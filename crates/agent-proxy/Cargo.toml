@@ -1,0 +1,13 @@
+[package]
+name = "az-agent-proxy"
+description = "Agent proxy: fronts remote/local agents for agencyzero clients"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[dependencies]
+az-core.workspace = true
+
+[[bin]]
+name = "az-agent-proxy"
+path = "src/main.rs"
