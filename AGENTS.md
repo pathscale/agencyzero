@@ -5,7 +5,9 @@ the single source of truth for the rules: Codex, Cursor and Gemini CLI read `AGE
 natively, and Claude Code loads it through the `@AGENTS.md` import in
 [`CLAUDE.md`](CLAUDE.md). **Never fork these rules into a per-vendor file.**
 
-Documentation / assets repository.
+Rust Cargo workspace hosting four executables (Tauri GUI harness, agent, MCP proxy,
+agent proxy) plus a shared `az-core` library. See [README.md](README.md) for the layout
+and build commands.
 
 ## Invariants (don't break these)
 

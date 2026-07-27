@@ -1,0 +1,13 @@
+[package]
+name = "az-mcp-proxy"
+description = "MCP proxy: multiplexes/mediates MCP servers for agencyzero clients"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[dependencies]
+az-core.workspace = true
+
+[[bin]]
+name = "az-mcp-proxy"
+path = "src/main.rs"

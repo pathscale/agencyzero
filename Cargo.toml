@@ -1,0 +1,23 @@
+[workspace]
+resolver = "3"
+members = [
+    "apps/gui",
+    "crates/agent",
+    "crates/agent-proxy",
+    "crates/core",
+    "crates/mcp-proxy",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[workspace.dependencies]
+az-core = { path = "crates/core" }
+
+# Heavy deps are declared per-crate on purpose: only apps/gui pulls in the
+# Tauri stack, so agent/proxy builds never trigger a webview toolchain build.
+
+[profile.release]
+strip = true
