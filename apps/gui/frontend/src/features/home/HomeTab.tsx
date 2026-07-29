@@ -283,6 +283,25 @@ function TaskManagerStatus(): JSX.Element {
   const { state, itemsFor } = useWorkspace();
   const tasks = () => itemsFor(TASK_MANAGER_ID);
 
+  /**
+   * The latest reply, or the one being written right now.
+   *
+   * This has to be on screen: the agent's failure mode is to stop and ask —
+   * "I can't read that, could you widen my permissions?" — and a question that
+   * only exists in a diagnostic panel is a question nobody answers.
+   */
+  const reply = () => {
+    const streaming = state.streaming[TASK_MANAGER_ID] ?? "";
+    if (streaming) return { body: streaming, isWriting: true };
+    const list = state.messages[TASK_MANAGER_ID] ?? [];
+    for (let at = list.length - 1; at >= 0; at--) {
+      if (list[at].author === "agent" && list[at].body.trim()) {
+        return { body: list[at].body, isWriting: false };
+      }
+    }
+    return null;
+  };
+
   return (
     <>
       <Show when={state.taskManagerSession}>
@@ -290,6 +309,22 @@ function TaskManagerStatus(): JSX.Element {
           <div class="flex items-baseline gap-2 px-0.5 text-[11px] text-az-faint">
             <span>Task Manager · session</span>
             <span class="truncate font-mono">{session()}</span>
+          </div>
+        )}
+      </Show>
+
+      <Show when={reply()}>
+        {(current) => (
+          <div class="flex flex-col gap-1 rounded-[11px] border border-az-hairline-soft bg-az-inset px-3 py-2">
+            <span class="text-[10.5px] text-az-faint">
+              {current().isWriting ? "Task Manager · writing…" : "Task Manager"}
+            </span>
+            <p
+              data-selectable
+              class="az-scroll max-h-[120px] overflow-y-auto whitespace-pre-wrap text-[12px] text-az-body leading-[1.55]"
+            >
+              {current().body}
+            </p>
           </div>
         )}
       </Show>

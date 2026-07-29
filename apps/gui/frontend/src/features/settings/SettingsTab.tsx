@@ -24,6 +24,7 @@ import type {
   ModelSelection,
   ModelSource,
   Permission,
+  TaskManagerSettings,
 } from "~/types";
 
 const STATE_TONE: Record<AgentState, string> = {
@@ -264,6 +265,12 @@ export function SettingsTab(): JSX.Element {
                       })
                     }
                   />
+                </Row>
+                <Row
+                  label="Working directories"
+                  hint="read_only denies reads outside these; empty means the workspace root"
+                >
+                  <TaskManagerDirs taskManager={current().taskManager} />
                 </Row>
                 <Row
                   label="Conversation"
@@ -513,6 +520,62 @@ export function SettingsTab(): JSX.Element {
           )}
         </Show>
       </div>
+    </div>
+  );
+}
+
+/**
+ * The task manager's working directories — the fix for its sharpest failure.
+ *
+ * Its runs are read_only, which maps to Claude's don't-ask mode: reads outside
+ * the working tree are denied without prompting. With no directory set, the
+ * runs execute at the workspace root and "read that file in ~/code/…" fails
+ * with a permission denial the user only sees in the I/O panel. The first
+ * entry becomes the run's cwd.
+ */
+function TaskManagerDirs(props: { taskManager: TaskManagerSettings }): JSX.Element {
+  const { actions } = useWorkspace();
+  const [path, setPath] = createSignal("");
+
+  const save = (dirs: string[]): void => {
+    void actions.saveSettings({ taskManager: { ...props.taskManager, dirs } });
+  };
+
+  const add = (): void => {
+    const value = path().trim();
+    if (!value) return;
+    save([...props.taskManager.dirs, value]);
+    setPath("");
+  };
+
+  return (
+    <div class="flex min-w-0 max-w-[300px] flex-col items-end gap-1.5">
+      <For each={props.taskManager.dirs}>
+        {(dir) => (
+          <span class="flex max-w-full items-center gap-1.5 rounded-md border border-az-hairline bg-base-300 px-2 py-0.5">
+            <span class="truncate font-mono text-[11px] text-az-body">{dir}</span>
+            <button
+              type="button"
+              onClick={() => save(props.taskManager.dirs.filter((kept) => kept !== dir))}
+              aria-label={`Remove ${dir}`}
+              class="shrink-0 text-az-faint transition-colors hover:text-error"
+            >
+              <Icon name="x" class="text-[11px]" />
+            </button>
+          </span>
+        )}
+      </For>
+      <input
+        value={path()}
+        placeholder="~/code/…"
+        aria-label="Add a task manager directory"
+        onInput={(event) => setPath(event.currentTarget.value)}
+        onKeyDown={(event) => {
+          if (event.key === "Enter") add();
+        }}
+        onBlur={add}
+        class="w-[200px] rounded-md border border-az-hairline bg-az-inset px-2 py-1 font-mono text-[11px] text-az-body focus:border-primary/40 focus:outline-none"
+      />
     </div>
   );
 }

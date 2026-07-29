@@ -1300,16 +1300,34 @@ pub async fn send_message(
     // The working directory: the project's own if it has one, else the
     // workspace root. An agent with no cwd inherits the app's, which for a
     // bundled .app is `/`.
-    let cwd = state
-        .tables
-        .project
-        .select(input.project_id.clone())
-        .and_then(|row| {
-            serde_json::from_str::<Vec<String>>(&row.dirs)
-                .ok()
-                .and_then(|dirs| dirs.first().cloned())
-        })
-        .unwrap_or_else(|| crate::workspace_root_path(&app, &state));
+    //
+    // The task manager is the special case: it has no project row to carry
+    // directories, and the scope matters more than it looks — `read_only`
+    // maps to Claude's don't-ask mode, which denies reads *outside* the
+    // working tree without prompting. Its directories live in Settings.
+    let cwd = if input.project_id == crate::tasks::TASK_MANAGER_ID {
+        state
+            .tables
+            .kv_get(crate::settings::KEY)
+            .and_then(|raw| serde_json::from_str::<crate::settings::GlobalSettings>(&raw).ok())
+            .unwrap_or_default()
+            .task_manager
+            .dirs
+            .first()
+            .cloned()
+            .unwrap_or_else(|| crate::workspace_root_path(&app, &state))
+    } else {
+        state
+            .tables
+            .project
+            .select(input.project_id.clone())
+            .and_then(|row| {
+                serde_json::from_str::<Vec<String>>(&row.dirs)
+                    .ok()
+                    .and_then(|dirs| dirs.first().cloned())
+            })
+            .unwrap_or_else(|| crate::workspace_root_path(&app, &state))
+    };
 
     // The agent's own session id for this project, when a turn has produced
     // one. Without it every turn starts a fresh conversation.

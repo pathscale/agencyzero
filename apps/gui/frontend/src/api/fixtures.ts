@@ -503,7 +503,7 @@ export const SETTINGS: GlobalSettings = {
   },
   // Deliberately not the prompt's model: a list keeper running unattended
   // wants a cheap fast model far more often than a frontier one.
-  taskManager: { model: "haiku", effort: "medium" },
+  taskManager: { model: "haiku", effort: "medium", dirs: [] },
   envPolicy: "minimal",
   forwardProxyVars: false,
   notifications: {
