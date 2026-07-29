@@ -1,4 +1,4 @@
-import { For, type JSX, Show } from "solid-js";
+import { createEffect, createSignal, For, type JSX, onCleanup, onMount, Show } from "solid-js";
 import { Icon, type IconProps } from "~/components/Icon";
 import { StatusDot } from "~/components/StatusDot";
 import { createTabReorder } from "~/features/tabs/reorder";
@@ -30,10 +30,63 @@ export function TabStrip(): JSX.Element {
   useTabShortcuts();
 
   let strip!: HTMLDivElement;
+  const [overflow, setOverflow] = createSignal({ left: false, right: false });
 
   const reorder = createTabReorder({
     onMove: actions.moveTab,
     onCommit: () => void actions.commitTabOrder(),
+  });
+
+  /** Which arrows are usable: whether there is anything left to scroll to. */
+  function measure(): void {
+    if (!strip) return;
+    const slack = strip.scrollWidth - strip.clientWidth;
+    // A pixel of tolerance: fractional layout widths make an exact comparison
+    // report scrollable-by-0.4px and leave an arrow enabled forever.
+    setOverflow({ left: strip.scrollLeft > 1, right: strip.scrollLeft < slack - 1 });
+  }
+
+  /** Roughly a screenful, so repeated presses walk the strip without overshooting. */
+  function nudge(direction: -1 | 1): void {
+    strip?.scrollBy({
+      left: direction * Math.max(180, strip.clientWidth * 0.7),
+      behavior: "smooth",
+    });
+  }
+
+  onMount(() => {
+    measure();
+    // Width changes with the window and with how many tabs are open; neither
+    // fires `scroll`. Guarded because jsdom has no ResizeObserver.
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(measure);
+    observer.observe(strip);
+    onCleanup(() => observer.disconnect());
+  });
+
+  /**
+   * Keeps the active tab visible.
+   *
+   * This is what makes ⌘1/⌘2 usable once the strip overflows — cycling onto a
+   * tab that is scrolled out of sight would otherwise look like nothing
+   * happened. Reading `tabs.length` as well means a new tab is revealed too.
+   */
+  createEffect(() => {
+    const key = state.activeKey;
+    state.tabs.length;
+
+    queueMicrotask(() => {
+      const pill = [...(strip?.children ?? [])].find(
+        (child) => (child as HTMLElement).dataset?.tabKey === key,
+      );
+      // jsdom does not implement scrollIntoView.
+      (pill as HTMLElement | undefined)?.scrollIntoView?.({
+        inline: "nearest",
+        block: "nearest",
+        behavior: "smooth",
+      });
+      measure();
+    });
   });
 
   return (
@@ -51,9 +104,14 @@ export function TabStrip(): JSX.Element {
       {/* Room for the macOS traffic lights, which the window keeps. */}
       <div class="w-[62px] shrink-0" />
 
+      <Show when={overflow().left || overflow().right}>
+        <ScrollArrow direction={-1} isDisabled={!overflow().left} onScroll={() => nudge(-1)} />
+      </Show>
+
       <div
         ref={strip}
-        class="az-scroll flex min-w-0 flex-1 items-center gap-2 overflow-x-auto overflow-y-hidden"
+        onScroll={measure}
+        class="az-scroll-x flex min-w-0 flex-1 items-center gap-2"
       >
         <For each={state.tabs}>
           {(tab) => <TabPill tab={tab} reorder={reorder} strip={() => strip} />}
@@ -69,6 +127,10 @@ export function TabStrip(): JSX.Element {
           <Icon name="plus" class="text-[15px]" />
         </button>
       </div>
+
+      <Show when={overflow().left || overflow().right}>
+        <ScrollArrow direction={1} isDisabled={!overflow().right} onScroll={() => nudge(1)} />
+      </Show>
 
       <div class="flex flex-none items-center gap-0.5">
         <button
@@ -89,6 +151,35 @@ export function TabStrip(): JSX.Element {
         </div>
       </div>
     </div>
+  );
+}
+
+/**
+ * One end of the tab strip.
+ *
+ * Shown only while the strip overflows, and disabled rather than hidden at each
+ * end so the row does not shift as you reach the edges. There is no visible
+ * scrollbar to grab: a horizontal one under the tabs sits inside the window's
+ * drag region and is a few pixels tall, which makes it unclickable in practice.
+ */
+function ScrollArrow(props: {
+  direction: -1 | 1;
+  isDisabled: boolean;
+  onScroll: () => void;
+}): JSX.Element {
+  return (
+    <button
+      type="button"
+      onClick={props.onScroll}
+      disabled={props.isDisabled}
+      aria-label={props.direction === -1 ? "Scroll tabs left" : "Scroll tabs right"}
+      class="flex size-6 shrink-0 items-center justify-center rounded-full text-az-muted transition-colors hover:bg-white/6 hover:text-base-content disabled:pointer-events-none disabled:opacity-25"
+    >
+      <Icon
+        name="chevron-right"
+        class={`text-[15px] ${props.direction === -1 ? "rotate-180" : ""}`}
+      />
+    </button>
   );
 }
 
@@ -153,6 +244,7 @@ function TabPill(props: {
      * `group` drives the close button's reveal on hover.
      */
     <div
+      data-tab-key={props.tab.key}
       class={`group ${shell()} ${isProject() ? "max-w-[220px]" : ""} ${
         props.reorder.isDragging(props.tab.key)
           ? "z-10 scale-[1.02] cursor-grabbing opacity-90 shadow-[0_6px_18px_rgba(0,0,0,.5)]"

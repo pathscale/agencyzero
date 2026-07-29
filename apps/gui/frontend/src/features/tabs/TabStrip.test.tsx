@@ -122,3 +122,32 @@ describe("TabStrip", () => {
     expect(getByLabelText("Close WorkTable")).toHaveAttribute("data-no-drag");
   });
 });
+
+describe("overflow", () => {
+  /*
+   * jsdom has no layout, so scrollWidth and clientWidth are both 0 and the
+   * strip never reports as overflowing. What is checkable here is that the
+   * arrows stay out of the way until they are needed, and that the strip is
+   * the scrollbar-less variant — a horizontal scrollbar under the tabs sits
+   * inside the window's drag region and cannot be grabbed.
+   */
+  it("shows no arrows while every tab fits", async () => {
+    const { queryByLabelText } = await mountStrip();
+    expect(queryByLabelText("Scroll tabs left")).toBeNull();
+    expect(queryByLabelText("Scroll tabs right")).toBeNull();
+  });
+
+  it("scrolls the strip without exposing a scrollbar", async () => {
+    const { container } = await mountStrip();
+    expect(container.querySelector(".az-scroll-x")).toBeTruthy();
+  });
+
+  /** How the scroll-into-view effect locates the active pill. */
+  it("keys every pill so the active one can be scrolled into view", async () => {
+    const { container, workspace } = await mountStrip();
+    const keyed = [...container.querySelectorAll("[data-tab-key]")].map(
+      (pill) => (pill as HTMLElement).dataset.tabKey,
+    );
+    expect(keyed).toEqual(workspace.state.tabs.map((tab) => tab.key));
+  });
+});

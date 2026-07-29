@@ -85,6 +85,15 @@ a tab by clicking stops working. Taking capture only once the 5px threshold is c
 means a plain click never captures. A finished drag deliberately does not select the tab
 it moved — you were reordering, not choosing.
 
+Once the strip overflows, chevrons appear at each end — disabled rather than hidden at the
+extremes, so the row does not shift as you reach them. There is deliberately **no visible
+scrollbar**: a horizontal one under the tabs is a few pixels tall *and* sits inside the
+window's drag region, which makes it effectively unclickable.
+
+Selecting a tab scrolls it into view, which is what keeps ⌘1/⌘2 usable at that width —
+cycling onto a tab that is scrolled out of sight would otherwise look like nothing happened.
+Each pill carries `data-tab-key` so the effect can find it.
+
 Home is index 0 and stays there. On drop, the project tabs' new order is persisted with
 `reorder_projects`, which writes `Project.order` — so it survives a restart and Home
 re-sorts to match. Draft and Settings tabs are window state and keep their place only
@@ -96,6 +105,10 @@ handled: the close button is always mounted for a closable tab and only *reveale
 active/hover/focus, and the label carries an always-semibold invisible ghost sharing one
 grid cell with the visible copy, so the cell is sized for the bold width whatever weight
 is showing.
+
+Opening a tab puts the cursor in its prompt, for both a project and a new draft. `autofocus`
+as an attribute is only honoured on initial page load and these mount when a tab opens, so
+the browser ignores it — `Composer` calls `focus()` on mount instead.
 
 ## Quitting
 
