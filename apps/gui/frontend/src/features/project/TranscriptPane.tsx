@@ -1,6 +1,7 @@
 import { EmptyState } from "@pathscale/ui";
 import { createEffect, For, type JSX, Match, Show, Switch } from "solid-js";
 import { Icon } from "~/components/Icon";
+import { ApprovalCard } from "~/features/project/ApprovalCard";
 import { InlineText, MessageBody } from "~/features/project/MessageBody";
 import { isTransientStop } from "~/lib/format";
 import { AGENT_LABELS } from "~/lib/labels";
@@ -20,7 +21,7 @@ export function TranscriptPane(props: {
   /** The reply being written right now, empty when nothing is streaming. */
   streaming: string;
 }): JSX.Element {
-  const { actions } = useWorkspace();
+  const { state, actions } = useWorkspace();
   let scroller!: HTMLDivElement;
 
   // Follow the tail as messages arrive. Reading `.length` is what subscribes
@@ -84,6 +85,11 @@ export function TranscriptPane(props: {
             </Switch>
           )}
         </For>
+        {/* The run is blocked on this question; it renders where you read. */}
+        <Show when={state.pendingApprovals[props.project.id]}>
+          {(approval) => <ApprovalCard projectId={props.project.id} approval={approval()} />}
+        </Show>
+
         {/*
           The reply as it arrives. No id and never persisted: it is replaced by
           the real row the moment the run finishes.

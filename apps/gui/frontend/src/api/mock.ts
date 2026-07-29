@@ -459,6 +459,10 @@ export function createMockApi(): AgencyZeroApi {
       return settle(undefined);
     },
 
+    // The mock never runs an agent, so nothing ever asks; answering is a no-op
+    // kept only so the interface stays whole.
+    resolveApproval: () => settle(undefined),
+
     async on<E extends keyof AppEvents>(
       event: E,
       handler: (payload: AppEvents[E]) => void,

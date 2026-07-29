@@ -7,6 +7,7 @@ import type { Permission } from "~/types";
 const PERMISSION_HINTS: Record<Permission, string> = {
   read_only: "Reads only. The crate default.",
   plan: "Proposes a plan, changes nothing.",
+  ask: "Each gated call asks you first, mid-run.",
   edit: "Edits inside the working directories.",
   auto: "Runs tools without asking each time.",
   bypass: "No prompts. The moderator is the only check.",
