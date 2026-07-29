@@ -26,7 +26,17 @@ export function TabStrip(): JSX.Element {
   const { state, actions } = useWorkspace();
 
   return (
-    <div class="flex flex-none items-center gap-2 px-3.5 pt-3 pb-1.5">
+    /*
+     * The strip is the title bar. `titleBarStyle: "Overlay"` leaves the window
+     * with no native bar to grab, so this row has to be the drag handle.
+     *
+     * "deep" makes the whole subtree draggable, but Tauri's handler walks up
+     * from the click target and stops at the first clickable element — so tabs,
+     * "+" and the gear still take their clicks, and only the gaps between them
+     * move the window. Needs `core:window:allow-start-dragging`, which is not
+     * in `core:window:default`; see capabilities/default.json.
+     */
+    <div data-tauri-drag-region="deep" class="flex flex-none items-center gap-2 px-3.5 pt-3 pb-1.5">
       {/* Room for the macOS traffic lights, which the window keeps. */}
       <div class="w-[62px] shrink-0" />
 
@@ -92,15 +102,20 @@ function TabPill(props: { tab: Tab }): JSX.Element {
       : `${PILL} ${ACTIVE} border border-az-hairline-strong font-semibold text-base-content`;
   };
 
+  const showClose = () => isClosable() && isActive();
+
   return (
-    <div
-      class={`${shell()} ${isProject() ? "max-w-[220px]" : ""} ${isClosable() && isActive() ? "pr-1.5 pl-3.5" : "px-3.5"}`}
-    >
+    /*
+     * Padding sits on the buttons, not on this wrapper. The strip is a drag
+     * region, so any bare padding here would be a dead strip inside the tab
+     * that moves the window instead of switching to it.
+     */
+    <div class={`${shell()} ${isProject() ? "max-w-[220px]" : ""}`}>
       <button
         type="button"
         onClick={() => actions.focus(props.tab.key)}
         aria-current={isActive() ? "page" : undefined}
-        class="flex min-w-0 items-center gap-2 text-[12.5px]"
+        class={`flex h-full min-w-0 items-center gap-2 pl-3.5 text-[12.5px] ${showClose() ? "pr-2" : "pr-3.5"}`}
       >
         <Show when={TAB_ICON[props.tab.kind]}>
           {(name) => (
@@ -116,12 +131,12 @@ function TabPill(props: { tab: Tab }): JSX.Element {
         <span class="truncate">{props.tab.label}</span>
       </button>
 
-      <Show when={isClosable() && isActive()}>
+      <Show when={showClose()}>
         <button
           type="button"
           onClick={() => actions.closeTab(props.tab.key)}
           aria-label={`Close ${props.tab.label}`}
-          class="ml-2 flex size-[18px] shrink-0 items-center justify-center rounded-full text-az-faint transition-colors hover:bg-white/10 hover:text-base-content"
+          class="mr-1.5 flex size-[18px] shrink-0 items-center justify-center rounded-full text-az-faint transition-colors hover:bg-white/10 hover:text-base-content"
         >
           <Icon name="x" class="text-[13px]" />
         </button>
