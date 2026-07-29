@@ -59,13 +59,16 @@ fn build_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> {
         .select_all()
         .build()?;
 
-    // Ctrl+N rather than Cmd+N, as asked for. A menu accelerator is app-global,
-    // so it shadows Cocoa's Ctrl+N (move down one line) inside text fields —
-    // the same class of conflict Ctrl+T had with transpose. Cmd+N is the one
-    // binding for "new" that collides with nothing; this is the deliberate
-    // choice, not an oversight.
+    // The standard "new" shortcut, and the only one that costs nothing: macOS
+    // reserves a Ctrl-letter set for text editing (Ctrl+A E B F P N K T), so
+    // any Ctrl accelerator takes one of those away from every text field.
+    //
+    // Ctrl+T is *also* bound to this, in the webview rather than here — see
+    // frontend/src/features/tabs/shortcuts.ts. Leaving it out of the menu is
+    // what lets the keydown reach the page, which is the only way it can fire
+    // while the composer has focus.
     let new_project = MenuItemBuilder::with_id(NEW_PROJECT, "New Project")
-        .accelerator("Ctrl+N")
+        .accelerator("CmdOrCtrl+N")
         .build(app)?;
     let close_tab = MenuItemBuilder::with_id(CLOSE_TAB, "Close Tab")
         .accelerator("CmdOrCtrl+W")

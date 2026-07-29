@@ -3,19 +3,26 @@ import { isTauri } from "~/lib/platform";
 import { useWorkspace } from "~/stores/workspace";
 
 /**
- * ⌃N new project · ⌘1 previous tab · ⌘2 next tab — **outside Tauri only**.
+ * Keyboard bindings the webview owns.
  *
- * In the app these are native menu accelerators (see `apps/gui/src/main.rs`),
- * which macOS delivers whatever has focus and which show up in the menu bar
- * where a keybinding is discoverable. Running the frontend in a browser has no
- * menu bar, so this stands in.
+ * There are two kinds, and the difference is exactly what decides whether a
+ * shortcut can work inside the composer.
  *
- * Gated rather than always-on: a menu accelerator is consumed by the menu and
- * never reaches the webview today, but that is macOS behaviour to rely on, not
- * a guarantee, and a double-fire would silently skip a tab.
+ * **Menu accelerators** — ⌘N new project · ⌘W close tab · ⌘1/⌘2 cycle — live in
+ * `apps/gui/src/main.rs`. macOS resolves them through the menu bar *before* the
+ * key reaches the webview, which makes them reliable and discoverable, and
+ * means they shadow whatever that combination did in a text field. That is why
+ * ⌃T and ⌃N were poor accelerators: macOS gives every text field an emacs-style
+ * set (⌃A ⌃E ⌃B ⌃F ⌃P ⌃N ⌃K ⌃T) and an accelerator takes one away.
  *
- * Matched on `code` as well as `key` so a layout that puts something other
- * than "1" on the first number key still works.
+ * **Webview bindings** — ⌃T — are handled here on a plain keydown. Nothing in
+ * the menu claims the combination, so the key reaches the DOM first: this fires
+ * wherever focus is, the composer included, and `preventDefault()` stops the
+ * text field acting on it. That is how ⌃T works inside the text area at all —
+ * by *not* being a menu item, which costs it the menu-bar listing.
+ *
+ * Matched on `code` as well as `key` so a layout that puts something else on
+ * that physical key still works.
  */
 export function useTabShortcuts(): void {
   const { actions } = useWorkspace();
@@ -23,15 +30,29 @@ export function useTabShortcuts(): void {
   const onKeyDown = (event: KeyboardEvent) => {
     if (event.altKey || event.shiftKey) return;
 
-    // Ctrl+N, not Cmd+N. The app itself uses the menu accelerator; this branch
-    // is the browser stand-in for `bun run dev`.
-    if (event.ctrlKey && !event.metaKey && (event.key === "n" || event.code === "KeyN")) {
+    // ⌃T — the second way to open a new project, and the one that works while
+    // you are typing. Transpose-characters is the deliberate cost.
+    if (event.ctrlKey && !event.metaKey && (event.key === "t" || event.code === "KeyT")) {
       event.preventDefault();
       actions.openDraft();
       return;
     }
 
+    /*
+     * Everything below duplicates a menu accelerator, so it only does work
+     * outside Tauri — under `bun run dev`, where there is no menu bar. Inside
+     * the app the menu consumes these before the webview sees them; the guard
+     * means a change in that behaviour cannot double-fire and silently skip a
+     * tab.
+     */
+    if (isTauri()) return;
     if (!event.metaKey || event.ctrlKey) return;
+
+    if (event.key === "n" || event.code === "KeyN") {
+      event.preventDefault();
+      actions.openDraft();
+      return;
+    }
 
     const isFirst = event.key === "1" || event.code === "Digit1";
     const isSecond = event.key === "2" || event.code === "Digit2";
@@ -42,7 +63,6 @@ export function useTabShortcuts(): void {
   };
 
   onMount(() => {
-    if (isTauri()) return;
     window.addEventListener("keydown", onKeyDown);
     onCleanup(() => window.removeEventListener("keydown", onKeyDown));
   });
