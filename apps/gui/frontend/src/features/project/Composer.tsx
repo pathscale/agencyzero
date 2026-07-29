@@ -184,15 +184,6 @@ export function Composer(props: ComposerProps): JSX.Element {
             <Icon name="plus" class="text-[16px]" />
           </button>
 
-          <button
-            type="button"
-            title="Dictate"
-            aria-label="Dictate"
-            class="text-az-body transition-colors hover:text-az-title"
-          >
-            <Icon name="mic" class="text-[16px]" />
-          </button>
-
           <div class="flex-1" />
 
           <Show when={props.usage}>
