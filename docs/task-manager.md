@@ -121,7 +121,20 @@ All built, on Home:
   promoting one to a real project is a person's decision.
 - The raw exchange sits in a Task Manager I/O panel under Recent, appearing
   once something has been sent.
-- Settings has the model/effort pickers and the Reset control, which is
-  disabled until a conversation exists.
+- The latest reply (or the one being written) renders under the row: the
+  agent's failure mode is to stop and ask, and a question that only exists in
+  a diagnostic panel is a question nobody answers.
+- Settings has the model/effort pickers, the working directories, and the
+  Reset control, which is disabled until a conversation exists.
+
+## Working directories
+
+The runs are `read_only`, which maps to Claude's don't-ask mode: reads
+*outside* the working tree are denied without prompting. With no directory
+configured the runs execute at the workspace root, so "read that file in
+~/code/…" fails with a denial. `GlobalSettings.taskManager.dirs` fixes the
+scope; the first entry becomes the run's cwd. One directory of reach for now —
+`agent-abstraction` has no `--add-dir` passthrough yet, so additional entries
+are stored but only the first takes effect until the crate grows one.
 
 `crates/wt-tools` is built too: the agent can see its own projects.

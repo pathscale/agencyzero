@@ -115,6 +115,13 @@ pub struct TaskManager {
     /// take effect.
     pub model: String,
     pub effort: String,
+    /// Where its runs execute, first entry as the working directory.
+    ///
+    /// The task manager has no project row to carry directories the way a
+    /// project does, and the run's scope matters: `read_only` maps to Claude's
+    /// don't-ask mode, which denies reads *outside* the working tree without
+    /// prompting. Empty means the workspace root, which can only read itself.
+    pub dirs: Vec<String>,
 }
 
 impl Default for TaskManager {
@@ -123,6 +130,7 @@ impl Default for TaskManager {
             // Cheap and fast: this is a list keeper, not a reasoner.
             model: "haiku".into(),
             effort: "medium".into(),
+            dirs: Vec::new(),
         }
     }
 }

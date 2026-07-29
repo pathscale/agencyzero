@@ -397,6 +397,12 @@ export interface GlobalSettings {
 export interface TaskManagerSettings {
   model: string;
   effort: string;
+  /**
+   * Where its runs execute, first entry as the working directory. Empty means
+   * the workspace root — which, under read_only's deny-outside-the-tree
+   * posture, is the only place the task manager can then read.
+   */
+  dirs: string[];
 }
 
 /**
