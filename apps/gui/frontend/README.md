@@ -76,6 +76,13 @@ and `dragstart`/`drop` are unreliable in the window this has to work in. The str
 reorders live as you drag, so the tab you are holding is always where it would land and
 there is no separate drop indicator to keep truthful.
 
+**Pointer capture is taken on the first real move, never on `pointerdown`.** While an
+element holds the pointer the browser retargets the following `click` to it, so capturing
+early sends every click to the pill wrapper instead of the button inside it and selecting
+a tab by clicking stops working. Taking capture only once the 5px threshold is crossed
+means a plain click never captures. A finished drag deliberately does not select the tab
+it moved — you were reordering, not choosing.
+
 Home is index 0 and stays there. On drop, the project tabs' new order is persisted with
 `reorder_projects`, which writes `Project.order` — so it survives a restart and Home
 re-sorts to match. Draft and Settings tabs are window state and keep their place only

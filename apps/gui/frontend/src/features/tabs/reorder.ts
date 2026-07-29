@@ -54,7 +54,7 @@ export function createTabReorder(handlers: ReorderHandlers) {
     startX = event.clientX;
     armed = true;
     moved = false;
-    capture(event, "set");
+    // Capture is taken on the first real move, not here — see onPointerMove.
   }
 
   function onPointerMove(event: PointerEvent): void {
@@ -65,6 +65,19 @@ export function createTabReorder(handlers: ReorderHandlers) {
     if (!moved) {
       moved = true;
       setDraggingKey(key);
+      /*
+       * Capture starts here rather than on pointerdown, and that placement is
+       * load-bearing: while an element holds the pointer, the browser retargets
+       * the following `click` to *it*. Capturing on pointerdown therefore sent
+       * every click to this wrapper instead of the button inside it, and
+       * selecting a tab by clicking stopped working entirely.
+       *
+       * Taking it only once a drag is real means a plain click never captures,
+       * so it dispatches normally. The cost is that a flick fast enough to
+       * leave the pill before its first pointermove lands does not start a
+       * drag; in practice a move is delivered every frame.
+       */
+      capture(event, "set");
     }
 
     handlers.onMove(key, indexAt(event.clientX));
@@ -73,7 +86,7 @@ export function createTabReorder(handlers: ReorderHandlers) {
   function onPointerUp(event: PointerEvent): void {
     if (!armed) return;
     armed = false;
-    capture(event, "release");
+    if (moved) capture(event, "release");
 
     const didMove = moved;
     key = null;
@@ -81,6 +94,11 @@ export function createTabReorder(handlers: ReorderHandlers) {
     moved = false;
     setDraggingKey(null);
 
+    // A finished drag deliberately does not select the tab it moved: you were
+    // reordering, not choosing. The click that follows a captured drag is
+    // retargeted to the wrapper, which has no handler, so this is also what
+    // happens on its own — stating it here so it is a decision, not a
+    // side effect of retargeting.
     if (didMove) handlers.onCommit();
   }
 
