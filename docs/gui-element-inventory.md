@@ -91,7 +91,7 @@ fields the UI never reads. The inert and missing rows are the actual backlog.
 | Element | Status | Notes |
 | --- | --- | --- |
 | Text area, Enter to send, Shift+Enter newline | Local | Grows to 168px then scrolls. |
-| Model pill | **Live** | Per tab, sticky. Model list is hardcoded `["opus","sonnet","haiku"]` — should come from the agent probe. |
+| Model pill | **Live** | Per tab, sticky. Model list is hardcoded `["opus","sonnet","haiku"]`; it should come from the agent probe. See [`agent-model-surface.md`](agent-model-surface.md) for what each CLI can actually tell us, and why the effort ladder has to be per model rather than global. |
 | Permission pill | **Live** | Per tab, per session. `read_only` default. |
 | Usage readout | Display | Last message that reported usage. |
 | Send | **Live** | |
