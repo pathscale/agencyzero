@@ -73,18 +73,51 @@ support `ultra`; `gpt-5.6-luna`, `gpt-5.5` and `gpt-5.4` stop at `max`. This is 
 single most important finding for our data model, and it generalises: an effort list
 belongs to a `(agent, model)` pair.
 
-## Claude: aliases beat enumeration
+## Claude: the list is the Models API, not the CLI
 
-There is no `--list-models` and no local model cache. The binary embeds model slugs but
-grepping a 237MB executable is not an interface and we should not build on it.
+**The authoritative list is `GET https://api.anthropic.com/v1/models`.** It is
+account-scoped, so it answers "which models can *this* login actually use", and it
+returns `id`, `display_name`, `max_input_tokens`, `max_tokens` and a `capabilities`
+tree. Confirmed that this is what Claude Code itself uses: the string `/v1/models` is
+embedded in the binary.
 
-The good news is that we do not need enumeration. `--model` accepts an **alias for the
-latest model** (`opus`, `sonnet`, `haiku`, `fable`) as well as a full id. Aliases
-resolve server-side to the current version, so a picker built on four aliases is
-correct by construction and never goes stale. Verified: `--model opus` resolved to
+Under OAuth the call needs `Authorization: Bearer <token>` plus
+`anthropic-beta: oauth-2025-04-20`, **not** `x-api-key`. Claude Code's token lives in
+the macOS Keychain under service `Claude Code-credentials`.
+
+> **Unverified.** The end-to-end OAuth call was not run on this machine: reading the
+> token out of the Keychain and sending it to a network endpoint was blocked by a local
+> permission guard, and that block was left in place. The endpoint and the header shape
+> are documented and the endpoint is confirmed present in the binary, but the response
+> under a subscription OAuth token has not been observed here. Verify before building on
+> it.
+
+There is deliberately **no CLI-side enumeration**. `claude models` is not a subcommand
+(it is parsed as a prompt), there is no `--list-models`, and the subcommand list is
+`agents auth auto-mode doctor gateway install mcp plugin project setup-token
+ultrareview update`.
+
+What *is* readable locally is Claude Code's own cache of the server response, in
+`~/.claude.json`:
+
+- `additionalModelOptionsCache` holds the account's extra entries, already picker-shaped:
+  `[{"value": "claude-fable-5[1m]", "label": "Fable", "description": "Fable 5 · Most capable for your hardest and longest-running tasks"}]`
+- `modelAccessCache` (`[]` on this account), `orgModelDefaultCache` (`null`),
+  `additionalModelCostsCache`, `autoCompactWindowsCache`.
+
+These are private Claude Code state, undocumented and free to change between releases.
+Useful as corroboration, not as an interface.
+
+### Aliases are more than four, and include context variants
+
+`--model` accepts an alias for the latest model as well as a full id. The help text
+gives `fable`, `opus`, `sonnet` as examples, and the binary additionally contains
+`default`, `opusplan`, `sonnet[1m]`, and `[1m]` long-context variants of full ids such
+as `claude-opus-4-7[1m]` and `claude-sonnet-4-6[1m]`. Treat the alias set as **open**;
+do not hardcode a closed list of four. Verified: `--model opus` resolved to
 `claude-opus-4-8` in the run envelope.
 
-Real model ids and their limits come back **after** a run. With
+Real model ids and their limits also come back **after** a run. With
 `--output-format json`, the result envelope carries `modelUsage` keyed by resolved
 model id:
 
@@ -96,11 +129,28 @@ model id:
 }
 ```
 
-So the flow is: offer aliases, then enrich the catalog opportunistically from the first
-run and cache the result. `contextWindow` and `maxOutputTokens` are exactly what the
-context meter needs, and `costUSD` plus the sibling `total_cost_usd` field feed the run
-cost display. Note the envelope reports *every* model a turn touched, not just the one
-requested, because Claude Code uses a small model for side tasks.
+`contextWindow` and `maxOutputTokens` are exactly what the context meter needs, and
+`costUSD` plus the sibling `total_cost_usd` field feed the run cost display. Note the
+envelope reports *every* model a turn touched, not just the one requested, because
+Claude Code uses a small model for side tasks. This is a useful enrichment source but
+it is not enumeration: it only ever describes models a run actually used.
+
+### The open decision for us
+
+`/v1/models` is the right answer, but agencyzero drives the CLI and does not hold a
+token of its own. Three ways to close that gap, and this is a decision, not a
+recommendation:
+
+1. **Ask for an API key in settings**, used *only* for enumeration while runs continue
+   to go through the OAuth'd CLI. Clean and documented, at the cost of asking the user
+   for a credential the app does not otherwise need.
+2. **Read Claude Code's Keychain item.** No new credential to ask for, but a
+   third-party app reaching into another app's Keychain entry is invasive and breaks
+   whenever Claude Code changes its storage.
+3. **Ship a static list plus validation.** No credential, no coupling, but the list
+   goes stale and is not account-scoped, so it can offer models the user cannot run.
+
+Option 1 is the only one that is both supported and account-accurate.
 
 Validation is cheap. An unknown model fails fast, before any tokens are spent, with
 `There's an issue with the selected model (X). It may not exist or you may not have
@@ -215,8 +265,9 @@ Populated per agent as:
 
 - **codex** `probe`: run `codex debug models`, filter `visibility === "list"`, sort by
   `priority`, map `supported_reasoning_levels[].effort` to `efforts`.
-- **claude** `alias`: the four aliases, enriched to `probe` quality from `modelUsage`
-  after the first run and cached.
+- **claude** `probe` once the credential question above is settled: `GET /v1/models`
+  gives `id`, `display_name`, `max_input_tokens`, `max_tokens` directly. Until then
+  `alias`, enriched from `modelUsage` after a run and cached.
 - **copilot** `static`: a short curated list plus `auto`, validated lazily.
 
 Carrying `source` matters. It lets the settings screen distinguish "these are the models
@@ -230,4 +281,13 @@ claude auth status                  # JSON liveness, works under OAuth
 codex debug models                  # full JSON catalog
 copilot --model bogus -p hi         # confirms validation still errors cleanly
 claude --model opus -p "reply ok" --output-format json   # modelUsage enrichment
+
+# Claude's authoritative list. Needs a token; see the open decision above.
+curl -s "https://api.anthropic.com/v1/models?limit=100" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "anthropic-beta: oauth-2025-04-20" \
+  -H "anthropic-version: 2023-06-01"
+
+# Corroborating local caches (private Claude Code state, may change without notice)
+python3 -c "import json;print(json.load(open('$HOME/.claude.json'))['additionalModelOptionsCache'])"
 ```

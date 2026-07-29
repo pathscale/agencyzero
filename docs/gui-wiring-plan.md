@@ -77,8 +77,9 @@ emits its event.
       caller-minted session id on Claude and Copilot; agent-printed thread id on Codex).
       The exact commands, and the per-agent model catalog this should also return, are
       worked out in [`agent-model-surface.md`](agent-model-surface.md): `claude auth status`
-      answers logged-out as JSON, and `codex debug models` is the only supported model
-      enumeration of the three.
+      answers logged-out as JSON, `codex debug models` enumerates Codex, and Claude's list
+      comes from the Anthropic `/v1/models` endpoint rather than from the CLI, which needs
+      a credential decision that is still open.
 - [ ] `create_project(first_message, model?, permission?) -> { project, items }` — needs an
       agent to name the project, so it lands properly in Phase 3. Until then, deriving the
       name from the first line is what the mock does and is enough to unblock the rest.
