@@ -4,6 +4,8 @@ import { DraftTab } from "~/features/draft/DraftTab";
 import { HomeTab } from "~/features/home/HomeTab";
 import { ProjectTab } from "~/features/project/ProjectTab";
 import { SettingsTab } from "~/features/settings/SettingsTab";
+import { CloseConfirm } from "~/features/shell/CloseConfirm";
+import { useAppShell } from "~/features/shell/useAppShell";
 import { TabStrip } from "~/features/tabs/TabStrip";
 import { useWorkspace, WorkspaceProvider } from "~/stores/workspace";
 
@@ -16,9 +18,10 @@ import { useWorkspace, WorkspaceProvider } from "~/stores/workspace";
  */
 function Workspace(): JSX.Element {
   const { state, activeTab, activeProject } = useWorkspace();
+  const shell = useAppShell();
 
   return (
-    <div class="az-desk flex h-full flex-col overflow-hidden">
+    <div class="az-desk relative flex h-full flex-col overflow-hidden">
       <TabStrip />
 
       <main class="flex min-h-0 flex-1 gap-3 px-3 pt-1.5 pb-3">
@@ -43,6 +46,12 @@ function Workspace(): JSX.Element {
       <Show when={state.backend === "mock"}>
         <MockBanner />
       </Show>
+
+      <CloseConfirm
+        isOpen={shell.isClosing()}
+        onCancel={shell.cancelClose}
+        onConfirm={shell.confirmClose}
+      />
     </div>
   );
 }

@@ -54,10 +54,21 @@ replaces the capability `tauri-build` generates when there isn't one.
 
 ## Tabs
 
-⌘1 selects the previous tab, ⌘2 the next, both wrapping
-([`shortcuts.ts`](src/features/tabs/shortcuts.ts)). Cycling walks `state.tabs`, which *is*
-the strip order, so a reordered tab cycles from where it now sits with nothing to keep in
-step.
+⌘W closes the tab, ⌘1 selects the previous, ⌘2 the next — both cycling wrap. These are
+**native menu accelerators**, defined in [`../src/main.rs`](../src/main.rs): macOS
+delivers them whatever has focus, and the menu bar is where a keybinding is discoverable.
+The menu items carry ids, not behaviour; Rust emits `menu:close-tab` / `menu:prev-tab` /
+`menu:next-tab` and [`useAppShell.ts`](src/features/shell/useAppShell.ts) answers them
+with the same actions the strip uses.
+
+[`shortcuts.ts`](src/features/tabs/shortcuts.ts) binds ⌘1/⌘2 in the webview **only outside
+Tauri**, so they work under `bun run dev` in a browser. It is gated rather than always-on:
+a menu accelerator is consumed by the menu and never reaches the webview today, but that
+is macOS behaviour to rely on rather than a guarantee, and a double-fire would silently
+skip a tab.
+
+Cycling walks `state.tabs`, which *is* the strip order, so a reordered tab cycles from
+where it now sits with nothing to keep in step.
 
 Dragging a tab reorders it ([`reorder.ts`](src/features/tabs/reorder.ts)) — pointer
 events, not HTML5 drag-and-drop, because Tauri's webview owns native drag for file drops
@@ -69,6 +80,28 @@ Home is index 0 and stays there. On drop, the project tabs' new order is persist
 `reorder_projects`, which writes `Project.order` — so it survives a restart and Home
 re-sorts to match. Draft and Settings tabs are window state and keep their place only
 while they are open.
+
+A pill is the same width in every state, which matters because cycling through tabs
+otherwise shoves the strip sideways on each step. Two things would resize it, and both are
+handled: the close button is always mounted for a closable tab and only *revealed* on
+active/hover/focus, and the label carries an always-semibold invisible ghost sharing one
+grid cell with the visible copy, so the cell is sized for the bold width whatever weight
+is showing.
+
+## Quitting
+
+Every route out — the traffic light, ⌘Q, the menu's Quit — is intercepted and routed
+through one confirmation
+([`CloseConfirm.tsx`](src/features/shell/CloseConfirm.tsx)), because quitting drops every
+Run the window is supervising and killing a run kills its whole process group. The dialog
+counts what is actually in flight rather than asking a generic "are you sure?" — a
+confirmation that cannot say what you are about to lose trains you to dismiss it.
+
+The traffic light arrives as `onCloseRequested` and is cancelled with `preventDefault`;
+⌘Q and the menu item are a custom `menu:quit` event, because the predefined Quit item
+exits the process without asking anyone. Confirming calls `destroy()`, not `close()` —
+`close()` re-enters the same close-requested handler and the window never goes. That needs
+`core:window:allow-destroy` in the capability file.
 
 ## Where the Rust boundary is
 

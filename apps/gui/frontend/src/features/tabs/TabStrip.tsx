@@ -93,6 +93,26 @@ export function TabStrip(): JSX.Element {
 }
 
 /**
+ * A tab label that keeps one width in every state.
+ *
+ * An active tab is semibold and an inactive one is not, so the label alone
+ * would change width as you cycle and shove every tab to its right sideways.
+ * The ghost copy is always semibold and always invisible; both copies share a
+ * single grid cell, so the cell is sized for the widest and the visible copy
+ * changes weight inside it without moving anything.
+ */
+function TabLabel(props: { label: string }): JSX.Element {
+  return (
+    <span class="grid min-w-0">
+      <span aria-hidden="true" class="invisible col-start-1 row-start-1 truncate font-semibold">
+        {props.label}
+      </span>
+      <span class="col-start-1 row-start-1 truncate">{props.label}</span>
+    </span>
+  );
+}
+
+/**
  * One pill.
  *
  * A `<div>` wrapping two real buttons rather than a button with a
@@ -109,7 +129,6 @@ function TabPill(props: {
   const isActive = () => props.tab.key === state.activeKey;
   const isProject = () => props.tab.kind === "project";
   const isClosable = () => props.tab.kind !== "home";
-  const showClose = () => isClosable() && isActive();
   // Home anchors the strip; there is nowhere for it to go.
   const isMovable = () => props.tab.kind !== "home";
 
@@ -130,9 +149,11 @@ function TabPill(props: {
      * Padding sits on the buttons, not on this wrapper. The strip is a drag
      * region, so any bare padding here would be a dead strip inside the tab
      * that moves the window instead of switching to it.
+     *
+     * `group` drives the close button's reveal on hover.
      */
     <div
-      class={`${shell()} ${isProject() ? "max-w-[220px]" : ""} ${
+      class={`group ${shell()} ${isProject() ? "max-w-[220px]" : ""} ${
         props.reorder.isDragging(props.tab.key)
           ? "z-10 scale-[1.02] cursor-grabbing opacity-90 shadow-[0_6px_18px_rgba(0,0,0,.5)]"
           : ""
@@ -148,7 +169,7 @@ function TabPill(props: {
         type="button"
         onClick={() => actions.focus(props.tab.key)}
         aria-current={isActive() ? "page" : undefined}
-        class={`flex h-full min-w-0 items-center gap-2 pl-3.5 text-[12.5px] ${showClose() ? "pr-2" : "pr-3.5"}`}
+        class={`flex h-full min-w-0 items-center gap-2 pl-3.5 text-[12.5px] ${isClosable() ? "pr-2" : "pr-3.5"}`}
       >
         <Show when={TAB_ICON[props.tab.kind]}>
           {(name) => (
@@ -161,16 +182,23 @@ function TabPill(props: {
         <Show when={isProject()}>
           <StatusDot status={tabStatus(props.tab.projectId ?? "")} live={isActive()} />
         </Show>
-        <span class="truncate">{props.tab.label}</span>
+        <TabLabel label={props.tab.label} />
       </button>
 
-      <Show when={showClose()}>
+      {/*
+        Always rendered for a closable tab, only *shown* when the tab is active,
+        hovered or focused. Mounting it on demand would change the pill's width
+        and shove the rest of the strip sideways every time you cycle.
+      */}
+      <Show when={isClosable()}>
         <button
           type="button"
           data-no-drag
           onClick={() => actions.closeTab(props.tab.key)}
           aria-label={`Close ${props.tab.label}`}
-          class="mr-1.5 flex size-[18px] shrink-0 items-center justify-center rounded-full text-az-faint transition-colors hover:bg-white/10 hover:text-base-content"
+          class={`mr-1.5 flex size-[18px] shrink-0 items-center justify-center rounded-full text-az-faint transition-[color,background-color,opacity] hover:bg-white/10 hover:text-base-content focus-visible:opacity-100 ${
+            isActive() ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+          }`}
         >
           <Icon name="x" class="text-[13px]" />
         </button>

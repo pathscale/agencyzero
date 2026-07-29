@@ -1,7 +1,13 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Base permissions for the main window. This file replaces the capability tauri-build generates when the directory is absent, so core:default has to be listed explicitly. start-dragging is added on top: the title bar is an overlay and the tab strip stands in for it, so the window is dragged from the webview. core:window:default grants internal-toggle-maximize but not start-dragging, which is why double-click zoomed the window and dragging did nothing.",
-  "windows": ["main"],
-  "permissions": ["core:default", "core:window:allow-start-dragging"]
+  "description": "Base permissions for the main window. This file replaces the capability tauri-build generates when the directory is absent, so core:default has to be listed explicitly. Two permissions are added on top. start-dragging: the title bar is an overlay and the tab strip stands in for it, so the window is dragged from the webview. core:window:default grants internal-toggle-maximize but not start-dragging, which is why double-click zoomed the window and dragging did nothing. destroy is what the close confirmation calls once you say yes \u2014 close() would re-enter the same close-requested handler and loop.",
+  "windows": [
+    "main"
+  ],
+  "permissions": [
+    "core:default",
+    "core:window:allow-start-dragging",
+    "core:window:allow-destroy"
+  ]
 }
