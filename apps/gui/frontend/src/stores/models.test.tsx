@@ -255,3 +255,29 @@ describe("settings own the defaults", () => {
     expect(workspace.promptModels().map((option) => option.value)).not.toContain("sonnet");
   });
 });
+
+describe("posture follows Settings too", () => {
+  /*
+   * Same rule as the model: Settings owns what a new tab starts on. This used to
+   * come from `prefs.lastPermission` and had the same shadowing problem.
+   */
+  it("opens a new tab on the posture Settings names", async () => {
+    const workspace = await mountWorkspace();
+    await workspace.actions.saveSettings({ defaultPermission: "auto" });
+
+    workspace.actions.openDraft();
+
+    await waitFor(() => expect(workspace.activeTab().kind).toBe("draft"));
+    expect(workspace.activeTab().permission).toBe("auto");
+  });
+
+  it("does not let a per-tab posture seed the next tab", async () => {
+    const workspace = await mountWorkspace();
+    workspace.actions.setTabModel("worktable", "sonnet", "bypass");
+
+    workspace.actions.openDraft();
+
+    await waitFor(() => expect(workspace.activeTab().kind).toBe("draft"));
+    expect(workspace.activeTab().permission).toBe("read_only");
+  });
+});

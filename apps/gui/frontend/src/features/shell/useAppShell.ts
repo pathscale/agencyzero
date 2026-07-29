@@ -46,6 +46,7 @@ export function useAppShell(): {
     };
 
     track(listen("menu:new-project", () => actions.openDraft()));
+    track(listen("menu:settings", () => actions.openSettings()));
     track(listen("menu:close-tab", () => actions.closeTab(state.activeKey)));
     track(listen("menu:prev-tab", () => actions.cycleTab(-1)));
     track(listen("menu:next-tab", () => actions.cycleTab(1)));

@@ -1,17 +1,17 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod agents;
+mod db;
 mod models;
 mod settings;
-mod store;
 
 use std::sync::Arc;
 
 use tauri::menu::{AboutMetadata, Menu, MenuBuilder, MenuItemBuilder, SubmenuBuilder};
 use tauri::{AppHandle, Emitter, Manager, Runtime, State};
 
+use crate::db::tables::Tables;
 use crate::settings::GlobalSettings;
-use crate::store::Store;
 
 /// Commands this build actually implements.
 ///
@@ -33,7 +33,7 @@ const IMPLEMENTED: &[&str] = &[
 
 /// What the GUI carries for the life of the process.
 struct AppState {
-    store: Arc<Store>,
+    tables: Arc<Tables>,
 }
 
 /// Which commands Rust answers. See [`IMPLEMENTED`].
@@ -51,8 +51,8 @@ fn list_capabilities() -> Vec<String> {
 #[tauri::command]
 fn get_settings(state: State<'_, AppState>) -> GlobalSettings {
     state
-        .store
-        .get(settings::KEY)
+        .tables
+        .kv_get(settings::KEY)
         .and_then(|raw| match serde_json::from_str(&raw) {
             Ok(parsed) => Some(parsed),
             Err(error) => {
@@ -78,8 +78,8 @@ async fn set_settings(
     state: State<'_, AppState>,
 ) -> Result<GlobalSettings, String> {
     let current = state
-        .store
-        .get(settings::KEY)
+        .tables
+        .kv_get(settings::KEY)
         .and_then(|raw| serde_json::from_str(&raw).ok())
         .unwrap_or_else(|| serde_json::to_value(GlobalSettings::default()).unwrap_or_default());
 
@@ -92,8 +92,8 @@ async fn set_settings(
         serde_json::from_value(merged.clone()).map_err(|error| error.to_string())?;
 
     state
-        .store
-        .put(settings::KEY, merged.to_string())
+        .tables
+        .kv_put(settings::KEY, merged.to_string())
         .await
         .map_err(|error| error.to_string())?;
     Ok(parsed)
@@ -112,8 +112,8 @@ async fn list_agent_status(
 ) -> Result<Vec<agents::AgentStatusDto>, String> {
     if !recheck
         && let Some(cached) = state
-            .store
-            .get(agents::KEY)
+            .tables
+            .kv_get(agents::KEY)
             .and_then(|raw| serde_json::from_str::<Vec<agents::AgentStatusDto>>(&raw).ok())
     {
         return Ok(cached);
@@ -123,7 +123,7 @@ async fn list_agent_status(
     // A cache that cannot be written is not worth failing the call over: the
     // answer in hand is still correct, it just will not survive a restart.
     if let Ok(encoded) = serde_json::to_string(&detected)
-        && let Err(error) = state.store.put(agents::KEY, encoded).await
+        && let Err(error) = state.tables.kv_put(agents::KEY, encoded).await
     {
         eprintln!("[az-gui] could not cache the agent probe: {error}");
     }
@@ -142,6 +142,7 @@ fn greet(name: &str) -> String {
 
 /// Menu ids the frontend answers for. Each becomes a `menu:<id>` event.
 const NEW_PROJECT: &str = "new-project";
+const SETTINGS: &str = "settings";
 const CLOSE_TAB: &str = "close-tab";
 const NEXT_TAB: &str = "next-tab";
 const PREV_TAB: &str = "prev-tab";
@@ -197,6 +198,14 @@ fn build_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> {
     let new_project = MenuItemBuilder::with_id(NEW_PROJECT, "New Project")
         .accelerator("CmdOrCtrl+N")
         .build(app)?;
+    // Cmd+S is free here: nothing in a tabbed agent window saves a document.
+    //
+    // Home has deliberately *not* been given Cmd+H. macOS reserves it for Hide
+    // Application, which the app submenu above owns, and taking it would make
+    // this the one Mac app where Cmd+H does something else.
+    let settings = MenuItemBuilder::with_id(SETTINGS, "Settings")
+        .accelerator("CmdOrCtrl+S")
+        .build(app)?;
     let close_tab = MenuItemBuilder::with_id(CLOSE_TAB, "Close Tab")
         .accelerator("CmdOrCtrl+W")
         .build(app)?;
@@ -209,6 +218,7 @@ fn build_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> {
 
     let tab_menu = SubmenuBuilder::new(app, "Tabs")
         .item(&new_project)
+        .item(&settings)
         .separator()
         .item(&close_tab)
         .separator()
@@ -250,16 +260,17 @@ fn main() {
                 .path()
                 .app_config_dir()
                 .map_err(|error| format!("no config directory: {error}"))?;
-            let store = tauri::async_runtime::block_on(Store::open(&dir))
-                .map_err(|error| format!("could not open the store in {dir:?}: {error}"))?;
+            let tables = tauri::async_runtime::block_on(Tables::open(&dir))
+                .map_err(|error| format!("could not open the tables in {dir:?}: {error}"))?;
             app.manage(AppState {
-                store: Arc::new(store),
+                tables: Arc::new(tables),
             });
             Ok(())
         })
         .on_menu_event(|app, event| {
             let topic = match event.id().as_ref() {
                 NEW_PROJECT => "menu:new-project",
+                SETTINGS => "menu:settings",
                 CLOSE_TAB => "menu:close-tab",
                 NEXT_TAB => "menu:next-tab",
                 PREV_TAB => "menu:prev-tab",
