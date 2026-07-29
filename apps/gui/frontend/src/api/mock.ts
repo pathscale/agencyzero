@@ -463,6 +463,11 @@ export function createMockApi(): AgencyZeroApi {
     // kept only so the interface stays whole.
     resolveApproval: () => settle(undefined),
 
+    // Fixture spend, so the Settings section is reviewable with real-looking
+    // numbers. The Rust command sums the usage-ledger table.
+    getCostSummary: () =>
+      settle({ todayUsd: 0.41, weekUsd: 3.87, monthUsd: 11.02, totalUsd: 28.6, turns: 412 }),
+
     async on<E extends keyof AppEvents>(
       event: E,
       handler: (payload: AppEvents[E]) => void,

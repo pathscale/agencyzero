@@ -419,6 +419,21 @@ export interface TaskManagerSettings {
 }
 
 /**
+ * Spend over the ranges Settings displays, summed from the usage ledger.
+ *
+ * Every figure is priced by the agent itself, per turn, at API list rates —
+ * on a subscription plan this measures consumption, not a bill. `turns` is
+ * the number of priced turns behind `totalUsd`.
+ */
+export interface CostSummary {
+  todayUsd: number;
+  weekUsd: number;
+  monthUsd: number;
+  totalUsd: number;
+  turns: number;
+}
+
+/**
  * Where the Home task manager's conversation stands.
  *
  * Its own DTO because the task manager has no project row: the session id the
@@ -466,6 +481,13 @@ export interface UiPrefs {
     pinned: boolean;
     recent: boolean;
     homeIo: boolean;
+    /**
+     * The task manager's reply and collected list on Home. Off by default:
+     * these are debug surfaces for when a harvest goes wrong, not reading
+     * material — the approval card stays visible regardless, since a blocked
+     * run cannot wait behind a toggle.
+     */
+    tmDebug: boolean;
   };
   lastTabKey: string;
   taskPlacement: TaskPlacement;

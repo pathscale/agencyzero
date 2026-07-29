@@ -12,7 +12,6 @@ import { createStore, produce, reconcile } from "solid-js/store";
 import type { AgencyZeroApi, AppEvents, Unlisten } from "~/api";
 import { selectApi } from "~/api";
 import { describeError, installGlobalErrorLogging, log } from "~/lib/log";
-import { claudeWindowKind } from "~/lib/stats";
 import { prefs, setPrefs } from "~/stores/prefs";
 import type {
   Agent,
@@ -62,18 +61,6 @@ type WorkspaceState = {
    * nobody can deliver.
    */
   pendingApprovals: Record<string, PendingApproval>;
-  /**
-   * The latest Claude quota report per window, across every project.
-   *
-   * `rateLimits` above keys by project and keeps only the last report, which
-   * is right for the tab dot and wrong for the usage panel: Claude names one
-   * window per report, so a weekly report following a five-hour one was
-   * silently overwritten and the Weekly line never filled. Keyed by
-   * `claudeWindowKind` (falling back to the provider's own wording), latest
-   * report per window wins, and a report is only history once its reset
-   * passes.
-   */
-  quotaWindows: Record<string, RateLimit>;
   settings: GlobalSettings | null;
   agents: AgentStatus[];
   /** Every agent's catalogue, for the Settings picker. Empty until boot ends. */
@@ -162,7 +149,6 @@ function createWorkspace() {
     agentIo: {},
     rateLimits: {},
     pendingApprovals: {},
-    quotaWindows: {},
     taskManagerSession: null,
     settings: null,
     agents: [],
@@ -404,14 +390,6 @@ function createWorkspace() {
             rateLimits.filter(isLimitLive).map((limit) => [limit.projectId, limit]),
           ),
         );
-        setState(
-          "quotaWindows",
-          Object.fromEntries(
-            rateLimits
-              .filter(isLimitLive)
-              .map((limit) => [claudeWindowKind(limit.message) ?? limit.message, limit]),
-          ),
-        );
         // Every project gets a tab, matching the mockup's strip. A project the
         // user closed would be reopened from the Home list.
         setState("tabs", [HOME_TAB, ...projects.map(projectTab)]);
@@ -620,13 +598,7 @@ function createWorkspace() {
       // A limit replayed from the buffer, or delivered late, can already be
       // spent by the time it lands.
       if (!isLimitLive(limit)) return;
-      batch(() => {
-        setState("rateLimits", limit.projectId, limit);
-        // Filed per window as well: the per-project slot keeps only the last
-        // report, and the usage panel needs each window's latest, not the
-        // latest overall.
-        setState("quotaWindows", claudeWindowKind(limit.message) ?? limit.message, limit);
-      });
+      setState("rateLimits", limit.projectId, limit);
     });
 
     await bind("run:rate_limit_cleared", ({ projectId }) => {
@@ -1046,6 +1018,7 @@ function createWorkspace() {
       client().resolveModeration(messageId, approve),
     resolveApproval: (projectId: string, approvalId: string, allow: boolean) =>
       client().resolveApproval(projectId, approvalId, allow),
+    getCostSummary: () => client().getCostSummary(),
     cancelTask: (toolCallId: string) => client().cancelTask(toolCallId),
     cancelRun: (projectId: string) => client().cancelRun(projectId),
     async clearTaskLog(projectId: string) {

@@ -1025,6 +1025,72 @@ fn page_task_log(
     }
 }
 
+/// Spend over the ranges Settings displays, summed from the usage ledger.
+///
+/// Dollars, derived once from the exact micro-dollar sums. `turns` counts the
+/// ledger rows behind `total`, so "how many priced turns is this" is
+/// answerable next to the figure.
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CostSummaryDto {
+    pub today_usd: f64,
+    pub week_usd: f64,
+    pub month_usd: f64,
+    pub total_usd: f64,
+    pub turns: usize,
+}
+
+/// Sum the usage ledger for Settings' cost readout.
+///
+/// UTC buckets, string-compared: `day` is `YYYY-MM-DD`, which sorts
+/// lexicographically, so "this week" is `day >= today - 6` and "this month"
+/// is a prefix match. The week is the trailing seven days rather than a
+/// calendar week — a Monday reset makes Sunday's spend vanish from view.
+///
+/// # Errors
+/// Infallible today; `Result` for signature stability.
+#[tauri::command]
+pub async fn get_cost_summary(state: State<'_, AppState>) -> Result<CostSummaryDto, String> {
+    let now = chrono::Utc::now();
+    let today = now.format("%Y-%m-%d").to_string();
+    let week_start = (now - chrono::Duration::days(6)).format("%Y-%m-%d").to_string();
+    let month = now.format("%Y-%m").to_string();
+
+    let rows = state
+        .tables
+        .usage_ledger
+        .select_all()
+        .execute()
+        .unwrap_or_default();
+
+    let mut today_micro = 0i64;
+    let mut week_micro = 0i64;
+    let mut month_micro = 0i64;
+    let mut total_micro = 0i64;
+    for row in &rows {
+        total_micro += row.cost_micro;
+        if row.day == today {
+            today_micro += row.cost_micro;
+        }
+        if row.day.as_str() >= week_start.as_str() {
+            week_micro += row.cost_micro;
+        }
+        if row.day.starts_with(&month) {
+            month_micro += row.cost_micro;
+        }
+    }
+
+    #[expect(clippy::cast_precision_loss, reason = "display figures in dollars")]
+    let usd = |micro: i64| micro as f64 / 1_000_000.0;
+    Ok(CostSummaryDto {
+        today_usd: usd(today_micro),
+        week_usd: usd(week_micro),
+        month_usd: usd(month_micro),
+        total_usd: usd(total_micro),
+        turns: rows.len(),
+    })
+}
+
 /// What the Home task-manager screen needs that no other surface carries.
 ///
 /// The task manager is a reserved project with **no project row** — it never
@@ -1973,6 +2039,46 @@ async fn drive_run(
                 );
             }
             let _ = app.emit("message:appended", MessageDto::from(row));
+
+            /*
+             * The durable cost record, one row per turn that priced itself.
+             * Separate from the message row because messages die with their
+             * project, and "what did this week cost" has to survive that.
+             * The figure is the agent's own; absent means the turn reported
+             * nothing, and no row is written rather than a zero.
+             */
+            if let Some(cost) = outcome.usage.cost_usd {
+                let at = now();
+                let ledger = crate::db::schema::usage_ledger::UsageLedgerRow {
+                    id: id("cost"),
+                    day: at.chars().take(10).collect(),
+                    at,
+                    project_id: project_id.clone(),
+                    model: model.clone(),
+                    #[expect(
+                        clippy::cast_possible_truncation,
+                        reason = "a turn costing more than 9 trillion dollars is not a rounding concern"
+                    )]
+                    cost_micro: (cost * 1_000_000.0).round() as i64,
+                    input_tokens: outcome
+                        .usage
+                        .input_tokens
+                        .and_then(|tokens| i64::try_from(tokens).ok())
+                        .unwrap_or(0),
+                    output_tokens: outcome
+                        .usage
+                        .output_tokens
+                        .and_then(|tokens| i64::try_from(tokens).ok())
+                        .unwrap_or(0),
+                };
+                if let Err(error) = tables.usage_ledger.insert(ledger) {
+                    crate::log!(
+                        crate::log::Level::Error,
+                        "run",
+                        "{project_id}: could not record the cost: {error}"
+                    );
+                }
+            }
 
             if is_task_manager {
                 write_tasks_from_reply(&app, &io, &tables, &project_id, &outcome.text);

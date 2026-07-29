@@ -21,6 +21,7 @@ const DEFAULTS: UiPrefs = {
     pinned: true,
     recent: true,
     homeIo: true,
+    tmDebug: false,
   },
   lastTabKey: "home",
   taskPlacement: "panel",

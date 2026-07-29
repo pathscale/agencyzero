@@ -18,6 +18,7 @@ use crate::db::schema::message::{MessagePersistenceEngine, MessageWorkTable};
 use crate::db::schema::project::{ProjectPersistenceEngine, ProjectWorkTable};
 use crate::db::schema::project_item::{ProjectItemPersistenceEngine, ProjectItemWorkTable};
 use crate::db::schema::task_log::{TaskLogPersistenceEngine, TaskLogWorkTable};
+use crate::db::schema::usage_ledger::{UsageLedgerPersistenceEngine, UsageLedgerWorkTable};
 
 /// Every persisted table, opened once at startup.
 ///
@@ -37,6 +38,8 @@ pub struct Tables {
     pub task_log: Arc<TaskLogWorkTable>,
     /// Opt-in per project. See the module doc on `schema/agent_io.rs`.
     pub agent_io: Arc<AgentIoRowWorkTable>,
+    /// One row per turn that reported usage. See `schema/usage_ledger.rs`.
+    pub usage_ledger: Arc<UsageLedgerWorkTable>,
 }
 
 /// Where the fingerprint of the schema this build expects is recorded.
@@ -67,6 +70,10 @@ const SCHEMA_FINGERPRINT: &str = concat!(
     "message(id,project_id,item_id,author,agent,moderation,model,permission,usage,stop,exit_code,body,created_at);",
     "task_log(id,tool_call_id,project_id,item_id,label,tool,ok,output,duration_ms,exit_code,finished_at);",
     "agent_io_row(id,project_id,at,direction,kind,detail);",
+    // Tables appended after first ship go at the end: `check_schema` treats a
+    // stored fingerprint that is a prefix of this one as a match, because a
+    // brand-new table has no rows on disk to misread.
+    "usage_ledger(id,at,day,project_id,model,cost_micro,input_tokens,output_tokens);",
 );
 
 /// What opening the tables found, so the caller can say something useful.
@@ -89,6 +96,14 @@ pub fn check_schema(stored: Option<&str>) -> SchemaState {
         // First run. Nothing on disk to misread.
         None => SchemaState::Match,
         Some(found) if found == SCHEMA_FINGERPRINT => SchemaState::Match,
+        /*
+         * The store predates a table this build added. Every table it does
+         * know is unchanged — additions append to the fingerprint — and a
+         * new table has no rows on disk to misread, so this is not the
+         * silent-corruption case the fingerprint exists to catch. Boot
+         * restamps, upgrading the marker to the full string.
+         */
+        Some(found) if SCHEMA_FINGERPRINT.starts_with(found) => SchemaState::Match,
         Some(found) => SchemaState::Mismatch {
             found: found.to_string(),
         },
@@ -130,6 +145,7 @@ impl Tables {
             message: open!(MessagePersistenceEngine, MessageWorkTable),
             task_log: open!(TaskLogPersistenceEngine, TaskLogWorkTable),
             agent_io: open!(AgentIoRowPersistenceEngine, AgentIoRowWorkTable),
+            usage_ledger: open!(UsageLedgerPersistenceEngine, UsageLedgerWorkTable),
         })
     }
 }
@@ -245,6 +261,17 @@ mod restart_tests {
             },
             "an added column has to be caught before the rows are read"
         );
+
+        // A store stamped before a table was appended. Every table it knows is
+        // unchanged and the new one has no rows to misread, so setting the
+        // whole store aside for it would throw data away over nothing.
+        let before_the_ledger =
+            SCHEMA_FINGERPRINT.replace("usage_ledger(id,at,day,project_id,model,cost_micro,input_tokens,output_tokens);", "");
+        assert_eq!(
+            check_schema(Some(&before_the_ledger)),
+            SchemaState::Match,
+            "an appended table must not orphan an existing store"
+        );
     }
 
     /// The behaviour the whole app depends on and that nothing covered: a write
@@ -339,5 +366,6 @@ impl Tables {
         self.message.wait_for_ops().await;
         self.task_log.wait_for_ops().await;
         self.agent_io.wait_for_ops().await;
+        self.usage_ledger.wait_for_ops().await;
     }
 }
