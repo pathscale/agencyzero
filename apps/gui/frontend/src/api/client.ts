@@ -117,6 +117,12 @@ export interface AppEvents {
   /** `Event::ToolResult` — the row leaves Running and lands in the log. */
   "task:finished": TaskLogEntry;
   "run:rate_limit": RateLimit;
+  /**
+   * The limit has lifted. Without this the header pill and the tab dot stay
+   * blocked for the rest of the session, since `resetsAt` passing is not
+   * something the window can observe on its own.
+   */
+  "run:rate_limit_cleared": { projectId: string };
   "run:stopped": { projectId: string; stop: string; exitCode: number | null };
 }
 

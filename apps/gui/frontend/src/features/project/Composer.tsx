@@ -18,7 +18,11 @@ export type ComposerProps = {
   permission: Permission;
   onModelChange: (model: string) => void;
   onPermissionChange: (permission: Permission) => void;
-  onSend: (body: string) => void;
+  /**
+   * Resolves on success. The draft is held until then, so an IPC, database or
+   * backend failure cannot swallow a prompt someone spent minutes writing.
+   */
+  onSend: (body: string) => Promise<void>;
   /** Shown on the right of the control row, e.g. "18.7k tok · $0.017". */
   usage?: string;
   /** A run is in flight: the send button becomes Stop. */
@@ -38,15 +42,33 @@ export type ComposerProps = {
  */
 export function Composer(props: ComposerProps): JSX.Element {
   const [draft, setDraft] = createSignal("");
+  const [isSending, setIsSending] = createSignal(false);
+  const [error, setError] = createSignal<string | null>(null);
   let field!: HTMLTextAreaElement;
 
-  const canSend = () => draft().trim().length > 0;
+  const canSend = () => draft().trim().length > 0 && !isSending();
 
-  function submit(): void {
+  /**
+   * Clears only after the send resolves.
+   *
+   * A prompt is often long and carefully written; clearing on dispatch and
+   * discovering the failure afterwards means it is already gone. `isSending`
+   * also blocks the double-submit that Enter-mashing would otherwise cause.
+   */
+  async function submit(): Promise<void> {
     if (!canSend()) return;
-    props.onSend(draft().trim());
-    setDraft("");
-    resize();
+
+    setError(null);
+    setIsSending(true);
+    try {
+      await props.onSend(draft().trim());
+      setDraft("");
+      resize();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setIsSending(false);
+    }
   }
 
   /** Grow with the content up to a ceiling, then scroll — no jumping layout. */
@@ -78,12 +100,20 @@ export function Composer(props: ComposerProps): JSX.Element {
             // and the reason this is a textarea rather than an input.
             if (event.key !== "Enter" || event.shiftKey) return;
             event.preventDefault();
-            submit();
+            void submit();
           }}
           class={`az-scroll w-full resize-none bg-transparent text-base-content leading-[1.45] placeholder:text-az-faint focus:outline-none ${
             props.size === "lg" ? "text-[15px]" : "text-[14.5px]"
           }`}
         />
+
+        <Show when={error()}>
+          {(message) => (
+            <p role="alert" class="text-[12px] text-error">
+              Could not send — your message is still here. {message()}
+            </p>
+          )}
+        </Show>
 
         <div class="flex items-center gap-2.5">
           <button
@@ -138,7 +168,7 @@ export function Composer(props: ComposerProps): JSX.Element {
             fallback={
               <button
                 type="button"
-                onClick={submit}
+                onClick={() => void submit()}
                 disabled={!canSend()}
                 aria-label="Send"
                 class="flex size-8 items-center justify-center rounded-full bg-primary text-primary-content transition-colors hover:bg-[#fff176] disabled:cursor-not-allowed disabled:opacity-40"

@@ -143,7 +143,20 @@ export function createMockApi(): AgencyZeroApi {
     async deleteProject(id) {
       const index = projects.findIndex((project) => project.id === id);
       if (index >= 0) projects.splice(index, 1);
-      for (let i = items.length - 1; i >= 0; i--) if (items[i].projectId === id) items.splice(i, 1);
+
+      // Every collection this project owns goes with it. Leaving messages or a
+      // task log behind would let them resurface under a reused id.
+      const drop = <T extends { projectId: string }>(list: T[]) => {
+        for (let i = list.length - 1; i >= 0; i--) {
+          if (list[i].projectId === id) list.splice(i, 1);
+        }
+      };
+      drop(items);
+      drop(messages);
+      drop(running);
+      drop(taskLog);
+      delete logTotals[id];
+
       emit("project:deleted", { id });
       return settle(undefined);
     },
@@ -372,6 +385,7 @@ export function createMockApi(): AgencyZeroApi {
   function finishTask(task: RunningTask, ok: boolean): TaskLogEntry {
     const entry: TaskLogEntry = {
       id: nextId("log"),
+      toolCallId: task.toolCallId,
       projectId: task.projectId,
       itemId: task.itemId,
       label: task.label,

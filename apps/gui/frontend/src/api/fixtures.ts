@@ -252,6 +252,8 @@ const logEntry = (
   exitCode: number | null,
 ): TaskLogEntry => ({
   id: `${projectId}-log-${index}`,
+  // History from before this session; nothing left to correlate it to.
+  toolCallId: null,
   projectId,
   itemId: null,
   label,
