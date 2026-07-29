@@ -205,6 +205,21 @@ export interface AgentStatus {
   checkedAt: string;
 }
 
+/**
+ * Where the WorkTable data directory is, and whether the UI may change it.
+ *
+ * Not part of `GlobalSettings` on purpose: settings are a row in the database,
+ * so the database's own location cannot be one of them. It resolves from an
+ * environment variable or a pointer file before anything opens.
+ */
+export interface DataLocation {
+  path: string;
+  /** `default` | `pointer` | `env`. */
+  source: "default" | "pointer" | "env";
+  /** False when `AZ_DATA_DIR` set it, which a pointer file cannot override. */
+  isEditable: boolean;
+}
+
 /** Whether an id names one model or points at whichever is current. */
 export type ModelKind = "alias" | "pinned";
 

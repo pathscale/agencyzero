@@ -2,6 +2,7 @@ import type {
   AgentModels,
   AgentStatus,
   CreatedProject,
+  DataLocation,
   GlobalSettings,
   Message,
   Project,
@@ -339,6 +340,16 @@ export function createMockApi(): AgencyZeroApi {
     listModels(_discover): Promise<AgentModels[]> {
       return settle(models);
     },
+
+    /*
+     * There is no database outside Tauri, so this reports the shape without
+     * claiming a real path, and `isEditable: false` keeps the browser from
+     * offering to move something that does not exist.
+     */
+    getDataLocation(): Promise<DataLocation> {
+      return settle({ path: "(in-memory fixtures)", source: "default", isEditable: false });
+    },
+    setDataLocation: () => settle(undefined),
 
     setTabModel: () => settle(undefined),
 

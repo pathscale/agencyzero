@@ -10,6 +10,7 @@ use std::sync::Arc;
 use tauri::menu::{AboutMetadata, Menu, MenuBuilder, MenuItemBuilder, SubmenuBuilder};
 use tauri::{AppHandle, Emitter, Manager, Runtime, State};
 
+use crate::db::location::{self, DataLocation};
 use crate::db::tables::Tables;
 use crate::settings::GlobalSettings;
 
@@ -25,6 +26,8 @@ use crate::settings::GlobalSettings;
 /// window fails rather than falling back.
 const IMPLEMENTED: &[&str] = &[
     "greet",
+    "get_data_location",
+    "set_data_location",
     "get_settings",
     "set_settings",
     "list_agent_status",
@@ -34,12 +37,42 @@ const IMPLEMENTED: &[&str] = &[
 /// What the GUI carries for the life of the process.
 struct AppState {
     tables: Arc<Tables>,
+    /// Kept so `set_data_location` can write the pointer beside the settings.
+    config_dir: std::path::PathBuf,
+    /// Where the tables were opened from this launch. A change takes effect on
+    /// the next one, so this is the answer for the whole session.
+    location: DataLocation,
 }
 
 /// Which commands Rust answers. See [`IMPLEMENTED`].
 #[tauri::command]
 fn list_capabilities() -> Vec<String> {
     IMPLEMENTED.iter().map(|name| (*name).to_string()).collect()
+}
+
+/// Where the tables were opened from, and whether that is changeable.
+#[tauri::command]
+fn get_data_location(state: State<'_, AppState>) -> DataLocation {
+    state.location.clone()
+}
+
+/// Point future launches at a different directory, or back at the default.
+///
+/// Takes effect on the next launch and moves nothing. A database cannot be
+/// relocated out from under its open handles, and silently copying a transcript
+/// to a new disk is not something to do without asking.
+///
+/// # Errors
+/// Returns the IO error as a string when the pointer cannot be written, and
+/// refuses outright when the location came from `AZ_DATA_DIR`: writing a pointer
+/// the environment will keep overriding would report a change that never happens.
+#[tauri::command]
+fn set_data_location(path: Option<String>, state: State<'_, AppState>) -> Result<(), String> {
+    if !state.location.is_editable {
+        return Err("the data location is set by AZ_DATA_DIR and cannot be changed here".into());
+    }
+    location::set_pointer(&state.config_dir, path.as_deref().map(std::path::Path::new))
+        .map_err(|error| error.to_string())
 }
 
 /// The persisted settings record, or the defaults on a first run.
@@ -244,6 +277,8 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             greet,
             list_capabilities,
+            get_data_location,
+            set_data_location,
             get_settings,
             set_settings,
             list_agent_status,
@@ -256,14 +291,26 @@ fn main() {
             // fatal on purpose. Running with no persistence would let every
             // setting appear to save and then vanish on the next launch, which
             // is a worse failure than refusing to start.
-            let dir = app
+            let config_dir = app
                 .path()
                 .app_config_dir()
                 .map_err(|error| format!("no config directory: {error}"))?;
-            let tables = tauri::async_runtime::block_on(Tables::open(&dir))
-                .map_err(|error| format!("could not open the tables in {dir:?}: {error}"))?;
+            let data_dir = app
+                .path()
+                .app_data_dir()
+                .map_err(|error| format!("no data directory: {error}"))?;
+
+            // Resolved before anything opens, because the settings record that
+            // would otherwise carry it lives in the database being located.
+            let location = location::resolve(&config_dir, &data_dir);
+            let tables =
+                tauri::async_runtime::block_on(Tables::open(&location.path)).map_err(|error| {
+                    format!("could not open the tables in {:?}: {error}", location.path)
+                })?;
             app.manage(AppState {
                 tables: Arc::new(tables),
+                config_dir,
+                location,
             });
             Ok(())
         })

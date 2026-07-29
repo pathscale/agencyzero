@@ -2,6 +2,7 @@ import type {
   AgentModels,
   AgentStatus,
   CreatedProject,
+  DataLocation,
   GlobalSettings,
   Message,
   Permission,
@@ -79,6 +80,15 @@ export interface AgencyZeroApi {
    * be asked.
    */
   listModels(discover: boolean): Promise<AgentModels[]>;
+  /** Where the tables were opened from this launch. */
+  getDataLocation(): Promise<DataLocation>;
+  /**
+   * Point future launches somewhere else, or at the default with `null`.
+   *
+   * Takes effect on the next launch and moves nothing: a database cannot be
+   * relocated out from under its open handles.
+   */
+  setDataLocation(path: string | null): Promise<void>;
 
   // — Runs and tasks ——————————————————————————————————————————
   /** The tab's model and posture stick until changed again. */
