@@ -296,6 +296,49 @@ function createWorkspace() {
     });
   }
 
+  /**
+   * Step through the strip in its current visual order, wrapping at both ends.
+   *
+   * Index-based on `state.tabs`, which *is* the strip order — so a tab dragged
+   * to a new position is immediately in that position for cycling too, with
+   * nothing to keep in step.
+   */
+  function cycleTab(delta: number): void {
+    const index = state.tabs.findIndex((tab) => tab.key === state.activeKey);
+    if (index < 0 || state.tabs.length < 2) return;
+    const count = state.tabs.length;
+    focus(state.tabs[(index + delta + count) % count].key);
+  }
+
+  /** Move a tab within the strip. Home is index 0 and stays there. */
+  function moveTab(key: string, toIndex: number): void {
+    const from = state.tabs.findIndex((tab) => tab.key === key);
+    if (from <= 0) return;
+    const to = Math.min(Math.max(toIndex, 1), state.tabs.length - 1);
+    if (from === to) return;
+    setState("tabs", (tabs) => {
+      const next = [...tabs];
+      const [moved] = next.splice(from, 1);
+      next.splice(to, 0, moved);
+      return next;
+    });
+  }
+
+  /**
+   * Persist the strip order, once, when a drag ends.
+   *
+   * Only the project run is persistable — `Project.order` is a real field, and
+   * `listProjects` returns them sorted by it, so the order survives a restart.
+   * Draft and Settings tabs are window state and keep their place only for as
+   * long as they are open.
+   */
+  async function commitTabOrder(): Promise<void> {
+    const ids = state.tabs
+      .filter((tab) => tab.kind === "project" && tab.projectId)
+      .map((tab) => tab.projectId as string);
+    if (ids.length > 1) await client().reorderProjects(ids);
+  }
+
   function openProject(projectId: string): void {
     const project = state.projects.find((candidate) => candidate.id === projectId);
     if (!project) return;
@@ -418,6 +461,9 @@ function createWorkspace() {
 
   const actions = {
     focus,
+    cycleTab,
+    moveTab,
+    commitTabOrder,
     openProject,
     openSettings,
     openDraft,
