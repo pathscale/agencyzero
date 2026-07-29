@@ -13,6 +13,7 @@
     "withGlobalTauri": true,
     "windows": [
       {
+        "label": "main",
         "title": "AgencyZero",
         "width": 1344,
         "height": 900,

@@ -32,6 +32,26 @@ bun run build        # typecheck + rsbuild -> ../dist
 `apps/gui` — it locates the frontend by the nearest `package.json`. A `--cwd frontend` in
 there fails with `ENOENT`.
 
+## Window chrome
+
+The window uses `titleBarStyle: "Overlay"` with `hiddenTitle`, so there is no native title
+bar and the tab strip stands in for one. That means the window is dragged from inside the
+webview, which takes two things that have to stay in step:
+
+- `data-tauri-drag-region="deep"` on the strip's root in
+  [`TabStrip.tsx`](src/features/tabs/TabStrip.tsx). Tauri walks up from the click target
+  and stops at the first clickable element, so tabs, "+" and the gear keep their clicks
+  and only the gaps between them move the window. Keep padding on those buttons rather
+  than on their wrappers — bare padding inside a tab becomes a dead strip that drags the
+  window instead of switching to the tab.
+- `core:window:allow-start-dragging` in
+  [`../capabilities/default.json`](../capabilities/default.json). It is **not** part of
+  `core:window:default`, which does grant `internal-toggle-maximize` — so without it
+  double-clicking the strip zooms the window while dragging silently does nothing.
+
+That file also has to list `core:default` itself: adding a `capabilities/` directory
+replaces the capability `tauri-build` generates when there isn't one.
+
 ## Where the Rust boundary is
 
 **Everything under `src/` is frontend.** It reaches Rust through exactly one file,
