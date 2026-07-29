@@ -2,6 +2,7 @@ import type {
   AgentIoEntry,
   AgentModels,
   AgentStatus,
+  CostSummary,
   CreatedProject,
   DataLocation,
   GlobalSettings,
@@ -140,6 +141,8 @@ export interface AgencyZeroApi {
    * with the stock reason; the turn continues either way.
    */
   resolveApproval(projectId: string, approvalId: string, allow: boolean): Promise<void>;
+  /** Spend over Settings' ranges, from the usage ledger. Survives project deletion. */
+  getCostSummary(): Promise<CostSummary>;
   /** Where the Home task manager's conversation stands. */
   getTaskManager(): Promise<TaskManagerState>;
   /**

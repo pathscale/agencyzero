@@ -83,6 +83,7 @@ export function createTauriApi(): AgencyZeroApi {
     listQuota: () => call("list_quota"),
     clearTaskLog: (projectId) => call("clear_task_log", { projectId }),
     listRateLimits: () => call("list_rate_limits"),
+    getCostSummary: () => call("get_cost_summary"),
     getTaskManager: () => call("get_task_manager"),
     resetTaskManager: () => call("reset_task_manager"),
     resolveApproval: (projectId, approvalId, allow) =>

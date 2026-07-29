@@ -1,5 +1,5 @@
 import { Toggle } from "@pathscale/ui";
-import { createSignal, For, type JSX, Show } from "solid-js";
+import { createSignal, For, type JSX, onMount, Show } from "solid-js";
 import { Icon, type IconProps } from "~/components/Icon";
 import { Panel } from "~/components/Panel";
 import { PillMenu } from "~/components/PillMenu";
@@ -19,6 +19,7 @@ import type {
   AgentModels,
   AgentState,
   AgentStatus,
+  CostSummary,
   EnvPolicy,
   Model,
   ModelSelection,
@@ -280,6 +281,8 @@ export function SettingsTab(): JSX.Element {
                   <ResetTaskManagerButton />
                 </Row>
               </Section>
+
+              <CostSection />
 
               <AccountUsageSection />
 
@@ -624,6 +627,51 @@ function ResetTaskManagerButton(): JSX.Element {
 }
 
 /**
+ * Global spend, from the usage ledger — the durable record, not this window.
+ *
+ * Every run that reported a cost wrote a ledger row, so these figures span
+ * every session and survive project deletion. Priced by the agent itself at
+ * API list rates: on a subscription plan this measures consumption rather
+ * than a bill, which is exactly what makes it comparable week to week.
+ */
+function CostSection(): JSX.Element {
+  const { actions } = useWorkspace();
+  const [summary, setSummary] = createSignal<CostSummary | null>(null);
+
+  // Asked once per visit: the ledger only grows when a run finishes, and
+  // Settings is not a screen left open while runs happen.
+  onMount(() => {
+    void actions
+      .getCostSummary()
+      .then(setSummary)
+      .catch(() => setSummary(null));
+  });
+
+  const dollars = (value: number | undefined): string =>
+    typeof value === "number" ? `$${value.toFixed(2)}` : "—";
+  const figure = (value: number | undefined): JSX.Element => (
+    <span class="font-mono text-[12.5px] text-az-strong">{dollars(value)}</span>
+  );
+
+  return (
+    <Section icon="gauge" title="Cost" hint="all sessions · summed from the usage ledger">
+      <Row label="Today">{figure(summary()?.todayUsd)}</Row>
+      <Row label="This week" hint="the trailing seven days, so a Monday reset cannot hide Sunday">
+        {figure(summary()?.weekUsd)}
+      </Row>
+      <Row label="This month">{figure(summary()?.monthUsd)}</Row>
+      <Row
+        label="All time"
+        hint={`${summary()?.turns ?? 0} priced turn(s) · priced by the agent at API list rates — consumption, not a bill`}
+        isLast
+      >
+        {figure(summary()?.totalUsd)}
+      </Row>
+    </Section>
+  );
+}
+
+/**
  * Account usage for the agents other than Claude, parked here for now.
  *
  * Claude's three lines live on the project panel, where they are read daily.
@@ -632,8 +680,14 @@ function ResetTaskManagerButton(): JSX.Element {
  * until that surface is properly exposed.
  */
 function AccountUsageSection(): JSX.Element {
-  const { state } = useWorkspace();
+  const { state, actions } = useWorkspace();
   const others = () => (state.quota?.agents ?? []).filter((agent) => agent.agent !== "claude");
+
+  // This section is now the only consumer, so it does its own asking — once
+  // per visit, not on a clock. Settings mounts after boot by construction.
+  onMount(() => {
+    void actions.refreshQuota();
+  });
 
   return (
     <Section

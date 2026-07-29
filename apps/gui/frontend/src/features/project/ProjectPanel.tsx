@@ -3,7 +3,6 @@ import { createEffect, createSignal, For, type JSX, Show } from "solid-js";
 import { Icon } from "~/components/Icon";
 import { SectionPanel } from "~/components/Panel";
 import { ItemMarker } from "~/components/StatusDot";
-import { UsagePanel } from "~/features/shell/UsageReadout";
 import { clockTime, elapsed, taskMeta } from "~/lib/format";
 import { statusSuffix } from "~/lib/labels";
 import { describeError, log } from "~/lib/log";
@@ -12,8 +11,8 @@ import { useNow, useWorkspace } from "~/stores/workspace";
 import type { Project, ProjectItem } from "~/types";
 
 /**
- * The project's right-hand column: Usage · Items · Running · Task log ·
- * Agent I/O · Settings.
+ * The project's right-hand column: Items · Running · Task log · Agent I/O ·
+ * Settings.
  *
  * This replaced the old left sidebar. Open state lives in `UiPrefs`, per
  * install rather than per project, so the panel you left open stays open when
@@ -28,8 +27,6 @@ export function ProjectPanel(props: { project: Project }): JSX.Element {
 
   return (
     <div class="az-scroll flex w-[322px] flex-none flex-col gap-2.5">
-      <UsagePanel />
-
       <SectionPanel
         icon="list-checks"
         title="Items"

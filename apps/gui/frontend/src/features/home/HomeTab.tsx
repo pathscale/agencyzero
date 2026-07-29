@@ -257,7 +257,15 @@ function TaskManagerComposer(): JSX.Element {
           onKeyDown={(event) => {
             if (event.key === "Enter") void submit();
           }}
-          placeholder="Tell the task manager…"
+          /*
+           * The session id rides in the placeholder: same gray, gone the
+           * moment you type, and it stops costing the line it used to sit on.
+           */
+          placeholder={
+            state.taskManagerSession
+              ? `Tell the task manager… · ${state.taskManagerSession}`
+              : "Tell the task manager…"
+          }
           aria-label="Task manager prompt"
           disabled={isSending()}
           class="min-w-0 flex-1 bg-transparent text-[12.5px] text-base-content placeholder:text-az-muted focus:outline-none disabled:opacity-60"
@@ -272,6 +280,22 @@ function TaskManagerComposer(): JSX.Element {
         >
           <span class="az-halo-primary size-2 shrink-0 rounded-full bg-primary" />
         </Show>
+        {/*
+          The debug reveal. The reply and collected list answer "what did the
+          harvest actually do", which only matters when it did the wrong
+          thing — so they hide behind this rather than costing space daily.
+        */}
+        <button
+          type="button"
+          onClick={() => togglePanelSection("tmDebug")}
+          aria-pressed={prefs.panelSections.tmDebug}
+          title="Show the task manager's reply and collected list"
+          class={`shrink-0 transition-colors ${
+            prefs.panelSections.tmDebug ? "text-primary" : "text-az-faint hover:text-az-body"
+          }`}
+        >
+          <Icon name="terminal" class="text-[13px]" />
+        </button>
       </div>
       <Show when={error()}>
         {(message) => (
@@ -337,21 +361,13 @@ function TaskManagerStatus(): JSX.Element {
 
   return (
     <>
-      <Show when={state.taskManagerSession}>
-        {(session) => (
-          <div class="flex items-baseline gap-2 px-0.5 text-[11px] text-az-faint">
-            <span>Task Manager · session</span>
-            <span class="truncate font-mono">{session()}</span>
-          </div>
-        )}
-      </Show>
-
-      {/* The task manager's run is blocked on this until you decide. */}
+      {/* The task manager's run is blocked on this until you decide — it can
+          never hide behind the debug toggle. */}
       <Show when={state.pendingApprovals[TASK_MANAGER_ID]}>
         {(approval) => <ApprovalCard projectId={TASK_MANAGER_ID} approval={approval()} />}
       </Show>
 
-      <Show when={reply()}>
+      <Show when={prefs.panelSections.tmDebug && reply()}>
         {(current) => (
           <div class="flex flex-col gap-1 rounded-[11px] border border-az-hairline-soft bg-az-inset px-3 py-2">
             <span class="text-[10.5px] text-az-faint">
@@ -367,7 +383,7 @@ function TaskManagerStatus(): JSX.Element {
         )}
       </Show>
 
-      <Show when={tasks().length > 0}>
+      <Show when={prefs.panelSections.tmDebug && tasks().length > 0}>
         {/*
           Leftovers only. Harvested tasks now land on real projects; anything
           still here was collected under the old flat scheme (or names the
