@@ -411,6 +411,20 @@ fn main() {
             };
             let _ = app.emit(topic, ());
         })
-        .run(tauri::generate_context!())
-        .expect("failed to run AgencyZero GUI");
+        // `build` then `run`, rather than `run` alone: the exit hook is only
+        // reachable on the built app. WorkTable is sensitive to a half-written
+        // page, so the tables are drained explicitly instead of being left to
+        // process teardown.
+        .build(tauri::generate_context!())
+        .expect("failed to build AgencyZero GUI")
+        .run(|app, event| {
+            // `Exit` fires once, after the last window is gone and before the
+            // process ends, which is the only point where nothing else can
+            // still be writing.
+            if matches!(event, tauri::RunEvent::Exit)
+                && let Some(state) = app.try_state::<AppState>()
+            {
+                tauri::async_runtime::block_on(state.tables.shutdown());
+            }
+        });
 }

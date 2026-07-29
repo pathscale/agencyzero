@@ -50,6 +50,21 @@ function Workspace(): JSX.Element {
             <Match when={activeTab().kind === "project" && activeProject()}>
               {(project) => <ProjectTab tab={activeTab()} project={project()} />}
             </Match>
+            {/*
+              A project tab whose record is not in state. Previously this matched
+              nothing and the window rendered an unexplained black void, which is
+              the worst possible failure: no content, no error, no way to tell a
+              missing record from a broken render.
+            */}
+            <Match when={activeTab().kind === "project"}>
+              <div class="flex min-w-0 flex-1 flex-col items-center justify-center gap-2 rounded-panel border border-az-hairline bg-[oklch(13%_0.004_240)]">
+                <p class="text-[13.5px] text-az-title">This project could not be loaded</p>
+                <p class="max-w-[420px] text-center text-[11.5px] text-az-muted">
+                  The tab is open but its record is missing from the workspace. Reopening the window
+                  will re-read it from the database.
+                </p>
+              </div>
+            </Match>
           </Switch>
         </Show>
       </main>

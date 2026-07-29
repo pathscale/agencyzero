@@ -167,3 +167,18 @@ mod restart_tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 }
+
+impl Tables {
+    /// Wait for every table's pending writes to reach disk.
+    ///
+    /// Called once on exit. WorkTable persists through a background task, so a
+    /// process that ends while an operation is still in flight can leave a page
+    /// half written, and a half-written page is how a table becomes unreadable
+    /// rather than merely stale. `wait_for_ops` is the drain.
+    pub async fn shutdown(&self) {
+        self.kv.wait_for_ops().await;
+        self.project.wait_for_ops().await;
+        self.project_item.wait_for_ops().await;
+        self.message.wait_for_ops().await;
+    }
+}
