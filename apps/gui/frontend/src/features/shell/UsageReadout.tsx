@@ -8,9 +8,10 @@ import {
   onCleanup,
   untrack,
 } from "solid-js";
-import { Icon } from "~/components/Icon";
-import { Panel } from "~/components/Panel";
+import { SectionPanel } from "~/components/Panel";
 import { countdown } from "~/lib/format";
+import { type ClaudeWindowKind, claudeWindowKind } from "~/lib/stats";
+import { prefs, togglePanelSection } from "~/stores/prefs";
 import { isLimitLive, useWorkspace } from "~/stores/workspace";
 import type { QuotaWindow, RateLimit } from "~/types";
 
@@ -34,26 +35,11 @@ function useMinuteClock(): Accessor<number> {
  * derived from reports, so the panel has a stable shape — a line that appears
  * only once you have hit its limit is a line you never learn to read.
  */
-const CLAUDE_LINES = [
+const CLAUDE_LINES: { kind: ClaudeWindowKind; label: string }[] = [
   { kind: "session", label: "Current session" },
   { kind: "weekly", label: "Weekly" },
   { kind: "fable", label: "Fable" },
-] as const;
-
-type ClaudeKind = (typeof CLAUDE_LINES)[number]["kind"];
-
-/**
- * Which fixed line a provider report belongs to, from its own wording —
- * "allowed (five_hour)", "opus_weekly", "weekly limit reached". Fable/Opus is
- * tested first because its window names contain "weekly" too.
- */
-export function claudeWindowKind(text: string): ClaudeKind | null {
-  const wording = text.toLowerCase();
-  if (/fable|opus/.test(wording)) return "fable";
-  if (/five_hour|five-hour|5h|session/.test(wording)) return "session";
-  if (/week|seven_day|7d/.test(wording)) return "weekly";
-  return null;
-}
+];
 
 type LineReport = {
   value: string;
@@ -104,7 +90,7 @@ export function UsagePanel(): JSX.Element {
 
   /** The best report per line: a refusal beats a figure beats a heartbeat. */
   const reports = createMemo<{
-    byKind: Partial<Record<ClaudeKind, LineReport>>;
+    byKind: Partial<Record<ClaudeWindowKind, LineReport>>;
     /**
      * Live refusals whose wording names no window. They cannot be filed under
      * a fixed line, and a refusal that quietly disappears is the one failure
@@ -113,7 +99,7 @@ export function UsagePanel(): JSX.Element {
     extras: { label: string; report: LineReport }[];
   }>(() => {
     const now = minute();
-    const byKind: Partial<Record<ClaudeKind, LineReport>> = {};
+    const byKind: Partial<Record<ClaudeWindowKind, LineReport>> = {};
     const extras: { label: string; report: LineReport }[] = [];
 
     // Account windows, should Claude ever learn to answer `account_usage`.
@@ -124,20 +110,19 @@ export function UsagePanel(): JSX.Element {
     }
 
     /*
-     * In-run reports, which are all Claude says today. Every project's latest
-     * limit is inspected: the plan is account-wide, so whichever project
-     * tripped it, it holds here too.
+     * In-run reports, which are all Claude says today, read from the
+     * per-window map: the plan is account-wide, so whichever project a report
+     * arrived on, it holds here — and a weekly report survives a later
+     * five-hour one instead of being overwritten.
      */
-    const seen = new Set<string>();
-    for (const limit of Object.values(state.rateLimits)) {
+    for (const [key, limit] of Object.entries(state.quotaWindows)) {
       if (!isLimitLive(limit, now)) continue;
       const kind = claudeWindowKind(limit.message);
       if (kind) {
         // A refusal outranks whatever else this line had to say.
         if (limit.isBlocking || !byKind[kind]) byKind[kind] = limitReport(limit, now);
-      } else if (limit.isBlocking && !seen.has(limit.message)) {
-        seen.add(limit.message);
-        extras.push({ label: limit.message, report: limitReport(limit, now) });
+      } else if (limit.isBlocking) {
+        extras.push({ label: key, report: limitReport(limit, now) });
       }
     }
 
@@ -145,13 +130,14 @@ export function UsagePanel(): JSX.Element {
   });
 
   return (
-    <Panel class="flex-none">
-      <div class="flex items-center gap-2.5 px-3.5 pt-3 pb-1.5">
-        <Icon name="gauge" class="text-[15px] text-az-body" />
-        <span class="font-semibold text-[12.5px] text-base-content">Claude usage</span>
-      </div>
-
-      <div class="flex flex-col gap-[3px] px-3.5 pt-0.5 pb-3">
+    <SectionPanel
+      icon="gauge"
+      title="Claude usage"
+      isOpen={prefs.panelSections.usage}
+      onToggle={() => togglePanelSection("usage")}
+      class="flex-none"
+    >
+      <div class="flex flex-col gap-[3px] px-3.5 py-2.5">
         <For each={CLAUDE_LINES}>
           {(line) => (
             <UsageLine
@@ -171,7 +157,7 @@ export function UsagePanel(): JSX.Element {
           {(extra) => <UsageLine label={extra.label} report={extra.report} />}
         </For>
       </div>
-    </Panel>
+    </SectionPanel>
   );
 }
 

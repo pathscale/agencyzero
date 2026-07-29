@@ -1,4 +1,4 @@
-import { type JSX, Match, Show, Switch } from "solid-js";
+import { type JSX, Match, onCleanup, onMount, Show, Switch } from "solid-js";
 import { Icon } from "~/components/Icon";
 import { IconSprite } from "~/components/IconSprite";
 import { DraftTab } from "~/features/draft/DraftTab";
@@ -8,6 +8,7 @@ import { SettingsTab } from "~/features/settings/SettingsTab";
 import { CloseConfirm } from "~/features/shell/CloseConfirm";
 import { useAppShell } from "~/features/shell/useAppShell";
 import { TabStrip } from "~/features/tabs/TabStrip";
+import { installSelectionCopy } from "~/lib/clipboard";
 import { useWorkspace, WorkspaceProvider } from "~/stores/workspace";
 
 /**
@@ -139,6 +140,10 @@ function MockBanner(): JSX.Element {
 }
 
 export default function App(): JSX.Element {
+  onMount(() => {
+    onCleanup(installSelectionCopy());
+  });
+
   return (
     <>
       <IconSprite />

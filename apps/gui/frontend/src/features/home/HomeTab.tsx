@@ -233,6 +233,7 @@ function ProjectGroup(props: { project: Project }): JSX.Element {
           label={`Rename ${props.project.name}`}
           class="min-w-0 font-semibold text-[13px] text-base-content"
           inputClass="font-semibold text-[13px]"
+          onActivate={() => actions.openProject(props.project.id)}
         />
         <button
           type="button"
@@ -302,7 +303,16 @@ function ProjectGroup(props: { project: Project }): JSX.Element {
       <div class="flex flex-col border-az-hairline-soft border-t">
         <For each={items()}>
           {(item) => (
-            <div class="flex cursor-default items-baseline gap-2.5 px-3.5 py-2.5 transition-colors hover:bg-white/4">
+            /*
+             * The whole row is a way into the project, matching the header:
+             * Home shows items but is not a second place to work them, so a
+             * click means "take me there", never "change the status here".
+             */
+            <button
+              type="button"
+              onClick={() => actions.openProject(props.project.id)}
+              class="flex items-baseline gap-2.5 px-3.5 py-2.5 text-left transition-colors hover:bg-white/4"
+            >
               <Show
                 when={item.status === "finished"}
                 fallback={<ItemMarker status={item.status === "active" ? "active" : "pending"} />}
@@ -323,7 +333,7 @@ function ProjectGroup(props: { project: Project }): JSX.Element {
               <span class={`shrink-0 text-[11.5px] ${STATUS_TONE[item.status]}`}>
                 {statusSuffix(item.status)}
               </span>
-            </div>
+            </button>
           )}
         </For>
       </div>

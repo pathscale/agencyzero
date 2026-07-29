@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { compactCount, contextUsed, costLabel, usageTotals } from "~/lib/stats";
+import { claudeWindowKind, compactCount, contextUsed, costLabel, usageTotals } from "~/lib/stats";
 import type { Message } from "~/types";
 
 function usage(partial: Partial<NonNullable<Message["usage"]>>): Message["usage"] {
@@ -172,5 +172,24 @@ describe("the accumulation rule", () => {
       turn("agent", usage({ tokens: 1, contextTokens: 10, contextWindow: 0 })),
     ]);
     expect(contextUsed(totals)).toBeNull();
+  });
+});
+
+describe("claudeWindowKind", () => {
+  it("files each provider wording under its fixed line", () => {
+    expect(claudeWindowKind("allowed (five_hour)")).toBe("session");
+    expect(claudeWindowKind("weekly limit reached")).toBe("weekly");
+    expect(claudeWindowKind("allowed (seven_day)")).toBe("weekly");
+    expect(claudeWindowKind("rejected (opus_weekly)")).toBe("fable");
+    expect(claudeWindowKind("fable usage cap")).toBe("fable");
+  });
+
+  // "opus_weekly" contains "weekly" too; the model-specific cap must win.
+  it("prefers the fable cap when the wording names both", () => {
+    expect(claudeWindowKind("opus_weekly")).toBe("fable");
+  });
+
+  it("declines to guess when the wording names no window", () => {
+    expect(claudeWindowKind("Rate limited")).toBeNull();
   });
 });
