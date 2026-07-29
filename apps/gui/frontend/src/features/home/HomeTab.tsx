@@ -290,7 +290,7 @@ function TaskManagerComposer(): JSX.Element {
  * fresh install's Home looks exactly as it did before the feature existed.
  */
 function TaskManagerStatus(): JSX.Element {
-  const { state, itemsFor } = useWorkspace();
+  const { state, actions, itemsFor } = useWorkspace();
   const tasks = () => itemsFor(TASK_MANAGER_ID);
 
   /**
@@ -369,22 +369,36 @@ function TaskManagerStatus(): JSX.Element {
 
       <Show when={tasks().length > 0}>
         {/*
-          Harvested tasks are items on the task manager's own project, the
-          proposed project name riding in the title. Promoting one to a real
-          project is a person's decision, so this list is read-only here.
+          Leftovers only. Harvested tasks now land on real projects; anything
+          still here was collected under the old flat scheme (or names the
+          task manager's own housekeeping), so it earns a Clear.
         */}
-        <div class="az-scroll flex max-h-[150px] flex-col gap-0.5 overflow-y-auto rounded-[11px] border border-az-hairline-soft bg-az-inset px-2.5 py-2">
-          <For each={tasks()}>
-            {(task) => (
-              <div class="flex items-baseline gap-2.5 px-1 py-1">
-                <ItemMarker status={task.status === "active" ? "active" : "pending"} />
-                <span class="min-w-0 flex-1 truncate text-[12px] text-az-body">{task.title}</span>
-                <span class={`shrink-0 text-[11px] ${STATUS_TONE[task.status]}`}>
-                  {statusSuffix(task.status)}
-                </span>
-              </div>
-            )}
-          </For>
+        <div class="flex flex-col gap-0.5 rounded-[11px] border border-az-hairline-soft bg-az-inset px-2.5 py-2">
+          <div class="flex items-center gap-2 px-1 pb-1">
+            <span class="text-[10.5px] text-az-faint">collected · {tasks().length}</span>
+            <button
+              type="button"
+              onClick={() => {
+                for (const task of tasks()) void actions.deleteItem(task.id);
+              }}
+              class="ml-auto rounded-md border border-az-hairline px-2 py-0.5 text-[10.5px] text-az-muted transition-colors hover:border-error hover:text-error"
+            >
+              Clear
+            </button>
+          </div>
+          <div class="az-scroll flex max-h-[150px] flex-col gap-0.5 overflow-y-auto">
+            <For each={tasks()}>
+              {(task) => (
+                <div class="flex items-baseline gap-2.5 px-1 py-1">
+                  <ItemMarker status={task.status === "active" ? "active" : "pending"} />
+                  <span class="min-w-0 flex-1 truncate text-[12px] text-az-body">{task.title}</span>
+                  <span class={`shrink-0 text-[11px] ${STATUS_TONE[task.status]}`}>
+                    {statusSuffix(task.status)}
+                  </span>
+                </div>
+              )}
+            </For>
+          </div>
         </div>
       </Show>
     </>
@@ -421,7 +435,14 @@ function ProjectGroup(props: { project: Project }): JSX.Element {
     activeCount() ? `${openCount()} open · ${activeCount()} active` : `${openCount()} open`;
 
   return (
-    <div class="overflow-hidden rounded-xl border border-az-hairline-soft bg-base-300">
+    /*
+     * `flex-none` is load-bearing: this sits in a flex column, and
+     * `overflow-hidden` sets the automatic minimum height to zero — so once
+     * the column overflows, flexbox *compresses* the groups instead of
+     * letting the column scroll. The projects with no items compressed to
+     * 2px slivers, which read as four empty pills above the real groups.
+     */
+    <div class="flex-none overflow-hidden rounded-xl border border-az-hairline-soft bg-base-300">
       <div class="flex items-center gap-2.5 px-3.5 py-2.5 transition-colors hover:bg-white/4">
         {/*
           The name is its own control now, not part of the open-project button:
@@ -502,7 +523,12 @@ function ProjectGroup(props: { project: Project }): JSX.Element {
         <Icon name="chevron-right" class="shrink-0 text-[14px] text-[oklch(56%_0.01_245)]" />
       </div>
 
-      <div class="flex flex-col border-az-hairline-soft border-t">
+      {/*
+        Bounded: a project the task manager just filled with eight items must
+        not push every other group off screen. The count in the header says
+        what the window is onto; the list scrolls inside it.
+      */}
+      <div class="az-scroll flex max-h-[220px] flex-col overflow-y-auto border-az-hairline-soft border-t">
         <For each={items()}>
           {(item) => (
             /*
