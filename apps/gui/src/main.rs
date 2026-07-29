@@ -3,6 +3,7 @@
 mod agents;
 mod db;
 mod models;
+mod projects;
 mod settings;
 
 use std::sync::Arc;
@@ -30,6 +31,14 @@ const IMPLEMENTED: &[&str] = &[
     "set_data_location",
     "get_workspace_root",
     "create_workspace_root",
+    "list_projects",
+    "list_items",
+    "list_messages",
+    "list_running_tasks",
+    "list_task_log",
+    "list_rate_limits",
+    "create_project",
+    "send_message",
     "get_settings",
     "set_settings",
     "list_agent_status",
@@ -37,7 +46,7 @@ const IMPLEMENTED: &[&str] = &[
 ];
 
 /// What the GUI carries for the life of the process.
-struct AppState {
+pub(crate) struct AppState {
     tables: Arc<Tables>,
     /// Kept so `set_data_location` can write the pointer beside the settings.
     config_dir: std::path::PathBuf,
@@ -84,6 +93,11 @@ fn resolve_workspace_root(app: &tauri::AppHandle, state: &AppState) -> Workspace
         path: path.to_string_lossy().into_owned(),
         is_default,
     }
+}
+
+/// The workspace root as a plain path, for callers that need somewhere to run.
+pub(crate) fn workspace_root_path(app: &tauri::AppHandle, state: &AppState) -> String {
+    resolve_workspace_root(app, state).path
 }
 
 #[tauri::command]
@@ -340,6 +354,14 @@ fn main() {
             set_data_location,
             get_workspace_root,
             create_workspace_root,
+            projects::list_projects,
+            projects::list_items,
+            projects::list_messages,
+            projects::list_running_tasks,
+            projects::list_task_log,
+            projects::list_rate_limits,
+            projects::create_project,
+            projects::send_message,
             get_settings,
             set_settings,
             list_agent_status,
