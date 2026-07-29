@@ -1,13 +1,14 @@
 import { createMemo, createSignal, For, type JSX, Show } from "solid-js";
 import { EditableTitle } from "~/components/EditableTitle";
 import { Icon } from "~/components/Icon";
-import { Panel } from "~/components/Panel";
+import { Panel, SectionPanel } from "~/components/Panel";
 import { ItemMarker, StatusDot } from "~/components/StatusDot";
 import { ApprovalCard } from "~/features/project/ApprovalCard";
 import { AgentIoList } from "~/features/project/ProjectPanel";
 import { relativeTime } from "~/lib/format";
 import { statusSuffix } from "~/lib/labels";
 import { describeError, log } from "~/lib/log";
+import { prefs, togglePanelSection } from "~/stores/prefs";
 import { TASK_MANAGER_ID, useWorkspace } from "~/stores/workspace";
 import type { Project, ProjectItem } from "~/types";
 
@@ -110,14 +111,15 @@ export function HomeTab(): JSX.Element {
         </button>
 
         <Show when={pinned().length > 0}>
-          <Panel class="flex-none">
-            <div class="flex items-center gap-2 px-4 pt-3.5 pb-2.5">
-              <Icon name="pin" class="text-[13px] text-primary" />
-              <span class="font-semibold text-[11.5px] text-az-muted uppercase tracking-[.06em]">
-                Pinned
-              </span>
-            </div>
-            <div class="flex flex-col gap-2 px-3 pb-3">
+          <SectionPanel
+            icon="pin"
+            title="Pinned"
+            count={pinned().length}
+            isOpen={prefs.panelSections.pinned}
+            onToggle={() => togglePanelSection("pinned")}
+            class="flex-none"
+          >
+            <div class="flex flex-col gap-2 px-3 pt-3 pb-3">
               <For each={pinned()}>
                 {(project) => (
                   <button
@@ -137,14 +139,18 @@ export function HomeTab(): JSX.Element {
                 )}
               </For>
             </div>
-          </Panel>
+          </SectionPanel>
         </Show>
 
-        <Panel class="flex min-h-0 flex-1 flex-col">
-          <div class="px-4 pt-3.5 pb-2.5 font-semibold text-[11.5px] text-az-muted uppercase tracking-[.06em]">
-            Recent
-          </div>
-          <div class="az-scroll flex min-h-0 flex-1 flex-col gap-2 px-3 pb-3">
+        <SectionPanel
+          icon="history"
+          title="Recent"
+          count={recent().length}
+          isOpen={prefs.panelSections.recent}
+          onToggle={() => togglePanelSection("recent")}
+          class={prefs.panelSections.recent ? "flex min-h-0 flex-1 flex-col" : "flex-none"}
+        >
+          <div class="az-scroll flex min-h-0 flex-1 flex-col gap-2 px-3 pt-3 pb-3">
             <For each={recent()}>
               {(project) => (
                 <button
@@ -170,7 +176,7 @@ export function HomeTab(): JSX.Element {
               )}
             </For>
           </div>
-        </Panel>
+        </SectionPanel>
 
         {/*
           The task manager's raw exchange, beneath Recent per the plan: what
@@ -179,15 +185,18 @@ export function HomeTab(): JSX.Element {
           sent — a diagnostic panel on a fresh install is noise.
         */}
         <Show when={(state.agentIo[TASK_MANAGER_ID] ?? []).length > 0}>
-          <Panel class="flex max-h-[300px] flex-none flex-col">
-            <div class="flex items-center gap-2 px-4 pt-3.5 pb-2">
-              <Icon name="terminal" class="text-[13px] text-az-muted" />
-              <span class="font-semibold text-[11.5px] text-az-muted uppercase tracking-[.06em]">
-                Task Manager I/O
-              </span>
-            </div>
+          <SectionPanel
+            icon="terminal"
+            title="Task Manager I/O"
+            count={(state.agentIo[TASK_MANAGER_ID] ?? []).length}
+            isOpen={prefs.panelSections.homeIo}
+            onToggle={() => togglePanelSection("homeIo")}
+            class={
+              prefs.panelSections.homeIo ? "flex max-h-[300px] flex-none flex-col" : "flex-none"
+            }
+          >
             <AgentIoList projectId={TASK_MANAGER_ID} />
-          </Panel>
+          </SectionPanel>
         </Show>
       </div>
     </div>
@@ -291,13 +300,36 @@ function TaskManagerStatus(): JSX.Element {
    * "I can't read that, could you widen my permissions?" — and a question that
    * only exists in a diagnostic panel is a question nobody answers.
    */
+  /**
+   * The machine-readable block, hidden from the human. Harvest already turned
+   * these lines into project items; re-reading them as prose is noise. Same
+   * shape test as `harvest()`: a line that parses as JSON with a project and
+   * an item.
+   */
+  const withoutTaskLines = (body: string): string =>
+    body
+      .split("\n")
+      .filter((line) => {
+        const bare = line.trim();
+        if (!bare.startsWith("{")) return true;
+        try {
+          const parsed = JSON.parse(bare) as { project?: unknown; item?: unknown };
+          return !(typeof parsed.project === "string" && typeof parsed.item === "string");
+        } catch {
+          return true;
+        }
+      })
+      .join("\n")
+      .trim();
+
   const reply = () => {
     const streaming = state.streaming[TASK_MANAGER_ID] ?? "";
-    if (streaming) return { body: streaming, isWriting: true };
+    if (streaming) return { body: withoutTaskLines(streaming), isWriting: true };
     const list = state.messages[TASK_MANAGER_ID] ?? [];
     for (let at = list.length - 1; at >= 0; at--) {
       if (list[at].author === "agent" && list[at].body.trim()) {
-        return { body: list[at].body, isWriting: false };
+        const body = withoutTaskLines(list[at].body);
+        if (body) return { body, isWriting: false };
       }
     }
     return null;
