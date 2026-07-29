@@ -24,6 +24,8 @@ cd apps/gui && cargo tauri dev
 ```bash
 bun run typecheck    # tsc --noEmit
 bun run lint         # biome check
+bun run test         # vitest, watch mode
+bun run test:run     # vitest, once
 bun run build        # typecheck + rsbuild -> ../dist
 ```
 
@@ -198,6 +200,47 @@ Two TODOs stay parked exactly where the design left them: resuming after a CRITI
 long tool output. [`MessageBody.tsx`](src/features/project/MessageBody.tsx) handles
 paragraphs, `**bold**` and `` `code` `` and nothing more, building JSX nodes rather than
 assigning HTML so agent output can never become markup.
+
+## Tests
+
+Vitest + jsdom + `@solidjs/testing-library`, colocated as `src/**/*.test.ts(x)` — the same
+setup as `nofilter.io`. `bun run test:run`.
+
+They run against the mock backend, which means against the design fixtures: three
+projects, two tool calls running on WorkTable, a CRITICAL hold and a rate limit on
+api.support.cafe. That is deliberate — the fixtures are a known, shared world, so a test
+can assert "a critical hold outranks a rate limit" without building a scenario first.
+
+What is covered, in rough order of how much it earns its keep:
+
+| | |
+| --- | --- |
+| [`stores/workspace.test.tsx`](src/stores/workspace.test.tsx) | Tab order, cycling and wrap, close-falls-left, draft→project conversion, and the `tabStatus` precedence chain (hold > rate limit > running > quiet). These encode decisions, not mechanics. |
+| [`features/tabs/reorder.test.ts`](src/features/tabs/reorder.test.ts) | The drag gesture, including the pointer-capture rule that a regression already broke once. |
+| [`api/mock.test.ts`](src/api/mock.test.ts) | The stand-in backend: every command, the events each one broadcasts, deep-merged settings, log paging and totals. |
+| [`features/project/MessageBody.test.tsx`](src/features/project/MessageBody.test.tsx) | The transcript renderer, including that agent output can never become markup. |
+| [`features/tabs/TabStrip.test.tsx`](src/features/tabs/TabStrip.test.tsx) | Close buttons on every closable tab, the sizing ghost, `aria-current`, click-to-select. |
+| [`lib/format.test.ts`](src/lib/format.test.ts) | Times, durations and usage, including that absent usage renders as "—" and never as zero. |
+
+### What these cannot catch
+
+Worth stating plainly, because a green suite here does not mean the window works.
+
+- **jsdom has no layout.** `getBoundingClientRect` returns zeros. The tab-width fix is
+  tested structurally — the close button is mounted, the ghost exists — but whether the
+  strip actually stops shifting is a measurement, and jsdom cannot measure.
+- **jsdom does not model pointer capture.** The click regression was the browser
+  retargeting `click` to the capturing element; a jsdom test would have passed with the
+  bug present. What is asserted instead is the *invariant* — capture is not taken on
+  pointerdown — which does fail against the broken version. That was checked, not assumed.
+- **Nothing here runs inside Tauri.** The menu, its accelerators, the drag region and the
+  quit confirmation are all shell behaviour. `tauri-driver` has no macOS support
+  (WKWebView exposes no WebDriver), so on this platform they are hand-tested.
+
+The gap that would pay for itself is a real-browser layer against `bun run dev` — measure
+pill widths across active states, and click a tab after a genuine pointerdown. `nofilter.io`
+does exactly this in [`tests/thirtyfour/`](https://github.com/pathscale/nofilter.io/tree/master/tests/thirtyfour),
+a small Rust crate driving WebDriver. Not built here yet.
 
 ## Conventions
 

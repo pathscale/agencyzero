@@ -276,6 +276,15 @@ function createWorkspace() {
         if (index < 0) draft.projects.push(project);
         else draft.projects[index] = project;
 
+        /*
+         * Kept sorted so the array agrees with `order` at all times.
+         * `listProjects` returns them sorted, so without this a reorder made
+         * during a session leaves the two disagreeing until the next restart
+         * quietly fixes it — the kind of difference that only shows up in the
+         * one place nobody thought to sort.
+         */
+        draft.projects.sort((a, b) => a.order - b.order);
+
         const tab = draft.tabs.find((candidate) => candidate.key === project.id);
         if (tab) tab.label = project.name;
       }),
