@@ -1,0 +1,124 @@
+import { render, waitFor } from "@solidjs/testing-library";
+import { describe, expect, it } from "vitest";
+import { TabStrip } from "~/features/tabs/TabStrip";
+import { useWorkspace, type Workspace, WorkspaceProvider } from "~/stores/workspace";
+
+async function mountStrip() {
+  let workspace!: Workspace;
+
+  function Probe() {
+    workspace = useWorkspace();
+    return null;
+  }
+
+  const screen = render(() => (
+    <WorkspaceProvider>
+      <Probe />
+      <TabStrip />
+    </WorkspaceProvider>
+  ));
+
+  await waitFor(() => expect(workspace.state.isLoaded).toBe(true), { timeout: 5_000 });
+  return { ...screen, workspace };
+}
+
+describe("TabStrip", () => {
+  /*
+   * Queried by accessible name rather than text: the label is rendered twice,
+   * once as the invisible sizing ghost, and the ghost is aria-hidden so only
+   * the visible copy contributes a name.
+   */
+  it("renders Home plus a tab per project", async () => {
+    const { getByRole } = await mountStrip();
+    for (const label of ["Home", "WorkTable", "api.support.cafe", "agencyzero"]) {
+      expect(getByRole("button", { name: label })).toBeInTheDocument();
+    }
+  });
+
+  /*
+   * The close button used to be mounted only on the active tab, which meant an
+   * inactive tab could not be closed without selecting it first — and, worse,
+   * that mounting it on activation changed the pill's width and shoved the rest
+   * of the strip sideways on every cycle. It is now always present and only
+   * *revealed* on active/hover/focus.
+   */
+  it("mounts a close button on every closable tab, not just the active one", async () => {
+    const { getByLabelText } = await mountStrip();
+
+    expect(getByLabelText("Close WorkTable")).toBeInTheDocument();
+    expect(getByLabelText("Close api.support.cafe")).toBeInTheDocument();
+    expect(getByLabelText("Close agencyzero")).toBeInTheDocument();
+  });
+
+  it("gives Home no close button, because Home is not closable", async () => {
+    const { queryByLabelText } = await mountStrip();
+    expect(queryByLabelText("Close Home")).toBeNull();
+  });
+
+  it("hides an inactive tab's close button without unmounting it", async () => {
+    const { getByLabelText, workspace } = await mountStrip();
+    workspace.actions.focus("worktable");
+
+    await waitFor(() => {
+      expect(getByLabelText("Close WorkTable").className).toContain("opacity-100");
+      expect(getByLabelText("Close agencyzero").className).toContain("opacity-0");
+      expect(getByLabelText("Close agencyzero").className).toContain("group-hover:opacity-100");
+    });
+  });
+
+  /*
+   * The other half of the width fix, and the half jsdom can check: the label
+   * carries an always-semibold invisible ghost sharing one grid cell with the
+   * visible copy, so the cell is sized for the bold width whatever weight is
+   * showing. Whether that actually holds the width is a layout question, and
+   * layout is what jsdom does not do — see the README.
+   */
+  it("renders a bold sizing ghost beside every visible label", async () => {
+    const { getByLabelText } = await mountStrip();
+    const pill = getByLabelText("Close WorkTable").parentElement!;
+
+    const ghost = pill.querySelector('[aria-hidden="true"].invisible');
+    expect(ghost).toHaveTextContent("WorkTable");
+    expect(ghost?.className).toContain("font-semibold");
+  });
+
+  it("marks only the active tab as current", async () => {
+    const { container, workspace } = await mountStrip();
+    workspace.actions.focus("cafe");
+
+    await waitFor(() => {
+      const current = container.querySelectorAll('[aria-current="page"]');
+      expect(current).toHaveLength(1);
+      expect(current[0]).toHaveTextContent("api.support.cafe");
+    });
+  });
+
+  it("clicking a tab selects it", async () => {
+    const { getByRole, workspace } = await mountStrip();
+    getByRole("button", { name: "agencyzero" }).click();
+
+    await waitFor(() => expect(workspace.state.activeKey).toBe("agencyzero"));
+  });
+
+  it("clicking a close button closes that tab without selecting it", async () => {
+    const { getByLabelText, workspace } = await mountStrip();
+    workspace.actions.focus("home");
+
+    getByLabelText("Close agencyzero").click();
+
+    await waitFor(() => {
+      expect(workspace.state.tabs.map((tab) => tab.key)).toEqual(["home", "worktable", "cafe"]);
+      expect(workspace.state.activeKey).toBe("home");
+    });
+  });
+
+  it("declares the strip a window drag region", async () => {
+    const { container } = await mountStrip();
+    expect(container.querySelector('[data-tauri-drag-region="deep"]')).toBeTruthy();
+  });
+
+  it("keeps the close button out of the drag gesture", async () => {
+    const { getByLabelText } = await mountStrip();
+    expect(getByLabelText("Close WorkTable")).toHaveAttribute("data-no-drag");
+  });
+});
