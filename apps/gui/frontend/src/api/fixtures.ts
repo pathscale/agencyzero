@@ -462,6 +462,7 @@ export const SETTINGS: GlobalSettings = {
     copilot: { enabled: ["auto"], default: "auto" },
   },
   defaultPermission: "read_only",
+  defaultEffort: "high",
   moderator: {
     enabled: true,
     model: "haiku",

@@ -60,7 +60,7 @@ const AGENT_USE: Record<Agent, string> = {
  * there is nothing to batch.
  */
 export function SettingsTab(): JSX.Element {
-  const { state, actions, isLive } = useWorkspace();
+  const { state, actions, isLive, effortsFor } = useWorkspace();
   const settings = () => state.settings;
 
   /**
@@ -85,6 +85,20 @@ export function SettingsTab(): JSX.Element {
    * Ordered by the catalogue rather than by the selection, so a picker reads in
    * the vendor's own ranking whatever order the ids were checked in.
    */
+  /**
+   * The effort ladder the default model accepts, from the catalogue.
+   *
+   * Per model rather than a shared list, which is why it is read from the
+   * default model's entry rather than hardcoded. Empty catalogues fall back to
+   * the current value alone, so the menu is never blank.
+   */
+  const effortOptions = (): string[] => {
+    const settings = state.settings;
+    if (!settings) return [];
+    const ladder = effortsFor(settings.models[settings.defaultAgent]?.default ?? "");
+    return ladder.length > 0 ? ladder : [settings.defaultEffort];
+  };
+
   const enabledModels = (agent: Agent): Model[] => {
     const catalogue = state.models.find((entry) => entry.agent === agent);
     const selection = state.settings?.models[agent];
@@ -151,6 +165,14 @@ export function SettingsTab(): JSX.Element {
                       label: model.name,
                     }))}
                     onChange={(id) => void actions.setDefaultModel(current().defaultAgent, id)}
+                  />
+                </Row>
+                <Row label="Effort" hint="reasoning level a new tab starts on">
+                  <PillMenu
+                    label="Default effort"
+                    value={current().defaultEffort}
+                    options={effortOptions().map((effort) => ({ value: effort, label: effort }))}
+                    onChange={(defaultEffort) => void actions.saveSettings({ defaultEffort })}
                   />
                 </Row>
                 <Row

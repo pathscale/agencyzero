@@ -281,3 +281,54 @@ describe("posture follows Settings too", () => {
     expect(workspace.activeTab().permission).toBe("read_only");
   });
 });
+
+describe("an open draft tracks the defaults", () => {
+  /*
+   * The reported bug: `openDraft` focuses an existing draft rather than making a
+   * new one, so a draft opened before a settings change kept the old defaults
+   * and the setting looked ignored.
+   */
+  it("moves an open draft onto a newly chosen model", async () => {
+    const workspace = await mountWorkspace();
+    workspace.actions.openDraft();
+    await waitFor(() => expect(workspace.activeTab().kind).toBe("draft"));
+    expect(workspace.activeTab().model).toBe("sonnet");
+
+    await workspace.actions.setDefaultModel("claude", "opus");
+
+    expect(workspace.activeTab().model).toBe("opus");
+  });
+
+  it("moves an open draft onto a newly chosen posture", async () => {
+    const workspace = await mountWorkspace();
+    workspace.actions.openDraft();
+    await waitFor(() => expect(workspace.activeTab().kind).toBe("draft"));
+
+    await workspace.actions.saveSettings({ defaultPermission: "auto" });
+
+    expect(workspace.activeTab().permission).toBe("auto");
+  });
+
+  it("moves an open draft onto a newly chosen effort", async () => {
+    const workspace = await mountWorkspace();
+    workspace.actions.openDraft();
+    await waitFor(() => expect(workspace.activeTab().kind).toBe("draft"));
+
+    await workspace.actions.saveSettings({ defaultEffort: "max" });
+
+    expect(workspace.activeTab().effort).toBe("max");
+  });
+
+  /*
+   * A project has history and its own choice. Only a withdrawn model moves it,
+   * which is the rule a draft deliberately does not follow.
+   */
+  it("leaves a project's posture alone when the default changes", async () => {
+    const workspace = await mountWorkspace();
+    const before = workspace.state.tabs.find((tab) => tab.key === "worktable")?.permission;
+
+    await workspace.actions.saveSettings({ defaultPermission: "bypass" });
+
+    expect(workspace.state.tabs.find((tab) => tab.key === "worktable")?.permission).toBe(before);
+  });
+});

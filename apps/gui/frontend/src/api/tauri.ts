@@ -16,7 +16,7 @@ import type { AgencyZeroApi, AppEvents, Unlisten } from "./client";
 export function createTauriApi(): AgencyZeroApi {
   return {
     listProjects: () => invoke("list_projects"),
-    createProject: (input) => invoke("create_project", input),
+    createProject: (input) => invoke("create_project", { input }),
     deleteProject: (id) => invoke("delete_project", { id }),
     setProjectStatus: (id, status) => invoke("set_project_status", { id, status }),
     reorderProjects: (ids) => invoke("reorder_projects", { ids }),
@@ -33,7 +33,7 @@ export function createTauriApi(): AgencyZeroApi {
     reorderItems: (projectId, ids) => invoke("reorder_items", { projectId, ids }),
 
     listMessages: (projectId) => invoke("list_messages", { projectId }),
-    sendMessage: (input) => invoke("send_message", input),
+    sendMessage: (input) => invoke("send_message", { input }),
     resolveModeration: (messageId, approve) => invoke("resolve_moderation", { messageId, approve }),
 
     getSettings: () => invoke("get_settings"),

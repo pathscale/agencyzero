@@ -28,6 +28,8 @@ pub struct GlobalSettings {
     /// Per agent: which models the picker offers, and which one it starts on.
     pub models: BTreeMap<String, ModelSelection>,
     pub default_permission: String,
+    /// Reasoning level a new tab starts on.
+    pub default_effort: String,
     pub moderator: Moderator,
     pub env_policy: String,
     pub forward_proxy_vars: bool,
@@ -122,6 +124,7 @@ impl Default for GlobalSettings {
                 ("copilot".to_string(), sel(&["auto"], "auto")),
             ]),
             default_permission: "read_only".into(),
+            default_effort: "high".into(),
             moderator: Moderator::default(),
             env_policy: "minimal".into(),
             forward_proxy_vars: false,
