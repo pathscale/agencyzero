@@ -16,6 +16,7 @@ import type {
   Agent,
   AgentModels,
   AgentStatus,
+  DataLocation,
   GlobalSettings,
   Message,
   Permission,
@@ -45,6 +46,8 @@ type WorkspaceState = {
   agents: AgentStatus[];
   /** Every agent's catalogue, for the Settings picker. Empty until boot ends. */
   models: AgentModels[];
+  /** Where the tables were opened from. Null until boot ends. */
+  dataLocation: DataLocation | null;
   tabs: Tab[];
   activeKey: string;
   backend: "tauri" | "mock" | "hybrid" | "loading";
@@ -98,6 +101,7 @@ function createWorkspace() {
     settings: null,
     agents: [],
     models: [],
+    dataLocation: null,
     tabs: [HOME_TAB],
     activeKey: "home",
     backend: "loading",
@@ -277,13 +281,14 @@ function createWorkspace() {
 
       await subscribe(backend);
 
-      const [projects, settings, agents, models, rateLimits] = await Promise.all([
+      const [projects, settings, agents, models, dataLocation, rateLimits] = await Promise.all([
         backend.listProjects(),
         backend.getSettings(),
         backend.listAgentStatus(false),
         // Compiled catalogues only. Discovery spawns a CLI per agent, which is
         // too slow to sit in front of the first paint; Settings can ask for it.
         backend.listModels(false),
+        backend.getDataLocation(),
         backend.listRateLimits(),
       ]);
 
@@ -292,6 +297,7 @@ function createWorkspace() {
         setState("settings", settings);
         setState("agents", reconcile(agents));
         setState("models", reconcile(models));
+        setState("dataLocation", dataLocation);
         setState(
           "rateLimits",
           // A limit whose reset time has already passed is history, not state.
@@ -776,6 +782,15 @@ function createWorkspace() {
      * come back on their compiled lists with `discovered: false`, which the
      * Settings provenance line reports honestly rather than hiding.
      */
+    /**
+     * Point future launches at a different data directory, or at the default
+     * with `null`. Re-reads afterwards so Settings shows what the next launch
+     * will use rather than what is open now.
+     */
+    async setDataLocation(path: string | null) {
+      await client().setDataLocation(path);
+      setState("dataLocation", await client().getDataLocation());
+    },
     async refreshModels() {
       setState("models", reconcile(await client().listModels(true)));
     },

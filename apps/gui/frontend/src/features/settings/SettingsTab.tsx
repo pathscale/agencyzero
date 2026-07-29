@@ -197,6 +197,57 @@ export function SettingsTab(): JSX.Element {
               </Section>
 
               <Section
+                icon="folder"
+                title="Data"
+                hint="where projects, items and messages are stored"
+              >
+                <Show when={state.dataLocation}>
+                  {(location) => (
+                    <>
+                      <Row
+                        label="Location"
+                        hint={
+                          location().source === "env"
+                            ? "set by AZ_DATA_DIR, which a saved path cannot override"
+                            : "a change takes effect on the next launch; nothing is moved"
+                        }
+                      >
+                        <span class="max-w-[340px] truncate font-mono text-[11.5px] text-az-body">
+                          {location().path}
+                        </span>
+                      </Row>
+                      <Row label="Change it" isLast>
+                        <div class="flex items-center gap-2">
+                          <button
+                            type="button"
+                            disabled={!location().isEditable}
+                            onClick={() => {
+                              const next = window.prompt(
+                                "Data directory for the next launch",
+                                location().path,
+                              );
+                              if (next?.trim()) void actions.setDataLocation(next.trim());
+                            }}
+                            class="rounded-lg border border-az-hairline-strong px-3 py-[5px] text-[12px] text-az-body transition-colors hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-40"
+                          >
+                            Choose…
+                          </button>
+                          <button
+                            type="button"
+                            disabled={!location().isEditable || location().source === "default"}
+                            onClick={() => void actions.setDataLocation(null)}
+                            class="rounded-lg border border-az-hairline-strong px-3 py-[5px] text-[12px] text-az-muted transition-colors hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-40"
+                          >
+                            Use the default
+                          </button>
+                        </div>
+                      </Row>
+                    </>
+                  )}
+                </Show>
+              </Section>
+
+              <Section
                 icon="shield"
                 title="Moderator"
                 hint="a second agent watching the stream — costs tokens"

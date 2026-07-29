@@ -37,6 +37,8 @@ const COMMAND_FOR: Partial<Record<keyof AgencyZeroApi, string>> = {
   setSettings: "set_settings",
   listAgentStatus: "list_agent_status",
   listModels: "list_models",
+  getDataLocation: "get_data_location",
+  setDataLocation: "set_data_location",
   setTabModel: "set_tab_model",
   cancelRun: "cancel_run",
   listRunningTasks: "list_running_tasks",

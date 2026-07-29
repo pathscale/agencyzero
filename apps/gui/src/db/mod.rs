@@ -16,5 +16,6 @@
 //! `futures` and `uuid` by bare path**, so those are direct dependencies of this
 //! crate even though nothing here imports them.
 
+pub mod location;
 pub mod schema;
 pub mod tables;
