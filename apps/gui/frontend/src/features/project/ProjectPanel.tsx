@@ -57,6 +57,10 @@ export function ProjectPanel(props: { project: Project }): JSX.Element {
         <RunningList projectId={props.project.id} />
       </SectionPanel>
 
+      {/*
+        The min-height applies only while open: a collapsed section holding
+        160px of blank space is not collapsed, it is furniture.
+      */}
       <SectionPanel
         icon="history"
         title="Task log"
@@ -64,7 +68,7 @@ export function ProjectPanel(props: { project: Project }): JSX.Element {
         lead={<ClearLogButton projectId={props.project.id} />}
         isOpen={prefs.panelSections.log}
         onToggle={() => togglePanelSection("log")}
-        class="flex min-h-[160px] flex-col"
+        class={prefs.panelSections.log ? "flex min-h-[160px] flex-col" : "flex-none"}
       >
         <TaskLogList projectId={props.project.id} />
       </SectionPanel>
@@ -75,7 +79,7 @@ export function ProjectPanel(props: { project: Project }): JSX.Element {
         count={io().length}
         isOpen={prefs.panelSections.io}
         onToggle={() => togglePanelSection("io")}
-        class="flex min-h-[160px] flex-col"
+        class={prefs.panelSections.io ? "flex min-h-[160px] flex-col" : "flex-none"}
       >
         <AgentIoList projectId={props.project.id} />
       </SectionPanel>

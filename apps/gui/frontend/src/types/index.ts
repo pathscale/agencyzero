@@ -413,6 +413,8 @@ export interface UiPrefs {
   lastPermission: Permission;
   /** Which accordion sections are expanded — per install, not per project. */
   panelSections: {
+    /** The Claude quota lines at the top of the project column. */
+    usage: boolean;
     settings: boolean;
     items: boolean;
     running: boolean;

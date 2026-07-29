@@ -22,6 +22,13 @@ export function EditableTitle(props: {
   inputClass?: string;
   /** Announced to screen readers, since the pencil is an icon alone. */
   label?: string;
+  /**
+   * What clicking the name itself does, when it is more than a label — on
+   * Home it opens the project. Renaming stays on the pencil either way: a
+   * name that both navigates and edits depending on where the pixel landed
+   * would do the wrong one half the time.
+   */
+  onActivate?: () => void;
 }): JSX.Element {
   const [editing, setEditing] = createSignal(false);
   const [draft, setDraft] = createSignal("");
@@ -54,7 +61,16 @@ export function EditableTitle(props: {
       when={editing()}
       fallback={
         <span class={`flex min-w-0 items-center gap-1.5 ${props.class ?? ""}`}>
-          <span class="min-w-0 truncate">{props.value}</span>
+          <Show
+            when={props.onActivate}
+            fallback={<span class="min-w-0 truncate">{props.value}</span>}
+          >
+            {(activate) => (
+              <button type="button" onClick={() => activate()()} class="min-w-0 truncate text-left">
+                {props.value}
+              </button>
+            )}
+          </Show>
           <button
             type="button"
             onClick={start}

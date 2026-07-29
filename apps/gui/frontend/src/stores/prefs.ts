@@ -11,7 +11,7 @@ const DEFAULTS: UiPrefs = {
   // alone, while the other three change while you watch.
   // `io` open by default: it is the panel you want the moment something looks
   // wrong, and closed-by-default made it effectively invisible.
-  panelSections: { settings: false, items: true, running: true, log: true, io: true },
+  panelSections: { usage: true, settings: false, items: true, running: true, log: true, io: true },
   lastTabKey: "home",
   taskPlacement: "panel",
   seenSections: [],

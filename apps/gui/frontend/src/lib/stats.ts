@@ -131,6 +131,24 @@ export function costLabel(costUsd: number | null): string {
   return isNumber(costUsd) ? `$${costUsd.toFixed(3)}` : "—";
 }
 
+/** The three Claude limits the usage panel keeps a permanent line for. */
+export type ClaudeWindowKind = "session" | "weekly" | "fable";
+
+/**
+ * Which fixed usage line a provider report belongs to, from its own wording —
+ * "allowed (five_hour)", "opus_weekly", "weekly limit reached". Fable/Opus is
+ * tested first because its window names contain "weekly" too. Null means the
+ * wording names no window this panel models; the report is still shown, on a
+ * line of its own.
+ */
+export function claudeWindowKind(text: string): ClaudeWindowKind | null {
+  const wording = text.toLowerCase();
+  if (/fable|opus/.test(wording)) return "fable";
+  if (/five_hour|five-hour|5h|session/.test(wording)) return "session";
+  if (/week|seven_day|7d/.test(wording)) return "weekly";
+  return null;
+}
+
 /**
  * The quota windows the provider has actually told us about.
  *
