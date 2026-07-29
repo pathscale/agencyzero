@@ -41,7 +41,7 @@ export type ComposerProps = {
    * backend failure cannot swallow a prompt someone spent minutes writing.
    */
   onSend: (body: string) => Promise<void>;
-  /** Shown on the right of the control row, e.g. "18.7k tok · $0.017". */
+  /** Shown on the right of the control row, e.g. "31.4k / 200k ctx · 16%". */
   usage?: string;
   /** A run is in flight: the send button becomes Stop. */
   isRunning?: boolean;
@@ -172,6 +172,7 @@ export function Composer(props: ComposerProps): JSX.Element {
 
           <div class="flex-1" />
 
+          {/* Text only, by request: the numbers already say how full it is. */}
           <Show when={props.usage}>
             <span class="font-mono text-[11.5px] text-az-faint">{props.usage}</span>
           </Show>

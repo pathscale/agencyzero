@@ -18,6 +18,7 @@ const COMMAND_FOR: Partial<Record<keyof AgencyZeroApi, string>> = {
   listProjects: "list_projects",
   createProject: "create_project",
   deleteProject: "delete_project",
+  renameProject: "rename_project",
   setProjectStatus: "set_project_status",
   reorderProjects: "reorder_projects",
   setProjectPinned: "set_project_pinned",
@@ -46,6 +47,10 @@ const COMMAND_FOR: Partial<Record<keyof AgencyZeroApi, string>> = {
   listRunningTasks: "list_running_tasks",
   cancelTask: "cancel_task",
   listTaskLog: "list_task_log",
+  listAgentIo: "list_agent_io",
+  getIoPersist: "get_io_persist",
+  setIoPersist: "set_io_persist",
+  listQuota: "list_quota",
   clearTaskLog: "clear_task_log",
   listRateLimits: "list_rate_limits",
 };
@@ -120,13 +125,38 @@ export async function selectApi(): Promise<BackendChoice> {
 
   /*
    * Bound per method at startup rather than proxied per call: `on` is not in the
-   * command map and must always come from the mock for now, and a Proxy would
-   * have to special-case it anyway.
+   * command map and needs the special case below, and a Proxy would have to
+   * carry it anyway.
    */
   const api = { ...mock } as AgencyZeroApi;
   for (const method of live) {
     Object.assign(api, { [method]: tauri[method].bind(tauri) });
   }
+
+  /*
+   * `on` subscribes to *both* buses, and that is not belt-and-braces.
+   *
+   * The store treats events as the source of truth — every mutation is applied
+   * by the event it broadcasts, not by the command's return value. In hybrid
+   * mode the two halves broadcast to different places: a mock-served command
+   * emits on the mock's in-memory emitter, a Rust-served one emits over Tauri's
+   * bus. Listening to only one silently drops every mutation the other half
+   * makes.
+   *
+   * Taking the mock's alone is what made a created project vanish: Rust wrote
+   * the row and emitted `project:created`, the window was listening to the mock,
+   * and the store never learned the project existed — so the tab it had just
+   * converted rendered "This project could not be loaded" forever.
+   *
+   * An event arrives once either way, since whichever backend served the command
+   * is the only one that emits for it.
+   */
+  api.on = async (event, handler) => {
+    const unlisteners = await Promise.all([mock.on(event, handler), tauri.on(event, handler)]);
+    return () => {
+      for (const unlisten of unlisteners) unlisten();
+    };
+  };
 
   const backend = live.size === Object.keys(COMMAND_FOR).length ? "tauri" : "hybrid";
   return { api, backend, live };

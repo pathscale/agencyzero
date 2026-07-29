@@ -1,13 +1,19 @@
 # Connecting the GUI to real data
 
-The frontend is complete against a typed IPC surface that Rust does not implement yet. It
-talks to [`apps/gui/frontend/src/api/client.ts`](../apps/gui/frontend/src/api/client.ts);
-today `api/index.ts` probes `get_settings`, that throws, and the window falls back to
-[`api/mock.ts`](../apps/gui/frontend/src/api/mock.ts) serving the design fixtures.
+The frontend is complete against a typed IPC surface that Rust implements one command at a
+time. It talks to [`apps/gui/frontend/src/api/client.ts`](../apps/gui/frontend/src/api/client.ts);
+`api/index.ts` asks Rust which commands exist (`list_capabilities`) and routes each method
+to Rust or to [`api/mock.ts`](../apps/gui/frontend/src/api/mock.ts) accordingly, so the
+window is honest about which half is real rather than choosing between a backend that
+cannot boot it and one that forgets everything.
 
-**Done, for this whole document, means the probe succeeds and the mock never loads.** Get
-`get_settings` returning a real record and the app is on the Rust path — every task after
-that swaps one screen at a time from fixture to fact.
+**Done, for this whole document, means the mock never answers.** Every task below swaps one
+more command from fixture to fact; the footer says which backend is in use until they all
+have.
+
+Probing a single command as a proxy for all of them is what this replaced: implementing
+`get_settings` alone used to flip the whole app onto a backend where `list_projects` did
+not exist.
 
 The phases below are ordered so the app is usable at the end of each one. Within a phase,
 tasks are roughly independent.
@@ -38,31 +44,33 @@ Nothing renders differently. This is the groundwork every later phase assumes.
 
 ## Phase 1 — the read path
 
-After this the app boots on real data and is honest, if inert. **This is the phase that
-turns off the mock**, so do it as one unit rather than command by command.
+After this the app boots on real data and is honest, if inert. Done — the whole read path
+is served by Rust, and the window boots on the database rather than on fixtures.
 
-- [ ] `get_settings() -> GlobalSettings` — the probe. Return a persisted record, seeding
+- [x] `get_settings() -> GlobalSettings` — the probe. Return a persisted record, seeding
       defaults on first run: `defaultPermission: read_only`, `envPolicy: minimal`,
       `moderator.enabled: true`, `forwardProxyVars: false`.
-- [ ] `list_projects() -> Project[]` — sorted by `order`. Drives the tab strip and Home.
-- [ ] `list_items(project_id) -> ProjectItem[]` — sorted by `order`.
-- [ ] `list_messages(project_id) -> Message[]` — transcript order by `createdAt`.
-- [ ] `list_running_tasks(project_id) -> RunningTask[]` — empty until Phase 3, but the
-      command has to exist or startup fails.
-- [ ] `list_task_log(project_id, limit, before?) -> { entries, total }` — note the shape:
+- [x] `list_projects() -> Project[]` — sorted by `order`. Drives the tab strip and Home.
+- [x] `list_items(project_id) -> ProjectItem[]` — sorted by `order`.
+- [x] `list_messages(project_id) -> Message[]` — transcript order by `createdAt`.
+- [x] `list_running_tasks(project_id) -> RunningTask[]` — served from an in-memory
+      registry in `AppState`, not a table. A running task cannot outlive the process
+      running it, so a persisted one would come back after a restart as a spinner for
+      work that can never finish.
+- [x] `list_task_log(project_id, limit, before?) -> { entries, total }` — note the shape:
       the panel badge shows the total while holding a page. `before` is the `finishedAt`
-      cursor for older pages; the frontend does not paginate yet, so `limit` alone is
-      enough to start.
-- [ ] `list_rate_limits() -> RateLimit[]` — empty is fine. **This command is not in the
+      cursor for older pages, and it is **exclusive**, so the row it names is not served
+      twice. The frontend does not paginate yet.
+- [x] `list_rate_limits() -> RateLimit[]` — empty is fine. **This command is not in the
       design's proposed surface**; it exists because `run:rate_limit` announces a *change*
       and a window opened after one arrived would otherwise show a clear header for a tab
       that is still blocked.
-- [ ] `list_agent_status(recheck) -> AgentStatus[]` — see Phase 2; return a fixed
-      `missing` row per agent first so Settings renders.
+- [x] `list_agent_status(recheck) -> AgentStatus[]` — the real probe, cached in `kv`
+      between launches because it spawns two processes per agent.
 
-**Verify:** launch, confirm the footer banner is gone, and that Home, a project tab and
-Settings all render from the database. `console.warn` from `api/index.ts` is the tell if
-the probe is still failing.
+**Verify:** launch and read `logs/az-gui.log`. `boot: backend=hybrid` names the backend,
+each command is logged in and out, and `boot: ready` means the read path completed. A
+request with no matching reply is the one that hung.
 
 ## Phase 2 — mutations that don't need an agent
 
@@ -83,8 +91,13 @@ emits its event.
 - [ ] `create_project(first_message, model?, permission?) -> { project, items }` — needs an
       agent to name the project, so it lands properly in Phase 3. Until then, deriving the
       name from the first line is what the mock does and is enough to unblock the rest.
-- [ ] `delete_project(id)`, `set_project_status(id, status)`, `set_project_pinned(id,
-      pinned)`, `set_project_moderator(id, enabled)`.
+- [x] `delete_project(id)` — clears the task log, transcript and items before the
+      project row, so a failure part-way leaves it listed and retryable rather than
+      orphaning rows under an id nothing points at. Home confirms in place first.
+- [ ] `set_project_status(id, status)`, `set_project_pinned(id, pinned)`,
+      `set_project_moderator(id, enabled)`. **`set_project_status` gates the tab
+      dot's grey state**: without it every project stays `active`, so nothing ever
+      reads as inactive.
 - [ ] `reorder_projects(ids) -> Project[]` — already wired: dragging a tab calls this on
       drop, and Home reads the result back.
 - [ ] `add_dir(project_id, path)` / `remove_dir(project_id, path)`. Consider adding the
@@ -107,28 +120,51 @@ being a list of user messages.
       the user's message, emit `message:appended`, then start a `Run` with the tab's model
       and permission.
 - [ ] **Map the event stream.** Per the design's `agent-abstraction → UI` table:
-      - `Event::Started {session, model}` — persist the session id against the
-        conversation; the model chip should show what was actually selected, not what was
-        asked for.
+      - [x] `Event::Started {session, model}` — the session id is persisted on the
+        **project** (not the message: it is the handle a later turn resumes with) and
+        shown in the header with a copy button. Rewritten on every `Started` rather
+        than only when empty, since a stale id would resume the wrong conversation.
       - `Event::Text(delta)` — append to a streaming bubble. **Never sum the deltas as the
         answer**; `Outcome::text` is the authoritative body stored as `Message.body`.
       - `Event::Thinking(text)` — a collapsed block. No frontend component yet.
-      - `Event::ToolCall` → `task:started` with a `RunningTask`. The row label is rendered
-        from `ToolCall::input` in the agent's own shape, so the label has to be built
-        Rust-side.
-      - `Event::ToolResult` → `task:finished` with a `TaskLogEntry`. `ok` is nullable:
-        null means the agent did not say, which is **not** failure.
+      - [x] `Event::ToolCall` → `task:started` with a `RunningTask`. The row label is
+        rendered from `ToolCall::input` in the agent's own shape, so the label has to be
+        built Rust-side — `tool_label` shows the argument a human would have typed (the
+        command, the path, the pattern) and falls back to compact JSON, never to the bare
+        tool name, which cannot be told from the three identical rows above it.
+      - [x] `Event::ToolResult` → `task:finished` with a `TaskLogEntry`, persisted to the
+        `task_log` table so the panel survives a reload. `ok` is nullable: null means the
+        agent did not say, which is **not** failure — and since a WorkTable column is not
+        nullable, it is stored as `-1` unknown / `0` failed / `1` succeeded. Results are
+        matched to their call by `ToolCall::id` and never by label.
       - `Event::RateLimit` → `run:rate_limit`, in the provider's own wording.
       - `Stop` + `exit_code` → `run:stopped`.
 - [ ] `cancel_run(project_id)` — `Run::cancel`. Must not resolve until the process group is
       gone; the composer's Stop button is bound directly to it.
 - [ ] `cancel_task(tool_call_id)` — per-row Stop. `RunningTask.toolCallId` is nullable
       because not every agent supplies one; the button is already disabled when it is null.
-- [ ] `clear_task_log(project_id)`.
+      **Blocked on the crate:** `agent-abstraction` cancels a `Run`, not an individual
+      tool call, so there is nothing to implement this against yet. Left out of
+      `IMPLEMENTED` rather than faked, so the frontend keeps serving it from fixtures and
+      greys it out instead of appearing to stop something it cannot.
+- [x] `clear_task_log(project_id)`.
+- [ ] **Items from the agent's reply — checkboxes only.** A finished turn's reply is
+      scanned for markdown checkboxes (`- [ ]` / `- [x]`, ordered forms included) and each
+      becomes a `ProjectItem`, appended and deduplicated by title so a restated plan does
+      not stack up or delete what the user added. Deliberately *not* bullets, numbered
+      lists or headings: a checkbox is unambiguously a task, a bullet is as often prose,
+      and inventing to-dos nobody proposed is worse than an empty panel. **Still open:**
+      an agent that writes its plan as prose contributes nothing, so the cheap second
+      call that the naming design uses (below) is the obvious next step.
 - [ ] **Streaming needs a frontend pass too.** `TranscriptPane` renders finished messages
       only. Adding a `message:delta` event means either extending `AppEvents` or reusing
       `useStreamingBuffer` from `@pathscale/ui`. Decide which before emitting deltas.
-- [ ] **Handle `looks_like_a_format_change()`** — clean exit, empty answer, unparsed > 0.
+- [x] **The raw exchange is visible.** `list_agent_io(project_id)` plus an
+      `agent:io` event feed an Agent I/O panel section: the request as sent, then
+      every event as it arrived, then the terminal outcome. In memory and capped at
+      500 lines per project — the durable copy is the log file, which survives the
+      crash this would not.
+- [x] **Handle `looks_like_a_format_change()`** — clean exit, empty answer, unparsed > 0.
       "The CLI is healthy, our parser is not" needs its own visible state, not a silent
       empty reply. Nothing in the design covers it.
 

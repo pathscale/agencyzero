@@ -23,9 +23,9 @@ checksum = "320119579fcad9c21884f5c4861d16174d0e06250625266f50fe6898340abefa"
 
 [[package]]
 name = "agent-abstraction"
-version = "0.3.0"
+version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "65bce1a2f7aa719a0867ef1b1c1c7558bf36eff1665e5801e2674ca821fcc0b7"
+checksum = "4c7a2c4c7b522b8a9a4d05e3a0a7890e4776fc33fd4ef2251c501227a17ff8d2"
 dependencies = [
  "libc",
  "serde",
@@ -840,7 +840,7 @@ dependencies = [
  "libc",
  "option-ext",
  "redox_users 0.5.2",
- "windows-sys 0.61.2",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -1016,7 +1016,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
- "windows-sys 0.61.2",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -1838,7 +1838,7 @@ checksum = "3640c1c38b8e4e43584d8df18be5fc6b0aa314ce6ebf51b53313d4306cca8e46"
 dependencies = [
  "hermit-abi",
  "libc",
- "windows-sys 0.61.2",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -4566,7 +4566,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.61.2",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -5024,6 +5024,22 @@ dependencies = [
  "windows-core 0.61.2",
  "windows-version",
  "x11-dl",
+]
+
+[[package]]
+name = "wt-tools"
+version = "0.1.0"
+dependencies = [
+ "derive_more 2.1.1",
+ "dirs",
+ "eyre",
+ "futures",
+ "rkyv 0.8.17",
+ "serde",
+ "serde_json",
+ "tokio",
+ "uuid",
+ "worktable",
 ]
 
 [[package]]

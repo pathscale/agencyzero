@@ -4,6 +4,7 @@ import { Icon, type IconProps } from "~/components/Icon";
 import { Panel } from "~/components/Panel";
 import { PillMenu } from "~/components/PillMenu";
 import { AgentStateDot } from "~/components/StatusDot";
+import { windowTitle, windowValue } from "~/features/shell/UsageReadout";
 import { relativeTime } from "~/lib/format";
 import {
   AGENT_LABELS,
@@ -217,6 +218,8 @@ export function SettingsTab(): JSX.Element {
                   </span>
                 </div>
               </Section>
+
+              <AccountUsageSection />
 
               <Section
                 icon="folder"
@@ -456,6 +459,61 @@ export function SettingsTab(): JSX.Element {
         </Show>
       </div>
     </div>
+  );
+}
+
+/**
+ * Account usage for the agents other than Claude, parked here for now.
+ *
+ * Claude's three lines live on the project panel, where they are read daily.
+ * Codex and Copilot figures have no interface of their own yet, so this
+ * section shows whatever `list_quota` already returns and is marked pending
+ * until that surface is properly exposed.
+ */
+function AccountUsageSection(): JSX.Element {
+  const { state } = useWorkspace();
+  const others = () => (state.quota?.agents ?? []).filter((agent) => agent.agent !== "claude");
+
+  return (
+    <Section
+      icon="gauge"
+      title="Account usage"
+      hint="other agents · Claude's own readout lives on the project panel"
+      pending="interface not exposed yet"
+    >
+      <For each={others()}>
+        {(agent) => (
+          <Row label={AGENT_LABELS[agent.agent]} hint={agent.supported ? undefined : agent.detail}>
+            <Show
+              when={agent.supported && agent.windows.length > 0}
+              fallback={
+                <span class="font-mono text-[11px] text-az-faint">
+                  {agent.supported ? "no windows in force" : "cannot report"}
+                </span>
+              }
+            >
+              <div class="flex flex-col items-end gap-[3px]">
+                <For each={agent.windows}>
+                  {(window) => (
+                    <span
+                      title={windowTitle(agent.agent, window)}
+                      class="font-mono text-[11px] text-az-body"
+                    >
+                      {window.window} · {windowValue(window, Date.now())}
+                    </span>
+                  )}
+                </For>
+              </div>
+            </Show>
+          </Row>
+        )}
+      </For>
+      <Show when={others().length === 0}>
+        <Row label="Nothing to show" hint="no agent has reported account usage yet" isLast>
+          <span />
+        </Row>
+      </Show>
+    </Section>
   );
 }
 

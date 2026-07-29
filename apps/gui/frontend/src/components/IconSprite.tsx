@@ -12,6 +12,10 @@ import type { JSX } from "solid-js";
 export type IconName =
   | "arrow-up"
   | "check"
+  | "copy"
+  | "pencil"
+  | "terminal"
+  | "gauge"
   | "chevron-down"
   | "chevron-up"
   | "chevron-right"
@@ -87,6 +91,22 @@ export function IconSprite(): JSX.Element {
         <circle cx="12" cy="12" r="9" />
         <path d="M12 11v5" />
         <circle cx="12" cy="7.8" r="1" fill="currentColor" stroke="none" />
+      </symbol>
+      <symbol id="i-copy" viewBox="0 0 24 24">
+        <rect x="9" y="9" width="11.5" height="11.5" rx="2" />
+        <path d="M5.5 15H4.8A1.3 1.3 0 0 1 3.5 13.7V4.8A1.3 1.3 0 0 1 4.8 3.5h8.9A1.3 1.3 0 0 1 15 4.8v.7" />
+      </symbol>
+      <symbol id="i-terminal" viewBox="0 0 24 24">
+        <path d="m4.5 6.5 5 5-5 5" />
+        <path d="M12 17.5h7.5" />
+      </symbol>
+      <symbol id="i-gauge" viewBox="0 0 24 24">
+        <path d="M12 14.5 15.5 9" />
+        <path d="M4 18a9 9 0 1 1 16 0" />
+      </symbol>
+      <symbol id="i-pencil" viewBox="0 0 24 24">
+        <path d="M4 20h4l10.5-10.5a2.1 2.1 0 0 0-3-3L5 17v3Z" />
+        <path d="m14.5 6.5 3 3" />
       </symbol>
       <symbol id="i-layout-grid" viewBox="0 0 24 24">
         <rect x="3.5" y="3.5" width="7" height="7" rx="1.5" />

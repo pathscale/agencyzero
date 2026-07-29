@@ -61,6 +61,7 @@ export const PROJECTS: Project[] = [
     pinned: true,
     moderatorEnabled: true,
     forkedFrom: null,
+    sessionId: null,
     lastActivityAt: ago(2 * 60_000),
   },
   {
@@ -72,6 +73,7 @@ export const PROJECTS: Project[] = [
     pinned: false,
     moderatorEnabled: true,
     forkedFrom: null,
+    sessionId: null,
     lastActivityAt: ago(9 * 60_000),
   },
   {
@@ -83,6 +85,7 @@ export const PROJECTS: Project[] = [
     pinned: true,
     moderatorEnabled: true,
     forkedFrom: null,
+    sessionId: null,
     lastActivityAt: ago(26 * 60 * 60_000),
   },
 ];
@@ -140,7 +143,16 @@ export const MESSAGES: Message[] = [
     projectId: "worktable",
     author: "agent",
     model: "sonnet",
-    usage: { tokens: 12_400, cacheReads: 8_100, costUsd: 0.011, premiumRequests: null },
+    usage: {
+      tokens: 12_400,
+      contextTokens: 20500,
+      contextWindow: 200_000,
+      cacheReads: 8_100,
+      reasoningTokens: null,
+      costUsd: 0.011,
+      premiumRequests: null,
+      durationMs: 4_200,
+    },
     body: [
       "**Phase A — safety quick-wins**, zero perf cost, no design questions: one PR, small each. Guard, rollback, yield, cycle bound with an honest corrupt-TOC error, then the nits in `into_values`. Ships as 0.9.3.",
       "**Phase B — engine observability**: join-handle plus panic propagation on `wait_for_ops()` — a small API break.",
@@ -182,7 +194,16 @@ export const MESSAGES: Message[] = [
     projectId: "worktable",
     author: "agent",
     model: "sonnet",
-    usage: { tokens: 18_700, cacheReads: 11_200, costUsd: 0.017, premiumRequests: null },
+    usage: {
+      tokens: 18_700,
+      contextTokens: 29900,
+      contextWindow: 200_000,
+      cacheReads: 11_200,
+      reasoningTokens: null,
+      costUsd: 0.017,
+      premiumRequests: null,
+      durationMs: 4_200,
+    },
     body: "Understood — A only, and I'll put the reader model in writing before it becomes code. Running the guard tests now.",
     createdAt: ago(3 * 60_000),
   },
@@ -205,7 +226,16 @@ export const MESSAGES: Message[] = [
     author: "agent",
     model: "haiku",
     permission: "read_only",
-    usage: { tokens: 4_100, cacheReads: 2_000, costUsd: 0.003, premiumRequests: null },
+    usage: {
+      tokens: 4_100,
+      contextTokens: 6100,
+      contextWindow: 200_000,
+      cacheReads: 2_000,
+      reasoningTokens: null,
+      costUsd: 0.003,
+      premiumRequests: null,
+      durationMs: 4_200,
+    },
     body: "Snapshot is mounted read-only at `~/snapshots/prod-0.9.2`. Starting the scan — it will take a few minutes over 412k rows.",
     createdAt: ago(13 * 60_000),
   },
@@ -486,8 +516,13 @@ export const SETTINGS: GlobalSettings = {
  * The mockup shows api.support.cafe rate-limited, which is what turns its tab
  * dot amber and puts the "Rate limited · resets 14:20" pill in its header.
  */
-export const RATE_LIMITS: Record<string, { message: string; resetsAt: string }> = {
+export const RATE_LIMITS: Record<
+  string,
+  { isBlocking: boolean; message: string; resetsAt: string }
+> = {
   cafe: {
+    // A real refusal, not the "allowed" heartbeat the provider also emits.
+    isBlocking: true,
     message: "Rate limited",
     resetsAt: new Date(now + 34 * 60_000).toISOString(),
   },

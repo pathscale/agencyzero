@@ -49,8 +49,14 @@ export function duration(ms: number): string {
  * "exit 101" reads at a glance where "0.4s" does not.
  */
 export function taskMeta(entry: { durationMs: number | null; exitCode: number | null }): string {
-  if (entry.exitCode !== null && entry.exitCode !== 0) return `exit ${entry.exitCode}`;
-  if (entry.durationMs !== null) return duration(entry.durationMs);
+  // Tested for being a number rather than for not being null, for the same
+  // reason as `usageLabel` below: these arrive as JSON, an absent field is
+  // `undefined`, and `undefined !== null` passes a null check while failing
+  // every arithmetic that follows it.
+  if (typeof entry.exitCode === "number" && entry.exitCode !== 0) return `exit ${entry.exitCode}`;
+  if (typeof entry.durationMs === "number" && Number.isFinite(entry.durationMs)) {
+    return duration(entry.durationMs);
+  }
   return "—";
 }
 
@@ -65,13 +71,46 @@ export function usageLabel(
 ): string {
   if (!usage) return "—";
 
-  const tokens =
-    usage.tokens >= 1000 ? `${(usage.tokens / 1000).toFixed(1)}k tok` : `${usage.tokens} tok`;
+  /*
+   * Every field is checked for being a number rather than for not being null,
+   * and that is not defensive noise. `usage` arrives as a JSON blob from a row
+   * a previous build wrote, so a field can be missing outright — and `undefined
+   * !== null` is true, which sent `.toFixed()` a value it could not format.
+   *
+   * The throw happened *during render*, so it did not merely blank the usage
+   * chip: it took the transcript, and with it the window, which then sat on
+   * "Loading workspace…" with nothing to say. A malformed number is worth an em
+   * dash, never a dead workspace.
+   */
+  const count =
+    typeof usage.tokens === "number" && Number.isFinite(usage.tokens) ? usage.tokens : 0;
+  const tokens = count >= 1000 ? `${(count / 1000).toFixed(1)}k tok` : `${count} tok`;
 
-  if (usage.costUsd !== null) return `${tokens} · $${usage.costUsd.toFixed(3)}`;
+  if (typeof usage.costUsd === "number" && Number.isFinite(usage.costUsd)) {
+    return `${tokens} · $${usage.costUsd.toFixed(3)}`;
+  }
   // Copilot bills in premium requests rather than dollars.
-  if (usage.premiumRequests !== null) return `${tokens} · ${usage.premiumRequests} premium`;
+  if (typeof usage.premiumRequests === "number" && Number.isFinite(usage.premiumRequests)) {
+    return `${tokens} · ${usage.premiumRequests} premium`;
+  }
   return tokens;
+}
+
+/**
+ * Whether a stop reason describes the provider having a bad moment rather than
+ * the run being wrong.
+ *
+ * A 529/5xx from the API is weather: the prompt was fine, the session is fine,
+ * and resending is the whole remedy. Painting it in the same red as a real
+ * failure teaches people to ignore red. Matched on the status code the agent
+ * quotes and on the words the API uses for itself, because the stop string is
+ * assembled by the vendor CLI and has no stable shape to parse.
+ */
+export function isTransientStop(stop: string): boolean {
+  return (
+    /\(status 5\d\d\)|API Error: 5\d\d/i.test(stop) ||
+    /overloaded|internal server error|service unavailable|try again in a moment/i.test(stop)
+  );
 }
 
 /** "resets 14:20" on the rate-limit pill. */
@@ -80,4 +119,28 @@ export function clockTime(iso: string | null): string {
   const at = new Date(iso);
   if (Number.isNaN(at.getTime())) return "";
   return `${String(at.getHours()).padStart(2, "0")}:${String(at.getMinutes()).padStart(2, "0")}`;
+}
+
+/**
+ * "2h 14m" — time left until `iso`, for the usage panel's reset countdowns.
+ *
+ * A countdown rather than a clock time: a deadline you have to subtract from
+ * the current time is a deadline you misread. Minute-coarse, matching the
+ * minute tick that redraws it, and `Math.ceil` so the last partial minute
+ * reads as "1m" rather than a premature "now".
+ */
+export function countdown(iso: string | null, now = Date.now()): string {
+  if (!iso) return "";
+  const at = Date.parse(iso);
+  if (Number.isNaN(at)) return "";
+
+  const delta = at - now;
+  if (delta <= 0) return "now";
+
+  const minutes = Math.ceil(delta / MINUTE);
+  if (minutes < 60) return `${minutes}m`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ${minutes % 60}m`;
+  const days = Math.floor(hours / 24);
+  return `${days}d ${hours % 24}h`;
 }

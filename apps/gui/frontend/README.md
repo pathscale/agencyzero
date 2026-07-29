@@ -163,14 +163,57 @@ interactive, writing to ephemeral fixture state behind a small banner, with the 
 believing their projects were saved. **The window says which backend it is on** in a footer
 rather than letting fixtures pass for live data.
 
-When the Rust commands land, the probe succeeds and the app switches over. Nothing above
-`src/api/` changes: no component imports `@tauri-apps/api` directly, and no component knows
-which backend answered.
+As Rust commands land, the probe reports them and each method switches over on its own.
+Nothing above `src/api/` changes: no component imports `@tauri-apps/api` directly, and no
+component knows which backend answered.
+
+**`on` is the exception, and it subscribes to both buses.** It is not a command, so it
+has no entry in `COMMAND_FOR` and cannot be routed the same way — and picking one bus is
+wrong in either direction while the backend is hybrid. A mock-served command emits on the
+mock's in-memory emitter; a Rust-served one emits over Tauri's. Listening to only one
+silently drops every mutation the other half makes, which is not a cosmetic loss: the
+store applies mutations *from the event*, not from the command's return value.
+
+Taking the mock's alone is what made a created project vanish. Rust wrote the row and
+emitted `project:created`, the window was listening to the mock, and the store never
+learned the project existed — so the tab it had just converted rendered "This project
+could not be loaded" for the rest of the session. An event still arrives once, since
+whichever backend served the command is the only one that emits for it.
+
+### Wire numbers are `undefined`, not `null`
+
+Rust translates `agent_abstraction::Usage` into the UI's shape rather than passing its
+own struct through — the crate says `input_tokens` / `cost_usd`, the UI reads `tokens` /
+`costUsd`. Sending the crate's shape meant every field the label read came back
+`undefined`, and **`undefined !== null` is true**, so a null check passed and `.toFixed()`
+was called on nothing.
+
+That threw *during render*, which did not merely blank a usage chip: it took the
+transcript, and with it the window, which then sat on "Loading workspace…" with no error
+anywhere. So formatters in [`lib/format.ts`](src/lib/format.ts) test `typeof x ===
+"number"` rather than `x !== null`. Rows written by older builds are still on disk in the
+old shape, and a malformed number is worth an em dash, never a dead workspace.
 
 The mock is a stand-in, not a simulation. It will not invent an agent reply — sending a
 message appends your message and stops there, because a fabricated answer is
 indistinguishable from a real one in a screenshot and that is precisely the wrong thing to
 ship.
+
+## Logs
+
+There are no devtools in a bundled `.app` and its stderr goes nowhere, so
+[`lib/log.ts`](src/lib/log.ts) forwards every line to Rust's `log_frontend`, which writes
+it to the same file Rust logs to (`~/Library/Application Support/com.pathscale.agencyzero/logs/az-gui.log`).
+Outside Tauri it is the console, so `bun run dev` reads normally.
+
+**One interleaved file is the point.** When a boot stalls the only question that matters
+is whether Rust was ever asked, and two separate logs cannot answer it. Every `invoke` is
+logged in and out with a sequence number — a request with no matching reply names the
+call that hung — and uncaught errors and unhandled rejections are routed there too, which
+is how a `TypeError` thrown mid-render stopped being invisible.
+
+`init()` announces each boot step before awaiting it, so a boot that never finishes says
+which step it stopped on.
 
 ## Layout
 
@@ -181,7 +224,7 @@ src/
   types/        the data model from design/data-model.html
   features/     one directory per screen: tabs · home · draft · project · settings
   components/   Icon + sprite, Panel/SectionPanel, PillMenu, StatusDot
-  lib/          format (times, usage) · labels (wire value -> what the user reads)
+  lib/          format (times, usage) · labels (wire value -> what the user reads) · log
   styles/       theme.css — the palette and app tokens
 ```
 
@@ -218,10 +261,16 @@ they are not fetched from an icon package at build time either.
 - **`list_rate_limits()` is a command this frontend added.** `run:rate_limit` announces a
   *change*; a window opened after one arrived would otherwise show a clear header for a tab
   that is still blocked.
-- **A CRITICAL hold turns the tab dot red, not amber.** That is what `data-model.html` says
-  (check → amber, critical → red). The `workspace-*.png` renders show api.support.cafe amber
-  because the mockup drove the dot from a single `status` field that could not express both
-  its rate limit and its hold.
+- **The tab dot has five states, and amber means busy.** The design maps a check-severity
+  hold to amber and only a critical one to red. Here amber means *the agent is working*, so
+  a hold — which needs a person — cannot also be amber, and **both hold severities are red**
+  along with a live rate limit. The two remain distinguishable in the transcript.
+  There is also a **green**: `ready` and `quiet` used to be one grey state, so a project
+  waiting on you looked exactly like one you had closed out. Grey now means inactive and is
+  driven off `Project.status`. The full table is in
+  [`docs/agent-usage-surface.md`](../../../docs/agent-usage-surface.md).
+  Caveat: `set_project_status` is unimplemented in Rust, so every real project stays
+  `active` and grey is currently only reachable in the fixtures.
 - **The moderator note's subtitle shows the moderator's model** ("supervising · haiku") where
   the mockup shows "supervising · bypass mode". The model is what the message actually
   records; the posture on a moderator message is the *moderator's*, not the supervised run's.
@@ -243,6 +292,22 @@ they are not fetched from an icon package at build time either.
   reports on 2.1.205. The catalogue is preferred whenever it answers, so this is one
   deletion once the crate carries the ladder, not a migration. **Delete it then** — a second
   copy of a model fact is exactly what the old hardcoded `MODELS` list was.
+- **Two different numbers sit in the tab strip, and they are not the same thing.** *Account
+  windows* come from `agent-abstraction`'s `account_usage` and are real plan figures — but
+  **only Codex reports them**. Claude reports quota solely during a run, and the percentages
+  its `/usage` screen shows are not on the wire, so the strip says why there is no figure
+  rather than inventing one. *Spend* is summed from turns this app ran and persisted, so it
+  omits work done in another client. See
+  [`docs/agent-usage-surface.md`](../../../docs/agent-usage-surface.md).
+- **A rate-limit record is not a rate limit.** The provider emits one on healthy runs, with
+  status `allowed`, as a heartbeat. `RateLimit::is_blocking()` is what separates them, and it
+  is carried to the webview as `isBlocking`: without it the header showed an orange
+  "allowed (five_hour)" warning on a run that was never restricted, and the tab dot went
+  amber with it.
+- **The Agent I/O panel shows the crate's event stream, not raw stdout.**
+  `agent-abstraction` parses stdout into events and does not hand back the source lines, so
+  a line it could not read surfaces as `unparsed` rather than verbatim. It is in memory and
+  capped at 500 lines per project; the log file is the durable copy.
 - **Nothing sends the effort yet.** `Request` in the crate has `model`, `permission`,
   `format`, `system` and `session` but no effort, so the control is a stored preference the
   run path cannot act on until the crate adds one.

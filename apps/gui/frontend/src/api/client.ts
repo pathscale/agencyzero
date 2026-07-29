@@ -1,4 +1,5 @@
 import type {
+  AgentIoEntry,
   AgentModels,
   AgentStatus,
   CreatedProject,
@@ -9,6 +10,7 @@ import type {
   Project,
   ProjectItem,
   ProjectStatus,
+  QuotaReport,
   RateLimit,
   RunningTask,
   TaskLogEntry,
@@ -34,8 +36,12 @@ export interface AgencyZeroApi {
     firstMessage: string;
     model?: string;
     permission?: Permission;
+    /** Reasoning effort, as `Request::effort`. Absent means the CLI's default. */
+    effort?: string;
   }): Promise<CreatedProject>;
   deleteProject(id: string): Promise<void>;
+  /** Stage 3 of the naming design: a manual rename outranks both derived stages. */
+  renameProject(id: string, name: string): Promise<Project>;
   setProjectStatus(id: string, status: ProjectStatus): Promise<Project>;
   reorderProjects(ids: string[]): Promise<Project[]>;
   setProjectPinned(id: string, pinned: boolean): Promise<Project>;
@@ -62,6 +68,8 @@ export interface AgencyZeroApi {
     itemId?: string | null;
     model?: string;
     permission?: Permission;
+    /** Reasoning effort, as `Request::effort`. Absent means the CLI's default. */
+    effort?: string;
   }): Promise<Message>;
   /** Approve once / Deny on a moderator hold. */
   resolveModeration(messageId: string, approve: boolean): Promise<Message>;
@@ -108,6 +116,14 @@ export interface AgencyZeroApi {
    * back with the page rather than be inferred from it.
    */
   listTaskLog(projectId: string, limit: number, before?: string): Promise<TaskLogPage>;
+  /** Whether this project records its raw exchange to the database. */
+  getIoPersist(projectId: string): Promise<boolean>;
+  /** Turn recording on or off for one project. Off by default; see the Rust doc. */
+  setIoPersist(projectId: string, enabled: boolean): Promise<boolean>;
+  /** The raw exchange with the agent for this project, oldest first. */
+  listAgentIo(projectId: string): Promise<AgentIoEntry[]>;
+  /** Where the account stands. See `docs/agent-usage-surface.md`. */
+  listQuota(): Promise<QuotaReport>;
   clearTaskLog(projectId: string): Promise<void>;
   /**
    * Rate limits currently in force.
@@ -142,6 +158,8 @@ export interface AppEvents {
   "task:progress": RunningTask;
   /** `Event::ToolResult` — the row leaves Running and lands in the log. */
   "task:finished": TaskLogEntry;
+  /** One line of the raw exchange, as it happens. */
+  "agent:io": AgentIoEntry;
   /**
    * A delta of the reply, as it arrives. Not persisted and not a Message: the
    * authoritative body is the one that lands as `message:appended` when the run

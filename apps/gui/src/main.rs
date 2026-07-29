@@ -2,9 +2,12 @@
 
 mod agents;
 mod db;
+mod log;
 mod models;
 mod projects;
+mod quota;
 mod settings;
+mod tasks;
 
 use std::sync::Arc;
 
@@ -36,6 +39,15 @@ const IMPLEMENTED: &[&str] = &[
     "list_messages",
     "list_running_tasks",
     "list_task_log",
+    "clear_task_log",
+    "delete_project",
+    "set_project_pinned",
+    "rename_project",
+    "reset_task_manager",
+    "list_agent_io",
+    "get_io_persist",
+    "set_io_persist",
+    "list_quota",
     "list_rate_limits",
     "create_project",
     "send_message",
@@ -43,11 +55,19 @@ const IMPLEMENTED: &[&str] = &[
     "set_settings",
     "list_agent_status",
     "list_models",
+    "log_frontend",
+    "get_log_path",
 ];
 
 /// What the GUI carries for the life of the process.
 pub(crate) struct AppState {
     tables: Arc<Tables>,
+    /// Tool calls in flight, by project. Not persisted, on purpose — see
+    /// [`projects::RunningTasks`].
+    running: Arc<projects::RunningTasks>,
+    /// The raw exchange with the agent, by project. In memory for the life of
+    /// the process — see [`projects::AgentIo`].
+    io: Arc<projects::AgentIo>,
     /// Kept so `set_data_location` can write the pointer beside the settings.
     config_dir: std::path::PathBuf,
     /// Where the tables were opened from this launch. A change takes effect on
@@ -59,6 +79,23 @@ pub(crate) struct AppState {
 #[tauri::command]
 fn list_capabilities() -> Vec<String> {
     IMPLEMENTED.iter().map(|name| (*name).to_string()).collect()
+}
+
+/// Record a line the webview produced, in the same file as the Rust ones.
+///
+/// Two logs in two places cannot be read against each other, and the ordering
+/// between them is the whole question when a boot stalls: the answer is either
+/// "Rust never got the call" or "Rust answered and the webview did nothing with
+/// it", and only one interleaved file can tell those apart.
+#[tauri::command]
+fn log_frontend(level: String, message: String) {
+    crate::log!(log::Level::parse(&level), "webview", "{message}");
+}
+
+/// Where the log file is, so Settings can point at it rather than describing it.
+#[tauri::command]
+fn get_log_path() -> Option<String> {
+    log::path().map(|path| path.to_string_lossy().into_owned())
 }
 
 /// The directory a new project runs in, and whether it is there yet.
@@ -162,7 +199,11 @@ fn get_settings(state: State<'_, AppState>) -> GlobalSettings {
         .and_then(|raw| match serde_json::from_str(&raw) {
             Ok(parsed) => Some(parsed),
             Err(error) => {
-                eprintln!("[az-gui] settings record unreadable, using defaults: {error}");
+                crate::log!(
+                    log::Level::Warn,
+                    "settings",
+                    "record unreadable, using defaults: {error}"
+                );
                 None
             }
         })
@@ -231,7 +272,11 @@ async fn list_agent_status(
     if let Ok(encoded) = serde_json::to_string(&detected)
         && let Err(error) = state.tables.kv_put(agents::KEY, encoded).await
     {
-        eprintln!("[az-gui] could not cache the agent probe: {error}");
+        crate::log!(
+            log::Level::Warn,
+            "agents",
+            "could not cache the agent probe: {error}"
+        );
     }
     Ok(detected)
 }
@@ -360,12 +405,23 @@ fn main() {
             projects::list_running_tasks,
             projects::list_task_log,
             projects::list_rate_limits,
+            projects::clear_task_log,
+            projects::delete_project,
+            projects::set_project_pinned,
+            projects::rename_project,
+            projects::reset_task_manager,
+            projects::list_agent_io,
+            projects::get_io_persist,
+            projects::set_io_persist,
+            quota::list_quota,
             projects::create_project,
             projects::send_message,
             get_settings,
             set_settings,
             list_agent_status,
-            models::list_models
+            models::list_models,
+            log_frontend,
+            get_log_path
         ])
         .setup(|app| {
             app.set_menu(build_menu(app.handle())?)?;
@@ -383,15 +439,90 @@ fn main() {
                 .app_data_dir()
                 .map_err(|error| format!("no data directory: {error}"))?;
 
+            // Before anything that can fail, so whatever happens next is on the
+            // record. Opening the tables is the first thing that can, and it is
+            // fatal — a fatal error nobody can read is how this app lost an
+            // afternoon.
+            log::init(&data_dir.join("logs"));
+
             // Resolved before anything opens, because the settings record that
             // would otherwise carry it lives in the database being located.
             let location = location::resolve(&config_dir, &data_dir);
-            let tables =
-                tauri::async_runtime::block_on(Tables::open(&location.path)).map_err(|error| {
-                    format!("could not open the tables in {:?}: {error}", location.path)
+            crate::log!(
+                log::Level::Info,
+                "boot",
+                "tables at {:?} (source {})",
+                location.path,
+                location.source
+            );
+            let tables = tauri::async_runtime::block_on(Tables::open(&location.path)).map_err(
+                |error| {
+                    let message =
+                        format!("could not open the tables in {:?}: {error}", location.path);
+                    crate::log!(log::Level::Error, "boot", "{message}");
+                    message
+                },
+            )?;
+            crate::log!(log::Level::Info, "boot", "tables open");
+
+            /*
+             * A store written by a build with a different schema is not stale,
+             * it is unreadable — rkyv reads the old bytes through the new layout
+             * and hands back plausible-looking nonsense. So the old directory is
+             * moved aside and this launch starts clean, rather than showing
+             * projects whose ids are garbage and whose every command fails.
+             *
+             * Moved, never deleted: it is the only copy of someone's transcripts
+             * and the path is logged so they can be recovered by hand.
+             */
+            let tables = if let db::tables::SchemaState::Mismatch { found } = tables.schema_state()
+            {
+                let aside = location.path.with_extension(format!(
+                    "superseded-{}",
+                    chrono::Utc::now().format("%Y%m%dT%H%M%SZ")
+                ));
+                crate::log!(
+                    log::Level::Warn,
+                    "boot",
+                    "the store was written by a different schema and cannot be read safely. \
+                     Moving it to {aside:?} and starting clean. Found: {found}"
+                );
+                // Close the handles before moving the directory out from under them.
+                drop(tables);
+                std::fs::rename(&location.path, &aside).map_err(|error| {
+                    format!("could not move the superseded store aside: {error}")
                 })?;
+
+                /*
+                 * Reopened here, in this launch, rather than reported as a
+                 * startup error. Returning `Err` from the setup hook does not
+                 * show anyone a message — Tauri turns it into a panic, so the
+                 * window never appears and the app dies on the launch that was
+                 * supposed to recover. Starting clean is the recovery; the log
+                 * and the directory left on disk are the record.
+                 */
+                tauri::async_runtime::block_on(Tables::open(&location.path)).map_err(|error| {
+                    let message = format!("could not open a fresh store: {error}");
+                    crate::log!(log::Level::Error, "boot", "{message}");
+                    message
+                })?
+            } else {
+                tables
+            };
+
+            // Stamped after the check, so the next launch can make it.
+            if let Err(error) = tauri::async_runtime::block_on(tables.stamp_schema()) {
+                crate::log!(
+                    log::Level::Warn,
+                    "boot",
+                    "could not record the schema fingerprint: {error}"
+                );
+            }
+
             app.manage(AppState {
                 tables: Arc::new(tables),
+                running: Arc::default(),
+                io: Arc::default(),
                 config_dir,
                 location,
             });

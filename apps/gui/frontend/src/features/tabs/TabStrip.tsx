@@ -132,7 +132,9 @@ export function TabStrip(): JSX.Element {
         <ScrollArrow direction={1} isDisabled={!overflow().right} onScroll={() => nudge(1)} />
       </Show>
 
-      <div class="flex flex-none items-center gap-0.5">
+      {/* Account usage moved to the project panel, where it has room to say
+          everything on its own lines instead of a strip of pills. */}
+      <div class="flex flex-none items-center gap-1.5">
         <button
           type="button"
           onClick={() => actions.openSettings()}

@@ -4,7 +4,9 @@
 //! `kv` carries settings and the agent probe cache, and the project, item and
 //! message tables land with the read path they serve.
 
+pub mod agent_io;
 pub mod kv;
 pub mod message;
 pub mod project;
 pub mod project_item;
+pub mod task_log;

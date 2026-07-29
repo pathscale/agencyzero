@@ -11,9 +11,11 @@ import {
 import { createStore, produce, reconcile } from "solid-js/store";
 import type { AgencyZeroApi, AppEvents, Unlisten } from "~/api";
 import { selectApi } from "~/api";
+import { describeError, installGlobalErrorLogging, log } from "~/lib/log";
 import { prefs, setPrefs } from "~/stores/prefs";
 import type {
   Agent,
+  AgentIoEntry,
   AgentModels,
   AgentStatus,
   DataLocation,
@@ -23,6 +25,7 @@ import type {
   Project,
   ProjectItem,
   ProjectStatus,
+  QuotaReport,
   RateLimit,
   RunningTask,
   Tab,
@@ -33,6 +36,9 @@ import type {
 
 const TASK_LOG_PAGE = 40;
 
+/** Matches `MAX_IO_ENTRIES` in `projects.rs`; see the `agent:io` handler. */
+const AGENT_IO_LIMIT = 500;
+
 const FALLBACK_EFFORT = "high";
 
 type WorkspaceState = {
@@ -42,6 +48,8 @@ type WorkspaceState = {
   running: Record<string, RunningTask[]>;
   taskLog: Record<string, TaskLogEntry[]>;
   logTotals: Record<string, number>;
+  /** The raw exchange with the agent, per project. Diagnostic, not persisted. */
+  agentIo: Record<string, AgentIoEntry[]>;
   rateLimits: Record<string, RateLimit>;
   settings: GlobalSettings | null;
   agents: AgentStatus[];
@@ -51,6 +59,11 @@ type WorkspaceState = {
   dataLocation: DataLocation | null;
   /** Where a new project runs. Null until boot ends. */
   workspaceRoot: WorkspaceRoot | null;
+  /**
+   * Where the account stands. Null until boot ends; a report with
+   * `supported: false` is the honest answer, not a missing one.
+   */
+  quota: QuotaReport | null;
   /**
    * The reply currently being written, per project.
    *
@@ -108,12 +121,14 @@ function createWorkspace() {
     running: {},
     taskLog: {},
     logTotals: {},
+    agentIo: {},
     rateLimits: {},
     settings: null,
     agents: [],
     models: [],
     dataLocation: null,
     workspaceRoot: null,
+    quota: null,
     streaming: {},
     tabs: [HOME_TAB],
     activeKey: "home",
@@ -186,12 +201,28 @@ function createWorkspace() {
         ? "error"
         : "blocked";
     }
+    /*
+     * Only a limit that actually refused something counts as blocked. The
+     * provider also emits an "allowed" heartbeat mid-run, and treating that as a
+     * limit turned the dot amber on a run that was never restricted.
+     *
+     * Liveness is checked rather than trusted: a suspended app misses timers, so
+     * an entry can outlive its reset time without anything having cleared it.
+     */
     const limit = state.rateLimits[projectId];
-    // Checked rather than trusted: a suspended app misses timers, so an entry
-    // can outlive its reset time without anything having cleared it.
-    if (limit && isLimitLive(limit, clock())) return "blocked";
+    if (limit?.isBlocking && isLimitLive(limit, clock())) return "blocked";
     if ((state.running[projectId] ?? []).length > 0) return "running";
-    return "quiet";
+
+    /*
+     * Idle, so the question is whether this project is still live work.
+     *
+     * `quiet` used to cover both, which meant a project sitting there waiting
+     * for you rendered exactly like one you had finished with. The project's own
+     * status is what tells them apart: `active` is waiting on you, anything else
+     * is done or not started.
+     */
+    const project = state.projects.find((candidate) => candidate.id === projectId);
+    return project?.status === "active" ? "ready" : "quiet";
   }
 
   /**
@@ -255,11 +286,12 @@ function createWorkspace() {
 
   async function loadProject(projectId: string): Promise<void> {
     const backend = client();
-    const [items, messages, running, log] = await Promise.all([
+    const [items, messages, running, log, io] = await Promise.all([
       backend.listItems(projectId),
       backend.listMessages(projectId),
       backend.listRunningTasks(projectId),
       backend.listTaskLog(projectId, TASK_LOG_PAGE),
+      backend.listAgentIo(projectId),
     ]);
     batch(() => {
       setState("items", projectId, reconcile(items));
@@ -267,6 +299,7 @@ function createWorkspace() {
       setState("running", projectId, reconcile(running));
       setState("taskLog", projectId, reconcile(log.entries));
       setState("logTotals", projectId, log.total);
+      setState("agentIo", projectId, reconcile(io));
     });
   }
 
@@ -284,16 +317,25 @@ function createWorkspace() {
    * contains is a no-op rather than a duplicate.
    */
   async function init(): Promise<void> {
+    // Each step is announced before it is awaited, so a boot that never
+    // finishes says which step it stopped on. Without this the window shows
+    // "Loading workspace…" forever and the log is silent, which is the state
+    // this app shipped in once already.
+    installGlobalErrorLogging();
+    log.info("boot: selecting a backend");
     try {
       const { api: backend, backend: kind, live } = await selectApi();
+      log.info(`boot: backend=${kind}, ${live.size} live commands`);
       setApi(() => backend);
       batch(() => {
         setState("backend", kind);
         setState("live", [...live]);
       });
 
+      log.info("boot: subscribing to events");
       await subscribe(backend);
 
+      log.info("boot: hydrating");
       const [projects, settings, agents, models, dataLocation, workspaceRoot, rateLimits] =
         await Promise.all([
           backend.listProjects(),
@@ -328,16 +370,38 @@ function createWorkspace() {
         setState("activeKey", restored ? prefs.lastTabKey : "home");
       });
 
+      log.info(`boot: loading ${projects.length} project(s)`);
       await Promise.all(projects.map((project) => loadProject(project.id)));
 
       drainEventBuffer();
       setState("boot", { status: "ready" });
+      log.info("boot: ready");
     } catch (cause) {
       // A half-loaded workspace is not something to render as if it were whole.
+      log.error(`boot failed: ${describeError(cause)}`);
       setState("boot", {
         status: "error",
         message: cause instanceof Error ? cause.message : String(cause),
       });
+    }
+  }
+
+  /**
+   * Ask where the account stands.
+   *
+   * Deliberately **not** part of boot: `account_usage` spawns `codex
+   * app-server` and waits on three round trips, which put a second onto every
+   * launch for a figure nobody needs before the window paints. The usage strip
+   * asks for it once the workspace is ready, and again each minute.
+   *
+   * A failure leaves the last answer in place rather than blanking the readout:
+   * a stale figure beats no figure, and `checkedAt` says how stale.
+   */
+  async function refreshQuota(): Promise<void> {
+    try {
+      setState("quota", await client().listQuota());
+    } catch (cause) {
+      log.warn(`could not refresh the quota: ${describeError(cause)}`);
     }
   }
 
@@ -479,6 +543,17 @@ function createWorkspace() {
         setState("taskLog", entry.projectId, (list = []) => [entry, ...list]);
         setState("logTotals", entry.projectId, (total = 0) => total + 1);
       });
+    });
+
+    /*
+     * Appended and capped at the same ceiling Rust keeps, so a long run cannot
+     * grow the store without bound. The newest line is the one worth keeping,
+     * so the oldest goes first.
+     */
+    await bind("agent:io", (entry) => {
+      setState("agentIo", entry.projectId, (lines = []) =>
+        [...lines, entry].slice(-AGENT_IO_LIMIT),
+      );
     });
 
     await bind("run:rate_limit", (limit) => {
@@ -685,6 +760,8 @@ function createWorkspace() {
           delete draft.taskLog[projectId];
           delete draft.logTotals[projectId];
           delete draft.rateLimits[projectId];
+          delete draft.agentIo[projectId];
+          delete draft.streaming[projectId];
         }),
       );
       closeTab(projectId);
@@ -761,8 +838,23 @@ function createWorkspace() {
       firstMessage,
       model: tab?.model,
       permission: tab?.permission,
+      effort: tab?.effort,
     });
     batch(() => {
+      /*
+       * The record goes in from the command's own return value, before the tab
+       * is converted — not left to the `project:created` event.
+       *
+       * This is the one mutation the window is allowed to apply optimistically,
+       * because it is the tab the user is holding. The event is delivered on a
+       * separate hop, so leaving it to arrive first means the tab is already
+       * `kind: "project"` while `state.projects` still has nothing under that
+       * id, and the tab renders "This project could not be loaded" until it
+       * lands. `upsertProject` matches on id, so the event that follows is a
+       * no-op rather than a duplicate.
+       */
+      upsertProject(created.project);
+
       // The draft becomes the project tab: same position in the strip, so the
       // tab you were typing in is the tab that keeps the conversation. Any tab
       // already holding this project is dropped rather than duplicated.
@@ -793,6 +885,9 @@ function createWorkspace() {
       body,
       model: tab?.model,
       permission: tab?.permission,
+      // The tab's effort, which was being dropped here: every run reached the
+      // agent with `effort=<none>` while the composer showed a level selected.
+      effort: tab?.effort,
     });
   };
 
@@ -810,6 +905,11 @@ function createWorkspace() {
     createProject,
     send,
     deleteProject: (id: string) => client().deleteProject(id),
+    renameProject: (id: string, name: string) => client().renameProject(id, name),
+    getIoPersist: (projectId: string) => client().getIoPersist(projectId),
+    setIoPersist: (projectId: string, enabled: boolean) =>
+      client().setIoPersist(projectId, enabled),
+    refreshQuota,
     purgeProject,
     setProjectStatus: (id: string, status: ProjectStatus) => client().setProjectStatus(id, status),
     setProjectPinned: (id: string, pinned: boolean) => client().setProjectPinned(id, pinned),
