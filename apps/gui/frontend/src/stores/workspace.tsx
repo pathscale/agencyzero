@@ -31,21 +31,6 @@ import type {
 
 const TASK_LOG_PAGE = 40;
 
-/**
- * Claude's reasoning levels, pending a crate release that carries them.
- *
- * Verified first-hand against claude 2.1.205: `--effort <level>  Effort level
- * for the current session (low, medium, high, xhigh, max)`. The crate leaves
- * Claude's `efforts` empty because the levels are not a `--model` value and it
- * had not verified them; they are now verified, so this is a stopgap and not a
- * disagreement. See `effortsFor`.
- */
-const CLAUDE_EFFORTS = ["low", "medium", "high", "xhigh", "max"] as const;
-
-/**
- * What a tab starts at. `high` is Anthropic's documented default effort, and is
- * what omitting `--effort` is equivalent to.
- */
 const DEFAULT_EFFORT = "high";
 
 type WorkspaceState = {
@@ -231,19 +216,13 @@ function createWorkspace() {
   /**
    * The reasoning ladder a model accepts.
    *
-   * Prefers the catalogue, and falls back to {@link CLAUDE_EFFORTS} while
-   * `agent-abstraction` still reports none for Claude. **Delete the fallback
-   * when the crate carries the ladder**: the whole point of the catalogue is
-   * that model facts live in one place, and a second copy here is exactly what
-   * the hardcoded `MODELS` list used to be. The `??` order means the crate wins
-   * automatically the moment it answers, so removing this is a deletion rather
-   * than a migration.
+   * From the catalogue, which is the only place a model fact lives. Empty means
+   * the crate establishes no ladder for that model, and the composer hides the
+   * control rather than guessing at one.
    */
   function effortsFor(modelId: string): string[] {
     const catalogue = state.models.find((entry) => entry.agent === "claude");
-    const fromCrate = catalogue?.models.find((model) => model.id === modelId)?.efforts ?? [];
-    if (fromCrate.length > 0) return fromCrate;
-    return catalogue ? [...CLAUDE_EFFORTS] : [];
+    return catalogue?.models.find((model) => model.id === modelId)?.efforts ?? [];
   }
 
   function itemsFor(projectId: string): ProjectItem[] {
