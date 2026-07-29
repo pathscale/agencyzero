@@ -56,21 +56,27 @@ replaces the capability `tauri-build` generates when there isn't one.
 
 ## Tabs
 
-⌃N opens a new project, ⌘W closes the tab, ⌘1 selects the previous and ⌘2 the next — both
-cycling wrap. These are **native menu accelerators**, defined in
+⌘N opens a new project, ⌘W closes the tab, ⌘1 selects the previous and ⌘2 the next — both
+cycling wrap. ⌃T also opens a new project, by a different route (below). These are **native menu accelerators**, defined in
 [`../src/main.rs`](../src/main.rs): macOS delivers them whatever has focus, and the menu bar
 is where a keybinding is discoverable. The menu items carry ids, not behaviour; Rust emits
 `menu:new-project` / `menu:close-tab` / `menu:prev-tab` / `menu:next-tab` and
 [`useAppShell.ts`](src/features/shell/useAppShell.ts) answers them with the same actions the
 strip uses.
 
-New project is ⌃N rather than ⌘N by request. Worth knowing, because it is a real cost: a
-menu accelerator is app-global, so it shadows Cocoa's ⌃N (move down one line) inside text
-fields. The whole emacs-style set — ⌃A ⌃E ⌃B ⌃F ⌃P ⌃N ⌃K ⌃T — has the same problem, so any
-Ctrl-letter binding takes something away from the composer. **⌘N is the one shortcut for
-"new" that collides with nothing**; switching is a one-line change to the accelerator in
-[`../src/main.rs`](../src/main.rs) and the matching branch in
-[`shortcuts.ts`](src/features/tabs/shortcuts.ts).
+### Why ⌃T is not a menu item
+
+A menu accelerator is resolved by macOS *before* the key reaches the webview. That is what
+makes one reliable and discoverable — and it is also why it shadows whatever the combination
+did in a text field. macOS gives every text field an emacs-style set (⌃A ⌃E ⌃B ⌃F ⌃P ⌃N ⌃K
+⌃T), so **any** Ctrl-letter accelerator takes one of those away. ⌘N is the one shortcut for
+"new" that costs nothing, which is why it is the menu binding.
+
+⌃T is handled in the webview instead, on a plain keydown in
+[`shortcuts.ts`](src/features/tabs/shortcuts.ts). Nothing in the menu claims it, so the key
+reaches the DOM first: it fires wherever focus is — the composer included — and
+`preventDefault()` stops the text field transposing. The trade is the menu-bar listing:
+⌃T works everywhere but is not written down anywhere in the UI.
 
 [`shortcuts.ts`](src/features/tabs/shortcuts.ts) binds these in the webview **only outside
 Tauri**, so they work under `bun run dev` in a browser — though a browser takes ⌃T for its

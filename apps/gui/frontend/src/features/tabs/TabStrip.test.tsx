@@ -151,3 +151,45 @@ describe("overflow", () => {
     expect(keyed).toEqual(workspace.state.tabs.map((tab) => tab.key));
   });
 });
+
+describe("keyboard", () => {
+  /*
+   * ⌃T is deliberately not a menu accelerator: the menu would consume it before
+   * the webview saw it, and it would shadow transpose in every text field
+   * anyway. Handled on a keydown, it fires wherever focus is — which is the
+   * only way it can work while the composer has focus.
+   */
+  it("opens a new project on ctrl+T, from anywhere", async () => {
+    const { workspace } = await mountStrip();
+    expect(workspace.state.tabs.filter((tab) => tab.kind === "draft")).toHaveLength(0);
+
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "t", ctrlKey: true, bubbles: true }));
+
+    await waitFor(() => {
+      expect(workspace.state.tabs.filter((tab) => tab.kind === "draft")).toHaveLength(1);
+      expect(workspace.activeTab().kind).toBe("draft");
+    });
+  });
+
+  it("focuses the draft already open rather than stacking a second", async () => {
+    const { workspace } = await mountStrip();
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "t", ctrlKey: true, bubbles: true }));
+    await waitFor(() => expect(workspace.activeTab().kind).toBe("draft"));
+
+    workspace.actions.focus("home");
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "t", ctrlKey: true, bubbles: true }));
+
+    await waitFor(() => {
+      expect(workspace.state.tabs.filter((tab) => tab.kind === "draft")).toHaveLength(1);
+      expect(workspace.activeTab().kind).toBe("draft");
+    });
+  });
+
+  it("ignores ctrl+shift+T, which is a different gesture", async () => {
+    const { workspace } = await mountStrip();
+    window.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "T", ctrlKey: true, shiftKey: true, bubbles: true }),
+    );
+    expect(workspace.state.tabs.filter((tab) => tab.kind === "draft")).toHaveLength(0);
+  });
+});
