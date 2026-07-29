@@ -235,12 +235,17 @@ they are not fetched from an icon package at build time either.
 - **The composer row does not match `design/workspace.html`.** The design puts the model
   pill on the left, right after Attach. A newer reference puts posture and input controls
   left and the model on the right, with a reasoning-effort control beside it, and that is
-  what is built. Design has not caught up yet.
-- **The effort control is present but never renders for Claude.** It is sourced from the
-  selected model's `efforts`, and `agent-abstraction` leaves that empty for every Claude
-  entry: the levels are real (`claude --effort low|medium|high|xhigh|max`) but they are not
-  a `--model` value and the crate has not verified them. Hiding the control beats filling it
-  with a list nothing established. It starts working when the crate carries the ladder.
+  what is built. The mic and the chevron beside it in that reference are deliberately not
+  built. Design has not caught up yet.
+- **Claude's effort ladder is hardcoded, temporarily.** `agent-abstraction` 0.2.2 leaves
+  `efforts` empty for every Claude entry, so `CLAUDE_EFFORTS` in
+  [`workspace.tsx`](src/stores/workspace.tsx) stands in with the levels `claude --help`
+  reports on 2.1.205. The catalogue is preferred whenever it answers, so this is one
+  deletion once the crate carries the ladder, not a migration. **Delete it then** — a second
+  copy of a model fact is exactly what the old hardcoded `MODELS` list was.
+- **Nothing sends the effort yet.** `Request` in the crate has `model`, `permission`,
+  `format`, `system` and `session` but no effort, so the control is a stored preference the
+  run path cannot act on until the crate adds one.
 - **Only `taskPlacement: "panel"` is built.** The dock and inline variants are a mockup
   tweak; the type keeps them open.
 - **"Add dir" takes a typed path**, not a native folder picker — that needs the Tauri dialog
