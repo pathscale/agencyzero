@@ -3,7 +3,7 @@ import { isTauri } from "~/lib/platform";
 import { useWorkspace } from "~/stores/workspace";
 
 /**
- * ⌘1 previous tab · ⌘2 next tab, both wrapping — **outside Tauri only**.
+ * ⌃T new project · ⌘1 previous tab · ⌘2 next tab — **outside Tauri only**.
  *
  * In the app these are native menu accelerators (see `apps/gui/src/main.rs`),
  * which macOS delivers whatever has focus and which show up in the menu bar
@@ -21,7 +21,18 @@ export function useTabShortcuts(): void {
   const { actions } = useWorkspace();
 
   const onKeyDown = (event: KeyboardEvent) => {
-    if (!event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return;
+    if (event.altKey || event.shiftKey) return;
+
+    // Ctrl+T, not Cmd+T. A browser takes this for its own new tab before the
+    // page sees it, so in practice this branch only fires in environments that
+    // do not — the app itself uses the menu accelerator.
+    if (event.ctrlKey && !event.metaKey && (event.key === "t" || event.code === "KeyT")) {
+      event.preventDefault();
+      actions.openDraft();
+      return;
+    }
+
+    if (!event.metaKey || event.ctrlKey) return;
 
     const isFirst = event.key === "1" || event.code === "Digit1";
     const isSecond = event.key === "2" || event.code === "Digit2";

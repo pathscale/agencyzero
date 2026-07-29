@@ -14,6 +14,7 @@ fn greet(name: &str) -> String {
 }
 
 /// Menu ids the frontend answers for. Each becomes a `menu:<id>` event.
+const NEW_PROJECT: &str = "new-project";
 const CLOSE_TAB: &str = "close-tab";
 const NEXT_TAB: &str = "next-tab";
 const PREV_TAB: &str = "prev-tab";
@@ -58,6 +59,11 @@ fn build_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> {
         .select_all()
         .build()?;
 
+    // Ctrl+T rather than Cmd+T, as asked for. Note this shadows Cocoa's
+    // transpose-characters binding inside text fields.
+    let new_project = MenuItemBuilder::with_id(NEW_PROJECT, "New Project")
+        .accelerator("Ctrl+T")
+        .build(app)?;
     let close_tab = MenuItemBuilder::with_id(CLOSE_TAB, "Close Tab")
         .accelerator("CmdOrCtrl+W")
         .build(app)?;
@@ -69,6 +75,8 @@ fn build_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> {
         .build(app)?;
 
     let tab_menu = SubmenuBuilder::new(app, "Tabs")
+        .item(&new_project)
+        .separator()
         .item(&close_tab)
         .separator()
         .item(&prev_tab)
@@ -97,6 +105,7 @@ fn main() {
         })
         .on_menu_event(|app, event| {
             let topic = match event.id().as_ref() {
+                NEW_PROJECT => "menu:new-project",
                 CLOSE_TAB => "menu:close-tab",
                 NEXT_TAB => "menu:next-tab",
                 PREV_TAB => "menu:prev-tab",
