@@ -4,16 +4,24 @@
   "version": "0.1.0",
   "identifier": "com.pathscale.agencyzero",
   "build": {
-    "frontendDist": "dist"
+    "frontendDist": "dist",
+    "devUrl": "http://localhost:3010",
+    "beforeDevCommand": "bun run dev",
+    "beforeBuildCommand": "bun run build"
   },
   "app": {
     "withGlobalTauri": true,
     "windows": [
       {
         "title": "AgencyZero",
-        "width": 900,
-        "height": 620,
-        "resizable": true
+        "width": 1344,
+        "height": 900,
+        "minWidth": 960,
+        "minHeight": 640,
+        "resizable": true,
+        "titleBarStyle": "Overlay",
+        "hiddenTitle": true,
+        "backgroundColor": "#0a0b0d"
       }
     ],
     "security": {
