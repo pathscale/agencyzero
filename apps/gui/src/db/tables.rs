@@ -56,7 +56,9 @@ impl Tables {
                     <$Table>::version(),
                 );
                 let engine = <$Engine>::new(config).await?;
-                Arc::new(<$Table>::new(engine).await?)
+                // `load`, never `new`: `new` builds an empty table and silently
+                // discards whatever is on disk, so every launch started blank.
+                Arc::new(<$Table>::load(engine).await?)
             }};
         }
 
@@ -129,6 +131,37 @@ mod tests {
             tables.kv_get("settings"),
             Some("{\"a\":2}".to_string()),
             "a second write replaces rather than appends"
+        );
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+}
+
+#[cfg(test)]
+mod restart_tests {
+    use super::*;
+
+    /// The behaviour the whole app depends on and that nothing covered: a write
+    /// has to survive the process that made it. The round-trip test above opens
+    /// once, so it would pass even if nothing reached disk.
+    #[tokio::test]
+    async fn a_write_survives_a_reopen() {
+        let dir = std::env::temp_dir().join(format!("az-reopen-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+
+        {
+            let tables = Tables::open(&dir).await.expect("should open");
+            tables
+                .kv_put("settings", "{\"models\":\"chosen\"}".into())
+                .await
+                .expect("should write");
+        }
+
+        let reopened = Tables::open(&dir).await.expect("should reopen");
+        assert_eq!(
+            reopened.kv_get("settings"),
+            Some("{\"models\":\"chosen\"}".to_string()),
+            "a setting written in one launch must be there in the next"
         );
 
         let _ = std::fs::remove_dir_all(&dir);
