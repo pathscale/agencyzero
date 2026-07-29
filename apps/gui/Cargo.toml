@@ -11,6 +11,18 @@ tauri-build = { version = "2", features = [] }
 [dependencies]
 agent-abstraction = "0.2.2"
 az-core.workspace = true
+worktable = "0.9"
+# The `worktable!` macro emits code that names these by bare path rather than
+# through a re-export, so a consumer of the macro has to declare them too.
+# Versions match worktable 0.9's own, since a mismatch produces errors that name
+# the wrong crate.
+eyre = "0.6"
+rkyv = { version = "0.8.9", features = ["uuid-1"] }
+derive_more = { version = "2.0.1", features = ["from", "error", "display", "debug", "into"] }
+futures = "0.3"
+uuid = "1"
+chrono = { version = "0.4", default-features = false, features = ["clock", "serde", "std"] }
+tokio = { version = "1", features = ["rt-multi-thread"] }
 tauri = { version = "2", features = [] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

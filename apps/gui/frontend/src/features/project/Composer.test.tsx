@@ -12,6 +12,8 @@ function mount(overrides: Partial<Parameters<typeof Composer>[0]> = {}) {
         { value: "sonnet", label: "Sonnet" },
         { value: "opus", label: "Opus" },
       ]}
+      efforts={[]}
+      effort=""
       permission="read_only"
       onModelChange={() => {}}
       onPermissionChange={() => {}}
