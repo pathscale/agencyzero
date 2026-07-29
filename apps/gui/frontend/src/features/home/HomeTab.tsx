@@ -1,9 +1,11 @@
 import { createMemo, createSignal, For, type JSX, Show } from "solid-js";
+import { EditableTitle } from "~/components/EditableTitle";
 import { Icon } from "~/components/Icon";
 import { Panel } from "~/components/Panel";
 import { ItemMarker, StatusDot } from "~/components/StatusDot";
 import { relativeTime } from "~/lib/format";
 import { statusSuffix } from "~/lib/labels";
+import { describeError, log } from "~/lib/log";
 import { useWorkspace } from "~/stores/workspace";
 import type { Project, ProjectItem } from "~/types";
 
@@ -57,19 +59,46 @@ export function HomeTab(): JSX.Element {
             </span>
           </div>
 
-          <div class="flex items-center gap-2.5 rounded-[11px] border border-white/11 bg-az-inset px-3 py-2.5 focus-within:border-primary/40">
-            <Icon name="search" class="shrink-0 text-[14px] text-az-muted" />
-            <input
-              type="search"
-              value={query()}
-              onInput={(event) => setQuery(event.currentTarget.value)}
-              placeholder="Search projects and items…"
-              aria-label="Search projects and items"
-              class="min-w-0 flex-1 bg-transparent text-[12.5px] text-base-content placeholder:text-az-muted focus:outline-none"
-            />
-            <kbd class="shrink-0 rounded-md border border-white/10 bg-base-300 px-[7px] py-0.5 font-mono text-[10.5px] text-az-faint">
-              ⌘K
-            </kbd>
+          {/*
+            Half the row each. Home is on its way to becoming a Task Manager
+            project — the thing that keeps the project and task lists organised —
+            so the left half is reserved for it now rather than leaving one
+            oversized search box to be cut in two later.
+          */}
+          <div class="flex items-stretch gap-2.5">
+            <button
+              type="button"
+              disabled
+              aria-label="Task Manager (not connected yet)"
+              class="flex min-w-0 flex-1 cursor-default items-center gap-2.5 rounded-[11px] border border-white/11 border-dashed bg-az-inset px-3 py-2.5 text-left"
+            >
+              <Icon name="list-checks" class="shrink-0 text-[14px] text-az-muted" />
+              <span class="min-w-0 flex-1 truncate text-[12.5px] text-az-muted">Task Manager</span>
+              {/*
+                Says what it is rather than looking like a button that ignores
+                you. There is no task-manager project to open yet, and a control
+                that silently does nothing is what we just removed from the
+                project header.
+              */}
+              <span class="shrink-0 rounded-md border border-white/10 bg-base-300 px-[7px] py-0.5 font-mono text-[10.5px] text-az-faint">
+                soon
+              </span>
+            </button>
+
+            <div class="flex min-w-0 flex-1 items-center gap-2.5 rounded-[11px] border border-white/11 bg-az-inset px-3 py-2.5 focus-within:border-primary/40">
+              <Icon name="search" class="shrink-0 text-[14px] text-az-muted" />
+              <input
+                type="search"
+                value={query()}
+                onInput={(event) => setQuery(event.currentTarget.value)}
+                placeholder="Search projects and items…"
+                aria-label="Search projects and items"
+                class="min-w-0 flex-1 bg-transparent text-[12.5px] text-base-content placeholder:text-az-muted focus:outline-none"
+              />
+              <kbd class="shrink-0 rounded-md border border-white/10 bg-base-300 px-[7px] py-0.5 font-mono text-[10.5px] text-az-faint">
+                ⌘K
+              </kbd>
+            </div>
           </div>
         </div>
 
@@ -163,6 +192,26 @@ export function HomeTab(): JSX.Element {
 function ProjectGroup(props: { project: Project }): JSX.Element {
   const { actions, itemsFor } = useWorkspace();
 
+  const [confirming, setConfirming] = createSignal(false);
+  const [isDeleting, setIsDeleting] = createSignal(false);
+
+  /**
+   * The row is removed by the `project:deleted` event, not here, so a delete the
+   * backend refused leaves the project on screen rather than vanishing it
+   * optimistically and lying about what is stored.
+   */
+  const remove = async (): Promise<void> => {
+    setIsDeleting(true);
+    try {
+      await actions.deleteProject(props.project.id);
+    } catch (cause) {
+      log.error(`could not delete ${props.project.id}: ${describeError(cause)}`);
+      setConfirming(false);
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
   const items = () => itemsFor(props.project.id);
   const openCount = () => items().filter((item) => item.status !== "finished").length;
   const activeCount = () => items().filter((item) => item.status === "active").length;
@@ -172,15 +221,25 @@ function ProjectGroup(props: { project: Project }): JSX.Element {
   return (
     <div class="overflow-hidden rounded-xl border border-az-hairline-soft bg-base-300">
       <div class="flex items-center gap-2.5 px-3.5 py-2.5 transition-colors hover:bg-white/4">
+        {/*
+          The name is its own control now, not part of the open-project button:
+          a pencil nested inside a button would open the project on the way to
+          editing it.
+        */}
+        <Icon name="folder-git-2" class="shrink-0 text-[15px] text-primary" />
+        <EditableTitle
+          value={props.project.name}
+          onRename={(name) => actions.renameProject(props.project.id, name)}
+          label={`Rename ${props.project.name}`}
+          class="min-w-0 font-semibold text-[13px] text-base-content"
+          inputClass="font-semibold text-[13px]"
+        />
         <button
           type="button"
           onClick={() => actions.openProject(props.project.id)}
+          aria-label={`Open ${props.project.name}`}
           class="flex min-w-0 flex-1 items-center gap-2.5 text-left"
         >
-          <Icon name="folder-git-2" class="shrink-0 text-[15px] text-primary" />
-          <span class="truncate font-semibold text-[13px] text-base-content">
-            {props.project.name}
-          </span>
           <span class={`shrink-0 text-[11.5px] ${STATUS_TONE[props.project.status]}`}>
             {statusSuffix(props.project.status)}
           </span>
@@ -196,6 +255,47 @@ function ProjectGroup(props: { project: Project }): JSX.Element {
         >
           <Icon name="pin" class="text-[14px]" />
         </button>
+
+        {/*
+          Two steps, in place, rather than a modal. Deleting a project takes its
+          transcript and its task log with it and there is no undo, so a single
+          click next to the pin toggle is too cheap — but a dialog for a row
+          action is heavy, and the row is where the name is, which is the thing
+          worth confirming.
+        */}
+        <Show
+          when={confirming()}
+          fallback={
+            <button
+              type="button"
+              onClick={() => setConfirming(true)}
+              aria-label={`Delete ${props.project.name}`}
+              class="shrink-0 text-[oklch(48%_0.01_245)] transition-colors hover:text-error"
+            >
+              <Icon name="x" class="text-[14px]" />
+            </button>
+          }
+        >
+          <div class="flex shrink-0 items-center gap-1.5">
+            <span class="text-[11px] text-az-muted">Delete?</span>
+            <button
+              type="button"
+              onClick={() => void remove()}
+              disabled={isDeleting()}
+              class="rounded-md border border-error/40 bg-error/15 px-2 py-0.5 font-semibold text-[11px] text-error transition-colors hover:bg-error/25 disabled:opacity-50"
+            >
+              {isDeleting() ? "Deleting…" : "Delete"}
+            </button>
+            <button
+              type="button"
+              onClick={() => setConfirming(false)}
+              class="rounded-md px-2 py-0.5 text-[11px] text-az-muted transition-colors hover:text-base-content"
+            >
+              Cancel
+            </button>
+          </div>
+        </Show>
+
         <Icon name="chevron-right" class="shrink-0 text-[14px] text-[oklch(56%_0.01_245)]" />
       </div>
 

@@ -78,6 +78,31 @@
   --color-az-hairline-soft: rgb(255 255 255 / 7%);
   --color-az-hairline-strong: rgb(255 255 255 / 14%);
 
+  /*
+   * The transcript's own surface, given in hex rather than oklch on purpose.
+   *
+   * The oklch ladder above is perceptual, and at these lightnesses it compresses
+   * hard: `az-void` 8% lands on #010202, `az-inset` 12.5% on #050708 and
+   * `base-100` 15% on #090b0d. Four sRGB points separate the agent's reply from
+   * the panel behind it, which is why the bubble read as a hole rather than a
+   * card and why the chat area was hard to follow.
+   *
+   * These are absolute values so the reply sits *above* the panel instead of
+   * below it, and so the contrast is a number that can be checked:
+   * #e0e0e0 on #1e1e1e is 12.6:1.
+   */
+  --color-az-bubble: #1e1e1e;
+  --color-az-bubble-edge: #2a2a2a;
+  --color-az-bubble-text: #e0e0e0;
+
+  /*
+   * Accents, for links, highlights and active states. Chosen to stay legible on
+   * the dark surfaces above without glare.
+   */
+  --color-az-link: #60a5fa;
+  --color-az-highlight: #22d3ee;
+  --color-az-active: #f59e0b;
+
   --radius-panel: 0.875rem;
 }
 

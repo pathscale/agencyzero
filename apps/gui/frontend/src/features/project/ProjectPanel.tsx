@@ -1,16 +1,19 @@
 import { Toggle } from "@pathscale/ui";
-import { createSignal, For, type JSX, Show } from "solid-js";
+import { createEffect, createSignal, For, type JSX, Show } from "solid-js";
 import { Icon } from "~/components/Icon";
 import { SectionPanel } from "~/components/Panel";
 import { ItemMarker } from "~/components/StatusDot";
-import { elapsed, taskMeta } from "~/lib/format";
+import { UsagePanel } from "~/features/shell/UsageReadout";
+import { clockTime, elapsed, taskMeta } from "~/lib/format";
 import { statusSuffix } from "~/lib/labels";
+import { describeError, log } from "~/lib/log";
 import { prefs, togglePanelSection } from "~/stores/prefs";
 import { useNow, useWorkspace } from "~/stores/workspace";
 import type { Project, ProjectItem } from "~/types";
 
 /**
- * The project's right-hand accordion: Settings · Items · Running · Task log.
+ * The project's right-hand column: Usage · Items · Running · Task log ·
+ * Agent I/O · Settings.
  *
  * This replaced the old left sidebar. Open state lives in `UiPrefs`, per
  * install rather than per project, so the panel you left open stays open when
@@ -21,10 +24,11 @@ export function ProjectPanel(props: { project: Project }): JSX.Element {
 
   const running = () => state.running[props.project.id] ?? [];
   const log = () => state.taskLog[props.project.id] ?? [];
+  const io = () => state.agentIo[props.project.id] ?? [];
 
   return (
     <div class="az-scroll flex w-[322px] flex-none flex-col gap-2.5">
-      <SettingsSection project={props.project} />
+      <UsagePanel />
 
       <SectionPanel
         icon="list-checks"
@@ -64,9 +68,212 @@ export function ProjectPanel(props: { project: Project }): JSX.Element {
       >
         <TaskLogList projectId={props.project.id} />
       </SectionPanel>
+
+      <SectionPanel
+        icon="terminal"
+        title="Agent I/O"
+        count={io().length}
+        isOpen={prefs.panelSections.io}
+        onToggle={() => togglePanelSection("io")}
+        class="flex min-h-[160px] flex-col"
+      >
+        <AgentIoList projectId={props.project.id} />
+      </SectionPanel>
+
+      {/* Last, deliberately: directories and the moderator toggle are set once
+          and revisited rarely, and they were costing the working sections the
+          top of the column. */}
+      <SettingsSection project={props.project} />
     </div>
   );
 }
+
+/**
+ * The raw exchange with the agent: what went out, and what came back.
+ *
+ * This is the crate's event stream, not the process's literal stdout —
+ * `agent-abstraction` parses stdout into events and does not hand back the raw
+ * lines. A line it could not read shows up as `unparsed`, which is the closest
+ * thing to "the CLI said something we did not understand" and the one case
+ * worth staring at.
+ *
+ * Newest last, like a terminal, and it does not survive a restart: this answers
+ * "what just happened", and the durable copy is the log file.
+ */
+/**
+ * Whether this project records its raw exchange to the database.
+ *
+ * Off by default and per project: a turn emits a text event per delta, so
+ * recording everything would put continuous write load on the store the whole
+ * workspace depends on, for data whose value drops off within minutes. Turn it
+ * on for the project you are debugging.
+ */
+function IoPersistToggle(props: { projectId: string }): JSX.Element {
+  const { actions, isLive } = useWorkspace();
+  const [enabled, setEnabled] = createSignal(false);
+
+  // Read once per project; the flag only changes from this control.
+  createEffect(() => {
+    const id = props.projectId;
+    void actions
+      .getIoPersist(id)
+      .then(setEnabled)
+      .catch((cause) => log.warn(`could not read the I/O recording flag: ${describeError(cause)}`));
+  });
+
+  const toggle = async (next: boolean): Promise<void> => {
+    setEnabled(next);
+    try {
+      await actions.setIoPersist(props.projectId, next);
+    } catch (cause) {
+      // Put it back: the control must not claim a setting that did not save.
+      setEnabled(!next);
+      log.error(`could not change I/O recording: ${describeError(cause)}`);
+    }
+  };
+
+  return (
+    <label
+      class="flex cursor-pointer items-center gap-2 px-3.5 pb-2 text-[11px] text-az-muted"
+      title="Keep this project's raw exchange in the database, so it survives a restart. Off by default: a long run writes thousands of rows."
+    >
+      <input
+        type="checkbox"
+        checked={enabled()}
+        disabled={!isLive("setIoPersist")}
+        onChange={(event) => void toggle(event.currentTarget.checked)}
+        class="size-3 accent-primary"
+      />
+      Keep across restarts
+    </label>
+  );
+}
+
+function AgentIoList(props: { projectId: string }): JSX.Element {
+  const { state } = useWorkspace();
+  const lines = () => state.agentIo[props.projectId] ?? [];
+
+  /*
+   * Two heights, because this panel has two jobs. Normally it is a tail you
+   * glance at, so it stays short and lets the sections above it breathe. When
+   * something has gone wrong it is the only thing you want on screen, and a
+   * 200px window onto a few hundred entries is unusable.
+   */
+  const [tall, setTall] = createSignal(false);
+
+  /** Newest last, so it reads like a terminal; the view follows the tail. */
+  let scroller: HTMLDivElement | undefined;
+  createEffect(() => {
+    // Track the count so a new entry scrolls the view down.
+    lines().length;
+    if (scroller) scroller.scrollTop = scroller.scrollHeight;
+  });
+
+  const copyAll = async (): Promise<void> => {
+    const text = lines()
+      .map(
+        (line) =>
+          `${line.at} ${line.direction === "sent" ? "->" : "<-"} ${line.kind}\n${line.detail}`,
+      )
+      .join("\n\n");
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch (cause) {
+      log.warn(`could not copy the agent log: ${describeError(cause)}`);
+    }
+  };
+
+  return (
+    <div class="flex min-h-0 flex-1 flex-col">
+      {/*
+        The recording toggle lives outside the empty-state Show: a project with
+        no I/O yet is exactly where someone goes to turn recording on, and
+        hiding the control until lines exist made the feature look absent.
+      */}
+      <IoPersistToggle projectId={props.projectId} />
+      <Show
+        when={lines().length > 0}
+        fallback={
+          <p class="px-3.5 py-6 text-center text-[11.5px] text-az-muted">
+            Nothing sent yet on this project.
+          </p>
+        }
+      >
+        <div class="flex flex-none items-center gap-1.5 px-2.5 pb-1.5">
+          <button
+            type="button"
+            onClick={() => setTall((open) => !open)}
+            class="rounded-md border border-az-hairline px-2 py-0.5 text-[10.5px] text-az-muted transition-colors hover:border-az-hairline-strong hover:text-base-content"
+          >
+            {tall() ? "Shrink" : "Expand"}
+          </button>
+          <button
+            type="button"
+            onClick={() => void copyAll()}
+            class="rounded-md border border-az-hairline px-2 py-0.5 text-[10.5px] text-az-muted transition-colors hover:border-az-hairline-strong hover:text-base-content"
+          >
+            Copy all
+          </button>
+          <span class="ml-auto text-[10.5px] text-az-faint">{lines().length} entries</span>
+        </div>
+
+        {/*
+          `data-selectable` is load-bearing: the app sets `user-select: none`
+          globally so the window drags like a native one, and without the opt-in
+          this text cannot be selected or copied at all.
+        */}
+        <div
+          ref={scroller}
+          data-selectable
+          class={`az-scroll flex flex-col gap-1.5 overflow-y-auto px-2.5 pb-2.5 font-mono text-[11px] ${
+            tall() ? "max-h-[62vh]" : "max-h-[220px]"
+          }`}
+        >
+          <For each={lines()}>
+            {(line) => (
+              <div
+                class={`flex flex-col gap-0.5 rounded-lg border px-2.5 py-1.5 ${
+                  line.direction === "sent"
+                    ? "border-primary/22 bg-primary/6"
+                    : (IO_TONE[line.kind] ?? "border-az-hairline-soft bg-base-300")
+                }`}
+              >
+                <div class="flex items-baseline gap-1.5">
+                  <span
+                    class={`shrink-0 ${line.direction === "sent" ? "text-primary" : "text-az-faint"}`}
+                  >
+                    {line.direction === "sent" ? "→" : "←"}
+                  </span>
+                  <span class="shrink-0 font-semibold text-az-muted">{line.kind}</span>
+                  <span class="ml-auto shrink-0 text-[10px] text-az-faint">
+                    {clockTime(line.at)}
+                  </span>
+                </div>
+                {/*
+                  `whitespace-pre-wrap` and `break-all`: this is raw agent output,
+                  so it has its own newlines and can be one unbroken
+                  4000-character token. Either would otherwise push the panel
+                  sideways.
+                */}
+                <pre class="whitespace-pre-wrap break-all text-[10.5px] text-az-bubble-text">
+                  {line.detail}
+                </pre>
+              </div>
+            )}
+          </For>
+        </div>
+      </Show>
+    </div>
+  );
+}
+
+/** The kinds worth colouring: a failure and a parser miss should not read as text. */
+const IO_TONE: Record<string, string> = {
+  stderr: "border-error/30 bg-error/8",
+  unparsed: "border-error/30 bg-error/8",
+  rate_limit: "border-warning/30 bg-warning/8",
+  stop: "border-az-hairline bg-base-300",
+};
 
 /**
  * Working directories and the per-session moderator toggle — and nothing else.

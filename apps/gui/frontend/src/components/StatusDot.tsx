@@ -1,16 +1,36 @@
 import { type JSX, Show } from "solid-js";
 import type { AgentState, TabStatus } from "~/types";
 
+/*
+ * Four meanings, four colours:
+ *
+ *   green  ready   — active and idle, waiting for you
+ *   amber  running — the agent is thinking, replying or running a tool
+ *   red    blocked — it needs you: a moderation hold, or a live rate limit
+ *   red    error   — a critical hold, which cancelled the run
+ *   grey   quiet   — inactive: finished, cancelled, or not started
+ *
+ * `ready` and `quiet` were one grey state, so a project waiting on you looked
+ * exactly like one you had closed out. Splitting them is the whole point of the
+ * green.
+ *
+ * `blocked` is red rather than the amber it used to be, because amber now means
+ * "busy" and a hold means "you". That is a deliberate departure from
+ * `design/data-model.html`, which maps a check-severity hold to amber and only a
+ * critical one to red — see the frontend README.
+ */
 const TAB_DOT: Record<TabStatus, string> = {
-  running: "bg-primary",
-  blocked: "bg-warning",
+  ready: "bg-success",
+  running: "bg-warning",
+  blocked: "bg-error",
   error: "bg-error",
   quiet: "bg-white/25",
 };
 
 const TAB_HALO: Record<TabStatus, string> = {
-  running: "az-halo-primary",
-  blocked: "az-halo-warning",
+  ready: "az-halo-success",
+  running: "az-halo-warning",
+  blocked: "az-halo-error",
   error: "az-halo-error",
   quiet: "",
 };
@@ -27,7 +47,7 @@ export type StatusDotProps = {
   class?: string;
 };
 
-/** The dot that carries a tab's state: running · blocked · error · quiet. */
+/** The dot that carries a tab's state: ready · running · blocked · error · quiet. */
 export function StatusDot(props: StatusDotProps): JSX.Element {
   return (
     <span

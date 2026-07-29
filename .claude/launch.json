@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "gui-frontend",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": ["-c", "cd apps/gui/frontend && bun run dev"],
+      "port": 3010
+    }
+  ]
+}

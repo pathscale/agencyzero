@@ -1,5 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { clockTime, duration, elapsed, relativeTime, taskMeta, usageLabel } from "~/lib/format";
+import {
+  clockTime,
+  countdown,
+  duration,
+  elapsed,
+  isTransientStop,
+  relativeTime,
+  taskMeta,
+  usageLabel,
+} from "~/lib/format";
 
 const NOW = Date.parse("2026-07-29T12:00:00Z");
 const ago = (ms: number) => new Date(NOW - ms).toISOString();
@@ -32,6 +41,48 @@ describe("elapsed", () => {
   });
 });
 
+describe("countdown", () => {
+  const inMs = (ms: number) => new Date(NOW + ms).toISOString();
+
+  it("changes unit with magnitude", () => {
+    expect(countdown(inMs(14 * 60_000), NOW)).toBe("14m");
+    expect(countdown(inMs(2 * 60 * 60_000 + 14 * 60_000), NOW)).toBe("2h 14m");
+    expect(countdown(inMs(30 * 60 * 60_000), NOW)).toBe("1d 6h");
+  });
+
+  it("rounds the last partial minute up rather than saying now early", () => {
+    expect(countdown(inMs(20_000), NOW)).toBe("1m");
+  });
+
+  it("says now for a deadline already passed, and nothing for garbage", () => {
+    expect(countdown(inMs(-5_000), NOW)).toBe("now");
+    expect(countdown(null, NOW)).toBe("");
+    expect(countdown("not a date", NOW)).toBe("");
+  });
+});
+
+describe("isTransientStop", () => {
+  it("recognises the provider's own outage messages", () => {
+    // Verbatim shape from a real outage: the vendor CLI quotes the status.
+    expect(
+      isTransientStop(
+        "claude-code reported a failed turn (status 529): API Error: 529 Overloaded. This is a server-side issue, usually temporary — try again in a moment.",
+      ),
+    ).toBe(true);
+    expect(isTransientStop("API Error: 500 Internal server error")).toBe(true);
+    expect(isTransientStop("API Error: 503 Service unavailable")).toBe(true);
+  });
+
+  it("does not soften real failures", () => {
+    expect(isTransientStop("error")).toBe(false);
+    expect(isTransientStop("could not start the agent: spawn failed")).toBe(false);
+    // A 4xx is the request being wrong, which resending will not fix.
+    expect(isTransientStop("API Error: 401 Unauthorized")).toBe(false);
+    // A 5xx mentioned as ordinary text is not a status the turn reported.
+    expect(isTransientStop("the parser failed at line 512")).toBe(false);
+  });
+});
+
 describe("duration", () => {
   it("changes unit with magnitude", () => {
     expect(duration(600)).toBe("600ms");
@@ -51,6 +102,16 @@ describe("taskMeta", () => {
 
   it("says nothing rather than guessing when neither was reported", () => {
     expect(taskMeta({ durationMs: null, exitCode: null })).toBe("—");
+  });
+
+  /*
+   * An agent that reports no duration sends no field at all, not a null. The
+   * arithmetic on `undefined` produces "NaNm NaNs" rather than throwing, which
+   * is worse: it renders, so nobody notices it is meaningless.
+   */
+  it("renders an em dash for a missing duration rather than NaN", () => {
+    const missing = {} as unknown as Parameters<typeof taskMeta>[0];
+    expect(taskMeta(missing)).toBe("—");
   });
 });
 
@@ -77,6 +138,35 @@ describe("usageLabel", () => {
     expect(usageLabel({ tokens: 2_000, costUsd: null, premiumRequests: 3 })).toBe(
       "2.0k tok · 3 premium",
     );
+  });
+
+  /*
+   * The shape a previous build persisted: `agent-abstraction`'s own `Usage`,
+   * written to the row verbatim. Its fields are snake_case and it has no
+   * `tokens` at all, so every field the label reads comes back `undefined` —
+   * and `undefined !== null`, which is what let `.toFixed()` be called on it.
+   *
+   * This threw during render, so it did not blank a chip; it killed the
+   * transcript and left the window on "Loading workspace…" with no error
+   * anywhere. Rows in that shape are still on disk, so this has to hold.
+   */
+  it("survives a usage blob written in the crate's shape rather than the UI's", () => {
+    const fromAnOlderBuild = {
+      input_tokens: 1_200,
+      output_tokens: 300,
+      cache_read_tokens: 4_096,
+      cost_usd: 0.017,
+    } as unknown as Parameters<typeof usageLabel>[0];
+
+    expect(() => usageLabel(fromAnOlderBuild)).not.toThrow();
+    expect(usageLabel(fromAnOlderBuild)).toBe("0 tok");
+  });
+
+  it("does not render a NaN or an infinity as a number", () => {
+    expect(usageLabel({ tokens: Number.NaN, costUsd: null, premiumRequests: null })).toBe("0 tok");
+    expect(
+      usageLabel({ tokens: 500, costUsd: Number.POSITIVE_INFINITY, premiumRequests: null }),
+    ).toBe("500 tok");
   });
 });
 

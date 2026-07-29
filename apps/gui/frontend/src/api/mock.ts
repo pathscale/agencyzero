@@ -1,4 +1,5 @@
 import type {
+  AgentIoEntry,
   AgentModels,
   AgentStatus,
   CreatedProject,
@@ -8,6 +9,7 @@ import type {
   Project,
   ProjectItem,
   ProjectStatus,
+  QuotaReport,
   RunningTask,
   TaskLogEntry,
 } from "~/types";
@@ -116,6 +118,8 @@ export function createMockApi(): AgencyZeroApi {
         pinned: false,
         moderatorEnabled: settings.moderator.enabled,
         forkedFrom: null,
+        // The mock never runs an agent, so there is no session to report.
+        sessionId: null,
         lastActivityAt: new Date().toISOString(),
       };
       projects.push(project);
@@ -141,6 +145,14 @@ export function createMockApi(): AgencyZeroApi {
       emit("project:created", project);
       emit("message:appended", first);
       return settle({ project, items: [] });
+    },
+
+    async renameProject(id, name) {
+      const project = projects.find((candidate) => candidate.id === id);
+      if (!project) throw new Error(`unknown project: ${id}`);
+      project.name = name.trim();
+      emit("project:updated", project);
+      return settle(project);
     },
 
     async deleteProject(id) {
@@ -390,6 +402,42 @@ export function createMockApi(): AgencyZeroApi {
       logTotals[projectId] = 0;
       return settle(undefined);
     },
+
+    /*
+     * Always empty, never invented. The raw exchange is only meaningful when
+     * there is a real agent on the other end of it, and a fabricated one would
+     * be indistinguishable from a real one in exactly the panel someone opens
+     * to find out what really happened.
+     */
+    listAgentIo: (_projectId: string) => settle([] as AgentIoEntry[]),
+
+    // The mock has no store to record into, so it reports the honest default.
+    getIoPersist: (_projectId: string) => settle(false),
+    setIoPersist: (_projectId: string, enabled: boolean) => settle(enabled),
+
+    /*
+     * `supported: false`, never an empty-but-supported report. The mock cannot
+     * ask anyone, and claiming "no limits in force" would be the one wrong
+     * answer here.
+     */
+    /*
+     * Every agent reports `supported: false`, never an empty-but-supported
+     * report. The mock cannot ask anyone, and claiming "no limits in force"
+     * would be the one wrong answer here.
+     */
+    listQuota: () =>
+      settle({
+        agents: (["claude", "codex", "copilot"] as const).map((agent) => ({
+          agent,
+          supported: false,
+          windows: [],
+          plan: null,
+          creditBalance: null,
+          unlimited: false,
+          detail: "the fixture backend cannot ask a provider",
+        })),
+        checkedAt: new Date().toISOString(),
+      } as QuotaReport),
 
     listRateLimits: () =>
       settle(

@@ -2,6 +2,8 @@ import { EmptyState } from "@pathscale/ui";
 import { createEffect, For, type JSX, Match, Show, Switch } from "solid-js";
 import { Icon } from "~/components/Icon";
 import { InlineText, MessageBody } from "~/features/project/MessageBody";
+import { isTransientStop } from "~/lib/format";
+import { AGENT_LABELS } from "~/lib/labels";
 import { useWorkspace } from "~/stores/workspace";
 import type { Message, Project } from "~/types";
 
@@ -45,7 +47,7 @@ export function TranscriptPane(props: {
         }
       >
         <For each={props.messages}>
-          {(message) => (
+          {(message, index) => (
             <Switch>
               <Match when={message.author === "user"}>
                 <UserBubble message={message} />
@@ -54,9 +56,29 @@ export function TranscriptPane(props: {
                 <ModeratorNote message={message} />
               </Match>
               <Match when={message.author === "agent"}>
-                <MessageBody
-                  body={message.body}
-                  class="text-[13.5px] text-az-body leading-[1.65]"
+                <AgentBubble
+                  message={message}
+                  onRetry={(() => {
+                    /*
+                     * Only the last turn is retryable: a failed turn further up
+                     * was already answered or resent, and a button there would
+                     * replay a stale prompt onto today's session.
+                     *
+                     * The prompt the failed turn was answering is the nearest
+                     * user message above it. Resent through the ordinary send
+                     * path so the retry is a real turn — persisted, moderated,
+                     * and resumed on the same session — not a special case.
+                     */
+                    if (index() !== props.messages.length - 1) return undefined;
+                    for (let at = index() - 1; at >= 0; at--) {
+                      const earlier = props.messages[at];
+                      if (earlier.author === "user") {
+                        const body = earlier.body;
+                        return () => void actions.send(props.project.id, body);
+                      }
+                    }
+                    return undefined;
+                  })()}
                 />
               </Match>
             </Switch>
@@ -68,12 +90,92 @@ export function TranscriptPane(props: {
         */}
         <Show when={props.streaming}>
           {(text) => (
-            <div class="flex flex-col gap-1.5">
-              <span class="text-[11.5px] text-az-muted">Claude · writing…</span>
-              <p class="whitespace-pre-wrap text-[13.5px] text-az-body leading-relaxed">{text()}</p>
+            // The same container as a finished reply, so the bubble does not
+            // appear, disappear and reappear as the run lands.
+            <div class={`${AGENT_BUBBLE}`}>
+              <span class="text-[11px] text-az-muted">Claude · writing…</span>
+              <p class={`whitespace-pre-wrap ${AGENT_TEXT}`}>{text()}</p>
             </div>
           )}
         </Show>
+      </Show>
+    </div>
+  );
+}
+
+/*
+ * The agent's reply is the thing you actually read, and it was the hardest text
+ * in the window to read: no container at all, sitting straight on the panel, in
+ * `az-body` (75%) while the user's own message beside it used `az-title` (86%).
+ * Dimmer than your own words, with no edge to tell one turn from the next.
+ *
+ * So: a recessed surface (`az-inset`, 12.5%) under the top text rung (86%),
+ * which is the highest contrast this palette offers without breaking its own
+ * rule against pure white. Darker than the panel rather than lighter, so it
+ * cannot be mistaken for the user bubble, which is `base-300` and right-aligned.
+ * The corner tail mirrors the user's, pointing the other way.
+ */
+const AGENT_BUBBLE =
+  "flex max-w-[88%] flex-col gap-2 self-start rounded-[16px_16px_16px_6px] border border-az-bubble-edge bg-az-bubble px-4 py-3";
+
+/* 14px rather than 13.5, and 1.75 rather than 1.7: this is the longest-running
+ * prose in the window and it was set smaller and tighter than the user's own
+ * one-line messages. */
+const AGENT_TEXT = "text-[14px] text-az-bubble-text leading-[1.75]";
+
+function AgentBubble(props: { message: Message; onRetry?: () => void }): JSX.Element {
+  /*
+   * A run that did not complete says so on the bubble. The body may be empty or
+   * partial, and an unexplained short reply reads as the agent being unhelpful
+   * rather than as the turn having failed.
+   */
+  const failed = () => props.message.stop !== "completed";
+
+  /*
+   * A provider outage is weather, not failure: amber rather than red, a short
+   * label rather than the vendor's whole sentence (the full text stays on
+   * hover), and the fix — resend the same prompt — offered right there.
+   */
+  const transient = () => isTransientStop(props.message.stop);
+
+  return (
+    <div class={AGENT_BUBBLE}>
+      <div class="flex items-baseline gap-2">
+        <span class="font-semibold text-[11px] text-az-muted">
+          {AGENT_LABELS[props.message.agent]}
+        </span>
+        <Show when={props.message.model}>
+          {(model) => <span class="text-[11px] text-az-faint">{model()}</span>}
+        </Show>
+        <Show when={failed()}>
+          <span
+            title={props.message.stop}
+            class={`rounded-[5px] px-[6px] py-px font-semibold text-[10px] ${
+              transient() ? "bg-warning/18 text-warning" : "bg-error/18 text-error"
+            }`}
+          >
+            {transient() ? "provider outage · temporary" : props.message.stop}
+          </span>
+        </Show>
+      </div>
+      <MessageBody body={props.message.body} class={AGENT_TEXT} />
+      <Show when={failed() && props.onRetry}>
+        {(retry) => (
+          <div class="flex items-center gap-2 pt-0.5">
+            <button
+              type="button"
+              onClick={() => retry()()}
+              class="rounded-lg border border-white/18 px-3 py-[5px] text-[12px] text-az-body transition-colors hover:border-primary hover:text-primary"
+            >
+              Retry
+            </button>
+            <Show when={transient()}>
+              <span class="text-[11.5px] text-az-muted">
+                the server was overloaded — your prompt is safe to resend
+              </span>
+            </Show>
+          </div>
+        )}
       </Show>
     </div>
   );

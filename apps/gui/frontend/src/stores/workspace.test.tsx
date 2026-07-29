@@ -182,15 +182,24 @@ describe("tabStatus", () => {
     expect(workspace.tabStatus("worktable")).toBe("running");
   });
 
-  it("reports an idle project as quiet", async () => {
+  /*
+   * `ready` and `quiet` used to be one grey state, so a project sitting there
+   * waiting for you looked exactly like one you had closed out. The project's
+   * own status is what separates them.
+   */
+  it("reports an idle project that has not started as quiet", async () => {
     const workspace = await mountWorkspace();
+    // The `agencyzero` fixture is `pending`: not started, so not waiting on you.
+    expect(workspace.state.projects.find((p) => p.id === "agencyzero")?.status).toBe("pending");
     expect(workspace.tabStatus("agencyzero")).toBe("quiet");
   });
 
-  it("goes quiet once the run is cancelled", async () => {
+  it("reports an idle active project as ready, not quiet", async () => {
     const workspace = await mountWorkspace();
     await workspace.actions.cancelRun("worktable");
-    await waitFor(() => expect(workspace.tabStatus("worktable")).toBe("quiet"));
+
+    // `worktable` is `active`, so with nothing running it is waiting for input.
+    await waitFor(() => expect(workspace.tabStatus("worktable")).toBe("ready"));
   });
 });
 
@@ -214,6 +223,44 @@ describe("createProject", () => {
     expect(workspace.state.tabs.filter((tab) => tab.kind === "draft")).toHaveLength(0);
     expect(workspace.state.tabs.filter((tab) => tab.label === "Port the emitter")).toHaveLength(1);
     expect(workspace.activeTab().label).toBe("Port the emitter");
+  });
+
+  /*
+   * The tab is converted to `kind: "project"` the moment the command returns.
+   * If the record is left to arrive on `project:created`, there is a window in
+   * which the tab points at an id `state.projects` has never heard of — and
+   * that is exactly what rendered "This project could not be loaded".
+   *
+   * Asserted synchronously, with no `waitFor`: waiting for the event to land
+   * is the bug, not the fix.
+   */
+  it("has the project in the store the instant the tab becomes one", async () => {
+    const workspace = await mountWorkspace();
+    workspace.actions.openDraft();
+    const draftKey = workspace.state.activeKey;
+
+    await workspace.actions.createProject("Port the emitter", draftKey);
+
+    const tab = workspace.activeTab();
+    expect(tab.kind).toBe("project");
+    expect(tab.projectId).not.toBeNull();
+    expect(workspace.state.projects.find((project) => project.id === tab.projectId)).toBeDefined();
+  });
+
+  /*
+   * The event follows the optimistic write. Both carry the same id, so the
+   * store must end up with one project, not two.
+   */
+  it("does not duplicate the project when its event lands afterwards", async () => {
+    const workspace = await mountWorkspace();
+    const before = workspace.state.projects.length;
+    workspace.actions.openDraft();
+
+    await workspace.actions.createProject("Port the emitter", workspace.state.activeKey);
+
+    await waitFor(() => {
+      expect(workspace.state.projects).toHaveLength(before + 1);
+    });
   });
 });
 
@@ -242,6 +289,9 @@ describe("isLimitLive", () => {
   const now = Date.parse("2026-07-29T12:00:00Z");
   const limit = (resetsAt: string | null) => ({
     projectId: "p",
+    // A real refusal. `isLimitLive` is only about expiry; whether a record
+    // restricts anything is a separate question, asked at the call sites.
+    isBlocking: true,
     message: "Rate limited",
     resetsAt,
   });

@@ -13,8 +13,19 @@ export type TabKind = "home" | "draft" | "settings" | "project";
 /** One enum for both layers: a Project and its ProjectItems share it. */
 export type ProjectStatus = "pending" | "active" | "finished" | "canceled";
 
-/** The dot on a project tab. */
-export type TabStatus = "running" | "blocked" | "error" | "quiet";
+/**
+ * The dot on a project tab.
+ *
+ * - `running` — the agent is working: thinking, replying, or running a tool.
+ * - `blocked` — it needs you: a moderation hold, or a live rate limit.
+ * - `error`   — a critical hold, which cancelled the run.
+ * - `ready`   — active and idle, waiting for input.
+ * - `quiet`   — inactive: a project that is finished, cancelled or not started.
+ *
+ * `ready` and `quiet` used to be one state, which meant a project waiting for
+ * you looked identical to one you had closed out.
+ */
+export type TabStatus = "running" | "blocked" | "error" | "ready" | "quiet";
 
 /** `Agent` in the crate. Claude in practice today. */
 export type Agent = "claude" | "codex" | "copilot";
@@ -68,8 +79,34 @@ export interface Project {
   /** Per-session override of `GlobalSettings.moderator.enabled`. */
   moderatorEnabled: boolean;
   forkedFrom: { projectId: string; messageId: string } | null;
+  /**
+   * The agent's own session id, from `Event::Started`. Null until the first run
+   * reveals one — this is the handle a later turn resumes with, so it belongs to
+   * the project rather than to any one message.
+   */
+  sessionId: string | null;
   /** ISO 8601. Orders the Recent list. */
   lastActivityAt: string;
+}
+
+/**
+ * One line of the raw exchange with the agent, for the I/O panel.
+ *
+ * `direction` is from the app's point of view: `sent` is what went to the agent,
+ * `received` is what came back. This is the crate's event stream rather than the
+ * process's literal stdout — `agent-abstraction` parses stdout into events and
+ * does not hand back the raw lines, so `unparsed` is how a line it could not
+ * read is surfaced.
+ */
+export interface AgentIoEntry {
+  id: string;
+  projectId: string;
+  /** ISO 8601. */
+  at: string;
+  direction: "sent" | "received";
+  /** `request` · `started` · `text` · `thinking` · `tool_call` · `tool_result` · `rate_limit` · `stop` · `stderr` · `unparsed` */
+  kind: string;
+  detail: string;
 }
 
 /** Layer 2 — the work items inside a Project. Same status enum as its parent. */
@@ -97,11 +134,28 @@ export interface ProjectDraft {
 
 /** From `Outcome::usage`. Absent means "the agent did not say", never zero. */
 export interface Usage {
+  /** Input plus output for this turn: the new work it did. */
   tokens: number;
+  /**
+   * Every input token the turn was charged for, cached or not — the size of the
+   * conversation as the model saw it.
+   *
+   * **Already cumulative, so it must not be summed across turns.** The agent
+   * re-sends the whole conversation each turn and reports it, mostly as cache
+   * reads; adding it up counts the same conversation once per turn and the error
+   * grows with the session. `agent-abstraction` ships `Usage::accumulate` for
+   * exactly this reason, and `usageTotals` follows the same rule.
+   */
+  contextTokens: number | null;
+  /** The model's context window. Claude alone reports one. */
+  contextWindow: number | null;
+  /** Cumulative like `contextTokens`, not additive. */
   cacheReads: number | null;
+  reasoningTokens: number | null;
   costUsd: number | null;
   /** Copilot reports premium requests instead of a dollar cost. */
   premiumRequests: number | null;
+  durationMs: number | null;
 }
 
 /**
@@ -358,14 +412,82 @@ export interface UiPrefs {
   lastModel: string;
   lastPermission: Permission;
   /** Which accordion sections are expanded — per install, not per project. */
-  panelSections: { settings: boolean; items: boolean; running: boolean; log: boolean };
+  panelSections: {
+    settings: boolean;
+    items: boolean;
+    running: boolean;
+    log: boolean;
+    /** The raw agent exchange. Closed by default — it is a diagnostic. */
+    io: boolean;
+  };
   lastTabKey: string;
   taskPlacement: TaskPlacement;
+  /**
+   * Panel sections whose shipped default has already been applied once.
+   *
+   * Stored prefs beat defaults, which is wrong for a section that shipped
+   * closed, was never seen, and has since been changed to open. This records
+   * that the one-time reset has happened, so the user's own choice sticks after
+   * it. See `RESET_ONCE` in `stores/prefs.ts`.
+   */
+  seenSections: string[];
+}
+
+/**
+ * One quota window, in the provider's own terms.
+ *
+ * Mirrors `agent_abstraction::UsageWindow`. `usedFraction` is 0..1 and is null
+ * when the provider reported no proportion — never synthesised, because a bar
+ * drawn from a guess is a number someone would plan around.
+ */
+export interface QuotaWindow {
+  /** The provider's own name for it, e.g. `primary`. */
+  window: string;
+  usedFraction: number | null;
+  /** How long the window runs. Codex reports 10080 for a week. */
+  windowMinutes: number | null;
+  /** ISO 8601. */
+  resetsAt: string | null;
+}
+
+/**
+ * What one agent reports about the account behind it.
+ *
+ * `supported: false` and an empty `windows` is "this agent cannot tell us",
+ * which is different from `supported: true` and an empty `windows`, meaning "no
+ * windows are in force". Only Codex answers today; Claude reports quota solely
+ * during a run, as a rate limit.
+ */
+export interface AgentQuota {
+  agent: Agent;
+  supported: boolean;
+  windows: QuotaWindow[];
+  plan: string | null;
+  /** As the provider wrote it. Text, so a decimal balance is not rounded. */
+  creditBalance: string | null;
+  unlimited: boolean;
+  /** Why there is nothing to show. Rendered as-is. */
+  detail: string;
+}
+
+export interface QuotaReport {
+  agents: AgentQuota[];
+  /** ISO 8601, so a stale answer is visibly stale. */
+  checkedAt: string;
 }
 
 /** `Event::RateLimit` — the crate reports rather than retries. */
 export interface RateLimit {
   projectId: string;
+  /**
+   * Whether anything was actually refused.
+   *
+   * `agent-abstraction` emits a rate-limit record on runs that were **not**
+   * limited — status `allowed` is a heartbeat saying "still fine". Treating
+   * every record as a limit is what put an orange "allowed (five_hour)" warning
+   * in the header of a healthy run and turned its tab dot amber.
+   */
+  isBlocking: boolean;
   /** The provider's own wording. */
   message: string;
   /** ISO 8601, or null when the provider does not say. */

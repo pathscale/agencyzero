@@ -31,6 +31,8 @@ pub struct GlobalSettings {
     /// Reasoning level a new tab starts on.
     pub default_effort: String,
     pub moderator: Moderator,
+    /// How the Home task manager runs. See [`TaskManager`].
+    pub task_manager: TaskManager,
     pub env_policy: String,
     pub forward_proxy_vars: bool,
     pub notifications: Notifications,
@@ -98,6 +100,33 @@ impl Default for Notifications {
     }
 }
 
+/// How the Home task manager runs.
+///
+/// Its own model and effort rather than the prompt's: it is a different job.
+/// The prompt is a conversation you steer; this one reads your projects and
+/// keeps a list, runs unattended, and wants a cheap fast model far more often
+/// than a frontier one. Sharing the prompt's setting would silently bill a
+/// to-do list at Opus rates.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase", default)]
+pub struct TaskManager {
+    /// A Claude model id. Claude only for now — it is the one agent the run
+    /// path drives, so offering the others here would be a control that cannot
+    /// take effect.
+    pub model: String,
+    pub effort: String,
+}
+
+impl Default for TaskManager {
+    fn default() -> Self {
+        TaskManager {
+            // Cheap and fast: this is a list keeper, not a reasoner.
+            model: "haiku".into(),
+            effort: "medium".into(),
+        }
+    }
+}
+
 impl Default for GlobalSettings {
     /// What a first launch starts from.
     ///
@@ -115,7 +144,12 @@ impl Default for GlobalSettings {
             models: BTreeMap::from([
                 (
                     "claude".to_string(),
-                    sel(&["default", "opus", "sonnet", "haiku"], "sonnet"),
+                    // The `[1m]` variants are the only way to get a 1M context window;
+                    // without them here the picker offers 200k and nothing else.
+                    sel(
+                        &["default", "opus", "sonnet", "haiku", "opus[1m]", "sonnet[1m]"],
+                        "sonnet",
+                    ),
                 ),
                 (
                     "codex".to_string(),
@@ -126,6 +160,7 @@ impl Default for GlobalSettings {
             default_permission: "read_only".into(),
             default_effort: "high".into(),
             moderator: Moderator::default(),
+            task_manager: TaskManager::default(),
             env_policy: "minimal".into(),
             forward_proxy_vars: false,
             notifications: Notifications::default(),
