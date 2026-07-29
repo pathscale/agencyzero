@@ -72,6 +72,8 @@ export function createMockApi(): AgencyZeroApi {
   const running = clone(fixtures.RUNNING);
   const taskLog = clone(fixtures.TASK_LOG);
   const logTotals = { ...fixtures.LOG_TOTALS };
+  // The Home task manager's conversation handle; reset clears it.
+  let taskManagerSession: string | null = "d991b0f0-fixture-4c9217d0";
   const agentStatus = clone(fixtures.AGENT_STATUS);
   const models = clone(fixtures.MODEL_CATALOGUE);
   let settings = clone(fixtures.SETTINGS);
@@ -292,7 +294,9 @@ export function createMockApi(): AgencyZeroApi {
       settle(messages.filter((message) => message.projectId === projectId)),
 
     async sendMessage(input) {
-      const project = findProject(input.projectId);
+      // The task manager is reserved with no project row, exactly like Rust:
+      // its messages hang off the fixed id and nothing else is touched.
+      const project = input.projectId === "home-task-manager" ? null : findProject(input.projectId);
       const message: Message = {
         id: nextId("message"),
         projectId: input.projectId,
@@ -309,9 +313,11 @@ export function createMockApi(): AgencyZeroApi {
         createdAt: new Date().toISOString(),
       };
       messages.push(message);
-      project.lastActivityAt = message.createdAt;
       emit("message:appended", message);
-      emit("project:updated", project);
+      if (project) {
+        project.lastActivityAt = message.createdAt;
+        emit("project:updated", project);
+      }
       // No reply is faked: an invented agent answer would be indistinguishable
       // from a real one in review, and that is exactly the wrong thing to ship.
       return settle(message);
@@ -443,6 +449,15 @@ export function createMockApi(): AgencyZeroApi {
       settle(
         Object.entries(fixtures.RATE_LIMITS).map(([projectId, limit]) => ({ projectId, ...limit })),
       ),
+
+    // A fixture session id, so the design shows the faded "session" line the
+    // way a real first prompt would produce it.
+    getTaskManager: () => settle({ sessionId: taskManagerSession }),
+
+    async resetTaskManager() {
+      taskManagerSession = null;
+      return settle(undefined);
+    },
 
     async on<E extends keyof AppEvents>(
       event: E,

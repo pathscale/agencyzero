@@ -1,5 +1,5 @@
 import { Toggle } from "@pathscale/ui";
-import { For, type JSX, Show } from "solid-js";
+import { createSignal, For, type JSX, Show } from "solid-js";
 import { Icon, type IconProps } from "~/components/Icon";
 import { Panel } from "~/components/Panel";
 import { PillMenu } from "~/components/PillMenu";
@@ -98,6 +98,14 @@ export function SettingsTab(): JSX.Element {
     if (!settings) return [];
     const ladder = effortsFor(settings.models[settings.defaultAgent]?.default ?? "");
     return ladder.length > 0 ? ladder : [settings.defaultEffort];
+  };
+
+  /** The effort ladder for the task manager's own model, not the default's. */
+  const taskManagerEfforts = (): string[] => {
+    const settings = state.settings;
+    if (!settings) return [];
+    const ladder = effortsFor(settings.taskManager.model);
+    return ladder.length > 0 ? ladder : [settings.taskManager.effort];
   };
 
   const enabledModels = (agent: Agent): Model[] => {
@@ -217,6 +225,53 @@ export function SettingsTab(): JSX.Element {
                     only Codex can enumerate; the other two stay on the compiled list
                   </span>
                 </div>
+              </Section>
+
+              <Section
+                icon="list-checks"
+                title="Task Manager"
+                hint="the Home conversation that keeps the lists in order"
+              >
+                <Row
+                  label="Model"
+                  hint="its own, deliberately — a list keeper running unattended should not bill at the prompt's rates"
+                >
+                  <PillMenu
+                    label="Task manager model"
+                    value={current().taskManager.model}
+                    options={enabledModels("claude").map((model) => ({
+                      value: model.id,
+                      label: model.name,
+                    }))}
+                    onChange={(model) =>
+                      void actions.saveSettings({
+                        taskManager: { ...current().taskManager, model },
+                      })
+                    }
+                  />
+                </Row>
+                <Row label="Effort">
+                  <PillMenu
+                    label="Task manager effort"
+                    value={current().taskManager.effort}
+                    options={taskManagerEfforts().map((effort) => ({
+                      value: effort,
+                      label: effort,
+                    }))}
+                    onChange={(effort) =>
+                      void actions.saveSettings({
+                        taskManager: { ...current().taskManager, effort },
+                      })
+                    }
+                  />
+                </Row>
+                <Row
+                  label="Conversation"
+                  hint="reset starts the next prompt fresh; the transcript and collected tasks stay"
+                  isLast
+                >
+                  <ResetTaskManagerButton />
+                </Row>
               </Section>
 
               <AccountUsageSection />
@@ -458,6 +513,49 @@ export function SettingsTab(): JSX.Element {
           )}
         </Show>
       </div>
+    </div>
+  );
+}
+
+/**
+ * Reset the task manager's conversation, with its session named beside it.
+ *
+ * Disabled when there is no session: reset is "start thinking again", and a
+ * conversation that never started has nothing to start again.
+ */
+function ResetTaskManagerButton(): JSX.Element {
+  const { state, actions, isLive } = useWorkspace();
+  const [busy, setBusy] = createSignal(false);
+
+  const reset = async (): Promise<void> => {
+    setBusy(true);
+    try {
+      await actions.resetTaskManager();
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div class="flex min-w-0 items-center gap-2.5">
+      <Show
+        when={state.taskManagerSession}
+        fallback={<span class="font-mono text-[11px] text-az-faint">no conversation yet</span>}
+      >
+        {(session) => (
+          <span class="max-w-[180px] truncate font-mono text-[11px] text-az-faint">
+            {session()}
+          </span>
+        )}
+      </Show>
+      <button
+        type="button"
+        onClick={() => void reset()}
+        disabled={busy() || !state.taskManagerSession || !isLive("resetTaskManager")}
+        class="shrink-0 rounded-lg border border-az-hairline-strong px-3 py-[5px] text-[12px] text-az-body transition-colors hover:border-warning hover:text-warning disabled:opacity-40"
+      >
+        {busy() ? "Resetting…" : "Reset"}
+      </button>
     </div>
   );
 }

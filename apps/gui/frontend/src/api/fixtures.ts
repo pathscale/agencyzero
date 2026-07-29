@@ -501,6 +501,9 @@ export const SETTINGS: GlobalSettings = {
     onCritical: "cancel_run",
     confineToDirs: true,
   },
+  // Deliberately not the prompt's model: a list keeper running unattended
+  // wants a cheap fast model far more often than a frontier one.
+  taskManager: { model: "haiku", effort: "medium" },
   envPolicy: "minimal",
   forwardProxyVars: false,
   notifications: {

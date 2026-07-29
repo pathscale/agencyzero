@@ -14,6 +14,7 @@ import type {
   RateLimit,
   RunningTask,
   TaskLogEntry,
+  TaskManagerState,
   WorkspaceRoot,
 } from "~/types";
 
@@ -133,6 +134,13 @@ export interface AgencyZeroApi {
    * in the design's proposed surface — see the frontend README.
    */
   listRateLimits(): Promise<RateLimit[]>;
+  /** Where the Home task manager's conversation stands. */
+  getTaskManager(): Promise<TaskManagerState>;
+  /**
+   * Clear the task manager's stored session, so the next prompt starts a
+   * fresh conversation. The transcript and collected tasks are left alone.
+   */
+  resetTaskManager(): Promise<void>;
 
   // — Events ——————————————————————————————————————————————————
   on<E extends keyof AppEvents>(
