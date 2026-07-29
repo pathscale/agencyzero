@@ -18,6 +18,13 @@ pub const KEY: &str = "settings";
 #[serde(rename_all = "camelCase", default)]
 pub struct GlobalSettings {
     pub default_agent: String,
+    /// Where a new project runs, and the parent of any directory it creates.
+    ///
+    /// Empty means "not chosen yet", which resolves to `$HOME/AgencyZero` at
+    /// read time rather than here. A `Default` impl has no access to the app
+    /// handle, and baking a literal home path into the record would freeze it
+    /// against the machine that first wrote it.
+    pub workspace_root: String,
     /// Per agent: which models the picker offers, and which one it starts on.
     pub models: BTreeMap<String, ModelSelection>,
     pub default_permission: String,
@@ -102,6 +109,7 @@ impl Default for GlobalSettings {
         };
         GlobalSettings {
             default_agent: "claude".into(),
+            workspace_root: String::new(),
             models: BTreeMap::from([
                 (
                     "claude".to_string(),

@@ -351,6 +351,10 @@ export function createMockApi(): AgencyZeroApi {
     },
     setDataLocation: () => settle(undefined),
 
+    /* No filesystem outside Tauri, so this describes the shape and claims nothing. */
+    getWorkspaceRoot: () => settle({ path: "(no filesystem)", exists: false, isDefault: true }),
+    createWorkspaceRoot: () => settle({ path: "(no filesystem)", exists: false, isDefault: true }),
+
     setTabModel: () => settle(undefined),
 
     async cancelRun(projectId) {

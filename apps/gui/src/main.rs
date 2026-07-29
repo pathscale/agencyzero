@@ -28,6 +28,8 @@ const IMPLEMENTED: &[&str] = &[
     "greet",
     "get_data_location",
     "set_data_location",
+    "get_workspace_root",
+    "create_workspace_root",
     "get_settings",
     "set_settings",
     "list_agent_status",
@@ -48,6 +50,63 @@ struct AppState {
 #[tauri::command]
 fn list_capabilities() -> Vec<String> {
     IMPLEMENTED.iter().map(|name| (*name).to_string()).collect()
+}
+
+/// The directory a new project runs in, and whether it is there yet.
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct WorkspaceRoot {
+    path: String,
+    exists: bool,
+    /// True when this is the resolved default rather than a stored choice, so
+    /// Settings can say "recommended" rather than presenting it as configured.
+    is_default: bool,
+}
+
+/// Resolve the workspace root: the stored value, else `$HOME/AgencyZero`.
+fn resolve_workspace_root(app: &tauri::AppHandle, state: &AppState) -> WorkspaceRoot {
+    let stored = state
+        .tables
+        .kv_get(settings::KEY)
+        .and_then(|raw| serde_json::from_str::<GlobalSettings>(&raw).ok())
+        .map(|settings| settings.workspace_root)
+        .unwrap_or_default();
+
+    let (path, is_default) = if stored.trim().is_empty() {
+        let home = app.path().home_dir().unwrap_or_else(|_| ".".into());
+        (home.join("AgencyZero"), true)
+    } else {
+        (std::path::PathBuf::from(&stored), false)
+    };
+
+    WorkspaceRoot {
+        exists: path.is_dir(),
+        path: path.to_string_lossy().into_owned(),
+        is_default,
+    }
+}
+
+#[tauri::command]
+fn get_workspace_root(app: tauri::AppHandle, state: State<'_, AppState>) -> WorkspaceRoot {
+    resolve_workspace_root(&app, &state)
+}
+
+/// Create the workspace root if it is not there.
+///
+/// Explicit rather than created on save: a settings write should not quietly
+/// make directories on someone's disk, and the recommended default is a
+/// suggestion until it is accepted.
+///
+/// # Errors
+/// Returns the IO error as a string when the directory cannot be created.
+#[tauri::command]
+fn create_workspace_root(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+) -> Result<WorkspaceRoot, String> {
+    let resolved = resolve_workspace_root(&app, &state);
+    std::fs::create_dir_all(&resolved.path).map_err(|error| error.to_string())?;
+    Ok(resolve_workspace_root(&app, &state))
 }
 
 /// Where the tables were opened from, and whether that is changeable.
@@ -279,6 +338,8 @@ fn main() {
             list_capabilities,
             get_data_location,
             set_data_location,
+            get_workspace_root,
+            create_workspace_root,
             get_settings,
             set_settings,
             list_agent_status,

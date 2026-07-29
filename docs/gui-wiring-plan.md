@@ -200,3 +200,37 @@ Frontend work that can happen in parallel:
       meaning or drop it.
 - [ ] **Dock and inline task placement** — `UiPrefs.taskPlacement` types all three, only
       `panel` is built.
+
+
+## How a project gets named
+
+Three stages, decided 2026-07-29. The point is that the tab is never blank and
+never blocks on a model call.
+
+1. **Front of the prompt, immediately.** Derived locally from the first message
+   the moment it is sent. No round trip, so the tab has a name before the agent
+   has said anything. This is the same move Claude Desktop makes with its task
+   list, and it is good enough on its own.
+2. **A cheap second call, auto-applied.** A small model is asked for a better
+   name and the project renames itself when the answer lands. Deliberately a
+   *separate* call rather than a schema on the first turn: constraining the first
+   response to carry a name shapes the answer the user actually asked for, and
+   the naming call is cheap enough that a second one costs less than that.
+3. **Manual rename, always available.** Whatever the first two produce, the name
+   is the user's to change. Neither stage is authoritative.
+
+Stage 1 must not wait on stage 2, and stage 2 must not overwrite a stage 3
+rename. That ordering is the whole design: anything that blocks the tab on a
+model call, or that lets a late auto-rename clobber a deliberate one, has got it
+wrong.
+
+## Where a project runs
+
+`GlobalSettings.workspace_root`, defaulting to `$HOME/AgencyZero` and created on
+explicit accept rather than on save. Empty in the record means "not chosen",
+resolved at read time, so the default follows the machine rather than being
+frozen into a record written on a different one.
+
+This is what unblocked the first prompt: `Project.dirs` is empty at creation by
+design (directories are added in the project's Settings section, not asked for at
+init), so without a workspace root a bundled `.app` would run the agent from `/`.

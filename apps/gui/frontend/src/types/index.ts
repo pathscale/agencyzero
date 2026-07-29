@@ -212,6 +212,13 @@ export interface AgentStatus {
  * so the database's own location cannot be one of them. It resolves from an
  * environment variable or a pointer file before anything opens.
  */
+export interface WorkspaceRoot {
+  path: string;
+  exists: boolean;
+  /** True when this is the resolved recommendation, not a stored choice. */
+  isDefault: boolean;
+}
+
 export interface DataLocation {
   path: string;
   /** `default` | `pointer` | `env`. */
@@ -303,6 +310,11 @@ export interface NotificationSettings {
 /** One record, persisted. Every new tab starts from it. */
 export interface GlobalSettings {
   defaultAgent: Agent;
+  /**
+   * Where a new project runs. Empty means not chosen, which resolves to
+   * `$HOME/AgencyZero` at read time rather than being frozen into the record.
+   */
+  workspaceRoot: string;
   /**
    * Per agent, which models the picker offers and which one it starts on.
    *

@@ -12,6 +12,7 @@ import type {
   RateLimit,
   RunningTask,
   TaskLogEntry,
+  WorkspaceRoot,
 } from "~/types";
 
 /**
@@ -89,6 +90,10 @@ export interface AgencyZeroApi {
    * relocated out from under its open handles.
    */
   setDataLocation(path: string | null): Promise<void>;
+  /** Where a new project runs, and whether the directory is there yet. */
+  getWorkspaceRoot(): Promise<WorkspaceRoot>;
+  /** Create it. Explicit, because a settings write should not make directories. */
+  createWorkspaceRoot(): Promise<WorkspaceRoot>;
 
   // — Runs and tasks ——————————————————————————————————————————
   /** The tab's model and posture stick until changed again. */
