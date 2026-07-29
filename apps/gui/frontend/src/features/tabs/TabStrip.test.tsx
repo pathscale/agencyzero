@@ -18,7 +18,7 @@ async function mountStrip() {
     </WorkspaceProvider>
   ));
 
-  await waitFor(() => expect(workspace.state.isLoaded).toBe(true), { timeout: 5_000 });
+  await waitFor(() => expect(workspace.state.boot.status).toBe("ready"), { timeout: 5_000 });
   return { ...screen, workspace };
 }
 

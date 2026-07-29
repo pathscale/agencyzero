@@ -1,4 +1,5 @@
 import { type JSX, Match, Show, Switch } from "solid-js";
+import { Icon } from "~/components/Icon";
 import { IconSprite } from "~/components/IconSprite";
 import { DraftTab } from "~/features/draft/DraftTab";
 import { HomeTab } from "~/features/home/HomeTab";
@@ -17,7 +18,7 @@ import { useWorkspace, WorkspaceProvider } from "~/stores/workspace";
  * point of the dot.
  */
 function Workspace(): JSX.Element {
-  const { state, activeTab, activeProject } = useWorkspace();
+  const { state, actions, activeTab, activeProject } = useWorkspace();
   const shell = useAppShell();
 
   return (
@@ -25,7 +26,17 @@ function Workspace(): JSX.Element {
       <TabStrip />
 
       <main class="flex min-h-0 flex-1 gap-3 px-3 pt-1.5 pb-3">
-        <Show when={state.isLoaded} fallback={<Booting />}>
+        <Show
+          when={state.boot.status === "ready"}
+          fallback={
+            <Show when={state.boot.status === "error"} fallback={<Booting />}>
+              <BootFailed
+                message={state.boot.status === "error" ? state.boot.message : ""}
+                onRetry={() => void actions.retryInit()}
+              />
+            </Show>
+          }
+        >
           <Switch>
             <Match when={activeTab().kind === "home"}>
               <HomeTab />
@@ -60,6 +71,38 @@ function Booting(): JSX.Element {
   return (
     <div class="flex flex-1 items-center justify-center text-[12.5px] text-az-muted">
       Loading workspace…
+    </div>
+  );
+}
+
+/**
+ * Boot failed, and says so.
+ *
+ * A half-loaded workspace must not render as though it were whole: the tabs
+ * would be there, the panels would be empty, and nothing would explain why.
+ */
+function BootFailed(props: { message: string; onRetry: () => void }): JSX.Element {
+  return (
+    <div class="flex flex-1 flex-col items-center justify-center gap-3.5 px-8">
+      <div class="flex size-[54px] items-center justify-center rounded-2xl border border-error/26 bg-error/8">
+        <Icon name="shield" class="text-[24px] text-error" />
+      </div>
+      <div class="flex flex-col items-center gap-1.5">
+        <p class="font-semibold text-[15px] text-base-content">Could not load the workspace</p>
+        <p
+          data-selectable
+          class="max-w-[460px] text-center font-mono text-[11.5px] text-az-muted leading-[1.55]"
+        >
+          {props.message}
+        </p>
+      </div>
+      <button
+        type="button"
+        onClick={props.onRetry}
+        class="rounded-lg bg-primary px-3.5 py-1.5 font-semibold text-[12.5px] text-primary-content transition-colors hover:bg-[#fff176]"
+      >
+        Try again
+      </button>
     </div>
   );
 }

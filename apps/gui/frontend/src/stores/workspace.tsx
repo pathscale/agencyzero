@@ -42,8 +42,30 @@ type WorkspaceState = {
   tabs: Tab[];
   activeKey: string;
   backend: "tauri" | "mock" | "loading";
-  isLoaded: boolean;
+  /**
+   * "not finished" and "failed" are different things, and a single boolean
+   * cannot tell them apart — a failure halfway through hydration would leave
+   * the window on a loading screen forever with nothing to explain it.
+   */
+  boot: BootState;
 };
+
+export type BootState =
+  | { status: "loading" }
+  | { status: "ready" }
+  | { status: "error"; message: string };
+
+/**
+ * A limit is only in force until its reset time; after that it is history.
+ *
+ * A missing or unparseable `resetsAt` counts as live: the provider did not say
+ * when it lifts, and guessing "already over" would clear a real limit.
+ */
+export function isLimitLive(limit: RateLimit, now = Date.now()): boolean {
+  if (!limit.resetsAt) return true;
+  const resets = Date.parse(limit.resetsAt);
+  return Number.isNaN(resets) || resets > now;
+}
 
 const HOME_TAB: Tab = {
   key: "home",
@@ -69,11 +91,38 @@ function createWorkspace() {
     tabs: [HOME_TAB],
     activeKey: "home",
     backend: "loading",
-    isLoaded: false,
+    boot: { status: "loading" },
   });
 
   const [api, setApi] = createSignal<AgencyZeroApi | null>(null);
   const unlisteners: Unlisten[] = [];
+
+  /** Monotonic ticket for settings writes; see `saveSettings`. */
+  let settingsWrite = 0;
+
+  /** Events that arrived while snapshots were still loading — see `init`. */
+  let buffered: (() => void)[] = [];
+  let isHydrating = true;
+
+  function drainEventBuffer(): void {
+    isHydrating = false;
+    const queued = buffered;
+    buffered = [];
+    batch(() => {
+      for (const apply of queued) apply();
+    });
+  }
+
+  /**
+   * A coarse reactive clock, so time-dependent state re-evaluates without a
+   * timer per rate limit. 30s is far below the resolution anyone reads off a
+   * status dot, and it is a display aid — expiry is also checked on hydration
+   * and answered by `run:rate_limit_cleared`, because a suspended app misses
+   * timers entirely.
+   */
+  const [clock, setClock] = createSignal(Date.now());
+  const clockTimer = setInterval(() => setClock(Date.now()), 30_000);
+  onCleanup(() => clearInterval(clockTimer));
 
   const client = (): AgencyZeroApi => {
     const current = api();
@@ -109,7 +158,10 @@ function createWorkspace() {
         ? "error"
         : "blocked";
     }
-    if (state.rateLimits[projectId]) return "blocked";
+    const limit = state.rateLimits[projectId];
+    // Checked rather than trusted: a suspended app misses timers, so an entry
+    // can outlive its reset time without anything having cleared it.
+    if (limit && isLimitLive(limit, clock())) return "blocked";
     if ((state.running[projectId] ?? []).length > 0) return "running";
     return "quiet";
   }
@@ -142,36 +194,72 @@ function createWorkspace() {
     });
   }
 
+  /**
+   * Boot, in an order that cannot drop an event.
+   *
+   * Subscribing after hydration leaves a window — one round trip per project —
+   * in which a tool could start, a moderator could block, or a run could stop,
+   * and the window would never hear about it. Since events are treated as
+   * authoritative, a miss is permanent.
+   *
+   * So: subscribe first, buffer everything that arrives, hydrate, then replay
+   * the buffer over the snapshot. Handlers are idempotent — they upsert by id
+   * rather than append blindly — so replaying an event the snapshot already
+   * contains is a no-op rather than a duplicate.
+   */
   async function init(): Promise<void> {
-    const { api: backend, backend: kind } = await selectApi();
-    setApi(() => backend);
-    setState("backend", kind);
+    try {
+      const { api: backend, backend: kind } = await selectApi();
+      setApi(() => backend);
+      setState("backend", kind);
 
-    const [projects, settings, agents, rateLimits] = await Promise.all([
-      backend.listProjects(),
-      backend.getSettings(),
-      backend.listAgentStatus(false),
-      backend.listRateLimits(),
-    ]);
+      await subscribe(backend);
 
-    batch(() => {
-      setState("projects", reconcile(projects));
-      setState("settings", settings);
-      setState("agents", reconcile(agents));
-      setState(
-        "rateLimits",
-        Object.fromEntries(rateLimits.map((limit) => [limit.projectId, limit])),
-      );
-      // Every project gets a tab, matching the mockup's strip. A project the
-      // user closed would be reopened from the Home list.
-      setState("tabs", [HOME_TAB, ...projects.map(projectTab)]);
-      const restored = state.tabs.some((tab) => tab.key === prefs.lastTabKey);
-      setState("activeKey", restored ? prefs.lastTabKey : "home");
-    });
+      const [projects, settings, agents, rateLimits] = await Promise.all([
+        backend.listProjects(),
+        backend.getSettings(),
+        backend.listAgentStatus(false),
+        backend.listRateLimits(),
+      ]);
 
-    await Promise.all(projects.map((project) => loadProject(project.id)));
-    setState("isLoaded", true);
-    subscribe(backend);
+      batch(() => {
+        setState("projects", reconcile(projects));
+        setState("settings", settings);
+        setState("agents", reconcile(agents));
+        setState(
+          "rateLimits",
+          // A limit whose reset time has already passed is history, not state.
+          Object.fromEntries(
+            rateLimits.filter(isLimitLive).map((limit) => [limit.projectId, limit]),
+          ),
+        );
+        // Every project gets a tab, matching the mockup's strip. A project the
+        // user closed would be reopened from the Home list.
+        setState("tabs", [HOME_TAB, ...projects.map(projectTab)]);
+        const restored = state.tabs.some((tab) => tab.key === prefs.lastTabKey);
+        setState("activeKey", restored ? prefs.lastTabKey : "home");
+      });
+
+      await Promise.all(projects.map((project) => loadProject(project.id)));
+
+      drainEventBuffer();
+      setState("boot", { status: "ready" });
+    } catch (cause) {
+      // A half-loaded workspace is not something to render as if it were whole.
+      setState("boot", {
+        status: "error",
+        message: cause instanceof Error ? cause.message : String(cause),
+      });
+    }
+  }
+
+  /** Boot again from scratch, for the retry button on the error screen. */
+  async function retryInit(): Promise<void> {
+    for (const unlisten of unlisteners.splice(0)) unlisten();
+    buffered = [];
+    isHydrating = true;
+    setState("boot", { status: "loading" });
+    await init();
   }
 
   function projectTab(project: Project): Tab {
@@ -193,11 +281,20 @@ function createWorkspace() {
   // own optimistic writes.
 
   async function subscribe(backend: AgencyZeroApi): Promise<void> {
+    /**
+     * While hydrating, an event is queued instead of applied — the snapshot
+     * that lands next would overwrite it. Queued events are replayed after.
+     */
     const bind = async <E extends keyof AppEvents>(
       event: E,
       handler: (payload: AppEvents[E]) => void,
     ) => {
-      unlisteners.push(await backend.on(event, handler));
+      unlisteners.push(
+        await backend.on(event, (payload) => {
+          if (isHydrating) buffered.push(() => handler(payload));
+          else handler(payload);
+        }),
+      );
     };
 
     // No tab is opened here. The agent creates projects too, and a new tab
@@ -210,7 +307,7 @@ function createWorkspace() {
 
     await bind("project:updated", upsertProject);
 
-    await bind("project:deleted", ({ id }) => closeProjectTab(id));
+    await bind("project:deleted", ({ id }) => purgeProject(id));
 
     await bind("item:created", (item) => {
       setState("items", item.projectId, (list = []) => [...list, item]);
@@ -252,16 +349,37 @@ function createWorkspace() {
 
     await bind("task:finished", (entry) => {
       batch(() => {
-        setState("running", entry.projectId, (list = []) =>
-          list.filter((task) => task.label !== entry.label),
-        );
+        /*
+         * Matched on identity, never on label. Two shell commands, two reads of
+         * the same file or two calls to the same MCP tool share a label, and
+         * removing by label would clear all of them when the first finished —
+         * taking the Stop buttons and the running count with it.
+         *
+         * With no id there is nothing to correlate, so nothing is removed: a
+         * stale row is recoverable, a wrongly cancelled one is not.
+         */
+        if (entry.toolCallId !== null) {
+          setState("running", entry.projectId, (list = []) =>
+            list.filter((task) => task.toolCallId !== entry.toolCallId),
+          );
+        }
         setState("taskLog", entry.projectId, (list = []) => [entry, ...list]);
         setState("logTotals", entry.projectId, (total = 0) => total + 1);
       });
     });
 
     await bind("run:rate_limit", (limit) => {
+      // A limit replayed from the buffer, or delivered late, can already be
+      // spent by the time it lands.
+      if (!isLimitLive(limit)) return;
       setState("rateLimits", limit.projectId, limit);
+    });
+
+    await bind("run:rate_limit_cleared", ({ projectId }) => {
+      setState(
+        "rateLimits",
+        produce((limits) => delete limits[projectId]),
+      );
     });
 
     await bind("run:stopped", ({ projectId }) => {
@@ -404,9 +522,27 @@ function createWorkspace() {
     });
   }
 
-  function closeProjectTab(projectId: string): void {
+  /**
+   * Forget a project completely.
+   *
+   * The store keys six collections by project id. Dropping the project and its
+   * tab while leaving those behind leaks, and worse, lets stale rows resurface
+   * if an id is ever reused or a request that was already in flight lands after
+   * the delete.
+   */
+  function purgeProject(projectId: string): void {
     batch(() => {
       setState("projects", (projects) => projects.filter((project) => project.id !== projectId));
+      setState(
+        produce((draft) => {
+          delete draft.items[projectId];
+          delete draft.messages[projectId];
+          delete draft.running[projectId];
+          delete draft.taskLog[projectId];
+          delete draft.logTotals[projectId];
+          delete draft.rateLimits[projectId];
+        }),
+      );
       closeTab(projectId);
     });
   }
@@ -469,6 +605,7 @@ function createWorkspace() {
   };
 
   const actions = {
+    retryInit,
     focus,
     cycleTab,
     moveTab,
@@ -481,6 +618,7 @@ function createWorkspace() {
     createProject,
     send,
     deleteProject: (id: string) => client().deleteProject(id),
+    purgeProject,
     setProjectStatus: (id: string, status: ProjectStatus) => client().setProjectStatus(id, status),
     setProjectPinned: (id: string, pinned: boolean) => client().setProjectPinned(id, pinned),
     setProjectModerator: (id: string, enabled: boolean) =>
@@ -501,9 +639,15 @@ function createWorkspace() {
         setState("logTotals", projectId, 0);
       });
     },
+    /**
+     * Settings autosave, and each response replaces the whole record — so two
+     * quick changes racing means the slower one wins and silently reverts the
+     * other. Writes are numbered and a stale response is dropped.
+     */
     async saveSettings(patch: Parameters<AgencyZeroApi["setSettings"]>[0]) {
+      const ticket = ++settingsWrite;
       const next = await client().setSettings(patch);
-      setState("settings", next);
+      if (ticket === settingsWrite) setState("settings", next);
     },
     async recheckAgents() {
       setState("agents", reconcile(await client().listAgentStatus(true)));

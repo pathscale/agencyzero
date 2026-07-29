@@ -20,6 +20,16 @@ export function ProjectTab(props: { tab: Tab; project: Project }): JSX.Element {
   const { state, actions } = useWorkspace();
 
   const messages = () => state.messages[props.project.id] ?? [];
+
+  /*
+   * The agent that actually ran, not a hardcoded name: the last message that
+   * recorded one, falling back to the configured default. Settings can select
+   * Codex or Copilot, and a header that always said "Claude" would be lying.
+   */
+  const agent = () =>
+    [...messages()].reverse().find((message) => message.author === "agent")?.agent ??
+    state.settings?.defaultAgent ??
+    "claude";
   const running = () => state.running[props.project.id] ?? [];
   const rateLimit = () => state.rateLimits[props.project.id];
 
@@ -38,7 +48,7 @@ export function ProjectTab(props: { tab: Tab; project: Project }): JSX.Element {
             {props.project.name}
           </span>
           <span class="shrink-0 rounded-full border border-az-hairline bg-base-300 px-2.5 py-0.5 font-mono text-[11px] text-az-muted">
-            conversation · {AGENT_LABELS.claude}
+            conversation · {AGENT_LABELS[agent()]}
           </span>
 
           <div class="flex-1" />
@@ -80,7 +90,7 @@ export function ProjectTab(props: { tab: Tab; project: Project }): JSX.Element {
             onPermissionChange={(permission) =>
               actions.setTabModel(props.tab.key, props.tab.model, permission)
             }
-            onSend={(body) => void actions.send(props.project.id, body)}
+            onSend={(body) => actions.send(props.project.id, body)}
           />
         </div>
       </Panel>

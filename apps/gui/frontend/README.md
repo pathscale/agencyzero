@@ -124,9 +124,15 @@ proposed in `design/data-model.html`. Two implementations satisfy it:
 | [`src/api/mock.ts`](src/api/mock.ts) | An in-memory stand-in serving the mockup's own data from [`src/api/fixtures.ts`](src/api/fixtures.ts). |
 
 [`src/api/index.ts`](src/api/index.ts) picks one at startup. Outside the Tauri webview it is
-always the mock. Inside it, it probes with `get_settings` and falls back to the mock with a
-console warning if that throws — which it does today, because `az-gui` still exposes only
-`greet`. **The window says so in a footer** rather than letting fixtures pass for live data.
+always the mock. Inside it, it probes with `get_settings`, and **the kind of failure
+decides**: a "command not found" error means Rust has not implemented it yet and falls back
+to fixtures; anything else — a database that would not open, a rejected capability, a serde
+mismatch, a panic — is rethrown and the window shows a boot error with a retry.
+
+Falling back on every error would be fail-open: a broken backend would leave the app fully
+interactive, writing to ephemeral fixture state behind a small banner, with the user
+believing their projects were saved. **The window says which backend it is on** in a footer
+rather than letting fixtures pass for live data.
 
 When the Rust commands land, the probe succeeds and the app switches over. Nothing above
 `src/api/` changes: no component imports `@tauri-apps/api` directly, and no component knows

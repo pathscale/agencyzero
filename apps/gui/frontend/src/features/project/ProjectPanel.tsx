@@ -324,13 +324,26 @@ function TaskLogList(props: { projectId: string }): JSX.Element {
     <div class="az-scroll flex min-h-0 flex-1 flex-col gap-[7px] px-3 pt-2.5 pb-3">
       <For each={entries()}>
         {(entry) => (
+          /*
+           * Three states, not two. `ok` is `boolean | null`, and null means the
+           * agent did not report an outcome — which is not failure. Rendering
+           * it with the error mark would tell you a tool failed when nothing
+           * said so.
+           */
           <div class="flex items-baseline gap-2 text-[11.5px]">
             <Icon
-              name={entry.ok ? "check" : "x"}
-              class={`shrink-0 text-[12px] ${entry.ok ? "text-success" : "text-error"}`}
+              name={entry.ok === true ? "check" : entry.ok === false ? "x" : "info"}
+              label={entry.ok === null ? "Outcome not reported" : undefined}
+              class={`shrink-0 text-[12px] ${
+                entry.ok === true
+                  ? "text-success"
+                  : entry.ok === false
+                    ? "text-error"
+                    : "text-az-muted"
+              }`}
             />
             <span class="min-w-0 flex-1 truncate text-az-body">{entry.label}</span>
-            <span class={`shrink-0 ${entry.ok ? "text-az-muted" : "text-error"}`}>
+            <span class={`shrink-0 ${entry.ok === false ? "text-error" : "text-az-muted"}`}>
               {taskMeta(entry)}
             </span>
           </div>

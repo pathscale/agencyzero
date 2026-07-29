@@ -10,7 +10,6 @@
     "beforeBuildCommand": "bun run build"
   },
   "app": {
-    "withGlobalTauri": true,
     "windows": [
       {
         "label": "main",
@@ -31,7 +30,11 @@
   },
   "bundle": {
     "active": true,
-    "targets": ["app"],
-    "icon": ["icons/icon.icns"]
+    "targets": [
+      "app"
+    ],
+    "icon": [
+      "icons/icon.icns"
+    ]
   }
 }

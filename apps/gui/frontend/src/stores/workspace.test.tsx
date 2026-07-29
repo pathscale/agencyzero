@@ -1,7 +1,7 @@
 import { render, waitFor } from "@solidjs/testing-library";
 import { beforeEach, describe, expect, it } from "vitest";
 import { setPrefs } from "~/stores/prefs";
-import { useWorkspace, type Workspace, WorkspaceProvider } from "~/stores/workspace";
+import { isLimitLive, useWorkspace, type Workspace, WorkspaceProvider } from "~/stores/workspace";
 
 /**
  * Mounts the provider and hands back the live workspace once it has loaded.
@@ -24,7 +24,7 @@ async function mountWorkspace(): Promise<Workspace> {
     </WorkspaceProvider>
   ));
 
-  await waitFor(() => expect(workspace.state.isLoaded).toBe(true), { timeout: 5_000 });
+  await waitFor(() => expect(workspace.state.boot.status).toBe("ready"), { timeout: 5_000 });
   return workspace;
 }
 
@@ -214,5 +214,74 @@ describe("createProject", () => {
     expect(workspace.state.tabs.filter((tab) => tab.kind === "draft")).toHaveLength(0);
     expect(workspace.state.tabs.filter((tab) => tab.label === "Port the emitter")).toHaveLength(1);
     expect(workspace.activeTab().label).toBe("Port the emitter");
+  });
+});
+
+describe("task correlation", () => {
+  /*
+   * Labels are not identities. Two `cargo test` calls, two reads of the same
+   * file or two calls to the same MCP tool share one, and removing by label
+   * cleared every match when the first finished.
+   */
+  it("completes only the tool call that finished, not every task sharing its label", async () => {
+    const workspace = await mountWorkspace();
+    const before = workspace.state.running.worktable;
+    expect(before).toHaveLength(2);
+
+    await workspace.actions.cancelTask("tc-wt-test");
+
+    await waitFor(() => {
+      const after = workspace.state.running.worktable;
+      expect(after).toHaveLength(1);
+      expect(after[0].toolCallId).toBe("tc-wt-rg");
+    });
+  });
+});
+
+describe("isLimitLive", () => {
+  const now = Date.parse("2026-07-29T12:00:00Z");
+  const limit = (resetsAt: string | null) => ({
+    projectId: "p",
+    message: "Rate limited",
+    resetsAt,
+  });
+
+  /*
+   * Without this a single rate-limit event leaves the tab blocked for the rest
+   * of the session: nothing observes `resetsAt` passing, and a suspended app
+   * misses timers, so expiry has to be re-derived every time it is read.
+   */
+  it("treats a limit past its reset as spent", () => {
+    expect(isLimitLive(limit("2026-07-29T11:59:00Z"), now)).toBe(false);
+  });
+
+  it("keeps one that has not reset yet", () => {
+    expect(isLimitLive(limit("2026-07-29T12:34:00Z"), now)).toBe(true);
+  });
+
+  it("keeps a limit the provider gave no reset time for, rather than guessing", () => {
+    expect(isLimitLive(limit(null), now)).toBe(true);
+    expect(isLimitLive(limit("nonsense"), now)).toBe(true);
+  });
+});
+
+describe("project deletion", () => {
+  it("purges every collection the project owned", async () => {
+    const workspace = await mountWorkspace();
+    expect(workspace.state.messages.worktable).toBeTruthy();
+
+    workspace.actions.purgeProject("worktable");
+
+    for (const bucket of [
+      "items",
+      "messages",
+      "running",
+      "taskLog",
+      "logTotals",
+      "rateLimits",
+    ] as const) {
+      expect(workspace.state[bucket]).not.toHaveProperty("worktable");
+    }
+    expect(workspace.state.tabs.map((tab) => tab.key)).not.toContain("worktable");
   });
 });

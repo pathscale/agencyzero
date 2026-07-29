@@ -166,6 +166,15 @@ export interface RunningTask {
 /** History — what ran, newest first. A finished RunningTask becomes one of these. */
 export interface TaskLogEntry {
   id: string;
+  /**
+   * The `RunningTask` this closes out — `ToolCall::id`, carried through so a
+   * result can be matched to its call by identity.
+   *
+   * Labels are not identities: two shell commands, two reads of the same file
+   * or two calls to the same MCP tool share one. Null when the agent gave no
+   * id, in which case the row cannot be correlated and is only history.
+   */
+  toolCallId: string | null;
   projectId: string;
   itemId: string | null;
   label: string;
