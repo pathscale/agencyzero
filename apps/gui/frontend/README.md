@@ -56,15 +56,21 @@ replaces the capability `tauri-build` generates when there isn't one.
 
 ## Tabs
 
-⌘W closes the tab, ⌘1 selects the previous, ⌘2 the next — both cycling wrap. These are
-**native menu accelerators**, defined in [`../src/main.rs`](../src/main.rs): macOS
-delivers them whatever has focus, and the menu bar is where a keybinding is discoverable.
-The menu items carry ids, not behaviour; Rust emits `menu:close-tab` / `menu:prev-tab` /
-`menu:next-tab` and [`useAppShell.ts`](src/features/shell/useAppShell.ts) answers them
-with the same actions the strip uses.
+⌃T opens a new project, ⌘W closes the tab, ⌘1 selects the previous and ⌘2 the next — both
+cycling wrap. These are **native menu accelerators**, defined in
+[`../src/main.rs`](../src/main.rs): macOS delivers them whatever has focus, and the menu bar
+is where a keybinding is discoverable. The menu items carry ids, not behaviour; Rust emits
+`menu:new-project` / `menu:close-tab` / `menu:prev-tab` / `menu:next-tab` and
+[`useAppShell.ts`](src/features/shell/useAppShell.ts) answers them with the same actions the
+strip uses.
 
-[`shortcuts.ts`](src/features/tabs/shortcuts.ts) binds ⌘1/⌘2 in the webview **only outside
-Tauri**, so they work under `bun run dev` in a browser. It is gated rather than always-on:
+New project is ⌃T rather than ⌘T by request. Worth knowing: on macOS ⌃T is Cocoa's
+transpose-characters binding in text fields, and a menu accelerator shadows it — so it no
+longer transposes inside the composer.
+
+[`shortcuts.ts`](src/features/tabs/shortcuts.ts) binds these in the webview **only outside
+Tauri**, so they work under `bun run dev` in a browser — though a browser takes ⌃T for its
+own new tab before the page sees it. It is gated rather than always-on:
 a menu accelerator is consumed by the menu and never reaches the webview today, but that
 is macOS behaviour to rely on rather than a guarantee, and a double-fire would silently
 skip a tab.
