@@ -39,6 +39,7 @@ export function createTauriApi(): AgencyZeroApi {
     getSettings: () => invoke("get_settings"),
     setSettings: (patch) => invoke("set_settings", { patch }),
     listAgentStatus: (recheck) => invoke("list_agent_status", { recheck }),
+    listModels: (discover) => invoke("list_models", { discover }),
 
     setTabModel: (tabKey, model, permission) =>
       invoke("set_tab_model", { tabKey, model, permission }),

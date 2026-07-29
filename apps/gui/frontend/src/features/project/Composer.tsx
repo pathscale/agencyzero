@@ -1,7 +1,7 @@
 import { createSignal, type JSX, onMount, Show } from "solid-js";
 import { Icon } from "~/components/Icon";
 import { PillMenu } from "~/components/PillMenu";
-import { MODELS, PERMISSION_LABELS, PERMISSION_ORDER } from "~/lib/labels";
+import { PERMISSION_LABELS, PERMISSION_ORDER } from "~/lib/labels";
 import type { Permission } from "~/types";
 
 const PERMISSION_HINTS: Record<Permission, string> = {
@@ -15,6 +15,14 @@ const PERMISSION_HINTS: Record<Permission, string> = {
 export type ComposerProps = {
   placeholder: string;
   model: string;
+  /**
+   * What the model pill offers, already filtered to the user's Settings choice.
+   *
+   * Supplied rather than derived here so the composer stays a controlled
+   * component: it renders the model it is given and reports changes, and has no
+   * opinion on which models exist.
+   */
+  modelOptions: { value: string; label: string }[];
   permission: Permission;
   onModelChange: (model: string) => void;
   onPermissionChange: (permission: Permission) => void;
@@ -48,6 +56,20 @@ export function Composer(props: ComposerProps): JSX.Element {
   let field!: HTMLTextAreaElement;
 
   const canSend = () => draft().trim().length > 0 && !isSending();
+
+  /**
+   * The offered models, plus the tab's own if the selection no longer holds it.
+   *
+   * A tab keeps the model it was set to. Dropping it from the menu because
+   * Settings stopped offering it would leave the pill showing one model and the
+   * menu unable to express it, and the next message would go out under a model
+   * the user never chose. Keeping it visible makes the mismatch the user's to
+   * resolve.
+   */
+  const options = () =>
+    props.modelOptions.some((option) => option.value === props.model)
+      ? props.modelOptions
+      : [...props.modelOptions, { value: props.model, label: props.model }];
 
   /**
    * Clears only after the send resolves.
@@ -141,7 +163,7 @@ export function Composer(props: ComposerProps): JSX.Element {
             icon="sparkles"
             iconClass="text-primary"
             value={props.model}
-            options={MODELS.map((model) => ({ value: model, label: model }))}
+            options={options()}
             onChange={props.onModelChange}
           />
 

@@ -13,6 +13,8 @@ import type { AgencyZeroApi, AppEvents, Unlisten } from "~/api";
 import { selectApi } from "~/api";
 import { prefs, setPrefs } from "~/stores/prefs";
 import type {
+  Agent,
+  AgentModels,
   AgentStatus,
   GlobalSettings,
   Message,
@@ -39,6 +41,8 @@ type WorkspaceState = {
   rateLimits: Record<string, RateLimit>;
   settings: GlobalSettings | null;
   agents: AgentStatus[];
+  /** Every agent's catalogue, for the Settings picker. Empty until boot ends. */
+  models: AgentModels[];
   tabs: Tab[];
   activeKey: string;
   backend: "tauri" | "mock" | "loading";
@@ -88,6 +92,7 @@ function createWorkspace() {
     rateLimits: {},
     settings: null,
     agents: [],
+    models: [],
     tabs: [HOME_TAB],
     activeKey: "home",
     backend: "loading",
@@ -166,6 +171,25 @@ function createWorkspace() {
     return "quiet";
   }
 
+  /**
+   * What the prompt's model pill offers, as `{ value, label }` pairs.
+   *
+   * Claude only: the prompt sends to Claude today, and the Codex and Copilot
+   * selections in Settings are collected for the code review UI rather than
+   * consumed here. Ordered by the catalogue rather than by the saved selection,
+   * so the menu reads in the vendor's own ranking.
+   *
+   * Empty until boot finishes, which the composer covers by keeping the tab's
+   * own model as an option rather than rendering an empty menu.
+   */
+  const promptModels = createMemo(() => {
+    const catalogue = state.models.find((entry) => entry.agent === "claude");
+    const enabled = state.settings?.models.claude.enabled ?? [];
+    return (catalogue?.models ?? [])
+      .filter((model) => enabled.includes(model.id))
+      .map((model) => ({ value: model.id, label: model.name }));
+  });
+
   function itemsFor(projectId: string): ProjectItem[] {
     return state.items[projectId] ?? [];
   }
@@ -215,10 +239,13 @@ function createWorkspace() {
 
       await subscribe(backend);
 
-      const [projects, settings, agents, rateLimits] = await Promise.all([
+      const [projects, settings, agents, models, rateLimits] = await Promise.all([
         backend.listProjects(),
         backend.getSettings(),
         backend.listAgentStatus(false),
+        // Compiled catalogues only. Discovery spawns a CLI per agent, which is
+        // too slow to sit in front of the first paint; Settings can ask for it.
+        backend.listModels(false),
         backend.listRateLimits(),
       ]);
 
@@ -226,6 +253,7 @@ function createWorkspace() {
         setState("projects", reconcile(projects));
         setState("settings", settings);
         setState("agents", reconcile(agents));
+        setState("models", reconcile(models));
         setState(
           "rateLimits",
           // A limit whose reset time has already passed is history, not state.
@@ -652,9 +680,72 @@ function createWorkspace() {
     async recheckAgents() {
       setState("agents", reconcile(await client().listAgentStatus(true)));
     },
+    /**
+     * Re-read the catalogues, asking each CLI to enumerate where it can.
+     *
+     * Only Codex answers today, so this is mostly a Codex refresh; the other two
+     * come back on their compiled lists with `discovered: false`, which the
+     * Settings provenance line reports honestly rather than hiding.
+     */
+    async refreshModels() {
+      setState("models", reconcile(await client().listModels(true)));
+    },
+    /**
+     * Add or remove a model from an agent's picker.
+     *
+     * Holds the two invariants that keep a picker non-empty: the last enabled
+     * model cannot be removed, and removing the default promotes another entry
+     * rather than leaving `default` pointing at something the picker no longer
+     * offers. Both are enforced here instead of in the UI so a keyboard path or
+     * a future caller cannot route around them.
+     */
+    async toggleModel(agent: Agent, modelId: string, enabled: boolean) {
+      const current = state.settings?.models[agent];
+      if (!current) return;
+
+      const next = enabled
+        ? [...new Set([...current.enabled, modelId])]
+        : current.enabled.filter((id) => id !== modelId);
+      if (next.length === 0) return;
+
+      // Order the selection by the catalogue rather than by click order, so the
+      // picker reads in the vendor's ranking however it was assembled.
+      const catalogue = state.models.find((entry) => entry.agent === agent);
+      const ordered = catalogue
+        ? catalogue.models.filter((model) => next.includes(model.id)).map((model) => model.id)
+        : next;
+
+      await actions.saveSettings({
+        models: {
+          [agent]: {
+            enabled: ordered,
+            default: ordered.includes(current.default) ? current.default : ordered[0],
+          },
+        },
+      });
+    },
+    /** Preselect a model. Enabling it first, since a default must be offered. */
+    async setDefaultModel(agent: Agent, modelId: string) {
+      const current = state.settings?.models[agent];
+      if (!current) return;
+      const enabled = current.enabled.includes(modelId)
+        ? current.enabled
+        : [...current.enabled, modelId];
+      await actions.saveSettings({ models: { [agent]: { enabled, default: modelId } } });
+    },
   };
 
-  return { state, actions, activeTab, activeProject, tabStatus, itemsFor, openItemCount, init };
+  return {
+    state,
+    actions,
+    activeTab,
+    activeProject,
+    tabStatus,
+    itemsFor,
+    openItemCount,
+    promptModels,
+    init,
+  };
 }
 
 export type Workspace = ReturnType<typeof createWorkspace>;

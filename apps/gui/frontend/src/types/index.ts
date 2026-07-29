@@ -205,6 +205,67 @@ export interface AgentStatus {
   checkedAt: string;
 }
 
+/** Whether an id names one model or points at whichever is current. */
+export type ModelKind = "alias" | "pinned";
+
+/**
+ * How the crate established a catalogue, weakest evidence wins.
+ *
+ * `cli` means the CLI itself was asked and can be asked again. `picker` was read
+ * out of an interactive picker and ages silently. `docs` came from vendor
+ * documentation and says nothing about the installed binary.
+ */
+export type ModelSource = "cli" | "picker" | "docs";
+
+/** One model a caller can choose. Mirrors `agent_abstraction::Model`. */
+export interface Model {
+  /** Exactly what goes to `--model`, passed through verbatim. */
+  id: string;
+  /** The vendor's own display name. */
+  name: string;
+  /** One line on what it is for. Empty when the vendor offers none. */
+  note: string;
+  kind: ModelKind;
+  /** Reasoning levels this model accepts, in the vendor's order. Often empty. */
+  efforts: string[];
+  /** What the agent falls back to when no model is named. */
+  isDefault: boolean;
+}
+
+/**
+ * One agent's catalogue.
+ *
+ * Advisory, and never an entitlement: what an agent offers and what an account
+ * may use are different sets, and only the account knows the second. A model the
+ * plan does not cover fails at run time with the provider's own wording, which is
+ * a better error than a picker that quietly hides it.
+ */
+export interface AgentModels {
+  agent: Agent;
+  models: Model[];
+  source: ModelSource;
+  /** ISO date the catalogue was last checked. */
+  checked: string;
+  /** The CLI release it was checked against. */
+  against: string;
+  /** True when the CLI was asked just now, false when the compiled list was used. */
+  discovered: boolean;
+}
+
+/**
+ * Which models the user wants offered for one agent, and which is preselected.
+ *
+ * Catalogues are long and account-specific, so the picker shows what was chosen
+ * here rather than everything the vendor lists. Two invariants hold, both
+ * enforced in the store: `default` is always a member of `enabled`, and `enabled`
+ * is never emptied. Together they mean a picker can never end up with nothing in
+ * it.
+ */
+export interface ModelSelection {
+  enabled: string[];
+  default: string;
+}
+
 export interface ModeratorSettings {
   enabled: boolean;
   /** The watcher runs as its own agent — a cheap model is the point. */
@@ -227,7 +288,14 @@ export interface NotificationSettings {
 /** One record, persisted. Every new tab starts from it. */
 export interface GlobalSettings {
   defaultAgent: Agent;
-  defaultModel: string;
+  /**
+   * Per agent, which models the picker offers and which one it starts on.
+   *
+   * This replaces the design's single `defaultModel`, which could not express a
+   * per-agent choice. The prompt reads the `claude` entry; `codex` and `copilot`
+   * are collected now and consumed by the code review UI later.
+   */
+  models: Record<Agent, ModelSelection>;
   defaultPermission: Permission;
   moderator: ModeratorSettings;
   envPolicy: EnvPolicy;

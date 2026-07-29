@@ -16,7 +16,7 @@ import type { Tab } from "~/types";
  * promise resolves, so a failed create leaves the draft exactly as typed.
  */
 export function DraftTab(props: { tab: Tab }): JSX.Element {
-  const { actions } = useWorkspace();
+  const { actions, promptModels } = useWorkspace();
 
   return (
     <Panel class="flex min-w-0 flex-1 items-center justify-center p-7">
@@ -26,6 +26,7 @@ export function DraftTab(props: { tab: Tab }): JSX.Element {
           autofocus
           placeholder="Type to start your new project…"
           model={props.tab.model}
+          modelOptions={promptModels()}
           permission={props.tab.permission}
           onModelChange={(model) => actions.setTabModel(props.tab.key, model, props.tab.permission)}
           onPermissionChange={(permission) =>

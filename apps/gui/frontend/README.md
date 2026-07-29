@@ -225,6 +225,13 @@ they are not fetched from an icon package at build time either.
 - **The moderator note's subtitle shows the moderator's model** ("supervising · haiku") where
   the mockup shows "supervising · bypass mode". The model is what the message actually
   records; the posture on a moderator message is the *moderator's*, not the supervised run's.
+- **`GlobalSettings.defaultModel` became `GlobalSettings.models`**, a
+  `Record<Agent, { enabled: string[]; default: string }>`. A single default model could not
+  express which models a picker should offer, and the three agents have separate catalogues
+  with overlapping ids, so a Codex id and a Copilot id that read the same are different
+  models. Settings picks per agent; the prompt reads the `claude` entry, and Codex and
+  Copilot are collected for the code review UI. See
+  [`docs/agent-model-surface.md`](../../../docs/agent-model-surface.md).
 - **Only `taskPlacement: "panel"` is built.** The dock and inline variants are a mockup
   tweak; the type keeps them open.
 - **"Add dir" takes a typed path**, not a native folder picker — that needs the Tauri dialog

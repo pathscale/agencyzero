@@ -1,7 +1,96 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+use agent_abstraction::{Agent, Model, Source};
+use serde::Serialize;
 use tauri::menu::{AboutMetadata, Menu, MenuBuilder, MenuItemBuilder, SubmenuBuilder};
 use tauri::{AppHandle, Emitter, Runtime};
+
+/// Every agent this build can drive. `Agent` is not iterable, so the list is
+/// named once here rather than at each call site.
+const AGENTS: [Agent; 3] = [Agent::Claude, Agent::Codex, Agent::Copilot];
+
+/// One model, renamed for the webview.
+///
+/// The crate serializes `is_default` in snake_case and every type the frontend
+/// already has is camelCase, so a DTO does the renaming rather than the
+/// TypeScript bending to match one field. `kind` needs no help: its own serde
+/// attribute already emits `alias` / `pinned`.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ModelDto {
+    id: String,
+    name: String,
+    note: String,
+    kind: agent_abstraction::Kind,
+    efforts: Vec<String>,
+    is_default: bool,
+}
+
+impl From<Model> for ModelDto {
+    fn from(model: Model) -> Self {
+        ModelDto {
+            id: model.id.into_owned(),
+            name: model.name.into_owned(),
+            note: model.note.into_owned(),
+            kind: model.kind,
+            efforts: model.efforts.into_iter().map(|e| e.into_owned()).collect(),
+            is_default: model.is_default,
+        }
+    }
+}
+
+/// One agent's catalogue, flattened so the webview does not have to reach
+/// through a nested `verified` object to render a single provenance line.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct AgentModelsDto {
+    agent: Agent,
+    models: Vec<ModelDto>,
+    source: Source,
+    checked: String,
+    against: String,
+    discovered: bool,
+}
+
+/// Every agent's model catalogue.
+///
+/// With `discover`, each CLI is asked to enumerate rather than trusting the
+/// crate's compiled list. Only Codex can answer that today; Claude and Copilot
+/// return `Error::Unsupported` and fall back here.
+///
+/// A discovery failure is **not** an error for the whole call. It falls back to
+/// the compiled list with `discovered: false`, which is the same thing the two
+/// agents that cannot be asked report. That is not a silent downgrade: the
+/// frontend renders provenance from these fields, so a failed discovery reads as
+/// "from vendor documentation, checked <date>" rather than "asked just now", and
+/// the difference is visible in Settings. Failing the whole call instead would
+/// leave the picker with nothing over one agent's bad output.
+#[tauri::command]
+async fn list_models(discover: bool) -> Vec<AgentModelsDto> {
+    let mut catalogues = Vec::with_capacity(AGENTS.len());
+    for agent in AGENTS {
+        let verified = agent.models_verified();
+        let discovered = if discover {
+            agent.discover_models().await.ok()
+        } else {
+            None
+        };
+        let has_discovered = discovered.is_some();
+        catalogues.push(AgentModelsDto {
+            agent,
+            models: discovered
+                .unwrap_or_else(|| agent.models())
+                .into_iter()
+                .map(ModelDto::from)
+                .collect(),
+            source: verified.source,
+            checked: verified.checked.to_string(),
+            against: verified.against.to_string(),
+            discovered: has_discovered,
+        });
+    }
+    catalogues
+}
 
 /// Hello-world IPC round trip: the frontend calls this over Tauri's invoke
 /// bridge and renders the reply, proving webview <-> Rust wiring works.
@@ -104,7 +193,7 @@ fn build_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> {
 
 fn main() {
     tauri::Builder::default()
-        .invoke_handler(tauri::generate_handler![greet])
+        .invoke_handler(tauri::generate_handler![greet, list_models])
         .setup(|app| {
             app.set_menu(build_menu(app.handle())?)?;
             Ok(())
@@ -124,4 +213,58 @@ fn main() {
         })
         .run(tauri::generate_context!())
         .expect("failed to run AgencyZero GUI");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The webview's `AgentModels` type is camelCase and the crate's `Model` is
+    /// not, so the DTO is the only thing keeping the two in step. A rename that
+    /// silently reverted would leave every model reading as not-default.
+    #[tokio::test]
+    async fn catalogues_serialize_in_the_shape_the_webview_expects() {
+        let catalogues = list_models(false).await;
+        assert_eq!(catalogues.len(), AGENTS.len());
+
+        let json = serde_json::to_value(&catalogues).expect("should serialize");
+        let claude = &json[0];
+        assert_eq!(claude["agent"], "claude");
+        assert!(
+            claude["models"].as_array().is_some_and(|m| !m.is_empty()),
+            "an empty catalogue would leave the picker with nothing"
+        );
+        assert!(
+            claude["models"][0].get("isDefault").is_some(),
+            "is_default must reach the webview as isDefault: {}",
+            claude["models"][0]
+        );
+        assert!(
+            claude["models"][0].get("is_default").is_none(),
+            "the snake_case field must not also be emitted"
+        );
+    }
+
+    /// Without `discover` nothing is spawned, so every entry must say so. The
+    /// Settings provenance line reads this to decide between "asked just now"
+    /// and naming the weaker evidence behind the compiled list.
+    #[tokio::test]
+    async fn a_compiled_catalogue_never_claims_to_have_been_discovered() {
+        for catalogue in list_models(false).await {
+            assert!(
+                !catalogue.discovered,
+                "{:?} claimed discovery without being asked",
+                catalogue.agent
+            );
+        }
+    }
+
+    /// Exactly one preselection per agent, or the picker opens on nothing.
+    #[tokio::test]
+    async fn every_agent_offers_one_default() {
+        for catalogue in list_models(false).await {
+            let defaults = catalogue.models.iter().filter(|m| m.is_default).count();
+            assert_eq!(defaults, 1, "{:?} should mark one default", catalogue.agent);
+        }
+    }
 }
