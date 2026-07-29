@@ -45,7 +45,9 @@ type WorkspaceState = {
   models: AgentModels[];
   tabs: Tab[];
   activeKey: string;
-  backend: "tauri" | "mock" | "loading";
+  backend: "tauri" | "mock" | "hybrid" | "loading";
+  /** Which API methods reach Rust. Empty on the mock; see `isLive`. */
+  live: (keyof AgencyZeroApi)[];
   /**
    * "not finished" and "failed" are different things, and a single boolean
    * cannot tell them apart — a failure halfway through hydration would leave
@@ -77,6 +79,7 @@ const HOME_TAB: Tab = {
   projectId: null,
   label: "Home",
   model: "sonnet",
+  effort: "",
   permission: "read_only",
   status: "quiet",
 };
@@ -96,6 +99,7 @@ function createWorkspace() {
     tabs: [HOME_TAB],
     activeKey: "home",
     backend: "loading",
+    live: [],
     boot: { status: "loading" },
   });
 
@@ -190,6 +194,37 @@ function createWorkspace() {
       .map((model) => ({ value: model.id, label: model.name }));
   });
 
+  /**
+   * Whether a command is backed by Rust rather than by fixtures.
+   *
+   * Used to grey out controls whose backend does not exist yet, so wiring
+   * progress is visible in the UI instead of tracked in a document that goes
+   * stale.
+   *
+   * Outside Tauri this always answers true. There is no Rust process to be
+   * backed by, and greying out the entire Settings screen would defeat the
+   * design-review pass the mock exists for. The footer already says the whole
+   * window is running on fixtures, which is the honest signal in that mode.
+   */
+  function isLive(method: keyof AgencyZeroApi): boolean {
+    if (state.backend === "mock") return true;
+    return state.live.includes(method);
+  }
+
+  /**
+   * The reasoning ladder a model accepts, from the Claude catalogue.
+   *
+   * Empty for a model the catalogue does not establish one for, which today is
+   * every Claude entry: `agent-abstraction` leaves `efforts` empty there because
+   * Claude's levels are not a `--model` value and were not verified. The
+   * composer hides the control rather than inventing a list, and this starts
+   * returning levels the moment the crate carries them.
+   */
+  function effortsFor(modelId: string): string[] {
+    const catalogue = state.models.find((entry) => entry.agent === "claude");
+    return catalogue?.models.find((model) => model.id === modelId)?.efforts ?? [];
+  }
+
   function itemsFor(projectId: string): ProjectItem[] {
     return state.items[projectId] ?? [];
   }
@@ -233,9 +268,12 @@ function createWorkspace() {
    */
   async function init(): Promise<void> {
     try {
-      const { api: backend, backend: kind } = await selectApi();
+      const { api: backend, backend: kind, live } = await selectApi();
       setApi(() => backend);
-      setState("backend", kind);
+      batch(() => {
+        setState("backend", kind);
+        setState("live", [...live]);
+      });
 
       await subscribe(backend);
 
@@ -297,6 +335,7 @@ function createWorkspace() {
       projectId: project.id,
       label: project.name,
       model: prefs.lastModel,
+      effort: "",
       permission: prefs.lastPermission,
       status: "quiet",
     };
@@ -530,6 +569,7 @@ function createWorkspace() {
         projectId: null,
         label: "Untitled",
         model: prefs.lastModel,
+        effort: "",
         permission: prefs.lastPermission,
         status: "quiet",
       },
@@ -741,6 +781,8 @@ function createWorkspace() {
     activeTab,
     activeProject,
     tabStatus,
+    isLive,
+    effortsFor,
     itemsFor,
     openItemCount,
     promptModels,

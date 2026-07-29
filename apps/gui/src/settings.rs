@@ -1,0 +1,203 @@
+//! The settings record, owned by Rust and persisted through [`crate::store`].
+//!
+//! Rust holds the shape because Rust holds the file. The frontend's
+//! `GlobalSettings` mirrors this, and every field carries `#[serde(default)]` so
+//! a record written by an older build still loads when the frontend adds a
+//! setting, rather than failing the read and resetting everything the user
+//! chose.
+
+use std::collections::BTreeMap;
+
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
+
+/// Where the record lives in the store.
+pub const KEY: &str = "settings";
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct GlobalSettings {
+    pub default_agent: String,
+    /// Per agent: which models the picker offers, and which one it starts on.
+    pub models: BTreeMap<String, ModelSelection>,
+    pub default_permission: String,
+    pub moderator: Moderator,
+    pub env_policy: String,
+    pub forward_proxy_vars: bool,
+    pub notifications: Notifications,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct ModelSelection {
+    pub enabled: Vec<String>,
+    pub default: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct Moderator {
+    pub enabled: bool,
+    pub model: String,
+    pub sees: Vec<String>,
+    pub on_check: String,
+    pub on_critical: String,
+    pub confine_to_dirs: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct Notifications {
+    pub on_hold: bool,
+    pub on_run_finished: bool,
+    pub on_task_failed: bool,
+    pub on_rate_limited: bool,
+    pub sound: bool,
+}
+
+impl Default for ModelSelection {
+    fn default() -> Self {
+        ModelSelection {
+            enabled: vec!["default".into()],
+            default: "default".into(),
+        }
+    }
+}
+
+impl Default for Moderator {
+    fn default() -> Self {
+        Moderator {
+            enabled: true,
+            model: "haiku".into(),
+            sees: vec!["transcript".into(), "events".into()],
+            on_check: "hold_step".into(),
+            on_critical: "cancel_run".into(),
+            confine_to_dirs: true,
+        }
+    }
+}
+
+impl Default for Notifications {
+    fn default() -> Self {
+        Notifications {
+            on_hold: true,
+            on_run_finished: true,
+            on_task_failed: true,
+            on_rate_limited: true,
+            sound: false,
+        }
+    }
+}
+
+impl Default for GlobalSettings {
+    /// What a first launch starts from.
+    ///
+    /// A deliberately short model selection out of long catalogues: the four
+    /// Claude aliases that name models, Codex's top three, and the only Copilot
+    /// id a Free plan permits. The rest are one checkbox away in Settings.
+    fn default() -> Self {
+        let sel = |enabled: &[&str], default: &str| ModelSelection {
+            enabled: enabled.iter().map(|s| (*s).to_string()).collect(),
+            default: default.to_string(),
+        };
+        GlobalSettings {
+            default_agent: "claude".into(),
+            models: BTreeMap::from([
+                (
+                    "claude".to_string(),
+                    sel(&["default", "opus", "sonnet", "haiku"], "sonnet"),
+                ),
+                (
+                    "codex".to_string(),
+                    sel(&["gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.5"], "gpt-5.6-sol"),
+                ),
+                ("copilot".to_string(), sel(&["auto"], "auto")),
+            ]),
+            default_permission: "read_only".into(),
+            moderator: Moderator::default(),
+            env_policy: "minimal".into(),
+            forward_proxy_vars: false,
+            notifications: Notifications::default(),
+        }
+    }
+}
+
+/// Merge a partial patch into a stored record.
+///
+/// Objects merge key by key; everything else replaces. **Arrays replace rather
+/// than merge**, which is what the model selection needs: unchecking a model
+/// sends the shorter list, and an element-wise merge would keep the removed id.
+pub fn merge(target: &mut Value, patch: &Value) {
+    match (target, patch) {
+        (Value::Object(target), Value::Object(patch)) => {
+            for (key, value) in patch {
+                if value.is_null() {
+                    target.remove(key);
+                } else {
+                    merge(target.entry(key.clone()).or_insert(Value::Null), value);
+                }
+            }
+        }
+        (target, patch) => *target = patch.clone(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn defaults_round_trip_through_json() {
+        let json = serde_json::to_string(&GlobalSettings::default()).expect("should serialize");
+        let back: GlobalSettings = serde_json::from_str(&json).expect("should deserialize");
+        assert_eq!(back.models["claude"].default, "sonnet");
+        assert!(json.contains("defaultAgent"), "must be camelCase: {json}");
+    }
+
+    /// A record written before a setting existed must still load. Without the
+    /// serde defaults this would fail the read, and a failed read resets
+    /// everything the user chose.
+    #[test]
+    fn a_record_missing_newer_fields_still_loads() {
+        let old = r#"{"defaultAgent":"codex"}"#;
+        let loaded: GlobalSettings = serde_json::from_str(old).expect("should tolerate absence");
+        assert_eq!(loaded.default_agent, "codex");
+        assert_eq!(
+            loaded.moderator.model, "haiku",
+            "absent blocks use defaults"
+        );
+    }
+
+    /// The case the model picker depends on: unchecking a model sends a shorter
+    /// array, and merging element-wise would silently keep what was removed.
+    #[test]
+    fn arrays_replace_rather_than_merge() {
+        let mut target = serde_json::json!({
+            "models": { "claude": { "enabled": ["default", "opus", "sonnet"], "default": "sonnet" } }
+        });
+        let patch = serde_json::json!({
+            "models": { "claude": { "enabled": ["default"], "default": "default" } }
+        });
+        merge(&mut target, &patch);
+        assert_eq!(
+            target["models"]["claude"]["enabled"],
+            serde_json::json!(["default"])
+        );
+    }
+
+    /// A patch touching one agent must not disturb another.
+    #[test]
+    fn a_patch_leaves_untouched_branches_alone() {
+        let mut target = serde_json::to_value(GlobalSettings::default()).expect("should serialize");
+        let patch = serde_json::json!({ "models": { "claude": { "enabled": ["opus"], "default": "opus" } } });
+        merge(&mut target, &patch);
+
+        let merged: GlobalSettings = serde_json::from_value(target).expect("should deserialize");
+        assert_eq!(merged.models["claude"].default, "opus");
+        assert_eq!(
+            merged.models["codex"].default, "gpt-5.6-sol",
+            "codex should be untouched"
+        );
+        assert_eq!(merged.env_policy, "minimal", "unrelated fields survive");
+    }
+}

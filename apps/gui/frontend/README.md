@@ -232,6 +232,15 @@ they are not fetched from an icon package at build time either.
   models. Settings picks per agent; the prompt reads the `claude` entry, and Codex and
   Copilot are collected for the code review UI. See
   [`docs/agent-model-surface.md`](../../../docs/agent-model-surface.md).
+- **The composer row does not match `design/workspace.html`.** The design puts the model
+  pill on the left, right after Attach. A newer reference puts posture and input controls
+  left and the model on the right, with a reasoning-effort control beside it, and that is
+  what is built. Design has not caught up yet.
+- **The effort control is present but never renders for Claude.** It is sourced from the
+  selected model's `efforts`, and `agent-abstraction` leaves that empty for every Claude
+  entry: the levels are real (`claude --effort low|medium|high|xhigh|max`) but they are not
+  a `--model` value and the crate has not verified them. Hiding the control beats filling it
+  with a list nothing established. It starts working when the crate carries the ladder.
 - **Only `taskPlacement: "panel"` is built.** The dock and inline variants are a mockup
   tweak; the type keeps them open.
 - **"Add dir" takes a typed path**, not a native folder picker — that needs the Tauri dialog

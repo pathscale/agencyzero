@@ -23,6 +23,16 @@ export type ComposerProps = {
    * opinion on which models exist.
    */
   modelOptions: { value: string; label: string }[];
+  /**
+   * Reasoning levels the selected model accepts, in the vendor's order.
+   *
+   * Empty means the catalogue does not establish a ladder for this model, which
+   * is different from "this model has no effort setting". The control is hidden
+   * in that case rather than guessed at.
+   */
+  efforts: string[];
+  effort: string;
+  onEffortChange?: (effort: string) => void;
   permission: Permission;
   onModelChange: (model: string) => void;
   onPermissionChange: (permission: Permission) => void;
@@ -147,30 +157,15 @@ export function Composer(props: ComposerProps): JSX.Element {
           )}
         </Show>
 
+        {/*
+          Posture and input controls left, model and effort right, per the newer
+          reference. This departs from design/workspace.html, which puts the
+          model pill on the left after Attach; recorded in the frontend README.
+        */}
         <div class="flex items-center gap-2.5">
-          <button
-            type="button"
-            title="Attach"
-            aria-label="Attach"
-            class="flex size-[30px] items-center justify-center rounded-full border border-az-hairline-strong text-az-body transition-colors hover:border-white/30 hover:text-az-title"
-          >
-            <Icon name="plus" class="text-[16px]" />
-          </button>
-
-          <PillMenu
-            label="Model"
-            prefix="Claude"
-            icon="sparkles"
-            iconClass="text-primary"
-            value={props.model}
-            options={options()}
-            onChange={props.onModelChange}
-          />
-
           <PillMenu
             label="Permission"
             icon="lock"
-            variant="outline"
             value={props.permission}
             options={PERMISSION_ORDER.map((permission) => ({
               value: permission,
@@ -180,11 +175,14 @@ export function Composer(props: ComposerProps): JSX.Element {
             onChange={props.onPermissionChange}
           />
 
-          <div class="flex-1" />
-
-          <Show when={props.usage}>
-            <span class="font-mono text-[11.5px] text-az-faint">{props.usage}</span>
-          </Show>
+          <button
+            type="button"
+            title="Attach"
+            aria-label="Attach"
+            class="flex size-[30px] items-center justify-center rounded-full border border-az-hairline-strong text-az-body transition-colors hover:border-white/30 hover:text-az-title"
+          >
+            <Icon name="plus" class="text-[16px]" />
+          </button>
 
           <button
             type="button"
@@ -194,6 +192,41 @@ export function Composer(props: ComposerProps): JSX.Element {
           >
             <Icon name="mic" class="text-[16px]" />
           </button>
+
+          <div class="flex-1" />
+
+          <Show when={props.usage}>
+            <span class="font-mono text-[11.5px] text-az-faint">{props.usage}</span>
+          </Show>
+
+          <PillMenu
+            label="Model"
+            prefix="Claude"
+            icon="sparkles"
+            iconClass="text-primary"
+            variant="outline"
+            value={props.model}
+            options={options()}
+            onChange={props.onModelChange}
+          />
+
+          {/*
+            Effort is per model, not per agent, so the ladder comes from the
+            catalogue entry rather than a shared list. A model whose ladder the
+            crate has not established reports none, and the control is hidden
+            rather than filled with a guess: `agent-abstraction` leaves Claude's
+            `efforts` empty on purpose, and inventing levels here would put a
+            list in the UI that nothing verified.
+          */}
+          <Show when={props.efforts.length > 0}>
+            <PillMenu
+              label="Effort"
+              variant="outline"
+              value={props.effort}
+              options={props.efforts.map((effort) => ({ value: effort, label: effort }))}
+              onChange={(effort) => props.onEffortChange?.(effort)}
+            />
+          </Show>
 
           <Show
             when={props.isRunning}

@@ -60,8 +60,24 @@ const AGENT_USE: Record<Agent, string> = {
  * there is nothing to batch.
  */
 export function SettingsTab(): JSX.Element {
-  const { state, actions } = useWorkspace();
+  const { state, actions, isLive } = useWorkspace();
   const settings = () => state.settings;
+
+  /**
+   * Why a section is not wired yet, or `undefined` when it is.
+   *
+   * Two different gaps, and they are worth telling apart. A command Rust has not
+   * implemented is a backend gap the capability probe already knows about. A
+   * setting that persists correctly but that nothing reads is a *consumer* gap:
+   * `set_settings` stores the moderator config faithfully and no moderator runs,
+   * because the agent run path does not exist. Only the second needs saying by
+   * hand, and it is deliberately short.
+   */
+  const runPathPending = (): string | undefined =>
+    isLive("sendMessage") ? undefined : "needs the agent run path";
+
+  /** The moderator rides the same run, so it unblocks with it. */
+  const moderatorPending = (): string | undefined => runPathPending();
 
   /**
    * The catalogue entries this agent's picker may show.
@@ -184,6 +200,7 @@ export function SettingsTab(): JSX.Element {
                 icon="shield"
                 title="Moderator"
                 hint="a second agent watching the stream — costs tokens"
+                pending={moderatorPending()}
               >
                 <Row
                   label="Enabled by default"
@@ -246,7 +263,12 @@ export function SettingsTab(): JSX.Element {
                 </div>
               </Section>
 
-              <Section icon="info" title="Notifications" hint="while you are in another window">
+              <Section
+                icon="info"
+                title="Notifications"
+                hint="while you are in another window"
+                pending={runPathPending()}
+              >
                 <Row label="A hold needs your approval">
                   <SettingToggle
                     label="Notify on a hold"
@@ -293,6 +315,7 @@ export function SettingsTab(): JSX.Element {
               <Section
                 icon="lock"
                 title="Environment"
+                pending={runPathPending()}
                 hint="what the agent process inherits from this machine"
               >
                 <Row
@@ -341,16 +364,48 @@ function Section(props: {
   icon: IconProps["name"];
   title: string;
   hint: string;
+  /**
+   * What this section still needs before its controls do anything.
+   *
+   * Present means not wired: the whole body renders disabled and says why. A
+   * setting that saves correctly but that nothing reads is not finished, and
+   * leaving it interactive invites someone to configure a moderator that will
+   * never run.
+   */
+  pending?: string;
   children: JSX.Element;
 }): JSX.Element {
   return (
     <Panel class="flex-none rounded-[13px]">
-      <div class="flex items-baseline gap-2.5 px-3.5 pt-3 pb-2.5">
+      <div class="flex flex-wrap items-baseline gap-x-2.5 gap-y-1 px-3.5 pt-3 pb-2.5">
         <Icon name={props.icon} class="relative top-0.5 text-[14px] text-az-muted" />
-        <h2 class="font-semibold text-[13px] text-az-title">{props.title}</h2>
+        <h2
+          class="font-semibold text-[13px]"
+          classList={{ "text-az-title": !props.pending, "text-az-muted": !!props.pending }}
+        >
+          {props.title}
+        </h2>
         <span class="text-[11.5px] text-az-muted">{props.hint}</span>
+        <Show when={props.pending}>
+          {(reason) => (
+            <span class="ml-auto shrink-0 rounded border border-az-hairline px-1.5 py-px text-[10px] text-az-muted">
+              not wired · {reason()}
+            </span>
+          )}
+        </Show>
       </div>
-      {props.children}
+      {/*
+        `inert` rather than a disabled prop on every control: it takes the whole
+        subtree out of the tab order and out of pointer events in one place, so
+        a control added later cannot be accidentally live.
+      */}
+      <div
+        // @ts-expect-error inert is valid HTML but not yet in Solid's JSX types
+        inert={props.pending ? "" : undefined}
+        classList={{ "pointer-events-none opacity-45": !!props.pending }}
+      >
+        {props.children}
+      </div>
     </Panel>
   );
 }

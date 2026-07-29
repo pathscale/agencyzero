@@ -314,6 +314,11 @@ export interface Tab {
   label: string;
   /** The tab's model. Swapping it in the composer sticks until changed again. */
   model: string;
+  /**
+   * The tab's reasoning effort, empty when the model's catalogue entry does not
+   * establish a ladder. Empty is "not established", not "no effort setting".
+   */
+  effort: string;
   /** The tab's posture for the whole session. Lives only in the composer pill. */
   permission: Permission;
   status: TabStatus;
