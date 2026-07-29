@@ -191,4 +191,21 @@
   .az-scroll::-webkit-scrollbar-track {
     background: transparent;
   }
+
+  /*
+   * Scrolls, shows nothing. The tab strip overflows sideways and a horizontal
+   * scrollbar under the tabs is both ugly and — sitting inside the window's
+   * drag region, a few pixels tall — effectively unclickable. Arrows do that
+   * job instead.
+   */
+  .az-scroll-x {
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+
+  .az-scroll-x::-webkit-scrollbar {
+    display: none;
+  }
 }

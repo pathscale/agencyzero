@@ -1,4 +1,4 @@
-import { createSignal, type JSX, Show } from "solid-js";
+import { createSignal, type JSX, onMount, Show } from "solid-js";
 import { Icon } from "~/components/Icon";
 import { PillMenu } from "~/components/PillMenu";
 import { MODELS, PERMISSION_LABELS, PERMISSION_ORDER } from "~/lib/labels";
@@ -30,6 +30,7 @@ export type ComposerProps = {
   onStop?: () => void;
   /** Larger prompt text, centred layout — the new-project variant. */
   size?: "md" | "lg";
+  /** Put the cursor here on mount, so an opened tab is ready to type into. */
   autofocus?: boolean;
 };
 
@@ -71,6 +72,16 @@ export function Composer(props: ComposerProps): JSX.Element {
     }
   }
 
+  /*
+   * `autofocus` as an attribute is only honoured on the initial page load, and
+   * this element is mounted when a tab opens — so the browser ignores it and
+   * the cursor lands nowhere. Focused explicitly instead, which is the point:
+   * open a tab and start typing.
+   */
+  onMount(() => {
+    if (props.autofocus) field.focus();
+  });
+
   /** Grow with the content up to a ceiling, then scroll — no jumping layout. */
   function resize(): void {
     field.style.height = "auto";
@@ -88,7 +99,6 @@ export function Composer(props: ComposerProps): JSX.Element {
           ref={field}
           rows={1}
           value={draft()}
-          autofocus={props.autofocus}
           placeholder={props.placeholder}
           aria-label={props.placeholder}
           onInput={(event) => {

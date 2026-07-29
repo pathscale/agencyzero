@@ -78,6 +78,7 @@ export function ProjectTab(props: { tab: Tab; project: Project }): JSX.Element {
 
         <div class="flex flex-none flex-col gap-2.5 px-4 pt-2 pb-4">
           <Composer
+            autofocus
             placeholder="Ask, or type / for commands…"
             model={props.tab.model}
             permission={props.tab.permission}
