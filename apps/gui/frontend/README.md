@@ -56,7 +56,7 @@ replaces the capability `tauri-build` generates when there isn't one.
 
 ## Tabs
 
-⌃T opens a new project, ⌘W closes the tab, ⌘1 selects the previous and ⌘2 the next — both
+⌃N opens a new project, ⌘W closes the tab, ⌘1 selects the previous and ⌘2 the next — both
 cycling wrap. These are **native menu accelerators**, defined in
 [`../src/main.rs`](../src/main.rs): macOS delivers them whatever has focus, and the menu bar
 is where a keybinding is discoverable. The menu items carry ids, not behaviour; Rust emits
@@ -64,9 +64,13 @@ is where a keybinding is discoverable. The menu items carry ids, not behaviour; 
 [`useAppShell.ts`](src/features/shell/useAppShell.ts) answers them with the same actions the
 strip uses.
 
-New project is ⌃T rather than ⌘T by request. Worth knowing: on macOS ⌃T is Cocoa's
-transpose-characters binding in text fields, and a menu accelerator shadows it — so it no
-longer transposes inside the composer.
+New project is ⌃N rather than ⌘N by request. Worth knowing, because it is a real cost: a
+menu accelerator is app-global, so it shadows Cocoa's ⌃N (move down one line) inside text
+fields. The whole emacs-style set — ⌃A ⌃E ⌃B ⌃F ⌃P ⌃N ⌃K ⌃T — has the same problem, so any
+Ctrl-letter binding takes something away from the composer. **⌘N is the one shortcut for
+"new" that collides with nothing**; switching is a one-line change to the accelerator in
+[`../src/main.rs`](../src/main.rs) and the matching branch in
+[`shortcuts.ts`](src/features/tabs/shortcuts.ts).
 
 [`shortcuts.ts`](src/features/tabs/shortcuts.ts) binds these in the webview **only outside
 Tauri**, so they work under `bun run dev` in a browser — though a browser takes ⌃T for its

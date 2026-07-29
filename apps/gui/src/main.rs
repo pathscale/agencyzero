@@ -59,10 +59,13 @@ fn build_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> {
         .select_all()
         .build()?;
 
-    // Ctrl+T rather than Cmd+T, as asked for. Note this shadows Cocoa's
-    // transpose-characters binding inside text fields.
+    // Ctrl+N rather than Cmd+N, as asked for. A menu accelerator is app-global,
+    // so it shadows Cocoa's Ctrl+N (move down one line) inside text fields —
+    // the same class of conflict Ctrl+T had with transpose. Cmd+N is the one
+    // binding for "new" that collides with nothing; this is the deliberate
+    // choice, not an oversight.
     let new_project = MenuItemBuilder::with_id(NEW_PROJECT, "New Project")
-        .accelerator("Ctrl+T")
+        .accelerator("Ctrl+N")
         .build(app)?;
     let close_tab = MenuItemBuilder::with_id(CLOSE_TAB, "Close Tab")
         .accelerator("CmdOrCtrl+W")
