@@ -31,7 +31,20 @@ export type TabStatus = "running" | "blocked" | "error" | "ready" | "quiet";
 export type Agent = "claude" | "codex" | "copilot";
 
 /** `Permission` in the crate. `read_only` is the default and widens deliberately. */
-export type Permission = "read_only" | "plan" | "edit" | "auto" | "bypass";
+export type Permission = "read_only" | "plan" | "ask" | "edit" | "auto" | "bypass";
+
+/**
+ * A tool call the agent is waiting for permission to make.
+ *
+ * `input` is the arguments exactly as the agent sent them — **show it**: for
+ * Bash the command lives there, and approving on the tool name alone approves
+ * an unseen command. The run is blocked mid-turn until this is answered.
+ */
+export interface PendingApproval {
+  approvalId: string;
+  tool: string;
+  input: unknown;
+}
 
 /** Who is speaking in the transcript. */
 export type MessageAuthor = "user" | "agent" | "moderator";

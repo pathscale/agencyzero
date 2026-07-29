@@ -22,6 +22,7 @@ import type {
   DataLocation,
   GlobalSettings,
   Message,
+  PendingApproval,
   Permission,
   Project,
   ProjectItem,
@@ -52,6 +53,15 @@ type WorkspaceState = {
   /** The raw exchange with the agent, per project. Diagnostic, not persisted. */
   agentIo: Record<string, AgentIoEntry[]>;
   rateLimits: Record<string, RateLimit>;
+  /**
+   * The approval question each project's run is blocked on, if any.
+   *
+   * One per project: the agent asks one question at a time, because it is
+   * itself blocked until it hears back. Cleared by the answer or by the run
+   * ending — a card for a run that already finished would collect a decision
+   * nobody can deliver.
+   */
+  pendingApprovals: Record<string, PendingApproval>;
   /**
    * The latest Claude quota report per window, across every project.
    *
@@ -151,6 +161,7 @@ function createWorkspace() {
     logTotals: {},
     agentIo: {},
     rateLimits: {},
+    pendingApprovals: {},
     quotaWindows: {},
     taskManagerSession: null,
     settings: null,
@@ -625,6 +636,17 @@ function createWorkspace() {
       );
     });
 
+    await bind("run:approval", ({ projectId, approvalId, tool, input }) => {
+      setState("pendingApprovals", projectId, { approvalId, tool, input });
+    });
+
+    await bind("run:approval_resolved", ({ projectId }) => {
+      setState(
+        "pendingApprovals",
+        produce((pending) => delete pending[projectId]),
+      );
+    });
+
     await bind("run:text", ({ projectId, delta }) => {
       setState("streaming", projectId, (current = "") => current + delta);
     });
@@ -646,6 +668,11 @@ function createWorkspace() {
       batch(() => {
         setState("running", projectId, []);
         setState("streaming", projectId, "");
+        // A question the run can no longer hear the answer to.
+        setState(
+          "pendingApprovals",
+          produce((pending) => delete pending[projectId]),
+        );
 
         /*
          * A run that did not complete has to say so in the transcript. Clearing
@@ -965,13 +992,18 @@ function createWorkspace() {
    * Not `send`: there is no tab to read a model from, and the task manager
    * deliberately runs on `GlobalSettings.taskManager` — a list keeper running
    * unattended should not be silently billed at the prompt's model.
+   *
+   * `ask`, not `read_only`: read_only silently denies anything outside the
+   * working tree, which is how "read that file in ~/code/…" died with the
+   * question buried in the I/O panel. Under `ask` the gated call becomes an
+   * approval card on Home instead, and Home is where you already are.
    */
   const sendTaskPrompt = async (body: string): Promise<void> => {
     await client().sendMessage({
       projectId: TASK_MANAGER_ID,
       body,
       model: state.settings?.taskManager.model,
-      permission: "read_only",
+      permission: "ask",
       effort: state.settings?.taskManager.effort,
     });
   };
@@ -1012,6 +1044,8 @@ function createWorkspace() {
     deleteItem: (id: string) => client().deleteItem(id),
     resolveModeration: (messageId: string, approve: boolean) =>
       client().resolveModeration(messageId, approve),
+    resolveApproval: (projectId: string, approvalId: string, allow: boolean) =>
+      client().resolveApproval(projectId, approvalId, allow),
     cancelTask: (toolCallId: string) => client().cancelTask(toolCallId),
     cancelRun: (projectId: string) => client().cancelRun(projectId),
     async clearTaskLog(projectId: string) {

@@ -20,13 +20,21 @@ import type {
 export const PERMISSION_LABELS: Record<Permission, string> = {
   read_only: "Read-only",
   plan: "Plan",
+  ask: "Ask",
   edit: "Edit",
   auto: "Auto",
   bypass: "Bypass",
 };
 
 /** Ordered least to most permissive — the order the composer offers them in. */
-export const PERMISSION_ORDER: Permission[] = ["read_only", "plan", "edit", "auto", "bypass"];
+export const PERMISSION_ORDER: Permission[] = [
+  "read_only",
+  "plan",
+  "ask",
+  "edit",
+  "auto",
+  "bypass",
+];
 
 export const AGENT_LABELS: Record<Agent, string> = {
   claude: "Claude",

@@ -45,6 +45,7 @@ const IMPLEMENTED: &[&str] = &[
     "rename_project",
     "reset_task_manager",
     "get_task_manager",
+    "resolve_approval",
     "list_agent_io",
     "get_io_persist",
     "set_io_persist",
@@ -69,6 +70,9 @@ pub(crate) struct AppState {
     /// The raw exchange with the agent, by project. In memory for the life of
     /// the process — see [`projects::AgentIo`].
     io: Arc<projects::AgentIo>,
+    /// Approval questions waiting on the user, by project. The run is blocked
+    /// mid-turn until `resolve_approval` answers — see [`projects::PendingApprovals`].
+    approvals: Arc<projects::PendingApprovals>,
     /// Kept so `set_data_location` can write the pointer beside the settings.
     config_dir: std::path::PathBuf,
     /// Where the tables were opened from this launch. A change takes effect on
@@ -412,6 +416,7 @@ fn main() {
             projects::rename_project,
             projects::reset_task_manager,
             projects::get_task_manager,
+            projects::resolve_approval,
             projects::list_agent_io,
             projects::get_io_persist,
             projects::set_io_persist,
@@ -525,6 +530,7 @@ fn main() {
                 tables: Arc::new(tables),
                 running: Arc::default(),
                 io: Arc::default(),
+                approvals: Arc::default(),
                 config_dir,
                 location,
             });

@@ -6,6 +6,7 @@ import type {
   DataLocation,
   GlobalSettings,
   Message,
+  PendingApproval,
   Permission,
   Project,
   ProjectItem,
@@ -134,6 +135,11 @@ export interface AgencyZeroApi {
    * in the design's proposed surface — see the frontend README.
    */
   listRateLimits(): Promise<RateLimit[]>;
+  /**
+   * Answer the approval question a run is blocked on. `allow: false` denies
+   * with the stock reason; the turn continues either way.
+   */
+  resolveApproval(projectId: string, approvalId: string, allow: boolean): Promise<void>;
   /** Where the Home task manager's conversation stands. */
   getTaskManager(): Promise<TaskManagerState>;
   /**
@@ -182,6 +188,13 @@ export interface AppEvents {
    * something the window can observe on its own.
    */
   "run:rate_limit_cleared": { projectId: string };
+  /**
+   * A tool call is waiting on the user. The run is blocked mid-turn until
+   * `resolveApproval` answers, so this must render somewhere it will be seen.
+   */
+  "run:approval": { projectId: string } & PendingApproval;
+  /** The question above was answered (by the user, or denied on timeout). */
+  "run:approval_resolved": { projectId: string; approvalId: string; allow: boolean };
   "run:stopped": { projectId: string; stop: string; exitCode: number | null };
 }
 

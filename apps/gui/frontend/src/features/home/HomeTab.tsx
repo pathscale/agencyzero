@@ -3,6 +3,7 @@ import { EditableTitle } from "~/components/EditableTitle";
 import { Icon } from "~/components/Icon";
 import { Panel } from "~/components/Panel";
 import { ItemMarker, StatusDot } from "~/components/StatusDot";
+import { ApprovalCard } from "~/features/project/ApprovalCard";
 import { AgentIoList } from "~/features/project/ProjectPanel";
 import { relativeTime } from "~/lib/format";
 import { statusSuffix } from "~/lib/labels";
@@ -311,6 +312,11 @@ function TaskManagerStatus(): JSX.Element {
             <span class="truncate font-mono">{session()}</span>
           </div>
         )}
+      </Show>
+
+      {/* The task manager's run is blocked on this until you decide. */}
+      <Show when={state.pendingApprovals[TASK_MANAGER_ID]}>
+        {(approval) => <ApprovalCard projectId={TASK_MANAGER_ID} approval={approval()} />}
       </Show>
 
       <Show when={reply()}>

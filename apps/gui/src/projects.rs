@@ -17,7 +17,7 @@
 //! never waits on a model. The cheap second call that improves it, and the manual
 //! rename that outranks both, are not built yet.
 
-use agent_abstraction::{Agent, Event, Permission, Request, Stop};
+use agent_abstraction::{Agent, Decision, Event, Permission, Request, Stop};
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, Manager, State};
 // `execute` on a select builder is a trait method.
@@ -374,7 +374,10 @@ fn truncate_on_char_boundary(text: &str, max: usize) -> String {
 fn parse_permission(raw: Option<&str>) -> Permission {
     match raw.unwrap_or("read_only") {
         "plan" => Permission::Plan,
-        "edit" => Permission::Edit,
+        // `ask` is Edit with a human answering each gated call. It cannot be
+        // ReadOnly underneath: that posture strips the mutating tools, so
+        // nothing would ever ask and the crate refuses the combination.
+        "ask" | "edit" => Permission::Edit,
         "auto" => Permission::Auto,
         "bypass" => Permission::Bypass,
         _ => Permission::ReadOnly,
@@ -866,6 +869,22 @@ pub fn list_agent_io(project_id: String, state: State<'_, AppState>) -> Vec<Agen
 /// worth keeping is the *finished* row, and that goes to `task_log`.
 pub type RunningTasks = std::sync::Mutex<std::collections::HashMap<String, Vec<RunningTaskDto>>>;
 
+/// Decisions on their way to runs blocked on an approval, by project.
+///
+/// A run in `ask` mode that hits a gated tool call emits `run:approval` and
+/// waits. The sender registered here is how `resolve_approval` delivers the
+/// user's answer — `(approval id, allow)` — back into that run's event loop.
+/// One entry per project: Claude asks one question at a time, because the
+/// agent itself is blocked until it hears back.
+pub type PendingApprovals =
+    std::sync::Mutex<std::collections::HashMap<String, tokio::sync::mpsc::Sender<(String, bool)>>>;
+
+/// How long an unanswered approval stands before it is denied.
+///
+/// The run is blocked while the question is open, so an abandoned window must
+/// become a denial rather than a run that hangs until the agent's own timeout.
+const APPROVAL_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30 * 60);
+
 /// What is running in this project right now.
 #[tauri::command]
 pub fn list_running_tasks(project_id: String, state: State<'_, AppState>) -> Vec<RunningTaskDto> {
@@ -965,6 +984,41 @@ pub async fn get_task_manager(state: State<'_, AppState>) -> Result<TaskManagerD
     Ok(TaskManagerDto {
         session_id: session,
     })
+}
+
+/// Answer the approval question a run is blocked on.
+///
+/// The id must be the one from `run:approval`: the agent ignores an answer
+/// carrying any other id, and this passes it straight through. A false `allow`
+/// denies with the stock reason; the turn continues either way — the model is
+/// told no and works around it, so a denial is not a failed run.
+///
+/// # Errors
+/// Returns a message when no run in this project is waiting, or when the run
+/// finished before the decision arrived.
+#[tauri::command]
+pub async fn resolve_approval(
+    project_id: String,
+    approval_id: String,
+    allow: bool,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let sender = state
+        .approvals
+        .lock()
+        .ok()
+        .and_then(|waiting| waiting.get(&project_id).cloned())
+        .ok_or_else(|| format!("no run in {project_id} is waiting on an approval"))?;
+
+    crate::log!(
+        crate::log::Level::Info,
+        "run",
+        "{project_id}: approval {approval_id} answered allow={allow}"
+    );
+    sender
+        .send((approval_id, allow))
+        .await
+        .map_err(|_| "the run finished before the decision arrived".to_string())
 }
 
 /// Start the Home task manager's next prompt on a fresh conversation.
@@ -1336,13 +1390,14 @@ pub async fn send_message(
     let tables = state.tables.clone();
     let running = state.running.clone();
     let io = state.io.clone();
+    let approvals = state.approvals.clone();
     let project_id = input.project_id.clone();
     let effort = input.effort.clone();
 
     tauri::async_runtime::spawn(async move {
         drive_run(
-            app, tables, running, io, project_id, input.body, model, permission, effort, cwd,
-            resume,
+            app, tables, running, io, approvals, project_id, input.body, model, permission,
+            effort, cwd, resume,
         )
         .await;
     });
@@ -1360,6 +1415,7 @@ async fn drive_run(
     tables: std::sync::Arc<crate::db::tables::Tables>,
     running: std::sync::Arc<RunningTasks>,
     io: std::sync::Arc<AgentIo>,
+    approvals: std::sync::Arc<PendingApprovals>,
     project_id: String,
     prompt: String,
     model: String,
@@ -1389,6 +1445,12 @@ async fn drive_run(
     let mut request = Request::new(Agent::Claude, prompt)
         .permission(parse_permission(Some(&permission)))
         .cwd(&cwd);
+    // `ask`: every gated call — a write, a command, a read outside the working
+    // tree — arrives as an approval question instead of a silent pre-decision.
+    let asks = permission == "ask";
+    if asks {
+        request = request.approvals();
+    }
     if !model.is_empty() {
         request = request.model(&model);
     }
@@ -1452,8 +1514,83 @@ async fn drive_run(
         }
     };
 
+    // The channel `resolve_approval` answers on, registered whether or not
+    // this run asks: registering is cheap and an entry for a run that never
+    // asks is simply never used.
+    let (decision_tx, mut decisions) = tokio::sync::mpsc::channel::<(String, bool)>(4);
+    if let Ok(mut waiting) = approvals.lock() {
+        waiting.insert(project_id.clone(), decision_tx);
+    }
+
     while let Some(event) = run.recv().await {
         match event {
+            Event::ApprovalRequest(approval) => {
+                note_io(
+                    &app,
+                    &io,
+                    &project_id,
+                    "received",
+                    "approval",
+                    // The input, not just the tool: for Bash the command lives
+                    // there, and approving on the name approves an unseen command.
+                    format!("{} {}", approval.tool, approval.input),
+                );
+                let _ = app.emit(
+                    "run:approval",
+                    serde_json::json!({
+                        "projectId": project_id,
+                        "approvalId": approval.id,
+                        "tool": approval.tool,
+                        "input": approval.input,
+                    }),
+                );
+
+                /*
+                 * The agent is blocked until this is answered, so blocking the
+                 * loop here loses nothing — no further events arrive while the
+                 * question stands. The timeout turns an abandoned question
+                 * into a denial rather than a run that hangs until the agent's
+                 * own timeout, and a denial is not a failed run: the model is
+                 * told no and carries on.
+                 */
+                let answer = tokio::select! {
+                    answer = decisions.recv() => answer,
+                    () = tokio::time::sleep(APPROVAL_TIMEOUT) => None,
+                };
+                let allow = matches!(&answer, Some((id, true)) if *id == approval.id);
+                let decision = if allow {
+                    Decision::Allow
+                } else {
+                    Decision::deny()
+                };
+                if let Err(error) = run.respond(&approval.id, &decision).await {
+                    crate::log!(
+                        crate::log::Level::Error,
+                        "run",
+                        "{project_id}: could not deliver the approval decision: {error}"
+                    );
+                }
+                note_io(
+                    &app,
+                    &io,
+                    &project_id,
+                    "sent",
+                    "approval",
+                    format!(
+                        "{} — {}",
+                        approval.tool,
+                        if allow { "allowed" } else { "denied" }
+                    ),
+                );
+                let _ = app.emit(
+                    "run:approval_resolved",
+                    serde_json::json!({
+                        "projectId": project_id,
+                        "approvalId": approval.id,
+                        "allow": allow,
+                    }),
+                );
+            }
             Event::Text(delta) => {
                 note_io(&app, &io, &project_id, "received", "text", &delta);
                 let _ = app.emit(
@@ -1648,6 +1785,11 @@ async fn drive_run(
     // frontend's `run:stopped` handler clears its own copy on the same event.
     if let Ok(mut running) = running.lock() {
         running.remove(&project_id);
+    }
+    // And nothing is waiting on a decision: a `resolve_approval` arriving now
+    // should say "the run finished" rather than feed a dead channel.
+    if let Ok(mut waiting) = approvals.lock() {
+        waiting.remove(&project_id);
     }
 
     // One write, now that there is something final to write.

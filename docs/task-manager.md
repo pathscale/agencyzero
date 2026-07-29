@@ -127,14 +127,24 @@ All built, on Home:
 - Settings has the model/effort pickers, the working directories, and the
   Reset control, which is disabled until a conversation exists.
 
-## Working directories
+## Working directories, and asking instead of denying
 
-The runs are `read_only`, which maps to Claude's don't-ask mode: reads
-*outside* the working tree are denied without prompting. With no directory
-configured the runs execute at the workspace root, so "read that file in
-~/code/…" fails with a denial. `GlobalSettings.taskManager.dirs` fixes the
-scope; the first entry becomes the run's cwd. One directory of reach for now —
-`agent-abstraction` has no `--add-dir` passthrough yet, so additional entries
-are stored but only the first takes effect until the crate grows one.
+The runs go out as `ask` — `Permission::Edit` plus `Request::approvals()`
+(agent-abstraction 0.3.4). A gated call — a write, a command, a read outside
+the working tree — arrives as an approval card on Home and the run waits,
+mid-turn, until Allow or Deny; an abandoned question becomes a denial after 30
+minutes. It cannot be ReadOnly underneath: that posture strips the mutating
+tools, so nothing would ever ask, and the crate refuses the combination.
+
+Two of the crate's caveats carried into the UI: the card shows the call's
+*input*, not just the tool name, because for Bash the command lives in the
+input; and silence is not proof nothing ran — Claude allows read-only commands
+without asking.
+
+`GlobalSettings.taskManager.dirs` still matters: the first entry becomes the
+run's cwd, and everything inside it runs unasked. Point it at the tree the
+task manager usually reads so approvals stay rare. One directory of reach for
+now — the crate has no `--add-dir` passthrough yet, so additional entries are
+stored but only the first takes effect until it grows one.
 
 `crates/wt-tools` is built too: the agent can see its own projects.
