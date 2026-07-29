@@ -551,34 +551,83 @@ fn write_tasks_from_reply(
         return;
     }
 
-    // Written as items on the task manager's own project, carrying the proposed
-    // project name in the title. Creating real projects from a model's output
-    // without asking is not something to do on its own initiative; promoting a
-    // line to a project is a decision for a person.
-    let existing: Vec<ProjectItemRow> = tables
-        .project_item
-        .select_by_project_id(project_id.to_string())
-        .execute()
-        .unwrap_or_default();
-    let seen: std::collections::HashSet<String> =
-        existing.iter().map(|row| row.title.to_lowercase()).collect();
-    let mut next = u32::try_from(existing.len()).unwrap_or(0);
+    /*
+     * Harvested tasks land on real projects: the `project` value names one,
+     * matched case-insensitively against what exists, created bare when
+     * nothing matches. This replaces the first design — items parked on the
+     * task manager's own project with the name folded into the title — which
+     * asked the user to re-type every line the model had already structured.
+     *
+     * A created project is bare on purpose: a row and a tab, no first message
+     * and no agent run. The task manager organises; it does not start work.
+     */
+    let all_projects: Vec<ProjectRow> = tables.project.select_all().execute().unwrap_or_default();
+    let mut project_ids: std::collections::HashMap<String, String> = all_projects
+        .iter()
+        .map(|row| (row.name.trim().to_lowercase(), row.id.clone()))
+        .collect();
+    let mut order = u32::try_from(all_projects.len()).unwrap_or(0);
+    let mut created: Vec<String> = Vec::new();
+    let mut placed = 0usize;
 
     for task in harvest.tasks {
-        let title = format!("{} — {}", task.project, task.item);
-        if seen.contains(&title.to_lowercase()) {
+        let key = task.project.trim().to_lowercase();
+        let target_id = match project_ids.get(&key) {
+            Some(found) => found.clone(),
+            None => {
+                let row = ProjectRow {
+                    id: id("proj"),
+                    name: task.project.trim().to_string(),
+                    status: "active".into(),
+                    position: order,
+                    dirs: "[]".into(),
+                    pinned: false,
+                    moderator_enabled: false,
+                    forked_from: String::new(),
+                    last_activity_at: now(),
+                };
+                if let Err(error) = tables.project.insert(row.clone()) {
+                    crate::log!(
+                        crate::log::Level::Error,
+                        "tasks",
+                        "could not create project {:?}: {error}",
+                        task.project
+                    );
+                    continue;
+                }
+                order += 1;
+                created.push(row.name.clone());
+                let dto = with_session(ProjectDto::from(row.clone()), tables);
+                let _ = app.emit("project:created", &dto);
+                project_ids.insert(key, row.id.clone());
+                row.id
+            }
+        };
+
+        // Appended after what is there, duplicates skipped: a later prompt
+        // restating the list must not stack the same line up or disturb rows
+        // the user added themselves.
+        let existing: Vec<ProjectItemRow> = tables
+            .project_item
+            .select_by_project_id(target_id.clone())
+            .execute()
+            .unwrap_or_default();
+        if existing
+            .iter()
+            .any(|row| row.title.to_lowercase() == task.item.to_lowercase())
+        {
             continue;
         }
         let row = ProjectItemRow {
             id: id("item"),
-            project_id: project_id.to_string(),
-            title,
+            project_id: target_id,
+            title: task.item,
             status: task.status,
-            position: next,
+            position: u32::try_from(existing.len()).unwrap_or(0),
         };
         match tables.project_item.insert(row.clone()) {
             Ok(_) => {
-                next += 1;
+                placed += 1;
                 let _ = app.emit("item:created", ProjectItemDto::from(row));
             }
             Err(error) => crate::log!(
@@ -588,6 +637,24 @@ fn write_tasks_from_reply(
             ),
         }
     }
+
+    // Said where the harvest count already lives, so "where did my tasks go"
+    // is answerable from the same panel that reported them parsed.
+    note_io(
+        app,
+        io,
+        project_id,
+        "gui",
+        "harvest",
+        if created.is_empty() {
+            format!("{placed} item(s) added to existing projects")
+        } else {
+            format!(
+                "{placed} item(s) placed; created project(s): {}",
+                created.join(", ")
+            )
+        },
+    );
 }
 
 /// Turn any checklist in the reply into item rows, appended after what is there.

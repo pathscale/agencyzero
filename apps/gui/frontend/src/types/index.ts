@@ -462,6 +462,10 @@ export interface UiPrefs {
     log: boolean;
     /** The raw agent exchange. Closed by default — it is a diagnostic. */
     io: boolean;
+    /** Home's right column. */
+    pinned: boolean;
+    recent: boolean;
+    homeIo: boolean;
   };
   lastTabKey: string;
   taskPlacement: TaskPlacement;
