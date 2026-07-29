@@ -74,7 +74,11 @@ export function ProjectTab(props: { tab: Tab; project: Project }): JSX.Element {
           </button>
         </header>
 
-        <TranscriptPane project={props.project} messages={messages()} />
+        <TranscriptPane
+          project={props.project}
+          messages={messages()}
+          streaming={state.streaming[props.project.id] ?? ""}
+        />
 
         <div class="flex flex-none flex-col gap-2.5 px-4 pt-2 pb-4">
           <Composer

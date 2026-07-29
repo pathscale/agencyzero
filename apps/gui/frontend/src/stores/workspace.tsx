@@ -51,6 +51,14 @@ type WorkspaceState = {
   dataLocation: DataLocation | null;
   /** Where a new project runs. Null until boot ends. */
   workspaceRoot: WorkspaceRoot | null;
+  /**
+   * The reply currently being written, per project.
+   *
+   * Deliberately not a Message: it has no id, is never persisted, and is
+   * replaced wholesale by the real row when the run finishes. Summing deltas is
+   * for the eye only, and `Outcome::text` is what gets stored.
+   */
+  streaming: Record<string, string>;
   tabs: Tab[];
   activeKey: string;
   backend: "tauri" | "mock" | "hybrid" | "loading";
@@ -106,6 +114,7 @@ function createWorkspace() {
     models: [],
     dataLocation: null,
     workspaceRoot: null,
+    streaming: {},
     tabs: [HOME_TAB],
     activeKey: "home",
     backend: "loading",
@@ -431,7 +440,12 @@ function createWorkspace() {
         return next;
       });
     };
-    await bind("message:appended", appendMessage);
+    await bind("message:appended", (message) => {
+      batch(() => {
+        if (message.author === "agent") setState("streaming", message.projectId, "");
+        appendMessage(message);
+      });
+    });
     await bind("moderation:blocked", appendMessage);
 
     const upsertTask = (task: RunningTask) => {
@@ -481,8 +495,38 @@ function createWorkspace() {
       );
     });
 
-    await bind("run:stopped", ({ projectId }) => {
-      setState("running", projectId, []);
+    await bind("run:text", ({ projectId, delta }) => {
+      setState("streaming", projectId, (current = "") => current + delta);
+    });
+
+    await bind("run:stopped", ({ projectId, stop, exitCode }) => {
+      batch(() => {
+        setState("running", projectId, []);
+        setState("streaming", projectId, "");
+
+        /*
+         * A run that did not complete has to say so in the transcript. Clearing
+         * the spinner and leaving nothing behind is what made a failed first
+         * prompt look like the app simply ignoring it.
+         */
+        if (stop !== "completed") {
+          appendMessage({
+            id: `run-error-${Date.now()}`,
+            projectId,
+            itemId: null,
+            author: "agent",
+            agent: "claude",
+            moderation: null,
+            model: "",
+            permission: "read_only",
+            usage: null,
+            stop,
+            exitCode,
+            body: `The run stopped: ${stop}`,
+            createdAt: new Date().toISOString(),
+          });
+        }
+      });
     });
   }
 
