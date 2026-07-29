@@ -201,6 +201,32 @@ export function SettingsTab(): JSX.Element {
                 title="Data"
                 hint="where projects, items and messages are stored"
               >
+                <Show when={state.workspaceRoot}>
+                  {(root) => (
+                    <Row
+                      label="Workspace"
+                      hint={
+                        root().exists ? "new projects run here" : "recommended, and not created yet"
+                      }
+                    >
+                      <div class="flex items-center gap-2">
+                        <span class="max-w-[280px] truncate font-mono text-[11.5px] text-az-body">
+                          {root().path}
+                        </span>
+                        <Show when={!root().exists}>
+                          <button
+                            type="button"
+                            onClick={() => void actions.createWorkspaceRoot()}
+                            class="shrink-0 rounded-lg border border-primary/50 px-2.5 py-[4px] text-[11.5px] text-primary transition-colors hover:border-primary"
+                          >
+                            Create it
+                          </button>
+                        </Show>
+                      </div>
+                    </Row>
+                  )}
+                </Show>
+
                 <Show when={state.dataLocation}>
                   {(location) => (
                     <>

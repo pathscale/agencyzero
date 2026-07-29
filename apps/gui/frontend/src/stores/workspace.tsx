@@ -28,6 +28,7 @@ import type {
   Tab,
   TabStatus,
   TaskLogEntry,
+  WorkspaceRoot,
 } from "~/types";
 
 const TASK_LOG_PAGE = 40;
@@ -48,6 +49,8 @@ type WorkspaceState = {
   models: AgentModels[];
   /** Where the tables were opened from. Null until boot ends. */
   dataLocation: DataLocation | null;
+  /** Where a new project runs. Null until boot ends. */
+  workspaceRoot: WorkspaceRoot | null;
   tabs: Tab[];
   activeKey: string;
   backend: "tauri" | "mock" | "hybrid" | "loading";
@@ -102,6 +105,7 @@ function createWorkspace() {
     agents: [],
     models: [],
     dataLocation: null,
+    workspaceRoot: null,
     tabs: [HOME_TAB],
     activeKey: "home",
     backend: "loading",
@@ -281,16 +285,18 @@ function createWorkspace() {
 
       await subscribe(backend);
 
-      const [projects, settings, agents, models, dataLocation, rateLimits] = await Promise.all([
-        backend.listProjects(),
-        backend.getSettings(),
-        backend.listAgentStatus(false),
-        // Compiled catalogues only. Discovery spawns a CLI per agent, which is
-        // too slow to sit in front of the first paint; Settings can ask for it.
-        backend.listModels(false),
-        backend.getDataLocation(),
-        backend.listRateLimits(),
-      ]);
+      const [projects, settings, agents, models, dataLocation, workspaceRoot, rateLimits] =
+        await Promise.all([
+          backend.listProjects(),
+          backend.getSettings(),
+          backend.listAgentStatus(false),
+          // Compiled catalogues only. Discovery spawns a CLI per agent, which is
+          // too slow to sit in front of the first paint; Settings can ask for it.
+          backend.listModels(false),
+          backend.getDataLocation(),
+          backend.getWorkspaceRoot(),
+          backend.listRateLimits(),
+        ]);
 
       batch(() => {
         setState("projects", reconcile(projects));
@@ -298,6 +304,7 @@ function createWorkspace() {
         setState("agents", reconcile(agents));
         setState("models", reconcile(models));
         setState("dataLocation", dataLocation);
+        setState("workspaceRoot", workspaceRoot);
         setState(
           "rateLimits",
           // A limit whose reset time has already passed is history, not state.
@@ -790,6 +797,10 @@ function createWorkspace() {
     async setDataLocation(path: string | null) {
       await client().setDataLocation(path);
       setState("dataLocation", await client().getDataLocation());
+    },
+    /** Create the workspace directory, then re-read so the row updates. */
+    async createWorkspaceRoot() {
+      setState("workspaceRoot", await client().createWorkspaceRoot());
     },
     async refreshModels() {
       setState("models", reconcile(await client().listModels(true)));

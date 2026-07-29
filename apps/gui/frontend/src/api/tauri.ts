@@ -42,6 +42,8 @@ export function createTauriApi(): AgencyZeroApi {
     listModels: (discover) => invoke("list_models", { discover }),
     getDataLocation: () => invoke("get_data_location"),
     setDataLocation: (path) => invoke("set_data_location", { path }),
+    getWorkspaceRoot: () => invoke("get_workspace_root"),
+    createWorkspaceRoot: () => invoke("create_workspace_root"),
 
     setTabModel: (tabKey, model, permission) =>
       invoke("set_tab_model", { tabKey, model, permission }),
