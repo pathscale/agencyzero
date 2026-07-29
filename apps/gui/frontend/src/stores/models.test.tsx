@@ -186,3 +186,72 @@ describe("what the prompt offers", () => {
     expect(offered).not.toContain("gemini-3.6-flash");
   });
 });
+
+describe("settings own the defaults", () => {
+  /*
+   * The bug this covers: `prefs.lastModel` used to seed a new tab and shadow the
+   * configured default, so choosing Opus in Settings and opening a tab still
+   * gave you Sonnet.
+   */
+  it("opens a new tab on the model Settings names, not the last one used", async () => {
+    const workspace = await mountWorkspace();
+    await workspace.actions.setDefaultModel("claude", "opus");
+
+    workspace.actions.openDraft();
+
+    await waitFor(() => expect(workspace.activeTab().kind).toBe("draft"));
+    expect(workspace.activeTab().model).toBe("opus");
+  });
+
+  it("does not let a per-tab override seed the next tab", async () => {
+    const workspace = await mountWorkspace();
+    workspace.actions.setTabModel("worktable", "haiku", "read_only");
+
+    workspace.actions.openDraft();
+
+    await waitFor(() => expect(workspace.activeTab().kind).toBe("draft"));
+    expect(workspace.activeTab().model).toBe("sonnet");
+  });
+
+  /*
+   * Disabling a model withdraws it everywhere, not just from the menu. A tab
+   * left on a withdrawn model would send the next message under a model the
+   * user had just removed.
+   */
+  it("moves a conflicting project onto the new default", async () => {
+    const workspace = await mountWorkspace();
+    const onSonnet = () =>
+      workspace.state.tabs.filter((tab) => tab.model === "sonnet").map((tab) => tab.key);
+    expect(onSonnet().length).toBeGreaterThan(0);
+
+    await workspace.actions.setDefaultModel("claude", "opus");
+    await workspace.actions.toggleModel("claude", "sonnet", false);
+
+    expect(onSonnet()).toEqual([]);
+    for (const tab of workspace.state.tabs) {
+      expect(workspace.state.settings?.models.claude.enabled).toContain(tab.model);
+    }
+  });
+
+  /*
+   * Only the conflicting tabs move. A per-tab override that is still offered is
+   * a real choice, and editing an unrelated setting must not quietly reset it.
+   */
+  it("leaves a tab alone when its model is still offered", async () => {
+    const workspace = await mountWorkspace();
+    workspace.actions.setTabModel("worktable", "haiku", "read_only");
+
+    await workspace.actions.toggleModel("claude", "fable", true);
+
+    const worktable = workspace.state.tabs.find((tab) => tab.key === "worktable");
+    expect(worktable?.model).toBe("haiku");
+  });
+
+  it("keeps the prompt menu in step with the withdrawal", async () => {
+    const workspace = await mountWorkspace();
+    await workspace.actions.setDefaultModel("claude", "opus");
+    await workspace.actions.toggleModel("claude", "sonnet", false);
+
+    expect(workspace.promptModels().map((option) => option.value)).not.toContain("sonnet");
+  });
+});

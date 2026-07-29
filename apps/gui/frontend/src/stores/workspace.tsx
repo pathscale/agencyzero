@@ -349,15 +349,30 @@ function createWorkspace() {
     await init();
   }
 
+  /**
+   * What a new tab starts on: the default agent's default model from Settings.
+   *
+   * Read from settings rather than from `prefs.lastModel`, which used to seed
+   * this and silently won. Two places claiming to own "the default model" meant
+   * picking Opus in Settings and still getting Sonnet in the next tab, because
+   * the pref remembered the last model *used* and shadowed the configured one.
+   * Settings owns it; the pref is gone.
+   */
+  function defaultModel(): string {
+    const settings = state.settings;
+    if (!settings) return "";
+    return settings.models[settings.defaultAgent]?.default ?? "";
+  }
+
   function projectTab(project: Project): Tab {
     return {
       key: project.id,
       kind: "project",
       projectId: project.id,
       label: project.name,
-      model: prefs.lastModel,
+      model: defaultModel(),
       effort: DEFAULT_EFFORT,
-      permission: prefs.lastPermission,
+      permission: state.settings?.defaultPermission ?? "read_only",
       status: "quiet",
     };
   }
@@ -589,9 +604,9 @@ function createWorkspace() {
         kind: "draft",
         projectId: null,
         label: "Untitled",
-        model: prefs.lastModel,
+        model: defaultModel(),
         effort: DEFAULT_EFFORT,
-        permission: prefs.lastPermission,
+        permission: state.settings?.defaultPermission ?? "read_only",
         status: "quiet",
       },
     ]);
@@ -636,14 +651,44 @@ function createWorkspace() {
     });
   }
 
-  /** Model and posture are per tab and sticky; UiPrefs only seeds the next new tab. */
+  /**
+   * Model and posture are per tab and sticky until Settings contradicts them.
+   *
+   * Deliberately does not write back to `UiPrefs`. A per-tab override is a
+   * choice about *this* tab, and letting it seed the next one is what made
+   * Settings look ignored.
+   */
+  /**
+   * Move every tab off a model Settings no longer offers.
+   *
+   * Settings is authoritative: disabling a model withdraws it everywhere, not
+   * just from the menu. A tab left pointing at a withdrawn model would show it
+   * in the pill while the menu could not express it, and the next message would
+   * go out under a model the user had just removed.
+   *
+   * Deliberately only touches tabs that *conflict*. A tab on a model that is
+   * still enabled keeps it, because the per-tab override is a real choice and
+   * editing an unrelated setting should not silently reset it.
+   */
+  function reconcileTabModels(settings: GlobalSettings): void {
+    const selection = settings.models[settings.defaultAgent];
+    if (!selection || selection.enabled.length === 0) return;
+
+    state.tabs.forEach((tab, index) => {
+      if (selection.enabled.includes(tab.model)) return;
+      setState("tabs", index, { model: selection.default });
+      // The backend keeps per-tab state, so a migration has to reach it too, or
+      // the next send would use the model the frontend just moved away from.
+      if (tab.kind === "project") {
+        void client().setTabModel(tab.key, selection.default, tab.permission);
+      }
+    });
+  }
+
   function setTabModel(key: string, model: string, permission: Permission): void {
     const index = state.tabs.findIndex((tab) => tab.key === key);
     if (index < 0) return;
-    batch(() => {
-      setState("tabs", index, { model, permission });
-      setPrefs({ lastModel: model, lastPermission: permission });
-    });
+    setState("tabs", index, { model, permission });
     void client().setTabModel(key, model, permission);
   }
 
@@ -736,7 +781,11 @@ function createWorkspace() {
     async saveSettings(patch: Parameters<AgencyZeroApi["setSettings"]>[0]) {
       const ticket = ++settingsWrite;
       const next = await client().setSettings(patch);
-      if (ticket === settingsWrite) setState("settings", next);
+      if (ticket !== settingsWrite) return;
+      batch(() => {
+        setState("settings", next);
+        reconcileTabModels(next);
+      });
     },
     async recheckAgents() {
       setState("agents", reconcile(await client().listAgentStatus(true)));
@@ -789,8 +838,13 @@ function createWorkspace() {
     async setDefaultModel(agent: Agent, modelId: string) {
       const current = state.settings?.models[agent];
       if (!current) return;
+      /*
+       * Copied, never passed through. `current.enabled` is a store proxy, and
+       * sending it back as part of a patch puts the store inside its own next
+       * value, which hangs rather than failing.
+       */
       const enabled = current.enabled.includes(modelId)
-        ? current.enabled
+        ? [...current.enabled]
         : [...current.enabled, modelId];
       await actions.saveSettings({ models: { [agent]: { enabled, default: modelId } } });
     },

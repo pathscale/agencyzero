@@ -68,20 +68,6 @@ export function Composer(props: ComposerProps): JSX.Element {
   const canSend = () => draft().trim().length > 0 && !isSending();
 
   /**
-   * The offered models, plus the tab's own if the selection no longer holds it.
-   *
-   * A tab keeps the model it was set to. Dropping it from the menu because
-   * Settings stopped offering it would leave the pill showing one model and the
-   * menu unable to express it, and the next message would go out under a model
-   * the user never chose. Keeping it visible makes the mismatch the user's to
-   * resolve.
-   */
-  const options = () =>
-    props.modelOptions.some((option) => option.value === props.model)
-      ? props.modelOptions
-      : [...props.modelOptions, { value: props.model, label: props.model }];
-
-  /**
    * Clears only after the send resolves.
    *
    * A prompt is often long and carefully written; clearing on dispatch and
@@ -197,7 +183,7 @@ export function Composer(props: ComposerProps): JSX.Element {
             iconClass="text-primary"
             variant="outline"
             value={props.model}
-            options={options()}
+            options={props.modelOptions}
             onChange={props.onModelChange}
           />
 
