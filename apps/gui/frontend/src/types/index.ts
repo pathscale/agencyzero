@@ -324,6 +324,8 @@ export interface GlobalSettings {
    */
   models: Record<Agent, ModelSelection>;
   defaultPermission: Permission;
+  /** Reasoning level a new tab starts on. */
+  defaultEffort: string;
   moderator: ModeratorSettings;
   envPolicy: EnvPolicy;
   /** Off by default: HTTPS_PROXY often embeds credentials. */

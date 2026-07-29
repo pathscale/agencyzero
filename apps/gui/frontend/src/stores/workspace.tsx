@@ -33,7 +33,7 @@ import type {
 
 const TASK_LOG_PAGE = 40;
 
-const DEFAULT_EFFORT = "high";
+const FALLBACK_EFFORT = "high";
 
 type WorkspaceState = {
   projects: Project[];
@@ -87,7 +87,7 @@ const HOME_TAB: Tab = {
   projectId: null,
   label: "Home",
   model: "sonnet",
-  effort: DEFAULT_EFFORT,
+  effort: FALLBACK_EFFORT,
   permission: "read_only",
   status: "quiet",
 };
@@ -350,6 +350,10 @@ function createWorkspace() {
    * the pref remembered the last model *used* and shadowed the configured one.
    * Settings owns it; the pref is gone.
    */
+  function defaultEffort(): string {
+    return state.settings?.defaultEffort ?? FALLBACK_EFFORT;
+  }
+
   function defaultModel(): string {
     const settings = state.settings;
     if (!settings) return "";
@@ -363,7 +367,7 @@ function createWorkspace() {
       projectId: project.id,
       label: project.name,
       model: defaultModel(),
-      effort: DEFAULT_EFFORT,
+      effort: defaultEffort(),
       permission: state.settings?.defaultPermission ?? "read_only",
       status: "quiet",
     };
@@ -597,7 +601,7 @@ function createWorkspace() {
         projectId: null,
         label: "Untitled",
         model: defaultModel(),
-        effort: DEFAULT_EFFORT,
+        effort: defaultEffort(),
         permission: state.settings?.defaultPermission ?? "read_only",
         status: "quiet",
       },
@@ -667,13 +671,31 @@ function createWorkspace() {
     if (!selection || selection.enabled.length === 0) return;
 
     state.tabs.forEach((tab, index) => {
+      /*
+       * A draft has no history and is not a project yet, so it tracks the
+       * defaults outright: model, posture and effort. Changing a default with
+       * an Untitled tab open and finding it unchanged reads as the setting
+       * having been ignored, which is what it looked like.
+       */
+      if (tab.kind === "draft") {
+        setState("tabs", index, {
+          model: selection.default,
+          permission: settings.defaultPermission,
+          effort: settings.defaultEffort,
+        });
+        return;
+      }
+
+      /*
+       * A project keeps its per-tab choice, and only moves when the model it is
+       * on has actually been withdrawn. An unrelated settings edit must not
+       * silently reset a deliberate override.
+       */
       if (selection.enabled.includes(tab.model)) return;
       setState("tabs", index, { model: selection.default });
       // The backend keeps per-tab state, so a migration has to reach it too, or
       // the next send would use the model the frontend just moved away from.
-      if (tab.kind === "project") {
-        void client().setTabModel(tab.key, selection.default, tab.permission);
-      }
+      void client().setTabModel(tab.key, selection.default, tab.permission);
     });
   }
 
