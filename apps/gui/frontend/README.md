@@ -52,6 +52,24 @@ webview, which takes two things that have to stay in step:
 That file also has to list `core:default` itself: adding a `capabilities/` directory
 replaces the capability `tauri-build` generates when there isn't one.
 
+## Tabs
+
+⌘1 selects the previous tab, ⌘2 the next, both wrapping
+([`shortcuts.ts`](src/features/tabs/shortcuts.ts)). Cycling walks `state.tabs`, which *is*
+the strip order, so a reordered tab cycles from where it now sits with nothing to keep in
+step.
+
+Dragging a tab reorders it ([`reorder.ts`](src/features/tabs/reorder.ts)) — pointer
+events, not HTML5 drag-and-drop, because Tauri's webview owns native drag for file drops
+and `dragstart`/`drop` are unreliable in the window this has to work in. The strip
+reorders live as you drag, so the tab you are holding is always where it would land and
+there is no separate drop indicator to keep truthful.
+
+Home is index 0 and stays there. On drop, the project tabs' new order is persisted with
+`reorder_projects`, which writes `Project.order` — so it survives a restart and Home
+re-sorts to match. Draft and Settings tabs are window state and keep their place only
+while they are open.
+
 ## Where the Rust boundary is
 
 **Everything under `src/` is frontend.** It reaches Rust through exactly one file,
