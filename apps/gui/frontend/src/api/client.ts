@@ -142,6 +142,13 @@ export interface AppEvents {
   "task:progress": RunningTask;
   /** `Event::ToolResult` — the row leaves Running and lands in the log. */
   "task:finished": TaskLogEntry;
+  /**
+   * A delta of the reply, as it arrives. Not persisted and not a Message: the
+   * authoritative body is the one that lands as `message:appended` when the run
+   * finishes. This is what makes a reply appear while it is being written.
+   */
+  "run:text": { projectId: string; delta: string };
+  "run:thinking": { projectId: string; text: string };
   "run:rate_limit": RateLimit;
   /**
    * The limit has lifted. Without this the header pill and the tab dot stay

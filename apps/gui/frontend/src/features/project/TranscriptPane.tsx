@@ -12,7 +12,12 @@ const STARTERS = ["Review the GUI crate", "Wire the Solid frontend", "Audit the 
  * you (a right-aligned bubble), the agent (plain prose), and the moderator
  * (an amber-ruled note that can be holding the run).
  */
-export function TranscriptPane(props: { project: Project; messages: Message[] }): JSX.Element {
+export function TranscriptPane(props: {
+  project: Project;
+  messages: Message[];
+  /** The reply being written right now, empty when nothing is streaming. */
+  streaming: string;
+}): JSX.Element {
   const { actions } = useWorkspace();
   let scroller!: HTMLDivElement;
 
@@ -57,6 +62,18 @@ export function TranscriptPane(props: { project: Project; messages: Message[] })
             </Switch>
           )}
         </For>
+        {/*
+          The reply as it arrives. No id and never persisted: it is replaced by
+          the real row the moment the run finishes.
+        */}
+        <Show when={props.streaming}>
+          {(text) => (
+            <div class="flex flex-col gap-1.5">
+              <span class="text-[11.5px] text-az-muted">Claude · writing…</span>
+              <p class="whitespace-pre-wrap text-[13.5px] text-az-body leading-relaxed">{text()}</p>
+            </div>
+          )}
+        </Show>
       </Show>
     </div>
   );
