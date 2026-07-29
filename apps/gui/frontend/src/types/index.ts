@@ -381,10 +381,32 @@ export interface GlobalSettings {
   /** Reasoning level a new tab starts on. */
   defaultEffort: string;
   moderator: ModeratorSettings;
+  /**
+   * How the Home task manager runs. Its own model and effort, deliberately
+   * not the prompt's: a list keeper running unattended wants a cheap fast
+   * model far more often than a frontier one.
+   */
+  taskManager: TaskManagerSettings;
   envPolicy: EnvPolicy;
   /** Off by default: HTTPS_PROXY often embeds credentials. */
   forwardProxyVars: boolean;
   notifications: NotificationSettings;
+}
+
+/** Mirrors `settings::TaskManager`. Claude only for now; see the Rust doc. */
+export interface TaskManagerSettings {
+  model: string;
+  effort: string;
+}
+
+/**
+ * Where the Home task manager's conversation stands.
+ *
+ * Its own DTO because the task manager has no project row: the session id the
+ * ordinary path hangs off `Project` has nowhere else to travel.
+ */
+export interface TaskManagerState {
+  sessionId: string | null;
 }
 
 /** Window chrome state. Every open tab maps back to a Project and its items. */

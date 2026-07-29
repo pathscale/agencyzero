@@ -53,6 +53,8 @@ const COMMAND_FOR: Partial<Record<keyof AgencyZeroApi, string>> = {
   listQuota: "list_quota",
   clearTaskLog: "clear_task_log",
   listRateLimits: "list_rate_limits",
+  getTaskManager: "get_task_manager",
+  resetTaskManager: "reset_task_manager",
 };
 
 export type BackendChoice = {

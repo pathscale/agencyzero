@@ -106,11 +106,22 @@ one. Sharing the prompt's setting would silently bill a to-do list at Opus rates
 fresh conversation. The transcript and the tasks already collected are left
 alone — it is "start thinking again", not "throw away what you have".
 
-## Still to build
+## The screen
 
-- The Home screen itself: a composer, the session id in faded text after the
-  first prompt (`Task Manager · session <uuid>`), a bounded Recent panel, and an
-  Agent I/O area beneath it.
-- The Settings controls for reset and model/effort selection.
+All built, on Home:
 
-`crates/wt-tools` above is built: the agent can see its own projects.
+- The composer is the left half of the header row: one line, Enter sends, the
+  draft held until the send resolves. A pulsing dot replaces the ↵ hint while
+  a run is in flight.
+- `Task Manager · session <uuid>` appears in faded text under the row once the
+  first prompt has produced a session. The id comes from `get_task_manager` —
+  the task manager has no project row, so the session the ordinary path hangs
+  off `ProjectDto` needed its own command.
+- Harvested tasks render in a bounded list under the composer, read-only:
+  promoting one to a real project is a person's decision.
+- The raw exchange sits in a Task Manager I/O panel under Recent, appearing
+  once something has been sent.
+- Settings has the model/effort pickers and the Reset control, which is
+  disabled until a conversation exists.
+
+`crates/wt-tools` is built too: the agent can see its own projects.

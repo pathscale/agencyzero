@@ -939,6 +939,34 @@ fn page_task_log(
     }
 }
 
+/// What the Home task-manager screen needs that no other surface carries.
+///
+/// The task manager is a reserved project with **no project row** — it never
+/// appears in `list_projects`, so the session id the ordinary path hangs off
+/// `ProjectDto` has nowhere to travel. This is that one field's own ride.
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TaskManagerDto {
+    /// The agent's native session id, once a prompt has produced one.
+    pub session_id: Option<String>,
+}
+
+/// Where the Home task manager's conversation stands.
+///
+/// # Errors
+/// Infallible today; `Result` so adding a fallible source later is not a
+/// breaking change to the command's signature.
+#[tauri::command]
+pub async fn get_task_manager(state: State<'_, AppState>) -> Result<TaskManagerDto, String> {
+    let session = state
+        .tables
+        .kv_get(&session_key(crate::tasks::TASK_MANAGER_ID))
+        .filter(|id| !id.is_empty());
+    Ok(TaskManagerDto {
+        session_id: session,
+    })
+}
+
 /// Start the Home task manager's next prompt on a fresh conversation.
 ///
 /// Clears the stored session id, so the next turn does not resume. The

@@ -78,6 +78,14 @@ type WorkspaceState = {
    */
   quota: QuotaReport | null;
   /**
+   * The Home task manager's native session id, once a prompt has produced one.
+   *
+   * Not on a `Project`: the task manager is reserved under a fixed id with no
+   * project row, so the session the ordinary path hangs off `ProjectDto` has
+   * nowhere else to live.
+   */
+  taskManagerSession: string | null;
+  /**
    * The reply currently being written, per project.
    *
    * Deliberately not a Message: it has no id, is never persisted, and is
@@ -115,6 +123,13 @@ export function isLimitLive(limit: RateLimit, now = Date.now()): boolean {
   return Number.isNaN(resets) || resets > now;
 }
 
+/**
+ * The Home task manager's reserved project id. A constant so it survives a
+ * restart without a lookup, prefixed differently from `proj-` so it can never
+ * collide with a real project. Mirrors `tasks::TASK_MANAGER_ID` in Rust.
+ */
+export const TASK_MANAGER_ID = "home-task-manager";
+
 const HOME_TAB: Tab = {
   key: "home",
   kind: "home",
@@ -137,6 +152,7 @@ function createWorkspace() {
     agentIo: {},
     rateLimits: {},
     quotaWindows: {},
+    taskManagerSession: null,
     settings: null,
     agents: [],
     models: [],
@@ -393,7 +409,18 @@ function createWorkspace() {
       });
 
       log.info(`boot: loading ${projects.length} project(s)`);
-      await Promise.all(projects.map((project) => loadProject(project.id)));
+      await Promise.all([
+        ...projects.map((project) => loadProject(project.id)),
+        /*
+         * The task manager rides along: it has no project row, so it is not
+         * in `projects`, but its transcript, harvested items and I/O live
+         * under its fixed id like anyone else's.
+         */
+        loadProject(TASK_MANAGER_ID),
+        client()
+          .getTaskManager()
+          .then((tm) => setState("taskManagerSession", tm.sessionId)),
+      ]);
 
       drainEventBuffer();
       setState("boot", { status: "ready" });
@@ -603,6 +630,19 @@ function createWorkspace() {
     });
 
     await bind("run:stopped", ({ projectId, stop, exitCode }) => {
+      /*
+       * The task manager's session id is recorded at `Event::Started`, but
+       * with no project row there is no `project:updated` to carry it here —
+       * so it is re-asked when the run lands.
+       */
+      if (projectId === TASK_MANAGER_ID) {
+        void client()
+          .getTaskManager()
+          .then((tm) => setState("taskManagerSession", tm.sessionId))
+          .catch((cause) =>
+            log.warn(`could not refresh the task manager session: ${describeError(cause)}`),
+          );
+      }
       batch(() => {
         setState("running", projectId, []);
         setState("streaming", projectId, "");
@@ -919,6 +959,23 @@ function createWorkspace() {
     });
   };
 
+  /**
+   * A prompt for the Home task manager, on its own settings.
+   *
+   * Not `send`: there is no tab to read a model from, and the task manager
+   * deliberately runs on `GlobalSettings.taskManager` — a list keeper running
+   * unattended should not be silently billed at the prompt's model.
+   */
+  const sendTaskPrompt = async (body: string): Promise<void> => {
+    await client().sendMessage({
+      projectId: TASK_MANAGER_ID,
+      body,
+      model: state.settings?.taskManager.model,
+      permission: "read_only",
+      effort: state.settings?.taskManager.effort,
+    });
+  };
+
   const actions = {
     retryInit,
     focus,
@@ -932,6 +989,11 @@ function createWorkspace() {
     setTabModel,
     createProject,
     send,
+    sendTaskPrompt,
+    async resetTaskManager() {
+      await client().resetTaskManager();
+      setState("taskManagerSession", null);
+    },
     deleteProject: (id: string) => client().deleteProject(id),
     renameProject: (id: string, name: string) => client().renameProject(id, name),
     getIoPersist: (projectId: string) => client().getIoPersist(projectId),

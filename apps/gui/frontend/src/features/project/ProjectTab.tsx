@@ -68,7 +68,7 @@ export function ProjectTab(props: { tab: Tab; project: Project }): JSX.Element {
     const it = totals();
     const partial =
       it.reported < it.turns ? ` ${it.turns - it.reported} turn(s) reported no usage.` : "";
-    return `${compactCount(it.tokens)} tokens of new work across ${it.turns} turn(s).${partial} Priced by the agent itself — nothing here computes a cost.`;
+    return `${compactCount(it.tokens)} tokens of new work across ${it.turns} turn(s).${partial} Each turn is priced by the agent itself at API list rates — on a subscription plan this measures consumption, not a bill. Nothing here computes a cost.`;
   };
 
   /**

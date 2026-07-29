@@ -153,7 +153,8 @@ function IoPersistToggle(props: { projectId: string }): JSX.Element {
   );
 }
 
-function AgentIoList(props: { projectId: string }): JSX.Element {
+/** Exported for Home, which shows the task manager's exchange under Recent. */
+export function AgentIoList(props: { projectId: string }): JSX.Element {
   const { state } = useWorkspace();
   const lines = () => state.agentIo[props.projectId] ?? [];
 
