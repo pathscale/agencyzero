@@ -103,25 +103,18 @@ describe("the model pill", () => {
   });
 
   /*
-   * A tab keeps the model it was set to. If Settings stops offering that model
-   * the pill must still show it: dropping it would leave the pill naming one
-   * model and the menu unable to express it, and the next message would go out
-   * under a model the user never picked.
+   * Settings is authoritative: a model it no longer offers must not appear here
+   * either. The store moves a conflicting tab onto the new default when the
+   * setting is saved, so the composer renders the list as given and adds
+   * nothing of its own.
    */
-  it("keeps the tab's own model when the selection no longer offers it", async () => {
-    const { getByLabelText } = mount({
-      model: "fable",
-      modelOptions: [{ value: "sonnet", label: "Sonnet" }],
-    });
-    expect(getByLabelText("Model")).toHaveTextContent("fable");
-  });
-
-  it("does not duplicate the tab's model when it is already offered", async () => {
+  it("offers nothing beyond what it was given", async () => {
     const { getByLabelText } = mount({
       model: "sonnet",
       modelOptions: [{ value: "sonnet", label: "Sonnet" }],
     });
     const pill = getByLabelText("Model");
     expect(pill.textContent?.match(/Sonnet/g) ?? []).toHaveLength(1);
+    expect(pill).not.toHaveTextContent("fable");
   });
 });
