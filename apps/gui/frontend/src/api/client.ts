@@ -1,4 +1,5 @@
 import type {
+  AgentModels,
   AgentStatus,
   CreatedProject,
   GlobalSettings,
@@ -68,6 +69,16 @@ export interface AgencyZeroApi {
   setSettings(patch: DeepPartial<GlobalSettings>): Promise<GlobalSettings>;
   /** Probes the installed CLIs. `recheck` forces a fresh probe. */
   listAgentStatus(recheck: boolean): Promise<AgentStatus[]>;
+  /**
+   * Every agent's model catalogue, for the Settings picker.
+   *
+   * `discover` asks each CLI to enumerate rather than trusting the crate's
+   * compiled list. Only Codex can answer that today, so the flag improves what
+   * it can and leaves the rest on the compiled catalogue with `discovered:
+   * false`, rather than failing the whole call for the two agents that cannot
+   * be asked.
+   */
+  listModels(discover: boolean): Promise<AgentModels[]>;
 
   // — Runs and tasks ——————————————————————————————————————————
   /** The tab's model and posture stick until changed again. */

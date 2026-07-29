@@ -1,7 +1,9 @@
 import type {
+  AgentModels,
   AgentStatus,
   GlobalSettings,
   Message,
+  Model,
   Project,
   ProjectItem,
   RunningTask,
@@ -21,6 +23,33 @@ import type {
 
 const now = Date.now();
 const ago = (ms: number) => new Date(now - ms).toISOString();
+
+/*
+ * Codex is the one agent that varies its effort ladder by model, so the levels
+ * are named once here rather than repeated per entry. Kept as plain strings for
+ * the reason the crate gives: `ultra` arrived on some models and not others, and
+ * an enum would need editing before a new level could even be named.
+ */
+const FULL = ["low", "medium", "high", "xhigh", "max", "ultra"];
+const TO_MAX = ["low", "medium", "high", "xhigh", "max"];
+const TO_XHIGH = ["low", "medium", "high", "xhigh"];
+
+const alias = (id: string, name: string, note: string, isDefault = false): Model => ({
+  id,
+  name,
+  note,
+  kind: "alias",
+  efforts: [],
+  isDefault,
+});
+
+const pinned = (
+  id: string,
+  name: string,
+  note: string,
+  efforts: string[] = [],
+  isDefault = false,
+): Model => ({ id, name, note, kind: "pinned", efforts, isDefault });
 
 export const PROJECTS: Project[] = [
   {
@@ -317,9 +346,119 @@ export const AGENT_STATUS: AgentStatus[] = [
   },
 ];
 
+/**
+ * The catalogues as `agent-abstraction` 0.2.2 compiles them in.
+ *
+ * Transcribed from the crate rather than invented, so the mock picker shows the
+ * same entries the Rust path will. `source` records the weakest evidence behind
+ * any entry in that agent's list, which is why Claude reads `docs` even though
+ * its aliases were read from a picker.
+ */
+export const MODEL_CATALOGUE: AgentModels[] = [
+  {
+    agent: "claude",
+    source: "docs",
+    checked: "2026-07-29",
+    against: "claude 2.1.212",
+    discovered: false,
+    models: [
+      alias("default", "Default", "Whatever is recommended for this account", true),
+      alias("opus", "Opus", "Latest Opus, for complex reasoning"),
+      alias("sonnet", "Sonnet", "Latest Sonnet, for daily coding"),
+      alias("haiku", "Haiku", "Fast and efficient, for simple tasks"),
+      alias("fable", "Fable", "For the hardest and longest-running tasks"),
+      alias("best", "Best available", "Fable where the organization has it, otherwise Opus"),
+      alias("opusplan", "Opus, then Sonnet", "Opus while planning, Sonnet to execute (a mode)"),
+      alias("opus[1m]", "Opus (1M context)", "Opus with a 1M token window (a variant)"),
+      alias("sonnet[1m]", "Sonnet (1M context)", "Sonnet with a 1M token window (a variant)"),
+      pinned("claude-opus-5", "Claude Opus 5", "For complex agentic coding and enterprise work"),
+      pinned(
+        "claude-sonnet-5",
+        "Claude Sonnet 5",
+        "The best combination of speed and intelligence",
+      ),
+      pinned(
+        "claude-fable-5",
+        "Claude Fable 5",
+        "Next-generation intelligence for long-running agents",
+      ),
+      pinned(
+        "claude-haiku-4-5",
+        "Claude Haiku 4.5",
+        "The fastest model with near-frontier intelligence",
+      ),
+    ],
+  },
+  {
+    agent: "codex",
+    source: "cli",
+    checked: "2026-07-29",
+    against: "codex-cli 0.145.0",
+    discovered: false,
+    models: [
+      pinned("gpt-5.6-sol", "GPT-5.6-Sol", "Latest frontier agentic coding model.", FULL, true),
+      pinned(
+        "gpt-5.6-terra",
+        "GPT-5.6-Terra",
+        "Balanced agentic coding model for everyday work.",
+        FULL,
+      ),
+      pinned("gpt-5.6-luna", "GPT-5.6-Luna", "Fast and affordable agentic coding model.", TO_MAX),
+      pinned("gpt-5.5", "GPT-5.5", "Frontier model for complex coding and research.", TO_XHIGH),
+      pinned("gpt-5.4", "GPT-5.4", "Strong model for everyday coding.", TO_XHIGH),
+      pinned("gpt-5.4-mini", "GPT-5.4-Mini", "Small, fast, cost-efficient model.", TO_XHIGH),
+    ],
+  },
+  {
+    agent: "copilot",
+    source: "picker",
+    checked: "2026-07-29",
+    against: "Copilot CLI 1.0.75",
+    discovered: false,
+    models: [
+      alias("auto", "Auto", "Copilot picks the best available model for each task", true),
+      // The picker shows ids and nothing else, so these carry no vendor note.
+      ...[
+        ["claude-sonnet-5", "Claude Sonnet 5"],
+        ["claude-sonnet-4.6", "Claude Sonnet 4.6"],
+        ["claude-sonnet-4.5", "Claude Sonnet 4.5"],
+        ["claude-haiku-4.5", "Claude Haiku 4.5"],
+        ["claude-fable-5", "Claude Fable 5"],
+        ["claude-opus-5", "Claude Opus 5"],
+        ["claude-opus-4.8", "Claude Opus 4.8"],
+        ["claude-opus-4.8-fast", "Claude Opus 4.8 (fast)"],
+        ["claude-opus-4.7", "Claude Opus 4.7"],
+        ["claude-opus-4.6", "Claude Opus 4.6"],
+        ["claude-opus-4.5", "Claude Opus 4.5"],
+        ["gpt-5.6-sol", "GPT-5.6-Sol"],
+        ["gpt-5.6-terra", "GPT-5.6-Terra"],
+        ["gpt-5.6-luna", "GPT-5.6-Luna"],
+        ["gpt-5.5", "GPT-5.5"],
+        ["gpt-5.4", "GPT-5.4"],
+        ["gpt-5.3-codex", "GPT-5.3-Codex"],
+        ["gpt-5.4-mini", "GPT-5.4-Mini"],
+        ["gpt-5-mini", "GPT-5 mini"],
+        ["gemini-3.1-pro-preview", "Gemini 3.1 Pro (preview)"],
+        ["gemini-3.6-flash", "Gemini 3.6 Flash"],
+        ["gemini-3.5-flash", "Gemini 3.5 Flash"],
+        ["kimi-k2.7-code", "Kimi K2.7 Code"],
+      ].map(([id, name]) => pinned(id, name, "")),
+    ],
+  },
+];
+
 export const SETTINGS: GlobalSettings = {
   defaultAgent: "claude",
-  defaultModel: "sonnet",
+  /*
+   * A deliberately short starting selection out of a long catalogue: the four
+   * Claude aliases that are actually models, Codex's top three, and the only
+   * Copilot id a Free plan permits. The rest are one checkbox away in Settings.
+   */
+  models: {
+    claude: { enabled: ["default", "opus", "sonnet", "haiku"], default: "sonnet" },
+    codex: { enabled: ["gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.5"], default: "gpt-5.6-sol" },
+    copilot: { enabled: ["auto"], default: "auto" },
+  },
   defaultPermission: "read_only",
   moderator: {
     enabled: true,

@@ -1,4 +1,5 @@
 import type {
+  AgentModels,
   AgentStatus,
   CreatedProject,
   GlobalSettings,
@@ -69,6 +70,7 @@ export function createMockApi(): AgencyZeroApi {
   const taskLog = clone(fixtures.TASK_LOG);
   const logTotals = { ...fixtures.LOG_TOTALS };
   const agentStatus = clone(fixtures.AGENT_STATUS);
+  const models = clone(fixtures.MODEL_CATALOGUE);
   let settings = clone(fixtures.SETTINGS);
 
   const listeners = new Map<string, Set<(payload: unknown) => void>>();
@@ -124,7 +126,7 @@ export function createMockApi(): AgencyZeroApi {
         author: "user",
         agent: settings.defaultAgent,
         moderation: null,
-        model: input.model ?? settings.defaultModel,
+        model: input.model ?? settings.models[settings.defaultAgent].default,
         permission: input.permission ?? settings.defaultPermission,
         usage: null,
         stop: "completed",
@@ -285,7 +287,7 @@ export function createMockApi(): AgencyZeroApi {
         author: "user",
         agent: settings.defaultAgent,
         moderation: null,
-        model: input.model ?? settings.defaultModel,
+        model: input.model ?? settings.models[settings.defaultAgent].default,
         permission: input.permission ?? settings.defaultPermission,
         usage: null,
         stop: "completed",
@@ -327,6 +329,15 @@ export function createMockApi(): AgencyZeroApi {
         for (const status of agentStatus) status.checkedAt = checkedAt;
       }
       return settle(agentStatus);
+    },
+
+    /*
+     * `discover` is accepted and ignored: the mock has no CLI to ask, and every
+     * entry stays `discovered: false` for that reason. Reporting discovery it
+     * did not do would make the Settings provenance line lie.
+     */
+    listModels(_discover): Promise<AgentModels[]> {
+      return settle(models);
     },
 
     setTabModel: () => settle(undefined),

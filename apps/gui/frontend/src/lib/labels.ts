@@ -58,7 +58,6 @@ export function statusSuffix(status: ProjectStatus): string {
 }
 
 /** Models the composer offers. Real values will come from the agent probe. */
-export const MODELS = ["opus", "sonnet", "haiku"] as const;
 
 /**
  * A running task and a finished one carry the same label but different shapes;

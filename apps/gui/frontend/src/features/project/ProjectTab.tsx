@@ -17,7 +17,7 @@ import type { Project, Tab } from "~/types";
  * through the transcript.
  */
 export function ProjectTab(props: { tab: Tab; project: Project }): JSX.Element {
-  const { state, actions } = useWorkspace();
+  const { state, actions, promptModels } = useWorkspace();
 
   const messages = () => state.messages[props.project.id] ?? [];
 
@@ -81,6 +81,7 @@ export function ProjectTab(props: { tab: Tab; project: Project }): JSX.Element {
             autofocus
             placeholder="Ask, or type / for commands…"
             model={props.tab.model}
+            modelOptions={promptModels()}
             permission={props.tab.permission}
             usage={usage()}
             isRunning={running().length > 0}

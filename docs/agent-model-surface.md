@@ -1,18 +1,41 @@
 # Agent model and parameter surface
 
 What each agent CLI will tell us about the models it can run, and which parameters we
-can send per turn. This is the reference behind two open items:
+can send per turn.
 
-- `MODELS = ["opus", "sonnet", "haiku"]` is hardcoded in
-  [`labels.ts`](../apps/gui/frontend/src/lib/labels.ts); the inventory flags it as
-  needing to come from the agent probe.
-- `list_agent_status(recheck)` is specified to probe the installed CLIs but returns
-  fixtures today. See [`gui-wiring-plan.md`](gui-wiring-plan.md).
+This began as the reference behind the hardcoded `MODELS` list in `labels.ts`. That
+constant is gone: Settings now offers `agent-abstraction`'s catalogue and the prompt
+shows what the user enabled. What remains open is `list_agent_status(recheck)`, still
+specified to probe the installed CLIs and still returning fixtures. See
+[`gui-wiring-plan.md`](gui-wiring-plan.md).
 
 **Probed 2026-07-29 on macOS** against `claude` 2.1.205, `codex-cli` 0.145.0, and
 GitHub Copilot CLI 1.0.75. Everything marked *verified* was run locally; everything
 marked *unverified* is called out as such. Re-run the probes when bumping a CLI: all
 three ship model lists that move.
+
+## What the GUI actually calls
+
+Since 0.2.2, [`agent-abstraction`](https://crates.io/crates/agent-abstraction) carries
+this research as code, and `apps/gui` reads the catalogue from there rather than
+re-deriving any of it:
+
+| Call | What it gives |
+| --- | --- |
+| `Agent::models()` | The compiled catalogue: `id`, `name`, `note`, `kind`, `efforts`, `is_default` |
+| `Agent::models_verified()` | `source` / `checked` / `against`, so a stale list can be recognised as stale |
+| `Agent::discover_models()` | Asks the CLI. Codex answers; Claude and Copilot return `Error::Unsupported` |
+
+The Tauri command is `list_models(discover)` in
+[`apps/gui/src/main.rs`](../apps/gui/src/main.rs), and Settings renders the result with
+its provenance visible. The rest of this document is the evidence behind those entries
+and stays useful for two things: judging how much to trust a given list, and re-deriving
+it when a CLI moves.
+
+**The catalogue is advisory, never an entitlement.** What an agent offers and what an
+account may use are different sets, and only the account knows the second. The crate's
+own example: a Copilot Free plan lists twenty-three models and permits exactly one. So a
+picker offers choices to try, and the run reports what the account actually allows.
 
 ## Authentication: OAuth throughout, no API keys
 
@@ -137,7 +160,14 @@ it is not enumeration: it only ever describes models a run actually used.
 
 ### The open decision for us
 
-`/v1/models` is the right answer, but agencyzero drives the CLI and does not hold a
+**Superseded for the picker.** Settings now offers the crate's compiled alias and pinned
+lists, and the user chooses which of them to show, which sidesteps the per-account
+question entirely: a model the plan does not cover simply fails at run time with the
+provider's own wording. What follows still applies if we ever want the picker to be
+account-accurate rather than account-agnostic, which would mean hiding models the login
+cannot reach instead of letting them fail.
+
+`/v1/models` is the right answer there, but agencyzero drives the CLI and does not hold a
 token of its own. Three ways to close that gap, and this is a decision, not a
 recommendation:
 
@@ -243,36 +273,42 @@ sandbox/approval pairs have none either. Either widen `Permission` to a two-axis
 or document these as deliberately unreachable. **This is a decision, not a mechanical
 fix, and it is not made yet.**
 
-## Suggested shape
+## What shipped
 
-Have `list_agent_status(recheck)` return a per-agent catalog alongside the existing
-status, and drop `MODELS` from `labels.ts` entirely:
+`list_models(discover)` returns one entry per agent, and Settings renders it:
 
 ```ts
-interface ModelInfo {
-  id: string;              // what goes on the command line
-  displayName: string;
-  description?: string;
-  efforts: string[];       // per model, from the CLI where available
-  defaultEffort?: string;
-  contextWindow?: number;  // known after first run for claude
-  maxOutputTokens?: number;
-  source: "probe" | "alias" | "static";  // provenance, so the UI can hedge
+interface Model {
+  id: string;        // what goes on the command line, verbatim
+  name: string;      // the vendor's display name
+  note: string;      // one line, empty when the vendor offers none
+  kind: "alias" | "pinned";
+  efforts: string[]; // per model, not per agent
+  isDefault: boolean;
+}
+
+interface AgentModels {
+  agent: Agent;
+  models: Model[];
+  source: "cli" | "picker" | "docs";  // weakest evidence behind any entry
+  checked: string;
+  against: string;
+  discovered: boolean;  // true only when the CLI was asked just now
 }
 ```
 
-Populated per agent as:
+`source` and `discovered` are rendered, not just stored. Two of the three lists were not
+obtained from the installed binary, and a picker that presents a documented list and an
+interrogated one identically invites equal trust in both.
 
-- **codex** `probe`: run `codex debug models`, filter `visibility === "list"`, sort by
-  `priority`, map `supported_reasoning_levels[].effort` to `efforts`.
-- **claude** `probe` once the credential question above is settled: `GET /v1/models`
-  gives `id`, `display_name`, `max_input_tokens`, `max_tokens` directly. Until then
-  `alias`, enriched from `modelUsage` after a run and cached.
-- **copilot** `static`: a short curated list plus `auto`, validated lazily.
+The user's choice per agent lives in `GlobalSettings.models`, a
+`Record<Agent, { enabled: string[]; default: string }>`. Two invariants are enforced in
+the store rather than the UI, so a keyboard path cannot route around them: `default` is
+always a member of `enabled`, and `enabled` is never emptied. Together they mean the
+picker can never end up with nothing in it.
 
-Carrying `source` matters. It lets the settings screen distinguish "these are the models
-your account actually has" from "this is our best guess", which is the honest thing to
-show given only one of three agents can tell us for certain.
+The prompt reads the `claude` entry only. Codex and Copilot selections are collected now
+so the code review UI opens on a real choice rather than a blank one.
 
 ## Re-running the probes
 

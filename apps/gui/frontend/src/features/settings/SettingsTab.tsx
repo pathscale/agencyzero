@@ -9,18 +9,46 @@ import {
   AGENT_LABELS,
   AGENT_STATE_LABELS,
   ENV_POLICY_LABELS,
-  MODELS,
   PERMISSION_LABELS,
   PERMISSION_ORDER,
 } from "~/lib/labels";
 import { useWorkspace } from "~/stores/workspace";
-import type { Agent, AgentState, AgentStatus, EnvPolicy, Permission } from "~/types";
+import type {
+  Agent,
+  AgentModels,
+  AgentState,
+  AgentStatus,
+  EnvPolicy,
+  Model,
+  ModelSelection,
+  ModelSource,
+  Permission,
+} from "~/types";
 
 const STATE_TONE: Record<AgentState, string> = {
   connected: "text-success",
   outdated: "text-warning",
   logged_out: "text-error",
   missing: "text-az-muted",
+};
+
+/** Weakest evidence behind a catalogue, phrased for someone deciding whether to trust it. */
+const SOURCE_LABELS: Record<ModelSource, string> = {
+  cli: "reported by the CLI",
+  picker: "read from the interactive picker",
+  docs: "from vendor documentation",
+};
+
+/**
+ * What each agent's selection is currently wired to.
+ *
+ * Only Claude reaches the prompt today. Codex and Copilot are collected now so
+ * the code review UI has a selection to open with rather than a blank one.
+ */
+const AGENT_USE: Record<Agent, string> = {
+  claude: "used by the prompt",
+  codex: "for the code review UI",
+  copilot: "for the code review UI",
 };
 
 /**
@@ -34,6 +62,19 @@ const STATE_TONE: Record<AgentState, string> = {
 export function SettingsTab(): JSX.Element {
   const { state, actions } = useWorkspace();
   const settings = () => state.settings;
+
+  /**
+   * The catalogue entries this agent's picker may show.
+   *
+   * Ordered by the catalogue rather than by the selection, so a picker reads in
+   * the vendor's own ranking whatever order the ids were checked in.
+   */
+  const enabledModels = (agent: Agent): Model[] => {
+    const catalogue = state.models.find((entry) => entry.agent === agent);
+    const selection = state.settings?.models[agent];
+    if (!catalogue || !selection) return [];
+    return catalogue.models.filter((model) => selection.enabled.includes(model.id));
+  };
 
   return (
     <div class="az-scroll flex min-w-0 flex-1 justify-center rounded-panel border border-az-hairline bg-[oklch(13%_0.004_240)]">
@@ -85,12 +126,15 @@ export function SettingsTab(): JSX.Element {
                     onChange={(defaultAgent) => void actions.saveSettings({ defaultAgent })}
                   />
                 </Row>
-                <Row label="Model">
+                <Row label="Model" hint="chosen from what Models below has enabled">
                   <PillMenu
                     label="Default model"
-                    value={current().defaultModel}
-                    options={MODELS.map((model) => ({ value: model, label: model }))}
-                    onChange={(defaultModel) => void actions.saveSettings({ defaultModel })}
+                    value={current().models[current().defaultAgent].default}
+                    options={enabledModels(current().defaultAgent).map((model) => ({
+                      value: model.id,
+                      label: model.name,
+                    }))}
+                    onChange={(id) => void actions.setDefaultModel(current().defaultAgent, id)}
                   />
                 </Row>
                 <Row
@@ -113,6 +157,29 @@ export function SettingsTab(): JSX.Element {
                 </Row>
               </Section>
 
+              <Section icon="sliders-horizontal" title="Models" hint="what each picker offers">
+                <For each={state.models}>
+                  {(catalogue) => (
+                    <AgentModelList
+                      catalogue={catalogue}
+                      selection={current().models[catalogue.agent]}
+                    />
+                  )}
+                </For>
+                <div class="flex flex-wrap items-center gap-2.5 px-3.5 pt-0 pb-3">
+                  <button
+                    type="button"
+                    onClick={() => void actions.refreshModels()}
+                    class="rounded-lg border border-az-hairline-strong px-3 py-[5px] text-[12px] text-az-body transition-colors hover:border-primary hover:text-primary"
+                  >
+                    Re-read from the CLIs
+                  </button>
+                  <span class="text-[11.5px] text-az-muted">
+                    only Codex can enumerate; the other two stay on the compiled list
+                  </span>
+                </div>
+              </Section>
+
               <Section
                 icon="shield"
                 title="Moderator"
@@ -132,7 +199,10 @@ export function SettingsTab(): JSX.Element {
                   <PillMenu
                     label="Moderator model"
                     value={current().moderator.model}
-                    options={MODELS.map((model) => ({ value: model, label: model }))}
+                    options={enabledModels("claude").map((model) => ({
+                      value: model.id,
+                      label: model.name,
+                    }))}
                     onChange={(model) => void actions.saveSettings({ moderator: { model } })}
                   />
                 </Row>
@@ -381,6 +451,141 @@ function HoldRow(props: {
         checked={props.checked}
         onChange={props.onChange}
       />
+    </div>
+  );
+}
+
+/**
+ * One agent's catalogue, with its provenance stated rather than implied.
+ *
+ * The provenance line is not decoration: two of the three lists were not
+ * obtained from the installed binary, and a picker that presents a documented
+ * list and an interrogated one identically invites the user to trust both
+ * equally.
+ */
+function AgentModelList(props: { catalogue: AgentModels; selection: ModelSelection }): JSX.Element {
+  const agent = () => props.catalogue.agent;
+
+  return (
+    <div class="flex flex-col border-az-hairline border-b last:border-b-0">
+      <div class="flex flex-wrap items-baseline gap-x-2.5 gap-y-0.5 px-3.5 pt-3 pb-1">
+        <span class="font-semibold text-[13px] text-az-title">{AGENT_LABELS[agent()]}</span>
+        <span class="text-[11.5px] text-az-muted">{AGENT_USE[agent()]}</span>
+        <span class="ml-auto text-[11px] text-az-muted tabular-nums">
+          {props.selection.enabled.length} of {props.catalogue.models.length}
+        </span>
+      </div>
+      <p class="px-3.5 pb-2 text-[11px] text-az-muted">
+        {props.catalogue.discovered ? "asked just now" : SOURCE_LABELS[props.catalogue.source]} ·
+        checked {props.catalogue.checked} against {props.catalogue.against}
+      </p>
+      <div class="az-scroll flex max-h-[236px] flex-col pb-1.5">
+        <For each={props.catalogue.models}>
+          {(model) => (
+            <ModelRow
+              model={model}
+              agent={agent()}
+              isEnabled={props.selection.enabled.includes(model.id)}
+              isDefault={props.selection.default === model.id}
+              /*
+               * Emptying a picker would leave the prompt with nothing to send,
+               * so the last remaining entry is not removable. Disabling the
+               * control says so where a rejected click would just look broken.
+               */
+              isLastEnabled={
+                props.selection.enabled.length === 1 && props.selection.enabled[0] === model.id
+              }
+            />
+          )}
+        </For>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * One model: offer it or not, and optionally make it the preselected one.
+ *
+ * "Make default" is always mounted and revealed on hover or focus rather than
+ * mounted on hover, for the same reason the tab close button is: mounting on
+ * hover changes the row's width and shoves the rest of the list sideways.
+ */
+function ModelRow(props: {
+  model: Model;
+  agent: Agent;
+  isEnabled: boolean;
+  isDefault: boolean;
+  isLastEnabled: boolean;
+}): JSX.Element {
+  const { actions } = useWorkspace();
+
+  return (
+    <div class="group flex items-center gap-2.5 px-3.5 py-[3px] transition-colors hover:bg-[oklch(17%_0.006_240)]">
+      {/*
+        A real checkbox rather than a styled button: this is a set of choices,
+        and screen readers should hear it as one. The input carries the state and
+        the keyboard behaviour; the span beside it is the visible box.
+      */}
+      <label
+        class="shrink-0 cursor-pointer"
+        title={props.isLastEnabled ? "The last enabled model cannot be removed" : undefined}
+      >
+        <input
+          type="checkbox"
+          class="peer sr-only"
+          checked={props.isEnabled}
+          disabled={props.isLastEnabled}
+          aria-label={`Offer ${props.model.name}`}
+          onChange={(event) =>
+            void actions.toggleModel(props.agent, props.model.id, event.currentTarget.checked)
+          }
+        />
+        <span
+          aria-hidden="true"
+          class="flex size-[15px] items-center justify-center rounded border transition-colors peer-focus-visible:ring-1 peer-focus-visible:ring-primary peer-disabled:opacity-40"
+          classList={{
+            "border-primary bg-primary text-[oklch(13%_0.004_240)]": props.isEnabled,
+            "border-az-hairline-strong": !props.isEnabled,
+          }}
+        >
+          <Show when={props.isEnabled}>
+            <Icon name="check" class="size-2.5" />
+          </Show>
+        </span>
+      </label>
+
+      <div class="flex min-w-0 flex-1 flex-col leading-tight">
+        <span class="flex items-baseline gap-1.5">
+          <span class="truncate text-[12.5px] text-az-body">{props.model.name}</span>
+          <span class="truncate font-mono text-[10.5px] text-az-muted">{props.model.id}</span>
+          <Show when={props.model.kind === "alias"}>
+            <span class="shrink-0 rounded border border-az-hairline px-1 text-[9.5px] text-az-muted uppercase tracking-[.04em]">
+              alias
+            </span>
+          </Show>
+        </span>
+        <Show when={props.model.note}>
+          <span class="truncate text-[11px] text-az-muted">{props.model.note}</span>
+        </Show>
+      </div>
+
+      <Show
+        when={!props.isDefault}
+        fallback={
+          <span class="shrink-0 rounded border border-primary px-1.5 py-px text-[10px] text-primary">
+            default
+          </span>
+        }
+      >
+        <button
+          type="button"
+          onClick={() => void actions.setDefaultModel(props.agent, props.model.id)}
+          aria-label={`Make ${props.model.name} the default`}
+          class="shrink-0 rounded border border-az-hairline-strong px-1.5 py-px text-[10px] text-az-muted opacity-0 transition-opacity hover:text-primary focus-visible:opacity-100 group-hover:opacity-100"
+        >
+          make default
+        </button>
+      </Show>
     </div>
   );
 }
