@@ -1,3 +1,7 @@
 /target
 .DS_Store
 /apps/gui/gen/schemas
+
+# Built by apps/gui/frontend (rsbuild -> ../dist), served by Tauri.
+/apps/gui/dist
+node_modules
