@@ -62,7 +62,12 @@ export function ProjectPanel(props: { project: Project }): JSX.Element {
         icon="history"
         title="Task log"
         count={state.logTotals[props.project.id] ?? log().length}
-        lead={<ClearLogButton projectId={props.project.id} />}
+        lead={
+          <>
+            <CopyLogButton projectId={props.project.id} />
+            <ClearLogButton projectId={props.project.id} />
+          </>
+        }
         isOpen={prefs.panelSections.log}
         onToggle={() => togglePanelSection("log")}
         class={prefs.panelSections.log ? "flex min-h-[160px] flex-col" : "flex-none"}
@@ -453,6 +458,26 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
   const { state, actions } = useWorkspace();
   const [adding, setAdding] = createSignal(false);
   const [title, setTitle] = createSignal("");
+  /*
+   * Two heights, same contract as Agent I/O: capped by default so the other
+   * sections keep the column, fully expanded on demand — a harvest that lands
+   * a dozen items should be readable without a 300px porthole.
+   */
+  const [tall, setTall] = createSignal(false);
+  /** The item whose title is being rewritten in place, if any. */
+  const [editingId, setEditingId] = createSignal<string | null>(null);
+  const [editTitle, setEditTitle] = createSignal("");
+
+  const saveEdit = async (item: ProjectItem): Promise<void> => {
+    const value = editTitle().trim();
+    setEditingId(null);
+    if (!value || value === item.title) return;
+    try {
+      await actions.updateItem(item.id, value);
+    } catch (cause) {
+      log.error(`could not rename the item: ${describeError(cause)}`);
+    }
+  };
 
   async function create(): Promise<void> {
     const value = title().trim();
@@ -502,94 +527,138 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
   }
 
   return (
-    <div class="az-scroll flex max-h-[300px] flex-col gap-0.5 px-2 pt-1.5 pb-2.5">
+    <div
+      class={`az-scroll flex flex-col gap-0.5 px-2 pt-1.5 pb-2.5 ${tall() ? "" : "max-h-[300px]"}`}
+    >
       <For each={props.items}>
         {(item, index) => (
-          <div
-            class={`group flex items-center gap-1 rounded-[9px] pr-1 transition-colors ${
-              item.status === "active"
-                ? "bg-base-300 shadow-[inset_2px_0_0_#ffee58]"
-                : "hover:bg-white/5"
-            }`}
+          <Show
+            when={editingId() !== item.id}
+            fallback={
+              <input
+                autofocus
+                value={editTitle()}
+                aria-label={`Edit ${item.title}`}
+                onInput={(event) => setEditTitle(event.currentTarget.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") void saveEdit(item);
+                  if (event.key === "Escape") setEditingId(null);
+                }}
+                onBlur={() => void saveEdit(item)}
+                class="rounded-[9px] border border-primary/40 bg-base-300 px-2.5 py-2 text-[12.5px] text-az-body focus:outline-none"
+              />
+            }
           >
-            <button
-              type="button"
-              onClick={() => advance(item)}
-              title="Change status"
-              class="flex min-w-0 flex-1 items-baseline gap-2.5 rounded-[9px] px-2.5 py-2 text-left"
+            <div
+              class={`group flex items-center gap-1 rounded-[9px] pr-1 transition-colors ${
+                item.status === "active"
+                  ? "bg-base-300 shadow-[inset_2px_0_0_#ffee58]"
+                  : "hover:bg-white/5"
+              }`}
             >
-              <Show
-                when={item.status === "finished"}
-                fallback={<ItemMarker status={item.status === "active" ? "active" : "pending"} />}
+              <button
+                type="button"
+                onClick={() => advance(item)}
+                title="Change status"
+                class="flex min-w-0 flex-1 items-baseline gap-2.5 rounded-[9px] px-2.5 py-2 text-left"
               >
-                <Icon name="check" class="relative top-0.5 shrink-0 text-[12px] text-success" />
+                <Show
+                  when={item.status === "finished"}
+                  fallback={<ItemMarker status={item.status === "active" ? "active" : "pending"} />}
+                >
+                  <Icon name="check" class="relative top-0.5 shrink-0 text-[12px] text-success" />
+                </Show>
+                <span
+                  class={`min-w-0 flex-1 text-[12.5px] ${
+                    item.status === "active"
+                      ? "text-base-content"
+                      : item.status === "finished"
+                        ? "text-az-muted"
+                        : "text-az-body"
+                  }`}
+                >
+                  {item.title}
+                </span>
+                <span
+                  class={`shrink-0 text-[11px] ${
+                    item.status === "active"
+                      ? "font-semibold text-primary"
+                      : item.status === "finished"
+                        ? "text-success"
+                        : "text-az-muted"
+                  }`}
+                >
+                  {statusSuffix(item.status)}
+                </span>
+              </button>
+              <Show when={item.status !== "finished"}>
+                <button
+                  type="button"
+                  onClick={() => run(item)}
+                  // Not gated on isLive: the mock serves sendMessage the same
+                  // as the composer does, so the preview can exercise this.
+                  disabled={isRunning()}
+                  title={
+                    isRunning()
+                      ? "A run is already in flight on this project"
+                      : "Send this item to the agent, on this project's session"
+                  }
+                  aria-label={`Run ${item.title}`}
+                  class="shrink-0 rounded-md p-1 text-az-faint transition-colors hover:bg-primary/12 hover:text-primary disabled:opacity-30"
+                >
+                  <Icon name="play" class="text-[12px]" />
+                </button>
               </Show>
-              <span
-                class={`min-w-0 flex-1 text-[12.5px] ${
-                  item.status === "active"
-                    ? "text-base-content"
-                    : item.status === "finished"
-                      ? "text-az-muted"
-                      : "text-az-body"
-                }`}
-              >
-                {item.title}
-              </span>
-              <span
-                class={`shrink-0 text-[11px] ${
-                  item.status === "active"
-                    ? "font-semibold text-primary"
-                    : item.status === "finished"
-                      ? "text-success"
-                      : "text-az-muted"
-                }`}
-              >
-                {statusSuffix(item.status)}
-              </span>
-            </button>
-            <Show when={item.status !== "finished"}>
+              {/* Revealed on hover: the controls all the time would be louder
+                than the titles they act on. */}
               <button
                 type="button"
-                onClick={() => run(item)}
-                // Not gated on isLive: the mock serves sendMessage the same
-                // as the composer does, so the preview can exercise this.
-                disabled={isRunning()}
-                title={
-                  isRunning()
-                    ? "A run is already in flight on this project"
-                    : "Send this item to the agent, on this project's session"
-                }
-                aria-label={`Run ${item.title}`}
-                class="shrink-0 rounded-md p-1 text-az-faint transition-colors hover:bg-primary/12 hover:text-primary disabled:opacity-30"
+                onClick={() => {
+                  setEditTitle(item.title);
+                  setEditingId(item.id);
+                }}
+                aria-label={`Edit ${item.title}`}
+                title="Edit this item"
+                class="shrink-0 rounded-md p-1 text-az-faint opacity-0 transition-[color,opacity] hover:text-az-body group-hover:opacity-100"
               >
-                <Icon name="play" class="text-[12px]" />
+                <Icon name="pencil" class="text-[11px]" />
               </button>
-            </Show>
-            {/* Revealed on hover: two arrows per row all the time would be
-                louder than the titles they move. */}
-            <div class="flex shrink-0 flex-col opacity-0 transition-opacity group-hover:opacity-100">
-              <button
-                type="button"
-                onClick={() => move(index(), -1)}
-                disabled={index() === 0}
-                aria-label={`Move ${item.title} up`}
-                class="rounded-sm px-0.5 text-az-faint transition-colors hover:text-az-body disabled:opacity-25"
-              >
-                <Icon name="chevron-up" class="text-[10px]" />
-              </button>
-              <button
-                type="button"
-                onClick={() => move(index(), 1)}
-                disabled={index() === props.items.length - 1}
-                aria-label={`Move ${item.title} down`}
-                class="rounded-sm px-0.5 text-az-faint transition-colors hover:text-az-body disabled:opacity-25"
-              >
-                <Icon name="chevron-down" class="text-[10px]" />
-              </button>
+              <div class="flex shrink-0 flex-col opacity-0 transition-opacity group-hover:opacity-100">
+                <button
+                  type="button"
+                  onClick={() => move(index(), -1)}
+                  disabled={index() === 0}
+                  aria-label={`Move ${item.title} up`}
+                  class="rounded-sm px-0.5 text-az-faint transition-colors hover:text-az-body disabled:opacity-25"
+                >
+                  <Icon name="chevron-up" class="text-[10px]" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => move(index(), 1)}
+                  disabled={index() === props.items.length - 1}
+                  aria-label={`Move ${item.title} down`}
+                  class="rounded-sm px-0.5 text-az-faint transition-colors hover:text-az-body disabled:opacity-25"
+                >
+                  <Icon name="chevron-down" class="text-[10px]" />
+                </button>
+              </div>
             </div>
-          </div>
+          </Show>
         )}
       </For>
+
+      {/* Only when the cap is plausibly in play: a short list has nothing to
+          expand, and the row would just be furniture. */}
+      <Show when={props.items.length > 8}>
+        <button
+          type="button"
+          onClick={() => setTall((open) => !open)}
+          class="mt-0.5 rounded-md border border-az-hairline px-2 py-1 text-[10.5px] text-az-muted transition-colors hover:border-az-hairline-strong hover:text-base-content"
+        >
+          {tall() ? "Shrink the list" : `Show all ${props.items.length}`}
+        </button>
+      </Show>
 
       <Show
         when={adding()}
@@ -670,7 +739,16 @@ function TaskLogList(props: { projectId: string }): JSX.Element {
   const entries = () => state.taskLog[props.projectId] ?? [];
 
   return (
-    <div class="az-scroll flex min-h-0 flex-1 flex-col gap-[7px] px-3 pt-2.5 pb-3">
+    /*
+     * Capped and scrolling, `data-selectable` throughout: a long run's log
+     * used to grow the whole right column instead of scrolling itself, and
+     * the global `user-select: none` made its rows uncopyable. Whole-log
+     * export is the Copy button in the section header.
+     */
+    <div
+      data-selectable
+      class="az-scroll flex max-h-[45vh] min-h-0 flex-1 flex-col gap-[7px] px-3 pt-2.5 pb-3"
+    >
       <For each={entries()}>
         {(entry) => (
           /*
@@ -691,7 +769,9 @@ function TaskLogList(props: { projectId: string }): JSX.Element {
                     : "text-az-muted"
               }`}
             />
-            <span class="min-w-0 flex-1 truncate text-az-body">{entry.label}</span>
+            <span class="min-w-0 flex-1 truncate text-az-body" title={entry.label}>
+              {entry.label}
+            </span>
             <span class={`shrink-0 ${entry.ok === false ? "text-error" : "text-az-muted"}`}>
               {taskMeta(entry)}
             </span>
@@ -703,6 +783,33 @@ function TaskLogList(props: { projectId: string }): JSX.Element {
         <p class="py-3 text-center text-[11.5px] text-az-muted">Nothing has run yet</p>
       </Show>
     </div>
+  );
+}
+
+/** The whole visible log as text: outcome, label, meta — one line per entry. */
+function CopyLogButton(props: { projectId: string }): JSX.Element {
+  const { state } = useWorkspace();
+  const copy = async (): Promise<void> => {
+    const text = (state.taskLog[props.projectId] ?? [])
+      .map(
+        (entry) =>
+          `${entry.ok === true ? "ok" : entry.ok === false ? "FAILED" : "?"} ${entry.label} · ${taskMeta(entry)}`,
+      )
+      .join("\n");
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch (cause) {
+      log.warn(`could not copy the task log: ${describeError(cause)}`);
+    }
+  };
+  return (
+    <button
+      type="button"
+      onClick={() => void copy()}
+      class="shrink-0 text-[11px] text-az-faint transition-colors hover:text-base-content"
+    >
+      Copy
+    </button>
   );
 }
 

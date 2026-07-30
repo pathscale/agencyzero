@@ -7,8 +7,11 @@
 //! superseded microseconds later, and `Outcome::text` is the authoritative body
 //! anyway: the deltas are for the eye, the outcome is for the record.
 //!
-//! That means an interrupted run persists nothing. Deliberate for now, and the
-//! thing to revisit first if a long run lost to a crash starts hurting.
+//! One exception, learned the hard way: the streaming reply is checkpointed to
+//! `kv` every couple of seconds (`partial_reply_key`), because "close the app,
+//! reopen it" lost every word the user had watched stream. A checkpoint found
+//! at boot becomes an `interrupted` message row; a run that ends normally
+//! clears it before anyone can see it.
 //!
 //! # Naming
 //!
@@ -28,9 +31,10 @@ use crate::db::schema::message::MessageRow;
 use crate::db::schema::project::{NameByIdQuery, PinnedByIdQuery, ProjectRow};
 use crate::db::schema::project_item::{
     PositionByIdQuery as ItemPositionByIdQuery, ProjectItemRow,
-    StatusByIdQuery as ItemStatusByIdQuery,
+    StatusByIdQuery as ItemStatusByIdQuery, TitleByIdQuery as ItemTitleByIdQuery,
 };
 use crate::db::schema::task_log::TaskLogRow;
+use crate::db::tables::Tables;
 
 // — wire shapes ————————————————————————————————————————————————————
 
@@ -497,6 +501,37 @@ pub async fn set_item_status(
     Ok(dto)
 }
 
+/// Rewrite one item's title, for the panel's inline edit.
+///
+/// # Errors
+/// Returns a message for an empty title, a missing item, or a store failure.
+#[tauri::command]
+pub async fn update_item(
+    app: AppHandle,
+    id: String,
+    title: String,
+    state: State<'_, AppState>,
+) -> Result<ProjectItemDto, String> {
+    let title = title.trim().to_string();
+    if title.is_empty() {
+        return Err("an item needs a title".into());
+    }
+    state
+        .tables
+        .project_item
+        .update_title_by_id(ItemTitleByIdQuery { title }, id.clone())
+        .await
+        .map_err(|error| error.to_string())?;
+    let row = state
+        .tables
+        .project_item
+        .select(id.clone())
+        .ok_or_else(|| format!("no item {id}"))?;
+    let dto = ProjectItemDto::from(row);
+    let _ = app.emit("item:updated", dto.clone());
+    Ok(dto)
+}
+
 /// Remove one item.
 ///
 /// # Errors
@@ -935,6 +970,95 @@ const MAX_IO_ENTRIES: usize = 500;
 /// Where a project's "keep the raw exchange" flag lives in `kv`.
 fn io_persist_key(project_id: &str) -> String {
     format!("io-persist:{project_id}")
+}
+
+/// Where a run's partially streamed reply lives in `kv` while it streams.
+///
+/// Written every few seconds during a run and cleared the moment the reply
+/// lands as a real message row. Anything found here at boot is a reply the
+/// app was closed on top of — `recover_partial_replies` turns it into an
+/// `interrupted` message so the words the user watched stream are not lost.
+pub(crate) fn partial_reply_key(project_id: &str) -> String {
+    format!("partial-reply:{project_id}")
+}
+
+/// How stale the persisted copy of a streaming reply may get.
+///
+/// Every text delta re-arms this; the write happens on the first delta after
+/// the interval passes. Frequent enough that killing the app loses seconds of
+/// prose, not minutes; rare enough that a chatty run is not a continuous
+/// write load on the store everything else depends on.
+const PARTIAL_FLUSH_EVERY: std::time::Duration = std::time::Duration::from_secs(2);
+
+/// Drop a run's reply checkpoint, once a real row owns the words.
+async fn clear_partial_reply(tables: &Tables, project_id: &str) {
+    if let Err(error) = tables
+        .kv_put(&partial_reply_key(project_id), String::new())
+        .await
+    {
+        crate::log!(
+            crate::log::Level::Warn,
+            "run",
+            "{project_id}: could not clear the reply checkpoint: {error}"
+        );
+    }
+}
+
+/// Turn any partially streamed replies from a previous launch into rows.
+///
+/// Called once at boot, before the window asks for messages. A non-empty
+/// `partial-reply:` key means a run was streaming when the process died — the
+/// reply row was never written, but the prose the user watched was flushed
+/// here. It becomes a message with `stop: "interrupted"`, so the transcript
+/// says honestly that the turn did not finish.
+pub async fn recover_partial_replies(tables: &Tables) {
+    let rows = tables.kv.select_all().execute().unwrap_or_default();
+    for row in rows {
+        let Some(project_id) = row.key.strip_prefix("partial-reply:") else {
+            continue;
+        };
+        let project_id = project_id.to_string();
+        if row.value.is_empty() {
+            continue;
+        }
+        // The task manager has no project row; every real project must still
+        // exist — a partial for a deleted project is just cleared.
+        if project_id != crate::tasks::TASK_MANAGER_ID
+            && tables.project.select(project_id.clone()).is_none()
+        {
+            let _ = tables.kv_put(&row.key, String::new()).await;
+            continue;
+        }
+        let message = MessageRow {
+            id: id("msg"),
+            project_id: project_id.clone(),
+            item_id: String::new(),
+            author: "agent".into(),
+            agent: "claude".into(),
+            moderation: String::new(),
+            model: String::new(),
+            permission: String::new(),
+            usage: String::new(),
+            stop: "interrupted".into(),
+            exit_code: 0,
+            body: row.value,
+            created_at: now(),
+        };
+        if let Err(error) = tables.message.insert(message) {
+            crate::log!(
+                crate::log::Level::Error,
+                "run",
+                "{project_id}: could not recover the interrupted reply: {error}"
+            );
+            continue;
+        }
+        crate::log!(
+            crate::log::Level::Info,
+            "run",
+            "{project_id}: recovered a reply the last launch was closed on top of"
+        );
+        let _ = tables.kv_put(&row.key, String::new()).await;
+    }
 }
 
 /// Whether this project records its raw exchange to the database.
@@ -1857,7 +1981,11 @@ pub async fn delete_project(
         .delete_by_project(id.clone())
         .await
         .map_err(|error| failed("the approval rules", &error))?;
-    for key in [session_key(&id), io_persist_key(&id)] {
+    for key in [
+        session_key(&id),
+        io_persist_key(&id),
+        partial_reply_key(&id),
+    ] {
         if let Err(error) = state.tables.kv_put(&key, String::new()).await {
             crate::log!(
                 crate::log::Level::Warn,
@@ -2058,6 +2186,14 @@ pub async fn send_message(
         format!("you sent a message ({} chars)", input.body.len()),
     );
     let _ = app.emit("message:appended", &user_message);
+    // The run exists from this moment: the slot is claimed and the spawn below
+    // cannot be refused. This is what starts the transcript's status line —
+    // event-driven rather than assumed by the sender, so a backend that fakes
+    // no run (the mock) shows no run.
+    let _ = app.emit(
+        "run:accepted",
+        serde_json::json!({ "projectId": input.project_id }),
+    );
 
     // The working directories: the project's own if it has any, else the
     // workspace root. An agent with no cwd inherits the app's, which for a
@@ -2297,6 +2433,14 @@ async fn drive_run(
      */
     let mut streamed_text = String::new();
 
+    /*
+     * The checkpoint clock. The reply is flushed to `kv` on the first delta
+     * after each interval, so killing the process mid-run loses at most a
+     * couple of seconds of prose instead of the whole turn. Each flush emits
+     * `run:persisted`, which is what the window's saved/unsaved dot reads.
+     */
+    let mut partial_flushed_at = std::time::Instant::now();
+
     // Set by the cancel signal, wherever the loop happens to be waiting when
     // it lands. The loop exits, and the tail below tears the agent down.
     let mut cancelled = false;
@@ -2463,6 +2607,30 @@ async fn drive_run(
                     "run:text",
                     serde_json::json!({ "projectId": project_id, "delta": delta }),
                 );
+                if partial_flushed_at.elapsed() >= PARTIAL_FLUSH_EVERY {
+                    partial_flushed_at = std::time::Instant::now();
+                    match tables
+                        .kv_put(&partial_reply_key(&project_id), streamed_text.clone())
+                        .await
+                    {
+                        Ok(()) => {
+                            // The saved/unsaved dot: how much of what streamed
+                            // is already safe in the store.
+                            let _ = app.emit(
+                                "run:persisted",
+                                serde_json::json!({
+                                    "projectId": project_id,
+                                    "chars": streamed_text.len(),
+                                }),
+                            );
+                        }
+                        Err(error) => crate::log!(
+                            crate::log::Level::Warn,
+                            "run",
+                            "{project_id}: could not checkpoint the reply: {error}"
+                        ),
+                    }
+                }
             }
             Event::Thinking(text) => {
                 note_io(&app, &io, &project_id, "received", "thinking", &text);
@@ -2701,6 +2869,9 @@ async fn drive_run(
             "run",
             "{project_id}: the project was deleted mid-run; discarding the outcome"
         );
+        // Including its checkpoint: recovery must not resurrect a deleted
+        // project's half-written reply at the next boot.
+        clear_partial_reply(&tables, &project_id).await;
         let _ = app.emit(
             "run:stopped",
             serde_json::json!({
@@ -2862,6 +3033,8 @@ async fn drive_run(
                 return;
             }
             let _ = app.emit("message:appended", MessageDto::from(row));
+            // The reply row now owns these words; the checkpoint is done.
+            clear_partial_reply(&tables, &project_id).await;
 
             /*
              * The durable cost record, one row per turn that priced itself.
@@ -2952,7 +3125,10 @@ async fn drive_run(
                 match tables.message.insert(row.clone()) {
                     Ok(_) => {
                         let _ = app.emit("message:appended", MessageDto::from(row));
+                        clear_partial_reply(&tables, &project_id).await;
                     }
+                    // The insert failing is the one case the checkpoint is
+                    // for: left in place, the next boot recovers the words.
                     Err(error) => crate::log!(
                         crate::log::Level::Error,
                         "run",

@@ -2,6 +2,8 @@ import { createSignal, type JSX, onMount, Show } from "solid-js";
 import { Icon } from "~/components/Icon";
 import { PillMenu } from "~/components/PillMenu";
 import { PERMISSION_LABELS, PERMISSION_ORDER } from "~/lib/labels";
+import { describeError, log } from "~/lib/log";
+import { useWorkspace } from "~/stores/workspace";
 import type { Permission } from "~/types";
 
 const PERMISSION_HINTS: Record<Permission, string> = {
@@ -61,15 +63,36 @@ export type ComposerProps = {
  * that is the whole reason it is a pill here and not a preference.
  */
 export function Composer(props: ComposerProps): JSX.Element {
+  const { actions, isLive } = useWorkspace();
   const [draft, setDraft] = createSignal("");
   const [isSending, setIsSending] = createSignal(false);
   const [error, setError] = createSignal<string | null>(null);
   let field!: HTMLTextAreaElement;
 
-  // `isRunning` blocks the keyboard path too: while a run is live the button
-  // reads Stop, but Enter used to submit anyway and start a second run. The
-  // backend now refuses that send; this keeps the draft from even trying.
-  const canSend = () => draft().trim().length > 0 && !isSending() && !props.isRunning;
+  // Sending while a run is live is allowed again — the store queues it and
+  // sends when the run lands, so Enter never starts a second run and never
+  // bounces the words back either.
+  const canSend = () => draft().trim().length > 0 && !isSending();
+
+  /**
+   * The Attach button: the OS picker, and the chosen paths appended to the
+   * draft. The agents read file paths in prose, so "attach" honestly means
+   * putting the path where the model will see it — nothing is uploaded.
+   */
+  const attach = async (): Promise<void> => {
+    try {
+      const paths = await actions.chooseAttachments();
+      if (paths.length === 0) return;
+      setDraft((current) => {
+        const lead = current.length > 0 && !current.endsWith("\n") ? `${current}\n` : current;
+        return lead + paths.join("\n");
+      });
+      resize();
+      field.focus();
+    } catch (cause) {
+      log.warn(`could not attach: ${describeError(cause)}`);
+    }
+  };
 
   /**
    * Clears only after the send resolves.
@@ -167,9 +190,14 @@ export function Composer(props: ComposerProps): JSX.Element {
 
           <button
             type="button"
-            title="Attach"
-            aria-label="Attach"
-            class="flex size-[30px] items-center justify-center rounded-full border border-az-hairline-strong text-az-body transition-colors hover:border-white/30 hover:text-az-title"
+            onClick={() => void attach()}
+            // Greyed on a build whose backend lacks the picker, per the house
+            // convention — a button that silently does nothing is the bug this
+            // replaces.
+            disabled={!isLive("chooseAttachments")}
+            title="Attach files — their paths go into the prompt"
+            aria-label="Attach files"
+            class="flex size-[30px] items-center justify-center rounded-full border border-az-hairline-strong text-az-body transition-colors hover:border-white/30 hover:text-az-title disabled:cursor-not-allowed disabled:opacity-40"
           >
             <Icon name="plus" class="text-[16px]" />
           </button>
@@ -210,20 +238,27 @@ export function Composer(props: ComposerProps): JSX.Element {
             />
           </Show>
 
-          <Show
-            when={props.isRunning}
-            fallback={
-              <button
-                type="button"
-                onClick={() => void submit()}
-                disabled={!canSend()}
-                aria-label="Send"
-                class="flex size-8 items-center justify-center rounded-full bg-primary text-primary-content transition-colors hover:bg-[#fff176] disabled:cursor-not-allowed disabled:opacity-40"
-              >
-                <Icon name="arrow-up" class="text-[17px]" />
-              </button>
-            }
+          {/*
+            While a run is live the pair reads: queue the words, or stop the
+            run. Send stays available because the store queues the message
+            rather than racing the backend's one-run rule; the outline style
+            says "this will wait" without a modal saying it louder.
+          */}
+          <button
+            type="button"
+            onClick={() => void submit()}
+            disabled={!canSend()}
+            aria-label={props.isRunning ? "Queue — sends when the current run finishes" : "Send"}
+            title={props.isRunning ? "Queued until the current run finishes" : undefined}
+            class={`flex size-8 items-center justify-center rounded-full transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
+              props.isRunning
+                ? "border border-primary/40 text-primary hover:border-primary"
+                : "bg-primary text-primary-content hover:bg-[#fff176]"
+            }`}
           >
+            <Icon name="arrow-up" class="text-[17px]" />
+          </button>
+          <Show when={props.isRunning}>
             <button
               type="button"
               onClick={() => props.onStop?.()}

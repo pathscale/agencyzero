@@ -453,6 +453,13 @@ function ProjectGroup(props: { project: Project }): JSX.Element {
   const collapsed = () => prefs.collapsedGroups.includes(props.project.id);
 
   /*
+   * Session-local, not a pref: "show me everything in this group right now"
+   * is a moment's need, and every group starting expanded next launch would
+   * give the longest project the whole screen daily.
+   */
+  const [showAll, setShowAll] = createSignal(false);
+
+  /*
    * Single click folds, double click opens — distinguished by a short timer,
    * not by luck. Folding immediately on the first click would hide an item
    * row before the second click of a double could land on it, so the fold
@@ -596,12 +603,17 @@ function ProjectGroup(props: { project: Project }): JSX.Element {
       </div>
 
       {/*
-        Bounded: a project the task manager just filled with eight items must
-        not push every other group off screen. The count in the header says
-        what the window is onto; the list scrolls inside it.
+        Bounded by default: a project the task manager just filled with eight
+        items must not push every other group off screen. The footer's
+        "Show all" lifts the cap for this group when reading the whole list
+        is the point.
       */}
       <Show when={!collapsed()}>
-        <div class="az-scroll flex max-h-[220px] flex-col overflow-y-auto border-az-hairline-soft border-t">
+        <div
+          class={`az-scroll flex flex-col overflow-y-auto border-az-hairline-soft border-t ${
+            showAll() ? "" : "max-h-[220px]"
+          }`}
+        >
           <For each={items()}>
             {(item) => (
               /*
@@ -639,6 +651,19 @@ function ProjectGroup(props: { project: Project }): JSX.Element {
               </button>
             )}
           </For>
+          <Show when={items().length > 5}>
+            <button
+              type="button"
+              onClick={(event) => {
+                // Not part of the header's fold/open contract.
+                event.stopPropagation();
+                setShowAll((open) => !open);
+              }}
+              class="border-az-hairline-soft border-t px-3.5 py-1.5 text-left text-[11px] text-az-muted transition-colors hover:bg-white/4 hover:text-base-content"
+            >
+              {showAll() ? "Shrink the list" : `Show all ${items().length}`}
+            </button>
+          </Show>
         </div>
       </Show>
     </div>

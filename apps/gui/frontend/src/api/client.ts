@@ -63,6 +63,8 @@ export interface AgencyZeroApi {
   createItem(projectId: string, title: string): Promise<ProjectItem>;
   deleteItem(id: string): Promise<void>;
   setItemStatus(id: string, status: ProjectStatus): Promise<ProjectItem>;
+  /** Rewrite one item's title, for the panel's inline edit. */
+  updateItem(id: string, title: string): Promise<ProjectItem>;
   reorderItems(projectId: string, ids: string[]): Promise<ProjectItem[]>;
 
   // — Conversation ————————————————————————————————————————————
@@ -111,6 +113,13 @@ export interface AgencyZeroApi {
    * all — the click lands and nothing happens.
    */
   chooseDataDirectory(): Promise<string | null>;
+  /**
+   * Open the OS file picker, for the composer's Attach button. The chosen
+   * paths land in the prompt as text — the agents read file paths in prose,
+   * so this is honestly "put the path where the model will see it", not an
+   * upload. Empty means the user cancelled, which is not a failure.
+   */
+  chooseAttachments(): Promise<string[]>;
   /** Where a new project runs, and whether the directory is there yet. */
   getWorkspaceRoot(): Promise<WorkspaceRoot>;
   /** Create it. Explicit, because a settings write should not make directories. */
@@ -223,8 +232,20 @@ export interface AppEvents {
    * authoritative body is the one that lands as `message:appended` when the run
    * finishes. This is what makes a reply appear while it is being written.
    */
+  /**
+   * The backend claimed the project's run slot for an accepted send. Starts
+   * the transcript's status line; `run:stopped` ends it. The mock never emits
+   * this, which is correct — it fakes no run.
+   */
+  "run:accepted": { projectId: string };
   "run:text": { projectId: string; delta: string };
   "run:thinking": { projectId: string; text: string };
+  /**
+   * The streaming reply was checkpointed to the store, up to this many
+   * characters. What the transcript's saved/unsaved dot compares against the
+   * streamed length: killing the app now loses only what came after.
+   */
+  "run:persisted": { projectId: string; chars: number };
   "run:rate_limit": RateLimit;
   /**
    * The limit has lifted. Without this the header pill and the tab dot stay
