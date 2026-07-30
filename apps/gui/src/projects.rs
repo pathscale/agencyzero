@@ -1441,6 +1441,50 @@ pub async fn delete_project(
         format!("could not delete {what}: {error}")
     };
 
+    /*
+     * Stop the live run first, and wait until it has actually stopped.
+     * Deleting rows out from under a running agent does not stop it — the
+     * detached run holds its own table handles and would keep executing
+     * tools, then write its reply and cost under an id that no longer
+     * exists. Deletion doubles as the emergency brake, so it must brake.
+     *
+     * The wait watches the run registry: the run frees its slot only after
+     * `Run::cancel()` has confirmed the process group is gone.
+     */
+    let was_running = state
+        .active
+        .lock()
+        .map(|active| {
+            active
+                .get(&id)
+                .map(|cancel| {
+                    let _ = cancel.send(true);
+                })
+                .is_some()
+        })
+        .unwrap_or(false);
+    if was_running {
+        crate::log!(
+            crate::log::Level::Info,
+            "projects",
+            "{id}: stopping the live run before deleting"
+        );
+        // Teardown is normally near-instant; the bound only exists so a hung
+        // agent cannot hold the delete hostage. The tombstone check in
+        // `drive_run` catches anything that outlives it.
+        for _ in 0..100 {
+            let released = state
+                .active
+                .lock()
+                .map(|active| !active.contains_key(&id))
+                .unwrap_or(true);
+            if released {
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+        }
+    }
+
     state
         .tables
         .task_log
@@ -1466,7 +1510,7 @@ pub async fn delete_project(
         .await
         .map_err(|error| failed("the project", &error))?;
 
-    // Nothing can be running in a project that no longer exists.
+    // The display metadata follows the run it described.
     if let Ok(mut running) = state.running.lock() {
         running.remove(&id);
     }
@@ -2195,6 +2239,33 @@ async fn drive_run(
     } else {
         run.finish().await
     };
+
+    /*
+     * The tombstone check. `delete_project` cancels the run and waits for
+     * this function to exit, so normally the rows are still here — but that
+     * wait is bounded, and a hung agent can outlive it. Checked after
+     * teardown: any delete that got this far has already removed the row,
+     * and a run whose project is gone must not write its reply, cost or
+     * harvest back into existence under a dead id.
+     */
+    let project_gone = !is_task_manager && tables.project.select(project_id.clone()).is_none();
+    if project_gone {
+        crate::log!(
+            crate::log::Level::Warn,
+            "run",
+            "{project_id}: the project was deleted mid-run; discarding the outcome"
+        );
+        let _ = app.emit(
+            "run:stopped",
+            serde_json::json!({
+                "projectId": project_id,
+                "stop": "canceled",
+                "exitCode": null,
+            }),
+        );
+        return;
+    }
+
     match result {
         Ok(outcome) => {
             /*
