@@ -712,7 +712,9 @@ function ProjectGroup(props: { project: Project }): JSX.Element {
           <For each={items()}>
             {(item) => <GroupItemRow item={item} onFold={foldSoon} onOpen={openNow} />}
           </For>
-          <Show when={items().length > 5}>
+          {/* Whenever the cap can be hiding anything: the 220px window fits
+              about five rows, so from the fifth on the way out must exist. */}
+          <Show when={items().length > 4}>
             <button
               type="button"
               onClick={(event) => {
