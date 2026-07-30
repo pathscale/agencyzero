@@ -468,6 +468,9 @@ export function createMockApi(): AgencyZeroApi {
     getCostSummary: () =>
       settle({ todayUsd: 0.41, weekUsd: 3.87, monthUsd: 11.02, totalUsd: 28.6, turns: 412 }),
 
+    // A browser tab cannot exec itself; the button is greyed off-Tauri anyway.
+    relaunchApp: () => settle(undefined),
+
     async on<E extends keyof AppEvents>(
       event: E,
       handler: (payload: AppEvents[E]) => void,

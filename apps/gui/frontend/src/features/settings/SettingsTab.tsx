@@ -284,6 +284,16 @@ export function SettingsTab(): JSX.Element {
 
               <CostSection />
 
+              <Section icon="settings" title="Application" hint="the running instance">
+                <Row
+                  label="Restart"
+                  hint="drains the store, then reopens into the build currently on disk — the second half of a rebuild"
+                  isLast
+                >
+                  <RelaunchButton />
+                </Row>
+              </Section>
+
               <AccountUsageSection />
 
               <Section
@@ -623,6 +633,32 @@ function ResetTaskManagerButton(): JSX.Element {
         {busy() ? "Resetting…" : "Reset"}
       </button>
     </div>
+  );
+}
+
+/**
+ * Restart into the binary currently on disk.
+ *
+ * "Restarting…" is optimistic and stays that way on success — the process is
+ * replaced mid-await, so there is nothing to reset. The window vanishing is
+ * the success state.
+ */
+function RelaunchButton(): JSX.Element {
+  const { actions, isLive } = useWorkspace();
+  const [busy, setBusy] = createSignal(false);
+
+  return (
+    <button
+      type="button"
+      disabled={busy() || !isLive("relaunchApp")}
+      onClick={() => {
+        setBusy(true);
+        void actions.relaunchApp().catch(() => setBusy(false));
+      }}
+      class="shrink-0 rounded-lg border border-az-hairline-strong px-3 py-[5px] text-[12px] text-az-body transition-colors hover:border-warning hover:text-warning disabled:opacity-40"
+    >
+      {busy() ? "Restarting…" : "Restart"}
+    </button>
   );
 }
 

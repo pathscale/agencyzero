@@ -54,6 +54,7 @@ const COMMAND_FOR: Partial<Record<keyof AgencyZeroApi, string>> = {
   clearTaskLog: "clear_task_log",
   listRateLimits: "list_rate_limits",
   getCostSummary: "get_cost_summary",
+  relaunchApp: "relaunch_app",
   getTaskManager: "get_task_manager",
   resetTaskManager: "reset_task_manager",
   resolveApproval: "resolve_approval",

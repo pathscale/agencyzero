@@ -393,7 +393,7 @@ function SettingsSection(props: { project: Project }): JSX.Element {
 }
 
 function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Element {
-  const { actions } = useWorkspace();
+  const { state, actions } = useWorkspace();
   const [adding, setAdding] = createSignal(false);
   const [title, setTitle] = createSignal("");
 
@@ -411,49 +411,88 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
     void actions.setItemStatus(item.id, next);
   }
 
+  const isRunning = () => (state.running[props.projectId] ?? []).length > 0;
+
+  /**
+   * The flywheel closer: an item becomes a prompt on this project's own
+   * session, so a harvested finding is one click from being worked instead of
+   * being re-typed. The item is marked active in the same motion — the run
+   * exists because of it, and the panel should say so.
+   */
+  function run(item: ProjectItem): void {
+    void actions.setItemStatus(item.id, "active");
+    void actions.send(
+      props.projectId,
+      `Work on this task from the project's item list:\n\n${item.title}\n\n` +
+        `When you are done, say what changed and what is left, if anything.`,
+    );
+  }
+
   return (
     <div class="az-scroll flex max-h-[300px] flex-col gap-0.5 px-2 pt-1.5 pb-2.5">
       <For each={props.items}>
         {(item) => (
-          <button
-            type="button"
-            onClick={() => advance(item)}
-            title="Change status"
-            class={`flex items-baseline gap-2.5 rounded-[9px] px-2.5 py-2 text-left transition-colors ${
+          <div
+            class={`group flex items-center gap-1 rounded-[9px] pr-1 transition-colors ${
               item.status === "active"
                 ? "bg-base-300 shadow-[inset_2px_0_0_#ffee58]"
                 : "hover:bg-white/5"
             }`}
           >
-            <Show
-              when={item.status === "finished"}
-              fallback={<ItemMarker status={item.status === "active" ? "active" : "pending"} />}
+            <button
+              type="button"
+              onClick={() => advance(item)}
+              title="Change status"
+              class="flex min-w-0 flex-1 items-baseline gap-2.5 rounded-[9px] px-2.5 py-2 text-left"
             >
-              <Icon name="check" class="relative top-0.5 shrink-0 text-[12px] text-success" />
+              <Show
+                when={item.status === "finished"}
+                fallback={<ItemMarker status={item.status === "active" ? "active" : "pending"} />}
+              >
+                <Icon name="check" class="relative top-0.5 shrink-0 text-[12px] text-success" />
+              </Show>
+              <span
+                class={`min-w-0 flex-1 text-[12.5px] ${
+                  item.status === "active"
+                    ? "text-base-content"
+                    : item.status === "finished"
+                      ? "text-az-muted"
+                      : "text-az-body"
+                }`}
+              >
+                {item.title}
+              </span>
+              <span
+                class={`shrink-0 text-[11px] ${
+                  item.status === "active"
+                    ? "font-semibold text-primary"
+                    : item.status === "finished"
+                      ? "text-success"
+                      : "text-az-muted"
+                }`}
+              >
+                {statusSuffix(item.status)}
+              </span>
+            </button>
+            <Show when={item.status !== "finished"}>
+              <button
+                type="button"
+                onClick={() => run(item)}
+                // Not gated on isLive: the mock serves sendMessage the same
+                // as the composer does, so the preview can exercise this.
+                disabled={isRunning()}
+                title={
+                  isRunning()
+                    ? "A run is already in flight on this project"
+                    : "Send this item to the agent, on this project's session"
+                }
+                aria-label={`Run ${item.title}`}
+                class="shrink-0 rounded-md p-1 text-az-faint transition-colors hover:bg-primary/12 hover:text-primary disabled:opacity-30"
+              >
+                <Icon name="play" class="text-[12px]" />
+              </button>
             </Show>
-            <span
-              class={`min-w-0 flex-1 text-[12.5px] ${
-                item.status === "active"
-                  ? "text-base-content"
-                  : item.status === "finished"
-                    ? "text-az-muted"
-                    : "text-az-body"
-              }`}
-            >
-              {item.title}
-            </span>
-            <span
-              class={`shrink-0 text-[11px] ${
-                item.status === "active"
-                  ? "font-semibold text-primary"
-                  : item.status === "finished"
-                    ? "text-success"
-                    : "text-az-muted"
-              }`}
-            >
-              {statusSuffix(item.status)}
-            </span>
-          </button>
+          </div>
         )}
       </For>
 
