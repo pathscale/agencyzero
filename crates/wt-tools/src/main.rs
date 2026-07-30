@@ -13,6 +13,7 @@ enum Command {
     ListProjects,
     ListItems { project: Option<String> },
     SearchItems { query: String },
+    ListRules { project: Option<String> },
 }
 
 const USAGE: &str = "\
@@ -26,6 +27,7 @@ commands:
   list-projects              every project, ordered by position
   list-items [--project ID]  items, optionally narrowed to one project
   search-items <QUERY>       items whose title contains QUERY (case-insensitive)
+  list-rules [--project ID]  remembered approvals (\"always allow similar\" grants)
 
 The store location honours the same overrides as the GUI: $AZ_DATA_DIR,
 then the data-location.json pointer next to the app's config, then the
@@ -34,24 +36,38 @@ platform app-data directory.";
 fn parse_args(args: &[String]) -> Result<Command, String> {
     let mut args = args.iter();
     let command = args.next().ok_or("missing command")?;
+    /// The shared `[--project ID]` tail, for the commands that narrow.
+    fn project_filter<'a>(
+        mut args: impl Iterator<Item = &'a String>,
+    ) -> Result<Option<String>, String> {
+        let mut project = None;
+        while let Some(flag) = args.next() {
+            match (flag.as_str(), flag.strip_prefix("--project=")) {
+                ("--project", _) => {
+                    project = Some(
+                        args.next()
+                            .ok_or("--project needs a project id")?
+                            .to_string(),
+                    );
+                }
+                (_, Some(value)) => project = Some(value.to_string()),
+                _ => return Err(format!("unexpected argument: {flag}")),
+            }
+        }
+        Ok(project)
+    }
+
     let command = match command.as_str() {
         "list-projects" => Command::ListProjects,
         "list-items" => {
-            let mut project = None;
-            while let Some(flag) = args.next() {
-                match (flag.as_str(), flag.strip_prefix("--project=")) {
-                    ("--project", _) => {
-                        project = Some(
-                            args.next()
-                                .ok_or("--project needs a project id")?
-                                .to_string(),
-                        );
-                    }
-                    (_, Some(value)) => project = Some(value.to_string()),
-                    _ => return Err(format!("unexpected argument: {flag}")),
-                }
-            }
-            return Ok(Command::ListItems { project });
+            return Ok(Command::ListItems {
+                project: project_filter(args)?,
+            });
+        }
+        "list-rules" => {
+            return Ok(Command::ListRules {
+                project: project_filter(args)?,
+            });
         }
         "search-items" => {
             let query = args.next().ok_or("search-items needs a query")?.to_string();
@@ -111,6 +127,10 @@ fn run(command: Command) -> eyre::Result<()> {
                 let table = wt_tools::open_items(&dir).await?;
                 print_lines(&wt_tools::search_items(&table, &query)?)
             }
+            Command::ListRules { project } => {
+                let table = wt_tools::open_rules(&dir).await?;
+                print_lines(&wt_tools::list_rules(&table, project.as_deref())?)
+            }
         }
     })
 }
@@ -156,6 +176,16 @@ mod tests {
             parse_args(&args(&["search-items", "deploy"])),
             Ok(Command::SearchItems {
                 query: "deploy".into()
+            })
+        );
+        assert_eq!(
+            parse_args(&args(&["list-rules"])),
+            Ok(Command::ListRules { project: None })
+        );
+        assert_eq!(
+            parse_args(&args(&["list-rules", "--project=proj-1"])),
+            Ok(Command::ListRules {
+                project: Some("proj-1".into())
             })
         );
     }
