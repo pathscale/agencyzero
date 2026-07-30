@@ -6,7 +6,7 @@ import type {
   BuildInfo,
   CostSummary,
   CreatedProject,
-  DataLocation,
+  DataLocationView,
   GlobalSettings,
   Message,
   PendingApproval,
@@ -94,8 +94,8 @@ export interface AgencyZeroApi {
    * be asked.
    */
   listModels(discover: boolean): Promise<AgentModels[]>;
-  /** Where the tables were opened from this launch. */
-  getDataLocation(): Promise<DataLocation>;
+  /** Where the tables were opened from this launch, and where the next will. */
+  getDataLocation(): Promise<DataLocationView>;
   /**
    * Point future launches somewhere else, or at the default with `null`.
    *
@@ -103,6 +103,14 @@ export interface AgencyZeroApi {
    * relocated out from under its open handles.
    */
   setDataLocation(path: string | null): Promise<void>;
+  /**
+   * Open the OS directory picker, to choose the location above.
+   *
+   * `null` means the user cancelled, which is not a failure. This is a command
+   * rather than a `window.prompt` because a Tauri webview draws no prompt at
+   * all — the click lands and nothing happens.
+   */
+  chooseDataDirectory(): Promise<string | null>;
   /** Where a new project runs, and whether the directory is there yet. */
   getWorkspaceRoot(): Promise<WorkspaceRoot>;
   /** Create it. Explicit, because a settings write should not make directories. */

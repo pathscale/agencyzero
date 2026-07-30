@@ -353,25 +353,41 @@ export function SettingsTab(): JSX.Element {
                           {location().path}
                         </span>
                       </Row>
+                      {/*
+                       * The pending row is what makes a change visible at all.
+                       * Nothing moves until the next launch, so without it a
+                       * directory that was chosen and written looks exactly
+                       * like a chooser that did nothing.
+                       */}
+                      <Show when={location().pending}>
+                        {(pending) => (
+                          <Row label="Next launch" hint="relaunch to open here">
+                            <span class="max-w-[340px] truncate font-mono text-[11.5px] text-primary">
+                              {pending().path}
+                            </span>
+                          </Row>
+                        )}
+                      </Show>
                       <Row label="Change it" isLast>
                         <div class="flex items-center gap-2">
                           <button
                             type="button"
-                            disabled={!location().isEditable}
-                            onClick={() => {
-                              const next = window.prompt(
-                                "Data directory for the next launch",
-                                location().path,
-                              );
-                              if (next?.trim()) void actions.setDataLocation(next.trim());
-                            }}
+                            disabled={!location().isEditable || !isLive("chooseDataDirectory")}
+                            onClick={() => void actions.chooseDataLocation()}
                             class="rounded-lg border border-az-hairline-strong px-3 py-[5px] text-[12px] text-az-body transition-colors hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-40"
                           >
                             Choose…
                           </button>
                           <button
                             type="button"
-                            disabled={!location().isEditable || location().source === "default"}
+                            disabled={
+                              !location().isEditable ||
+                              // Whether there is a pointer left to clear, which
+                              // after a change this session is what the pending
+                              // half says — `source` describes how *this* launch
+                              // resolved and no longer moves.
+                              (location().pending ?? location()).source === "default"
+                            }
                             onClick={() => void actions.setDataLocation(null)}
                             class="rounded-lg border border-az-hairline-strong px-3 py-[5px] text-[12px] text-az-muted transition-colors hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-40"
                           >

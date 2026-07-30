@@ -68,6 +68,7 @@ export function createTauriApi(): AgencyZeroApi {
     listModels: (discover) => call("list_models", { discover }),
     getDataLocation: () => call("get_data_location"),
     setDataLocation: (path) => call("set_data_location", { path }),
+    chooseDataDirectory: () => call("choose_data_directory"),
     getWorkspaceRoot: () => call("get_workspace_root"),
     createWorkspaceRoot: () => call("create_workspace_root"),
 

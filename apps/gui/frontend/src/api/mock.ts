@@ -3,7 +3,7 @@ import type {
   AgentModels,
   AgentStatus,
   CreatedProject,
-  DataLocation,
+  DataLocationView,
   GlobalSettings,
   Message,
   Project,
@@ -364,10 +364,21 @@ export function createMockApi(): AgencyZeroApi {
      * claiming a real path, and `isEditable: false` keeps the browser from
      * offering to move something that does not exist.
      */
-    getDataLocation(): Promise<DataLocation> {
-      return settle({ path: "(in-memory fixtures)", source: "default", isEditable: false });
+    getDataLocation(): Promise<DataLocationView> {
+      return settle({
+        path: "(in-memory fixtures)",
+        source: "default",
+        isEditable: false,
+        pending: null,
+      });
     },
     setDataLocation: () => settle(undefined),
+    /*
+     * Cancelled, always. A browser has no native picker to open, and answering
+     * with a plausible path would have the fixtures pretending to a filesystem
+     * they do not have.
+     */
+    chooseDataDirectory: () => settle(null),
 
     /* No filesystem outside Tauri, so this describes the shape and claims nothing. */
     getWorkspaceRoot: () => settle({ path: "(no filesystem)", exists: false, isDefault: true }),
