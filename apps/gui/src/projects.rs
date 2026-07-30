@@ -967,15 +967,18 @@ pub fn list_agent_io(project_id: String, state: State<'_, AppState>) -> Vec<Agen
 /// worth keeping is the *finished* row, and that goes to `task_log`.
 pub type RunningTasks = std::sync::Mutex<std::collections::HashMap<String, Vec<RunningTaskDto>>>;
 
-/// Decisions on their way to runs blocked on an approval, by project.
+/// Decisions on their way to runs blocked on an approval, keyed by the exact
+/// `(project id, approval id)` pair.
 ///
-/// A run in `ask` mode that hits a gated tool call emits `run:approval` and
-/// waits. The sender registered here is how `resolve_approval` delivers the
-/// user's answer — `(approval id, allow)` — back into that run's event loop.
-/// One entry per project: Claude asks one question at a time, because the
-/// agent itself is blocked until it hears back.
-pub type PendingApprovals =
-    std::sync::Mutex<std::collections::HashMap<String, tokio::sync::mpsc::Sender<(String, bool)>>>;
+/// A run in `ask` mode that hits a gated tool call emits `run:approval`,
+/// registers a one-shot sender here, and waits. `resolve_approval` consumes
+/// exactly that sender, so an answer can only ever reach the question it
+/// names. The previous shape — a shared per-project queue — let a late answer
+/// to a timed-out question sit in the queue and instantly deny the *next*
+/// question; one-shot-per-id makes that stale answer an error instead.
+pub type PendingApprovals = std::sync::Mutex<
+    std::collections::HashMap<(String, String), tokio::sync::oneshot::Sender<bool>>,
+>;
 
 /// How long an unanswered approval stands before it is denied.
 ///
@@ -1241,12 +1244,23 @@ pub async fn resolve_approval(
     allow: bool,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
+    /*
+     * Removed, not read: consuming the sender is what makes a duplicate click
+     * or a late answer to a timed-out question an error here, instead of a
+     * stray decision waiting to be misread as the answer to the *next*
+     * question.
+     */
     let sender = state
         .approvals
         .lock()
         .ok()
-        .and_then(|waiting| waiting.get(&project_id).cloned())
-        .ok_or_else(|| format!("no run in {project_id} is waiting on an approval"))?;
+        .and_then(|mut waiting| waiting.remove(&(project_id.clone(), approval_id.clone())))
+        .ok_or_else(|| {
+            format!(
+                "approval {approval_id} is not waiting in {project_id} — \
+                 already answered, timed out, or the run has moved on"
+            )
+        })?;
 
     crate::log!(
         crate::log::Level::Info,
@@ -1254,8 +1268,7 @@ pub async fn resolve_approval(
         "{project_id}: approval {approval_id} answered allow={allow}"
     );
     sender
-        .send((approval_id, allow))
-        .await
+        .send(allow)
         .map_err(|_| "the run finished before the decision arrived".to_string())
 }
 
@@ -1887,14 +1900,6 @@ async fn drive_run(
         }
     };
 
-    // The channel `resolve_approval` answers on, registered whether or not
-    // this run asks: registering is cheap and an entry for a run that never
-    // asks is simply never used.
-    let (decision_tx, mut decisions) = tokio::sync::mpsc::channel::<(String, bool)>(4);
-    if let Ok(mut waiting) = approvals.lock() {
-        waiting.insert(project_id.clone(), decision_tx);
-    }
-
     /*
      * Paragraph breaks between text blocks, keyed on structure rather than
      * timing. "I'll check whether that exists." → tool call → "Yes — it's
@@ -1957,6 +1962,14 @@ async fn drive_run(
                     }),
                 );
 
+                // One sender per question, registered when the question is
+                // asked and consumed by exactly one answer. See
+                // [`PendingApprovals`] for why this is not a shared queue.
+                let (answer_tx, answer_rx) = tokio::sync::oneshot::channel::<bool>();
+                if let Ok(mut waiting) = approvals.lock() {
+                    waiting.insert((project_id.clone(), approval.id.clone()), answer_tx);
+                }
+
                 /*
                  * The agent is blocked until this is answered, so blocking the
                  * loop here loses nothing — no further events arrive while the
@@ -1966,7 +1979,7 @@ async fn drive_run(
                  * told no and carries on.
                  */
                 let answer = tokio::select! {
-                    answer = decisions.recv() => answer,
+                    answer = answer_rx => answer.ok(),
                     () = tokio::time::sleep(APPROVAL_TIMEOUT) => None,
                     // Stop can arrive while the question stands; the pending
                     // tool call is denied and the loop tail tears down.
@@ -1975,7 +1988,13 @@ async fn drive_run(
                         None
                     }
                 };
-                let allow = matches!(&answer, Some((id, true)) if *id == approval.id);
+                // The question is closed however it ended. A timed-out entry
+                // left registered would let a late click "answer" a question
+                // that is no longer being asked.
+                if let Ok(mut waiting) = approvals.lock() {
+                    waiting.remove(&(project_id.clone(), approval.id.clone()));
+                }
+                let allow = answer == Some(true);
                 let decision = if allow {
                     Decision::Allow
                 } else {
@@ -2218,9 +2237,9 @@ async fn drive_run(
         running.remove(&project_id);
     }
     // And nothing is waiting on a decision: a `resolve_approval` arriving now
-    // should say "the run finished" rather than feed a dead channel.
+    // should say "not waiting" rather than feed a dead channel.
     if let Ok(mut waiting) = approvals.lock() {
-        waiting.remove(&project_id);
+        waiting.retain(|(project, _), _| project != &project_id);
     }
 
     // One write, now that there is something final to write.
