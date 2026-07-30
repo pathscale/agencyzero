@@ -1,13 +1,12 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "AgencyZero",
-  "version": "0.1.0",
   "identifier": "com.pathscale.agencyzero",
   "build": {
     "frontendDist": "dist",
     "devUrl": "http://localhost:3010",
-    "beforeDevCommand": "cd gui/frontend && bun run dev",
-    "beforeBuildCommand": "cd gui/frontend && bun run build"
+    "beforeDevCommand": "bun run dev",
+    "beforeBuildCommand": "bun run build"
   },
   "app": {
     "windows": [

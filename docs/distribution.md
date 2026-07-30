@@ -45,6 +45,28 @@ Two things follow that are easy to trip over:
   casks from the official tap on 2026-09-01. That policy governs `homebrew/cask`
   only, so our own tap is unaffected, but the direction of travel is clear.
 
+## Cutting a release
+
+Bump `[workspace.package] version` in the root `Cargo.toml` and push to master.
+That is the whole ritual.
+
+That one field is the only version in the repo. `apps/gui/tauri.conf.json`
+deliberately omits its `version` key so Tauri falls back to the crate version,
+which means a single bump moves the bundle version, the in-app build stamp
+(`az_core::VERSION`) and the number the updater compares, together. Tauri's own
+docs suggest keeping the version in the config instead; that advice does not fit
+here, because the build stamp already reads the crate version and two
+declarations are two things to forget.
+
+[`release.yml`](../.github/workflows/release.yml) decides whether to publish by
+comparing that version against the one in the **live** `latest.json`, not against
+git history. That makes it idempotent: a release that failed halfway is retried
+by the next push, a re-run is harmless, and squashes and force-pushes cannot
+confuse it. A push that changes code but not the version publishes nothing.
+
+`workflow_dispatch` takes a `force` input for the case where you need to
+republish the same version.
+
 ## Why the URL carries no version
 
 Releases overwrite `AgencyZero.app.tar.gz` at a fixed path rather than

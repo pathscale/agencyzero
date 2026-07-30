@@ -1,17 +1,35 @@
 name: Release
 
-# Publishes the macOS bundle to BunnyCDN under a fixed, versionless path, so a
-# release clobbers the previous one instead of accumulating files. `latest.json`
-# is therefore the only place the version is recorded, which is why the purge
-# steps below are hard failures rather than best-effort: a stale edge copy of
-# either file is indistinguishable, to a client, from a release that never
-# happened.
+# Publishes when the version changes, and only then.
+#
+# The version lives in one place: `[workspace.package] version` in the root
+# Cargo.toml. `apps/gui/tauri.conf.json` deliberately omits its `version` field
+# so Tauri falls back to that, which means one bump moves the bundle version,
+# the in-app build stamp (`az_core::VERSION`) and the number the updater
+# compares, together. Tauri's docs suggest keeping the version in the config
+# instead; that advice does not fit a repo where the build stamp already reads
+# the crate version, and two declarations are two things to forget.
+#
+# "Changed" is decided against what is actually published, not against git
+# history. Comparing to the live latest.json makes this idempotent: a release
+# that failed halfway is retried by the next push, a re-run is harmless, and
+# squashes and force-pushes cannot confuse it.
+#
+# Publishing overwrites a fixed, versionless CDN path, so latest.json is the
+# only record of the current version. That is why the purges below are hard
+# failures: a stale edge copy is indistinguishable, to a client, from a release
+# that never happened.
 
 on:
   push:
-    tags:
-      - "v*"
+    branches:
+      - master
   workflow_dispatch:
+    inputs:
+      force:
+        description: "Publish even if the version has not changed"
+        type: boolean
+        default: false
 
 concurrency:
   group: release
@@ -23,10 +41,46 @@ env:
   BUNDLE_DIR: target/release/bundle/macos
 
 jobs:
+  # Cheap gate, so a macOS runner is only spent on pushes that actually ship.
+  # This half has no macOS dependency, so it follows the usual runner rule.
+  check:
+    runs-on: ubicloud-standard-2
+    outputs:
+      version: ${{ steps.decide.outputs.version }}
+      publish: ${{ steps.decide.outputs.publish }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Compare the committed version against the published one
+        id: decide
+        run: |
+          VERSION=$(python3 -c "import tomllib;print(tomllib.load(open('Cargo.toml','rb'))['workspace']['package']['version'])")
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+          LIVE=$(curl -fsS --max-time 30 "$CDN_BASE/latest.json" 2>/dev/null \
+            | python3 -c 'import json,sys; print(json.load(sys.stdin)["version"])' 2>/dev/null || echo "")
+
+          if [ "${{ inputs.force }}" = "true" ]; then
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+            echo "Forced: publishing $VERSION over live '${LIVE:-none}'."
+          elif [ -z "$LIVE" ]; then
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+            echo "Nothing published yet, so $VERSION is the first release."
+          elif [ "$LIVE" != "$VERSION" ]; then
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+            echo "Committed $VERSION differs from live $LIVE, publishing."
+          else
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+            echo "Live is already $LIVE; nothing to do. Bump [workspace.package] version to release."
+          fi
+
   release:
-    # The only workflow here that cannot use ubicloud-standard-*: Ubicloud
-    # offers Linux runners only, and a Tauri macOS bundle needs the macOS SDK
-    # and WebKit. macos-15 is arm64, so this is a native build, not a cross one.
+    needs: check
+    if: needs.check.outputs.publish == 'true'
+    # The only job here that cannot use ubicloud-standard-*: Ubicloud offers
+    # Linux runners only, and a Tauri macOS bundle needs the macOS SDK and
+    # WebKit. macos-15 is arm64, so this is a native build, not a cross one.
     runs-on: macos-15
 
     steps:
@@ -50,23 +104,6 @@ jobs:
         run: bun install --frozen-lockfile
         working-directory: apps/gui/frontend
 
-      - name: Resolve version
-        id: version
-        run: |
-          VERSION="0.1.${GITHUB_RUN_NUMBER}"
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          python3 - "$VERSION" <<'PY'
-          import json, sys
-          path = "apps/gui/tauri.conf.json"
-          with open(path) as f:
-              conf = json.load(f)
-          conf["version"] = sys.argv[1]
-          with open(path, "w") as f:
-              json.dump(conf, f, indent=2)
-              f.write("\n")
-          PY
-          echo "Releasing $VERSION"
-
       # The committed config ad-hoc signs so that a local `cargo tauri build`
       # still produces a bundle with sealed resources. A real Developer ID
       # certificate, when present, has to displace that value.
@@ -87,7 +124,7 @@ jobs:
               f.write("\n")
           PY
             echo "mode=developer-id" >> "$GITHUB_OUTPUT"
-            echo "Signing with Developer ID and notarizing."
+            echo "Signing with Developer ID."
           else
             echo "mode=adhoc" >> "$GITHUB_OUTPUT"
             echo "::warning::APPLE_CERTIFICATE is not set, so this is an ad-hoc signed bundle. Gatekeeper will reject it on download, and every update resets the installed copy's privacy permissions."
@@ -112,16 +149,29 @@ jobs:
         run: bunx --yes @tauri-apps/cli@^2.11 build
         working-directory: apps/gui
 
-      # The failure this catches is specific and was live in this repo: a
-      # bundle whose inner executable is linker-ad-hoc-signed while the bundle
-      # itself has no sealed resources verifies nowhere, and the symptom on a
-      # user's Mac is "damaged and can't be opened" rather than anything that
-      # names signing.
-      - name: Verify bundle signature
+      # Two failures worth catching here. The signature one was live in this
+      # repo: a bundle whose inner executable is linker-ad-hoc-signed while the
+      # bundle has no sealed resources verifies nowhere, and the symptom on a
+      # user's Mac is "damaged and can't be opened" rather than anything naming
+      # signing. The version one guards the indirection above: if the Cargo.toml
+      # fallback ever stops feeding the bundle, latest.json would advertise a
+      # version the app does not report, and every client would re-download the
+      # same build forever.
+      - name: Verify the bundle
+        env:
+          VERSION: ${{ needs.check.outputs.version }}
         run: |
           APP="$BUNDLE_DIR/AgencyZero.app"
           codesign --verify --deep --strict --verbose=2 "$APP"
           codesign -dv --verbose=4 "$APP" 2>&1 | grep -E "Signature|TeamIdentifier|Sealed Resources"
+
+          BUILT=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$APP/Contents/Info.plist")
+          if [ "$BUILT" != "$VERSION" ]; then
+            echo "::error::bundle reports $BUILT but this release is $VERSION"
+            exit 1
+          fi
+          echo "bundle version $BUILT matches"
+
           if [ "${{ steps.signing.outputs.mode }}" = "developer-id" ]; then
             spctl -a -vvv "$APP"
             xcrun stapler validate "$APP"
@@ -129,7 +179,7 @@ jobs:
 
       - name: Build latest.json
         env:
-          VERSION: ${{ steps.version.outputs.version }}
+          VERSION: ${{ needs.check.outputs.version }}
         run: |
           TARBALL="$BUNDLE_DIR/AgencyZero.app.tar.gz"
           test -f "$TARBALL" || { echo "::error::missing $TARBALL"; exit 1; }
@@ -223,6 +273,7 @@ jobs:
 
       - name: Publish latest.json
         env:
+          VERSION: ${{ needs.check.outputs.version }}
           STORAGE_API_KEY: ${{ secrets.BUNNYCDN_STORAGE_API_KEY }}
           STORAGE_NAME: ${{ secrets.BUNNYCDN_STORAGE_NAME }}
           ZONE_API_KEY: ${{ secrets.BUNNYCDN_ZONE_API_KEY }}
@@ -238,14 +289,15 @@ jobs:
           fi
 
           # latest.json is the version record, so a stale edge copy here means
-          # nobody sees the release. Confirm it before declaring success.
+          # nobody sees the release. It is also what the next run compares
+          # against, so a stale copy would republish this version forever.
           for attempt in 1 2 3 4 5 6; do
             LIVE=$(curl -sS -L "$CDN_BASE/latest.json" | python3 -c 'import json,sys; print(json.load(sys.stdin)["version"])' 2>/dev/null || echo "")
-            if [ "$LIVE" = "${{ steps.version.outputs.version }}" ]; then
+            if [ "$LIVE" = "$VERSION" ]; then
               echo "edge serves version $LIVE"
               exit 0
             fi
-            echo "attempt $attempt: edge serves '$LIVE', want '${{ steps.version.outputs.version }}'"
+            echo "attempt $attempt: edge serves '$LIVE', want '$VERSION'"
             sleep 10
           done
           echo "::error::edge never served the new latest.json"
@@ -253,7 +305,7 @@ jobs:
 
       - name: Summary
         env:
-          VERSION: ${{ steps.version.outputs.version }}
+          VERSION: ${{ needs.check.outputs.version }}
         run: |
           {
             echo "### AgencyZero $VERSION published"

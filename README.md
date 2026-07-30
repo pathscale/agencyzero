@@ -49,6 +49,12 @@ cd apps/gui && cargo tauri dev     # rsbuild dev server + the app window
 cd apps/gui && cargo tauri build   # produce the .app bundle
 ```
 
+The `cd apps/gui` is load-bearing, not decoration. Tauri picks the working directory
+for `beforeBuildCommand` relative to where the CLI was invoked: from `apps/gui` it
+lands in `apps/gui/frontend` and `bun run build` finds its `package.json`, but from
+the repository root it lands in `apps/` and the build dies with `Script not found
+"build"`. Run it from anywhere else and that error is the one you get.
+
 The macOS bundle lands in `target/release/bundle/macos/AgencyZero.app`. To work on the
 UI alone, `cd apps/gui/frontend && bun run dev` serves it in a browser at
 <http://localhost:3010> against the design fixtures.
