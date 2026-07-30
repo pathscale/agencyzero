@@ -528,7 +528,7 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
 }
 
 function RunningList(props: { projectId: string }): JSX.Element {
-  const { state, actions } = useWorkspace();
+  const { state, actions, isLive } = useWorkspace();
   const now = useNow();
   const tasks = () => state.running[props.projectId] ?? [];
 
@@ -544,7 +544,13 @@ function RunningList(props: { projectId: string }): JSX.Element {
               <div class="flex-1" />
               <button
                 type="button"
-                disabled={!task.isCancelable || !task.toolCallId}
+                /*
+                 * `isLive` too: per-tool cancellation has no Rust side yet,
+                 * so on the real backend this routes to the mock — which
+                 * fakes a `task:completed` while the tool keeps running.
+                 * Greyed out until it can be true, per the house convention.
+                 */
+                disabled={!task.isCancelable || !task.toolCallId || !isLive("cancelTask")}
                 onClick={() => task.toolCallId && void actions.cancelTask(task.toolCallId)}
                 class="rounded-md border border-white/16 px-2 py-0.5 text-az-body transition-colors hover:border-error hover:text-error disabled:opacity-40"
               >

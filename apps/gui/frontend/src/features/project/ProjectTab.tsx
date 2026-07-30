@@ -25,7 +25,7 @@ function isCount(value: number | null): value is number {
 }
 
 export function ProjectTab(props: { tab: Tab; project: Project }): JSX.Element {
-  const { state, actions, promptModels, effortsFor } = useWorkspace();
+  const { state, actions, promptModels, effortsFor, isLive } = useWorkspace();
 
   const messages = () => state.messages[props.project.id] ?? [];
 
@@ -176,8 +176,25 @@ export function ProjectTab(props: { tab: Tab; project: Project }): JSX.Element {
             }
             permission={props.tab.permission}
             usage={contextLabel()}
-            isRunning={running().length > 0}
-            onStop={() => void actions.cancelRun(props.project.id)}
+            /*
+             * Tool calls in flight *or* text still streaming: a text-only
+             * generation has no tool rows, and treating it as "not running"
+             * let Enter start a second run mid-turn.
+             */
+            isRunning={running().length > 0 || (state.streaming[props.project.id] ?? "") !== ""}
+            /*
+             * Only offered when the backend can actually stop the run. An
+             * ungated Stop routed to the mock, which emitted `run:stopped`
+             * while the real agent kept working — the worst kind of button.
+             */
+            onStop={
+              isLive("cancelRun")
+                ? () =>
+                    void actions.cancelRun(props.project.id).catch((cause) => {
+                      log.warn(`stop: ${describeError(cause)}`);
+                    })
+                : undefined
+            }
             onModelChange={(model) =>
               actions.setTabModel(props.tab.key, model, props.tab.permission)
             }
