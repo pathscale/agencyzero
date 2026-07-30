@@ -1,5 +1,12 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { applyTheme, DEFAULT_ACCENT, isAccent, MAX_SOFTNESS, toColorValue } from "~/lib/theme";
+import {
+  applyTheme,
+  DEFAULT_ACCENT,
+  isAccent,
+  MAX_SOFTNESS,
+  toColorValue,
+  WASH_STOPS,
+} from "~/lib/theme";
 
 let root: HTMLElement;
 
@@ -9,7 +16,7 @@ beforeEach(() => {
 
 describe("applyTheme", () => {
   it("falls back to the palette's accent when the setting is empty", () => {
-    applyTheme({ accent: "", softness: 0 }, root);
+    applyTheme({ accent: "", softness: 0, wash: 0 }, root);
     expect(root.style.getPropertyValue("--color-primary")).toBe(DEFAULT_ACCENT);
   });
 
@@ -19,15 +26,15 @@ describe("applyTheme", () => {
    * which is why the clamp is here and not at the setting.
    */
   it("clamps softness into the range the surfaces can take", () => {
-    applyTheme({ accent: "", softness: 999 }, root);
+    applyTheme({ accent: "", softness: 999, wash: 0 }, root);
     expect(root.style.getPropertyValue("--az-lift")).toBe(`${MAX_SOFTNESS}%`);
 
-    applyTheme({ accent: "", softness: -20 }, root);
+    applyTheme({ accent: "", softness: -20, wash: 0 }, root);
     expect(root.style.getPropertyValue("--az-lift")).toBe("0%");
   });
 
   it("ignores a value that is not a colour rather than writing it through", () => {
-    applyTheme({ accent: "red; background: url(x)", softness: 0 }, root);
+    applyTheme({ accent: "red; background: url(x)", softness: 0, wash: 0 }, root);
     expect(root.style.getPropertyValue("--color-primary")).toBe(DEFAULT_ACCENT);
   });
 
@@ -36,7 +43,7 @@ describe("applyTheme", () => {
    * down swaps one glare for another, so damp must move whenever lift does.
    */
   it("damps the text ladder whenever it lifts the surfaces", () => {
-    applyTheme({ accent: "", softness: MAX_SOFTNESS }, root);
+    applyTheme({ accent: "", softness: MAX_SOFTNESS, wash: 0 }, root);
     const lift = Number.parseFloat(root.style.getPropertyValue("--az-lift"));
     const damp = Number.parseFloat(root.style.getPropertyValue("--az-damp"));
     expect(lift).toBe(MAX_SOFTNESS);
@@ -49,15 +56,38 @@ describe("applyTheme", () => {
    * the palette's dark ink left in place is an invisible button.
    */
   it("picks ink that stays legible on the chosen accent", () => {
-    applyTheme({ accent: "#101820", softness: 0 }, root);
+    applyTheme({ accent: "#101820", softness: 0, wash: 0 }, root);
     expect(root.style.getPropertyValue("--color-primary-content")).toBe("#ffffff");
 
-    applyTheme({ accent: "#ffee58", softness: 0 }, root);
+    applyTheme({ accent: "#ffee58", softness: 0, wash: 0 }, root);
     expect(root.style.getPropertyValue("--color-primary-content")).toBe("#111111");
   });
 
-  it("leaves the hue and tint axes alone — the accent does not wash the surfaces", () => {
-    applyTheme({ accent: "#3355ff", softness: 4 }, root);
+  /*
+   * The axis that makes a pick read as a theme. Accent-only shipped first and
+   * was wrong: the wheel recoloured buttons while the workspace stayed grey.
+   */
+  it("washes the picked colour into the surfaces", () => {
+    applyTheme({ accent: "#3355ff", softness: 4, wash: 10 }, root);
+    expect(root.style.getPropertyValue("--az-wash")).toBe("10%");
+  });
+
+  /* The designed palette is grey, not grey washed with its own yellow, so an
+   * empty accent means no wash whatever the stored strength says. */
+  it("ignores the wash while no colour has been picked", () => {
+    applyTheme({ accent: "", softness: 0, wash: 20 }, root);
+    expect(root.style.getPropertyValue("--az-wash")).toBe("0%");
+  });
+
+  it("clamps the wash to what the surface ladder survives", () => {
+    applyTheme({ accent: "#3355ff", softness: 0, wash: 90 }, root);
+    expect(root.style.getPropertyValue("--az-wash")).toBe(`${WASH_STOPS[WASH_STOPS.length - 1]}%`);
+  });
+
+  /* Hue and tint stay untouched: the wash mixes the accent in, it does not
+   * rotate the neutral ladder underneath. */
+  it("leaves the neutral hue and chroma axes alone", () => {
+    applyTheme({ accent: "#3355ff", softness: 4, wash: 10 }, root);
     expect(root.style.getPropertyValue("--az-hue")).toBe("");
     expect(root.style.getPropertyValue("--az-tint")).toBe("");
   });

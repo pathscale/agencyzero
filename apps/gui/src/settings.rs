@@ -72,6 +72,16 @@ pub struct Theme {
     /// here, so a record from a future build with a wider range cannot make
     /// this one unreadable — it renders at the edge instead.
     pub softness: f32,
+    /// How much of the accent is mixed into every surface, as a percentage.
+    ///
+    /// The difference between a picked colour that changes buttons and one that
+    /// changes the workspace. nofilter.io washes its base tiers at 8–11%, which
+    /// is why its picker reads as a theme and an accent-only version reads as a
+    /// highlight — that version shipped here first and was wrong.
+    ///
+    /// Ignored while `accent` is empty: the designed palette is grey, not grey
+    /// washed with its own yellow.
+    pub wash: f32,
 }
 
 impl Default for Theme {
@@ -79,6 +89,9 @@ impl Default for Theme {
         Theme {
             accent: String::new(),
             softness: 0.0,
+            // Matches `DEFAULT_WASH` in the webview's lib/theme.ts: a colour
+            // picked with no opinion about strength washes at 10%.
+            wash: 10.0,
         }
     }
 }

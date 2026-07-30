@@ -33,6 +33,24 @@ export const MAX_SOFTNESS = 12;
 /** Text comes down more gently than surfaces go up; equal amounts wash it out. */
 const DAMP_RATIO = 0.45;
 
+/**
+ * How much of the accent washes into the surfaces, in percent.
+ *
+ * The axis that makes a pick read as a *theme* rather than a highlight: without
+ * it the wheel recolours buttons and rings while the workspace stays the same
+ * grey, which is exactly how this first shipped and exactly what was wrong with
+ * it. nofilter.io mixes 8–11% into its base tiers; the stops below bracket that,
+ * with `0` kept reachable because the designed palette is a legitimate choice.
+ *
+ * Higher than about 20% and the surface ladder stops reading as neutral at all —
+ * the desk becomes the accent at low lightness, and the depth cues that separate
+ * desk from panel from card collapse into one wash.
+ */
+export const WASH_STOPS = [0, 6, 10, 14, 20] as const;
+
+/** What a freshly picked colour washes at, before anyone touches the strength. */
+export const DEFAULT_WASH = 10;
+
 /** `#rgb` and `#rrggbb`, the two forms the wheel emits. */
 const HEX = /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i;
 
@@ -51,11 +69,22 @@ export function applyTheme(
   theme: ThemeSettings,
   root: HTMLElement = document.documentElement,
 ): void {
-  const accent = isAccent(theme.accent) ? theme.accent.trim() : DEFAULT_ACCENT;
+  const chosen = isAccent(theme.accent);
+  const accent = chosen ? theme.accent.trim() : DEFAULT_ACCENT;
   const softness = Math.min(Math.max(theme.softness || 0, 0), MAX_SOFTNESS);
+  /*
+   * No accent means the designed palette, and the designed palette is not a
+   * yellow-washed one — so the wash applies only once something has actually
+   * been picked. Reset therefore returns the workspace to grey, rather than to
+   * grey plus whatever wash was last set.
+   */
+  const wash = chosen
+    ? Math.min(Math.max(theme.wash ?? DEFAULT_WASH, 0), WASH_STOPS[WASH_STOPS.length - 1])
+    : 0;
 
   root.style.setProperty("--color-primary", accent);
   root.style.setProperty("--color-accent", accent);
+  root.style.setProperty("--az-wash", `${wash}%`);
   /*
    * What sits *on* the accent. A picked colour can be anything from near-black
    * to near-white, so the label has to be chosen against it rather than left at

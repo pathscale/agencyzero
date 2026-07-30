@@ -541,7 +541,7 @@ export const SETTINGS: GlobalSettings = {
   envPolicy: "minimal",
   forwardProxyVars: false,
   completedItems: "resolve",
-  theme: { accent: "", softness: 0 },
+  theme: { accent: "", softness: 0, wash: 10 },
   notifications: {
     onHold: true,
     onRunFinished: true,

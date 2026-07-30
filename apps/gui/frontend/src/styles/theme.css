@@ -15,20 +15,34 @@
     color-scheme: only dark;
 
     /*
-     * The three axes the theme picker drives. Every surface and text colour
-     * below is written in terms of them, so one write to `:root` retints or
-     * lightens the whole app — there is no second place holding a colour.
+     * The axes the theme picker drives. Every surface and text colour below is
+     * written in terms of them, so one write to `:root` recolours the whole app
+     * — there is no second place holding a colour.
      *
-     * The defaults reproduce the palette exactly: `+ 0%` and `× 1` are
-     * identity, so a build with the picker untouched renders the values that
-     * were literals here before.
+     * The defaults reproduce the palette exactly: `+ 0%`, `× 1` and a 0% mix
+     * are all identity, so a build with the picker untouched renders the values
+     * that were literals here before.
      *
      *   --az-hue     the hue every neutral leans on, in oklch degrees
-     *   --az-tint    chroma multiplier; 1 is the near-grey desk, higher is
-     *                a surface visibly of the chosen colour
+     *   --az-tint    chroma multiplier for the neutral ladder
      *   --az-lift    lightness added to every surface, in percentage points.
      *                The comfort axis: a desk at 10.5% under 86% text is a
      *                contrast the eye pays for over hours.
+     *   --az-damp    taken off every text rung, so the ladder comes down to
+     *                meet a lifted desk instead of glaring off it
+     *   --az-wash    how much of the accent is mixed into every surface
+     *
+     * `--az-wash` is what makes a picked colour read as a *theme* rather than
+     * as a highlight. It follows nofilter.io, whose picker mixes the chosen
+     * colour into its base tiers at 8–11% (see `hueShift.js` in
+     * `@pathscale/ui`): the accent alone changes buttons and rings, while the
+     * wash is what makes the workspace itself lean warm or cool.
+     *
+     * The per-tier multipliers below are deliberate rather than uniform. Deeper
+     * surfaces take slightly more because they have the least chroma to begin
+     * with and would otherwise stay stubbornly grey next to a washed panel; the
+     * transcript takes the least, because a wall of body text is the one place
+     * a colour cast is read as a fault rather than as a theme.
      */
     --az-hue: 240;
     --az-tint: 1;
@@ -36,20 +50,33 @@
     /* Text leans a touch warmer than the surfaces it sits on; kept separate so
      * the picker can move both together without flattening the difference. */
     --az-hue-text: 245;
-    /* Subtracted from every text lightness, so the ladder can come down to
-     * meet a lifted desk instead of glaring off it. */
     --az-damp: 0%;
+    --az-wash: 0%;
 
     /* Panels: the floating cards the workspace is built from. */
-    --color-base-100: oklch(calc(15% + var(--az-lift)) calc(0.005 * var(--az-tint)) var(--az-hue));
+    --color-base-100: color-mix(
+      in oklab,
+      var(--color-primary) var(--az-wash),
+      oklch(calc(15% + var(--az-lift)) calc(0.005 * var(--az-tint)) var(--az-hue))
+    );
     /* Desk: the window interior, under the dot grid. */
-    --color-base-200: oklch(
-      calc(10.5% + var(--az-lift)) calc(0.004 * var(--az-tint)) var(--az-hue)
+    --color-base-200: color-mix(
+      in oklab,
+      var(--color-primary) calc(var(--az-wash) * 1.1),
+      oklch(calc(10.5% + var(--az-lift)) calc(0.004 * var(--az-tint)) var(--az-hue))
     );
     /* Cards: rows and chips sitting on a panel. */
-    --color-base-300: oklch(calc(20% + var(--az-lift)) calc(0.008 * var(--az-tint)) var(--az-hue));
-    --color-base-content: oklch(
-      calc(84% - var(--az-damp)) calc(0.008 * var(--az-tint)) var(--az-hue-text)
+    --color-base-300: color-mix(
+      in oklab,
+      var(--color-primary) calc(var(--az-wash) * 1.2),
+      oklch(calc(20% + var(--az-lift)) calc(0.008 * var(--az-tint)) var(--az-hue))
+    );
+    /* Text takes a fraction of the wash — enough to belong to the surface it
+     * sits on, far short of tinting prose. */
+    --color-base-content: color-mix(
+      in oklab,
+      var(--color-primary) calc(var(--az-wash) * 0.25),
+      oklch(calc(84% - var(--az-damp)) calc(0.008 * var(--az-tint)) var(--az-hue-text))
     );
 
     --color-primary: #ffee58;
@@ -95,20 +122,30 @@
    * 64 muted. Every rung carries `- var(--az-damp)`, so the picker can bring
    * the whole ladder down together and keep the intervals between rungs.
    */
-  --color-az-title: oklch(
-    calc(86% - var(--az-damp)) calc(0.008 * var(--az-tint)) var(--az-hue-text)
+  --color-az-title: color-mix(
+    in oklab,
+    var(--color-primary) calc(var(--az-wash) * 0.25),
+    oklch(calc(86% - var(--az-damp)) calc(0.008 * var(--az-tint)) var(--az-hue-text))
   );
-  --color-az-strong: oklch(
-    calc(80% - var(--az-damp)) calc(0.008 * var(--az-tint)) var(--az-hue-text)
+  --color-az-strong: color-mix(
+    in oklab,
+    var(--color-primary) calc(var(--az-wash) * 0.25),
+    oklch(calc(80% - var(--az-damp)) calc(0.008 * var(--az-tint)) var(--az-hue-text))
   );
-  --color-az-body: oklch(
-    calc(75% - var(--az-damp)) calc(0.009 * var(--az-tint)) var(--az-hue-text)
+  --color-az-body: color-mix(
+    in oklab,
+    var(--color-primary) calc(var(--az-wash) * 0.25),
+    oklch(calc(75% - var(--az-damp)) calc(0.009 * var(--az-tint)) var(--az-hue-text))
   );
-  --color-az-muted: oklch(
-    calc(66% - var(--az-damp)) calc(0.01 * var(--az-tint)) var(--az-hue-text)
+  --color-az-muted: color-mix(
+    in oklab,
+    var(--color-primary) calc(var(--az-wash) * 0.3),
+    oklch(calc(66% - var(--az-damp)) calc(0.01 * var(--az-tint)) var(--az-hue-text))
   );
-  --color-az-faint: oklch(
-    calc(62% - var(--az-damp)) calc(0.01 * var(--az-tint)) var(--az-hue-text)
+  --color-az-faint: color-mix(
+    in oklab,
+    var(--color-primary) calc(var(--az-wash) * 0.3),
+    oklch(calc(62% - var(--az-damp)) calc(0.01 * var(--az-tint)) var(--az-hue-text))
   );
 
   /*
@@ -116,22 +153,60 @@
    * a meta glyph. Named so they are visibly exceptions instead of arbitrary
    * triples inlined in a class list, which is how they entered the codebase.
    */
-  --color-az-dim: oklch(calc(56% - var(--az-damp)) calc(0.01 * var(--az-tint)) var(--az-hue-text));
-  --color-az-ghost: oklch(
-    calc(48% - var(--az-damp)) calc(0.01 * var(--az-tint)) var(--az-hue-text)
+  --color-az-dim: color-mix(
+    in oklab,
+    var(--color-primary) calc(var(--az-wash) * 0.3),
+    oklch(calc(56% - var(--az-damp)) calc(0.01 * var(--az-tint)) var(--az-hue-text))
+  );
+  --color-az-ghost: color-mix(
+    in oklab,
+    var(--color-primary) calc(var(--az-wash) * 0.3),
+    oklch(calc(48% - var(--az-damp)) calc(0.01 * var(--az-tint)) var(--az-hue-text))
   );
 
-  /* Surfaces the base-N ladder does not cover. */
-  --color-az-void: oklch(calc(8% + var(--az-lift)) calc(0.003 * var(--az-tint)) var(--az-hue));
-  --color-az-desk: oklch(calc(10.5% + var(--az-lift)) calc(0.004 * var(--az-tint)) var(--az-hue));
-  --color-az-inset: oklch(calc(12.5% + var(--az-lift)) calc(0.005 * var(--az-tint)) var(--az-hue));
-  --color-az-tab: oklch(calc(16% + var(--az-lift)) calc(0.006 * var(--az-tint)) var(--az-hue));
+  /*
+   * Surfaces the base-N ladder does not cover. Each takes the wash, weighted:
+   * the deepest tiers slightly more, because they start with the least chroma
+   * and would otherwise stay grey beside a washed panel.
+   */
+  --color-az-void: color-mix(
+    in oklab,
+    var(--color-primary) calc(var(--az-wash) * 1.2),
+    oklch(calc(8% + var(--az-lift)) calc(0.003 * var(--az-tint)) var(--az-hue))
+  );
+  --color-az-desk: color-mix(
+    in oklab,
+    var(--color-primary) calc(var(--az-wash) * 1.1),
+    oklch(calc(10.5% + var(--az-lift)) calc(0.004 * var(--az-tint)) var(--az-hue))
+  );
+  --color-az-inset: color-mix(
+    in oklab,
+    var(--color-primary) calc(var(--az-wash) * 1.05),
+    oklch(calc(12.5% + var(--az-lift)) calc(0.005 * var(--az-tint)) var(--az-hue))
+  );
+  --color-az-tab: color-mix(
+    in oklab,
+    var(--color-primary) var(--az-wash),
+    oklch(calc(16% + var(--az-lift)) calc(0.006 * var(--az-tint)) var(--az-hue))
+  );
 
   /* Three more the screens were hand-writing: a sunken card, a row hover, a
    * badge pill. Same ladder, now named. */
-  --color-az-sunken: oklch(calc(13% + var(--az-lift)) calc(0.004 * var(--az-tint)) var(--az-hue));
-  --color-az-hover: oklch(calc(17% + var(--az-lift)) calc(0.006 * var(--az-tint)) var(--az-hue));
-  --color-az-badge: oklch(calc(24% + var(--az-lift)) calc(0.01 * var(--az-tint)) var(--az-hue));
+  --color-az-sunken: color-mix(
+    in oklab,
+    var(--color-primary) calc(var(--az-wash) * 1.05),
+    oklch(calc(13% + var(--az-lift)) calc(0.004 * var(--az-tint)) var(--az-hue))
+  );
+  --color-az-hover: color-mix(
+    in oklab,
+    var(--color-primary) var(--az-wash),
+    oklch(calc(17% + var(--az-lift)) calc(0.006 * var(--az-tint)) var(--az-hue))
+  );
+  --color-az-badge: color-mix(
+    in oklab,
+    var(--color-primary) calc(var(--az-wash) * 1.2),
+    oklch(calc(24% + var(--az-lift)) calc(0.01 * var(--az-tint)) var(--az-hue))
+  );
 
   /* Hairlines are base-content at low alpha; three weights cover every divider. */
   --color-az-hairline: rgb(255 255 255 / 9%);
@@ -155,9 +230,21 @@
    * Contrast is still a number that can be checked — 90.67% on 23.5% is the
    * 12.6:1 the hex pair gave.
    */
-  --color-az-bubble: oklch(calc(23.5% + var(--az-lift)) 0 var(--az-hue));
-  --color-az-bubble-edge: oklch(calc(28.5% + var(--az-lift)) 0 var(--az-hue));
-  --color-az-bubble-text: oklch(calc(90.67% - var(--az-damp)) 0 var(--az-hue));
+  --color-az-bubble: color-mix(
+    in oklab,
+    var(--color-primary) calc(var(--az-wash) * 0.5),
+    oklch(calc(23.5% + var(--az-lift)) 0 var(--az-hue))
+  );
+  --color-az-bubble-edge: color-mix(
+    in oklab,
+    var(--color-primary) calc(var(--az-wash) * 0.6),
+    oklch(calc(28.5% + var(--az-lift)) 0 var(--az-hue))
+  );
+  --color-az-bubble-text: color-mix(
+    in oklab,
+    var(--color-primary) calc(var(--az-wash) * 0.15),
+    oklch(calc(90.67% - var(--az-damp)) 0 var(--az-hue))
+  );
 
   /*
    * Accents, for links, highlights and active states. Chosen to stay legible on
