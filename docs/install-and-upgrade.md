@@ -69,3 +69,15 @@ self-hosting case, the session that just did the building. Until the run
 supervisor moves out of the GUI process (see
 [`xpc-sidecar.md`](xpc-sidecar.md)), `Install & Restart` should refuse while
 runs are active, the same way deletion now stops the run first.
+
+## The "Support Ending for Intel-based Apps" notification
+
+macOS sometimes shows this against AgencyZero. The bundle is arm64-only —
+`lipo -archs /Applications/AgencyZero.app/Contents/MacOS/az-gui` prints
+`arm64`, and every agent CLI the app spawns is arm64 too. The notification
+appears because macOS attributes any x86_64 *child* process to the
+"responsible app" that spawned it: an agent run that executes some
+Intel-only tool inside a project (an old prebuilt binary in a repo,
+a Rosetta-translated build artifact) gets billed to AgencyZero's name.
+It says nothing about the app itself and can be dismissed; if it recurs,
+the interesting question is which tool inside the *project* is x86_64.

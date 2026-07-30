@@ -30,6 +30,30 @@ success.
 **Always paste the full PR URL** (`https://github.com/pathscale/agencyzero/pull/<n>`), not just the number, so it's
 clickable.
 
+**Leave nothing dangling.** When your change lands on master — whether the PR was merged
+or the commits were rebased in — close the PR and delete its branch in the same breath
+(`gh pr merge --delete-branch`, or `gh pr close --delete-branch` for a superseded one).
+An open PR whose content is already on master reads as unfinished work to everyone else.
+
+## Working on the machine you share with a human
+
+The owner uses this Mac while you work. Rules of the road:
+
+- **Never take over the desktop without asking first.** Launching or relaunching GUI
+  apps, focusing windows, `open` on apps or URLs, screenshots, AppleScript UI control —
+  all of it steals the screen mid-keystroke. Ask, wait for a yes, then do it.
+- **Don't drive the real app's UI to verify visual changes.** The frontend runs
+  standalone against the mock (`bun run dev` in `apps/gui/frontend`, port 3010) and can
+  be driven headlessly by accessibility roles and labels — see
+  [`docs/ui-verification.md`](docs/ui-verification.md) for the technique and its two
+  hard-won rules (no pixel coordinates, no synthetic Enter). For what fixtures cannot
+  show, build + test, then ask the owner to look, with one precise sentence about what
+  to check. A human glance takes seconds; a desktop takeover is never the answer.
+- **Never touch the running System instance** — its process, its WorkTable files, its
+  data directory. The store is single-writer and the running GUI is the writer. Try
+  changes on the Dev instance (`tauri.dev.conf.json`; see the README's dev-instance
+  section).
+
 <!-- DORMANT — CI-green gating. Do not follow this rule yet; re-enable it as its own project.
 
 Why it's off: CI here does not reliably attach checks to pull requests, so
