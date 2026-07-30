@@ -2402,12 +2402,37 @@ async fn drive_run(
                     ),
                 );
             }
+            /*
+             * The reply row is the canonical record; everything below derives
+             * from it. If it cannot be written, emitting `message:appended`
+             * would show a reply that vanishes on restart, the ledger would
+             * price a turn the transcript cannot account for, and the harvest
+             * would mutate tasks from a reply that no longer exists to audit.
+             * So a failed insert ends the run visibly, with nothing derived.
+             */
             if let Err(error) = tables.message.insert(row.clone()) {
                 crate::log!(
                     crate::log::Level::Error,
                     "run",
                     "{project_id}: could not persist the reply: {error}"
                 );
+                note_io(
+                    &app,
+                    &io,
+                    &project_id,
+                    "received",
+                    "error",
+                    format!("the reply could not be persisted: {error}"),
+                );
+                let _ = app.emit(
+                    "run:stopped",
+                    serde_json::json!({
+                        "projectId": project_id,
+                        "stop": format!("the reply could not be persisted: {error}"),
+                        "exitCode": null,
+                    }),
+                );
+                return;
             }
             let _ = app.emit("message:appended", MessageDto::from(row));
 
