@@ -1051,17 +1051,18 @@ fn approval_signature(tool: &str, input: &serde_json::Value) -> String {
     tool.to_string()
 }
 
-/// Where a project's remembered approvals live in `kv`.
-fn rules_key(project_id: &str) -> String {
-    format!("approval_rules:{project_id}")
-}
-
-/// The remembered approval signatures for one project.
+/// The remembered approval signatures for one project, from the
+/// `approval_rule` table — rows, not a kv blob, so `wt-tools` can audit
+/// grants and a later per-rule delete is a `delete`, not a rewrite.
 fn load_rules(tables: &crate::db::tables::Tables, project_id: &str) -> Vec<String> {
     tables
-        .kv_get(&rules_key(project_id))
-        .and_then(|raw| serde_json::from_str(&raw).ok())
+        .approval_rule
+        .select_by_project_id(project_id.to_string())
+        .execute()
         .unwrap_or_default()
+        .into_iter()
+        .map(|row| row.signature)
+        .collect()
 }
 
 /// How long an unanswered approval stands before it is denied.
@@ -1356,14 +1357,19 @@ pub async fn resolve_approval(
      * one misclick into a run that can never do its job again, silently.
      */
     if allow && remember == Some(true) {
-        let mut rules = load_rules(&state.tables, &project_id);
+        let rules = load_rules(&state.tables, &project_id);
+        // Uniqueness is the writer's job; the single writer makes that safe.
         if !rules.iter().any(|rule| rule == &ask.signature) {
-            rules.push(ask.signature.clone());
-            let encoded = serde_json::to_string(&rules).map_err(|error| error.to_string())?;
+            let row = crate::db::schema::approval_rule::ApprovalRuleRow {
+                id: id("rule"),
+                project_id: project_id.clone(),
+                signature: ask.signature.clone(),
+                created_at: now(),
+            };
             state
                 .tables
-                .kv_put(&rules_key(&project_id), encoded)
-                .await
+                .approval_rule
+                .insert(row)
                 .map_err(|error| error.to_string())?;
             crate::log!(
                 crate::log::Level::Info,
@@ -1406,7 +1412,8 @@ pub async fn clear_approval_rules(
 ) -> Result<(), String> {
     state
         .tables
-        .kv_put(&rules_key(&project_id), String::new())
+        .approval_rule
+        .delete_by_project(project_id.clone())
         .await
         .map_err(|error| error.to_string())?;
     crate::log!(
@@ -1691,12 +1698,18 @@ pub async fn delete_project(
         .map_err(|error| failed("the project", &error))?;
 
     /*
-     * The project's kv satellites go with it: the resume session, the I/O
-     * recording flag, and — a standing permission grant now — its remembered
-     * approvals. Ids are never recycled so these were only orphans, but an
-     * allow-rule is not the kind of orphan to leave lying around.
+     * The project's satellites go with it: the remembered approval rows —
+     * standing permission grants — plus the resume session and the I/O
+     * recording flag in kv. Ids are never recycled so these were only
+     * orphans, but an allow-rule is not the kind of orphan to leave around.
      */
-    for key in [session_key(&id), io_persist_key(&id), rules_key(&id)] {
+    state
+        .tables
+        .approval_rule
+        .delete_by_project(id.clone())
+        .await
+        .map_err(|error| failed("the approval rules", &error))?;
+    for key in [session_key(&id), io_persist_key(&id)] {
         if let Err(error) = state.tables.kv_put(&key, String::new()).await {
             crate::log!(
                 crate::log::Level::Warn,

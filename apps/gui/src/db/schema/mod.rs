@@ -5,6 +5,7 @@
 //! message tables land with the read path they serve.
 
 pub mod agent_io;
+pub mod approval_rule;
 pub mod kv;
 pub mod message;
 pub mod project;
