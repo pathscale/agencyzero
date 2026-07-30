@@ -87,6 +87,25 @@ fetches an edge-cached older tarball, and fails the signature check. Those purge
 steps are hard failures in [`release.yml`](../.github/workflows/release.yml) for
 that reason.
 
+Three details of that choreography exist because the 0.1.1 release proved they
+were not optional, and each guards against a distinct failure:
+
+- **Storage objects are deleted before their replacement is uploaded.**
+  Overwriting in place let an edge pull mid-overwrite and cache a splice of two
+  uploads: the same length as the real file, an invalid gzip, and a ~300-day
+  max-age. `gunzip -t` gates both the built tarball and the edge-served copy so
+  a spliced object can never be advertised again.
+- **Purges are zone-wide** (`pullzone/<id>/purgeCache`), never per-URL. The
+  per-URL endpoint reported success without evicting the poisoned object, three
+  times. Zone-wide eviction is the form the 24x.ai site pipeline has always
+  used, and that site shares this pull zone and purges it on every deploy, so
+  the collateral is nil.
+- **`latest.json` advertises the tarball with a `?v=<version>` query string.**
+  The pull zone keys its cache on the full URL, so each release's updater
+  download goes through a cache key no edge has ever held — correct even if
+  every purge silently fails. The bare URL remains for the cask and relies on
+  the purge.
+
 ## Upgrades
 
 The app carries Tauri's updater. `check_for_update` reads `latest.json`;

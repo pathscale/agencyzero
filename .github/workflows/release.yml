@@ -19,6 +19,17 @@ name: Release
 # only record of the current version. That is why the purges below are hard
 # failures: a stale edge copy is indistinguishable, to a client, from a release
 # that never happened.
+#
+# The publish choreography follows the 24x.ai site pipeline, the one BunnyCDN
+# flow here that has never served stale or corrupt bytes: DELETE the storage
+# object before uploading its replacement, and purge the whole pull zone rather
+# than one URL. Overwriting in place is how the 0.1.1 release got poisoned — an
+# edge pulled mid-overwrite, cached a 206 partial response as the full object,
+# and then served a truncated gzip for as long as its ~300-day max-age allowed.
+# The per-URL purge endpoint made it worse by reporting success without
+# evicting that object; three purge attempts changed nothing. A zone-wide purge
+# does evict, and it is not the collateral damage it sounds like: the site
+# fronted by this same zone purges the zone on every one of its own deploys.
 
 on:
   push:
@@ -180,7 +191,13 @@ jobs:
               "platforms": {
                   "darwin-aarch64": {
                       "signature": signature,
-                      "url": f"{base}/AgencyZero.app.tar.gz",
+                      # The query string is a cache-buster, and it works because
+                      # this pull zone keys its cache on the full URL including
+                      # the query. Each release advertises a URL no edge has
+                      # ever cached, so the updater download cannot be served a
+                      # stale or spliced object even if every purge fails. Brew
+                      # still fetches the bare URL and relies on the purge.
+                      "url": f"{base}/AgencyZero.app.tar.gz?v={version}",
                   }
               },
           }
@@ -194,13 +211,24 @@ jobs:
       # tarball goes live and is confirmed live *before* latest.json advertises
       # it. Reversed, a client reads the new version, fetches an edge-cached
       # older tarball, and fails the signature check.
+      #
+      # The DELETE before the PUT is not tidiness: replacing the object instead
+      # of overwriting it in place is what stops an edge from pulling a file
+      # mid-write and caching the truncation (see the header comment).
       - name: Upload tarball to BunnyCDN
         env:
           STORAGE_API_KEY: ${{ secrets.BUNNYCDN_STORAGE_API_KEY }}
           STORAGE_NAME: ${{ secrets.BUNNYCDN_STORAGE_NAME }}
         run: |
+          # A truncated or corrupt local build must never reach storage; after
+          # this gate, any corruption seen at the edge is the CDN's doing.
+          gunzip -t "$BUNDLE_DIR/AgencyZero.app.tar.gz" || {
+            echo "::error::the built tarball is not a valid gzip"; exit 1;
+          }
           upload() {
             local file="$1" dest="$2" attempt=1 code
+            curl -sS -X DELETE -H "AccessKey: $STORAGE_API_KEY" \
+              "https://storage.bunnycdn.com/$STORAGE_NAME/$dest" || true
             while [ "$attempt" -le 4 ]; do
               code=$(curl -sS -X PUT -H "AccessKey: $STORAGE_API_KEY" \
                 -T "$file" -o /dev/null -w '%{http_code}' \
@@ -217,39 +245,44 @@ jobs:
           }
           upload "$BUNDLE_DIR/AgencyZero.app.tar.gz" "$CDN_DIR/AgencyZero.app.tar.gz"
 
-      # Per-URL purge first, because this pull zone also fronts the 24x.ai site
-      # and a zone-wide purge would evict that site's cache on every AgencyZero
-      # release. The zone-wide call is the fallback: it is the form the other
-      # pathscale pipelines use, so it is the one known to work with these
-      # credentials if the per-URL endpoint rejects this key type.
-      - name: Purge tarball from edge
+      # Zone-wide, never per-URL: the per-URL endpoint reports success without
+      # evicting (observed while the poisoned 0.1.1 object shrugged off three
+      # purges), and the site sharing this zone purges the whole zone on every
+      # deploy of its own, so there is no cache worth sparing.
+      - name: Purge the pull zone
         env:
           ZONE_API_KEY: ${{ secrets.BUNNYCDN_ZONE_API_KEY }}
           ZONE_ID: ${{ secrets.BUNNYCDN_ZONE_ID }}
         run: |
-          if [ -z "$ZONE_API_KEY" ]; then
-            echo "::error::BUNNYCDN_ZONE_API_KEY is required: a versionless URL that is not purged serves the previous release forever."
+          if [ -z "$ZONE_API_KEY" ] || [ -z "$ZONE_ID" ]; then
+            echo "::error::BUNNYCDN_ZONE_API_KEY and BUNNYCDN_ZONE_ID are required: a versionless URL that is not purged serves the previous release forever."
             exit 1
           fi
-          if curl -sS --fail-with-body -X POST -H "AccessKey: $ZONE_API_KEY" \
-               "https://api.bunny.net/purge?url=$CDN_BASE/AgencyZero.app.tar.gz&async=false"; then
-            echo "purged the tarball URL"
-          else
-            echo "::warning::per-URL purge failed; falling back to a zone-wide purge"
-            curl -sS --fail-with-body -X POST -H "AccessKey: $ZONE_API_KEY" \
-              "https://bunnycdn.com/api/pullzone/$ZONE_ID/purgeCache"
-          fi
+          curl -sS --fail-with-body -X POST -H "AccessKey: $ZONE_API_KEY" \
+            "https://bunnycdn.com/api/pullzone/$ZONE_ID/purgeCache"
+          echo "purged pull zone $ZONE_ID"
 
       - name: Confirm the live tarball is the one just built
+        env:
+          ZONE_API_KEY: ${{ secrets.BUNNYCDN_ZONE_API_KEY }}
+          ZONE_ID: ${{ secrets.BUNNYCDN_ZONE_ID }}
         run: |
           LOCAL=$(shasum -a 256 "$BUNDLE_DIR/AgencyZero.app.tar.gz" | cut -d' ' -f1)
           for attempt in 1 2 3 4 5 6; do
-            REMOTE=$(curl -sS -L "$CDN_BASE/AgencyZero.app.tar.gz" | shasum -a 256 | cut -d' ' -f1)
-            if [ "$LOCAL" = "$REMOTE" ]; then
-              echo "edge matches build ($LOCAL)"
+            curl -sS -L -o edge.tar.gz "$CDN_BASE/AgencyZero.app.tar.gz" || true
+            REMOTE=$(shasum -a 256 edge.tar.gz | cut -d' ' -f1)
+            # The sha proves identity; gunzip proves the edge did not cache a
+            # partial response. Both, so the failure message names the culprit.
+            if [ "$LOCAL" = "$REMOTE" ] && gunzip -t edge.tar.gz; then
+              echo "edge matches build ($LOCAL) and the gzip is intact"
               exit 0
             fi
             echo "attempt $attempt: edge has $REMOTE, want $LOCAL"
+            if [ "$attempt" = 3 ]; then
+              echo "::warning::edge still stale after purge; purging the zone again"
+              curl -sS --fail-with-body -X POST -H "AccessKey: $ZONE_API_KEY" \
+                "https://bunnycdn.com/api/pullzone/$ZONE_ID/purgeCache" || true
+            fi
             sleep 10
           done
           echo "::error::edge never served the new tarball; not publishing latest.json"
@@ -263,14 +296,12 @@ jobs:
           ZONE_API_KEY: ${{ secrets.BUNNYCDN_ZONE_API_KEY }}
           ZONE_ID: ${{ secrets.BUNNYCDN_ZONE_ID }}
         run: |
+          curl -sS -X DELETE -H "AccessKey: $STORAGE_API_KEY" \
+            "https://storage.bunnycdn.com/$STORAGE_NAME/$CDN_DIR/latest.json" || true
           curl -sS --fail-with-body -X PUT -H "AccessKey: $STORAGE_API_KEY" \
             -T latest.json "https://storage.bunnycdn.com/$STORAGE_NAME/$CDN_DIR/latest.json"
-          if ! curl -sS --fail-with-body -X POST -H "AccessKey: $ZONE_API_KEY" \
-                 "https://api.bunny.net/purge?url=$CDN_BASE/latest.json&async=false"; then
-            echo "::warning::per-URL purge failed; falling back to a zone-wide purge"
-            curl -sS --fail-with-body -X POST -H "AccessKey: $ZONE_API_KEY" \
-              "https://bunnycdn.com/api/pullzone/$ZONE_ID/purgeCache"
-          fi
+          curl -sS --fail-with-body -X POST -H "AccessKey: $ZONE_API_KEY" \
+            "https://bunnycdn.com/api/pullzone/$ZONE_ID/purgeCache"
 
           # latest.json is the version record, so a stale edge copy here means
           # nobody sees the release. It is also what the next run compares
@@ -282,6 +313,11 @@ jobs:
               exit 0
             fi
             echo "attempt $attempt: edge serves '$LIVE', want '$VERSION'"
+            if [ "$attempt" = 3 ]; then
+              echo "::warning::edge still stale after purge; purging the zone again"
+              curl -sS --fail-with-body -X POST -H "AccessKey: $ZONE_API_KEY" \
+                "https://bunnycdn.com/api/pullzone/$ZONE_ID/purgeCache" || true
+            fi
             sleep 10
           done
           echo "::error::edge never served the new latest.json"
