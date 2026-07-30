@@ -14,13 +14,43 @@
   [data-theme="agencyzero"] {
     color-scheme: only dark;
 
+    /*
+     * The three axes the theme picker drives. Every surface and text colour
+     * below is written in terms of them, so one write to `:root` retints or
+     * lightens the whole app — there is no second place holding a colour.
+     *
+     * The defaults reproduce the palette exactly: `+ 0%` and `× 1` are
+     * identity, so a build with the picker untouched renders the values that
+     * were literals here before.
+     *
+     *   --az-hue     the hue every neutral leans on, in oklch degrees
+     *   --az-tint    chroma multiplier; 1 is the near-grey desk, higher is
+     *                a surface visibly of the chosen colour
+     *   --az-lift    lightness added to every surface, in percentage points.
+     *                The comfort axis: a desk at 10.5% under 86% text is a
+     *                contrast the eye pays for over hours.
+     */
+    --az-hue: 240;
+    --az-tint: 1;
+    --az-lift: 0%;
+    /* Text leans a touch warmer than the surfaces it sits on; kept separate so
+     * the picker can move both together without flattening the difference. */
+    --az-hue-text: 245;
+    /* Subtracted from every text lightness, so the ladder can come down to
+     * meet a lifted desk instead of glaring off it. */
+    --az-damp: 0%;
+
     /* Panels: the floating cards the workspace is built from. */
-    --color-base-100: oklch(15% 0.005 240);
+    --color-base-100: oklch(calc(15% + var(--az-lift)) calc(0.005 * var(--az-tint)) var(--az-hue));
     /* Desk: the window interior, under the dot grid. */
-    --color-base-200: oklch(10.5% 0.004 240);
+    --color-base-200: oklch(
+      calc(10.5% + var(--az-lift)) calc(0.004 * var(--az-tint)) var(--az-hue)
+    );
     /* Cards: rows and chips sitting on a panel. */
-    --color-base-300: oklch(20% 0.008 240);
-    --color-base-content: oklch(84% 0.008 245);
+    --color-base-300: oklch(calc(20% + var(--az-lift)) calc(0.008 * var(--az-tint)) var(--az-hue));
+    --color-base-content: oklch(
+      calc(84% - var(--az-damp)) calc(0.008 * var(--az-tint)) var(--az-hue-text)
+    );
 
     --color-primary: #ffee58;
     --color-primary-content: #111111;
@@ -60,18 +90,48 @@
  * never hand-write an oklch triple.
  */
 @theme {
-  /* Text ladder. The design footer names four rungs: 84 / 76 bold / 73 body / 64 muted. */
-  --color-az-title: oklch(86% 0.008 245);
-  --color-az-strong: oklch(80% 0.008 245);
-  --color-az-body: oklch(75% 0.009 245);
-  --color-az-muted: oklch(66% 0.01 245);
-  --color-az-faint: oklch(62% 0.01 245);
+  /*
+   * Text ladder. The design footer names four rungs: 84 / 76 bold / 73 body /
+   * 64 muted. Every rung carries `- var(--az-damp)`, so the picker can bring
+   * the whole ladder down together and keep the intervals between rungs.
+   */
+  --color-az-title: oklch(
+    calc(86% - var(--az-damp)) calc(0.008 * var(--az-tint)) var(--az-hue-text)
+  );
+  --color-az-strong: oklch(
+    calc(80% - var(--az-damp)) calc(0.008 * var(--az-tint)) var(--az-hue-text)
+  );
+  --color-az-body: oklch(
+    calc(75% - var(--az-damp)) calc(0.009 * var(--az-tint)) var(--az-hue-text)
+  );
+  --color-az-muted: oklch(
+    calc(66% - var(--az-damp)) calc(0.01 * var(--az-tint)) var(--az-hue-text)
+  );
+  --color-az-faint: oklch(
+    calc(62% - var(--az-damp)) calc(0.01 * var(--az-tint)) var(--az-hue-text)
+  );
+
+  /*
+   * Below the stated 62% floor, for marks rather than prose: an unpinned pin,
+   * a meta glyph. Named so they are visibly exceptions instead of arbitrary
+   * triples inlined in a class list, which is how they entered the codebase.
+   */
+  --color-az-dim: oklch(calc(56% - var(--az-damp)) calc(0.01 * var(--az-tint)) var(--az-hue-text));
+  --color-az-ghost: oklch(
+    calc(48% - var(--az-damp)) calc(0.01 * var(--az-tint)) var(--az-hue-text)
+  );
 
   /* Surfaces the base-N ladder does not cover. */
-  --color-az-void: oklch(8% 0.003 240);
-  --color-az-desk: oklch(10.5% 0.004 240);
-  --color-az-inset: oklch(12.5% 0.005 240);
-  --color-az-tab: oklch(16% 0.006 240);
+  --color-az-void: oklch(calc(8% + var(--az-lift)) calc(0.003 * var(--az-tint)) var(--az-hue));
+  --color-az-desk: oklch(calc(10.5% + var(--az-lift)) calc(0.004 * var(--az-tint)) var(--az-hue));
+  --color-az-inset: oklch(calc(12.5% + var(--az-lift)) calc(0.005 * var(--az-tint)) var(--az-hue));
+  --color-az-tab: oklch(calc(16% + var(--az-lift)) calc(0.006 * var(--az-tint)) var(--az-hue));
+
+  /* Three more the screens were hand-writing: a sunken card, a row hover, a
+   * badge pill. Same ladder, now named. */
+  --color-az-sunken: oklch(calc(13% + var(--az-lift)) calc(0.004 * var(--az-tint)) var(--az-hue));
+  --color-az-hover: oklch(calc(17% + var(--az-lift)) calc(0.006 * var(--az-tint)) var(--az-hue));
+  --color-az-badge: oklch(calc(24% + var(--az-lift)) calc(0.01 * var(--az-tint)) var(--az-hue));
 
   /* Hairlines are base-content at low alpha; three weights cover every divider. */
   --color-az-hairline: rgb(255 255 255 / 9%);
@@ -79,29 +139,42 @@
   --color-az-hairline-strong: rgb(255 255 255 / 14%);
 
   /*
-   * The transcript's own surface, given in hex rather than oklch on purpose.
+   * The transcript's own surface — the one you read for hours, so it follows
+   * the comfort axes rather than sitting outside them.
    *
-   * The oklch ladder above is perceptual, and at these lightnesses it compresses
-   * hard: `az-void` 8% lands on #010202, `az-inset` 12.5% on #050708 and
-   * `base-100` 15% on #090b0d. Four sRGB points separate the agent's reply from
-   * the panel behind it, which is why the bubble read as a hole rather than a
-   * card and why the chat area was hard to follow.
+   * These were hex (#1e1e1e / #2a2a2a / #e0e0e0) because the oklch ladder
+   * compresses hard at the *desk's* lightnesses: 8% lands on #010202 and 12.5%
+   * on #050708, four sRGB points apart, which is why the bubble once read as a
+   * hole rather than a card. That reasoning holds for 8–15%; the bubble sits at
+   * 23.5%, where oklch has room, so the exact sRGB equivalents below render
+   * identically and gain `--az-lift` / `--az-damp`.
    *
-   * These are absolute values so the reply sits *above* the panel instead of
-   * below it, and so the contrast is a number that can be checked:
-   * #e0e0e0 on #1e1e1e is 12.6:1.
+   * Chroma stays 0: the reply is a neutral card by choice, and the accent has
+   * no business tinting a wall of text. Raise it here if that ever changes.
+   *
+   * Contrast is still a number that can be checked — 90.67% on 23.5% is the
+   * 12.6:1 the hex pair gave.
    */
-  --color-az-bubble: #1e1e1e;
-  --color-az-bubble-edge: #2a2a2a;
-  --color-az-bubble-text: #e0e0e0;
+  --color-az-bubble: oklch(calc(23.5% + var(--az-lift)) 0 var(--az-hue));
+  --color-az-bubble-edge: oklch(calc(28.5% + var(--az-lift)) 0 var(--az-hue));
+  --color-az-bubble-text: oklch(calc(90.67% - var(--az-damp)) 0 var(--az-hue));
 
   /*
    * Accents, for links, highlights and active states. Chosen to stay legible on
-   * the dark surfaces above without glare.
+   * the dark surfaces above without glare. Deliberately *not* on the neutral
+   * axes: these carry meaning (a link is blue, a PR is purple) and must not
+   * drift when the desk changes hue.
    */
   --color-az-link: #60a5fa;
   --color-az-highlight: #22d3ee;
   --color-az-active: #f59e0b;
+
+  /* The lighter yellow six screens reach for on a primary hover. */
+  --color-az-primary-hover: #fff176;
+
+  /* PR chips over the composer: border/tint, and the brighter text on top. */
+  --color-az-pr: #7e6bd0;
+  --color-az-pr-strong: #a794ee;
 
   --radius-panel: 0.875rem;
 }
@@ -164,7 +237,7 @@
     padding: 1px;
     background-image: linear-gradient(
       120deg,
-      rgb(255 238 88 / 34%),
+      rgb(from var(--color-primary) r g b / 34%),
       rgb(255 255 255 / 7%) 42%,
       rgb(255 255 255 / 5%)
     );
@@ -173,7 +246,7 @@
   .az-ring-strong {
     background-image: linear-gradient(
       120deg,
-      rgb(255 238 88 / 40%),
+      rgb(from var(--color-primary) r g b / 40%),
       rgb(255 255 255 / 8%) 45%,
       rgb(255 255 255 / 5%)
     );
@@ -181,7 +254,7 @@
 
   /* Status dots carry a soft halo when the state is live rather than historic. */
   .az-halo-primary {
-    box-shadow: 0 0 0 3px rgb(255 238 88 / 18%);
+    box-shadow: 0 0 0 3px rgb(from var(--color-primary) r g b / 18%);
   }
 
   .az-halo-warning {

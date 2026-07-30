@@ -58,7 +58,7 @@ function Workspace(): JSX.Element {
               missing record from a broken render.
             */}
             <Match when={activeTab().kind === "project"}>
-              <div class="flex min-w-0 flex-1 flex-col items-center justify-center gap-2 rounded-panel border border-az-hairline bg-[oklch(13%_0.004_240)]">
+              <div class="flex min-w-0 flex-1 flex-col items-center justify-center gap-2 rounded-panel border border-az-hairline bg-az-sunken">
                 <p class="text-[13.5px] text-az-title">This project could not be loaded</p>
                 <p class="max-w-[420px] text-center text-[11.5px] text-az-muted">
                   The tab is open but its record is missing from the workspace. Reopening the window
@@ -115,7 +115,7 @@ function BootFailed(props: { message: string; onRetry: () => void }): JSX.Elemen
       <button
         type="button"
         onClick={props.onRetry}
-        class="rounded-lg bg-primary px-3.5 py-1.5 font-semibold text-[12.5px] text-primary-content transition-colors hover:bg-[#fff176]"
+        class="rounded-lg bg-primary px-3.5 py-1.5 font-semibold text-[12.5px] text-primary-content transition-colors hover:bg-az-primary-hover"
       >
         Try again
       </button>

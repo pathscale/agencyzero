@@ -304,7 +304,7 @@ export function Composer(props: ComposerProps): JSX.Element {
                 ? "Delivered into the running turn — the agent takes it at its next step"
                 : undefined
             }
-            class="flex size-8 items-center justify-center rounded-full bg-primary text-primary-content transition-colors hover:bg-[#fff176] disabled:cursor-not-allowed disabled:opacity-40"
+            class="flex size-8 items-center justify-center rounded-full bg-primary text-primary-content transition-colors hover:bg-az-primary-hover disabled:cursor-not-allowed disabled:opacity-40"
           >
             <Icon name="arrow-up" class="text-[17px]" />
           </button>

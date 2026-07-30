@@ -83,7 +83,7 @@ export function CloseConfirm(props: CloseConfirmProps): JSX.Element {
                 type="button"
                 autofocus
                 onClick={props.onConfirm}
-                class="rounded-lg bg-primary px-3.5 py-1.5 font-semibold text-[12.5px] text-primary-content transition-colors hover:bg-[#fff176]"
+                class="rounded-lg bg-primary px-3.5 py-1.5 font-semibold text-[12.5px] text-primary-content transition-colors hover:bg-az-primary-hover"
               >
                 Quit
               </button>

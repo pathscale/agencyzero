@@ -289,7 +289,7 @@ function PrChip(props: { pr: PullRequest }): JSX.Element {
     <div
       class={`flex items-center gap-2.5 rounded-[11px] border px-3 py-2 text-[12px] ${
         merged()
-          ? "border-[#7e6bd0]/40 bg-[#7e6bd0]/12"
+          ? "border-az-pr/40 bg-az-pr/12"
           : closed()
             ? "border-az-hairline bg-base-300 opacity-70"
             : "border-az-hairline-strong bg-az-inset"
@@ -297,7 +297,7 @@ function PrChip(props: { pr: PullRequest }): JSX.Element {
     >
       <Icon
         name={merged() ? "git-merge" : "git-pull-request"}
-        class={`shrink-0 text-[14px] ${merged() ? "text-[#a794ee]" : closed() ? "text-az-muted" : "text-success"}`}
+        class={`shrink-0 text-[14px] ${merged() ? "text-az-pr-strong" : closed() ? "text-az-muted" : "text-success"}`}
       />
       <button
         type="button"
@@ -305,7 +305,7 @@ function PrChip(props: { pr: PullRequest }): JSX.Element {
         title={copied() ? "Copied" : `${props.pr.url} — click to copy`}
         class="flex min-w-0 flex-1 items-center gap-2.5 text-left"
       >
-        <span class={`shrink-0 font-semibold ${merged() ? "text-[#a794ee]" : "text-az-strong"}`}>
+        <span class={`shrink-0 font-semibold ${merged() ? "text-az-pr-strong" : "text-az-strong"}`}>
           #{props.pr.number}
         </span>
         <span class="shrink-0 text-az-muted">{props.pr.repo}</span>
@@ -344,7 +344,7 @@ function PrChip(props: { pr: PullRequest }): JSX.Element {
           </>
         }
       >
-        <span class="shrink-0 font-semibold text-[#a794ee] text-[11.5px]">Merged</span>
+        <span class="shrink-0 font-semibold text-[11.5px] text-az-pr-strong">Merged</span>
       </Show>
       <button
         type="button"

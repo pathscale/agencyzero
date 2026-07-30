@@ -157,7 +157,7 @@ export function TabStrip(): JSX.Element {
             <span class="az-halo-primary absolute top-[3px] right-[3px] size-[7px] rounded-full bg-primary" />
           </Show>
         </button>
-        <div class="ml-1 flex size-[26px] items-center justify-center rounded-full bg-[oklch(24%_0.01_240)] font-semibold text-[11px] text-base-content">
+        <div class="ml-1 flex size-[26px] items-center justify-center rounded-full bg-az-badge font-semibold text-[11px] text-base-content">
           N
         </div>
       </div>
