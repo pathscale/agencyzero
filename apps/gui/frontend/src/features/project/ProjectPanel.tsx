@@ -485,10 +485,26 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
     );
   }
 
+  /**
+   * Swap the item with its neighbour and persist the whole order. The full
+   * id list goes over the wire because position is the index within it —
+   * sending one move would make the backend re-derive what the panel
+   * already knows.
+   */
+  function move(index: number, delta: number): void {
+    const ordered = props.items.map((item) => item.id);
+    const target = index + delta;
+    if (target < 0 || target >= ordered.length) return;
+    [ordered[index], ordered[target]] = [ordered[target], ordered[index]];
+    void actions
+      .reorderItems(props.projectId, ordered)
+      .catch((cause) => log.error(`could not reorder: ${describeError(cause)}`));
+  }
+
   return (
     <div class="az-scroll flex max-h-[300px] flex-col gap-0.5 px-2 pt-1.5 pb-2.5">
       <For each={props.items}>
-        {(item) => (
+        {(item, index) => (
           <div
             class={`group flex items-center gap-1 rounded-[9px] pr-1 transition-colors ${
               item.status === "active"
@@ -549,6 +565,28 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
                 <Icon name="play" class="text-[12px]" />
               </button>
             </Show>
+            {/* Revealed on hover: two arrows per row all the time would be
+                louder than the titles they move. */}
+            <div class="flex shrink-0 flex-col opacity-0 transition-opacity group-hover:opacity-100">
+              <button
+                type="button"
+                onClick={() => move(index(), -1)}
+                disabled={index() === 0}
+                aria-label={`Move ${item.title} up`}
+                class="rounded-sm px-0.5 text-az-faint transition-colors hover:text-az-body disabled:opacity-25"
+              >
+                <Icon name="chevron-up" class="text-[10px]" />
+              </button>
+              <button
+                type="button"
+                onClick={() => move(index(), 1)}
+                disabled={index() === props.items.length - 1}
+                aria-label={`Move ${item.title} down`}
+                class="rounded-sm px-0.5 text-az-faint transition-colors hover:text-az-body disabled:opacity-25"
+              >
+                <Icon name="chevron-down" class="text-[10px]" />
+              </button>
+            </div>
           </div>
         )}
       </For>

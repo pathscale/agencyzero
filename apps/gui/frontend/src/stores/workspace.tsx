@@ -316,7 +316,10 @@ function createWorkspace() {
   }
 
   function itemsFor(projectId: string): ProjectItem[] {
-    return state.items[projectId] ?? [];
+    // Sorted here, not trusted from the array: a reorder arrives as
+    // `item:updated` events that change `order` in place, and the array's
+    // insertion order never moves.
+    return [...(state.items[projectId] ?? [])].sort((a, b) => a.order - b.order);
   }
 
   /** The Items badge counts what is left to do, so finished items drop out. */
@@ -1041,6 +1044,7 @@ function createWorkspace() {
     addDir: (projectId: string, path: string) => client().addDir(projectId, path),
     removeDir: (projectId: string, path: string) => client().removeDir(projectId, path),
     createItem: (projectId: string, title: string) => client().createItem(projectId, title),
+    reorderItems: (projectId: string, ids: string[]) => client().reorderItems(projectId, ids),
     setItemStatus: (id: string, status: ProjectStatus) => client().setItemStatus(id, status),
     deleteItem: (id: string) => client().deleteItem(id),
     resolveModeration: (messageId: string, approve: boolean) =>
