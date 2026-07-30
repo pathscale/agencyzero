@@ -422,6 +422,29 @@ export interface GlobalSettings {
    * finished and keeps the row, `"delete"` removes it outright.
    */
   completedItems: "resolve" | "delete";
+  /** How the workspace is coloured. See {@link ThemeSettings}. */
+  theme: ThemeSettings;
+}
+
+/**
+ * Mirrors `settings::Theme` — the two axes the picker drives.
+ *
+ * In settings rather than `localStorage` because that is where this app keeps
+ * state: a webview store would not survive a data directory move and would not
+ * appear in an export.
+ */
+export interface ThemeSettings {
+  /**
+   * Accent as `#rrggbb`. Empty means the palette's own yellow — deliberately
+   * not the literal, so the record cannot drift from the stylesheet.
+   */
+  accent: string;
+  /**
+   * Lightness added to every surface in oklch points, and taken off every text
+   * rung. One number: lifting the desk without bringing the text down trades
+   * one glare for another. 0 is the palette as designed.
+   */
+  softness: number;
 }
 
 /** Mirrors `settings::TaskManager`. Claude only for now; see the Rust doc. */
