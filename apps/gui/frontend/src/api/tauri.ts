@@ -85,6 +85,8 @@ export function createTauriApi(): AgencyZeroApi {
     listRateLimits: () => call("list_rate_limits"),
     getCostSummary: () => call("get_cost_summary"),
     getBuildInfo: () => call("get_build_info"),
+    checkForUpdate: () => call("check_for_update"),
+    installUpdate: () => call("install_update"),
     relaunchApp: () => call("relaunch_app"),
     getTaskManager: () => call("get_task_manager"),
     resetTaskManager: () => call("reset_task_manager"),

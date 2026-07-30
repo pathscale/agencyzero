@@ -19,6 +19,7 @@ import type {
   AgentIoEntry,
   AgentModels,
   AgentStatus,
+  AvailableUpdate,
   DataLocation,
   GlobalSettings,
   Message,
@@ -75,6 +76,12 @@ type WorkspaceState = {
    * `supported: false` is the honest answer, not a missing one.
    */
   quota: QuotaReport | null;
+  /**
+   * A newer published version, when the boot-time check found one. Null is
+   * both "up to date" and "check failed" — the Settings row distinguishes,
+   * the gear-dot nudge deliberately does not.
+   */
+  availableUpdate: AvailableUpdate | null;
   /**
    * The Home task manager's native session id, once a prompt has produced one.
    *
@@ -157,6 +164,7 @@ function createWorkspace() {
     dataLocation: null,
     workspaceRoot: null,
     quota: null,
+    availableUpdate: null,
     streaming: {},
     tabs: [HOME_TAB],
     activeKey: "home",
@@ -440,6 +448,13 @@ function createWorkspace() {
       drainEventBuffer();
       setState("boot", { status: "ready" });
       log.info("boot: ready");
+
+      // After ready, not during: an update nobody has asked to install must
+      // never delay first paint, and a failed check is a log line, not a
+      // boot error.
+      void checkForUpdate().catch((cause) =>
+        log.warn(`update check failed: ${describeError(cause)}`),
+      );
     } catch (cause) {
       // A half-loaded workspace is not something to render as if it were whole.
       log.error(`boot failed: ${describeError(cause)}`);
@@ -461,6 +476,20 @@ function createWorkspace() {
    * A failure leaves the last answer in place rather than blanking the readout:
    * a stale figure beats no figure, and `checkedAt` says how stale.
    */
+  /**
+   * Ask whether a newer version is published, and remember the answer.
+   *
+   * Returns what it found so Settings' explicit Check button can also say
+   * "you are up to date" — which the passive boot check never claims, since
+   * its failure and a current install look identical in state.
+   */
+  async function checkForUpdate(): Promise<AvailableUpdate | null> {
+    const found = await client().checkForUpdate();
+    setState("availableUpdate", found);
+    if (found) log.info(`update available: ${found.version}`);
+    return found;
+  }
+
   async function refreshQuota(): Promise<void> {
     try {
       setState("quota", await client().listQuota());
@@ -1055,6 +1084,8 @@ function createWorkspace() {
     clearApprovalRules: (projectId: string) => client().clearApprovalRules(projectId),
     getCostSummary: () => client().getCostSummary(),
     getBuildInfo: () => client().getBuildInfo(),
+    checkForUpdate,
+    installUpdate: () => client().installUpdate(),
     relaunchApp: () => client().relaunchApp(),
     cancelTask: (toolCallId: string) => client().cancelTask(toolCallId),
     cancelRun: (projectId: string) => client().cancelRun(projectId),

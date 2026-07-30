@@ -12,6 +12,7 @@ import {
   PERMISSION_LABELS,
   PERMISSION_ORDER,
 } from "~/lib/labels";
+import { describeError } from "~/lib/log";
 import { useWorkspace } from "~/stores/workspace";
 import type {
   Agent,
@@ -290,6 +291,12 @@ export function SettingsTab(): JSX.Element {
                   hint="version · commit · compiled — a * after the commit means uncommitted edits"
                 >
                   <BuildStamp />
+                </Row>
+                <Row
+                  label="Update"
+                  hint="checked at launch against the published manifest; installing refuses while runs are active"
+                >
+                  <UpdateControl />
                 </Row>
                 <Row
                   label="Restart"
@@ -673,6 +680,78 @@ function BuildStamp(): JSX.Element {
         </span>
       )}
     </Show>
+  );
+}
+
+/**
+ * The whole update story in one row: what the boot check found, a manual
+ * re-check, and the install button. "Up to date" is only ever said after an
+ * *explicit* check succeeds — the passive boot check's failure and a current
+ * install look identical in state, and claiming freshness on a check that
+ * never reached the CDN is the lie the backend was built to avoid.
+ */
+function UpdateControl(): JSX.Element {
+  const { state, actions, isLive } = useWorkspace();
+  const [busy, setBusy] = createSignal(false);
+  const [note, setNote] = createSignal<string | null>(null);
+
+  const check = (): void => {
+    setBusy(true);
+    setNote(null);
+    void actions
+      .checkForUpdate()
+      .then((found) => setNote(found ? null : "up to date"))
+      .catch((cause) => setNote(describeError(cause)))
+      .finally(() => setBusy(false));
+  };
+
+  // Optimistic and stays that way on success: the process is replaced
+  // mid-await, same as Restart. Failure (a live run, a download error)
+  // lands in the note.
+  const install = (): void => {
+    setBusy(true);
+    setNote("downloading…");
+    void actions.installUpdate().catch((cause) => {
+      setNote(describeError(cause));
+      setBusy(false);
+    });
+  };
+
+  return (
+    <div class="flex items-center gap-2">
+      <Show when={note()}>
+        {(text) => <span class="max-w-[220px] truncate text-[11.5px] text-az-muted">{text()}</span>}
+      </Show>
+      <Show
+        when={state.availableUpdate}
+        fallback={
+          <button
+            type="button"
+            onClick={check}
+            disabled={busy() || !isLive("checkForUpdate")}
+            class="shrink-0 rounded-lg border border-az-hairline-strong px-3 py-[5px] text-[12px] text-az-body transition-colors hover:border-primary hover:text-primary disabled:opacity-40"
+          >
+            {busy() ? "Checking…" : "Check for update"}
+          </button>
+        }
+      >
+        {(update) => (
+          <>
+            <span class="shrink-0 font-mono text-[11.5px] text-primary">
+              {update().version} available
+            </span>
+            <button
+              type="button"
+              onClick={install}
+              disabled={busy() || !isLive("installUpdate")}
+              class="shrink-0 rounded-lg border border-primary/50 px-3 py-[5px] font-semibold text-[12px] text-primary transition-colors hover:border-primary hover:bg-primary/10 disabled:opacity-40"
+            >
+              {busy() ? "Installing…" : "Install & Restart"}
+            </button>
+          </>
+        )}
+      </Show>
+    </div>
   );
 }
 
