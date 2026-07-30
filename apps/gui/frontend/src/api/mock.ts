@@ -463,6 +463,11 @@ export function createMockApi(): AgencyZeroApi {
     // kept only so the interface stays whole.
     resolveApproval: () => settle(undefined),
 
+    // A couple of fixture rules so the "remembered approvals" surface is
+    // reviewable in the browser preview.
+    listApprovalRules: () => settle(["Bash: cargo test", "Edit: apps/gui/src"]),
+    clearApprovalRules: () => settle(undefined),
+
     // Fixture spend, so the Settings section is reviewable with real-looking
     // numbers. The Rust command sums the usage-ledger table.
     getCostSummary: () =>

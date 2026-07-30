@@ -1045,8 +1045,10 @@ function createWorkspace() {
     deleteItem: (id: string) => client().deleteItem(id),
     resolveModeration: (messageId: string, approve: boolean) =>
       client().resolveModeration(messageId, approve),
-    resolveApproval: (projectId: string, approvalId: string, allow: boolean) =>
-      client().resolveApproval(projectId, approvalId, allow),
+    resolveApproval: (projectId: string, approvalId: string, allow: boolean, remember?: boolean) =>
+      client().resolveApproval(projectId, approvalId, allow, remember),
+    listApprovalRules: (projectId: string) => client().listApprovalRules(projectId),
+    clearApprovalRules: (projectId: string) => client().clearApprovalRules(projectId),
     getCostSummary: () => client().getCostSummary(),
     getBuildInfo: () => client().getBuildInfo(),
     relaunchApp: () => client().relaunchApp(),

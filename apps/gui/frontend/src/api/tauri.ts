@@ -88,8 +88,10 @@ export function createTauriApi(): AgencyZeroApi {
     relaunchApp: () => call("relaunch_app"),
     getTaskManager: () => call("get_task_manager"),
     resetTaskManager: () => call("reset_task_manager"),
-    resolveApproval: (projectId, approvalId, allow) =>
-      call("resolve_approval", { projectId, approvalId, allow }),
+    resolveApproval: (projectId, approvalId, allow, remember) =>
+      call("resolve_approval", { projectId, approvalId, allow, remember: remember ?? false }),
+    listApprovalRules: (projectId) => call("list_approval_rules", { projectId }),
+    clearApprovalRules: (projectId) => call("clear_approval_rules", { projectId }),
 
     async on<E extends keyof AppEvents>(
       event: E,

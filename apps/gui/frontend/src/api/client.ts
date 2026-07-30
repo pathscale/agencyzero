@@ -139,9 +139,20 @@ export interface AgencyZeroApi {
   listRateLimits(): Promise<RateLimit[]>;
   /**
    * Answer the approval question a run is blocked on. `allow: false` denies
-   * with the stock reason; the turn continues either way.
+   * with the stock reason; the turn continues either way. `remember: true`
+   * with an allow stores the call's signature so matching asks in this
+   * project are answered automatically from then on.
    */
-  resolveApproval(projectId: string, approvalId: string, allow: boolean): Promise<void>;
+  resolveApproval(
+    projectId: string,
+    approvalId: string,
+    allow: boolean,
+    remember?: boolean,
+  ): Promise<void>;
+  /** The remembered approval signatures for one project. */
+  listApprovalRules(projectId: string): Promise<string[]>;
+  /** Forget every remembered approval for one project. */
+  clearApprovalRules(projectId: string): Promise<void>;
   /** Spend over Settings' ranges, from the usage ledger. Survives project deletion. */
   getCostSummary(): Promise<CostSummary>;
   /** Which commit this binary is and when it was compiled. */
