@@ -83,6 +83,11 @@ to every agent and human; private memory dies with your machine.
 
 ## Git workflow
 
+- **One change per commit.** One bug fix or one feature per commit, committed as it is
+  finished — not a batch "round" commit blobbing several features together at the end.
+  Blobbed commits cannot be reverted, bisected, or reviewed one decision at a time.
+  When features share files, that is an ordering problem, not an excuse: build and
+  commit them sequentially.
 - **Always specify the branch when pushing**: `git push origin branch-name`
 - **Branch naming**: `fix/issue-description` or `feat/issue-description`
 - **Force-push your own branch freely.** Rebasing a feature branch onto a moved
