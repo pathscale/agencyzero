@@ -23,7 +23,9 @@ const STATUS_TONE: Record<ProjectItem["status"], string> = {
  * Home: every project with its items, plus Pinned and Recent.
  *
  * Two layers, one status enum. Clicking a project group opens its tab — the
- * list is a way in, not a second place to work.
+ * list is a way in, not a second workbench. One exception, by owner request:
+ * item titles edit in place here, because Home is where the harvested lists
+ * actually get read and corrected.
  */
 export function HomeTab(): JSX.Element {
   const { state, actions, itemsFor, tabStatus } = useWorkspace();
@@ -421,6 +423,99 @@ function TaskManagerStatus(): JSX.Element {
   );
 }
 
+/**
+ * One item row inside a Home project group.
+ *
+ * The row keeps the header's contract — single click folds, double click
+ * opens the tab — and status still cannot be changed here. But the *title* is
+ * editable in place, by owner request: the harvested lists are read and
+ * corrected on Home, and "go open the project tab to fix a typo" was a rule
+ * serving the doctrine rather than the person. The pencil reveals on hover
+ * and is its own sibling control, so editing never triggers fold or open.
+ */
+function GroupItemRow(props: {
+  item: ProjectItem;
+  onFold: () => void;
+  onOpen: () => void;
+}): JSX.Element {
+  const { actions } = useWorkspace();
+  const [editing, setEditing] = createSignal(false);
+  const [title, setTitle] = createSignal("");
+
+  const save = async (): Promise<void> => {
+    const value = title().trim();
+    setEditing(false);
+    if (!value || value === props.item.title) return;
+    try {
+      await actions.updateItem(props.item.id, value);
+    } catch (cause) {
+      log.error(`could not rename the item: ${describeError(cause)}`);
+    }
+  };
+
+  return (
+    <Show
+      when={!editing()}
+      fallback={
+        <input
+          autofocus
+          value={title()}
+          aria-label={`Edit ${props.item.title}`}
+          onInput={(event) => setTitle(event.currentTarget.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") void save();
+            if (event.key === "Escape") setEditing(false);
+          }}
+          onBlur={() => void save()}
+          class="mx-2 my-1 rounded-[9px] border border-primary/40 bg-base-300 px-2.5 py-2 text-[12.5px] text-az-body focus:outline-none"
+        />
+      }
+    >
+      <div class="group flex items-baseline gap-2.5 px-3.5 py-2.5 transition-colors hover:bg-white/4">
+        <button
+          type="button"
+          onClick={props.onFold}
+          onDblClick={props.onOpen}
+          class="flex min-w-0 flex-1 items-baseline gap-2.5 text-left"
+        >
+          <Show
+            when={props.item.status === "finished"}
+            fallback={<ItemMarker status={props.item.status === "active" ? "active" : "pending"} />}
+          >
+            <Icon name="check" class="relative top-0.5 shrink-0 text-[13px] text-success" />
+          </Show>
+          <span
+            class={`min-w-0 flex-1 text-[12.5px] ${
+              props.item.status === "active"
+                ? "text-az-strong"
+                : props.item.status === "finished"
+                  ? "text-az-muted"
+                  : "text-az-body"
+            }`}
+          >
+            {props.item.title}
+          </span>
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            setTitle(props.item.title);
+            setEditing(true);
+          }}
+          aria-label={`Edit ${props.item.title}`}
+          title="Edit this item"
+          class="shrink-0 rounded-md p-0.5 text-az-faint opacity-0 transition-[color,opacity] hover:text-az-body group-hover:opacity-100"
+        >
+          <Icon name="pencil" class="text-[11px]" />
+        </button>
+        <span class={`shrink-0 text-[11.5px] ${STATUS_TONE[props.item.status]}`}>
+          {statusSuffix(props.item.status)}
+        </span>
+      </div>
+    </Show>
+  );
+}
+
 function ProjectGroup(props: { project: Project }): JSX.Element {
   const { actions, itemsFor } = useWorkspace();
 
@@ -615,41 +710,7 @@ function ProjectGroup(props: { project: Project }): JSX.Element {
           }`}
         >
           <For each={items()}>
-            {(item) => (
-              /*
-               * The rows follow the header's contract: single click folds the
-               * group, double click opens the tab. Home shows items but is
-               * not a second place to work them, so a click never means
-               * "change the status here".
-               */
-              <button
-                type="button"
-                onClick={foldSoon}
-                onDblClick={openNow}
-                class="flex items-baseline gap-2.5 px-3.5 py-2.5 text-left transition-colors hover:bg-white/4"
-              >
-                <Show
-                  when={item.status === "finished"}
-                  fallback={<ItemMarker status={item.status === "active" ? "active" : "pending"} />}
-                >
-                  <Icon name="check" class="relative top-0.5 shrink-0 text-[13px] text-success" />
-                </Show>
-                <span
-                  class={`min-w-0 flex-1 text-[12.5px] ${
-                    item.status === "active"
-                      ? "text-az-strong"
-                      : item.status === "finished"
-                        ? "text-az-muted"
-                        : "text-az-body"
-                  }`}
-                >
-                  {item.title}
-                </span>
-                <span class={`shrink-0 text-[11.5px] ${STATUS_TONE[item.status]}`}>
-                  {statusSuffix(item.status)}
-                </span>
-              </button>
-            )}
+            {(item) => <GroupItemRow item={item} onFold={foldSoon} onOpen={openNow} />}
           </For>
           <Show when={items().length > 5}>
             <button
