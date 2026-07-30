@@ -2,6 +2,7 @@ import type {
   AgentIoEntry,
   AgentModels,
   AgentStatus,
+  BuildInfo,
   CostSummary,
   CreatedProject,
   DataLocation,
@@ -143,6 +144,8 @@ export interface AgencyZeroApi {
   resolveApproval(projectId: string, approvalId: string, allow: boolean): Promise<void>;
   /** Spend over Settings' ranges, from the usage ledger. Survives project deletion. */
   getCostSummary(): Promise<CostSummary>;
+  /** Which commit this binary is and when it was compiled. */
+  getBuildInfo(): Promise<BuildInfo>;
   /**
    * Drain the store and restart into whatever binary is on disk at the app's
    * own path — the second half of a rebuild. Never resolves: the process is

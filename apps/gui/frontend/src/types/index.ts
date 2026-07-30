@@ -434,6 +434,19 @@ export interface CostSummary {
 }
 
 /**
+ * Exactly which build the running process is.
+ *
+ * The version names every build for weeks, so it cannot distinguish a fresh
+ * bundle from a stale one; the commit and compile time can. A `*` after the
+ * sha means the tree had uncommitted edits when the build ran.
+ */
+export interface BuildInfo {
+  version: string;
+  gitSha: string;
+  builtAt: string;
+}
+
+/**
  * Where the Home task manager's conversation stands.
  *
  * Its own DTO because the task manager has no project row: the session id the

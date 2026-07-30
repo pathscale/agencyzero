@@ -47,6 +47,7 @@ const IMPLEMENTED: &[&str] = &[
     "get_task_manager",
     "resolve_approval",
     "get_cost_summary",
+    "get_build_info",
     "relaunch_app",
     "list_agent_io",
     "get_io_persist",
@@ -86,6 +87,31 @@ pub(crate) struct AppState {
 #[tauri::command]
 fn list_capabilities() -> Vec<String> {
     IMPLEMENTED.iter().map(|name| (*name).to_string()).collect()
+}
+
+/// Exactly which build this process is.
+///
+/// The version number names every build for weeks at a time, so it cannot
+/// answer "am I running the fix or the stale bundle?" — the question behind
+/// two wasted debugging rounds. The commit and compile time can. Stamped by
+/// `build.rs`; a `*` after the sha means the tree had uncommitted edits.
+#[derive(Clone, Copy, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct BuildInfo {
+    version: &'static str,
+    git_sha: &'static str,
+    built_at: &'static str,
+}
+
+const BUILD: BuildInfo = BuildInfo {
+    version: az_core::VERSION,
+    git_sha: env!("AZ_GIT_SHA"),
+    built_at: env!("AZ_BUILT_AT"),
+};
+
+#[tauri::command]
+fn get_build_info() -> BuildInfo {
+    BUILD
 }
 
 /// Record a line the webview produced, in the same file as the Rust ones.
@@ -349,8 +375,16 @@ fn build_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> {
     // No accelerator: restarting is deliberate, not something to fat-finger.
     let restart = MenuItemBuilder::with_id(RESTART, "Restart into Build on Disk").build(app)?;
 
+    // The About box carries the full stamp, so "which build is this?" has an
+    // answer reachable without opening Settings.
+    let about = AboutMetadata {
+        version: Some(BUILD.version.into()),
+        comments: Some(format!("{} · built {}", BUILD.git_sha, BUILD.built_at)),
+        ..Default::default()
+    };
+
     let app_menu = SubmenuBuilder::new(app, "AgencyZero")
-        .about(Some(AboutMetadata::default()))
+        .about(Some(about))
         .separator()
         .services()
         .separator()
@@ -447,6 +481,7 @@ fn main() {
             projects::get_task_manager,
             projects::resolve_approval,
             projects::get_cost_summary,
+            get_build_info,
             projects::list_agent_io,
             projects::get_io_persist,
             projects::set_io_persist,
@@ -482,6 +517,17 @@ fn main() {
             // fatal — a fatal error nobody can read is how this app lost an
             // afternoon.
             log::init(&data_dir.join("logs"));
+
+            // The first line of every launch names the exact build, so a log
+            // can never be read against the wrong binary.
+            crate::log!(
+                log::Level::Info,
+                "boot",
+                "az-gui {} · {} · built {}",
+                BUILD.version,
+                BUILD.git_sha,
+                BUILD.built_at
+            );
 
             // Resolved before anything opens, because the settings record that
             // would otherwise carry it lives in the database being located.
