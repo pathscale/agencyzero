@@ -1004,7 +1004,12 @@ pub type PendingApprovals =
 /// in a crate allows that directory, not the disk. URL tools collapse to the
 /// host. Anything else is the tool name alone.
 fn approval_signature(tool: &str, input: &serde_json::Value) -> String {
-    let text = |key: &str| input.get(key).and_then(|value| value.as_str()).unwrap_or("");
+    let text = |key: &str| {
+        input
+            .get(key)
+            .and_then(|value| value.as_str())
+            .unwrap_or("")
+    };
 
     if tool.eq_ignore_ascii_case("bash") {
         let mut words = text("command").split_whitespace();
@@ -2211,7 +2216,10 @@ async fn drive_run(
                         &project_id,
                         "sent",
                         "approval",
-                        format!("{} — allowed by remembered rule [{signature}]", approval.tool),
+                        format!(
+                            "{} — allowed by remembered rule [{signature}]",
+                            approval.tool
+                        ),
                     );
                     last_was_text = is_text;
                     continue;
@@ -2878,9 +2886,8 @@ mod tests {
     /// or every rule would match exactly one command ever.
     #[test]
     fn bash_signatures_are_program_plus_subcommand() {
-        let sig = |command: &str| {
-            approval_signature("Bash", &serde_json::json!({ "command": command }))
-        };
+        let sig =
+            |command: &str| approval_signature("Bash", &serde_json::json!({ "command": command }));
         assert_eq!(sig("cargo test -p az-gui"), "Bash: cargo test");
         assert_eq!(sig("git push origin master"), "Bash: git push");
         // A flag is not a subcommand; the rule stops at the program.
