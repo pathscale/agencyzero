@@ -36,6 +36,11 @@ pub struct GlobalSettings {
     pub env_policy: String,
     pub forward_proxy_vars: bool,
     pub notifications: Notifications,
+    /// What a session's `- [x]` does to an existing item: `"resolve"` marks
+    /// it finished and keeps the row (the default — history stays readable),
+    /// `"delete"` removes it outright for owners who want the list to be only
+    /// what is still open.
+    pub completed_items: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -179,6 +184,7 @@ impl Default for GlobalSettings {
             env_policy: "minimal".into(),
             forward_proxy_vars: false,
             notifications: Notifications::default(),
+            completed_items: "resolve".into(),
         }
     }
 }

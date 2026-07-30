@@ -875,7 +875,7 @@ async fn write_tasks_from_reply(
 /// a later turn restating the plan must not delete the rows they added or the
 /// ones they already ticked off. Duplicate titles are skipped so an agent that
 /// repeats its checklist each turn does not stack the same line up.
-fn write_items_from_reply(
+async fn write_items_from_reply(
     app: &AppHandle,
     tables: &crate::db::tables::Tables,
     project_id: &str,
@@ -891,14 +891,66 @@ fn write_items_from_reply(
         .select_by_project_id(project_id.to_string())
         .execute()
         .unwrap_or_default();
-    let seen: std::collections::HashSet<String> = existing
+    let by_title: std::collections::HashMap<String, &ProjectItemRow> = existing
         .iter()
-        .map(|row| row.title.to_lowercase())
+        .map(|row| (row.title.to_lowercase(), row))
         .collect();
     let mut next = u32::try_from(existing.len()).unwrap_or(0);
 
+    // Settings decide what "done" does to an existing row; read once per reply.
+    let delete_completed = tables
+        .kv_get(crate::settings::KEY)
+        .and_then(|raw| serde_json::from_str::<crate::settings::GlobalSettings>(&raw).ok())
+        .unwrap_or_default()
+        .completed_items
+        == "delete";
+
     for (title, status) in proposed {
-        if seen.contains(&title.to_lowercase()) {
+        /*
+         * A checkbox line naming an item that already exists is a status
+         * report, not a proposal: `- [x] Fix the picker` from the session
+         * that just fixed it marks the row finished (or deletes it, per
+         * Settings). This is how a run closes out the item it was started
+         * from without any special verb.
+         */
+        if let Some(row) = by_title.get(&title.to_lowercase()) {
+            if row.status == status {
+                continue;
+            }
+            if status == "finished" && delete_completed {
+                let (row_id, row_project) = (row.id.clone(), row.project_id.clone());
+                match tables.project_item.delete(row_id.clone()).await {
+                    Ok(()) => {
+                        let _ = app.emit(
+                            "item:deleted",
+                            serde_json::json!({ "id": row_id, "projectId": row_project }),
+                        );
+                    }
+                    Err(error) => crate::log!(
+                        crate::log::Level::Error,
+                        "items",
+                        "{project_id}: could not delete the completed item: {error}"
+                    ),
+                }
+                continue;
+            }
+            let row_id = row.id.clone();
+            match tables
+                .project_item
+                .update_status_by_id(ItemStatusByIdQuery { status }, row_id.clone())
+                .await
+            {
+                Ok(()) => {
+                    if let Some(updated) = tables.project_item.select(row_id) {
+                        let _ = app.emit("item:updated", ProjectItemDto::from(updated));
+                    }
+                }
+                Err(error) => crate::log!(
+                    crate::log::Level::Error,
+                    "items",
+                    "{project_id}: could not update the item's status: {error}"
+                ),
+            }
             continue;
         }
         let row = ProjectItemRow {
@@ -3213,7 +3265,7 @@ async fn drive_run(
                 // harvester saw and what the user reads can never disagree.
                 write_tasks_from_reply(&app, &io, &tables, &project_id, &body).await;
             } else {
-                write_items_from_reply(&app, &tables, &project_id, &body);
+                write_items_from_reply(&app, &tables, &project_id, &body).await;
             }
             let _ = app.emit(
                 "run:stopped",

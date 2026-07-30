@@ -506,7 +506,9 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
     void actions.send(
       props.projectId,
       `Work on this task from the project's item list:\n\n${item.title}\n\n` +
-        `When you are done, say what changed and what is left, if anything.`,
+        `When you are done, say what changed and what is left, if anything. ` +
+        `If the task is complete, end with this exact checklist line so the ` +
+        `list updates itself:\n- [x] ${item.title}`,
     );
   }
 

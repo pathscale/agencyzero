@@ -510,6 +510,7 @@ export const SETTINGS: GlobalSettings = {
   taskManager: { model: "haiku", effort: "medium", dirs: [] },
   envPolicy: "minimal",
   forwardProxyVars: false,
+  completedItems: "resolve",
   notifications: {
     onHold: true,
     onRunFinished: true,
