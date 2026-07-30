@@ -629,13 +629,6 @@ function ProjectGroup(props: { project: Project }): JSX.Element {
   const collapsed = () => prefs.collapsedGroups.includes(props.project.id);
 
   /*
-   * Session-local, not a pref: "show me everything in this group right now"
-   * is a moment's need, and every group starting expanded next launch would
-   * give the longest project the whole screen daily.
-   */
-  const [showAll, setShowAll] = createSignal(false);
-
-  /*
    * Single click folds, double click opens — distinguished by a short timer,
    * not by luck. Folding immediately on the first click would hide an item
    * row before the second click of a double could land on it, so the fold
@@ -779,35 +772,18 @@ function ProjectGroup(props: { project: Project }): JSX.Element {
       </div>
 
       {/*
-        Bounded by default: a project the task manager just filled with eight
-        items must not push every other group off screen. The footer's
-        "Show all" lifts the cap for this group when reading the whole list
-        is the point.
+        No inner cap and no inner scrollbar. The 220px window (and the
+        "Show all" footer that lived, unreachably, inside its own scroll
+        area) had a 23-item list scrolling in a porthole while the page
+        below sat empty. The group grows to what it holds; the projects
+        column is the one scroller, and folding the group is the tool for
+        getting a long list out of the way.
       */}
       <Show when={!collapsed()}>
-        <div
-          class={`az-scroll flex flex-col overflow-y-auto border-az-hairline-soft border-t ${
-            showAll() ? "" : "max-h-[220px]"
-          }`}
-        >
+        <div class="flex flex-col border-az-hairline-soft border-t">
           <For each={items()}>
             {(item) => <GroupItemRow item={item} onFold={foldSoon} onOpen={openNow} />}
           </For>
-          {/* Whenever the cap can be hiding anything: the 220px window fits
-              about five rows, so from the fifth on the way out must exist. */}
-          <Show when={items().length > 4}>
-            <button
-              type="button"
-              onClick={(event) => {
-                // Not part of the header's fold/open contract.
-                event.stopPropagation();
-                setShowAll((open) => !open);
-              }}
-              class="border-az-hairline-soft border-t px-3.5 py-1.5 text-left text-[11px] text-az-muted transition-colors hover:bg-white/4 hover:text-base-content"
-            >
-              {showAll() ? "Shrink the list" : `Show all ${items().length}`}
-            </button>
-          </Show>
         </div>
       </Show>
     </div>
