@@ -8,6 +8,7 @@ mod projects;
 mod quota;
 mod settings;
 mod tasks;
+mod update;
 
 use std::sync::Arc;
 
@@ -63,6 +64,8 @@ const IMPLEMENTED: &[&str] = &[
     "list_models",
     "log_frontend",
     "get_log_path",
+    "check_for_update",
+    "install_update",
 ];
 
 /// What the GUI carries for the life of the process.
@@ -479,8 +482,11 @@ fn build_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> {
 
 fn main() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .invoke_handler(tauri::generate_handler![
             greet,
+            update::check_for_update,
+            update::install_update,
             list_capabilities,
             get_data_location,
             set_data_location,

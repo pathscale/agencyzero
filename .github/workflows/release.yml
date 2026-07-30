@@ -1,0 +1,264 @@
+name: Release
+
+# Publishes the macOS bundle to BunnyCDN under a fixed, versionless path, so a
+# release clobbers the previous one instead of accumulating files. `latest.json`
+# is therefore the only place the version is recorded, which is why the purge
+# steps below are hard failures rather than best-effort: a stale edge copy of
+# either file is indistinguishable, to a client, from a release that never
+# happened.
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+env:
+  CDN_DIR: agencyzero
+  CDN_BASE: https://24x.ai/agencyzero
+  BUNDLE_DIR: target/release/bundle/macos
+
+jobs:
+  release:
+    # The only workflow here that cannot use ubicloud-standard-*: Ubicloud
+    # offers Linux runners only, and a Tauri macOS bundle needs the macOS SDK
+    # and WebKit. macos-15 is arm64, so this is a native build, not a cross one.
+    runs-on: macos-15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin
+
+      - name: Cache cargo build
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install frontend dependencies
+        run: bun install --frozen-lockfile
+        working-directory: apps/gui/frontend
+
+      - name: Resolve version
+        id: version
+        run: |
+          VERSION="0.1.${GITHUB_RUN_NUMBER}"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          python3 - "$VERSION" <<'PY'
+          import json, sys
+          path = "apps/gui/tauri.conf.json"
+          with open(path) as f:
+              conf = json.load(f)
+          conf["version"] = sys.argv[1]
+          with open(path, "w") as f:
+              json.dump(conf, f, indent=2)
+              f.write("\n")
+          PY
+          echo "Releasing $VERSION"
+
+      # The committed config ad-hoc signs so that a local `cargo tauri build`
+      # still produces a bundle with sealed resources. A real Developer ID
+      # certificate, when present, has to displace that value.
+      - name: Select signing identity
+        id: signing
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+        run: |
+          if [ -n "$APPLE_CERTIFICATE" ]; then
+            python3 - <<'PY'
+          import json
+          path = "apps/gui/tauri.conf.json"
+          with open(path) as f:
+              conf = json.load(f)
+          conf["bundle"]["macOS"].pop("signingIdentity", None)
+          with open(path, "w") as f:
+              json.dump(conf, f, indent=2)
+              f.write("\n")
+          PY
+            echo "mode=developer-id" >> "$GITHUB_OUTPUT"
+            echo "Signing with Developer ID and notarizing."
+          else
+            echo "mode=adhoc" >> "$GITHUB_OUTPUT"
+            echo "::warning::APPLE_CERTIFICATE is not set, so this is an ad-hoc signed bundle. Gatekeeper will reject it on download, and every update resets the installed copy's privacy permissions."
+          fi
+
+      # Notarization is deliberately absent. It needs a current Apple Developer
+      # Program membership, and ours has lapsed, so shipping the wiring for it
+      # would mean shipping a path nothing here can exercise. On renewal:
+      # create a Developer ID Application certificate, set APPLE_CERTIFICATE
+      # and APPLE_CERTIFICATE_PASSWORD, then add APPLE_API_ISSUER,
+      # APPLE_API_KEY and APPLE_API_KEY_PATH (a .p8 written to disk in an
+      # earlier step) to the env below. Tauri notarizes and staples on its own
+      # once those are present. Note that `secrets` is not a legal context in a
+      # step-level `if`, so gate any such step on a step output instead.
+      - name: Build bundle
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+        run: bunx --yes @tauri-apps/cli@^2.11 build
+        working-directory: apps/gui
+
+      # The failure this catches is specific and was live in this repo: a
+      # bundle whose inner executable is linker-ad-hoc-signed while the bundle
+      # itself has no sealed resources verifies nowhere, and the symptom on a
+      # user's Mac is "damaged and can't be opened" rather than anything that
+      # names signing.
+      - name: Verify bundle signature
+        run: |
+          APP="$BUNDLE_DIR/AgencyZero.app"
+          codesign --verify --deep --strict --verbose=2 "$APP"
+          codesign -dv --verbose=4 "$APP" 2>&1 | grep -E "Signature|TeamIdentifier|Sealed Resources"
+          if [ "${{ steps.signing.outputs.mode }}" = "developer-id" ]; then
+            spctl -a -vvv "$APP"
+            xcrun stapler validate "$APP"
+          fi
+
+      - name: Build latest.json
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          TARBALL="$BUNDLE_DIR/AgencyZero.app.tar.gz"
+          test -f "$TARBALL" || { echo "::error::missing $TARBALL"; exit 1; }
+          test -f "$TARBALL.sig" || { echo "::error::missing $TARBALL.sig (was TAURI_SIGNING_PRIVATE_KEY set?)"; exit 1; }
+          python3 - "$VERSION" "$TARBALL.sig" "$CDN_BASE" <<'PY'
+          import json, sys, datetime
+          version, sig_path, base = sys.argv[1], sys.argv[2], sys.argv[3]
+          with open(sig_path) as f:
+              signature = f.read().strip()
+          manifest = {
+              "version": version,
+              "pub_date": datetime.datetime.now(datetime.timezone.utc)
+                  .strftime("%Y-%m-%dT%H:%M:%SZ"),
+              "platforms": {
+                  "darwin-aarch64": {
+                      "signature": signature,
+                      "url": f"{base}/AgencyZero.app.tar.gz",
+                  }
+              },
+          }
+          with open("latest.json", "w") as f:
+              json.dump(manifest, f, indent=2)
+              f.write("\n")
+          PY
+          cat latest.json
+
+      # Ordering matters and is the whole reason these are separate steps. The
+      # tarball goes live and is confirmed live *before* latest.json advertises
+      # it. Reversed, a client reads the new version, fetches an edge-cached
+      # older tarball, and fails the signature check.
+      - name: Upload tarball to BunnyCDN
+        env:
+          STORAGE_API_KEY: ${{ secrets.BUNNYCDN_STORAGE_API_KEY }}
+          STORAGE_NAME: ${{ secrets.BUNNYCDN_STORAGE_NAME }}
+        run: |
+          upload() {
+            local file="$1" dest="$2" attempt=1 code
+            while [ "$attempt" -le 4 ]; do
+              code=$(curl -sS -X PUT -H "AccessKey: $STORAGE_API_KEY" \
+                -T "$file" -o /dev/null -w '%{http_code}' \
+                "https://storage.bunnycdn.com/$STORAGE_NAME/$dest")
+              case "$code" in
+                200|201) echo "uploaded $dest"; return 0 ;;
+              esac
+              echo "::warning::attempt $attempt for $dest: HTTP $code"
+              attempt=$((attempt + 1))
+              sleep $((attempt * 3))
+            done
+            echo "::error::upload failed for $dest"
+            return 1
+          }
+          upload "$BUNDLE_DIR/AgencyZero.app.tar.gz" "$CDN_DIR/AgencyZero.app.tar.gz"
+
+      # Per-URL purge first, because this pull zone also fronts the 24x.ai site
+      # and a zone-wide purge would evict that site's cache on every AgencyZero
+      # release. The zone-wide call is the fallback: it is the form the other
+      # pathscale pipelines use, so it is the one known to work with these
+      # credentials if the per-URL endpoint rejects this key type.
+      - name: Purge tarball from edge
+        env:
+          ZONE_API_KEY: ${{ secrets.BUNNYCDN_ZONE_API_KEY }}
+          ZONE_ID: ${{ secrets.BUNNYCDN_ZONE_ID }}
+        run: |
+          if [ -z "$ZONE_API_KEY" ]; then
+            echo "::error::BUNNYCDN_ZONE_API_KEY is required: a versionless URL that is not purged serves the previous release forever."
+            exit 1
+          fi
+          if curl -sS --fail-with-body -X POST -H "AccessKey: $ZONE_API_KEY" \
+               "https://api.bunny.net/purge?url=$CDN_BASE/AgencyZero.app.tar.gz&async=false"; then
+            echo "purged the tarball URL"
+          else
+            echo "::warning::per-URL purge failed; falling back to a zone-wide purge"
+            curl -sS --fail-with-body -X POST -H "AccessKey: $ZONE_API_KEY" \
+              "https://bunnycdn.com/api/pullzone/$ZONE_ID/purgeCache"
+          fi
+
+      - name: Confirm the live tarball is the one just built
+        run: |
+          LOCAL=$(shasum -a 256 "$BUNDLE_DIR/AgencyZero.app.tar.gz" | cut -d' ' -f1)
+          for attempt in 1 2 3 4 5 6; do
+            REMOTE=$(curl -sS -L "$CDN_BASE/AgencyZero.app.tar.gz" | shasum -a 256 | cut -d' ' -f1)
+            if [ "$LOCAL" = "$REMOTE" ]; then
+              echo "edge matches build ($LOCAL)"
+              exit 0
+            fi
+            echo "attempt $attempt: edge has $REMOTE, want $LOCAL"
+            sleep 10
+          done
+          echo "::error::edge never served the new tarball; not publishing latest.json"
+          exit 1
+
+      - name: Publish latest.json
+        env:
+          STORAGE_API_KEY: ${{ secrets.BUNNYCDN_STORAGE_API_KEY }}
+          STORAGE_NAME: ${{ secrets.BUNNYCDN_STORAGE_NAME }}
+          ZONE_API_KEY: ${{ secrets.BUNNYCDN_ZONE_API_KEY }}
+          ZONE_ID: ${{ secrets.BUNNYCDN_ZONE_ID }}
+        run: |
+          curl -sS --fail-with-body -X PUT -H "AccessKey: $STORAGE_API_KEY" \
+            -T latest.json "https://storage.bunnycdn.com/$STORAGE_NAME/$CDN_DIR/latest.json"
+          if ! curl -sS --fail-with-body -X POST -H "AccessKey: $ZONE_API_KEY" \
+                 "https://api.bunny.net/purge?url=$CDN_BASE/latest.json&async=false"; then
+            echo "::warning::per-URL purge failed; falling back to a zone-wide purge"
+            curl -sS --fail-with-body -X POST -H "AccessKey: $ZONE_API_KEY" \
+              "https://bunnycdn.com/api/pullzone/$ZONE_ID/purgeCache"
+          fi
+
+          # latest.json is the version record, so a stale edge copy here means
+          # nobody sees the release. Confirm it before declaring success.
+          for attempt in 1 2 3 4 5 6; do
+            LIVE=$(curl -sS -L "$CDN_BASE/latest.json" | python3 -c 'import json,sys; print(json.load(sys.stdin)["version"])' 2>/dev/null || echo "")
+            if [ "$LIVE" = "${{ steps.version.outputs.version }}" ]; then
+              echo "edge serves version $LIVE"
+              exit 0
+            fi
+            echo "attempt $attempt: edge serves '$LIVE', want '${{ steps.version.outputs.version }}'"
+            sleep 10
+          done
+          echo "::error::edge never served the new latest.json"
+          exit 1
+
+      - name: Summary
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          {
+            echo "### AgencyZero $VERSION published"
+            echo
+            echo "- Signing: **${{ steps.signing.outputs.mode }}**"
+            echo "- Bundle: \`$CDN_BASE/AgencyZero.app.tar.gz\`"
+            echo "- Manifest: \`$CDN_BASE/latest.json\`"
+          } >> "$GITHUB_STEP_SUMMARY"

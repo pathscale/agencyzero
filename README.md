@@ -79,6 +79,21 @@ inside the bundle directly when you need it:
 AZ_DATA_DIR=/tmp/az-scratch "./target/release/bundle/macos/AgencyZero Dev.app/Contents/MacOS/az-gui" &
 ```
 
+## Distribution
+
+Other Macs install through Homebrew, and the app upgrades itself from there:
+
+```bash
+brew tap pathscale/tap && brew trust pathscale/tap && brew install --cask agencyzero
+```
+
+A build also emits `AgencyZero.app.tar.gz` and a `.sig` beside the bundle, which
+are what [`release.yml`](.github/workflows/release.yml) publishes. Handing someone
+the tarball URL directly does **not** work: the bundle is ad-hoc signed rather
+than notarized, so a browser download is quarantined and refuses to launch.
+[`docs/distribution.md`](docs/distribution.md) explains why, and what a Developer
+ID certificate would change.
+
 ## Design
 
 [`design/`](design) is the static export of the design source of truth: the workspace
