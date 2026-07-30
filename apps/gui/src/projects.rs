@@ -26,7 +26,10 @@ use worktable::prelude::*;
 use crate::AppState;
 use crate::db::schema::message::MessageRow;
 use crate::db::schema::project::{NameByIdQuery, PinnedByIdQuery, ProjectRow};
-use crate::db::schema::project_item::ProjectItemRow;
+use crate::db::schema::project_item::{
+    PositionByIdQuery as ItemPositionByIdQuery, ProjectItemRow,
+    StatusByIdQuery as ItemStatusByIdQuery,
+};
 use crate::db::schema::task_log::TaskLogRow;
 
 // — wire shapes ————————————————————————————————————————————————————
@@ -417,6 +420,146 @@ pub fn list_items(project_id: String, state: State<'_, AppState>) -> Vec<Project
         .collect();
     rows.sort_by_key(|item| item.order);
     rows
+}
+
+/// Add one item at the end of a project's list.
+///
+/// These four item commands land together: the panel's controls existed for
+/// weeks served by the frontend mock, which meant a created or reordered item
+/// looked real and evaporated on restart — the same dishonesty the Stop
+/// button had, in miniature.
+///
+/// # Errors
+/// Returns a message for an empty title or a store failure.
+#[tauri::command]
+pub fn create_item(
+    app: AppHandle,
+    project_id: String,
+    title: String,
+    state: State<'_, AppState>,
+) -> Result<ProjectItemDto, String> {
+    let title = title.trim().to_string();
+    if title.is_empty() {
+        return Err("an item needs a title".into());
+    }
+    let count = state
+        .tables
+        .project_item
+        .select_by_project_id(project_id.clone())
+        .execute()
+        .unwrap_or_default()
+        .len();
+    let row = ProjectItemRow {
+        id: id("item"),
+        project_id,
+        title,
+        status: "pending".into(),
+        position: u32::try_from(count).unwrap_or(u32::MAX),
+    };
+    state
+        .tables
+        .project_item
+        .insert(row.clone())
+        .map_err(|error| error.to_string())?;
+    let dto = ProjectItemDto::from(row);
+    let _ = app.emit("item:created", dto.clone());
+    Ok(dto)
+}
+
+/// Move one item through pending → active → finished.
+///
+/// # Errors
+/// Returns a message for an unknown status word, a missing item, or a store
+/// failure.
+#[tauri::command]
+pub async fn set_item_status(
+    app: AppHandle,
+    id: String,
+    status: String,
+    state: State<'_, AppState>,
+) -> Result<ProjectItemDto, String> {
+    if !matches!(status.as_str(), "pending" | "active" | "finished") {
+        return Err(format!("not an item status: {status}"));
+    }
+    state
+        .tables
+        .project_item
+        .update_status_by_id(ItemStatusByIdQuery { status }, id.clone())
+        .await
+        .map_err(|error| error.to_string())?;
+    let row = state
+        .tables
+        .project_item
+        .select(id.clone())
+        .ok_or_else(|| format!("no item {id}"))?;
+    let dto = ProjectItemDto::from(row);
+    let _ = app.emit("item:updated", dto.clone());
+    Ok(dto)
+}
+
+/// Remove one item.
+///
+/// # Errors
+/// Returns a message when the item does not exist or the delete fails.
+#[tauri::command]
+pub async fn delete_item(
+    app: AppHandle,
+    id: String,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let row = state
+        .tables
+        .project_item
+        .select(id.clone())
+        .ok_or_else(|| format!("no item {id}"))?;
+    state
+        .tables
+        .project_item
+        .delete(id.clone())
+        .await
+        .map_err(|error| error.to_string())?;
+    let _ = app.emit(
+        "item:deleted",
+        serde_json::json!({ "id": id, "projectId": row.project_id }),
+    );
+    Ok(())
+}
+
+/// Persist a new order for a project's items.
+///
+/// `ids` is the list as the user arranged it; position becomes the index.
+/// Items the list does not name keep their old positions — the sort is
+/// stable enough for the desktop-sized lists this handles, and refusing a
+/// partial list would make every caller re-fetch before every move.
+///
+/// # Errors
+/// Returns the first store failure; positions written before it stand, which
+/// the returned (re-read) list makes visible rather than papering over.
+#[tauri::command]
+pub async fn reorder_items(
+    app: AppHandle,
+    project_id: String,
+    ids: Vec<String>,
+    state: State<'_, AppState>,
+) -> Result<Vec<ProjectItemDto>, String> {
+    for (index, item_id) in ids.iter().enumerate() {
+        state
+            .tables
+            .project_item
+            .update_position_by_id(
+                ItemPositionByIdQuery {
+                    position: u32::try_from(index).unwrap_or(u32::MAX),
+                },
+                item_id.clone(),
+            )
+            .await
+            .map_err(|error| error.to_string())?;
+    }
+    let items = list_items(project_id, state);
+    for item in &items {
+        let _ = app.emit("item:updated", item.clone());
+    }
+    Ok(items)
 }
 
 #[tauri::command]
