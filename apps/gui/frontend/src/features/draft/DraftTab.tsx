@@ -34,6 +34,11 @@ export function DraftTab(props: { tab: Tab }): JSX.Element {
           onPermissionChange={(permission) =>
             actions.setTabModel(props.tab.key, props.tab.model, permission)
           }
+          // The same omission the project tab had: the effort menu called an
+          // optional handler nobody passed, so a picked level never stuck.
+          onEffortChange={(effort) =>
+            actions.setTabModel(props.tab.key, props.tab.model, props.tab.permission, effort)
+          }
           onSend={(body) => actions.createProject(body, props.tab.key)}
         />
       </div>
