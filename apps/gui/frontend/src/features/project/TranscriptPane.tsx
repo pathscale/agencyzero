@@ -189,7 +189,7 @@ function RunStatusLine(props: {
         {props.status.activity}
       </span>
       {/* Saved-to-store dot: green means killing the app now loses nothing
-          that has streamed; amber means the last couple of seconds exist only
+          that has streamed; amber means the newest instant exists only
           on screen. Only meaningful once something has streamed. */}
       <Show when={props.streamedChars > 0}>
         <span
@@ -198,7 +198,7 @@ function RunStatusLine(props: {
           title={
             isSynced()
               ? "Everything streamed so far is saved to the store"
-              : "The store checkpoint runs every 2s — the newest text is not saved yet"
+              : "The store checkpoint runs every 200ms — the newest text is not saved yet"
           }
           class={`size-[7px] shrink-0 rounded-full ${isSynced() ? "bg-success" : "bg-warning"}`}
         />

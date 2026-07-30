@@ -8,7 +8,7 @@
 //! anyway: the deltas are for the eye, the outcome is for the record.
 //!
 //! One exception, learned the hard way: the streaming reply is checkpointed to
-//! `kv` every couple of seconds (`partial_reply_key`), because "close the app,
+//! `kv` every 200ms (`partial_reply_key`), because "close the app,
 //! reopen it" lost every word the user had watched stream. A checkpoint found
 //! at boot becomes an `interrupted` message row; a run that ends normally
 //! clears it before anyone can see it.
@@ -985,10 +985,12 @@ pub(crate) fn partial_reply_key(project_id: &str) -> String {
 /// How stale the persisted copy of a streaming reply may get.
 ///
 /// Every text delta re-arms this; the write happens on the first delta after
-/// the interval passes. Frequent enough that killing the app loses seconds of
-/// prose, not minutes; rare enough that a chatty run is not a continuous
-/// write load on the store everything else depends on.
-const PARTIAL_FLUSH_EVERY: std::time::Duration = std::time::Duration::from_secs(2);
+/// the interval passes. 200ms by owner request (down from 2s): killing the
+/// app should lose a breath of prose, not a paragraph. Still throttled at
+/// all, because a delta can be a single token and one kv upsert per token
+/// is a continuous write load on the store everything else depends on —
+/// at ~5 writes/second the cost is noise and the loss window is invisible.
+const PARTIAL_FLUSH_EVERY: std::time::Duration = std::time::Duration::from_millis(200);
 
 /// Drop a run's reply checkpoint, once a real row owns the words.
 async fn clear_partial_reply(tables: &Tables, project_id: &str) {
@@ -2436,7 +2438,7 @@ async fn drive_run(
     /*
      * The checkpoint clock. The reply is flushed to `kv` on the first delta
      * after each interval, so killing the process mid-run loses at most a
-     * couple of seconds of prose instead of the whole turn. Each flush emits
+     * breath of prose instead of the whole turn. Each flush emits
      * `run:persisted`, which is what the window's saved/unsaved dot reads.
      */
     let mut partial_flushed_at = std::time::Instant::now();
