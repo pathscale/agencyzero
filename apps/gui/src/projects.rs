@@ -1741,7 +1741,7 @@ pub async fn send_message(
     );
     let _ = app.emit("message:appended", &user_message);
 
-    // The working directory: the project's own if it has one, else the
+    // The working directories: the project's own if it has any, else the
     // workspace root. An agent with no cwd inherits the app's, which for a
     // bundled .app is `/`.
     //
@@ -1749,7 +1749,11 @@ pub async fn send_message(
     // directories, and the scope matters more than it looks — `read_only`
     // maps to Claude's don't-ask mode, which denies reads *outside* the
     // working tree without prompting. Its directories live in Settings.
-    let cwd = if input.project_id == crate::tasks::TASK_MANAGER_ID {
+    //
+    // The first directory becomes the cwd; every further one rides along as
+    // `--add-dir`, so a project spanning two repos is in scope for both
+    // instead of generating an approval question per out-of-tree read.
+    let mut dirs = if input.project_id == crate::tasks::TASK_MANAGER_ID {
         state
             .tables
             .kv_get(crate::settings::KEY)
@@ -1757,21 +1761,21 @@ pub async fn send_message(
             .unwrap_or_default()
             .task_manager
             .dirs
-            .first()
-            .cloned()
-            .unwrap_or_else(|| crate::workspace_root_path(&app, &state))
     } else {
         state
             .tables
             .project
             .select(input.project_id.clone())
-            .and_then(|row| {
-                serde_json::from_str::<Vec<String>>(&row.dirs)
-                    .ok()
-                    .and_then(|dirs| dirs.first().cloned())
-            })
-            .unwrap_or_else(|| crate::workspace_root_path(&app, &state))
+            .and_then(|row| serde_json::from_str::<Vec<String>>(&row.dirs).ok())
+            .unwrap_or_default()
     };
+    dirs.retain(|dir| !dir.trim().is_empty());
+    let cwd = if dirs.is_empty() {
+        crate::workspace_root_path(&app, &state)
+    } else {
+        dirs.remove(0)
+    };
+    let extra_dirs = dirs;
 
     // The agent's own session id for this project, when a turn has produced
     // one. Without it every turn starts a fresh conversation.
@@ -1799,6 +1803,7 @@ pub async fn send_message(
             permission,
             effort,
             cwd,
+            extra_dirs,
             resume,
         )
         .await;
@@ -1828,6 +1833,7 @@ async fn drive_run(
     permission: String,
     effort: Option<String>,
     cwd: String,
+    extra_dirs: Vec<String>,
     resume: Option<String>,
 ) {
     /*
@@ -1862,6 +1868,15 @@ async fn drive_run(
     let mut request = Request::new(Agent::Claude, prompt)
         .permission(parse_permission(Some(&permission)))
         .cwd(&cwd);
+    /*
+     * Every directory after the first widens the working tree via Claude's
+     * `--add-dir`. Passed through `unchecked_args` — the crate has no unified
+     * spelling for this yet — which is safe here because the values are the
+     * user's own configured directories, not model output.
+     */
+    for dir in &extra_dirs {
+        request = request.unchecked_args(["--add-dir", dir]);
+    }
     // `ask`: every gated call — a write, a command, a read outside the working
     // tree — arrives as an approval question instead of a silent pre-decision.
     let asks = permission == "ask";
@@ -1907,13 +1922,18 @@ async fn drive_run(
         "sent",
         "request",
         format!(
-            "claude model={} permission={permission} effort={} cwd={cwd}\n\n{prompt_echo}",
+            "claude model={} permission={permission} effort={} cwd={cwd}{}\n\n{prompt_echo}",
             if model.is_empty() {
                 "<default>"
             } else {
                 &model
             },
             effort_echo.as_deref().unwrap_or("<none>"),
+            if extra_dirs.is_empty() {
+                String::new()
+            } else {
+                format!(" add-dir={}", extra_dirs.join(","))
+            },
         ),
     );
 
