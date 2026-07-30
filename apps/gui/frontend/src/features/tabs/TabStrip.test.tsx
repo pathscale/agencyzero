@@ -1,6 +1,7 @@
 import { render, waitFor } from "@solidjs/testing-library";
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { TabStrip } from "~/features/tabs/TabStrip";
+import { setPrefs } from "~/stores/prefs";
 import { useWorkspace, type Workspace, WorkspaceProvider } from "~/stores/workspace";
 
 async function mountStrip() {
@@ -21,6 +22,11 @@ async function mountStrip() {
   await waitFor(() => expect(workspace.state.boot.status).toBe("ready"), { timeout: 5_000 });
   return { ...screen, workspace };
 }
+
+// Boot restores only remembered tabs now; these scenarios want them all open.
+beforeEach(() => {
+  setPrefs("openTabKeys", ["worktable", "cafe", "agencyzero"]);
+});
 
 describe("TabStrip", () => {
   /*
