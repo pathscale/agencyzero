@@ -451,6 +451,23 @@ function ProjectGroup(props: { project: Project }): JSX.Element {
     activeCount() ? `${openCount()} open · ${activeCount()} active` : `${openCount()} open`;
 
   const collapsed = () => prefs.collapsedGroups.includes(props.project.id);
+
+  /*
+   * Single click folds, double click opens — distinguished by a short timer,
+   * not by luck. Folding immediately on the first click would hide an item
+   * row before the second click of a double could land on it, so the fold
+   * waits long enough for a double-click to claim the gesture.
+   */
+  let clickTimer: number | undefined;
+  const foldSoon = (): void => {
+    window.clearTimeout(clickTimer);
+    clickTimer = window.setTimeout(toggleCollapsed, 230);
+  };
+  const openNow = (): void => {
+    window.clearTimeout(clickTimer);
+    actions.openProject(props.project.id);
+  };
+
   const toggleCollapsed = (): void => {
     setPrefs(
       "collapsedGroups",
@@ -480,8 +497,8 @@ function ProjectGroup(props: { project: Project }): JSX.Element {
         role="button"
         tabIndex={0}
         aria-expanded={!collapsed()}
-        onClick={toggleCollapsed}
-        onDblClick={() => actions.openProject(props.project.id)}
+        onClick={foldSoon}
+        onDblClick={openNow}
         onKeyDown={(event) => {
           if (event.key === "Enter" || event.key === " ") {
             event.preventDefault();
@@ -590,13 +607,15 @@ function ProjectGroup(props: { project: Project }): JSX.Element {
           <For each={items()}>
             {(item) => (
               /*
-               * The whole row is a way into the project, matching the header:
-               * Home shows items but is not a second place to work them, so a
-               * click means "take me there", never "change the status here".
+               * The rows follow the header's contract: single click folds the
+               * group, double click opens the tab. Home shows items but is
+               * not a second place to work them, so a click never means
+               * "change the status here".
                */
               <button
                 type="button"
-                onClick={() => actions.openProject(props.project.id)}
+                onClick={foldSoon}
+                onDblClick={openNow}
                 class="flex items-baseline gap-2.5 px-3.5 py-2.5 text-left transition-colors hover:bg-white/4"
               >
                 <Show
