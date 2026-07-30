@@ -648,9 +648,10 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
         )}
       </For>
 
-      {/* Only when the cap is plausibly in play: a short list has nothing to
-          expand, and the row would just be furniture. */}
-      <Show when={props.items.length > 8}>
+      {/* Whenever the cap can be hiding anything: the 300px window fits about
+          seven rows. A shorter list has nothing to expand, and the row would
+          just be furniture. */}
+      <Show when={props.items.length > 6}>
         <button
           type="button"
           onClick={() => setTall((open) => !open)}
