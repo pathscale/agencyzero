@@ -2,6 +2,7 @@ import {
   type Accessor,
   batch,
   createContext,
+  createEffect,
   createMemo,
   createSignal,
   onCleanup,
@@ -200,6 +201,20 @@ function createWorkspace() {
     return current;
   };
 
+  /*
+   * The strip persists itself: whichever project tabs are open is written
+   * through to prefs, so the next launch restores the arrangement. Guarded on
+   * boot being ready — before hydration the strip is just Home, and writing
+   * that through would erase the very list boot is about to restore.
+   */
+  createEffect(() => {
+    if (state.boot.status !== "ready") return;
+    setPrefs(
+      "openTabKeys",
+      state.tabs.filter((tab) => tab.kind === "project").map((tab) => tab.key),
+    );
+  });
+
   // — derived ————————————————————————————————————————————————————
 
   const activeTab = createMemo(
@@ -390,9 +405,17 @@ function createWorkspace() {
             rateLimits.filter(isLimitLive).map((limit) => [limit.projectId, limit]),
           ),
         );
-        // Every project gets a tab, matching the mockup's strip. A project the
-        // user closed would be reopened from the Home list.
-        setState("tabs", [HOME_TAB, ...projects.map(projectTab)]);
+        /*
+         * Only the tabs that were open when the app last ran. Boot used to
+         * open a tab per project, which meant a restart quietly un-did every
+         * close; the strip is the user's arrangement, and it should survive
+         * the process. Everything else is one click away on Home.
+         */
+        const remembered = new Set(prefs.openTabKeys);
+        setState("tabs", [
+          HOME_TAB,
+          ...projects.filter((project) => remembered.has(project.id)).map(projectTab),
+        ]);
         const restored = state.tabs.some((tab) => tab.key === prefs.lastTabKey);
         setState("activeKey", restored ? prefs.lastTabKey : "home");
       });

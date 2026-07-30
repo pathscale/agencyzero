@@ -24,6 +24,7 @@ const DEFAULTS: UiPrefs = {
     tmDebug: false,
   },
   lastTabKey: "home",
+  openTabKeys: [],
   taskPlacement: "panel",
   seenSections: [],
 };

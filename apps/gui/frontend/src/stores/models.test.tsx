@@ -1,5 +1,6 @@
 import { render, waitFor } from "@solidjs/testing-library";
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
+import { setPrefs } from "~/stores/prefs";
 import { useWorkspace, type Workspace, WorkspaceProvider } from "~/stores/workspace";
 
 /**
@@ -26,6 +27,11 @@ async function mountWorkspace(): Promise<Workspace> {
 }
 
 const claude = (workspace: Workspace) => workspace.state.settings?.models.claude;
+
+// Boot restores only remembered tabs now; these scenarios want them all open.
+beforeEach(() => {
+  setPrefs("openTabKeys", ["worktable", "cafe", "agencyzero"]);
+});
 
 describe("the catalogue", () => {
   it("loads one entry per agent at boot", async () => {

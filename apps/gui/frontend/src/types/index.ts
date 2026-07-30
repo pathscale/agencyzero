@@ -490,6 +490,11 @@ export interface UiPrefs {
     tmDebug: boolean;
   };
   lastTabKey: string;
+  /**
+   * The project tabs that were open, restored on launch. Boot used to open a
+   * tab per project, which meant a restart un-did every close.
+   */
+  openTabKeys: string[];
   taskPlacement: TaskPlacement;
   /**
    * Panel sections whose shipped default has already been applied once.

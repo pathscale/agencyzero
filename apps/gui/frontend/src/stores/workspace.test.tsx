@@ -32,12 +32,24 @@ const keys = (workspace: Workspace) => workspace.state.tabs.map((tab) => tab.key
 
 beforeEach(() => {
   setPrefs("lastTabKey", "home");
+  // These scenarios predate tab restore, so they remember everything open.
+  setPrefs("openTabKeys", ["worktable", "cafe", "agencyzero"]);
 });
 
 describe("startup", () => {
-  it("opens Home plus one tab per project, in project order", async () => {
+  it("opens Home plus the remembered tabs, in project order", async () => {
     const workspace = await mountWorkspace();
     expect(keys(workspace)).toEqual(["home", "worktable", "cafe", "agencyzero"]);
+  });
+
+  /*
+   * The strip is the user's arrangement, and it survives the process: boot
+   * used to open a tab per project, which quietly un-did every close.
+   */
+  it("leaves a closed tab closed across a restart", async () => {
+    setPrefs("openTabKeys", ["cafe"]);
+    const workspace = await mountWorkspace();
+    expect(keys(workspace)).toEqual(["home", "cafe"]);
   });
 
   it("falls back to the mock backend when there is no Rust to talk to", async () => {

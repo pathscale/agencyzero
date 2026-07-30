@@ -328,6 +328,7 @@ const CLOSE_TAB: &str = "close-tab";
 const NEXT_TAB: &str = "next-tab";
 const PREV_TAB: &str = "prev-tab";
 const QUIT: &str = "quit";
+const RESTART: &str = "restart";
 
 /// The application menu.
 ///
@@ -345,6 +346,8 @@ fn build_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> {
     let quit = MenuItemBuilder::with_id(QUIT, "Quit AgencyZero")
         .accelerator("CmdOrCtrl+Q")
         .build(app)?;
+    // No accelerator: restarting is deliberate, not something to fat-finger.
+    let restart = MenuItemBuilder::with_id(RESTART, "Restart into Build on Disk").build(app)?;
 
     let app_menu = SubmenuBuilder::new(app, "AgencyZero")
         .about(Some(AboutMetadata::default()))
@@ -355,6 +358,7 @@ fn build_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> {
         .hide_others()
         .show_all()
         .separator()
+        .item(&restart)
         .item(&quit)
         .build()?;
 
@@ -573,6 +577,7 @@ fn main() {
                 // Quit asks rather than exits. The webview owns the confirmation
                 // because it is the side that knows what is still running.
                 QUIT => "menu:quit",
+                RESTART => "menu:restart",
                 _ => return,
             };
             let _ = app.emit(topic, ());

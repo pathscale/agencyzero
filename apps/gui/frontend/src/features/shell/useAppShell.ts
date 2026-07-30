@@ -51,6 +51,8 @@ export function useAppShell(): {
     track(listen("menu:prev-tab", () => actions.cycleTab(-1)));
     track(listen("menu:next-tab", () => actions.cycleTab(1)));
     track(listen("menu:quit", () => setIsClosing(true)));
+    // Same drain-then-exec as the Settings button; the menu is just nearer.
+    track(listen("menu:restart", () => void actions.relaunchApp()));
 
     // Fires for the traffic light and anything else that asks the window to go.
     track(
