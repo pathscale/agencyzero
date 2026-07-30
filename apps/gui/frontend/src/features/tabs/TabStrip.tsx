@@ -138,15 +138,24 @@ export function TabStrip(): JSX.Element {
         <button
           type="button"
           onClick={() => actions.openSettings()}
-          title="Settings"
+          title={
+            state.availableUpdate
+              ? `Update available: ${state.availableUpdate.version} — install from Settings`
+              : "Settings"
+          }
           aria-label="Settings"
-          class={`flex size-[30px] items-center justify-center rounded-full transition-colors hover:bg-white/6 ${
+          class={`relative flex size-[30px] items-center justify-center rounded-full transition-colors hover:bg-white/6 ${
             state.activeKey === "settings"
               ? "text-primary"
               : "text-az-muted hover:text-base-content"
           }`}
         >
           <Icon name="settings" class="text-[15px]" />
+          {/* The update nudge: a dot, not a dialog. The gear is where the
+              install button lives, so the dot points at its own remedy. */}
+          <Show when={state.availableUpdate}>
+            <span class="az-halo-primary absolute top-[3px] right-[3px] size-[7px] rounded-full bg-primary" />
+          </Show>
         </button>
         <div class="ml-1 flex size-[26px] items-center justify-center rounded-full bg-[oklch(24%_0.01_240)] font-semibold text-[11px] text-base-content">
           N

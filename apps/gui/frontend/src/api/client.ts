@@ -2,6 +2,7 @@ import type {
   AgentIoEntry,
   AgentModels,
   AgentStatus,
+  AvailableUpdate,
   BuildInfo,
   CostSummary,
   CreatedProject,
@@ -157,6 +158,18 @@ export interface AgencyZeroApi {
   getCostSummary(): Promise<CostSummary>;
   /** Which commit this binary is and when it was compiled. */
   getBuildInfo(): Promise<BuildInfo>;
+  /**
+   * The published version, when it is newer than the running one. `null`
+   * means genuinely up to date; a check that never reached the CDN rejects
+   * instead, so the two cannot be confused.
+   */
+  checkForUpdate(): Promise<AvailableUpdate | null>;
+  /**
+   * Download the published bundle over the installed one and restart into
+   * it. Refuses while any run is live. Never resolves on success: the
+   * process is replaced.
+   */
+  installUpdate(): Promise<void>;
   /**
    * Drain the store and restart into whatever binary is on disk at the app's
    * own path — the second half of a rebuild. Never resolves: the process is

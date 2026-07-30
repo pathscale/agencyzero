@@ -477,6 +477,12 @@ export function createMockApi(): AgencyZeroApi {
     getBuildInfo: () =>
       settle({ version: "0.1.0", gitSha: "fixture00", builtAt: "2026-07-30 00:00:00" }),
 
+    // A fixture update, so the nudge and the install row are reviewable in
+    // the browser preview. The real command asks the CDN manifest.
+    checkForUpdate: () =>
+      settle({ version: "0.2.0", notes: "Fixture release notes.", date: "2026-07-30" }),
+    installUpdate: () => settle(undefined),
+
     // A browser tab cannot exec itself; the button is greyed off-Tauri anyway.
     relaunchApp: () => settle(undefined),
 

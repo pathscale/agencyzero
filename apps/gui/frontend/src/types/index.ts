@@ -446,6 +446,13 @@ export interface BuildInfo {
   builtAt: string;
 }
 
+/** A newer published version than the one running, from the update manifest. */
+export interface AvailableUpdate {
+  version: string;
+  notes: string | null;
+  date: string | null;
+}
+
 /**
  * Where the Home task manager's conversation stands.
  *
