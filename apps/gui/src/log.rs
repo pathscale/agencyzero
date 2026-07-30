@@ -91,7 +91,11 @@ pub fn init(dir: &Path) {
         let _ = std::fs::rename(&path, dir.join(format!("{FILE_NAME}.1")));
     }
 
-    let opened = OpenOptions::new().create(true).append(true).open(&path).ok();
+    let opened = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&path)
+        .ok();
     let _ = PATH.set(path.clone());
     let _ = SINK.set(opened.map(Mutex::new));
 
@@ -211,7 +215,10 @@ mod tests {
         std::fs::rename(&path, dir.join(format!("{FILE_NAME}.1"))).expect("should rotate");
 
         assert!(!path.exists(), "the live log is moved aside");
-        assert!(dir.join(format!("{FILE_NAME}.1")).exists(), "one generation is kept");
+        assert!(
+            dir.join(format!("{FILE_NAME}.1")).exists(),
+            "one generation is kept"
+        );
 
         let _ = std::fs::remove_dir_all(&dir);
     }

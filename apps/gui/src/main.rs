@@ -565,14 +565,13 @@ fn main() {
                 location.path,
                 location.source
             );
-            let tables = tauri::async_runtime::block_on(Tables::open(&location.path)).map_err(
-                |error| {
+            let tables =
+                tauri::async_runtime::block_on(Tables::open(&location.path)).map_err(|error| {
                     let message =
                         format!("could not open the tables in {:?}: {error}", location.path);
                     crate::log!(log::Level::Error, "boot", "{message}");
                     message
-                },
-            )?;
+                })?;
             crate::log!(log::Level::Info, "boot", "tables open");
 
             /*

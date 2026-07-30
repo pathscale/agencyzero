@@ -265,8 +265,10 @@ mod restart_tests {
         // A store stamped before a table was appended. Every table it knows is
         // unchanged and the new one has no rows to misread, so setting the
         // whole store aside for it would throw data away over nothing.
-        let before_the_ledger =
-            SCHEMA_FINGERPRINT.replace("usage_ledger(id,at,day,project_id,model,cost_micro,input_tokens,output_tokens);", "");
+        let before_the_ledger = SCHEMA_FINGERPRINT.replace(
+            "usage_ledger(id,at,day,project_id,model,cost_micro,input_tokens,output_tokens);",
+            "",
+        );
         assert_eq!(
             check_schema(Some(&before_the_ledger)),
             SchemaState::Match,
