@@ -264,6 +264,13 @@ export interface AppEvents {
    * streamed length: killing the app now loses only what came after.
    */
   "run:persisted": { projectId: string; chars: number };
+  /**
+   * The turn's charged work so far, refreshed as each API request inside the
+   * turn completes (`Event::Usage`, 0.3.8). `tokens` is input + output summed
+   * across the turn — the live counter's figure; the estimate from streamed
+   * characters survives only as the fallback before the first report.
+   */
+  "run:usage": { projectId: string; tokens: number; contextTokens: number | null };
   "run:rate_limit": RateLimit;
   /**
    * The limit has lifted. Without this the header pill and the tab dot stay
