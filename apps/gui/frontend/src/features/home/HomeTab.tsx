@@ -520,20 +520,18 @@ function ProjectGroup(props: { project: Project }): JSX.Element {
           class="min-w-0 font-semibold text-[13px] text-base-content"
           inputClass="font-semibold text-[13px]"
         />
-        <button
-          type="button"
-          onClick={(event) => {
-            event.stopPropagation();
-            actions.openProject(props.project.id);
-          }}
-          aria-label={`Open ${props.project.name}`}
-          class="flex min-w-0 flex-1 items-center gap-2.5 text-left"
-        >
+        {/*
+          A plain stretch, deliberately. This used to be an "Open" button, and
+          because it fills the header between name and pin, a single click
+          almost anywhere on the row kept opening the project after the
+          fold/double-click contract landed. The header owns the gesture now.
+        */}
+        <span class="flex min-w-0 flex-1 items-center gap-2.5">
           <span class={`shrink-0 text-[11.5px] ${STATUS_TONE[props.project.status]}`}>
             {statusSuffix(props.project.status)}
           </span>
           <span class="ml-auto shrink-0 text-[11.5px] text-az-muted">{summary()}</span>
-        </button>
+        </span>
 
         <button
           type="button"
