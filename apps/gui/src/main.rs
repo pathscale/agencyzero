@@ -80,6 +80,11 @@ pub(crate) struct AppState {
     /// The live run per project: at most one, and how to stop it — see
     /// [`projects::ActiveRuns`].
     active: Arc<projects::ActiveRuns>,
+    /// Serializes `set_settings`. The update is a read-merge-write over one
+    /// record, and Tauri runs commands concurrently: two quick patches could
+    /// both read the same prior record and the slower write would silently
+    /// drop the faster one's field on disk.
+    settings_write: tokio::sync::Mutex<()>,
     /// Kept so `set_data_location` can write the pointer beside the settings.
     config_dir: std::path::PathBuf,
     /// Where the tables were opened from this launch. A change takes effect on
@@ -284,6 +289,11 @@ async fn set_settings(
     patch: serde_json::Value,
     state: State<'_, AppState>,
 ) -> Result<GlobalSettings, String> {
+    // Held across the whole read-merge-write. The frontend's response
+    // ticketing protects its in-memory copy from stale responses; only this
+    // protects the record on disk from a stale write.
+    let _guard = state.settings_write.lock().await;
+
     let current = state
         .tables
         .kv_get(settings::KEY)
@@ -619,6 +629,7 @@ fn main() {
                 io: Arc::default(),
                 approvals: Arc::default(),
                 active: Arc::default(),
+                settings_write: tokio::sync::Mutex::new(()),
                 config_dir,
                 location,
             });
