@@ -9,7 +9,7 @@ publish.workspace = true
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-agent-abstraction = "0.3.4"
+agent-abstraction = "0.3.7"
 az-core.workspace = true
 worktable = "0.9"
 # The `worktable!` macro emits code that names these by bare path rather than
