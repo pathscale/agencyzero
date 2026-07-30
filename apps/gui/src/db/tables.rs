@@ -273,8 +273,9 @@ mod restart_tests {
         // Truncated at the first appended table rather than `replace`d out of
         // the middle: an old stamp is always a *prefix* of the new one, and a
         // gap in the middle is a real mismatch.
-        let before_the_appends = &SCHEMA_FINGERPRINT
-            [..SCHEMA_FINGERPRINT.find("usage_ledger(").expect("the appended tables are present")];
+        let before_the_appends = &SCHEMA_FINGERPRINT[..SCHEMA_FINGERPRINT
+            .find("usage_ledger(")
+            .expect("the appended tables are present")];
         assert_eq!(
             check_schema(Some(before_the_appends)),
             SchemaState::Match,
