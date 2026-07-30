@@ -1044,6 +1044,48 @@ pub(crate) fn partial_reply_key(project_id: &str) -> String {
 /// at ~5 writes/second the cost is noise and the loss window is invisible.
 const PARTIAL_FLUSH_EVERY: std::time::Duration = std::time::Duration::from_millis(200);
 
+/// Deliver a mid-turn message into the open turn, per 0.3.6's contract.
+///
+/// The user row is already in the transcript — rendering happened on send and
+/// no echo is coming, deliberately. Here the words just have to reach the
+/// agent, which takes them at its next step boundary ("sent", never
+/// "stopped"). A turn that settled first (`is_cancelled`) hands them back via
+/// `run:inject_failed`, and the frontend queues them for a fresh run resuming
+/// the session — the crate notes' prescribed recovery, automated. Any other
+/// failure takes the same road, with its own reason in the I/O panel.
+async fn deliver_injection(
+    app: &AppHandle,
+    io: &std::sync::Arc<AgentIo>,
+    run: &agent_abstraction::Run,
+    project_id: &str,
+    body: String,
+) {
+    match run.send(&body).await {
+        Ok(()) => {
+            note_io(
+                app,
+                io,
+                project_id,
+                "sent",
+                "message",
+                "(into the running turn)",
+            );
+        }
+        Err(error) => {
+            let why = if error.is_cancelled() {
+                "the turn settled before the message arrived — queued for a fresh turn resuming the session".to_string()
+            } else {
+                format!("the mid-run message could not be delivered: {error}")
+            };
+            note_io(app, io, project_id, "received", "error", why);
+            let _ = app.emit(
+                "run:inject_failed",
+                serde_json::json!({ "projectId": project_id, "body": body }),
+            );
+        }
+    }
+}
+
 /// Drop a run's reply checkpoint, once a real row owns the words.
 async fn clear_partial_reply(tables: &Tables, project_id: &str) {
     if let Err(error) = tables
@@ -2603,41 +2645,10 @@ async fn drive_run(
         let event = match wake {
             Wake::Event(event) => event,
             Wake::Inject(body) => {
-                /*
-                 * A correction typed mid-turn, delivered into the run over the
-                 * agent's open stdin; the model takes it at its next step
-                 * boundary (0.3.6's contract). The user row was persisted and
-                 * broadcast by `send_message` — here the words just have to
-                 * reach the agent. If they cannot (the turn settled in the
-                 * race window), the frontend is told and queues the message
-                 * for a fresh turn instead of losing it.
-                 */
-                match run.send(&body).await {
-                    Ok(()) => {
-                        note_io(
-                            &app,
-                            &io,
-                            &project_id,
-                            "sent",
-                            "message",
-                            "(into the running turn)",
-                        );
-                    }
-                    Err(error) => {
-                        note_io(
-                            &app,
-                            &io,
-                            &project_id,
-                            "received",
-                            "error",
-                            format!("the mid-run message could not be delivered: {error}"),
-                        );
-                        let _ = app.emit(
-                            "run:inject_failed",
-                            serde_json::json!({ "projectId": project_id, "body": body }),
-                        );
-                    }
-                }
+                // A correction typed mid-turn. The user row was persisted and
+                // broadcast by `send_message`; delivery and its failure modes
+                // live in the helper, shared with the approval-wait arm.
+                deliver_injection(&app, &io, &run, &project_id, body).await;
                 // A user message is a block boundary: the next streamed text
                 // starts a new paragraph rather than gluing to the old one.
                 last_was_text = false;
@@ -2728,14 +2739,32 @@ async fn drive_run(
                  * own timeout, and a denial is not a failed run: the model is
                  * told no and carries on.
                  */
-                let answer = tokio::select! {
-                    answer = answer_rx => answer.ok(),
-                    () = tokio::time::sleep(APPROVAL_TIMEOUT) => None,
-                    // Stop can arrive while the question stands; the pending
-                    // tool call is denied and the loop tail tears down.
-                    _ = cancel.changed() => {
-                        cancelled = true;
-                        None
+                /*
+                 * A loop, not a single select: a message typed while the
+                 * question stands must be delivered *now* — "the moment the
+                 * user hits enter" is the 0.3.6 contract, and an approval
+                 * dialog on screen is exactly when someone types "deny that
+                 * and do X instead". `run.send` takes `&self`, so delivering
+                 * here needs no truce with the event loop; the deadline is
+                 * absolute so servicing a message cannot extend the timeout.
+                 */
+                let deadline = tokio::time::Instant::now() + APPROVAL_TIMEOUT;
+                let mut answer_rx = answer_rx;
+                let answer = loop {
+                    tokio::select! {
+                        answer = &mut answer_rx => break answer.ok(),
+                        () = tokio::time::sleep_until(deadline) => break None,
+                        // Stop can arrive while the question stands; the pending
+                        // tool call is denied and the loop tail tears down.
+                        _ = cancel.changed() => {
+                            cancelled = true;
+                            break None;
+                        }
+                        injected = inject_rx.recv() => {
+                            if let Some(body) = injected {
+                                deliver_injection(&app, &io, &run, &project_id, body).await;
+                            }
+                        }
                     }
                 };
                 // The question is closed however it ended. A timed-out entry
