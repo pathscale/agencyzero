@@ -1048,6 +1048,7 @@ function createWorkspace() {
     resolveApproval: (projectId: string, approvalId: string, allow: boolean) =>
       client().resolveApproval(projectId, approvalId, allow),
     getCostSummary: () => client().getCostSummary(),
+    getBuildInfo: () => client().getBuildInfo(),
     relaunchApp: () => client().relaunchApp(),
     cancelTask: (toolCallId: string) => client().cancelTask(toolCallId),
     cancelRun: (projectId: string) => client().cancelRun(projectId),

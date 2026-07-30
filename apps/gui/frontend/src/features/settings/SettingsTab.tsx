@@ -19,6 +19,7 @@ import type {
   AgentModels,
   AgentState,
   AgentStatus,
+  BuildInfo,
   CostSummary,
   EnvPolicy,
   Model,
@@ -285,6 +286,12 @@ export function SettingsTab(): JSX.Element {
               <CostSection />
 
               <Section icon="settings" title="Application" hint="the running instance">
+                <Row
+                  label="Build"
+                  hint="version · commit · compiled — a * after the commit means uncommitted edits"
+                >
+                  <BuildStamp />
+                </Row>
                 <Row
                   label="Restart"
                   hint="drains the store, then reopens into the build currently on disk — the second half of a rebuild"
@@ -643,6 +650,35 @@ function ResetTaskManagerButton(): JSX.Element {
  * replaced mid-await, so there is nothing to reset. The window vanishing is
  * the success state.
  */
+/**
+ * Which build this window is running, so "am I testing the fix?" is answered
+ * by reading the screen instead of comparing binary timestamps in a shell.
+ * The same stamp opens every log file and fills the About box.
+ */
+function BuildStamp(): JSX.Element {
+  const { actions } = useWorkspace();
+  const [build, setBuild] = createSignal<BuildInfo | null>(null);
+
+  // Once per visit: the answer cannot change without the process being
+  // replaced, and a replaced process remounts this anyway.
+  onMount(() => {
+    void actions
+      .getBuildInfo()
+      .then(setBuild)
+      .catch(() => setBuild(null));
+  });
+
+  return (
+    <Show when={build()} fallback={<span class="text-[12px] text-az-faint">—</span>}>
+      {(info) => (
+        <span class="font-mono text-[11.5px] text-az-body">
+          {info().version} · {info().gitSha} · built {info().builtAt}
+        </span>
+      )}
+    </Show>
+  );
+}
+
 function RelaunchButton(): JSX.Element {
   const { actions, isLive } = useWorkspace();
   const [busy, setBusy] = createSignal(false);

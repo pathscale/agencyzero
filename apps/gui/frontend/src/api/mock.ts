@@ -468,6 +468,10 @@ export function createMockApi(): AgencyZeroApi {
     getCostSummary: () =>
       settle({ todayUsd: 0.41, weekUsd: 3.87, monthUsd: 11.02, totalUsd: 28.6, turns: 412 }),
 
+    // A fixture stamp, shaped like the real one so the Settings row renders.
+    getBuildInfo: () =>
+      settle({ version: "0.1.0", gitSha: "fixture00", builtAt: "2026-07-30 00:00:00" }),
+
     // A browser tab cannot exec itself; the button is greyed off-Tauri anyway.
     relaunchApp: () => settle(undefined),
 
