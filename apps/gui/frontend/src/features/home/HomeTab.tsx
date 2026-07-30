@@ -4,6 +4,7 @@ import { Icon } from "~/components/Icon";
 import { Panel, SectionPanel } from "~/components/Panel";
 import { ItemMarker, StatusDot } from "~/components/StatusDot";
 import { ApprovalCard } from "~/features/project/ApprovalCard";
+import { AttachmentPills } from "~/features/project/Composer";
 import { AgentIoList } from "~/features/project/ProjectPanel";
 import { relativeTime } from "~/lib/format";
 import { statusSuffix } from "~/lib/labels";
@@ -228,15 +229,14 @@ function TaskManagerComposer(): JSX.Element {
    */
   const [tall, setTall] = createSignal(false);
 
-  /** Same honest attach as the project composer: paths into the prompt. */
+  /** Held as pills until send; the paths join the prompt body then. */
+  const [attachments, setAttachments] = createSignal<string[]>([]);
+
   const attach = async (): Promise<void> => {
     try {
       const paths = await actions.chooseAttachments();
       if (paths.length === 0) return;
-      setDraft((current) => {
-        const lead = current.length > 0 && !current.endsWith("\n") ? `${current}\n` : current;
-        return lead + paths.join("\n");
-      });
+      setAttachments((current) => [...current, ...paths.filter((path) => !current.includes(path))]);
     } catch (cause) {
       log.warn(`could not attach: ${describeError(cause)}`);
     }
@@ -247,7 +247,11 @@ function TaskManagerComposer(): JSX.Element {
     (state.streaming[TASK_MANAGER_ID] ?? "") !== "";
 
   const submit = async (): Promise<void> => {
-    const body = draft().trim();
+    // The pills become prose on the way out; a file alone is a sendable
+    // prompt ("eat this").
+    const body = [draft().trim(), attachments().join("\n")]
+      .filter((part) => part.length > 0)
+      .join("\n\n");
     if (!body || isSending()) return;
 
     setError(null);
@@ -255,6 +259,7 @@ function TaskManagerComposer(): JSX.Element {
     try {
       await actions.sendTaskPrompt(body);
       setDraft("");
+      setAttachments([]);
     } catch (cause) {
       setError(describeError(cause));
     } finally {
@@ -365,6 +370,16 @@ function TaskManagerComposer(): JSX.Element {
           <Icon name="terminal" class="text-[13px]" />
         </button>
       </div>
+      <Show when={attachments().length > 0}>
+        <div class="px-1 pt-1.5">
+          <AttachmentPills
+            paths={attachments()}
+            onRemove={(path) =>
+              setAttachments((current) => current.filter((existing) => existing !== path))
+            }
+          />
+        </div>
+      </Show>
       <Show when={error()}>
         {(message) => (
           <p role="alert" class="px-1 pt-1 text-[11px] text-error">
