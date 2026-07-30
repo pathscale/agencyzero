@@ -98,6 +98,18 @@ type WorkspaceState = {
    * for the eye only, and `Outcome::text` is what gets stored.
    */
   streaming: Record<string, string>;
+  /**
+   * The live run per project, from the moment a send is accepted until
+   * `run:stopped`. The transcript's status line reads all three fields; the
+   * key's mere presence is what "a run is in flight" means everywhere else.
+   */
+  runStatus: Record<string, RunStatus>;
+  /**
+   * Prompts written while a run was busy, oldest first. Sent automatically,
+   * one per finished run — the backend's one-run-per-project rule holds; this
+   * just stops the composer from bouncing the words back at the user.
+   */
+  queued: Record<string, string[]>;
   tabs: Tab[];
   activeKey: string;
   backend: "tauri" | "mock" | "hybrid" | "loading";
@@ -115,6 +127,19 @@ export type BootState =
   | { status: "loading" }
   | { status: "ready" }
   | { status: "error"; message: string };
+
+/** What the transcript's status line knows about a run in flight. */
+export type RunStatus = {
+  /** Wall-clock ms when the send was accepted; the elapsed timer's zero. */
+  startedAt: number;
+  /** What the agent is doing right now, in a couple of words. */
+  activity: string;
+  /**
+   * How many streamed characters are checkpointed in the store — what the
+   * saved/unsaved dot compares against `streaming.length`.
+   */
+  persistedChars: number;
+};
 
 /**
  * A limit is only in force until its reset time; after that it is history.
@@ -166,6 +191,8 @@ function createWorkspace() {
     quota: null,
     availableUpdate: null,
     streaming: {},
+    runStatus: {},
+    queued: {},
     tabs: [HOME_TAB],
     activeKey: "home",
     backend: "loading",
@@ -614,7 +641,12 @@ function createWorkspace() {
         return next;
       });
     };
-    await bind("task:started", upsertTask);
+    await bind("task:started", (task) => {
+      batch(() => {
+        upsertTask(task);
+        touchRunStatus(task.projectId, `running ${task.name}…`);
+      });
+    });
     await bind("task:progress", upsertTask);
 
     await bind("task:finished", (entry) => {
@@ -635,6 +667,7 @@ function createWorkspace() {
         }
         setState("taskLog", entry.projectId, (list = []) => [entry, ...list]);
         setState("logTotals", entry.projectId, (total = 0) => total + 1);
+        touchRunStatus(entry.projectId, "working…");
       });
     });
 
@@ -664,18 +697,43 @@ function createWorkspace() {
     });
 
     await bind("run:approval", ({ projectId, approvalId, tool, input }) => {
-      setState("pendingApprovals", projectId, { approvalId, tool, input });
+      batch(() => {
+        setState("pendingApprovals", projectId, { approvalId, tool, input });
+        touchRunStatus(projectId, "waiting for your approval");
+      });
     });
 
     await bind("run:approval_resolved", ({ projectId }) => {
-      setState(
-        "pendingApprovals",
-        produce((pending) => delete pending[projectId]),
-      );
+      batch(() => {
+        setState(
+          "pendingApprovals",
+          produce((pending) => delete pending[projectId]),
+        );
+        touchRunStatus(projectId, "working…");
+      });
+    });
+
+    await bind("run:accepted", ({ projectId }) => {
+      touchRunStatus(projectId, "waiting for the agent…");
     });
 
     await bind("run:text", ({ projectId, delta }) => {
-      setState("streaming", projectId, (current = "") => current + delta);
+      batch(() => {
+        setState("streaming", projectId, (current = "") => current + delta);
+        touchRunStatus(projectId, "writing…");
+      });
+    });
+
+    await bind("run:thinking", ({ projectId }) => {
+      touchRunStatus(projectId, "thinking…");
+    });
+
+    await bind("run:persisted", ({ projectId, chars }) => {
+      setState("runStatus", projectId, (current) => ({
+        startedAt: current?.startedAt ?? Date.now(),
+        activity: current?.activity ?? "working…",
+        persistedChars: chars,
+      }));
     });
 
     await bind("run:stopped", ({ projectId, stop, exitCode }) => {
@@ -695,6 +753,10 @@ function createWorkspace() {
       batch(() => {
         setState("running", projectId, []);
         setState("streaming", projectId, "");
+        setState(
+          "runStatus",
+          produce((status) => delete status[projectId]),
+        );
         // A question the run can no longer hear the answer to.
         setState(
           "pendingApprovals",
@@ -724,6 +786,15 @@ function createWorkspace() {
           });
         }
       });
+      /*
+       * The slot just freed is the queue's cue. Delayed a beat: `run:stopped`
+       * is emitted from inside the run's own teardown, a moment before the
+       * backend actually releases the one-run-per-project slot, so an
+       * immediate send can still be refused. `flushQueue` retries on that.
+       */
+      if ((state.queued[projectId] ?? []).length > 0) {
+        window.setTimeout(() => void flushQueue(projectId, 0), 250);
+      }
     });
   }
 
@@ -1006,7 +1077,31 @@ function createWorkspace() {
     });
   }
 
-  const send = async (projectId: string, body: string): Promise<void> => {
+  /**
+   * The status line's anchor: a run exists for this project from now until
+   * `run:stopped`. Create-if-missing because every event arm calls this — the
+   * first one to land after a send is whichever the agent got to first.
+   */
+  function touchRunStatus(projectId: string, activity: string): void {
+    setState("runStatus", projectId, (current) => ({
+      startedAt: current?.startedAt ?? Date.now(),
+      persistedChars: current?.persistedChars ?? 0,
+      activity,
+    }));
+  }
+
+  /** A run is in flight, so a send now would be refused by the backend. */
+  const isBusy = (projectId: string): boolean =>
+    projectId in state.runStatus ||
+    (state.running[projectId] ?? []).length > 0 ||
+    (state.streaming[projectId] ?? "") !== "";
+
+  /**
+   * The raw dispatch, on the tab's model and posture. Throws on any refusal.
+   * No optimistic `runStatus` here: the backend's `run:accepted` starts the
+   * status line, so a backend that fakes no run (the mock) shows no run.
+   */
+  const dispatch = async (projectId: string, body: string): Promise<void> => {
     const tab = state.tabs.find((candidate) => candidate.projectId === projectId);
     await client().sendMessage({
       projectId,
@@ -1018,6 +1113,55 @@ function createWorkspace() {
       effort: tab?.effort,
     });
   };
+
+  const send = async (projectId: string, body: string): Promise<void> => {
+    /*
+     * A busy project queues instead of refusing. The backend's
+     * one-run-per-project rule stands; what changed is who holds the words —
+     * the store keeps them and sends when the run lands, instead of the error
+     * banner handing them back to be babysat.
+     */
+    if (isBusy(projectId)) {
+      setState("queued", projectId, (waiting = []) => [...waiting, body]);
+      return;
+    }
+    try {
+      await dispatch(projectId, body);
+    } catch (cause) {
+      // The one refusal that is not an error here: the frontend's busy check
+      // raced a run the backend already holds. Queue; that run's stop flushes.
+      if (describeError(cause).includes("already active")) {
+        setState("queued", projectId, (waiting = []) => [...waiting, body]);
+        return;
+      }
+      throw cause;
+    }
+  };
+
+  /**
+   * Send the oldest queued prompt, once the slot frees.
+   *
+   * Retries with backoff because `run:stopped` slightly precedes the slot
+   * actually opening; after the attempts run out the prompt goes back to the
+   * front of the queue, still visible above the composer rather than lost.
+   */
+  async function flushQueue(projectId: string, attempt: number): Promise<void> {
+    const waiting = state.queued[projectId] ?? [];
+    const body = waiting[0];
+    if (body === undefined) return;
+    if (isBusy(projectId)) return; // a newer run took the slot; its stop will re-cue
+    setState("queued", projectId, waiting.slice(1));
+    try {
+      await dispatch(projectId, body);
+    } catch (cause) {
+      setState("queued", projectId, (rest = []) => [body, ...rest]);
+      if (attempt < 4) {
+        window.setTimeout(() => void flushQueue(projectId, attempt + 1), 500 * 2 ** attempt);
+      } else {
+        log.error(`could not send the queued prompt: ${describeError(cause)}`);
+      }
+    }
+  }
 
   /**
    * A prompt for the Home task manager, on its own settings.
@@ -1075,7 +1219,15 @@ function createWorkspace() {
     createItem: (projectId: string, title: string) => client().createItem(projectId, title),
     reorderItems: (projectId: string, ids: string[]) => client().reorderItems(projectId, ids),
     setItemStatus: (id: string, status: ProjectStatus) => client().setItemStatus(id, status),
+    updateItem: (id: string, title: string) => client().updateItem(id, title),
     deleteItem: (id: string) => client().deleteItem(id),
+    chooseAttachments: () => client().chooseAttachments(),
+    /** Drop one queued prompt — second thoughts are allowed while it waits. */
+    removeQueued(projectId: string, index: number) {
+      setState("queued", projectId, (waiting = []) =>
+        waiting.filter((_, position) => position !== index),
+      );
+    },
     resolveModeration: (messageId: string, approve: boolean) =>
       client().resolveModeration(messageId, approve),
     resolveApproval: (projectId: string, approvalId: string, allow: boolean, remember?: boolean) =>

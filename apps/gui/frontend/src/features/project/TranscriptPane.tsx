@@ -1,11 +1,11 @@
 import { EmptyState } from "@pathscale/ui";
-import { createEffect, For, type JSX, Match, Show, Switch } from "solid-js";
+import { createEffect, createSignal, For, type JSX, Match, Show, Switch, untrack } from "solid-js";
 import { Icon } from "~/components/Icon";
 import { ApprovalCard } from "~/features/project/ApprovalCard";
 import { InlineText, MessageBody } from "~/features/project/MessageBody";
 import { isTransientStop } from "~/lib/format";
 import { AGENT_LABELS } from "~/lib/labels";
-import { useWorkspace } from "~/stores/workspace";
+import { type RunStatus, useNow, useWorkspace } from "~/stores/workspace";
 import type { Message, Project } from "~/types";
 
 const STARTERS = ["Review the GUI crate", "Wire the Solid frontend", "Audit the proxies"];
@@ -24,10 +24,27 @@ export function TranscriptPane(props: {
   const { state, actions } = useWorkspace();
   let scroller!: HTMLDivElement;
 
-  // Follow the tail as messages arrive. Reading `.length` is what subscribes
-  // this effect — the array identity alone would not change on an append.
+  /*
+   * Whether the view is at (or near) the tail. Reading up through a long
+   * transcript while the agent streams used to be impossible: every delta
+   * yanked the view back to the bottom. Now the tail is only followed while
+   * you are already there; scroll up and new text appends below without
+   * moving what you are reading. Coming back within a bubble's height of the
+   * bottom re-engages the follow.
+   */
+  const [pinned, setPinned] = createSignal(true);
+  const trackScroll = (): void => {
+    setPinned(scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight < 48);
+  };
+
+  // Follow the tail as content arrives: new messages, streaming deltas, the
+  // status line appearing. Reading these is what subscribes the effect;
+  // `pinned` is untracked so scrolling around cannot itself re-run it.
   createEffect(() => {
     props.messages.length;
+    props.streaming;
+    void state.runStatus[props.project.id];
+    if (!untrack(pinned)) return;
     queueMicrotask(() => {
       scroller.scrollTop = scroller.scrollHeight;
     });
@@ -36,6 +53,7 @@ export function TranscriptPane(props: {
   return (
     <div
       ref={scroller}
+      onScroll={trackScroll}
       class="az-scroll flex min-h-0 flex-1 flex-col gap-4 px-6 pt-5 pb-2 leading-relaxed"
     >
       <Show
@@ -104,6 +122,95 @@ export function TranscriptPane(props: {
             </div>
           )}
         </Show>
+
+        {/* The run's vital signs, from send to stop: elapsed, size, what the
+            agent is doing, whether the words so far are safe in the store —
+            and the way out. */}
+        <Show when={state.runStatus[props.project.id]}>
+          {(status) => (
+            <RunStatusLine
+              projectId={props.project.id}
+              status={status()}
+              streamedChars={props.streaming.length}
+            />
+          )}
+        </Show>
+      </Show>
+    </div>
+  );
+}
+
+/**
+ * One quiet line while a run is in flight.
+ *
+ * Answers, at a glance, the questions a running turn raises: how long it has
+ * been going, roughly how much it has said, what it is doing right now, and —
+ * via the dot — whether the words on screen would survive the app dying this
+ * instant. Cancel lives here because this line *is* the run: the window
+ * between sending and the first reply used to have no way out at all.
+ */
+function RunStatusLine(props: {
+  projectId: string;
+  status: RunStatus;
+  streamedChars: number;
+}): JSX.Element {
+  const { actions, isLive } = useWorkspace();
+  const now = useNow();
+
+  const elapsedText = () => {
+    const seconds = Math.max(0, Math.floor((now() - props.status.startedAt) / 1000));
+    return seconds < 60 ? `${seconds}s` : `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
+  };
+
+  /*
+   * An estimate and labelled as one (`~`): the agent reports real token
+   * counts only when the turn ends, so mid-run the honest choice is chars/4
+   * or nothing, and nothing tells you less.
+   */
+  const tokenText = () => {
+    const tokens = props.streamedChars / 4;
+    if (tokens < 1) return null;
+    return tokens < 1000
+      ? `~${Math.round(tokens)} tokens`
+      : `~${(tokens / 1000).toFixed(1)}k tokens`;
+  };
+
+  const isSynced = () => props.status.persistedChars >= props.streamedChars;
+
+  return (
+    <div class="flex items-center gap-2.5 px-1 py-0.5 text-[12px] text-az-muted">
+      <span class="animate-pulse text-[13px] text-primary" aria-hidden="true">
+        ✳
+      </span>
+      <span>
+        {elapsedText()}
+        <Show when={tokenText()}>{(tokens) => <> · {tokens()}</>}</Show>
+        {" · "}
+        {props.status.activity}
+      </span>
+      {/* Saved-to-store dot: green means killing the app now loses nothing
+          that has streamed; amber means the last couple of seconds exist only
+          on screen. Only meaningful once something has streamed. */}
+      <Show when={props.streamedChars > 0}>
+        <span
+          role="img"
+          aria-label={isSynced() ? "streamed text saved" : "recent text not yet saved"}
+          title={
+            isSynced()
+              ? "Everything streamed so far is saved to the store"
+              : "The store checkpoint runs every 2s — the newest text is not saved yet"
+          }
+          class={`size-[7px] shrink-0 rounded-full ${isSynced() ? "bg-success" : "bg-warning"}`}
+        />
+      </Show>
+      <Show when={isLive("cancelRun")}>
+        <button
+          type="button"
+          onClick={() => void actions.cancelRun(props.projectId)}
+          class="rounded-md border border-white/16 px-2 py-px text-[11.5px] text-az-body transition-colors hover:border-error hover:text-error"
+        >
+          Cancel
+        </button>
       </Show>
     </div>
   );
@@ -187,12 +294,14 @@ function AgentBubble(props: { message: Message; onRetry?: () => void }): JSX.Ele
   );
 }
 
+/*
+ * No avatar chip. The mockup had a 26px square reading "nd" — a designer's
+ * initials placeholder that shipped as-is and read as a mystery glyph. The
+ * right-aligned bubble already says whose words these are.
+ */
 function UserBubble(props: { message: Message }): JSX.Element {
   return (
     <div class="flex max-w-[76%] flex-col items-end gap-[7px] self-end">
-      <div class="flex size-[26px] items-center justify-center rounded-lg border border-az-hairline-soft bg-base-300 text-[10.5px] text-az-muted">
-        nd
-      </div>
       <div
         data-selectable
         class="rounded-[16px_16px_6px_16px] bg-base-300 px-[15px] py-[11px] text-[13.5px] text-az-title leading-[1.55]"

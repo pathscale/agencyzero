@@ -56,6 +56,7 @@ export function createTauriApi(): AgencyZeroApi {
     createItem: (projectId, title) => call("create_item", { projectId, title }),
     deleteItem: (id) => call("delete_item", { id }),
     setItemStatus: (id, status) => call("set_item_status", { id, status }),
+    updateItem: (id, title) => call("update_item", { id, title }),
     reorderItems: (projectId, ids) => call("reorder_items", { projectId, ids }),
 
     listMessages: (projectId) => call("list_messages", { projectId }),
@@ -69,6 +70,7 @@ export function createTauriApi(): AgencyZeroApi {
     getDataLocation: () => call("get_data_location"),
     setDataLocation: (path) => call("set_data_location", { path }),
     chooseDataDirectory: () => call("choose_data_directory"),
+    chooseAttachments: () => call("choose_attachments"),
     getWorkspaceRoot: () => call("get_workspace_root"),
     createWorkspaceRoot: () => call("create_workspace_root"),
 

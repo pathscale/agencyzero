@@ -1,25 +1,30 @@
 import { render, waitFor } from "@solidjs/testing-library";
 import { describe, expect, it, vi } from "vitest";
 import { Composer } from "~/features/project/Composer";
+import { WorkspaceProvider } from "~/stores/workspace";
 
 function mount(overrides: Partial<Parameters<typeof Composer>[0]> = {}) {
   const onSend = vi.fn().mockResolvedValue(undefined);
+  // Wrapped since the Attach button made the composer a workspace consumer
+  // (isLive gating and the picker action come from context).
   const screen = render(() => (
-    <Composer
-      placeholder="Ask, or type / for commands…"
-      model="sonnet"
-      modelOptions={[
-        { value: "sonnet", label: "Sonnet" },
-        { value: "opus", label: "Opus" },
-      ]}
-      efforts={[]}
-      effort=""
-      permission="read_only"
-      onModelChange={() => {}}
-      onPermissionChange={() => {}}
-      onSend={onSend}
-      {...overrides}
-    />
+    <WorkspaceProvider>
+      <Composer
+        placeholder="Ask, or type / for commands…"
+        model="sonnet"
+        modelOptions={[
+          { value: "sonnet", label: "Sonnet" },
+          { value: "opus", label: "Opus" },
+        ]}
+        efforts={[]}
+        effort=""
+        permission="read_only"
+        onModelChange={() => {}}
+        onPermissionChange={() => {}}
+        onSend={onSend}
+        {...overrides}
+      />
+    </WorkspaceProvider>
   ));
   const field = screen.getByLabelText("Ask, or type / for commands…") as HTMLTextAreaElement;
   return { ...screen, field, onSend };

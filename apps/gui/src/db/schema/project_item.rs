@@ -22,6 +22,7 @@ worktable!(
         update: {
             StatusById(status) by id,
             PositionById(position) by id,
+            TitleById(title) by id,
         },
         delete: {
             ByProject() by project_id,

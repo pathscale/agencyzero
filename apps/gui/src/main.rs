@@ -41,8 +41,10 @@ const IMPLEMENTED: &[&str] = &[
     "list_items",
     "create_item",
     "set_item_status",
+    "update_item",
     "delete_item",
     "reorder_items",
+    "choose_attachments",
     "list_messages",
     "list_running_tasks",
     "list_task_log",
@@ -277,6 +279,42 @@ async fn choose_data_directory(
         .await
         .map_err(|_| "the directory picker closed without answering".to_string())?;
     Ok(picked.map(|path| path.to_string()))
+}
+
+/// Ask the OS for files, for the composer's Attach button.
+///
+/// The chosen paths land in the prompt as text — the agents take file paths
+/// in prose, so "attach" honestly means "put the path where the model will
+/// read it", not an upload. An empty list means the user cancelled, which is
+/// not an error.
+///
+/// Same shape as [`choose_data_directory`], and for the same reasons: the
+/// callback form because a blocking picker on the main thread deadlocks, and
+/// a Rust-side command so the control greys out through the capability probe
+/// on a build that lacks it.
+///
+/// # Errors
+/// Returns a message when the picker goes away without answering, which would
+/// otherwise hang the caller's await forever.
+#[tauri::command]
+async fn choose_attachments(app: AppHandle) -> Result<Vec<String>, String> {
+    let (tx, rx) = tokio::sync::oneshot::channel();
+    app.dialog()
+        .file()
+        .set_title("Attach files to the prompt")
+        .pick_files(move |picked| {
+            // Fails only if this command was already dropped; nobody is left to tell.
+            let _ = tx.send(picked);
+        });
+
+    let picked = rx
+        .await
+        .map_err(|_| "the file picker closed without answering".to_string())?;
+    Ok(picked
+        .unwrap_or_default()
+        .into_iter()
+        .map(|path| path.to_string())
+        .collect())
 }
 
 /// Point future launches at a different directory, or back at the default.
@@ -608,8 +646,10 @@ fn main() {
             projects::list_items,
             projects::create_item,
             projects::set_item_status,
+            projects::update_item,
             projects::delete_item,
             projects::reorder_items,
+            choose_attachments,
             projects::list_messages,
             projects::list_running_tasks,
             projects::list_task_log,
@@ -745,6 +785,11 @@ fn main() {
                     "could not record the schema fingerprint: {error}"
                 );
             }
+
+            // Before the window can ask for messages: a reply the previous
+            // launch was closed on top of becomes an `interrupted` row now,
+            // so the transcript already holds it when the tab first renders.
+            tauri::async_runtime::block_on(projects::recover_partial_replies(&tables));
 
             app.manage(AppState {
                 tables: Arc::new(tables),

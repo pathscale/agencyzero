@@ -278,6 +278,13 @@ export function createMockApi(): AgencyZeroApi {
       return settle(item);
     },
 
+    async updateItem(id, title) {
+      const item = findItem(id);
+      item.title = title;
+      emit("item:updated", item);
+      return settle(item);
+    },
+
     async reorderItems(projectId, ids) {
       ids.forEach((id, order) => {
         const item = items.find((candidate) => candidate.id === id);
@@ -379,6 +386,8 @@ export function createMockApi(): AgencyZeroApi {
      * they do not have.
      */
     chooseDataDirectory: () => settle(null),
+    // A fixed fixture path: the preview has no OS picker to open.
+    chooseAttachments: () => settle(["/tmp/mock-attachment.txt"]),
 
     /* No filesystem outside Tauri, so this describes the shape and claims nothing. */
     getWorkspaceRoot: () => settle({ path: "(no filesystem)", exists: false, isDefault: true }),

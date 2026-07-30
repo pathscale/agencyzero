@@ -1,4 +1,4 @@
-import { createMemo, createSignal, type JSX, onCleanup, Show } from "solid-js";
+import { createMemo, createSignal, For, type JSX, onCleanup, Show } from "solid-js";
 import { EditableTitle } from "~/components/EditableTitle";
 import { Icon } from "~/components/Icon";
 import { Panel } from "~/components/Panel";
@@ -159,6 +159,29 @@ export function ProjectTab(props: { tab: Tab; project: Project }): JSX.Element {
         />
 
         <div class="flex flex-none flex-col gap-2.5 px-4 pt-2 pb-4">
+          {/* Prompts waiting their turn, each with its way out. Above the
+              composer so the words are visibly held, not vanished. */}
+          <Show when={(state.queued[props.project.id] ?? []).length > 0}>
+            <div class="flex flex-col gap-1">
+              <For each={state.queued[props.project.id]}>
+                {(body, index) => (
+                  <div class="flex items-center gap-2 rounded-[11px] border border-white/14 border-dashed bg-az-inset px-3 py-1.5 text-[12px]">
+                    <Icon name="history" class="shrink-0 text-[12px] text-az-faint" />
+                    <span class="min-w-0 flex-1 truncate text-az-body">{body}</span>
+                    <span class="shrink-0 text-[10.5px] text-az-faint">queued</span>
+                    <button
+                      type="button"
+                      onClick={() => actions.removeQueued(props.project.id, index())}
+                      aria-label="Drop this queued message"
+                      class="shrink-0 text-az-faint transition-colors hover:text-error"
+                    >
+                      <Icon name="x" class="text-[12px]" />
+                    </button>
+                  </div>
+                )}
+              </For>
+            </div>
+          </Show>
           <Composer
             autofocus
             placeholder="Ask, or type / for commands…"
@@ -177,11 +200,16 @@ export function ProjectTab(props: { tab: Tab; project: Project }): JSX.Element {
             permission={props.tab.permission}
             usage={contextLabel()}
             /*
-             * Tool calls in flight *or* text still streaming: a text-only
-             * generation has no tool rows, and treating it as "not running"
-             * let Enter start a second run mid-turn.
+             * The full turn, not just its visible parts: `runStatus` exists
+             * from the accepted send to `run:stopped`, covering the quiet
+             * stretches where no tool row and no text would otherwise read
+             * as idle. The older signals stay as belt for replayed state.
              */
-            isRunning={running().length > 0 || (state.streaming[props.project.id] ?? "") !== ""}
+            isRunning={
+              props.project.id in state.runStatus ||
+              running().length > 0 ||
+              (state.streaming[props.project.id] ?? "") !== ""
+            }
             /*
              * Only offered when the backend can actually stop the run. An
              * ungated Stop routed to the mock, which emitted `run:stopped`
