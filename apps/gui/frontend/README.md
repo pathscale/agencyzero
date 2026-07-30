@@ -54,6 +54,20 @@ webview, which takes two things that have to stay in step:
 That file also has to list `core:default` itself: adding a `capabilities/` directory
 replaces the capability `tauri-build` generates when there isn't one.
 
+### `prompt`, `alert` and `confirm` do nothing here
+
+They are not merely discouraged, they are inert. Drawing one is the host application's
+job through `WKUIDelegate`, and wry implements exactly three of its methods — the file
+upload panel, media capture permission, and new windows. The JavaScript panels are not
+among them, so WebKit completes the request with nil immediately: `prompt()` returns
+`null` before anything is drawn and the click looks like a dead control.
+
+Settings' "Choose…" for the data directory was a `window.prompt` for this reason, and did
+nothing at all. Anything of that shape goes through a Tauri command instead —
+`choose_data_directory` opens the native picker from Rust. Keeping it a command rather
+than reaching for the dialog plugin's JavaScript API also keeps it inside the capability
+probe, so the control greys out on a build that lacks it like every other one.
+
 ## Tabs
 
 ⌘N opens a new project, ⌘W closes the tab, ⌘1 selects the previous and ⌘2 the next — both
@@ -153,8 +167,8 @@ proposed in `design/data-model.html`. Two implementations satisfy it:
 | [`src/api/mock.ts`](src/api/mock.ts) | An in-memory stand-in serving the mockup's own data from [`src/api/fixtures.ts`](src/api/fixtures.ts). |
 
 [`src/api/index.ts`](src/api/index.ts) picks one at startup. Outside the Tauri webview it is
-always the mock. Inside it, it probes with `get_settings`, and **the kind of failure
-decides**: a "command not found" error means Rust has not implemented it yet and falls back
+always the mock. Inside it, it probes with `list_capabilities`, and **the kind of failure
+decides**: a "command not found" error means the build predates the probe and falls back
 to fixtures; anything else — a database that would not open, a rejected capability, a serde
 mismatch, a panic — is rethrown and the window shows a boot error with a retry.
 

@@ -294,6 +294,19 @@ export interface DataLocation {
   isEditable: boolean;
 }
 
+/**
+ * Where this session opened, and where the next launch will.
+ *
+ * The two diverge as soon as the location is changed: the pointer takes effect
+ * on the next launch and nothing is moved in between. Settings shows both,
+ * because the session's path alone makes a change that was written look exactly
+ * like a change that did nothing.
+ */
+export interface DataLocationView extends DataLocation {
+  /** The next launch's location, or `null` while it agrees with this one. */
+  pending: DataLocation | null;
+}
+
 /** Whether an id names one model or points at whichever is current. */
 export type ModelKind = "alias" | "pinned";
 

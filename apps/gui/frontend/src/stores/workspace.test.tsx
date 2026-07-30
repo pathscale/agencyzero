@@ -347,3 +347,21 @@ describe("project deletion", () => {
     expect(workspace.state.tabs.map((tab) => tab.key)).not.toContain("worktable");
   });
 });
+
+describe("the data location", () => {
+  /*
+   * The picker used to be a `window.prompt`, which a Tauri webview never draws:
+   * the click landed, `null` came straight back, and the row was unreachable.
+   * Cancelling now takes the same path a closed picker does, so the one thing
+   * worth holding is that it stays a no-op rather than clearing the pointer.
+   */
+  it("leaves the location alone when the picker is cancelled", async () => {
+    const workspace = await mountWorkspace();
+    const before = workspace.state.dataLocation;
+
+    // The mock has no native picker, so it answers "cancelled" every time.
+    await workspace.actions.chooseDataLocation();
+
+    expect(workspace.state.dataLocation).toEqual(before);
+  });
+});

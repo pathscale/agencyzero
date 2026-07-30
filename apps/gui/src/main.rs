@@ -14,6 +14,7 @@ use std::sync::Arc;
 
 use tauri::menu::{AboutMetadata, Menu, MenuBuilder, MenuItemBuilder, SubmenuBuilder};
 use tauri::{AppHandle, Emitter, Manager, Runtime, State};
+use tauri_plugin_dialog::DialogExt;
 
 use crate::db::location::{self, DataLocation};
 use crate::db::tables::Tables;
@@ -33,6 +34,7 @@ const IMPLEMENTED: &[&str] = &[
     "greet",
     "get_data_location",
     "set_data_location",
+    "choose_data_directory",
     "get_workspace_root",
     "create_workspace_root",
     "list_projects",
@@ -96,6 +98,9 @@ pub(crate) struct AppState {
     settings_write: tokio::sync::Mutex<()>,
     /// Kept so `set_data_location` can write the pointer beside the settings.
     config_dir: std::path::PathBuf,
+    /// Kept so `get_data_location` can re-resolve the pointer against the same
+    /// default this launch used, and report where the next one will open.
+    data_dir: std::path::PathBuf,
     /// Where the tables were opened from this launch. A change takes effect on
     /// the next one, so this is the answer for the whole session.
     location: DataLocation,
@@ -211,10 +216,67 @@ fn create_workspace_root(
     Ok(resolve_workspace_root(&app, &state))
 }
 
-/// Where the tables were opened from, and whether that is changeable.
+/// Where the tables were opened from, whether that is changeable, and where the
+/// next launch will open if that has been changed since.
 #[tauri::command]
-fn get_data_location(state: State<'_, AppState>) -> DataLocation {
-    state.location.clone()
+fn get_data_location(state: State<'_, AppState>) -> location::LocationView {
+    location::view(&state.config_dir, &state.data_dir, &state.location)
+}
+
+/// Ask the OS for a directory, for the Settings "Choose…" row.
+///
+/// `window.prompt` used to stand in for this and silently did nothing. wry
+/// implements only three of `WKUIDelegate`'s methods and the JavaScript text
+/// input panel is not among them, so WKWebView completes the request with nil
+/// without drawing anything: `prompt()` returns `null` instantly and the click
+/// has no visible effect at all. A native picker is both the path that works and
+/// the right affordance for a filesystem path.
+///
+/// `None` means the user cancelled, which is not an error — the caller writes no
+/// pointer and the row is left alone.
+///
+/// # Errors
+/// Returns a message when the picker goes away without answering, which would
+/// otherwise hang the caller's await forever.
+#[tauri::command]
+async fn choose_data_directory(
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> Result<Option<String>, String> {
+    // Open where the tables are now, so the picker starts somewhere meaningful
+    // rather than in whatever directory macOS remembers last. The path may not
+    // exist yet on a first run, in which case its parent is the next best thing.
+    let current = &state.location.path;
+    let start = if current.is_dir() {
+        Some(current.clone())
+    } else {
+        current.parent().map(std::path::Path::to_path_buf)
+    };
+
+    let mut dialog = app
+        .dialog()
+        .file()
+        .set_title("Choose the agencyzero data directory");
+    if let Some(start) = start {
+        dialog = dialog.set_directory(start);
+    }
+
+    /*
+     * The callback form, not `blocking_pick_folder`. Tauri runs a synchronous
+     * command on the main thread, and the blocking variant asks the main thread
+     * to run the panel and then waits for it — from the main thread that is a
+     * deadlock, with the window frozen behind a dialog that never appears.
+     */
+    let (tx, rx) = tokio::sync::oneshot::channel();
+    dialog.pick_folder(move |picked| {
+        // Fails only if this command was already dropped; nobody is left to tell.
+        let _ = tx.send(picked);
+    });
+
+    let picked = rx
+        .await
+        .map_err(|_| "the directory picker closed without answering".to_string())?;
+    Ok(picked.map(|path| path.to_string()))
 }
 
 /// Point future launches at a different directory, or back at the default.
@@ -528,6 +590,10 @@ fn main() {
 
     tauri::Builder::default()
         .plugin(tauri_plugin_updater::Builder::new().build())
+        // Called from Rust only, so no capability entry: the permissions in
+        // `capabilities/default.json` gate the plugin's *JavaScript* commands,
+        // and the webview has no business opening a panel of its own.
+        .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
             greet,
             update::check_for_update,
@@ -535,6 +601,7 @@ fn main() {
             list_capabilities,
             get_data_location,
             set_data_location,
+            choose_data_directory,
             get_workspace_root,
             create_workspace_root,
             projects::list_projects,
@@ -687,6 +754,7 @@ fn main() {
                 active: Arc::default(),
                 settings_write: tokio::sync::Mutex::new(()),
                 config_dir,
+                data_dir,
                 location,
             });
             Ok(())
