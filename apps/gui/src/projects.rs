@@ -1690,6 +1690,22 @@ pub async fn delete_project(
         .await
         .map_err(|error| failed("the project", &error))?;
 
+    /*
+     * The project's kv satellites go with it: the resume session, the I/O
+     * recording flag, and — a standing permission grant now — its remembered
+     * approvals. Ids are never recycled so these were only orphans, but an
+     * allow-rule is not the kind of orphan to leave lying around.
+     */
+    for key in [session_key(&id), io_persist_key(&id), rules_key(&id)] {
+        if let Err(error) = state.tables.kv_put(&key, String::new()).await {
+            crate::log!(
+                crate::log::Level::Warn,
+                "projects",
+                "could not clear {key} for deleted {id}: {error}"
+            );
+        }
+    }
+
     // The display metadata follows the run it described.
     if let Ok(mut running) = state.running.lock() {
         running.remove(&id);
