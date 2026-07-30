@@ -53,6 +53,32 @@ The macOS bundle lands in `target/release/bundle/macos/AgencyZero.app`. To work 
 UI alone, `cd apps/gui/frontend && bun run dev` serves it in a browser at
 <http://localhost:3010> against the design fixtures.
 
+### A Dev instance beside the System one
+
+Identity is what keeps two instances apart on macOS: the bundle identifier keys the
+data directory, the logs, the webview's localStorage and the Dock entry, so a second
+identifier is a second app. [`apps/gui/tauri.dev.conf.json`](apps/gui/tauri.dev.conf.json)
+is a config overlay that changes only that — `com.pathscale.agencyzero.dev`, named
+"AgencyZero Dev":
+
+```bash
+cd apps/gui && cargo tauri build --config tauri.dev.conf.json
+```
+
+The bundle lands beside the system one as `AgencyZero Dev.app`, stores its data in
+`~/Library/Application Support/com.pathscale.agencyzero.dev/`, and launches in
+parallel with the system copy — nothing is shared, so nothing conflicts. Settings →
+Application shows the build stamp, which is how you confirm which commit either
+instance is running.
+
+`AZ_DATA_DIR` still overrides the store location for either instance (tests, CI, a
+scratch database). `open` does not pass environment variables, so run the binary
+inside the bundle directly when you need it:
+
+```bash
+AZ_DATA_DIR=/tmp/az-scratch "./target/release/bundle/macos/AgencyZero Dev.app/Contents/MacOS/az-gui" &
+```
+
 ## Design
 
 [`design/`](design) is the static export of the design source of truth: the workspace
