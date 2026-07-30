@@ -308,13 +308,25 @@ fn items_from_reply(reply: &str) -> Vec<(String, String)> {
                 })?
                 .trim_start();
 
+            /*
+             * `[ ]` proposes, `[x]` closes, `[-]` removes. The third box is
+             * this contract's own: markdown has no "strike this row" checkbox,
+             * and a project session needs one — an obsolete item is not a
+             * *finished* item, and before this verb existed an agent working
+             * a backlog could add rows but never retire one, so the list only
+             * grew. `[-]` never creates: removing something that does not
+             * exist is already true.
+             */
             let (marker, title) = match rest.strip_prefix("[ ] ") {
                 Some(title) => ("pending", title),
-                None => (
-                    "finished",
-                    rest.strip_prefix("[x] ")
-                        .or_else(|| rest.strip_prefix("[X] "))?,
-                ),
+                None => match rest.strip_prefix("[-] ") {
+                    Some(title) => ("deleted", title),
+                    None => (
+                        "finished",
+                        rest.strip_prefix("[x] ")
+                            .or_else(|| rest.strip_prefix("[X] "))?,
+                    ),
+                },
             };
 
             let title = title.trim();
@@ -917,7 +929,13 @@ async fn write_items_from_reply(
             if row.status == status {
                 continue;
             }
-            if status == "finished" && delete_completed {
+            /*
+             * `[-]` removes outright, whatever Settings says about completed
+             * items: an obsolete row is not a finished one, and the setting
+             * governs what "done" means, not what "gone" means. `[x]` defers
+             * to the setting as before.
+             */
+            if status == "deleted" || (status == "finished" && delete_completed) {
                 let (row_id, row_project) = (row.id.clone(), row.project_id.clone());
                 match tables.project_item.delete(row_id.clone()).await {
                     Ok(()) => {
@@ -929,7 +947,7 @@ async fn write_items_from_reply(
                     Err(error) => crate::log!(
                         crate::log::Level::Error,
                         "items",
-                        "{project_id}: could not delete the completed item: {error}"
+                        "{project_id}: could not delete the item: {error}"
                     ),
                 }
                 continue;
@@ -951,6 +969,11 @@ async fn write_items_from_reply(
                     "{project_id}: could not update the item's status: {error}"
                 ),
             }
+            continue;
+        }
+        // `[-]` for a title that does not exist is already true — removing
+        // nothing must not create something.
+        if status == "deleted" {
             continue;
         }
         let row = ProjectItemRow {
@@ -3569,6 +3592,22 @@ mod tests {
             .collect::<Vec<_>>()
             .join("\n");
         assert_eq!(items_from_reply(&many).len(), MAX_ITEMS_PER_REPLY);
+    }
+
+    /// The third box: `[-]` marks a row for removal. It parses like the other
+    /// two so an agent can retire an obsolete item from a project session —
+    /// the write path deletes on match and refuses to create from it.
+    #[test]
+    fn a_struck_box_parses_as_deleted() {
+        assert_eq!(
+            items_from_reply("- [-] Verify release 0.1.4 upgrade path"),
+            vec![(
+                "Verify release 0.1.4 upgrade path".to_string(),
+                "deleted".to_string()
+            )]
+        );
+        // The box needs its title, same as the others.
+        assert!(items_from_reply("- [-] ").is_empty());
     }
 
     /// `ok` is a tri-state the column cannot hold, and the distinction between

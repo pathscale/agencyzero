@@ -77,6 +77,26 @@ Three decisions worth keeping:
   output unasked is not something it should do on its own initiative; promoting
   a line to a project is a decision for a person.
 
+## The project-session contract: three checkboxes
+
+Ordinary project conversations (everything that is not the Home task manager)
+speak a simpler, checklist-shaped contract, parsed from any reply:
+
+- `- [ ] <title>` **proposes** a new pending item. An existing title is left
+  alone — a proposal is not permission to clobber a row the user owns.
+- `- [x] <title>` **closes** the existing item with that exact title. What
+  closing means is the Settings choice (*Completed items*): mark resolved, or
+  delete the row. The run-this-item prompt teaches this line, so a run started
+  from an item can end by closing it.
+- `- [-] <title>` **removes** the existing item outright, whatever the
+  Settings say — an obsolete row is not a finished one. It never creates:
+  striking something that does not exist is already true.
+
+Titles match case-insensitively and exactly; a paraphrased title is a new
+proposal, which is the append-only safety working as intended. `[x]` and `[-]`
+landed in 0.1.6 and 0.1.10 respectively — an agent reading older sources will
+find an append-only path and wrongly conclude the list can only grow.
+
 ## Can the agent read the WorkTable store?
 
 **Yes — through `crates/wt-tools`.**
