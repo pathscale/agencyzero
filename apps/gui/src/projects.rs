@@ -2631,6 +2631,14 @@ async fn drive_run(
      */
     let mut partial_flushed_at = std::time::Instant::now();
 
+    /*
+     * The live token counter's ledger. Each `Event::Usage` carries one API
+     * request's figures; `accumulate` sums the summed fields and keeps the
+     * context latest, exactly as the terminal total will. For the eye only —
+     * `Outcome::usage` remains the record.
+     */
+    let mut turn_usage = agent_abstraction::Usage::default();
+
     // Set by the cancel signal, wherever the loop happens to be waiting when
     // it lands. The loop exits, and the tail below tears the agent down.
     let mut cancelled = false;
@@ -3009,6 +3017,25 @@ async fn drive_run(
                         "message": message,
                         "resetsAt": resets_at,
                         "isBlocking": limit.is_blocking(),
+                    }),
+                );
+            }
+            Event::Usage(usage) => {
+                /*
+                 * One API request's figures; the ledger keeps the turn's
+                 * running truth. `tokens` is the turn's new work so far
+                 * (input + output), matching the header's own metric; the
+                 * context rides along for a future gauge. No note_io — a
+                 * tool-heavy turn would bury the panel in bookkeeping.
+                 */
+                turn_usage.accumulate(&usage);
+                let _ = app.emit(
+                    "run:usage",
+                    serde_json::json!({
+                        "projectId": project_id,
+                        "tokens": turn_usage.input_tokens.unwrap_or(0)
+                            + turn_usage.output_tokens.unwrap_or(0),
+                        "contextTokens": turn_usage.context_tokens,
                     }),
                 );
             }

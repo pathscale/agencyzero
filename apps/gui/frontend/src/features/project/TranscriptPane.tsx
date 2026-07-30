@@ -163,11 +163,17 @@ function RunStatusLine(props: {
   };
 
   /*
-   * An estimate and labelled as one (`~`): the agent reports real token
-   * counts only when the turn ends, so mid-run the honest choice is chars/4
-   * or nothing, and nothing tells you less.
+   * Real when the crate reports it, estimated until then. 0.3.8's
+   * `Event::Usage` carries each API request's true figures as it completes,
+   * so the counter moves through tool phases too — the phases where the
+   * character estimate sat frozen because nothing was streaming. The `~`
+   * marks the estimate and only the estimate.
    */
   const tokenText = () => {
+    const live = props.status.liveTokens;
+    if (live !== null && live > 0) {
+      return live < 1000 ? `${live} tokens` : `${(live / 1000).toFixed(1)}k tokens`;
+    }
     const tokens = props.streamedChars / 4;
     if (tokens < 1) return null;
     return tokens < 1000

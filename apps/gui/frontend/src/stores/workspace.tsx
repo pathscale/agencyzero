@@ -142,6 +142,12 @@ export type RunStatus = {
    * saved/unsaved dot compares against `streaming.length`.
    */
   persistedChars: number;
+  /**
+   * The turn's real charged work so far (input + output), from `run:usage`.
+   * Null until the first API request completes; the character estimate
+   * covers that gap.
+   */
+  liveTokens: number | null;
 };
 
 /**
@@ -755,7 +761,17 @@ function createWorkspace() {
       setState("runStatus", projectId, (current) => ({
         startedAt: current?.startedAt ?? Date.now(),
         activity: current?.activity ?? "working…",
+        liveTokens: current?.liveTokens ?? null,
         persistedChars: chars,
+      }));
+    });
+
+    await bind("run:usage", ({ projectId, tokens }) => {
+      setState("runStatus", projectId, (current) => ({
+        startedAt: current?.startedAt ?? Date.now(),
+        activity: current?.activity ?? "working…",
+        persistedChars: current?.persistedChars ?? 0,
+        liveTokens: tokens,
       }));
     });
 
@@ -1109,6 +1125,7 @@ function createWorkspace() {
     setState("runStatus", projectId, (current) => ({
       startedAt: current?.startedAt ?? Date.now(),
       persistedChars: current?.persistedChars ?? 0,
+      liveTokens: current?.liveTokens ?? null,
       activity,
     }));
   }
