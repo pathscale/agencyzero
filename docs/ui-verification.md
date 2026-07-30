@@ -23,8 +23,27 @@ desktop.
 
 ## Drive it headlessly, by role and label — never by pixels
 
-Use a headless browser (`bunx playwright …`, or any CDP client) against
-`localhost:3010`. Two rules learned the hard way:
+Use the browser that is already here. **Brave is the machine's agent browser** —
+it carries the owner's Claude for Chrome plugin and is kept apart from the
+profile they work in, so driving it risks nothing of theirs:
+
+```bash
+"/Applications/Brave Browser.app/Contents/MacOS/Brave Browser" \
+  --headless --remote-debugging-port=9222 \
+  --user-data-dir=/tmp/az-headless        # never the real profile
+```
+
+It is Chromium, so any CDP client speaks to it and **nothing needs installing**.
+That matters: this file used to say `bunx playwright …`, and a session read that
+as licence to pull a 95 MB browser onto the owner's disk unannounced. A doc
+recommending a tool is not permission to install it — **ask first, every time**,
+and reach for what is already on the machine before asking at all.
+
+Headless means no window and no stolen focus, but it is still launching a GUI
+application: the takeover hook matches it, and that prompt is correct. Answer it
+rather than routing around it.
+
+Two rules learned the hard way:
 
 - **Address controls through the accessibility tree** — roles, `aria-label`s,
   placeholder text — never screen coordinates. This codebase labels every

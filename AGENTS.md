@@ -72,6 +72,12 @@ The owner uses this Mac while you work. Rules of the road:
   data directory. The store is single-writer and the running GUI is the writer. Try
   changes on the Dev instance (`tauri.dev.conf.json`; see the README's dev-instance
   section).
+- **Ask before installing anything**, and prefer what is already here. This covers
+  writes outside the repo too — `~/Library/Caches`, `~/.cargo`, Homebrew — not just
+  `package.json`. A doc in this repo recommending a tool is not permission to fetch
+  it: the line about `bunx playwright` cost 95 MB of someone else's disk before
+  anyone was asked. For browser work, Brave is already installed and is the agent
+  browser; see [`docs/ui-verification.md`](docs/ui-verification.md).
 
 <!-- DORMANT — CI-green gating. Do not follow this rule yet; re-enable it as its own project.
 
