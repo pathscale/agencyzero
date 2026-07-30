@@ -33,6 +33,26 @@ move the block, fence it, or bury it after prose, and a parser that depends on
 finding a marker fails on the first reply that omits one. A line is taken when
 it parses as an object with a non-empty `project` and `item`.
 
+## Deleting, and why absence never deletes
+
+`status: "deleted"` removes the existing task whose project and item match,
+exactly. That is the only remove verb: a model asked to "delete X" will
+happily re-emit the whole list without X, and treating absence as deletion
+would wipe rows the user added by hand every time the model abbreviated. So
+the harvester appends and deletes only what is named, and the contract tells
+the model so.
+
+To make bulk edits exact ("delete everything about cleaning junk"), every
+prompt carries a live snapshot of the current projects and tasks, built from
+the tables and bounded at ~6KB with an honest truncation marker. The model
+sees what exists; each deletion is an explicit, auditable line in the I/O
+panel.
+
+The write path stays in the GUI on purpose. wt-tools is read-only by
+construction — that is what makes it safe to run beside the GUI on a
+single-writer store — so it will never grow a delete. wt-tools is the eyes;
+the harvest contract is the hands; the GUI is the only writer.
+
 Three decisions worth keeping:
 
 - **A line that looks like JSON and does not parse is counted, not hidden.** The

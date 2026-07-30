@@ -34,12 +34,16 @@ const FULL = ["low", "medium", "high", "xhigh", "max", "ultra"];
 const TO_MAX = ["low", "medium", "high", "xhigh", "max"];
 const TO_XHIGH = ["low", "medium", "high", "xhigh"];
 
+// The ladder claude 2.1.212 accepts on --effort, mirrored from the crate's
+// catalogue so the preview's effort pill behaves like the real one.
+const CLAUDE_EFFORTS = ["low", "medium", "high", "xhigh", "max"];
+
 const alias = (id: string, name: string, note: string, isDefault = false): Model => ({
   id,
   name,
   note,
   kind: "alias",
-  efforts: [],
+  efforts: CLAUDE_EFFORTS,
   isDefault,
 });
 

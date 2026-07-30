@@ -887,10 +887,16 @@ function createWorkspace() {
     });
   }
 
-  function setTabModel(key: string, model: string, permission: Permission): void {
+  function setTabModel(key: string, model: string, permission: Permission, effort?: string): void {
     const index = state.tabs.findIndex((tab) => tab.key === key);
     if (index < 0) return;
-    setState("tabs", index, { model, permission });
+    // Effort only when the caller sent one: the model and permission pills
+    // must not clobber a level someone picked a moment ago.
+    setState(
+      "tabs",
+      index,
+      effort === undefined ? { model, permission } : { model, permission, effort },
+    );
     void client().setTabModel(key, model, permission);
   }
 

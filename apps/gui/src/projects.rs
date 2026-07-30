@@ -518,7 +518,7 @@ impl From<&TaskLogEntryDto> for TaskLogRow {
 /// The count of rejected lines goes to the I/O panel. A model that has drifted
 /// off the format produces a short list and no error anywhere else, which is
 /// exactly the failure that looks like the feature not working.
-fn write_tasks_from_reply(
+async fn write_tasks_from_reply(
     app: &AppHandle,
     io: &AgentIo,
     tables: &crate::db::tables::Tables,
@@ -570,8 +570,46 @@ fn write_tasks_from_reply(
     let mut created: Vec<String> = Vec::new();
     let mut placed = 0usize;
 
+    let mut removed = 0usize;
     for task in harvest.tasks {
         let key = task.project.trim().to_lowercase();
+
+        /*
+         * The one destructive verb, and it only ever removes an exact match:
+         * a delete against a project or title that does not exist is a no-op,
+         * never a fuzzy guess. Absence from the output changes nothing — the
+         * contract says so to the model, and this code says it to the store.
+         */
+        if task.status == "deleted" {
+            let Some(target_id) = project_ids.get(&key).cloned() else {
+                continue;
+            };
+            let existing: Vec<ProjectItemRow> = tables
+                .project_item
+                .select_by_project_id(target_id)
+                .execute()
+                .unwrap_or_default();
+            for row in existing {
+                if row.title.to_lowercase() == task.item.to_lowercase() {
+                    match tables.project_item.delete(row.id.clone()).await {
+                        Ok(()) => {
+                            removed += 1;
+                            let _ = app.emit(
+                                "item:deleted",
+                                serde_json::json!({ "id": row.id, "projectId": row.project_id }),
+                            );
+                        }
+                        Err(error) => crate::log!(
+                            crate::log::Level::Error,
+                            "tasks",
+                            "{project_id}: could not delete a task: {error}"
+                        ),
+                    }
+                }
+            }
+            continue;
+        }
+
         let target_id = match project_ids.get(&key) {
             Some(found) => found.clone(),
             None => {
@@ -640,21 +678,14 @@ fn write_tasks_from_reply(
 
     // Said where the harvest count already lives, so "where did my tasks go"
     // is answerable from the same panel that reported them parsed.
-    note_io(
-        app,
-        io,
-        project_id,
-        "gui",
-        "harvest",
-        if created.is_empty() {
-            format!("{placed} item(s) added to existing projects")
-        } else {
-            format!(
-                "{placed} item(s) placed; created project(s): {}",
-                created.join(", ")
-            )
-        },
-    );
+    let mut summary = format!("{placed} item(s) placed");
+    if removed > 0 {
+        summary.push_str(&format!(", {removed} deleted"));
+    }
+    if !created.is_empty() {
+        summary.push_str(&format!("; created project(s): {}", created.join(", ")));
+    }
+    note_io(app, io, project_id, "gui", "harvest", summary);
 }
 
 /// Turn any checklist in the reply into item rows, appended after what is there.
@@ -1023,6 +1054,50 @@ fn page_task_log(
         entries: rows,
         total,
     }
+}
+
+/// The live project and task lists, for the task manager's eyes.
+///
+/// Bounded: a store with hundreds of tasks must not turn every prompt into a
+/// novel, so the block is cut at a ceiling with an honest marker. The cut is
+/// per line, never mid-line — a half task reads as a different task.
+fn task_manager_snapshot(tables: &crate::db::tables::Tables) -> String {
+    const CEILING: usize = 6_000;
+
+    let mut projects: Vec<ProjectRow> = tables.project.select_all().execute().unwrap_or_default();
+    projects.sort_by_key(|row| row.position);
+    if projects.is_empty() {
+        return String::new();
+    }
+
+    let mut block = String::from(
+        "\n\n---\nCurrent projects and tasks, live from the store. To remove one, \
+         emit its line with status \"deleted\"; to add or restate, emit it normally.\n",
+    );
+    'outer: for project in &projects {
+        let header = format!("# {}\n", project.name);
+        if block.len() + header.len() > CEILING {
+            block.push_str("… (list truncated)\n");
+            break;
+        }
+        block.push_str(&header);
+
+        let mut items: Vec<ProjectItemRow> = tables
+            .project_item
+            .select_by_project_id(project.id.clone())
+            .execute()
+            .unwrap_or_default();
+        items.sort_by_key(|row| row.position);
+        for item in &items {
+            let line = format!("- [{}] {}\n", item.status, item.title);
+            if block.len() + line.len() > CEILING {
+                block.push_str("… (list truncated)\n");
+                break 'outer;
+            }
+            block.push_str(&line);
+        }
+    }
+    block
 }
 
 /// Spend over the ranges Settings displays, summed from the usage ledger.
@@ -1565,7 +1640,18 @@ async fn drive_run(
      */
     let is_task_manager = project_id == crate::tasks::TASK_MANAGER_ID;
     let prompt = if is_task_manager {
-        format!("{prompt}{}", crate::tasks::OUTPUT_CONTRACT)
+        /*
+         * The current lists ride along with every prompt. Without them the
+         * model only knows what its own conversation remembers, so "delete
+         * everything about X" could not name the lines to delete. With them,
+         * bulk edits are exact: each deletion is an explicit line against a
+         * task the model can actually see.
+         */
+        format!(
+            "{prompt}{}{}",
+            task_manager_snapshot(&tables),
+            crate::tasks::OUTPUT_CONTRACT
+        )
     } else {
         prompt
     };
@@ -2081,7 +2167,7 @@ async fn drive_run(
             }
 
             if is_task_manager {
-                write_tasks_from_reply(&app, &io, &tables, &project_id, &outcome.text);
+                write_tasks_from_reply(&app, &io, &tables, &project_id, &outcome.text).await;
             } else {
                 write_items_from_reply(&app, &tables, &project_id, &outcome.text);
             }
