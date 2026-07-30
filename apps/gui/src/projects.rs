@@ -292,7 +292,11 @@ fn items_from_reply(reply: &str) -> Vec<(String, String)> {
                 .or_else(|| {
                     let digits = line.trim_start_matches(|c: char| c.is_ascii_digit());
                     (digits.len() < line.len())
-                        .then(|| digits.strip_prefix(". ").or_else(|| digits.strip_prefix(") ")))
+                        .then(|| {
+                            digits
+                                .strip_prefix(". ")
+                                .or_else(|| digits.strip_prefix(") "))
+                        })
                         .flatten()
                 })?
                 .trim_start();
@@ -307,8 +311,7 @@ fn items_from_reply(reply: &str) -> Vec<(String, String)> {
             };
 
             let title = title.trim();
-            (!title.is_empty())
-                .then(|| (truncate_on_char_boundary(title, 120), marker.to_string()))
+            (!title.is_empty()).then(|| (truncate_on_char_boundary(title, 120), marker.to_string()))
         })
         .take(MAX_ITEMS_PER_REPLY)
         .collect()
@@ -1161,7 +1164,9 @@ pub struct CostSummaryDto {
 pub async fn get_cost_summary(state: State<'_, AppState>) -> Result<CostSummaryDto, String> {
     let now = chrono::Utc::now();
     let today = now.format("%Y-%m-%d").to_string();
-    let week_start = (now - chrono::Duration::days(6)).format("%Y-%m-%d").to_string();
+    let week_start = (now - chrono::Duration::days(6))
+        .format("%Y-%m-%d")
+        .to_string();
     let month = now.format("%Y-%m").to_string();
 
     let rows = state
@@ -1327,11 +1332,23 @@ pub async fn reset_task_manager(app: AppHandle, state: State<'_, AppState>) -> R
         .await
         .map_err(|error| error.to_string())?;
 
-    crate::log!(crate::log::Level::Info, "tasks", "task manager session reset");
-    note_gui(&app, &state, id, "task manager session reset; the next prompt starts fresh");
+    crate::log!(
+        crate::log::Level::Info,
+        "tasks",
+        "task manager session reset"
+    );
+    note_gui(
+        &app,
+        &state,
+        id,
+        "task manager session reset; the next prompt starts fresh",
+    );
 
     if let Some(row) = state.tables.project.select(id.to_string()) {
-        let _ = app.emit("project:updated", with_session(ProjectDto::from(row), &state.tables));
+        let _ = app.emit(
+            "project:updated",
+            with_session(ProjectDto::from(row), &state.tables),
+        );
     }
     Ok(())
 }
@@ -1379,8 +1396,17 @@ pub async fn rename_project(
         .select(id.clone())
         .ok_or_else(|| format!("no project {id}"))?;
     let project = with_session(ProjectDto::from(row), &state.tables);
-    crate::log!(crate::log::Level::Info, "projects", "renamed {id} to {name:?}");
-    note_gui(&app, &state, &id, format!("renamed the project to {name:?}"));
+    crate::log!(
+        crate::log::Level::Info,
+        "projects",
+        "renamed {id} to {name:?}"
+    );
+    note_gui(
+        &app,
+        &state,
+        &id,
+        format!("renamed the project to {name:?}"),
+    );
     let _ = app.emit("project:updated", &project);
     Ok(project)
 }
@@ -1607,7 +1633,10 @@ pub async fn create_project(
         &app,
         &state,
         &project_id,
-        format!("created the project, named {:?} from the prompt", project.name),
+        format!(
+            "created the project, named {:?} from the prompt",
+            project.name
+        ),
     );
     let _ = app.emit("project:created", &project);
 
@@ -1667,7 +1696,9 @@ pub async fn send_message(
             .lock()
             .map_err(|_| "the run registry is unavailable".to_string())?;
         if active.contains_key(&input.project_id) {
-            return Err("a run is already active in this project — stop it or let it finish".into());
+            return Err(
+                "a run is already active in this project — stop it or let it finish".into(),
+            );
         }
         let (cancel_tx, cancel_rx) = tokio::sync::watch::channel(false);
         active.insert(input.project_id.clone(), cancel_tx);
@@ -1861,7 +1892,11 @@ async fn drive_run(
         crate::log::Level::Info,
         "run",
         "{project_id}: starting claude model={} permission={permission} cwd={cwd} resume={}",
-        if model.is_empty() { "<default>" } else { &model },
+        if model.is_empty() {
+            "<default>"
+        } else {
+            &model
+        },
         resume.as_deref().unwrap_or("<new conversation>")
     );
 
@@ -1873,7 +1908,11 @@ async fn drive_run(
         "request",
         format!(
             "claude model={} permission={permission} effort={} cwd={cwd}\n\n{prompt_echo}",
-            if model.is_empty() { "<default>" } else { &model },
+            if model.is_empty() {
+                "<default>"
+            } else {
+                &model
+            },
             effort_echo.as_deref().unwrap_or("<none>"),
         ),
     );
@@ -2209,7 +2248,9 @@ async fn drive_run(
                 // Written every time rather than only when empty, because an
                 // agent is free to hand back a new id and the stale one would
                 // resume the wrong conversation.
-                if let Err(error) = tables.kv_put(&session_key(&project_id), session.clone()).await
+                if let Err(error) = tables
+                    .kv_put(&session_key(&project_id), session.clone())
+                    .await
                 {
                     crate::log!(
                         crate::log::Level::Error,
@@ -2217,7 +2258,10 @@ async fn drive_run(
                         "{project_id}: could not record the session id: {error}"
                     );
                 } else if let Some(row) = tables.project.select(project_id.clone()) {
-                    let _ = app.emit("project:updated", with_session(ProjectDto::from(row), &tables));
+                    let _ = app.emit(
+                        "project:updated",
+                        with_session(ProjectDto::from(row), &tables),
+                    );
                 }
             }
             _ => {}
@@ -2336,44 +2380,44 @@ async fn drive_run(
                 outcome.exit_code,
                 body.len()
             );
-            note_io(
-                &app,
-                &io,
-                &project_id,
-                "received",
-                "stop",
-                {
-                    /*
-                     * The usage figures belong here, not only in the totals.
-                     * "where did $0.06 come from" has to be answerable from
-                     * this panel, and the answer is that the agent priced its
-                     * own turn — nothing here computes a cost.
-                     */
-                    let u = &outcome.usage;
-                    let context = match (u.context_tokens, u.context_window) {
-                        (Some(used), Some(window)) => {
-                            format!(" context={used}/{window}")
-                        }
-                        (Some(used), None) => format!(" context={used}"),
-                        _ => String::new(),
-                    };
-                    format!(
-                        "stop={stop} exit={} chars={} unparsed={}\n\
+            note_io(&app, &io, &project_id, "received", "stop", {
+                /*
+                 * The usage figures belong here, not only in the totals.
+                 * "where did $0.06 come from" has to be answerable from
+                 * this panel, and the answer is that the agent priced its
+                 * own turn — nothing here computes a cost.
+                 */
+                let u = &outcome.usage;
+                let context = match (u.context_tokens, u.context_window) {
+                    (Some(used), Some(window)) => {
+                        format!(" context={used}/{window}")
+                    }
+                    (Some(used), None) => format!(" context={used}"),
+                    _ => String::new(),
+                };
+                format!(
+                    "stop={stop} exit={} chars={} unparsed={}\n\
                          usage: in={:?} out={:?} cacheRead={:?} cost_usd={:?} (priced by the agent){context}",
-                        outcome.exit_code,
-                        outcome.text.len(),
-                        outcome.unparsed,
-                        u.input_tokens,
-                        u.output_tokens,
-                        u.cache_read_tokens,
-                        u.cost_usd,
-                    )
-                },
-            );
+                    outcome.exit_code,
+                    outcome.text.len(),
+                    outcome.unparsed,
+                    u.input_tokens,
+                    u.output_tokens,
+                    u.cache_read_tokens,
+                    u.cost_usd,
+                )
+            });
             // Only when there is something to say. An empty stderr line every
             // run would push the interesting ones off the panel.
             if !outcome.stderr.trim().is_empty() {
-                note_io(&app, &io, &project_id, "received", "stderr", &outcome.stderr);
+                note_io(
+                    &app,
+                    &io,
+                    &project_id,
+                    "received",
+                    "stderr",
+                    &outcome.stderr,
+                );
             }
             /*
              * A clean exit with no answer and lines we could not read is the
@@ -2620,8 +2664,7 @@ mod tests {
         crate_usage.cache_write_tokens = Some(64);
         crate_usage.cost_usd = Some(0.017);
 
-        let encoded =
-            serde_json::to_value(UsageDto::from(&crate_usage)).expect("should serialize");
+        let encoded = serde_json::to_value(UsageDto::from(&crate_usage)).expect("should serialize");
 
         assert_eq!(encoded["tokens"], 1_500, "input and output are summed");
         assert_eq!(encoded["cacheReads"], 4_096);
@@ -2638,7 +2681,10 @@ mod tests {
     #[test]
     fn a_task_label_shows_the_argument_not_the_tool() {
         assert_eq!(
-            tool_label("Bash", &serde_json::json!({ "command": "cargo test -p az-gui" })),
+            tool_label(
+                "Bash",
+                &serde_json::json!({ "command": "cargo test -p az-gui" })
+            ),
             "cargo test -p az-gui"
         );
         assert_eq!(

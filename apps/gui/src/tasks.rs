@@ -272,7 +272,9 @@ mod tests {
     fn a_reply_cannot_mutate_more_than_the_cap() {
         let mut reply = String::from("AZ-TASKS-BEGIN\n");
         for index in 0..120 {
-            reply.push_str(&format!("{{\"project\": \"P\", \"item\": \"task {index}\"}}\n"));
+            reply.push_str(&format!(
+                "{{\"project\": \"P\", \"item\": \"task {index}\"}}\n"
+            ));
         }
         reply.push_str("AZ-TASKS-END");
 
@@ -306,7 +308,8 @@ mod tests {
     /// to three backticks would be the most common possible failure.
     #[test]
     fn a_fenced_block_still_parses() {
-        let reply = "```json\n{\"project\": \"P\", \"item\": \"Do a thing\", \"status\": \"pending\"}\n```";
+        let reply =
+            "```json\n{\"project\": \"P\", \"item\": \"Do a thing\", \"status\": \"pending\"}\n```";
         assert_eq!(harvest(reply).tasks.len(), 1);
     }
 
@@ -319,7 +322,10 @@ mod tests {
         let got = harvest(reply);
 
         assert!(got.tasks.is_empty());
-        assert_eq!(got.rejected, 1, "the malformed line is reported, not hidden");
+        assert_eq!(
+            got.rejected, 1,
+            "the malformed line is reported, not hidden"
+        );
     }
 
     /// An empty field is not a task. Writing it would put a blank row in the

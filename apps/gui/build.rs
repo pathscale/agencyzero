@@ -19,8 +19,8 @@ fn first_line(cmd: &str, args: &[&str]) -> Option<String> {
 /// edits on top of it; the timestamp says when, which is what gets compared
 /// against "I just rebuilt". Read back through `env!` in `main.rs`.
 fn stamp_build() {
-    let sha = first_line("git", &["rev-parse", "--short=9", "HEAD"])
-        .unwrap_or_else(|| "unknown".into());
+    let sha =
+        first_line("git", &["rev-parse", "--short=9", "HEAD"]).unwrap_or_else(|| "unknown".into());
     let dirty = first_line("git", &["status", "--porcelain"]).is_some();
     println!(
         "cargo:rustc-env=AZ_GIT_SHA={sha}{}",
@@ -29,8 +29,7 @@ fn stamp_build() {
 
     // Local time on purpose: this string is read by a human comparing it to
     // the clock on the same machine that ran the build.
-    let built =
-        first_line("date", &["+%Y-%m-%d %H:%M:%S"]).unwrap_or_else(|| "unknown".into());
+    let built = first_line("date", &["+%Y-%m-%d %H:%M:%S"]).unwrap_or_else(|| "unknown".into());
     println!("cargo:rustc-env=AZ_BUILT_AT={built}");
 
     // A commit moves HEAD or a ref; a code edit touches `src`. Either has to

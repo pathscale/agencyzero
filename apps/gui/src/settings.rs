@@ -155,7 +155,14 @@ impl Default for GlobalSettings {
                     // The `[1m]` variants are the only way to get a 1M context window;
                     // without them here the picker offers 200k and nothing else.
                     sel(
-                        &["default", "opus", "sonnet", "haiku", "opus[1m]", "sonnet[1m]"],
+                        &[
+                            "default",
+                            "opus",
+                            "sonnet",
+                            "haiku",
+                            "opus[1m]",
+                            "sonnet[1m]",
+                        ],
                         "sonnet",
                     ),
                 ),
