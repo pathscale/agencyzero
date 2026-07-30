@@ -41,7 +41,13 @@ The owner uses this Mac while you work. Rules of the road:
 
 - **Never take over the desktop without asking first.** Launching or relaunching GUI
   apps, focusing windows, `open` on apps or URLs, screenshots, AppleScript UI control —
-  all of it steals the screen mid-keystroke. Ask, wait for a yes, then do it.
+  all of it steals the screen mid-keystroke. Ask, wait for a yes, then do it. Say what
+  it will do and roughly how long, so the answer can be an informed one.
+  [`.claude/hooks/ask-before-gui-takeover.sh`](.claude/hooks/ask-before-gui-takeover.sh)
+  prompts for those command families every time, without trying to work out whether
+  anyone is watching. It cannot see a compiled helper posting synthetic events, which is
+  how this rule got broken on 2026-07-31 despite already being written here — the hook is
+  a reminder, not the boundary.
 - **Don't drive the real app's UI to verify visual changes.** The frontend runs
   standalone against the mock (`bun run dev` in `apps/gui/frontend`, port 3010) and can
   be driven headlessly by accessibility roles and labels — see
@@ -102,10 +108,19 @@ to every agent and human; private memory dies with your machine.
 Claude Code prompt a human before prod-affecting or destructive commands — pushes, publishing
 to a registry, `gh pr merge`, cloud CLIs, recursive deletes, deploy scripts.
 
+A second hook,
+[`.claude/hooks/ask-before-gui-takeover.sh`](.claude/hooks/ask-before-gui-takeover.sh),
+prompts before a command takes over the screen, focus or keyboard — every time, rather
+than guessing whether anyone is watching. A hook rather than `permissions.ask` entries
+because the decision needs more than a glob: `osascript` is a takeover only when it
+speaks the UI-scripting vocabulary, a bundle's binary is recognised by path, and a
+takeover wrapped in `bash -c '…'` has to be seen through.
+
 **Other agents don't get that net automatically.** Apply the same rule yourself: ask before
-running any command family listed in
-[`.claude/hooks/ask-before-risky-commands.sh`](.claude/hooks/ask-before-risky-commands.sh).
-It is one layer of defence, not a guarantee — a pattern match over a command string is
+running any command family listed in either hook —
+[`ask-before-risky-commands.sh`](.claude/hooks/ask-before-risky-commands.sh) or
+[`ask-before-gui-takeover.sh`](.claude/hooks/ask-before-gui-takeover.sh).
+They are one layer of defence, not a guarantee — a pattern match over a command string is
 best-effort.
 
 ## No AI attribution
