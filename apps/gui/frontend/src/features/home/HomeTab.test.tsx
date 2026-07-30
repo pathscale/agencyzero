@@ -83,4 +83,17 @@ describe("Home item rows", () => {
     }
     expect(screen.queryByText(/^Show all \d+$/)).toBeNull();
   });
+
+  it("deletes an item from its row", async () => {
+    const screen = await mountHome();
+
+    // By its title attribute: `Delete <name>` aria-labels also belong to the
+    // project delete (which confirms in place instead of acting).
+    const remove = screen.getAllByTitle("Delete this item")[0] as HTMLButtonElement;
+    const title = (remove.getAttribute("aria-label") ?? "").replace(/^Delete /, "");
+    expect(title.length).toBeGreaterThan(0);
+
+    fireEvent.click(remove);
+    await waitFor(() => expect(screen.queryByText(title)).toBeNull());
+  });
 });

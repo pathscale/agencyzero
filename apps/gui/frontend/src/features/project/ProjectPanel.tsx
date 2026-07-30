@@ -625,6 +625,21 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
               >
                 <Icon name="pencil" class="text-[11px]" />
               </button>
+              <button
+                type="button"
+                onClick={() =>
+                  void actions
+                    .deleteItem(item.id)
+                    .catch((cause) =>
+                      log.error(`could not delete the item: ${describeError(cause)}`),
+                    )
+                }
+                aria-label={`Delete ${item.title}`}
+                title="Delete this item"
+                class="shrink-0 rounded-md p-1 text-az-faint opacity-0 transition-[color,opacity] hover:text-error group-hover:opacity-100"
+              >
+                <Icon name="x" class="text-[12px]" />
+              </button>
               <div class="flex shrink-0 flex-col opacity-0 transition-opacity group-hover:opacity-100">
                 <button
                   type="button"

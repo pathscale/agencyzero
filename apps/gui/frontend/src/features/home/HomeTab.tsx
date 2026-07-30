@@ -589,6 +589,19 @@ function GroupItemRow(props: {
         >
           <Icon name="pencil" class="text-[11px]" />
         </button>
+        <button
+          type="button"
+          onClick={() =>
+            void actions
+              .deleteItem(props.item.id)
+              .catch((cause) => log.error(`could not delete the item: ${describeError(cause)}`))
+          }
+          aria-label={`Delete ${props.item.title}`}
+          title="Delete this item"
+          class="shrink-0 rounded-md p-0.5 text-az-faint opacity-0 transition-[color,opacity] hover:text-error group-hover:opacity-100"
+        >
+          <Icon name="x" class="text-[12px]" />
+        </button>
         <span class={`shrink-0 text-[11.5px] ${STATUS_TONE[props.item.status]}`}>
           {statusSuffix(props.item.status)}
         </span>
