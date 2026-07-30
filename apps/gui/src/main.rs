@@ -486,7 +486,46 @@ fn build_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> {
         .build()
 }
 
+/// Take the user's real `PATH` from their login shell.
+///
+/// An app launched from Finder inherits launchd's minimal `PATH`
+/// (`/usr/bin:/bin:...`), not the terminal's — so every agent probe spawned
+/// `claude` by name, found nothing, and Settings reported three installed
+/// CLIs as "not installed" while dev runs (launched from a terminal) worked.
+/// Asking the login shell is the same trick every GUI editor uses.
+fn adopt_login_shell_path() {
+    let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/zsh".into());
+    let Ok(output) = std::process::Command::new(&shell)
+        .args(["-lc", "printf %s \"$PATH\""])
+        .output()
+    else {
+        return;
+    };
+    if !output.status.success() {
+        return;
+    }
+    if let Ok(path) = String::from_utf8(output.stdout)
+        && !path.trim().is_empty()
+    {
+        // Safe: called before the async runtime or any thread exists.
+        unsafe { std::env::set_var("PATH", path.trim()) };
+    }
+}
+
 fn main() {
+    adopt_login_shell_path();
+
+    /*
+     * Panics must reach the log file. A Finder-launched app's stderr goes
+     * nowhere, so before this hook a crash left a DiagnosticReports entry
+     * saying only "abort()" — the message and location of the panic itself
+     * were discarded with the stream.
+     */
+    std::panic::set_hook(Box::new(|info| {
+        crate::log!(log::Level::Error, "panic", "{info}");
+        eprintln!("{info}");
+    }));
+
     tauri::Builder::default()
         .plugin(tauri_plugin_updater::Builder::new().build())
         .invoke_handler(tauri::generate_handler![
