@@ -1,4 +1,4 @@
-import { createSignal, type JSX, onMount, Show } from "solid-js";
+import { createSignal, For, type JSX, onMount, Show } from "solid-js";
 import { Icon } from "~/components/Icon";
 import { PillMenu } from "~/components/PillMenu";
 import { PERMISSION_LABELS, PERMISSION_ORDER } from "~/lib/labels";
@@ -56,6 +56,45 @@ export type ComposerProps = {
 };
 
 /**
+ * Attached files as pills: paperclip, basename, full path on hover, × to
+ * drop one before sending. Shared with the Home task manager's composer.
+ *
+ * A pill, not a path in the text, because a path in the draft reads as
+ * plumbing the user must not touch — this looks like the upload it
+ * behaves as, while the transport underneath stays paths-in-prose.
+ */
+export function AttachmentPills(props: {
+  paths: string[];
+  onRemove: (path: string) => void;
+}): JSX.Element {
+  return (
+    <Show when={props.paths.length > 0}>
+      <div class="flex flex-wrap gap-1.5">
+        <For each={props.paths}>
+          {(path) => (
+            <span
+              title={path}
+              class="flex max-w-[260px] items-center gap-1.5 rounded-full border border-az-hairline-strong bg-base-300 py-1 pr-1.5 pl-2.5 text-[11.5px]"
+            >
+              <Icon name="paperclip" class="shrink-0 text-[11px] text-az-muted" />
+              <span class="min-w-0 truncate text-az-body">{path.split("/").pop() || path}</span>
+              <button
+                type="button"
+                onClick={() => props.onRemove(path)}
+                aria-label={`Remove ${path.split("/").pop() || path}`}
+                class="flex size-[16px] shrink-0 items-center justify-center rounded-full text-az-faint transition-colors hover:bg-white/10 hover:text-base-content"
+              >
+                <Icon name="x" class="text-[11px]" />
+              </button>
+            </span>
+          )}
+        </For>
+      </div>
+    </Show>
+  );
+}
+
+/**
  * The composer, and the only place the tab's model and permission live.
  *
  * Permission is per tab / per session and defaults to `read_only`, so it has to
@@ -65,29 +104,28 @@ export type ComposerProps = {
 export function Composer(props: ComposerProps): JSX.Element {
   const { actions, isLive } = useWorkspace();
   const [draft, setDraft] = createSignal("");
+  const [attachments, setAttachments] = createSignal<string[]>([]);
   const [isSending, setIsSending] = createSignal(false);
   const [error, setError] = createSignal<string | null>(null);
   let field!: HTMLTextAreaElement;
 
   // Sending while a run is live is allowed again — the store queues it and
   // sends when the run lands, so Enter never starts a second run and never
-  // bounces the words back either.
-  const canSend = () => draft().trim().length > 0 && !isSending();
+  // bounces the words back either. Attachments alone are a sendable message:
+  // "eat this file" needs no caption.
+  const canSend = () => (draft().trim().length > 0 || attachments().length > 0) && !isSending();
 
   /**
-   * The Attach button: the OS picker, and the chosen paths appended to the
-   * draft. The agents read file paths in prose, so "attach" honestly means
-   * putting the path where the model will see it — nothing is uploaded.
+   * The Attach button: the OS picker, and the chosen files held as pills
+   * beside the draft. The transport is unchanged — on send the paths join the
+   * message body, because the agents read file paths in prose and nothing is
+   * uploaded — but visually the file is "attached", not pasted plumbing.
    */
   const attach = async (): Promise<void> => {
     try {
       const paths = await actions.chooseAttachments();
       if (paths.length === 0) return;
-      setDraft((current) => {
-        const lead = current.length > 0 && !current.endsWith("\n") ? `${current}\n` : current;
-        return lead + paths.join("\n");
-      });
-      resize();
+      setAttachments((current) => [...current, ...paths.filter((path) => !current.includes(path))]);
       field.focus();
     } catch (cause) {
       log.warn(`could not attach: ${describeError(cause)}`);
@@ -107,8 +145,14 @@ export function Composer(props: ComposerProps): JSX.Element {
     setError(null);
     setIsSending(true);
     try {
-      await props.onSend(draft().trim());
+      // The pills become prose here: the paths ride at the end of the body,
+      // where the model reads them.
+      const body = [draft().trim(), attachments().join("\n")]
+        .filter((part) => part.length > 0)
+        .join("\n\n");
+      await props.onSend(body);
       setDraft("");
+      setAttachments([]);
       resize();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
@@ -140,6 +184,12 @@ export function Composer(props: ComposerProps): JSX.Element {
       <div
         class={`flex flex-col gap-3 bg-az-inset ${props.size === "lg" ? "rounded-[18px] p-[18px] pb-3.5" : "rounded-2xl p-[15px] pb-3"}`}
       >
+        <AttachmentPills
+          paths={attachments()}
+          onRemove={(path) =>
+            setAttachments((current) => current.filter((existing) => existing !== path))
+          }
+        />
         <textarea
           ref={field}
           rows={1}
