@@ -970,6 +970,16 @@ pub fn list_agent_io(project_id: String, state: State<'_, AppState>) -> Vec<Agen
 /// worth keeping is the *finished* row, and that goes to `task_log`.
 pub type RunningTasks = std::sync::Mutex<std::collections::HashMap<String, Vec<RunningTaskDto>>>;
 
+/// One question a run is blocked on: the way to answer it, and what
+/// remembering the answer would mean.
+pub struct PendingAsk {
+    sender: tokio::sync::oneshot::Sender<bool>,
+    /// The [`approval_signature`] of the gated call, carried here so
+    /// "always allow similar" can persist a rule without the frontend ever
+    /// defining what similar means.
+    signature: String,
+}
+
 /// Decisions on their way to runs blocked on an approval, keyed by the exact
 /// `(project id, approval id)` pair.
 ///
@@ -979,9 +989,80 @@ pub type RunningTasks = std::sync::Mutex<std::collections::HashMap<String, Vec<R
 /// names. The previous shape — a shared per-project queue — let a late answer
 /// to a timed-out question sit in the queue and instantly deny the *next*
 /// question; one-shot-per-id makes that stale answer an error instead.
-pub type PendingApprovals = std::sync::Mutex<
-    std::collections::HashMap<(String, String), tokio::sync::oneshot::Sender<bool>>,
->;
+pub type PendingApprovals =
+    std::sync::Mutex<std::collections::HashMap<(String, String), PendingAsk>>;
+
+/// What "similar" means when an approval is remembered.
+///
+/// Bash commands collapse to program plus subcommand — `cargo test`,
+/// `git push` — specific enough that allowing `cargo test` says nothing
+/// about `rm`, general enough that the next test run does not ask again.
+/// The second word only counts when it is shaped like a subcommand: flags
+/// and paths vary per call and would make every rule single-use.
+///
+/// File tools collapse to the file's parent directory, so allowing one edit
+/// in a crate allows that directory, not the disk. URL tools collapse to the
+/// host. Anything else is the tool name alone.
+fn approval_signature(tool: &str, input: &serde_json::Value) -> String {
+    let text = |key: &str| input.get(key).and_then(|value| value.as_str()).unwrap_or("");
+
+    if tool.eq_ignore_ascii_case("bash") {
+        let mut words = text("command").split_whitespace();
+        let program = words.next().unwrap_or("");
+        let subcommand = words
+            .next()
+            .filter(|word| {
+                !word.starts_with('-')
+                    && word
+                        .chars()
+                        .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+            })
+            .unwrap_or("");
+        return if subcommand.is_empty() {
+            format!("{tool}: {program}")
+        } else {
+            format!("{tool}: {program} {subcommand}")
+        };
+    }
+
+    for key in ["file_path", "path", "notebook_path"] {
+        let value = text(key);
+        if !value.is_empty() {
+            let dir = std::path::Path::new(value)
+                .parent()
+                .filter(|parent| !parent.as_os_str().is_empty())
+                .map_or_else(|| value.to_string(), |p| p.to_string_lossy().into_owned());
+            return format!("{tool}: {dir}");
+        }
+    }
+
+    let url = text("url");
+    if !url.is_empty() {
+        let host = url
+            .split("://")
+            .nth(1)
+            .unwrap_or(url)
+            .split('/')
+            .next()
+            .unwrap_or(url);
+        return format!("{tool}: {host}");
+    }
+
+    tool.to_string()
+}
+
+/// Where a project's remembered approvals live in `kv`.
+fn rules_key(project_id: &str) -> String {
+    format!("approval_rules:{project_id}")
+}
+
+/// The remembered approval signatures for one project.
+fn load_rules(tables: &crate::db::tables::Tables, project_id: &str) -> Vec<String> {
+    tables
+        .kv_get(&rules_key(project_id))
+        .and_then(|raw| serde_json::from_str(&raw).ok())
+        .unwrap_or_default()
+}
 
 /// How long an unanswered approval stands before it is denied.
 ///
@@ -1247,6 +1328,7 @@ pub async fn resolve_approval(
     project_id: String,
     approval_id: String,
     allow: bool,
+    remember: Option<bool>,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
     /*
@@ -1255,7 +1337,7 @@ pub async fn resolve_approval(
      * stray decision waiting to be misread as the answer to the *next*
      * question.
      */
-    let sender = state
+    let ask = state
         .approvals
         .lock()
         .ok()
@@ -1267,14 +1349,73 @@ pub async fn resolve_approval(
             )
         })?;
 
+    /*
+     * "Always allow similar": persist the rule before answering, so a run
+     * that finishes the instant it hears yes still leaves the rule behind.
+     * Only an *allow* is ever remembered — a remembered denial would turn
+     * one misclick into a run that can never do its job again, silently.
+     */
+    if allow && remember == Some(true) {
+        let mut rules = load_rules(&state.tables, &project_id);
+        if !rules.iter().any(|rule| rule == &ask.signature) {
+            rules.push(ask.signature.clone());
+            let encoded = serde_json::to_string(&rules).map_err(|error| error.to_string())?;
+            state
+                .tables
+                .kv_put(&rules_key(&project_id), encoded)
+                .await
+                .map_err(|error| error.to_string())?;
+            crate::log!(
+                crate::log::Level::Info,
+                "run",
+                "{project_id}: remembered [{}]",
+                ask.signature
+            );
+        }
+    }
+
     crate::log!(
         crate::log::Level::Info,
         "run",
         "{project_id}: approval {approval_id} answered allow={allow}"
     );
-    sender
+    ask.sender
         .send(allow)
         .map_err(|_| "the run finished before the decision arrived".to_string())
+}
+
+/// The remembered approval rules for one project, for display.
+#[tauri::command]
+pub fn list_approval_rules(project_id: String, state: State<'_, AppState>) -> Vec<String> {
+    load_rules(&state.tables, &project_id)
+}
+
+/// Forget every remembered approval for one project.
+///
+/// All of them rather than one at a time, on purpose for now: the list is
+/// short, the rules are cheap to re-teach, and "which single rule caused
+/// that" is answered by the I/O panel's auto-allow notes.
+///
+/// # Errors
+/// Returns the store's error when the record cannot be cleared.
+#[tauri::command]
+pub async fn clear_approval_rules(
+    app: AppHandle,
+    project_id: String,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    state
+        .tables
+        .kv_put(&rules_key(&project_id), String::new())
+        .await
+        .map_err(|error| error.to_string())?;
+    crate::log!(
+        crate::log::Level::Info,
+        "run",
+        "{project_id}: remembered approvals cleared"
+    );
+    note_gui(&app, &state, &project_id, "remembered approvals cleared");
+    Ok(())
 }
 
 /// Stop the run in this project, if one is live.
@@ -2011,6 +2152,42 @@ async fn drive_run(
                     // there, and approving on the name approves an unseen command.
                     format!("{} {}", approval.tool, approval.input),
                 );
+
+                /*
+                 * The remembered answer, before the question ever reaches a
+                 * human. "Always allow similar" stored this signature; the
+                 * agent may keep asking, but the click marathon is answered
+                 * here — audited in the I/O panel, never silently.
+                 */
+                let signature = approval_signature(&approval.tool, &approval.input);
+                if load_rules(&tables, &project_id)
+                    .iter()
+                    .any(|rule| rule == &signature)
+                {
+                    crate::log!(
+                        crate::log::Level::Info,
+                        "run",
+                        "{project_id}: auto-allowed by remembered rule [{signature}]"
+                    );
+                    if let Err(error) = run.respond(&approval.id, &Decision::Allow).await {
+                        crate::log!(
+                            crate::log::Level::Error,
+                            "run",
+                            "{project_id}: could not deliver the approval decision: {error}"
+                        );
+                    }
+                    note_io(
+                        &app,
+                        &io,
+                        &project_id,
+                        "sent",
+                        "approval",
+                        format!("{} — allowed by remembered rule [{signature}]", approval.tool),
+                    );
+                    last_was_text = is_text;
+                    continue;
+                }
+
                 let _ = app.emit(
                     "run:approval",
                     serde_json::json!({
@@ -2026,7 +2203,13 @@ async fn drive_run(
                 // [`PendingApprovals`] for why this is not a shared queue.
                 let (answer_tx, answer_rx) = tokio::sync::oneshot::channel::<bool>();
                 if let Ok(mut waiting) = approvals.lock() {
-                    waiting.insert((project_id.clone(), approval.id.clone()), answer_tx);
+                    waiting.insert(
+                        (project_id.clone(), approval.id.clone()),
+                        PendingAsk {
+                            sender: answer_tx,
+                            signature,
+                        },
+                    );
                 }
 
                 /*
@@ -2659,6 +2842,50 @@ mod tests {
             name_from_prompt("\n\n  Ship the release"),
             "Ship the release"
         );
+    }
+
+    /// The rule granularity: allowing `cargo test` must say nothing about
+    /// `cargo publish`, and a flag or a path must not become part of the rule
+    /// or every rule would match exactly one command ever.
+    #[test]
+    fn bash_signatures_are_program_plus_subcommand() {
+        let sig = |command: &str| {
+            approval_signature("Bash", &serde_json::json!({ "command": command }))
+        };
+        assert_eq!(sig("cargo test -p az-gui"), "Bash: cargo test");
+        assert_eq!(sig("git push origin master"), "Bash: git push");
+        // A flag is not a subcommand; the rule stops at the program.
+        assert_eq!(sig("rm -rf /tmp/x"), "Bash: rm");
+        // Nor is a path.
+        assert_eq!(sig("ls /etc"), "Bash: ls");
+        assert_ne!(sig("cargo test"), sig("cargo publish"));
+    }
+
+    /// A file rule covers the directory, not the disk.
+    #[test]
+    fn file_signatures_are_the_parent_directory() {
+        let sig = approval_signature(
+            "Edit",
+            &serde_json::json!({ "file_path": "/repo/apps/gui/src/main.rs" }),
+        );
+        assert_eq!(sig, "Edit: /repo/apps/gui/src");
+    }
+
+    /// A URL rule covers the host: one docs page allows the site, not the web.
+    #[test]
+    fn url_signatures_are_the_host() {
+        let sig = approval_signature(
+            "WebFetch",
+            &serde_json::json!({ "url": "https://docs.rs/tokio/latest/tokio/" }),
+        );
+        assert_eq!(sig, "WebFetch: docs.rs");
+    }
+
+    /// A tool with no recognized shape falls back to the tool name alone —
+    /// still a rule, just a coarse one, and visibly so in the UI.
+    #[test]
+    fn unknown_tools_sign_as_themselves() {
+        assert_eq!(approval_signature("Fancy", &serde_json::json!({})), "Fancy");
     }
 
     #[test]

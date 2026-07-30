@@ -382,6 +382,8 @@ function SettingsSection(props: { project: Project }): JSX.Element {
           />
         </div>
 
+        <ApprovalRules projectId={props.project.id} />
+
         <div class="flex gap-[7px] pt-0.5 text-[11px] text-az-faint leading-[1.5]">
           <Icon name="info" class="relative top-0.5 shrink-0 text-[12px]" />
           Model and permission are per tab — set them in the composer. Everything else lives in
@@ -389,6 +391,61 @@ function SettingsSection(props: { project: Project }): JSX.Element {
         </div>
       </div>
     </SectionPanel>
+  );
+}
+
+/**
+ * What "Always allow similar" has taught this project, and the way out.
+ *
+ * The rules are shown in full — an auto-allow the user cannot inspect is a
+ * permission model on faith — and forgotten all at once: the list is short,
+ * rules are one click to re-teach, and per-rule surgery can come when a real
+ * list demands it. Hidden entirely while nothing is remembered.
+ */
+function ApprovalRules(props: { projectId: string }): JSX.Element {
+  const { state, actions } = useWorkspace();
+  const [rules, setRules] = createSignal<string[]>([]);
+
+  // Re-asked when this project's pending approval appears or resolves — the
+  // only moments a rule can be born; forgetting below updates the list itself.
+  createEffect(() => {
+    void state.pendingApprovals[props.projectId];
+    void actions
+      .listApprovalRules(props.projectId)
+      .then(setRules)
+      .catch(() => setRules([]));
+  });
+
+  const forget = (): void => {
+    void actions
+      .clearApprovalRules(props.projectId)
+      .then(() => setRules([]))
+      .catch((cause) => log.error(`could not clear the rules: ${describeError(cause)}`));
+  };
+
+  return (
+    <Show when={rules().length > 0}>
+      <div class="my-0.5 h-px bg-az-hairline-soft" />
+      <div class="flex items-center gap-2">
+        <span class="min-w-0 flex-1 text-[11.5px] text-az-muted">
+          Remembered approvals · auto-allowed
+        </span>
+        <button
+          type="button"
+          onClick={forget}
+          class="shrink-0 rounded-md border border-white/16 px-2 py-0.5 text-[11px] text-az-body transition-colors hover:border-error hover:text-error"
+        >
+          Forget all
+        </button>
+      </div>
+      <For each={rules()}>
+        {(rule) => (
+          <code class="block truncate rounded-md bg-base-300 px-2 py-1 font-mono text-[11px] text-az-body">
+            {rule}
+          </code>
+        )}
+      </For>
+    </Show>
   );
 }
 

@@ -18,9 +18,9 @@ import type { PendingApproval } from "~/types";
 export function ApprovalCard(props: { projectId: string; approval: PendingApproval }): JSX.Element {
   const { actions } = useWorkspace();
 
-  const answer = (allow: boolean): void => {
+  const answer = (allow: boolean, remember = false): void => {
     void actions
-      .resolveApproval(props.projectId, props.approval.approvalId, allow)
+      .resolveApproval(props.projectId, props.approval.approvalId, allow, remember)
       .catch((cause) => log.error(`could not deliver the decision: ${describeError(cause)}`));
   };
 
@@ -74,6 +74,20 @@ export function ApprovalCard(props: { projectId: string; approval: PendingApprov
             class="rounded-lg bg-primary px-[13px] py-[5px] font-semibold text-[12px] text-primary-content transition-colors hover:bg-[#fff176]"
           >
             Allow once
+          </button>
+          <button
+            type="button"
+            onClick={() => answer(true, true)}
+            /*
+             * The teach verb. Rust remembers this call's signature for the
+             * project — Bash rules are program + subcommand, file rules the
+             * parent directory — and answers matching asks itself from now
+             * on, each auto-allow audited in the Agent I/O panel.
+             */
+            title="Remembers this kind of call for this project — the same command family or the same directory — and allows it automatically from now on"
+            class="rounded-lg border border-primary/50 px-3 py-[5px] font-semibold text-[12px] text-primary transition-colors hover:border-primary hover:bg-primary/10"
+          >
+            Always allow similar
           </button>
           <button
             type="button"
