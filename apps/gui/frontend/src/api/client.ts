@@ -238,6 +238,13 @@ export interface AppEvents {
    * this, which is correct — it fakes no run.
    */
   "run:accepted": { projectId: string };
+  /**
+   * A message sent into a live run could not be delivered — the turn settled
+   * in the race window. The words are already in the transcript; this hands
+   * them back so the store can queue them for a fresh turn the agent will
+   * actually hear.
+   */
+  "run:inject_failed": { projectId: string; body: string };
   "run:text": { projectId: string; delta: string };
   "run:thinking": { projectId: string; text: string };
   /**

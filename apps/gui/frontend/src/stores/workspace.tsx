@@ -717,6 +717,13 @@ function createWorkspace() {
       touchRunStatus(projectId, "waiting for the agent…");
     });
 
+    await bind("run:inject_failed", ({ projectId, body }) => {
+      // The turn settled before the interruption reached it. The transcript
+      // already shows the words; queue them so a fresh turn actually hears
+      // them once the slot frees.
+      setState("queued", projectId, (waiting = []) => [...waiting, body]);
+    });
+
     await bind("run:text", ({ projectId, delta }) => {
       batch(() => {
         setState("streaming", projectId, (current = "") => current + delta);
@@ -1116,20 +1123,15 @@ function createWorkspace() {
 
   const send = async (projectId: string, body: string): Promise<void> => {
     /*
-     * A busy project queues instead of refusing. The backend's
-     * one-run-per-project rule stands; what changed is who holds the words —
-     * the store keeps them and sends when the run lands, instead of the error
-     * banner handing them back to be babysat.
+     * Sent regardless of a live run: the backend delivers a mid-run message
+     * *into* the open turn (0.3.6's `Run::send`), so typing a correction
+     * interrupts rather than waits. The refusal below only remains for the
+     * mock (which fakes no run) and the settle-race — there the store queues,
+     * and the run's stop flushes. Either way the words are never handed back.
      */
-    if (isBusy(projectId)) {
-      setState("queued", projectId, (waiting = []) => [...waiting, body]);
-      return;
-    }
     try {
       await dispatch(projectId, body);
     } catch (cause) {
-      // The one refusal that is not an error here: the frontend's busy check
-      // raced a run the backend already holds. Queue; that run's stop flushes.
       if (describeError(cause).includes("already active")) {
         setState("queued", projectId, (waiting = []) => [...waiting, body]);
         return;
