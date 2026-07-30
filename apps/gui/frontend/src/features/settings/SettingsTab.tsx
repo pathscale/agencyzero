@@ -28,6 +28,7 @@ import type {
   Permission,
   TaskManagerSettings,
 } from "~/types";
+import { ThemePicker } from "./ThemePicker";
 
 const STATE_TONE: Record<AgentState, string> = {
   connected: "text-success",
@@ -322,6 +323,34 @@ export function SettingsTab(): JSX.Element {
                   isLast
                 >
                   <RelaunchButton />
+                </Row>
+              </Section>
+
+              <Section
+                icon="sparkles"
+                title="Appearance"
+                hint="the accent, and how far the surfaces lift off black"
+              >
+                <ThemePicker
+                  theme={current().theme}
+                  onAccent={(accent) => void actions.saveSettings({ theme: { accent } })}
+                  onSoftness={(softness) => void actions.saveSettings({ theme: { softness } })}
+                />
+                <Row
+                  label="Reset"
+                  hint="back to the designed palette — the yellow accent on the dark desk"
+                  isLast
+                >
+                  <button
+                    type="button"
+                    disabled={current().theme.accent === "" && current().theme.softness === 0}
+                    onClick={() =>
+                      void actions.saveSettings({ theme: { accent: "", softness: 0 } })
+                    }
+                    class="rounded-lg border border-az-hairline-strong px-3 py-[5px] text-[12px] text-az-muted transition-colors hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    Use the default
+                  </button>
                 </Row>
               </Section>
 

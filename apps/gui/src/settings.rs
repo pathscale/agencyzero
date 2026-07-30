@@ -41,6 +41,46 @@ pub struct GlobalSettings {
     /// `"delete"` removes it outright for owners who want the list to be only
     /// what is still open.
     pub completed_items: String,
+    /// How the workspace is coloured. See [`Theme`].
+    pub theme: Theme,
+}
+
+/// The theme picker's two axes, as the webview applies them.
+///
+/// Here rather than in the webview's own storage because settings in this app
+/// are rows in WorkTable: `localStorage` would not survive a data directory
+/// move, would not show up in an export, and would leave Settings displaying a
+/// control whose value lives somewhere the rest of Settings does not.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct Theme {
+    /// The accent, as a `#rrggbb` hex string. Drives `--color-primary` and
+    /// everything derived from it — the composer ring, the status halo, active
+    /// states.
+    ///
+    /// Empty means "the palette's own yellow", deliberately rather than the
+    /// literal `#ffee58`: writing the default in here would freeze this record
+    /// against the stylesheet, and the two would drift the first time the
+    /// design changed.
+    pub accent: String,
+    /// Lightness added to every surface, in oklch percentage points, with the
+    /// matching amount taken off every text rung. One number, because the two
+    /// halves only make sense together: lifting the desk without bringing the
+    /// text down trades one glare for another.
+    ///
+    /// 0 is the palette as designed. Clamped where it is applied rather than
+    /// here, so a record from a future build with a wider range cannot make
+    /// this one unreadable — it renders at the edge instead.
+    pub softness: f32,
+}
+
+impl Default for Theme {
+    fn default() -> Self {
+        Theme {
+            accent: String::new(),
+            softness: 0.0,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -185,6 +225,7 @@ impl Default for GlobalSettings {
             forward_proxy_vars: false,
             notifications: Notifications::default(),
             completed_items: "resolve".into(),
+            theme: Theme::default(),
         }
     }
 }

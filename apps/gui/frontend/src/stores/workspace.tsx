@@ -13,6 +13,7 @@ import { createStore, produce, reconcile } from "solid-js/store";
 import type { AgencyZeroApi, AppEvents, Unlisten } from "~/api";
 import { selectApi } from "~/api";
 import { describeError, installGlobalErrorLogging, log } from "~/lib/log";
+import { applyTheme } from "~/lib/theme";
 import { prefs, setPrefs } from "~/stores/prefs";
 import type {
   Agent,
@@ -440,6 +441,11 @@ function createWorkspace() {
           backend.getWorkspaceRoot(),
           backend.listRateLimits(),
         ]);
+
+      // Before the first paint of anything themed: the stylesheet's defaults are
+      // the designed palette, so a saved theme arriving late would show as a
+      // flash of the old colours on every launch.
+      applyTheme(settings.theme);
 
       batch(() => {
         setState("projects", reconcile(projects));
@@ -1298,6 +1304,10 @@ function createWorkspace() {
         setState("settings", next);
         reconcileTabModels(next);
       });
+      // The record is the only source for the palette, so the document follows
+      // whatever came back rather than what was optimistically sent — a
+      // rejected or clamped theme shows as the value that was actually stored.
+      applyTheme(next.theme);
     },
     async recheckAgents() {
       setState("agents", reconcile(await client().listAgentStatus(true)));
