@@ -107,7 +107,7 @@ export function HomeTab(): JSX.Element {
         <button
           type="button"
           onClick={() => actions.openDraft()}
-          class="flex items-center justify-center gap-2.5 rounded-panel bg-primary py-3.5 font-semibold text-[13.5px] text-primary-content shadow-[0_6px_20px_rgba(255,238,88,.12)] transition-colors hover:bg-[#fff176]"
+          class="flex items-center justify-center gap-2.5 rounded-panel bg-primary py-3.5 font-semibold text-[13.5px] text-primary-content shadow-[0_6px_20px_rgba(255,238,88,.12)] transition-colors hover:bg-az-primary-hover"
         >
           <Icon name="plus" class="text-[17px]" />
           New Project
@@ -730,7 +730,7 @@ function ProjectGroup(props: { project: Project }): JSX.Element {
           }}
           aria-pressed={props.project.pinned}
           aria-label={props.project.pinned ? "Unpin project" : "Pin project"}
-          class={`shrink-0 transition-colors ${props.project.pinned ? "text-primary" : "text-[oklch(48%_0.01_245)] hover:text-az-strong"}`}
+          class={`shrink-0 transition-colors ${props.project.pinned ? "text-primary" : "text-az-ghost hover:text-az-strong"}`}
         >
           <Icon name="pin" class="text-[14px]" />
         </button>
@@ -752,7 +752,7 @@ function ProjectGroup(props: { project: Project }): JSX.Element {
                 setConfirming(true);
               }}
               aria-label={`Delete ${props.project.name}`}
-              class="shrink-0 text-[oklch(48%_0.01_245)] transition-colors hover:text-error"
+              class="shrink-0 text-az-ghost transition-colors hover:text-error"
             >
               <Icon name="x" class="text-[14px]" />
             </button>
@@ -780,7 +780,7 @@ function ProjectGroup(props: { project: Project }): JSX.Element {
 
         <Icon
           name={collapsed() ? "chevron-right" : "chevron-down"}
-          class="shrink-0 text-[14px] text-[oklch(56%_0.01_245)]"
+          class="shrink-0 text-[14px] text-az-dim"
         />
       </div>
 

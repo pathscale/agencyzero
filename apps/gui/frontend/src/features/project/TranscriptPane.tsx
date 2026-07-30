@@ -369,7 +369,7 @@ function ModeratorNote(props: { message: Message }): JSX.Element {
             <button
               type="button"
               onClick={() => void actions.resolveModeration(props.message.id, true)}
-              class="rounded-lg bg-primary px-[13px] py-[5px] font-semibold text-[12px] text-primary-content transition-colors hover:bg-[#fff176]"
+              class="rounded-lg bg-primary px-[13px] py-[5px] font-semibold text-[12px] text-primary-content transition-colors hover:bg-az-primary-hover"
             >
               Approve once
             </button>

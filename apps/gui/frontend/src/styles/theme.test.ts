@@ -1,0 +1,164 @@
+/// <reference types="node" />
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { describe, expect, it } from "vitest";
+
+/*
+ * Read off disk, and deliberately not through `import … from "./theme.css?raw"`:
+ * Tailwind's pipeline claims `.css` first and hands `?raw` back an empty string,
+ * so that import silently asserts nothing. The reference above pulls in the
+ * `@types/node` that vitest already brings — nothing new is installed, and the
+ * app's own tsconfig keeps `types: []`.
+ */
+const CSS = readFileSync(join(process.cwd(), "src/styles/theme.css"), "utf8");
+
+/*
+ * Every colour in the app is now an expression over three axes rather than a
+ * literal, so "the palette did not move" stopped being something you can see by
+ * reading the diff. This reduces each token at the default axis values and
+ * checks it against what the file held before the refactor.
+ *
+ * It is a regression guard as much as a one-off proof: change an axis default
+ * and this fails, naming the token that shifted. The numbers below are the
+ * literals from the commit before the axes existed — do not update them to
+ * match new output without knowing why the palette moved.
+ */
+
+/** The axis defaults, read from the stylesheet rather than assumed. */
+function axisDefaults(): Record<string, number> {
+  const axes: Record<string, number> = {};
+  for (const [, name, raw] of CSS.matchAll(
+    /--(az-hue|az-hue-text|az-tint|az-lift|az-damp):\s*([^;]+);/g,
+  )) {
+    axes[`--${name}`] = Number.parseFloat(raw);
+  }
+  return axes;
+}
+
+/**
+ * Reduce one `oklch(...)` token to numbers.
+ *
+ * Handles exactly the two shapes the stylesheet uses — `calc(N% ± var(--axis))`
+ * and `calc(N * var(--axis))` — and throws on anything else, so a new shape
+ * cannot slip through as a silent pass.
+ */
+function reduce(token: string, axes: Record<string, number>): [number, number, number] {
+  const body = CSS.match(new RegExp(`--color-${token}:\\s*oklch\\(([\\s\\S]*?)\\);`))?.[1];
+  if (!body) throw new Error(`no oklch token named --color-${token}`);
+
+  // `calc(15% + var(--az-lift))` nests one level, so the component matcher has
+  // to allow an inner pair of parens before closing.
+  const parts = body
+    .replace(/\s+/g, " ")
+    .trim()
+    .match(/(calc\((?:[^()]|\([^()]*\))*\)|[^\s]+)/g);
+  if (!parts || parts.length !== 3) throw new Error(`cannot split ${token}: ${body}`);
+
+  return parts.map((part: string) => {
+    const plain = Number.parseFloat(part);
+    if (!part.startsWith("calc(")) {
+      // A bare `var(--az-hue)` resolves to its default; a bare number is itself.
+      return part.startsWith("var(") ? axes[part.slice(4, -1)] : plain;
+    }
+    const sum = part.match(/calc\(\s*([\d.]+)%?\s*([+-])\s*var\((--[\w-]+)\)\s*\)/);
+    if (sum) {
+      const [, base, op, axis] = sum;
+      return op === "+" ? Number(base) + axes[axis] : Number(base) - axes[axis];
+    }
+    const product = part.match(/calc\(\s*([\d.]+)\s*\*\s*var\((--[\w-]+)\)\s*\)/);
+    if (product) return Number(product[1]) * axes[product[2]];
+    throw new Error(`unrecognised expression in ${token}: ${part}`);
+  }) as [number, number, number];
+}
+
+/** What each token rendered as before the axes existed. */
+const BEFORE: Record<string, [number, number, number]> = {
+  "base-100": [15, 0.005, 240],
+  "base-200": [10.5, 0.004, 240],
+  "base-300": [20, 0.008, 240],
+  "base-content": [84, 0.008, 245],
+  "az-title": [86, 0.008, 245],
+  "az-strong": [80, 0.008, 245],
+  "az-body": [75, 0.009, 245],
+  "az-muted": [66, 0.01, 245],
+  "az-faint": [62, 0.01, 245],
+  "az-void": [8, 0.003, 240],
+  "az-desk": [10.5, 0.004, 240],
+  "az-inset": [12.5, 0.005, 240],
+  "az-tab": [16, 0.006, 240],
+  // Were inline in class lists, not in this file; values carried over exactly.
+  "az-sunken": [13, 0.004, 240],
+  "az-hover": [17, 0.006, 240],
+  "az-badge": [24, 0.01, 240],
+  "az-dim": [56, 0.01, 245],
+  "az-ghost": [48, 0.01, 245],
+  // Converted from #1e1e1e / #2a2a2a / #e0e0e0. Neutral, so chroma is 0.
+  "az-bubble": [23.5, 0, 240],
+  "az-bubble-edge": [28.5, 0, 240],
+  "az-bubble-text": [90.67, 0, 240],
+};
+
+describe("the theme axes", () => {
+  it("are identity at their defaults", () => {
+    const axes = axisDefaults();
+    expect(axes["--az-tint"]).toBe(1);
+    expect(axes["--az-lift"]).toBe(0);
+    expect(axes["--az-damp"]).toBe(0);
+  });
+
+  const axes = axisDefaults();
+  for (const [token, expected] of Object.entries(BEFORE)) {
+    it(`leaves --color-${token} where it was`, () => {
+      expect(reduce(token, axes)).toEqual(expected);
+    });
+  }
+
+  /*
+   * The point of the refactor: one write to an axis has to move everything.
+   * A token that forgot its `var(--az-lift)` would pass the table above and
+   * still stay put when the picker moves, so surfaces are checked for the
+   * axis by name.
+   */
+  it("wires every surface to the lift, and every text rung to the damp", () => {
+    const surfaces = [
+      "base-100",
+      "base-200",
+      "base-300",
+      "az-void",
+      "az-desk",
+      "az-inset",
+      "az-tab",
+      "az-sunken",
+      "az-hover",
+      "az-badge",
+      "az-bubble",
+      "az-bubble-edge",
+    ];
+    for (const token of surfaces) {
+      const body = CSS.match(new RegExp(`--color-${token}:\\s*oklch\\(([\\s\\S]*?)\\);`))?.[1];
+      expect(body, `--color-${token} must follow --az-lift`).toContain("--az-lift");
+    }
+    const text = [
+      "base-content",
+      "az-title",
+      "az-strong",
+      "az-body",
+      "az-muted",
+      "az-faint",
+      "az-dim",
+      "az-ghost",
+      "az-bubble-text",
+    ];
+    for (const token of text) {
+      const body = CSS.match(new RegExp(`--color-${token}:\\s*oklch\\(([\\s\\S]*?)\\);`))?.[1];
+      expect(body, `--color-${token} must follow --az-damp`).toContain("--az-damp");
+    }
+  });
+
+  /* The accent drives the ring and the halo; a literal yellow there would not
+   * follow the picker, which is how it was written before. */
+  it("derives the ring and halo from the accent rather than a literal", () => {
+    expect(CSS).not.toMatch(/rgb\(255 238 88/);
+    expect(CSS.match(/rgb\(from var\(--color-primary\)/g)?.length).toBe(3);
+  });
+});

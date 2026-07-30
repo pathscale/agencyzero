@@ -119,7 +119,7 @@ export function SettingsTab(): JSX.Element {
   };
 
   return (
-    <div class="az-scroll flex min-w-0 flex-1 justify-center rounded-panel border border-az-hairline bg-[oklch(13%_0.004_240)]">
+    <div class="az-scroll flex min-w-0 flex-1 justify-center rounded-panel border border-az-hairline bg-az-sunken">
       <div class="flex w-full max-w-[720px] flex-col gap-3 px-6 pt-5.5 pb-7">
         <div class="flex items-baseline gap-2.5 pb-0.5">
           <h1 class="font-semibold text-[18px] text-az-title tracking-[-.01em]">Settings</h1>
@@ -1068,7 +1068,7 @@ function ModelRow(props: {
   const { actions } = useWorkspace();
 
   return (
-    <div class="group flex items-center gap-2.5 px-3.5 py-[3px] transition-colors hover:bg-[oklch(17%_0.006_240)]">
+    <div class="group flex items-center gap-2.5 px-3.5 py-[3px] transition-colors hover:bg-az-hover">
       {/*
         A real checkbox rather than a styled button: this is a set of choices,
         and screen readers should hear it as one. The input carries the state and
@@ -1092,7 +1092,7 @@ function ModelRow(props: {
           aria-hidden="true"
           class="flex size-[15px] items-center justify-center rounded border transition-colors peer-focus-visible:ring-1 peer-focus-visible:ring-primary peer-disabled:opacity-40"
           classList={{
-            "border-primary bg-primary text-[oklch(13%_0.004_240)]": props.isEnabled,
+            "border-primary bg-primary text-az-sunken": props.isEnabled,
             "border-az-hairline-strong": !props.isEnabled,
           }}
         >

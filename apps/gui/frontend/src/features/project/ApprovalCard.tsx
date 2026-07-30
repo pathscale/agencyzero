@@ -71,7 +71,7 @@ export function ApprovalCard(props: { projectId: string; approval: PendingApprov
           <button
             type="button"
             onClick={() => answer(true)}
-            class="rounded-lg bg-primary px-[13px] py-[5px] font-semibold text-[12px] text-primary-content transition-colors hover:bg-[#fff176]"
+            class="rounded-lg bg-primary px-[13px] py-[5px] font-semibold text-[12px] text-primary-content transition-colors hover:bg-az-primary-hover"
           >
             Allow once
           </button>
