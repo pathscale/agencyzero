@@ -1348,14 +1348,23 @@ const APPROVAL_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30 
 /// The live run in each project: a reservation that there is at most one, and
 /// the signal that stops it.
 ///
-/// `send_message` claims a project's slot before spawning anything and is
-/// refused while the slot is held, which is what makes "one run per project"
-/// true in the backend rather than merely drawn in the UI — two concurrent
-/// runs would resume the same session and share one approval route.
-/// `cancel_run` and `delete_project` signal the sender; the run's event loop
-/// watches the receiver and tears the agent down cooperatively.
-pub type ActiveRuns =
-    std::sync::Mutex<std::collections::HashMap<String, tokio::sync::watch::Sender<bool>>>;
+/// `send_message` claims a project's slot before spawning anything and a
+/// second *run* is refused while the slot is held, which is what makes "one
+/// run per project" true in the backend rather than merely drawn in the UI —
+/// two concurrent runs would resume the same session and share one approval
+/// route. `cancel_run` and `delete_project` signal `cancel`; the run's event
+/// loop watches the receiver and tears the agent down cooperatively.
+///
+/// `inject` is the other direction: a message typed while the run is live is
+/// delivered *into* the turn over the agent's open stdin (`Run::send`, 0.3.6),
+/// and the model takes it at its next step boundary. That is what makes a
+/// mid-run correction an interruption rather than a queued afterthought.
+pub struct ActiveRun {
+    pub cancel: tokio::sync::watch::Sender<bool>,
+    pub inject: tokio::sync::mpsc::UnboundedSender<String>,
+}
+
+pub type ActiveRuns = std::sync::Mutex<std::collections::HashMap<String, ActiveRun>>;
 
 /// Releases a project's run slot when the run is over, however it ends.
 ///
@@ -1718,8 +1727,8 @@ pub async fn cancel_run(project_id: String, state: State<'_, AppState>) -> Resul
         .map(|active| {
             active
                 .get(&project_id)
-                .map(|cancel| {
-                    let _ = cancel.send(true);
+                .map(|run| {
+                    let _ = run.cancel.send(true);
                 })
                 .is_some()
         })
@@ -1918,8 +1927,8 @@ pub async fn delete_project(
         .map(|active| {
             active
                 .get(&id)
-                .map(|cancel| {
-                    let _ = cancel.send(true);
+                .map(|run| {
+                    let _ = run.cancel.send(true);
                 })
                 .is_some()
         })
@@ -2137,25 +2146,80 @@ pub async fn send_message(
      * route, so it corrupts rather than parallelizes. The slot is claimed
      * before the message row is written: a refused send leaves no user message
      * dangling with no reply, and the frontend keeps the draft to retry.
+     *
+     * A message during a live run is not a second run: it is delivered *into*
+     * the turn over the agent's open stdin, and the model takes it at its next
+     * step boundary. The interruption the owner asked for.
      */
-    let (reservation, cancel) = {
+    let (reservation, cancel, inject_rx) = {
         let mut active = state
             .active
             .lock()
             .map_err(|_| "the run registry is unavailable".to_string())?;
-        if active.contains_key(&input.project_id) {
-            return Err(
-                "a run is already active in this project — stop it or let it finish".into(),
+        if let Some(running) = active.get(&input.project_id) {
+            let inject = running.inject.clone();
+            drop(active);
+
+            let user_row = MessageRow {
+                id: id("msg"),
+                project_id: input.project_id.clone(),
+                item_id: input.item_id.clone().unwrap_or_default(),
+                author: "user".into(),
+                agent: "claude".into(),
+                moderation: String::new(),
+                model: model.clone(),
+                permission: permission.clone(),
+                usage: String::new(),
+                stop: "completed".into(),
+                exit_code: -1,
+                body: input.body.clone(),
+                created_at: now(),
+            };
+            state
+                .tables
+                .message
+                .insert(user_row.clone())
+                .map_err(|error| error.to_string())?;
+            let user_message = MessageDto::from(user_row);
+            note_gui(
+                &app,
+                &state,
+                &input.project_id,
+                format!(
+                    "you sent a message into the running turn ({} chars)",
+                    input.body.len()
+                ),
             );
+            // The 0.3.6 rendering rule: append immediately, never wait for an
+            // echo — the crate deliberately requests none.
+            let _ = app.emit("message:appended", &user_message);
+
+            if inject.send(input.body.clone()).is_err() {
+                // The run tore down in the race window. The row stands (the
+                // words were said); the refusal tells the frontend to queue
+                // the body for a fresh turn so the agent actually hears it.
+                return Err(
+                    "a run is already active in this project — stop it or let it finish".into(),
+                );
+            }
+            return Ok(user_message);
         }
         let (cancel_tx, cancel_rx) = tokio::sync::watch::channel(false);
-        active.insert(input.project_id.clone(), cancel_tx);
+        let (inject_tx, inject_rx) = tokio::sync::mpsc::unbounded_channel();
+        active.insert(
+            input.project_id.clone(),
+            ActiveRun {
+                cancel: cancel_tx,
+                inject: inject_tx,
+            },
+        );
         (
             RunReservation {
                 active: state.active.clone(),
                 project_id: input.project_id.clone(),
             },
             cancel_rx,
+            inject_rx,
         )
     };
 
@@ -2253,6 +2317,7 @@ pub async fn send_message(
             approvals,
             reservation,
             cancel,
+            inject_rx,
             project_id,
             input.body,
             model,
@@ -2283,6 +2348,8 @@ async fn drive_run(
     // run slot frees exactly when no agent can still be alive.
     _reservation: RunReservation,
     mut cancel: tokio::sync::watch::Receiver<bool>,
+    // Messages typed while this run is live, to deliver into the open turn.
+    mut inject_rx: tokio::sync::mpsc::UnboundedReceiver<String>,
     project_id: String,
     prompt: String,
     model: String,
@@ -2339,6 +2406,10 @@ async fn drive_run(
     if asks {
         request = request.approvals();
     }
+    // Always, not only under `ask` (approvals implies it anyway): the open
+    // stdin is what lets a message typed mid-turn reach the model at its next
+    // step boundary instead of waiting out the whole turn.
+    request = request.interactive();
     if !model.is_empty() {
         request = request.model(&model);
     }
@@ -2447,10 +2518,19 @@ async fn drive_run(
     // it lands. The loop exits, and the tail below tears the agent down.
     let mut cancelled = false;
 
+    /// What woke the loop: an agent event, or a message to deliver into the
+    /// turn. Two variants rather than handling inject inside the select arm,
+    /// because `recv` borrows the run mutably for the whole select and
+    /// `run.send` cannot be called until that future is dropped.
+    enum Wake {
+        Event(Event),
+        Inject(String),
+    }
+
     loop {
-        let event = tokio::select! {
+        let wake = tokio::select! {
             event = run.recv() => match event {
-                Some(event) => event,
+                Some(event) => Wake::Event(event),
                 None => break,
             },
             /*
@@ -2460,6 +2540,56 @@ async fn drive_run(
             _ = cancel.changed() => {
                 cancelled = true;
                 break;
+            }
+            injected = inject_rx.recv() => match injected {
+                Some(body) => Wake::Inject(body),
+                // The sender lives in the registry this run owns a slot in;
+                // it closing early is a teardown already in progress.
+                None => continue,
+            },
+        };
+        let event = match wake {
+            Wake::Event(event) => event,
+            Wake::Inject(body) => {
+                /*
+                 * A correction typed mid-turn, delivered into the run over the
+                 * agent's open stdin; the model takes it at its next step
+                 * boundary (0.3.6's contract). The user row was persisted and
+                 * broadcast by `send_message` — here the words just have to
+                 * reach the agent. If they cannot (the turn settled in the
+                 * race window), the frontend is told and queues the message
+                 * for a fresh turn instead of losing it.
+                 */
+                match run.send(&body).await {
+                    Ok(()) => {
+                        note_io(
+                            &app,
+                            &io,
+                            &project_id,
+                            "sent",
+                            "message",
+                            "(into the running turn)",
+                        );
+                    }
+                    Err(error) => {
+                        note_io(
+                            &app,
+                            &io,
+                            &project_id,
+                            "received",
+                            "error",
+                            format!("the mid-run message could not be delivered: {error}"),
+                        );
+                        let _ = app.emit(
+                            "run:inject_failed",
+                            serde_json::json!({ "projectId": project_id, "body": body }),
+                        );
+                    }
+                }
+                // A user message is a block boundary: the next streamed text
+                // starts a new paragraph rather than gluing to the old one.
+                last_was_text = false;
+                continue;
             }
         };
         let is_text = matches!(&event, Event::Text(_));

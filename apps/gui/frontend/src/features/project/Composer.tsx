@@ -239,22 +239,22 @@ export function Composer(props: ComposerProps): JSX.Element {
           </Show>
 
           {/*
-            While a run is live the pair reads: queue the words, or stop the
-            run. Send stays available because the store queues the message
-            rather than racing the backend's one-run rule; the outline style
-            says "this will wait" without a modal saying it louder.
+            While a run is live the pair reads: speak into the turn, or stop
+            it. A message sent now is delivered into the open turn and the
+            model takes it at its next step boundary — a real interruption,
+            so the button keeps its ordinary send face.
           */}
           <button
             type="button"
             onClick={() => void submit()}
             disabled={!canSend()}
-            aria-label={props.isRunning ? "Queue — sends when the current run finishes" : "Send"}
-            title={props.isRunning ? "Queued until the current run finishes" : undefined}
-            class={`flex size-8 items-center justify-center rounded-full transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
+            aria-label={props.isRunning ? "Send into the running turn" : "Send"}
+            title={
               props.isRunning
-                ? "border border-primary/40 text-primary hover:border-primary"
-                : "bg-primary text-primary-content hover:bg-[#fff176]"
-            }`}
+                ? "Delivered into the running turn — the agent takes it at its next step"
+                : undefined
+            }
+            class="flex size-8 items-center justify-center rounded-full bg-primary text-primary-content transition-colors hover:bg-[#fff176] disabled:cursor-not-allowed disabled:opacity-40"
           >
             <Icon name="arrow-up" class="text-[17px]" />
           </button>
