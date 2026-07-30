@@ -35,6 +35,19 @@ or the commits were rebased in — close the PR and delete its branch in the sam
 (`gh pr merge --delete-branch`, or `gh pr close --delete-branch` for a superseded one).
 An open PR whose content is already on master reads as unfinished work to everyone else.
 
+## Closing an item you were given
+
+A project session edits its own item list with checkboxes in the reply:
+`- [ ]` proposes, `- [x] <exact title>` closes, `- [-] <exact title>` strikes an
+obsolete row. Titles match exactly and case-insensitively; a paraphrase silently
+appends a near-duplicate instead. Full contract, including what "close" does:
+[`docs/task-manager.md`](docs/task-manager.md#the-project-session-contract-three-checkboxes).
+
+Read that rather than the source. `projects.rs` grew these verbs late — `[x]` in
+0.1.6, `[-]` in 0.1.10 — so an agent inferring the rules from an older tree finds an
+append-only path and concludes, wrongly, that it can add rows but never retire one.
+[`wt-tools`](crates/wt-tools) reads the list; it never writes, by construction.
+
 ## Working on the machine you share with a human
 
 The owner uses this Mac while you work. Rules of the road:
