@@ -45,6 +45,8 @@ use worktable::prelude::{DiskConfig, SelectQueryExecutor};
 
 #[path = "../../../apps/gui/src/db/schema/agent_io.rs"]
 pub mod agent_io;
+#[path = "../../../apps/gui/src/db/schema/approval_rule.rs"]
+pub mod approval_rule;
 #[path = "../../../apps/gui/src/db/schema/kv.rs"]
 pub mod kv;
 #[path = "../../../apps/gui/src/db/location.rs"]
@@ -58,6 +60,7 @@ pub mod project_item;
 #[path = "../../../apps/gui/src/db/schema/task_log.rs"]
 pub mod task_log;
 
+use approval_rule::{ApprovalRuleRow, ApprovalRuleWorkTable};
 use project::{ProjectRow, ProjectWorkTable};
 use project_item::{ProjectItemRow, ProjectItemWorkTable};
 
@@ -143,6 +146,11 @@ open_read_only!(
     open_items,
     ProjectItemWorkTable
 );
+open_read_only!(
+    /// The remembered-approval table, read-only.
+    open_rules,
+    ApprovalRuleWorkTable
+);
 
 /// A project row as the CLI prints it: one JSON object, one line.
 ///
@@ -204,6 +212,51 @@ impl From<ProjectItemRow> for ItemOut {
             position: row.position,
         }
     }
+}
+
+/// A remembered approval as the CLI prints it: a standing permission grant.
+#[derive(Debug, Serialize)]
+pub struct RuleOut {
+    pub id: String,
+    pub project_id: String,
+    /// e.g. "Bash: cargo test" or "Edit: apps/gui/src". Computed by the GUI;
+    /// see `projects::approval_signature` there for what "similar" means.
+    pub signature: String,
+    pub created_at: String,
+}
+
+impl From<ApprovalRuleRow> for RuleOut {
+    fn from(row: ApprovalRuleRow) -> Self {
+        RuleOut {
+            id: row.id,
+            project_id: row.project_id,
+            signature: row.signature,
+            created_at: row.created_at,
+        }
+    }
+}
+
+/// Remembered approvals, optionally narrowed to one project, ordered by
+/// project then creation time then id — the audit view over what "always
+/// allow similar" has been taught.
+///
+/// # Errors
+/// Propagates WorkTable's own error when the scan fails.
+pub fn list_rules(
+    table: &ApprovalRuleWorkTable,
+    project: Option<&str>,
+) -> eyre::Result<Vec<RuleOut>> {
+    let mut rows = table.select_all().execute()?;
+    if let Some(project) = project {
+        rows.retain(|row| row.project_id == project);
+    }
+    rows.sort_by(|a, b| {
+        a.project_id
+            .cmp(&b.project_id)
+            .then_with(|| a.created_at.cmp(&b.created_at))
+            .then_with(|| a.id.cmp(&b.id))
+    });
+    Ok(rows.into_iter().map(RuleOut::from).collect())
 }
 
 fn decode_embedded_json(raw: &str) -> serde_json::Value {
