@@ -376,10 +376,15 @@ fn build_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> {
     let restart = MenuItemBuilder::with_id(RESTART, "Restart into Build on Disk").build(app)?;
 
     // The About box carries the full stamp, so "which build is this?" has an
-    // answer reachable without opening Settings.
+    // answer reachable without opening Settings. macOS renders it as
+    // "Version {short_version} ({version})" and shows nothing else —
+    // `comments` in particular is Linux-only, so the stamp has to ride in
+    // `version` to appear at all.
+    let stamp = format!("{} · built {}", BUILD.git_sha, BUILD.built_at);
     let about = AboutMetadata {
-        version: Some(BUILD.version.into()),
-        comments: Some(format!("{} · built {}", BUILD.git_sha, BUILD.built_at)),
+        short_version: Some(BUILD.version.into()),
+        version: Some(stamp.clone()),
+        comments: Some(stamp),
         ..Default::default()
     };
 
