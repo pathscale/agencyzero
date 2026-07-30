@@ -63,19 +63,24 @@ describe("Home item rows", () => {
   });
 
   /*
-   * "Task list should be able to fully expand": any group whose item count
-   * exceeds what the capped window shows must offer the way out, and taking
-   * it must actually lift the cap.
+   * "Home tasks projects can fully expand to fill the height if there's
+   * room": no group carries an inner scroll cap any more — every item row
+   * renders, and the projects column is the only scroller. The 220px
+   * porthole (with its Show-all footer scrolled out of its own reach) is
+   * what this pins against returning.
    */
-  it("offers Show all once the cap can hide a row, and lifts it", async () => {
+  it("renders every item with no inner scroll cap", async () => {
     const screen = await mountHome();
 
-    const toggle = screen.getAllByText(/^Show all \d+$/)[0] as HTMLButtonElement;
-    const list = toggle.closest("div");
-    expect(list?.className).toContain("max-h-[220px]");
-
-    fireEvent.click(toggle);
-    expect(list?.className).not.toContain("max-h-[220px]");
-    expect(screen.getAllByText("Shrink the list").length).toBeGreaterThan(0);
+    const pencils = screen.getAllByLabelText(/^Edit /);
+    expect(pencils.length).toBeGreaterThan(0);
+    for (const pencil of pencils) {
+      let node: HTMLElement | null = pencil as HTMLElement;
+      while (node) {
+        expect(node.className ?? "").not.toContain("max-h-[220px]");
+        node = node.parentElement;
+      }
+    }
+    expect(screen.queryByText(/^Show all \d+$/)).toBeNull();
   });
 });
