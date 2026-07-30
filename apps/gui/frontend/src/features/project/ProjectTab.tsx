@@ -128,6 +128,11 @@ export function ProjectTab(props: { tab: Tab; project: Project }): JSX.Element {
                 {totals().turns} turn{totals().turns === 1 ? "" : "s"}
               </span>
               <span class="text-az-faint">·</span>
+              {/* The session's summed new work — where the tokens went. The
+                  context readout under the composer answers a different
+                  question (how full the window is), so both exist. */}
+              <span title={costTitle()}>{compactCount(totals().tokens)} tok</span>
+              <span class="text-az-faint">·</span>
               <span title={costTitle()}>{costLabel(totals().costUsd)}</span>
               <Show when={totals().reported < totals().turns}>
                 <span class="text-az-faint" title="Some turns reported no usage">
