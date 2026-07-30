@@ -24,6 +24,8 @@ export type IconName =
   | "folder"
   | "folder-plus"
   | "folder-git-2"
+  | "git-pull-request"
+  | "git-merge"
   | "history"
   | "info"
   | "layout-grid"
@@ -83,6 +85,18 @@ export function IconSprite(): JSX.Element {
       <symbol id="i-folder-git-2" viewBox="0 0 24 24">
         <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
         <circle cx="13" cy="13" r="1.8" />
+      </symbol>
+      <symbol id="i-git-pull-request" viewBox="0 0 24 24">
+        <circle cx="6" cy="6" r="3" />
+        <circle cx="6" cy="18" r="3" />
+        <circle cx="18" cy="18" r="3" />
+        <path d="M6 9v6" />
+        <path d="M13 6h3a2 2 0 0 1 2 2v7" />
+      </symbol>
+      <symbol id="i-git-merge" viewBox="0 0 24 24">
+        <circle cx="18" cy="18" r="3" />
+        <circle cx="6" cy="6" r="3" />
+        <path d="M6 21V9a9 9 0 0 0 9 9" />
       </symbol>
       <symbol id="i-history" viewBox="0 0 24 24">
         <circle cx="12" cy="12" r="8.5" />

@@ -18,6 +18,7 @@ use crate::db::schema::kv::{KvPersistenceEngine, KvRow, KvWorkTable};
 use crate::db::schema::message::{MessagePersistenceEngine, MessageWorkTable};
 use crate::db::schema::project::{ProjectPersistenceEngine, ProjectWorkTable};
 use crate::db::schema::project_item::{ProjectItemPersistenceEngine, ProjectItemWorkTable};
+use crate::db::schema::pull_request::{PullRequestPersistenceEngine, PullRequestWorkTable};
 use crate::db::schema::task_log::{TaskLogPersistenceEngine, TaskLogWorkTable};
 use crate::db::schema::usage_ledger::{UsageLedgerPersistenceEngine, UsageLedgerWorkTable};
 
@@ -43,6 +44,8 @@ pub struct Tables {
     pub usage_ledger: Arc<UsageLedgerWorkTable>,
     /// One row per remembered approval. See `schema/approval_rule.rs`.
     pub approval_rule: Arc<ApprovalRuleWorkTable>,
+    /// One row per PR cut during a run. See `schema/pull_request.rs`.
+    pub pull_request: Arc<PullRequestWorkTable>,
 }
 
 /// Where the fingerprint of the schema this build expects is recorded.
@@ -78,6 +81,7 @@ const SCHEMA_FINGERPRINT: &str = concat!(
     // brand-new table has no rows on disk to misread.
     "usage_ledger(id,at,day,project_id,model,cost_micro,input_tokens,output_tokens);",
     "approval_rule(id,project_id,signature,created_at);",
+    "pull_request(id,project_id,url,repo,number,branch,state,additions,deletions,ci,dismissed,updated_at);",
 );
 
 /// What opening the tables found, so the caller can say something useful.
@@ -151,6 +155,7 @@ impl Tables {
             agent_io: open!(AgentIoRowPersistenceEngine, AgentIoRowWorkTable),
             usage_ledger: open!(UsageLedgerPersistenceEngine, UsageLedgerWorkTable),
             approval_rule: open!(ApprovalRulePersistenceEngine, ApprovalRuleWorkTable),
+            pull_request: open!(PullRequestPersistenceEngine, PullRequestWorkTable),
         })
     }
 }
@@ -391,5 +396,6 @@ impl Tables {
         self.agent_io.wait_for_ops().await;
         self.usage_ledger.wait_for_ops().await;
         self.approval_rule.wait_for_ops().await;
+        self.pull_request.wait_for_ops().await;
     }
 }

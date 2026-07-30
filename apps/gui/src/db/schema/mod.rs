@@ -10,5 +10,6 @@ pub mod kv;
 pub mod message;
 pub mod project;
 pub mod project_item;
+pub mod pull_request;
 pub mod task_log;
 pub mod usage_ledger;

@@ -6,6 +6,7 @@ import type {
   Model,
   Project,
   ProjectItem,
+  PullRequest,
   RunningTask,
   TaskLogEntry,
 } from "~/types";
@@ -478,6 +479,35 @@ export const MODEL_CATALOGUE: AgentModels[] = [
         ["kimi-k2.7-code", "Kimi K2.7 Code"],
       ].map(([id, name]) => pinned(id, name, "")),
     ],
+  },
+];
+
+export const PULL_REQUESTS: PullRequest[] = [
+  {
+    id: "pr-1",
+    projectId: "agencyzero",
+    url: "https://github.com/pathscale/agencyzero/pull/16",
+    repo: "pathscale/agencyzero",
+    number: 16,
+    branch: "fix/home-list-ergonomics",
+    state: "OPEN",
+    additions: 185,
+    deletions: 40,
+    ci: "pending",
+    dismissed: false,
+  },
+  {
+    id: "pr-2",
+    projectId: "agencyzero",
+    url: "https://github.com/pathscale/agencyzero/pull/2",
+    repo: "pathscale/agencyzero",
+    number: 2,
+    branch: "feat/workspace-scaffold",
+    state: "MERGED",
+    additions: 812,
+    deletions: 44,
+    ci: "pass",
+    dismissed: false,
   },
 ];
 

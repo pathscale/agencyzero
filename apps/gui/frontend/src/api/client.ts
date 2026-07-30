@@ -14,6 +14,7 @@ import type {
   Project,
   ProjectItem,
   ProjectStatus,
+  PullRequest,
   QuotaReport,
   RateLimit,
   RunningTask,
@@ -66,6 +67,14 @@ export interface AgencyZeroApi {
   /** Rewrite one item's title, for the panel's inline edit. */
   updateItem(id: string, title: string): Promise<ProjectItem>;
   reorderItems(projectId: string, ids: string[]): Promise<ProjectItem[]>;
+
+  // — Pull requests ————————————————————————————————————————————
+  /** This project's tracked PRs, dismissed ones included; callers filter. */
+  listPullRequests(projectId: string): Promise<PullRequest[]>;
+  /** Wave one chip away. The row stays; dismissed is view state. */
+  dismissPullRequest(id: string): Promise<void>;
+  /** Ask gh again — state, diff stats, CI — for the chip's refresh. */
+  refreshPullRequest(id: string): Promise<void>;
 
   // — Conversation ————————————————————————————————————————————
   listMessages(projectId: string): Promise<Message[]>;
@@ -216,6 +225,8 @@ export interface AppEvents {
   "item:created": ProjectItem;
   "item:updated": ProjectItem;
   "item:deleted": { id: string; projectId: string };
+  /** A tracked PR was recorded, refreshed, or dismissed. Upsert by id. */
+  "pr:updated": PullRequest;
   /** author: user | agent | moderator. */
   "message:appended": Message;
   /** The tab dot goes blocked until this one is resolved. */
