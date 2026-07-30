@@ -48,7 +48,10 @@ Emit one JSON object per line, nothing else in the block, no markdown fence, no 
 commentary between lines. Each line must be:\n\n\
 {\"project\": \"<project name>\", \"item\": \"<one short task>\", \"status\": \"pending\"}\n\n\
 Rules:\n\
-- `status` is one of pending, active, finished.\n\
+- `status` is one of pending, active, finished, deleted.\n\
+- `deleted` removes the existing task whose project and item match. This is \
+the only way to remove one: omitting a task from your output never deletes \
+it, so never re-emit a list hoping the absences take effect.\n\
 - One task per line. Do not number them.\n\
 - Keep `item` under 120 characters and specific enough to act on.\n\
 - Group related tasks by repeating the same `project` value.\n\
@@ -117,11 +120,14 @@ pub fn harvest(reply: &str) -> Harvest {
 /// Anything unrecognized becomes `pending` rather than being dropped.
 ///
 /// A task whose status we cannot read is still a task; refusing it would lose
-/// work over a spelling.
+/// work over a spelling. `deleted` is the one destructive word and is matched
+/// strictly for that reason: "remove"-adjacent spellings fall through to
+/// `pending`, because guessing at a deletion is worse than adding a stray row.
 fn normalize_status(raw: &str) -> String {
     match raw.trim().to_ascii_lowercase().as_str() {
         "active" | "in_progress" | "in-progress" | "doing" => "active",
         "finished" | "done" | "complete" | "completed" => "finished",
+        "deleted" => "deleted",
         _ => "pending",
     }
     .to_string()
@@ -130,6 +136,24 @@ fn normalize_status(raw: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// `deleted` is the one destructive word, so it passes through exactly and
+    /// nothing else is allowed to drift into it: a "remove" that became a
+    /// deletion by fuzzy matching would delete work over a spelling.
+    #[test]
+    fn deleted_passes_and_nothing_drifts_into_it() {
+        let explicit = harvest(r#"{"project": "p", "item": "t", "status": "deleted"}"#);
+        assert_eq!(explicit.tasks[0].status, "deleted");
+
+        let fuzzy = harvest(r#"{"project": "p", "item": "t", "status": "remove"}"#);
+        assert_eq!(fuzzy.tasks[0].status, "pending");
+    }
+
+    #[test]
+    fn the_contract_names_the_delete_rule() {
+        assert!(OUTPUT_CONTRACT.contains("deleted"));
+        assert!(OUTPUT_CONTRACT.contains("never deletes"));
+    }
 
     #[test]
     fn a_jsonl_block_after_prose_is_found() {

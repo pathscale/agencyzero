@@ -166,6 +166,14 @@ export function ProjectTab(props: { tab: Tab; project: Project }): JSX.Element {
             modelOptions={promptModels()}
             efforts={effortsFor(props.tab.model)}
             effort={props.tab.effort}
+            /*
+             * This was missing entirely: the effort menu rendered and called
+             * an optional handler nobody passed, so picking "low" changed
+             * nothing. The bug read as "low cannot be selected".
+             */
+            onEffortChange={(effort) =>
+              actions.setTabModel(props.tab.key, props.tab.model, props.tab.permission, effort)
+            }
             permission={props.tab.permission}
             usage={contextLabel()}
             isRunning={running().length > 0}
