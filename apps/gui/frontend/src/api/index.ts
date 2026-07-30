@@ -40,6 +40,7 @@ const COMMAND_FOR: Partial<Record<keyof AgencyZeroApi, string>> = {
   listModels: "list_models",
   getDataLocation: "get_data_location",
   setDataLocation: "set_data_location",
+  chooseDataDirectory: "choose_data_directory",
   getWorkspaceRoot: "get_workspace_root",
   createWorkspaceRoot: "create_workspace_root",
   setTabModel: "set_tab_model",

@@ -52,6 +52,23 @@ pub struct DataLocation {
     pub is_editable: bool,
 }
 
+/// This session's location, plus what the next launch will use.
+///
+/// The two diverge the moment Settings writes a pointer: the change takes effect
+/// on the next launch and nothing moves in between. Reporting only one of them
+/// makes the UI wrong either way — showing the session's path alone means a
+/// change that was written looks like a change that did nothing, and showing the
+/// pointer's alone means the app cannot say where it is actually running from.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LocationView {
+    #[serde(flatten)]
+    pub current: DataLocation,
+    /// The next launch's resolution, when it differs from `current`. `None`
+    /// while the two agree, which is every session that has not changed it.
+    pub pending: Option<DataLocation>,
+}
+
 /// Resolve the data directory. Never fails: an unreadable pointer falls back to
 /// the default rather than refusing to start, because the alternative is an app
 /// that cannot launch until someone hand-edits a file it never named.
@@ -77,6 +94,19 @@ pub fn resolve(config_dir: &Path, data_dir: &Path) -> DataLocation {
         path: default_path(data_dir),
         source: "default".into(),
         is_editable: true,
+    }
+}
+
+/// Pair a session's location with the pointer as it stands on disk right now.
+///
+/// Re-reads rather than trusting the session's own resolution, because the
+/// pointer is exactly what Settings edits mid-session. See [`LocationView`].
+#[must_use]
+pub fn view(config_dir: &Path, data_dir: &Path, current: &DataLocation) -> LocationView {
+    let next = resolve(config_dir, data_dir);
+    LocationView {
+        pending: (next.path != current.path).then_some(next),
+        current: current.clone(),
     }
 }
 
@@ -167,6 +197,58 @@ mod tests {
     fn clearing_an_absent_pointer_is_not_an_error() {
         let config = temp("config-c");
         assert!(set_pointer(&config, None).is_ok());
+    }
+
+    /// The change Settings just wrote has to be visible without a relaunch, or
+    /// choosing a directory looks exactly like choosing nothing: the tables stay
+    /// open where they were, so the session's own resolution never moves.
+    #[test]
+    fn a_pointer_written_this_session_shows_up_as_pending() {
+        let config = temp("config-e");
+        let data = temp("data-e");
+        let elsewhere = temp("elsewhere-e");
+        let current = resolve(&config, &data);
+
+        assert!(view(&config, &data, &current).pending.is_none());
+
+        set_pointer(&config, Some(&elsewhere)).expect("should write");
+        let pending = view(&config, &data, &current)
+            .pending
+            .expect("the next launch moves");
+        assert_eq!(pending.path, elsewhere);
+        assert_eq!(pending.source, "pointer");
+    }
+
+    /// Clearing the pointer is a change too: a session that launched from one
+    /// has to report that the next launch goes back to the default.
+    #[test]
+    fn clearing_a_pointer_is_pending_in_the_other_direction() {
+        let config = temp("config-f");
+        let data = temp("data-f");
+        let elsewhere = temp("elsewhere-f");
+
+        set_pointer(&config, Some(&elsewhere)).expect("should write");
+        let current = resolve(&config, &data);
+        assert!(view(&config, &data, &current).pending.is_none());
+
+        set_pointer(&config, None).expect("should clear");
+        let pending = view(&config, &data, &current)
+            .pending
+            .expect("the next launch moves back");
+        assert_eq!(pending.path, default_path(&data));
+        assert_eq!(pending.source, "default");
+    }
+
+    /// Rewriting the same path is not a change, and must not leave Settings
+    /// advertising a relaunch that would do nothing.
+    #[test]
+    fn a_pointer_at_the_current_path_is_not_pending() {
+        let config = temp("config-g");
+        let data = temp("data-g");
+        let current = resolve(&config, &data);
+
+        set_pointer(&config, Some(&default_path(&data))).expect("should write");
+        assert!(view(&config, &data, &current).pending.is_none());
     }
 
     /// A corrupt pointer must not stop the app launching. Falling back to the

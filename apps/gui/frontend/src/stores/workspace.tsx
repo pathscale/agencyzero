@@ -20,7 +20,7 @@ import type {
   AgentModels,
   AgentStatus,
   AvailableUpdate,
-  DataLocation,
+  DataLocationView,
   GlobalSettings,
   Message,
   PendingApproval,
@@ -68,7 +68,7 @@ type WorkspaceState = {
   /** Every agent's catalogue, for the Settings picker. Empty until boot ends. */
   models: AgentModels[];
   /** Where the tables were opened from. Null until boot ends. */
-  dataLocation: DataLocation | null;
+  dataLocation: DataLocationView | null;
   /** Where a new project runs. Null until boot ends. */
   workspaceRoot: WorkspaceRoot | null;
   /**
@@ -1122,12 +1122,23 @@ function createWorkspace() {
      */
     /**
      * Point future launches at a different data directory, or at the default
-     * with `null`. Re-reads afterwards so Settings shows what the next launch
-     * will use rather than what is open now.
+     * with `null`. Re-reads afterwards, which is what surfaces the change: the
+     * tables stay open where they are, so only the `pending` half of the answer
+     * moves until the next launch.
      */
     async setDataLocation(path: string | null) {
       await client().setDataLocation(path);
       setState("dataLocation", await client().getDataLocation());
+    },
+    /**
+     * Choose that directory with the OS picker.
+     *
+     * A cancelled picker writes nothing. Distinguishing it from a choice is the
+     * whole reason the command answers `null` rather than an empty string.
+     */
+    async chooseDataLocation() {
+      const picked = await client().chooseDataDirectory();
+      if (picked) await actions.setDataLocation(picked);
     },
     /** Create the workspace directory, then re-read so the row updates. */
     async createWorkspaceRoot() {
