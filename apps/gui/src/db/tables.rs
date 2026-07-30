@@ -13,6 +13,7 @@ use worktable::persistence::PersistenceEngine;
 use worktable::prelude::DiskConfig;
 
 use crate::db::schema::agent_io::{AgentIoRowPersistenceEngine, AgentIoRowWorkTable};
+use crate::db::schema::approval_rule::{ApprovalRulePersistenceEngine, ApprovalRuleWorkTable};
 use crate::db::schema::kv::{KvPersistenceEngine, KvRow, KvWorkTable};
 use crate::db::schema::message::{MessagePersistenceEngine, MessageWorkTable};
 use crate::db::schema::project::{ProjectPersistenceEngine, ProjectWorkTable};
@@ -40,6 +41,8 @@ pub struct Tables {
     pub agent_io: Arc<AgentIoRowWorkTable>,
     /// One row per turn that reported usage. See `schema/usage_ledger.rs`.
     pub usage_ledger: Arc<UsageLedgerWorkTable>,
+    /// One row per remembered approval. See `schema/approval_rule.rs`.
+    pub approval_rule: Arc<ApprovalRuleWorkTable>,
 }
 
 /// Where the fingerprint of the schema this build expects is recorded.
@@ -74,6 +77,7 @@ const SCHEMA_FINGERPRINT: &str = concat!(
     // stored fingerprint that is a prefix of this one as a match, because a
     // brand-new table has no rows on disk to misread.
     "usage_ledger(id,at,day,project_id,model,cost_micro,input_tokens,output_tokens);",
+    "approval_rule(id,project_id,signature,created_at);",
 );
 
 /// What opening the tables found, so the caller can say something useful.
@@ -146,6 +150,7 @@ impl Tables {
             task_log: open!(TaskLogPersistenceEngine, TaskLogWorkTable),
             agent_io: open!(AgentIoRowPersistenceEngine, AgentIoRowWorkTable),
             usage_ledger: open!(UsageLedgerPersistenceEngine, UsageLedgerWorkTable),
+            approval_rule: open!(ApprovalRulePersistenceEngine, ApprovalRuleWorkTable),
         })
     }
 }
@@ -262,17 +267,32 @@ mod restart_tests {
             "an added column has to be caught before the rows are read"
         );
 
-        // A store stamped before a table was appended. Every table it knows is
-        // unchanged and the new one has no rows to misread, so setting the
-        // whole store aside for it would throw data away over nothing.
-        let before_the_ledger = SCHEMA_FINGERPRINT.replace(
+        // A store stamped before the appended tables existed. Every table it
+        // knows is unchanged and the new ones have no rows to misread, so
+        // setting the whole store aside would throw data away over nothing.
+        // Truncated at the first appended table rather than `replace`d out of
+        // the middle: an old stamp is always a *prefix* of the new one, and a
+        // gap in the middle is a real mismatch.
+        let before_the_appends = &SCHEMA_FINGERPRINT
+            [..SCHEMA_FINGERPRINT.find("usage_ledger(").expect("the appended tables are present")];
+        assert_eq!(
+            check_schema(Some(before_the_appends)),
+            SchemaState::Match,
+            "an appended table must not orphan an existing store"
+        );
+
+        // But a table removed from the *middle* is a layout change, not an
+        // append, and must be caught.
+        let with_a_gap = SCHEMA_FINGERPRINT.replace(
             "usage_ledger(id,at,day,project_id,model,cost_micro,input_tokens,output_tokens);",
             "",
         );
         assert_eq!(
-            check_schema(Some(&before_the_ledger)),
-            SchemaState::Match,
-            "an appended table must not orphan an existing store"
+            check_schema(Some(&with_a_gap)),
+            SchemaState::Mismatch {
+                found: with_a_gap.clone()
+            },
+            "a mid-list gap is not an append"
         );
     }
 
@@ -369,5 +389,6 @@ impl Tables {
         self.task_log.wait_for_ops().await;
         self.agent_io.wait_for_ops().await;
         self.usage_ledger.wait_for_ops().await;
+        self.approval_rule.wait_for_ops().await;
     }
 }
