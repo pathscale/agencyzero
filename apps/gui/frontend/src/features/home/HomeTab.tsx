@@ -217,10 +217,30 @@ export function HomeTab(): JSX.Element {
  * backend failure must not swallow a prompt someone spent minutes writing.
  */
 function TaskManagerComposer(): JSX.Element {
-  const { state, actions } = useWorkspace();
+  const { state, actions, isLive } = useWorkspace();
   const [draft, setDraft] = createSignal("");
   const [isSending, setIsSending] = createSignal(false);
   const [error, setError] = createSignal<string | null>(null);
+  /*
+   * The one-liner is right for "add X to project Y"; a pasted meeting's worth
+   * of notes needs to be read before it is sent. The toggle swaps the input
+   * for a real textarea — same draft, same Enter-sends contract.
+   */
+  const [tall, setTall] = createSignal(false);
+
+  /** Same honest attach as the project composer: paths into the prompt. */
+  const attach = async (): Promise<void> => {
+    try {
+      const paths = await actions.chooseAttachments();
+      if (paths.length === 0) return;
+      setDraft((current) => {
+        const lead = current.length > 0 && !current.endsWith("\n") ? `${current}\n` : current;
+        return lead + paths.join("\n");
+      });
+    } catch (cause) {
+      log.warn(`could not attach: ${describeError(cause)}`);
+    }
+  };
 
   const isRunning = () =>
     (state.running[TASK_MANAGER_ID] ?? []).length > 0 ||
@@ -242,36 +262,82 @@ function TaskManagerComposer(): JSX.Element {
     }
   };
 
+  const placeholder = () =>
+    state.taskManagerSession
+      ? `Tell the task manager… · ${state.taskManagerSession}`
+      : "Tell the task manager…";
+
   return (
     <div class="flex min-w-0 flex-1 flex-col">
       <div
-        class={`flex min-w-0 flex-1 items-center gap-2.5 rounded-[11px] border bg-az-inset px-3 py-2.5 focus-within:border-primary/40 ${
-          error() ? "border-error/40" : "border-white/11"
-        }`}
+        class={`flex min-w-0 flex-1 gap-2.5 rounded-[11px] border bg-az-inset px-3 py-2.5 focus-within:border-primary/40 ${
+          tall() ? "items-start" : "items-center"
+        } ${error() ? "border-error/40" : "border-white/11"}`}
       >
         <Icon
           name="list-checks"
-          class={`shrink-0 text-[14px] ${isRunning() ? "text-primary" : "text-az-muted"}`}
+          class={`shrink-0 text-[14px] ${tall() ? "relative top-0.5" : ""} ${
+            isRunning() ? "text-primary" : "text-az-muted"
+          }`}
         />
-        <input
-          value={draft()}
-          onInput={(event) => setDraft(event.currentTarget.value)}
-          onKeyDown={(event) => {
-            if (event.key === "Enter") void submit();
-          }}
-          /*
-           * The session id rides in the placeholder: same gray, gone the
-           * moment you type, and it stops costing the line it used to sit on.
-           */
-          placeholder={
-            state.taskManagerSession
-              ? `Tell the task manager… · ${state.taskManagerSession}`
-              : "Tell the task manager…"
+        <Show
+          when={tall()}
+          fallback={
+            <input
+              value={draft()}
+              onInput={(event) => setDraft(event.currentTarget.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") void submit();
+              }}
+              /*
+               * The session id rides in the placeholder: same gray, gone the
+               * moment you type, and it stops costing the line it used to sit on.
+               */
+              placeholder={placeholder()}
+              aria-label="Task manager prompt"
+              disabled={isSending()}
+              class="min-w-0 flex-1 bg-transparent text-[12.5px] text-base-content placeholder:text-az-muted focus:outline-none disabled:opacity-60"
+            />
           }
-          aria-label="Task manager prompt"
-          disabled={isSending()}
-          class="min-w-0 flex-1 bg-transparent text-[12.5px] text-base-content placeholder:text-az-muted focus:outline-none disabled:opacity-60"
-        />
+        >
+          <textarea
+            autofocus
+            rows={6}
+            value={draft()}
+            onInput={(event) => setDraft(event.currentTarget.value)}
+            onKeyDown={(event) => {
+              // Same contract as the project composer: Enter sends,
+              // Shift+Enter is a newline for the notes this mode exists for.
+              if (event.key !== "Enter" || event.shiftKey) return;
+              event.preventDefault();
+              void submit();
+            }}
+            placeholder={placeholder()}
+            aria-label="Task manager prompt"
+            disabled={isSending()}
+            class="az-scroll min-w-0 flex-1 resize-none bg-transparent text-[12.5px] text-base-content leading-[1.5] placeholder:text-az-muted focus:outline-none disabled:opacity-60"
+          />
+        </Show>
+        <button
+          type="button"
+          onClick={() => void attach()}
+          disabled={!isLive("chooseAttachments")}
+          title="Attach files — their paths go into the prompt for the task manager to read"
+          aria-label="Attach files for the task manager"
+          class="shrink-0 text-az-faint transition-colors hover:text-az-body disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          <Icon name="plus" class="text-[14px]" />
+        </button>
+        <button
+          type="button"
+          onClick={() => setTall((open) => !open)}
+          aria-pressed={tall()}
+          title={tall() ? "Back to one line" : "Expand the prompt area"}
+          aria-label={tall() ? "Shrink the prompt area" : "Expand the prompt area"}
+          class="shrink-0 text-az-faint transition-colors hover:text-az-body"
+        >
+          <Icon name={tall() ? "chevron-up" : "chevron-down"} class="text-[14px]" />
+        </button>
         <Show
           when={isRunning()}
           fallback={
