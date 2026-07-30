@@ -143,6 +143,12 @@ export interface AgencyZeroApi {
   resolveApproval(projectId: string, approvalId: string, allow: boolean): Promise<void>;
   /** Spend over Settings' ranges, from the usage ledger. Survives project deletion. */
   getCostSummary(): Promise<CostSummary>;
+  /**
+   * Drain the store and restart into whatever binary is on disk at the app's
+   * own path — the second half of a rebuild. Never resolves: the process is
+   * replaced.
+   */
+  relaunchApp(): Promise<void>;
   /** Where the Home task manager's conversation stands. */
   getTaskManager(): Promise<TaskManagerState>;
   /**

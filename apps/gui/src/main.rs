@@ -47,6 +47,7 @@ const IMPLEMENTED: &[&str] = &[
     "get_task_manager",
     "resolve_approval",
     "get_cost_summary",
+    "relaunch_app",
     "list_agent_io",
     "get_io_persist",
     "set_io_persist",
@@ -189,6 +190,29 @@ fn set_data_location(path: Option<String>, state: State<'_, AppState>) -> Result
     }
     location::set_pointer(&state.config_dir, path.as_deref().map(std::path::Path::new))
         .map_err(|error| error.to_string())
+}
+
+/// Restart into whatever binary sits at this app's own path on disk.
+///
+/// The self-hosting keystone: after `cargo tauri build` lands a new bundle at
+/// the same path, the running instance is the stale copy. Draining the tables
+/// first and then exec'ing our own path is "restart into the new build" — and
+/// the clean half of any upgrade. It has to be the app's own move: an agent
+/// quitting the app from inside a run kills its own parent mid-flight.
+///
+/// # Errors
+/// None reachable — the tail never returns. `Result` for command uniformity.
+#[tauri::command]
+async fn relaunch_app(app: AppHandle, state: State<'_, AppState>) -> Result<(), String> {
+    crate::log!(
+        log::Level::Info,
+        "boot",
+        "relaunching into the binary on disk"
+    );
+    // The same drain the quit path does: a half-written page is how a table
+    // becomes unreadable rather than merely stale.
+    state.tables.shutdown().await;
+    app.restart();
 }
 
 /// The persisted settings record, or the defaults on a first run.
@@ -426,6 +450,7 @@ fn main() {
             projects::create_project,
             projects::send_message,
             get_settings,
+            relaunch_app,
             set_settings,
             list_agent_status,
             models::list_models,

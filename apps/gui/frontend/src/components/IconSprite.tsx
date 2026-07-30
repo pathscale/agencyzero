@@ -34,6 +34,7 @@ export type IconName =
   | "mic"
   | "pause"
   | "pin"
+  | "play"
   | "plus"
   | "search"
   | "settings"
@@ -134,6 +135,9 @@ export function IconSprite(): JSX.Element {
         <rect x="9" y="2.8" width="6" height="11.4" rx="3" />
         <path d="M5.5 11.5a6.5 6.5 0 0 0 13 0" />
         <path d="M12 18v3.2" />
+      </symbol>
+      <symbol id="i-play" viewBox="0 0 24 24">
+        <polygon points="6 3 20 12 6 21 6 3" />
       </symbol>
       <symbol id="i-pause" viewBox="0 0 24 24">
         <rect x="7" y="5" width="3.4" height="14" rx="1" />
