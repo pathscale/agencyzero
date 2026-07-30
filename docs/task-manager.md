@@ -25,13 +25,24 @@ empty.
 The user's own words go out unchanged, with `OUTPUT_CONTRACT` appended:
 
 ```
+AZ-TASKS-BEGIN
 {"project": "<project name>", "item": "<one short task>", "status": "pending"}
+AZ-TASKS-END
 ```
 
-`harvest()` scans every line rather than looking for a delimiter, because models
-move the block, fence it, or bury it after prose, and a parser that depends on
-finding a marker fails on the first reply that omits one. A line is taken when
-it parses as an object with a non-empty `project` and `item`.
+The marked block is the authority. When `AZ-TASKS-BEGIN` appears, `harvest()`
+reads only the lines between the markers — a task the model merely *quotes* in
+its prose (an example, a README, a discussion of the format) cannot mutate
+anything. Lines carry exactly the three fields (`deny_unknown_fields`, the
+signature of JSON quoted from somewhere else), and one reply may mutate at
+most 100 tasks.
+
+Models still move, fence, or forget delimiters, so a reply with no marker at
+all falls back to scanning every line — but that lenient path is additive
+only: a `deleted` outside the markers is refused and counted, never applied.
+A stray quoted line can at worst add a row someone deletes; it can no longer
+destroy one. A line is taken when it parses as an object with a non-empty
+`project` and `item`.
 
 ## Deleting, and why absence never deletes
 
