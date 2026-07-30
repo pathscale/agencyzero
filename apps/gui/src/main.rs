@@ -46,6 +46,7 @@ const IMPLEMENTED: &[&str] = &[
     "reset_task_manager",
     "get_task_manager",
     "resolve_approval",
+    "cancel_run",
     "get_cost_summary",
     "get_build_info",
     "relaunch_app",
@@ -76,6 +77,9 @@ pub(crate) struct AppState {
     /// Approval questions waiting on the user, by project. The run is blocked
     /// mid-turn until `resolve_approval` answers — see [`projects::PendingApprovals`].
     approvals: Arc<projects::PendingApprovals>,
+    /// The live run per project: at most one, and how to stop it — see
+    /// [`projects::ActiveRuns`].
+    active: Arc<projects::ActiveRuns>,
     /// Kept so `set_data_location` can write the pointer beside the settings.
     config_dir: std::path::PathBuf,
     /// Where the tables were opened from this launch. A change takes effect on
@@ -485,6 +489,7 @@ fn main() {
             projects::reset_task_manager,
             projects::get_task_manager,
             projects::resolve_approval,
+            projects::cancel_run,
             projects::get_cost_summary,
             get_build_info,
             projects::list_agent_io,
@@ -613,6 +618,7 @@ fn main() {
                 running: Arc::default(),
                 io: Arc::default(),
                 approvals: Arc::default(),
+                active: Arc::default(),
                 config_dir,
                 location,
             });

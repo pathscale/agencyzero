@@ -983,6 +983,36 @@ pub type PendingApprovals =
 /// become a denial rather than a run that hangs until the agent's own timeout.
 const APPROVAL_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30 * 60);
 
+/// The live run in each project: a reservation that there is at most one, and
+/// the signal that stops it.
+///
+/// `send_message` claims a project's slot before spawning anything and is
+/// refused while the slot is held, which is what makes "one run per project"
+/// true in the backend rather than merely drawn in the UI — two concurrent
+/// runs would resume the same session and share one approval route.
+/// `cancel_run` and `delete_project` signal the sender; the run's event loop
+/// watches the receiver and tears the agent down cooperatively.
+pub type ActiveRuns =
+    std::sync::Mutex<std::collections::HashMap<String, tokio::sync::watch::Sender<bool>>>;
+
+/// Releases a project's run slot when the run is over, however it ends.
+///
+/// Owned by `drive_run` for its whole body, so a spawn failure or a panic
+/// unwinding frees the slot the same way a finished run does. A leaked slot
+/// would refuse every later send for the project.
+pub struct RunReservation {
+    active: std::sync::Arc<ActiveRuns>,
+    project_id: String,
+}
+
+impl Drop for RunReservation {
+    fn drop(&mut self) {
+        if let Ok(mut active) = self.active.lock() {
+            active.remove(&self.project_id);
+        }
+    }
+}
+
 /// What is running in this project right now.
 #[tauri::command]
 pub fn list_running_tasks(project_id: String, state: State<'_, AppState>) -> Vec<RunningTaskDto> {
@@ -1227,6 +1257,44 @@ pub async fn resolve_approval(
         .send((approval_id, allow))
         .await
         .map_err(|_| "the run finished before the decision arrived".to_string())
+}
+
+/// Stop the run in this project, if one is live.
+///
+/// The signal reaches the run's own event loop, which asks the crate to tear
+/// the agent's process group down cooperatively and waits until it is really
+/// gone — the `run:stopped` that follows comes from the backend after the
+/// processes have exited, not from optimism. Before this existed, Stop was
+/// served by the frontend mock: the UI showed "canceled" while the real agent
+/// kept executing tools.
+///
+/// # Errors
+/// Returns a message when nothing is running in the project.
+#[tauri::command]
+pub async fn cancel_run(project_id: String, state: State<'_, AppState>) -> Result<(), String> {
+    let signalled = state
+        .active
+        .lock()
+        .map(|active| {
+            active
+                .get(&project_id)
+                .map(|cancel| {
+                    let _ = cancel.send(true);
+                })
+                .is_some()
+        })
+        .unwrap_or(false);
+
+    if signalled {
+        crate::log!(
+            crate::log::Level::Info,
+            "run",
+            "{project_id}: stop requested"
+        );
+        Ok(())
+    } else {
+        Err(format!("nothing is running in {project_id}"))
+    }
 }
 
 /// Start the Home task manager's next prompt on a fresh conversation.
@@ -1529,6 +1597,32 @@ pub async fn send_message(
         .clone()
         .unwrap_or_else(|| "read_only".into());
 
+    /*
+     * One run per project, enforced here rather than in the composer. A second
+     * concurrent run would resume the same session and share one approval
+     * route, so it corrupts rather than parallelizes. The slot is claimed
+     * before the message row is written: a refused send leaves no user message
+     * dangling with no reply, and the frontend keeps the draft to retry.
+     */
+    let (reservation, cancel) = {
+        let mut active = state
+            .active
+            .lock()
+            .map_err(|_| "the run registry is unavailable".to_string())?;
+        if active.contains_key(&input.project_id) {
+            return Err("a run is already active in this project — stop it or let it finish".into());
+        }
+        let (cancel_tx, cancel_rx) = tokio::sync::watch::channel(false);
+        active.insert(input.project_id.clone(), cancel_tx);
+        (
+            RunReservation {
+                active: state.active.clone(),
+                project_id: input.project_id.clone(),
+            },
+            cancel_rx,
+        )
+    };
+
     let user_row = MessageRow {
         id: id("msg"),
         project_id: input.project_id.clone(),
@@ -1604,8 +1698,20 @@ pub async fn send_message(
 
     tauri::async_runtime::spawn(async move {
         drive_run(
-            app, tables, running, io, approvals, project_id, input.body, model, permission,
-            effort, cwd, resume,
+            app,
+            tables,
+            running,
+            io,
+            approvals,
+            reservation,
+            cancel,
+            project_id,
+            input.body,
+            model,
+            permission,
+            effort,
+            cwd,
+            resume,
         )
         .await;
     });
@@ -1624,6 +1730,10 @@ async fn drive_run(
     running: std::sync::Arc<RunningTasks>,
     io: std::sync::Arc<AgentIo>,
     approvals: std::sync::Arc<PendingApprovals>,
+    // Held for the whole run and dropped on any exit path, so the project's
+    // run slot frees exactly when no agent can still be alive.
+    _reservation: RunReservation,
+    mut cancel: tokio::sync::watch::Receiver<bool>,
     project_id: String,
     prompt: String,
     model: String,
@@ -1761,7 +1871,25 @@ async fn drive_run(
      */
     let mut streamed_text = String::new();
 
-    while let Some(event) = run.recv().await {
+    // Set by the cancel signal, wherever the loop happens to be waiting when
+    // it lands. The loop exits, and the tail below tears the agent down.
+    let mut cancelled = false;
+
+    loop {
+        let event = tokio::select! {
+            event = run.recv() => match event {
+                Some(event) => event,
+                None => break,
+            },
+            /*
+             * `Ok` is the signal; `Err` means the sender vanished from the
+             * registry, which only teardown paths do — both read as "stop".
+             */
+            _ = cancel.changed() => {
+                cancelled = true;
+                break;
+            }
+        };
         let is_text = matches!(&event, Event::Text(_));
         match event {
             Event::ApprovalRequest(approval) => {
@@ -1796,6 +1924,12 @@ async fn drive_run(
                 let answer = tokio::select! {
                     answer = decisions.recv() => answer,
                     () = tokio::time::sleep(APPROVAL_TIMEOUT) => None,
+                    // Stop can arrive while the question stands; the pending
+                    // tool call is denied and the loop tail tears down.
+                    _ = cancel.changed() => {
+                        cancelled = true;
+                        None
+                    }
                 };
                 let allow = matches!(&answer, Some((id, true)) if *id == approval.id);
                 let decision = if allow {
@@ -2026,6 +2160,11 @@ async fn drive_run(
             _ => {}
         }
         last_was_text = is_text;
+        // The approval arm can learn about a stop mid-question; honour it
+        // here rather than waiting for the next event that may never come.
+        if cancelled {
+            break;
+        }
     }
 
     // Whatever the outcome, nothing in this project is running any more. A tool
@@ -2041,7 +2180,22 @@ async fn drive_run(
     }
 
     // One write, now that there is something final to write.
-    match run.finish().await {
+    let result = if cancelled {
+        note_io(
+            &app,
+            &io,
+            &project_id,
+            "sent",
+            "cancel",
+            "stop requested — tearing the agent down and waiting for it to exit",
+        );
+        // Cooperative and awaited: when this returns, the process group is
+        // actually gone, not merely asked to leave.
+        run.cancel().await
+    } else {
+        run.finish().await
+    };
+    match result {
         Ok(outcome) => {
             /*
              * The body is what the user watched stream, block breaks and all.
@@ -2220,6 +2374,56 @@ async fn drive_run(
                     "projectId": project_id,
                     "stop": stop,
                     "exitCode": outcome.exit_code,
+                }),
+            );
+        }
+        // The normal shape of a stop: `cancel()` reports `Cancelled` unless
+        // the run happened to finish first (then it is the `Ok` arm above).
+        Err(error) if cancelled => {
+            crate::log!(
+                crate::log::Level::Info,
+                "run",
+                "{project_id}: run cancelled ({error})"
+            );
+            /*
+             * The partial transcript is what the user watched stream; a
+             * cancelled run that said something must not read afterwards as
+             * if it never spoke. No usage row and no harvest: an interrupted
+             * turn reported no cost and its output is not a finished answer.
+             */
+            if !streamed_text.trim().is_empty() {
+                let row = MessageRow {
+                    id: id("msg"),
+                    project_id: project_id.clone(),
+                    item_id: String::new(),
+                    author: "agent".into(),
+                    agent: "claude".into(),
+                    moderation: String::new(),
+                    model: model.clone(),
+                    permission,
+                    usage: String::new(),
+                    stop: "canceled".into(),
+                    exit_code: -1,
+                    body: streamed_text,
+                    created_at: now(),
+                };
+                match tables.message.insert(row.clone()) {
+                    Ok(_) => {
+                        let _ = app.emit("message:appended", MessageDto::from(row));
+                    }
+                    Err(error) => crate::log!(
+                        crate::log::Level::Error,
+                        "run",
+                        "{project_id}: could not persist the cancelled turn: {error}"
+                    ),
+                }
+            }
+            let _ = app.emit(
+                "run:stopped",
+                serde_json::json!({
+                    "projectId": project_id,
+                    "stop": "canceled",
+                    "exitCode": null,
                 }),
             );
         }

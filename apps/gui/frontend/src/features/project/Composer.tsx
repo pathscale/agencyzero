@@ -66,7 +66,10 @@ export function Composer(props: ComposerProps): JSX.Element {
   const [error, setError] = createSignal<string | null>(null);
   let field!: HTMLTextAreaElement;
 
-  const canSend = () => draft().trim().length > 0 && !isSending();
+  // `isRunning` blocks the keyboard path too: while a run is live the button
+  // reads Stop, but Enter used to submit anyway and start a second run. The
+  // backend now refuses that send; this keeps the draft from even trying.
+  const canSend = () => draft().trim().length > 0 && !isSending() && !props.isRunning;
 
   /**
    * Clears only after the send resolves.
@@ -224,8 +227,11 @@ export function Composer(props: ComposerProps): JSX.Element {
             <button
               type="button"
               onClick={() => props.onStop?.()}
+              // No handler means the backend cannot stop this run; a Stop
+              // that only pretended would be worse than a disabled one.
+              disabled={!props.onStop}
               aria-label="Stop the run"
-              class="flex size-8 items-center justify-center rounded-full border border-primary/40 bg-base-300 transition-colors hover:border-primary"
+              class="flex size-8 items-center justify-center rounded-full border border-primary/40 bg-base-300 transition-colors hover:border-primary disabled:cursor-not-allowed disabled:opacity-40"
             >
               <span class="size-[11px] rounded-[3px] bg-primary" />
             </button>
