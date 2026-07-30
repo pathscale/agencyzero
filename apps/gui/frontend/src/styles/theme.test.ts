@@ -42,9 +42,21 @@ function axisDefaults(): Record<string, number> {
  * and `calc(N * var(--axis))` — and throws on anything else, so a new shape
  * cannot slip through as a silent pass.
  */
+function anchorOf(token: string): string {
+  /*
+   * Tokens now read `color-mix(in oklab, var(--color-primary) <wash>, oklch(...))`.
+   * At the default 0% wash the mix is the anchor exactly, so the anchor is what
+   * decides whether the palette moved — pull it out and reduce that.
+   */
+  const decl = CSS.match(new RegExp(`--color-${token}:\\s*([\\s\\S]*?);\\n`))?.[1];
+  if (!decl) throw new Error(`no token named --color-${token}`);
+  const anchor = decl.match(/oklch\(((?:[^()]|\([^()]*(?:\([^()]*\))?[^()]*\))*)\)/);
+  if (!anchor) throw new Error(`no oklch anchor in --color-${token}: ${decl}`);
+  return anchor[1];
+}
+
 function reduce(token: string, axes: Record<string, number>): [number, number, number] {
-  const body = CSS.match(new RegExp(`--color-${token}:\\s*oklch\\(([\\s\\S]*?)\\);`))?.[1];
-  if (!body) throw new Error(`no oklch token named --color-${token}`);
+  const body = anchorOf(token);
 
   // `calc(15% + var(--az-lift))` nests one level, so the component matcher has
   // to allow an inner pair of parens before closing.
@@ -52,7 +64,7 @@ function reduce(token: string, axes: Record<string, number>): [number, number, n
     .replace(/\s+/g, " ")
     .trim()
     .match(/(calc\((?:[^()]|\([^()]*\))*\)|[^\s]+)/g);
-  if (!parts || parts.length !== 3) throw new Error(`cannot split ${token}: ${body}`);
+  if (parts?.length !== 3) throw new Error(`cannot split ${token}: ${body}`);
 
   return parts.map((part: string) => {
     const plain = Number.parseFloat(part);
@@ -135,8 +147,7 @@ describe("the theme axes", () => {
       "az-bubble-edge",
     ];
     for (const token of surfaces) {
-      const body = CSS.match(new RegExp(`--color-${token}:\\s*oklch\\(([\\s\\S]*?)\\);`))?.[1];
-      expect(body, `--color-${token} must follow --az-lift`).toContain("--az-lift");
+      expect(anchorOf(token), `--color-${token} must follow --az-lift`).toContain("--az-lift");
     }
     const text = [
       "base-content",
@@ -150,8 +161,7 @@ describe("the theme axes", () => {
       "az-bubble-text",
     ];
     for (const token of text) {
-      const body = CSS.match(new RegExp(`--color-${token}:\\s*oklch\\(([\\s\\S]*?)\\);`))?.[1];
-      expect(body, `--color-${token} must follow --az-damp`).toContain("--az-damp");
+      expect(anchorOf(token), `--color-${token} must follow --az-damp`).toContain("--az-damp");
     }
   });
 

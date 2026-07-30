@@ -13,6 +13,7 @@ import {
   PERMISSION_ORDER,
 } from "~/lib/labels";
 import { describeError } from "~/lib/log";
+import { DEFAULT_WASH } from "~/lib/theme";
 import { useWorkspace } from "~/stores/workspace";
 import type {
   Agent,
@@ -335,6 +336,7 @@ export function SettingsTab(): JSX.Element {
                   theme={current().theme}
                   onAccent={(accent) => void actions.saveSettings({ theme: { accent } })}
                   onSoftness={(softness) => void actions.saveSettings({ theme: { softness } })}
+                  onWash={(wash) => void actions.saveSettings({ theme: { wash } })}
                 />
                 <Row
                   label="Reset"
@@ -345,7 +347,9 @@ export function SettingsTab(): JSX.Element {
                     type="button"
                     disabled={current().theme.accent === "" && current().theme.softness === 0}
                     onClick={() =>
-                      void actions.saveSettings({ theme: { accent: "", softness: 0 } })
+                      void actions.saveSettings({
+                        theme: { accent: "", softness: 0, wash: DEFAULT_WASH },
+                      })
                     }
                     class="rounded-lg border border-az-hairline-strong px-3 py-[5px] text-[12px] text-az-muted transition-colors hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-40"
                   >

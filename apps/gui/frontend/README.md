@@ -256,11 +256,43 @@ palette, not a site that follows the OS.
 `@pathscale/ui`'s token names (`--color-base-100/200/300`, `--color-primary`, …) so
 `bg-base-100` and `text-primary` resolve, then adds `--color-az-*` for what the base ladder
 does not cover — the text rungs and the desk/inset surfaces. Screens use utilities
-(`text-az-muted`, `bg-az-inset`); no component writes an `oklch()` triple.
+(`text-az-muted`, `bg-az-inset`); **no component writes an `oklch()` triple**, and a test
+holds that: nineteen of them had accumulated in class lists before it existed.
 
 Two rules the design states outright and this file enforces: the text contrast floor is
 `oklch(62%)` (`--color-az-faint`), and there is no pure white — the top tier is
 `oklch(86%)`.
+
+### The axes, and why a colour is never a literal
+
+Every token is an expression over five variables, so Settings → Appearance can recolour the
+workspace with a handful of writes to `:root`:
+
+| | |
+| --- | --- |
+| `--az-hue` / `--az-hue-text` | what the neutral ladder leans on, in oklch degrees |
+| `--az-tint` | chroma multiplier for that ladder |
+| `--az-lift` | lightness added to every surface — the comfort axis |
+| `--az-damp` | taken off every text rung, so the ladder meets a lifted desk |
+| `--az-wash` | how much of the accent is mixed into every surface |
+
+All five default to identity (`+ 0%`, `× 1`, `0%` mix), so an untouched build renders the
+designed palette exactly — [`theme.test.ts`](src/styles/theme.test.ts) reduces all 21 tokens
+and compares them against the literals from before the axes existed.
+
+**`--az-wash` is the one that matters most, and it is easy to leave out.** A picker that
+only sets `--color-primary` recolours buttons, rings and links while the workspace stays
+the same grey — it reads as a highlight, not a theme. That version shipped here first and
+was wrong. nofilter.io mixes the picked colour into its base tiers at 8–11%
+(`hueShift.js` in `@pathscale/ui`); this does the same, weighted per tier — deeper surfaces
+slightly more, the transcript least, because a colour cast across a wall of body text reads
+as a fault rather than as a theme.
+
+The wheel itself is `@pathscale/ui`'s `ColorWheelFlower`. Its `ThemeColorPicker` wrapper is
+**not** used: that writes `--color-base-*` against nofilter's own anchors and resolves
+light/dark by reading `data-theme` for the literal `"light"`/`"dark"` — ours says
+`agencyzero`, so it would fall through to the OS preference and paint 98%-white surfaces
+over a dark workspace on any Mac set to Light.
 
 Icons are inlined SVG symbols in [`src/components/IconSprite.tsx`](src/components/IconSprite.tsx),
 transcribed from the mockup's own sprite. The design's rule is no network at runtime, so

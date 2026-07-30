@@ -445,6 +445,12 @@ export interface ThemeSettings {
    * one glare for another. 0 is the palette as designed.
    */
   softness: number;
+  /**
+   * How much of the accent is mixed into every surface, as a percentage. The
+   * difference between a pick that changes buttons and one that changes the
+   * workspace. Ignored while `accent` is empty.
+   */
+  wash: number;
 }
 
 /** Mirrors `settings::TaskManager`. Claude only for now; see the Rust doc. */
