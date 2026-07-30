@@ -28,6 +28,7 @@ import type {
   Project,
   ProjectItem,
   ProjectStatus,
+  PullRequest,
   QuotaReport,
   RateLimit,
   RunningTask,
@@ -50,6 +51,8 @@ type WorkspaceState = {
   messages: Record<string, Message[]>;
   running: Record<string, RunningTask[]>;
   taskLog: Record<string, TaskLogEntry[]>;
+  /** PRs cut during runs, per project, dismissed rows included. */
+  pullRequests: Record<string, PullRequest[]>;
   logTotals: Record<string, number>;
   /** The raw exchange with the agent, per project. Diagnostic, not persisted. */
   agentIo: Record<string, AgentIoEntry[]>;
@@ -178,6 +181,7 @@ function createWorkspace() {
     messages: {},
     running: {},
     taskLog: {},
+    pullRequests: {},
     logTotals: {},
     agentIo: {},
     rateLimits: {},
@@ -366,12 +370,13 @@ function createWorkspace() {
 
   async function loadProject(projectId: string): Promise<void> {
     const backend = client();
-    const [items, messages, running, log, io] = await Promise.all([
+    const [items, messages, running, log, io, prs] = await Promise.all([
       backend.listItems(projectId),
       backend.listMessages(projectId),
       backend.listRunningTasks(projectId),
       backend.listTaskLog(projectId, TASK_LOG_PAGE),
       backend.listAgentIo(projectId),
+      backend.listPullRequests(projectId),
     ]);
     batch(() => {
       setState("items", projectId, reconcile(items));
@@ -380,6 +385,7 @@ function createWorkspace() {
       setState("taskLog", projectId, reconcile(log.entries));
       setState("logTotals", projectId, log.total);
       setState("agentIo", projectId, reconcile(io));
+      setState("pullRequests", projectId, reconcile(prs));
     });
   }
 
@@ -613,6 +619,16 @@ function createWorkspace() {
 
     await bind("item:deleted", ({ id, projectId }) => {
       setState("items", projectId, (list = []) => list.filter((item) => item.id !== id));
+    });
+
+    await bind("pr:updated", (pr) => {
+      setState("pullRequests", pr.projectId, (list = []) => {
+        const index = list.findIndex((existing) => existing.id === pr.id);
+        if (index < 0) return [...list, pr];
+        const next = [...list];
+        next[index] = pr;
+        return next;
+      });
     });
 
     const appendMessage = (message: Message) => {
@@ -1224,6 +1240,8 @@ function createWorkspace() {
     updateItem: (id: string, title: string) => client().updateItem(id, title),
     deleteItem: (id: string) => client().deleteItem(id),
     chooseAttachments: () => client().chooseAttachments(),
+    dismissPullRequest: (id: string) => client().dismissPullRequest(id),
+    refreshPullRequest: (id: string) => client().refreshPullRequest(id),
     /** Drop one queued prompt — second thoughts are allowed while it waits. */
     removeQueued(projectId: string, index: number) {
       setState("queued", projectId, (waiting = []) =>

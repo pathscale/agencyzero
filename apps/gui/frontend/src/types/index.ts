@@ -613,3 +613,22 @@ export interface CreatedProject {
   project: Project;
   items: ProjectItem[];
 }
+
+/**
+ * A pull request cut during a run, tracked as a chip over the composer.
+ * `state` is GitHub's own word (OPEN | MERGED | CLOSED, or "unknown" before
+ * gh first answers); `ci` is the check rollup reduced to one word.
+ */
+export interface PullRequest {
+  id: string;
+  projectId: string;
+  url: string;
+  repo: string;
+  number: number;
+  branch: string;
+  state: string;
+  additions: number;
+  deletions: number;
+  ci: "pass" | "fail" | "pending" | "none" | "unknown";
+  dismissed: boolean;
+}

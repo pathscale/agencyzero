@@ -59,6 +59,10 @@ export function createTauriApi(): AgencyZeroApi {
     updateItem: (id, title) => call("update_item", { id, title }),
     reorderItems: (projectId, ids) => call("reorder_items", { projectId, ids }),
 
+    listPullRequests: (projectId) => call("list_pull_requests", { projectId }),
+    dismissPullRequest: (id) => call("dismiss_pull_request", { id }),
+    refreshPullRequest: (id) => call("refresh_pull_request", { id }),
+
     listMessages: (projectId) => call("list_messages", { projectId }),
     sendMessage: (input) => call("send_message", { input }),
     resolveModeration: (messageId, approve) => call("resolve_moderation", { messageId, approve }),

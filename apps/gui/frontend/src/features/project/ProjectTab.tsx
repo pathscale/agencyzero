@@ -10,7 +10,7 @@ import { AGENT_LABELS } from "~/lib/labels";
 import { describeError, log } from "~/lib/log";
 import { compactCount, contextUsed, costLabel, usageTotals } from "~/lib/stats";
 import { useWorkspace } from "~/stores/workspace";
-import type { Project, Tab } from "~/types";
+import type { Project, PullRequest, Tab } from "~/types";
 
 /**
  * A project tab: the conversation on the left, the accordion on the right.
@@ -164,6 +164,17 @@ export function ProjectTab(props: { tab: Tab; project: Project }): JSX.Element {
         />
 
         <div class="flex flex-none flex-col gap-2.5 px-4 pt-2 pb-4">
+          {/* PRs this project's runs have cut, tracked like Claude Desktop's
+              chips: state, diff stats, CI — with a way to wave each away. */}
+          <Show when={(state.pullRequests[props.project.id] ?? []).some((pr) => !pr.dismissed)}>
+            <div class="flex flex-col gap-1">
+              <For
+                each={(state.pullRequests[props.project.id] ?? []).filter((pr) => !pr.dismissed)}
+              >
+                {(pr) => <PrChip pr={pr} />}
+              </For>
+            </div>
+          </Show>
           {/* Prompts waiting their turn, each with its way out. Above the
               composer so the words are visibly held, not vanished. */}
           <Show when={(state.queued[props.project.id] ?? []).length > 0}>
@@ -240,6 +251,109 @@ export function ProjectTab(props: { tab: Tab; project: Project }): JSX.Element {
       </Panel>
 
       <ProjectPanel project={props.project} />
+    </div>
+  );
+}
+
+/**
+ * One tracked pull request, in the shape of Claude Desktop's chip.
+ *
+ * Open: PR icon, number, repo and branch, then +adds −dels and the CI word.
+ * Merged goes purple and says so; closed dims. The body click copies the URL —
+ * the webview has no external-browser bridge yet, and a copied URL pastes
+ * anywhere. × dismisses the chip; the row stays in the store.
+ */
+function PrChip(props: { pr: PullRequest }): JSX.Element {
+  const { actions, isLive } = useWorkspace();
+  const [copied, setCopied] = createSignal(false);
+  const merged = () => props.pr.state === "MERGED";
+  const closed = () => props.pr.state === "CLOSED";
+
+  const copy = async (): Promise<void> => {
+    try {
+      await navigator.clipboard.writeText(props.pr.url);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1_400);
+    } catch (cause) {
+      log.warn(`could not copy the PR URL: ${describeError(cause)}`);
+    }
+  };
+
+  const CI_TONE: Record<string, string> = {
+    pass: "bg-success/15 text-success",
+    fail: "bg-error/15 text-error",
+    pending: "bg-warning/15 text-warning",
+  };
+
+  return (
+    <div
+      class={`flex items-center gap-2.5 rounded-[11px] border px-3 py-2 text-[12px] ${
+        merged()
+          ? "border-[#7e6bd0]/40 bg-[#7e6bd0]/12"
+          : closed()
+            ? "border-az-hairline bg-base-300 opacity-70"
+            : "border-az-hairline-strong bg-az-inset"
+      }`}
+    >
+      <Icon
+        name={merged() ? "git-merge" : "git-pull-request"}
+        class={`shrink-0 text-[14px] ${merged() ? "text-[#a794ee]" : closed() ? "text-az-muted" : "text-success"}`}
+      />
+      <button
+        type="button"
+        onClick={() => void copy()}
+        title={copied() ? "Copied" : `${props.pr.url} — click to copy`}
+        class="flex min-w-0 flex-1 items-center gap-2.5 text-left"
+      >
+        <span class={`shrink-0 font-semibold ${merged() ? "text-[#a794ee]" : "text-az-strong"}`}>
+          #{props.pr.number}
+        </span>
+        <span class="shrink-0 text-az-muted">{props.pr.repo}</span>
+        <Show when={props.pr.branch}>
+          <span class="min-w-0 truncate font-mono text-[11px] text-az-body">{props.pr.branch}</span>
+        </Show>
+        <Show when={copied()}>
+          <span class="shrink-0 text-[10.5px] text-success">copied</span>
+        </Show>
+      </button>
+      <Show
+        when={merged()}
+        fallback={
+          <>
+            <Show when={props.pr.additions + props.pr.deletions > 0}>
+              <span class="shrink-0 font-mono text-[11px]">
+                <span class="text-success">+{props.pr.additions}</span>{" "}
+                <span class="text-error">−{props.pr.deletions}</span>
+              </span>
+            </Show>
+            <Show when={props.pr.ci !== "unknown" && props.pr.ci !== "none"}>
+              <button
+                type="button"
+                onClick={() =>
+                  isLive("refreshPullRequest") && actions.refreshPullRequest(props.pr.id)
+                }
+                title="CI rollup — click to re-check"
+                class={`shrink-0 rounded-md px-[7px] py-px font-semibold text-[10.5px] ${CI_TONE[props.pr.ci] ?? "bg-base-300 text-az-muted"}`}
+              >
+                CI {props.pr.ci}
+              </button>
+            </Show>
+            <Show when={closed()}>
+              <span class="shrink-0 font-semibold text-[11px] text-az-muted">Closed</span>
+            </Show>
+          </>
+        }
+      >
+        <span class="shrink-0 font-semibold text-[#a794ee] text-[11.5px]">Merged</span>
+      </Show>
+      <button
+        type="button"
+        onClick={() => void actions.dismissPullRequest(props.pr.id)}
+        aria-label={`Dismiss PR ${props.pr.number}`}
+        class="shrink-0 text-az-faint transition-colors hover:text-base-content"
+      >
+        <Icon name="x" class="text-[13px]" />
+      </button>
     </div>
   );
 }

@@ -226,7 +226,7 @@ pub struct CreatedProject {
 
 // — helpers ————————————————————————————————————————————————————————
 
-fn now() -> String {
+pub(crate) fn now() -> String {
     chrono::Utc::now().to_rfc3339()
 }
 
@@ -240,7 +240,7 @@ fn session_key(project_id: &str) -> String {
     format!("session:{project_id}")
 }
 
-fn id(prefix: &str) -> String {
+pub(crate) fn id(prefix: &str) -> String {
     format!("{prefix}-{}", uuid::Uuid::new_v4())
 }
 
@@ -3267,6 +3267,9 @@ async fn drive_run(
             } else {
                 write_items_from_reply(&app, &tables, &project_id, &body).await;
             }
+            // Any PR the reply mentions becomes a chip; `gh` fills it in
+            // off-path moments later.
+            crate::prs::harvest_prs(&app, &tables, &project_id, &body);
             let _ = app.emit(
                 "run:stopped",
                 serde_json::json!({

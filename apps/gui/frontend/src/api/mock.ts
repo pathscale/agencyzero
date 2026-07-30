@@ -77,6 +77,7 @@ export function createMockApi(): AgencyZeroApi {
   const agentStatus = clone(fixtures.AGENT_STATUS);
   const models = clone(fixtures.MODEL_CATALOGUE);
   let settings = clone(fixtures.SETTINGS);
+  const pullRequests = clone(fixtures.PULL_REQUESTS);
 
   const listeners = new Map<string, Set<(payload: unknown) => void>>();
 
@@ -242,6 +243,24 @@ export function createMockApi(): AgencyZeroApi {
       const project = findProject(projectId);
       project.dirs = project.dirs.filter((dir) => dir !== path);
       return touch(project);
+    },
+
+    listPullRequests: (projectId) =>
+      settle(pullRequests.filter((pr) => pr.projectId === projectId)),
+
+    async dismissPullRequest(id) {
+      const pr = pullRequests.find((candidate) => candidate.id === id);
+      if (!pr) return settle(undefined);
+      pr.dismissed = true;
+      emit("pr:updated", pr);
+      return settle(undefined);
+    },
+
+    // The mock has no gh to ask; a refresh re-announces what it has.
+    async refreshPullRequest(id) {
+      const pr = pullRequests.find((candidate) => candidate.id === id);
+      if (pr) emit("pr:updated", pr);
+      return settle(undefined);
     },
 
     listItems: (projectId) =>

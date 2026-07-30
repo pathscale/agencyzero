@@ -5,6 +5,7 @@ mod db;
 mod log;
 mod models;
 mod projects;
+mod prs;
 mod quota;
 mod settings;
 mod tasks;
@@ -45,6 +46,9 @@ const IMPLEMENTED: &[&str] = &[
     "delete_item",
     "reorder_items",
     "choose_attachments",
+    "list_pull_requests",
+    "dismiss_pull_request",
+    "refresh_pull_request",
     "list_messages",
     "list_running_tasks",
     "list_task_log",
@@ -650,6 +654,9 @@ fn main() {
             projects::delete_item,
             projects::reorder_items,
             choose_attachments,
+            prs::list_pull_requests,
+            prs::dismiss_pull_request,
+            prs::refresh_pull_request,
             projects::list_messages,
             projects::list_running_tasks,
             projects::list_task_log,
