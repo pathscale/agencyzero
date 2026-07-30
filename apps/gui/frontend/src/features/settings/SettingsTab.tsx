@@ -188,6 +188,24 @@ export function SettingsTab(): JSX.Element {
                   />
                 </Row>
                 <Row
+                  label="Completed items"
+                  hint="what a session's own “done” report does to the row"
+                >
+                  <PillMenu
+                    label="Completed items"
+                    value={current().completedItems}
+                    options={[
+                      { value: "resolve", label: "Mark resolved" },
+                      { value: "delete", label: "Delete" },
+                    ]}
+                    onChange={(completedItems) =>
+                      void actions.saveSettings({
+                        completedItems: completedItems as "resolve" | "delete",
+                      })
+                    }
+                  />
+                </Row>
+                <Row
                   label="Permission posture"
                   hint="read_only is the crate default; widen deliberately"
                   isLast

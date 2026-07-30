@@ -417,6 +417,11 @@ export interface GlobalSettings {
   /** Off by default: HTTPS_PROXY often embeds credentials. */
   forwardProxyVars: boolean;
   notifications: NotificationSettings;
+  /**
+   * What a session's `- [x]` does to an existing item: `"resolve"` marks it
+   * finished and keeps the row, `"delete"` removes it outright.
+   */
+  completedItems: "resolve" | "delete";
 }
 
 /** Mirrors `settings::TaskManager`. Claude only for now; see the Rust doc. */
