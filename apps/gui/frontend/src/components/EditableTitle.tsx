@@ -73,7 +73,12 @@ export function EditableTitle(props: {
           </Show>
           <button
             type="button"
-            onClick={start}
+            // Stopped so a rename click cannot double as the header's own
+            // click (on Home, that click folds the group).
+            onClick={(event) => {
+              event.stopPropagation();
+              start();
+            }}
             disabled={busy()}
             aria-label={props.label ?? `Rename ${props.value}`}
             // Always visible. Hover-to-reveal hides the only clue that a name

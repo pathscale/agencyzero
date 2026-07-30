@@ -495,6 +495,8 @@ export interface UiPrefs {
    * tab per project, which meant a restart un-did every close.
    */
   openTabKeys: string[];
+  /** Home project groups folded to their header, by project id. */
+  collapsedGroups: string[];
   taskPlacement: TaskPlacement;
   /**
    * Panel sections whose shipped default has already been applied once.

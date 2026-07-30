@@ -8,7 +8,7 @@ import { AgentIoList } from "~/features/project/ProjectPanel";
 import { relativeTime } from "~/lib/format";
 import { statusSuffix } from "~/lib/labels";
 import { describeError, log } from "~/lib/log";
-import { prefs, togglePanelSection } from "~/stores/prefs";
+import { prefs, setPrefs, togglePanelSection } from "~/stores/prefs";
 import { TASK_MANAGER_ID, useWorkspace } from "~/stores/workspace";
 import type { Project, ProjectItem } from "~/types";
 
@@ -450,6 +450,16 @@ function ProjectGroup(props: { project: Project }): JSX.Element {
   const summary = () =>
     activeCount() ? `${openCount()} open · ${activeCount()} active` : `${openCount()} open`;
 
+  const collapsed = () => prefs.collapsedGroups.includes(props.project.id);
+  const toggleCollapsed = (): void => {
+    setPrefs(
+      "collapsedGroups",
+      collapsed()
+        ? prefs.collapsedGroups.filter((id) => id !== props.project.id)
+        : [...prefs.collapsedGroups, props.project.id],
+    );
+  };
+
   return (
     /*
      * `flex-none` is load-bearing: this sits in a flex column, and
@@ -459,7 +469,27 @@ function ProjectGroup(props: { project: Project }): JSX.Element {
      * 2px slivers, which read as four empty pills above the real groups.
      */
     <div class="flex-none overflow-hidden rounded-xl border border-az-hairline-soft bg-base-300">
-      <div class="flex items-center gap-2.5 px-3.5 py-2.5 transition-colors hover:bg-white/4">
+      {/*
+        Single click folds, double click opens the tab. The two coexist
+        without timers: a double-click fires two clicks first, which toggle
+        the fold there and back, and then the open lands. The row controls
+        (pencil, pin, delete, chevron) stop propagation to stay themselves.
+      */}
+      {/* biome-ignore lint/a11y/useSemanticElements: the header carries its own buttons (pencil, pin, delete), and nesting those in a native button is invalid HTML — the same split SectionPanel makes. */}
+      <div
+        role="button"
+        tabIndex={0}
+        aria-expanded={!collapsed()}
+        onClick={toggleCollapsed}
+        onDblClick={() => actions.openProject(props.project.id)}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            toggleCollapsed();
+          }
+        }}
+        class="flex cursor-pointer items-center gap-2.5 px-3.5 py-2.5 transition-colors hover:bg-white/4"
+      >
         {/*
           The name is its own control now, not part of the open-project button:
           a pencil nested inside a button would open the project on the way to
@@ -472,11 +502,13 @@ function ProjectGroup(props: { project: Project }): JSX.Element {
           label={`Rename ${props.project.name}`}
           class="min-w-0 font-semibold text-[13px] text-base-content"
           inputClass="font-semibold text-[13px]"
-          onActivate={() => actions.openProject(props.project.id)}
         />
         <button
           type="button"
-          onClick={() => actions.openProject(props.project.id)}
+          onClick={(event) => {
+            event.stopPropagation();
+            actions.openProject(props.project.id);
+          }}
           aria-label={`Open ${props.project.name}`}
           class="flex min-w-0 flex-1 items-center gap-2.5 text-left"
         >
@@ -488,7 +520,10 @@ function ProjectGroup(props: { project: Project }): JSX.Element {
 
         <button
           type="button"
-          onClick={() => void actions.setProjectPinned(props.project.id, !props.project.pinned)}
+          onClick={(event) => {
+            event.stopPropagation();
+            void actions.setProjectPinned(props.project.id, !props.project.pinned);
+          }}
           aria-pressed={props.project.pinned}
           aria-label={props.project.pinned ? "Unpin project" : "Pin project"}
           class={`shrink-0 transition-colors ${props.project.pinned ? "text-primary" : "text-[oklch(48%_0.01_245)] hover:text-az-strong"}`}
@@ -508,7 +543,10 @@ function ProjectGroup(props: { project: Project }): JSX.Element {
           fallback={
             <button
               type="button"
-              onClick={() => setConfirming(true)}
+              onClick={(event) => {
+                event.stopPropagation();
+                setConfirming(true);
+              }}
               aria-label={`Delete ${props.project.name}`}
               class="shrink-0 text-[oklch(48%_0.01_245)] transition-colors hover:text-error"
             >
@@ -536,7 +574,10 @@ function ProjectGroup(props: { project: Project }): JSX.Element {
           </div>
         </Show>
 
-        <Icon name="chevron-right" class="shrink-0 text-[14px] text-[oklch(56%_0.01_245)]" />
+        <Icon
+          name={collapsed() ? "chevron-right" : "chevron-down"}
+          class="shrink-0 text-[14px] text-[oklch(56%_0.01_245)]"
+        />
       </div>
 
       {/*
@@ -544,43 +585,45 @@ function ProjectGroup(props: { project: Project }): JSX.Element {
         not push every other group off screen. The count in the header says
         what the window is onto; the list scrolls inside it.
       */}
-      <div class="az-scroll flex max-h-[220px] flex-col overflow-y-auto border-az-hairline-soft border-t">
-        <For each={items()}>
-          {(item) => (
-            /*
-             * The whole row is a way into the project, matching the header:
-             * Home shows items but is not a second place to work them, so a
-             * click means "take me there", never "change the status here".
-             */
-            <button
-              type="button"
-              onClick={() => actions.openProject(props.project.id)}
-              class="flex items-baseline gap-2.5 px-3.5 py-2.5 text-left transition-colors hover:bg-white/4"
-            >
-              <Show
-                when={item.status === "finished"}
-                fallback={<ItemMarker status={item.status === "active" ? "active" : "pending"} />}
+      <Show when={!collapsed()}>
+        <div class="az-scroll flex max-h-[220px] flex-col overflow-y-auto border-az-hairline-soft border-t">
+          <For each={items()}>
+            {(item) => (
+              /*
+               * The whole row is a way into the project, matching the header:
+               * Home shows items but is not a second place to work them, so a
+               * click means "take me there", never "change the status here".
+               */
+              <button
+                type="button"
+                onClick={() => actions.openProject(props.project.id)}
+                class="flex items-baseline gap-2.5 px-3.5 py-2.5 text-left transition-colors hover:bg-white/4"
               >
-                <Icon name="check" class="relative top-0.5 shrink-0 text-[13px] text-success" />
-              </Show>
-              <span
-                class={`min-w-0 flex-1 text-[12.5px] ${
-                  item.status === "active"
-                    ? "text-az-strong"
-                    : item.status === "finished"
-                      ? "text-az-muted"
-                      : "text-az-body"
-                }`}
-              >
-                {item.title}
-              </span>
-              <span class={`shrink-0 text-[11.5px] ${STATUS_TONE[item.status]}`}>
-                {statusSuffix(item.status)}
-              </span>
-            </button>
-          )}
-        </For>
-      </div>
+                <Show
+                  when={item.status === "finished"}
+                  fallback={<ItemMarker status={item.status === "active" ? "active" : "pending"} />}
+                >
+                  <Icon name="check" class="relative top-0.5 shrink-0 text-[13px] text-success" />
+                </Show>
+                <span
+                  class={`min-w-0 flex-1 text-[12.5px] ${
+                    item.status === "active"
+                      ? "text-az-strong"
+                      : item.status === "finished"
+                        ? "text-az-muted"
+                        : "text-az-body"
+                  }`}
+                >
+                  {item.title}
+                </span>
+                <span class={`shrink-0 text-[11.5px] ${STATUS_TONE[item.status]}`}>
+                  {statusSuffix(item.status)}
+                </span>
+              </button>
+            )}
+          </For>
+        </div>
+      </Show>
     </div>
   );
 }
