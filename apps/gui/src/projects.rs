@@ -1741,7 +1741,28 @@ async fn drive_run(
         waiting.insert(project_id.clone(), decision_tx);
     }
 
+    /*
+     * Paragraph breaks between text blocks, keyed on structure rather than
+     * timing. "I'll check whether that exists." → tool call → "Yes — it's
+     * there." streams as two blocks, and appending the second delta straight
+     * after the first glued the sentences together on screen. Any non-text
+     * event between deltas marks a block boundary; a pause detector would
+     * fire on network hiccups mid-sentence and miss fast tool calls.
+     */
+    let mut last_was_text = false;
+    let mut streamed_any = false;
+    /*
+     * Everything the model said, exactly as it streamed. The crate's
+     * `Outcome::text` is Claude's terminal `result` field — the *final* text
+     * block only — so persisting it clobbered the narration between tool
+     * calls ("I'll check whether that exists.") the moment the run finished.
+     * The transcript keeps what the user watched; the terminal text is the
+     * fallback for a run that never streamed.
+     */
+    let mut streamed_text = String::new();
+
     while let Some(event) = run.recv().await {
+        let is_text = matches!(&event, Event::Text(_));
         match event {
             Event::ApprovalRequest(approval) => {
                 note_io(
@@ -1811,6 +1832,13 @@ async fn drive_run(
                 );
             }
             Event::Text(delta) => {
+                let delta = if streamed_any && !last_was_text {
+                    format!("\n\n{delta}")
+                } else {
+                    delta
+                };
+                streamed_any = true;
+                streamed_text.push_str(&delta);
                 note_io(&app, &io, &project_id, "received", "text", &delta);
                 let _ = app.emit(
                     "run:text",
@@ -1997,6 +2025,7 @@ async fn drive_run(
             }
             _ => {}
         }
+        last_was_text = is_text;
     }
 
     // Whatever the outcome, nothing in this project is running any more. A tool
@@ -2014,6 +2043,18 @@ async fn drive_run(
     // One write, now that there is something final to write.
     match run.finish().await {
         Ok(outcome) => {
+            /*
+             * The body is what the user watched stream, block breaks and all.
+             * `outcome.text` is Claude's terminal `result` field — the final
+             * block only — and persisting it was how the narration between
+             * tool calls vanished the moment a run finished. The terminal
+             * text remains the fallback for a run that never streamed.
+             */
+            let body = if streamed_text.trim().is_empty() {
+                outcome.text.clone()
+            } else {
+                streamed_text
+            };
             let stop = match &outcome.stop {
                 Stop::Completed => "completed".to_string(),
                 Stop::Error => "error".to_string(),
@@ -2041,7 +2082,7 @@ async fn drive_run(
                 },
                 stop: stop.clone(),
                 exit_code: i64::from(outcome.exit_code),
-                body: outcome.text.clone(),
+                body: body.clone(),
                 created_at: now(),
             };
             crate::log!(
@@ -2049,7 +2090,7 @@ async fn drive_run(
                 "run",
                 "{project_id}: finished stop={stop} exit={} chars={}",
                 outcome.exit_code,
-                outcome.text.len()
+                body.len()
             );
             note_io(
                 &app,
@@ -2167,9 +2208,11 @@ async fn drive_run(
             }
 
             if is_task_manager {
-                write_tasks_from_reply(&app, &io, &tables, &project_id, &outcome.text).await;
+                // Parsed from the same body the transcript stores, so what the
+                // harvester saw and what the user reads can never disagree.
+                write_tasks_from_reply(&app, &io, &tables, &project_id, &body).await;
             } else {
-                write_items_from_reply(&app, &tables, &project_id, &outcome.text);
+                write_items_from_reply(&app, &tables, &project_id, &body);
             }
             let _ = app.emit(
                 "run:stopped",
