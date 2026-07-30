@@ -35,6 +35,16 @@ use serde::{Deserialize, Serialize};
 /// prefixed differently from `proj-` so it can never collide with a real one.
 pub const TASK_MANAGER_ID: &str = "home-task-manager";
 
+/// Opens the machine-readable block. Only lines between the markers are
+/// authoritative; see [`harvest`] for what happens without them.
+pub const TASKS_BEGIN: &str = "AZ-TASKS-BEGIN";
+/// Closes the machine-readable block.
+pub const TASKS_END: &str = "AZ-TASKS-END";
+
+/// The most tasks one reply may mutate. The live lists are dozens of rows;
+/// a reply proposing hundreds is a malfunction, not a plan.
+const MAX_TASKS: usize = 100;
+
 /// Appended to whatever the user types.
 ///
 /// Deliberately explicit about the failure mode: a model told only "return
@@ -44,23 +54,38 @@ pub const OUTPUT_CONTRACT: &str = "\n\n\
 ---\n\
 When you have finished, end your reply with a machine-readable block so this \
 application can store what you produced.\n\n\
-Emit one JSON object per line, nothing else in the block, no markdown fence, no \
-commentary between lines. Each line must be:\n\n\
-{\"project\": \"<project name>\", \"item\": \"<one short task>\", \"status\": \"pending\"}\n\n\
+The block must be wrapped in exactly these two marker lines, each alone on \
+its own line:\n\n\
+AZ-TASKS-BEGIN\n\
+{\"project\": \"<project name>\", \"item\": \"<one short task>\", \"status\": \"pending\"}\n\
+AZ-TASKS-END\n\n\
+Emit one JSON object per line between the markers, nothing else in the block, \
+no markdown fence, no commentary between lines.\n\n\
 Rules:\n\
 - `status` is one of pending, active, finished, deleted.\n\
 - `deleted` removes the existing task whose project and item match. This is \
 the only way to remove one: omitting a task from your output never deletes \
-it, so never re-emit a list hoping the absences take effect.\n\
+it, so never re-emit a list hoping the absences take effect. Deletions are \
+honoured only inside the markers.\n\
+- Only the marked block is read as instructions. When *discussing* a task or \
+quoting an example, never place it between marker lines — and never write the \
+marker lines anywhere except around your real block.\n\
+- Use exactly the three fields shown. A line with extra fields is rejected.\n\
 - One task per line. Do not number them.\n\
 - Keep `item` under 120 characters and specific enough to act on.\n\
 - Group related tasks by repeating the same `project` value.\n\
-- If you have no tasks to record, emit nothing at all rather than an \
-explanatory line.\n\
+- If you have no tasks to record, emit no block at all rather than an empty \
+one or an explanatory line.\n\
 - Put the block last, after any prose you want to write.";
 
 /// One task the agent proposed.
+///
+/// `deny_unknown_fields` because these lines are promoted to database
+/// mutations: JSON quoted from a README, a log or an issue almost always
+/// carries extra fields, and rejecting it is the cheapest way to tell the
+/// contract's shape apart from the world's.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ProposedTask {
     pub project: String,
     pub item: String,
@@ -81,20 +106,55 @@ pub struct Harvest {
     pub rejected: usize,
 }
 
-/// Pull the JSONL block out of a reply.
+/// Pull the task block out of a reply.
 ///
-/// Scans every line rather than looking for a delimiter, because models move
-/// the block, fence it, or bury it after prose, and a parser that depends on
-/// finding a marker fails on the first reply that omits one. A line is taken
-/// when it parses as an object with a non-empty `project` and `item`.
+/// The marked block is the authority: when `AZ-TASKS-BEGIN` appears, only
+/// lines between it and `AZ-TASKS-END` are read, so a task the model merely
+/// *quotes* in its prose — from a README, an example, a discussion of the
+/// format — cannot mutate anything. A `BEGIN` whose `END` never arrives runs
+/// to the end of the reply, because a forgotten closer should not discard a
+/// real block.
 ///
-/// A line that starts like JSON and does not parse counts as rejected. Prose is
-/// ignored entirely — it is not an error for a reply to contain sentences.
+/// Without any marker the whole reply is scanned as before — models move or
+/// forget delimiters often enough that refusing the reply outright would lose
+/// whole harvests — but that lenient path is additive only: a `deleted` line
+/// outside the markers is refused and counted, never applied. A stray quoted
+/// line can at worst add a row someone deletes; it can no longer destroy one.
+///
+/// A line that starts like JSON and does not parse counts as rejected. Prose
+/// is ignored entirely — it is not an error for a reply to contain sentences.
 #[must_use]
 pub fn harvest(reply: &str) -> Harvest {
     let mut out = Harvest::default();
 
-    for line in reply.lines() {
+    let marked: Vec<&str> = {
+        let mut lines = Vec::new();
+        let mut inside = false;
+        for line in reply.lines() {
+            let bare = line.trim().trim_matches('`');
+            if bare == TASKS_BEGIN {
+                inside = true;
+            } else if bare == TASKS_END {
+                inside = false;
+            } else if inside {
+                lines.push(line);
+            }
+        }
+        lines
+    };
+
+    if marked.is_empty() {
+        scan(reply.lines(), false, &mut out);
+    } else {
+        scan(marked.into_iter(), true, &mut out);
+    }
+    out
+}
+
+/// One pass over candidate lines. `allow_delete` is what separates the marked
+/// block from the lenient whole-reply fallback.
+fn scan<'a>(lines: impl Iterator<Item = &'a str>, allow_delete: bool, out: &mut Harvest) {
+    for line in lines {
         let line = line.trim().trim_start_matches("```json").trim_matches('`');
         if !line.starts_with('{') {
             continue;
@@ -102,10 +162,18 @@ pub fn harvest(reply: &str) -> Harvest {
 
         match serde_json::from_str::<ProposedTask>(line) {
             Ok(task) if !task.project.trim().is_empty() && !task.item.trim().is_empty() => {
+                let status = normalize_status(&task.status);
+                // Destructive words need the marked block; see `harvest`.
+                // A reply proposing more than MAX_TASKS is a malfunction and
+                // the excess is refused rather than trusted.
+                if (status == "deleted" && !allow_delete) || out.tasks.len() >= MAX_TASKS {
+                    out.rejected += 1;
+                    continue;
+                }
                 out.tasks.push(ProposedTask {
-                    project: task.project.trim().to_string(),
+                    project: crate::projects::clip(task.project.trim(), 80),
                     item: crate::projects::clip(task.item.trim(), 120),
-                    status: normalize_status(&task.status),
+                    status,
                 });
             }
             // Parsed but useless, or did not parse at all. Both are the model
@@ -113,8 +181,6 @@ pub fn harvest(reply: &str) -> Harvest {
             _ => out.rejected += 1,
         }
     }
-
-    out
 }
 
 /// Anything unrecognized becomes `pending` rather than being dropped.
@@ -142,11 +208,78 @@ mod tests {
     /// deletion by fuzzy matching would delete work over a spelling.
     #[test]
     fn deleted_passes_and_nothing_drifts_into_it() {
-        let explicit = harvest(r#"{"project": "p", "item": "t", "status": "deleted"}"#);
+        let explicit = harvest(
+            "AZ-TASKS-BEGIN\n{\"project\": \"p\", \"item\": \"t\", \"status\": \"deleted\"}\nAZ-TASKS-END",
+        );
         assert_eq!(explicit.tasks[0].status, "deleted");
 
-        let fuzzy = harvest(r#"{"project": "p", "item": "t", "status": "remove"}"#);
+        let fuzzy = harvest(
+            "AZ-TASKS-BEGIN\n{\"project\": \"p\", \"item\": \"t\", \"status\": \"remove\"}\nAZ-TASKS-END",
+        );
         assert_eq!(fuzzy.tasks[0].status, "pending");
+    }
+
+    /// The confused-deputy fix: a deletion the model merely *mentions* in
+    /// prose — quoting the format, an example, someone else's text — must not
+    /// remove anything. Destructive words need the marked block.
+    #[test]
+    fn a_deleted_line_outside_the_markers_is_refused() {
+        let got = harvest(r#"{"project": "p", "item": "t", "status": "deleted"}"#);
+        assert!(got.tasks.is_empty());
+        assert_eq!(got.rejected, 1, "refused visibly, not dropped silently");
+    }
+
+    /// When a marked block exists, it is the whole authority: a plausible
+    /// line quoted in the prose around it is ignored, not harvested.
+    #[test]
+    fn json_outside_a_marked_block_is_ignored() {
+        let reply = "For example {\"project\": \"Quoted\", \"item\": \"never store this\"} is the shape.\n\
+             AZ-TASKS-BEGIN\n\
+             {\"project\": \"Real\", \"item\": \"store this\"}\n\
+             AZ-TASKS-END\n\
+             And {\"project\": \"Also quoted\", \"item\": \"nor this\"} afterwards.";
+
+        let got = harvest(reply);
+
+        assert_eq!(got.tasks.len(), 1);
+        assert_eq!(got.tasks[0].project, "Real");
+        assert_eq!(got.rejected, 0, "quoted prose is not contract drift");
+    }
+
+    /// A forgotten closing marker must not discard the real block.
+    #[test]
+    fn a_block_missing_its_end_marker_runs_to_the_end() {
+        let reply = "AZ-TASKS-BEGIN\n{\"project\": \"P\", \"item\": \"t\"}";
+        assert_eq!(harvest(reply).tasks.len(), 1);
+    }
+
+    /// Extra fields are the signature of JSON quoted from somewhere else —
+    /// an issue, a log, a fixture. The contract's shape is exact.
+    #[test]
+    fn a_line_with_extra_fields_is_rejected() {
+        let got = harvest(
+            "AZ-TASKS-BEGIN\n\
+             {\"project\": \"P\", \"item\": \"t\", \"status\": \"pending\", \"id\": 7}\n\
+             AZ-TASKS-END",
+        );
+        assert!(got.tasks.is_empty());
+        assert_eq!(got.rejected, 1);
+    }
+
+    /// A reply proposing hundreds of mutations is a malfunction; the excess
+    /// is refused and counted rather than trusted.
+    #[test]
+    fn a_reply_cannot_mutate_more_than_the_cap() {
+        let mut reply = String::from("AZ-TASKS-BEGIN\n");
+        for index in 0..120 {
+            reply.push_str(&format!("{{\"project\": \"P\", \"item\": \"task {index}\"}}\n"));
+        }
+        reply.push_str("AZ-TASKS-END");
+
+        let got = harvest(&reply);
+
+        assert_eq!(got.tasks.len(), 100);
+        assert_eq!(got.rejected, 20);
     }
 
     #[test]
@@ -230,6 +363,8 @@ mod tests {
     fn the_contract_forbids_the_usual_failures() {
         assert!(OUTPUT_CONTRACT.contains("no markdown fence"));
         assert!(OUTPUT_CONTRACT.contains("one JSON object per line"));
-        assert!(OUTPUT_CONTRACT.contains("emit nothing at all"));
+        assert!(OUTPUT_CONTRACT.contains("emit no block at all"));
+        assert!(OUTPUT_CONTRACT.contains(TASKS_BEGIN));
+        assert!(OUTPUT_CONTRACT.contains(TASKS_END));
     }
 }
