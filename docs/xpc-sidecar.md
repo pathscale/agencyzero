@@ -16,15 +16,52 @@ no orphaned agents — but it welds run lifetime to window lifetime:
 - A long unattended run (the moderator future) has no home that outlives the
   window.
 
+## Why the host process cannot do this alone
+
+The constraint is an OS fact, not an architecture taste. An agent process's
+output reaches us through pipes whose read ends are file descriptors *in the
+process that spawned it*. When that process exits — and `Restart into Build
+on Disk` is an exit — its descriptors are closed with it. The restarted GUI
+is a new process: it can find the orphaned agent's PID, but it cannot
+re-open a pipe whose read end died; the stream is simply gone. (The crate's
+`detach()` exists and keeps the agent *alive* through this, but alive and
+unobservable: no events, no approvals, no outcome.)
+
+So whoever holds the pipes has to be a process that survives the restart.
+The GUI can still be the one that *spawns* that process — no launchd, no
+installation step — it just cannot *be* it.
+
 ## Proposal: `az-runnerd`
 
 A small headless supervisor binary in the workspace (beside the five
 existing executables) that owns agent processes, with the GUI as its client.
 
-**Transport.** The macOS-native answer is XPC, but Rust XPC bindings are
-immature and Linux is on the horizon. A Unix domain socket in the app data
-directory, carrying length-framed serde JSON, gives the same process
-isolation with portable code. The item keeps its XPC name; the wire is UDS.
+**Transport: what XPC would actually buy, and cost.** XPC comes in two
+shapes. An **XPC service** (bundled in `Contents/XPCServices/`) has its
+lifecycle managed by launchd *on behalf of the client app*: launched on
+connection, eligible for termination when idle or when the client goes away.
+That lifecycle is precisely the wrong one — the whole requirement is a
+broker that outlives its client. The shape with an independent lifetime is a
+**launchd agent** exposing a Mach service, which means registration
+(`SMAppService` / a plist in `~/Library/LaunchAgents`) — an install-time
+step that couples this item to signing and installation (#27) before phase
+one can even be tested.
+
+On the API side, the comfortable XPC layer is `NSXPCConnection`
+(Objective-C: typed remote proxies from a protocol). From Rust there is no
+equivalent: the available crates bind the C `libxpc` surface, so every
+message is a hand-assembled `xpc_dictionary` — meaning we would write the
+message-framing and serialization layer ourselves *on top of* the FFI. XPC's
+remaining exclusives — launchd lifecycle management and entitlement-based
+peer verification — matter for privileged helpers talking across trust
+boundaries, not for a single-user app talking to a child it spawned, where
+filesystem permissions on the socket already gate access.
+
+A Unix domain socket in the app data directory carrying length-framed serde
+JSON keeps the same process isolation, costs one dependency we already have
+(serde), works identically on the future Linux target, and lets the GUI
+spawn the daemon on demand with no registration step. The item keeps its
+XPC name; the wire is UDS.
 
 **Split of responsibilities.**
 
