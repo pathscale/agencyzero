@@ -3,7 +3,7 @@ import { createEffect, createSignal, For, type JSX, Match, Show, Switch, untrack
 import { Icon } from "~/components/Icon";
 import { ApprovalCard } from "~/features/project/ApprovalCard";
 import { InlineText, MessageBody } from "~/features/project/MessageBody";
-import { isTransientStop } from "~/lib/format";
+import { isTransientStop, relativeTime } from "~/lib/format";
 import { AGENT_LABELS } from "~/lib/labels";
 import { compactCount } from "~/lib/stats";
 import { type RunStatus, useNow, useWorkspace } from "~/stores/workspace";
@@ -287,6 +287,7 @@ function AgentBubble(props: { message: Message; onRetry?: () => void }): JSX.Ele
         <Show when={props.message.model}>
           {(model) => <span class="text-[11px] text-az-faint">{model()}</span>}
         </Show>
+        <MessageTime at={props.message.createdAt} />
         <Show when={failed()}>
           <span
             title={props.message.stop}
@@ -331,11 +332,33 @@ function UserBubble(props: { message: Message }): JSX.Element {
     <div class="flex max-w-[76%] flex-col items-end gap-[7px] self-end">
       <div
         data-selectable
-        class="rounded-[16px_16px_6px_16px] bg-base-300 px-[15px] py-[11px] text-[13.5px] text-az-title leading-[1.55]"
+        class="whitespace-pre-wrap rounded-[16px_16px_6px_16px] bg-base-300 px-[15px] py-[11px] text-[13.5px] text-az-title leading-[1.55]"
       >
         {props.message.body}
       </div>
+      <MessageTime at={props.message.createdAt} />
     </div>
+  );
+}
+
+/**
+ * When a message landed, in words rather than a clock face.
+ *
+ * A transcript read hours later is a sequence of "and then what" — the gap
+ * between two turns is the useful fact, and "31 min ago" answers it without
+ * arithmetic. The exact stamp is on hover for when it is the timeline that
+ * matters.
+ *
+ * Recomputed on a minute's tick rather than once at render: a bubble that says
+ * "just now" three hours later is worse than no timestamp, and the transcript
+ * is a screen people leave open.
+ */
+function MessageTime(props: { at: string }): JSX.Element {
+  const now = useNow(30_000);
+  return (
+    <span title={props.at} class="shrink-0 text-[10.5px] text-az-faint">
+      {relativeTime(props.at, now())}
+    </span>
   );
 }
 
