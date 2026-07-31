@@ -38,6 +38,9 @@ commands:
   list-items [--project ID]  items, optionally narrowed to one project
   search-items <QUERY>       items whose title contains QUERY (case-insensitive)
   list-rules [--project ID]  remembered approvals (\"always allow similar\" grants)
+  list-messages [--project ID] [--bodies]
+                             one row per message, oldest first, with the usage
+                             the turn reported
 
 The store location honours the same overrides as the GUI: $AZ_DATA_DIR,
 then the data-location.json pointer next to the app's config, then the

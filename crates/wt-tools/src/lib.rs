@@ -312,6 +312,12 @@ pub fn list_items(
 /// largest thing in the store and the question this answers is "how many rows,
 /// in what order, how big" — not "what did it say". `--bodies` prints them when
 /// the words themselves are the question.
+///
+/// The usage rides along because the other question asked of a transcript is
+/// what it cost, and the window is otherwise the only place that figure exists.
+/// A token count that looks wrong on screen could not be checked against the
+/// store at all, which is how one shipped reading "60 tokens" for a ten-minute
+/// turn.
 #[derive(Debug, Serialize)]
 pub struct MessageOut {
     pub id: String,
@@ -321,6 +327,11 @@ pub struct MessageOut {
     pub stop: String,
     pub chars: usize,
     pub created_at: String,
+    /// The turn's own report, as stored. Absent on user rows, which have none,
+    /// and on any row whose JSON will not parse — printed as the object it is
+    /// rather than as an escaped string, so the line stays greppable.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub usage: Option<serde_json::Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub body: Option<String>,
 }
@@ -335,6 +346,10 @@ impl MessageOut {
             stop: row.stop,
             chars: row.body.chars().count(),
             created_at: row.created_at,
+            // A row that stored nothing, or stored something unparseable, reads
+            // as absent rather than as a zero: this tool exists to report what
+            // is there, and an invented 0 would be a usage figure of its own.
+            usage: serde_json::from_str(&row.usage).ok(),
             body: bodies.then_some(row.body),
         }
     }
