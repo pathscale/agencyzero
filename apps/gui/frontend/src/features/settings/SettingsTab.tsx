@@ -4,7 +4,7 @@ import { Icon, type IconProps } from "~/components/Icon";
 import { Panel } from "~/components/Panel";
 import { PillMenu } from "~/components/PillMenu";
 import { AgentStateDot } from "~/components/StatusDot";
-import { relativeTime } from "~/lib/format";
+import { formatBytes, relativeTime } from "~/lib/format";
 import {
   AGENT_LABELS,
   AGENT_STATE_LABELS,
@@ -12,7 +12,7 @@ import {
   PERMISSION_LABELS,
   PERMISSION_ORDER,
 } from "~/lib/labels";
-import { describeError } from "~/lib/log";
+import { describeError, log } from "~/lib/log";
 import { DEFAULT_WASH } from "~/lib/theme";
 import { useWorkspace } from "~/stores/workspace";
 import type {
@@ -27,6 +27,7 @@ import type {
   ModelSelection,
   ModelSource,
   Permission,
+  TableSize,
   TaskManagerSettings,
 } from "~/types";
 import { ThemePicker } from "./ThemePicker";
@@ -426,6 +427,12 @@ export function SettingsTab(): JSX.Element {
                           </Row>
                         )}
                       </Show>
+                      <Row
+                        label="Tables"
+                        hint="how much disk each one holds — the logs outgrow the transcript"
+                      >
+                        <TableSizes />
+                      </Row>
                       <Row label="Change it" isLast>
                         <div class="flex items-center gap-2">
                           <button
@@ -631,6 +638,67 @@ export function SettingsTab(): JSX.Element {
  * with a permission denial the user only sees in the I/O panel. The first
  * entry becomes the run's cwd.
  */
+/**
+ * What each table costs on disk, largest first.
+ *
+ * Loaded on mount rather than at boot: it is a directory walk, and nothing else
+ * in Settings needs it. Reads as a list because the *ordering* is the finding —
+ * that the task log and the raw I/O dwarf the transcript is what tells you
+ * where a growing store is going.
+ */
+function TableSizes(): JSX.Element {
+  const { state, actions } = useWorkspace();
+  const [sizes, setSizes] = createSignal<TableSize[] | null>(null);
+  const [failed, setFailed] = createSignal(false);
+
+  onMount(() => {
+    void actions
+      .listTableSizes()
+      .then(setSizes)
+      .catch((cause) => {
+        setFailed(true);
+        log.error(`could not measure the tables: ${describeError(cause)}`);
+      });
+  });
+
+  const total = () => (sizes() ?? []).reduce((sum, table) => sum + table.bytes, 0);
+
+  return (
+    <Show
+      when={sizes()}
+      fallback={
+        <span class="text-[11.5px] text-az-muted">{failed() ? "unavailable" : "measuring…"}</span>
+      }
+    >
+      {(tables) => (
+        <div class="flex max-w-[340px] flex-col gap-1">
+          <For each={tables()}>
+            {(table) => (
+              <div class="flex items-baseline justify-between gap-3">
+                <span class="truncate font-mono text-[11px] text-az-body">{table.name}</span>
+                <span class="shrink-0 font-mono text-[11px] text-az-muted">
+                  {formatBytes(table.bytes)}
+                </span>
+              </div>
+            )}
+          </For>
+          <div class="mt-0.5 flex items-baseline justify-between gap-3 border-az-hairline border-t pt-1">
+            <span class="font-semibold text-[11px] text-az-muted uppercase tracking-[.04em]">
+              total
+            </span>
+            <span class="shrink-0 font-mono text-[11px] text-az-strong">
+              {formatBytes(total())}
+            </span>
+          </div>
+          <Show when={state.backend === "mock"}>
+            <span class="text-[10.5px] text-az-faint">fixtures — no store to measure</span>
+          </Show>
+        </div>
+      )}
+    </Show>
+  );
+}
+
 function TaskManagerDirs(props: { taskManager: TaskManagerSettings }): JSX.Element {
   const { actions } = useWorkspace();
   const [path, setPath] = createSignal("");

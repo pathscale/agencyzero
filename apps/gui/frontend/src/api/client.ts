@@ -18,6 +18,7 @@ import type {
   QuotaReport,
   RateLimit,
   RunningTask,
+  TableSize,
   TaskLogEntry,
   TaskManagerState,
   WorkspaceRoot,
@@ -105,6 +106,13 @@ export interface AgencyZeroApi {
    * be asked.
    */
   listModels(discover: boolean): Promise<AgentModels[]>;
+  /**
+   * How much disk each table holds, largest first.
+   *
+   * The store grows unevenly — the task log and the raw I/O are written per
+   * tool call and per event — and nothing on screen said so.
+   */
+  listTableSizes(): Promise<TableSize[]>;
   /** Where the tables were opened from this launch, and where the next will. */
   getDataLocation(): Promise<DataLocationView>;
   /**

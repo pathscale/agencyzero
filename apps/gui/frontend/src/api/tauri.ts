@@ -71,6 +71,7 @@ export function createTauriApi(): AgencyZeroApi {
     setSettings: (patch) => call("set_settings", { patch }),
     listAgentStatus: (recheck) => call("list_agent_status", { recheck }),
     listModels: (discover) => call("list_models", { discover }),
+    listTableSizes: () => call("list_table_sizes"),
     getDataLocation: () => call("get_data_location"),
     setDataLocation: (path) => call("set_data_location", { path }),
     chooseDataDirectory: () => call("choose_data_directory"),

@@ -302,6 +302,13 @@ export interface DataLocation {
  * because the session's path alone makes a change that was written look exactly
  * like a change that did nothing.
  */
+/** One table's footprint on disk. Mirrors `main.rs`'s `TableSize`. */
+export interface TableSize {
+  /** The table's directory name, e.g. `task_log`. */
+  name: string;
+  bytes: number;
+}
+
 export interface DataLocationView extends DataLocation {
   /** The next launch's location, or `null` while it agrees with this one. */
   pending: DataLocation | null;
