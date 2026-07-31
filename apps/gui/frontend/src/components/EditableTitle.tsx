@@ -96,6 +96,14 @@ export function EditableTitle(props: {
         autofocus
         value={draft()}
         aria-label={props.label ?? "Project name"}
+        /*
+         * The row behind this field opens a project on double click, so
+         * selecting a word to retype it navigated away and dropped the edit.
+         * A field's own mouse gestures stop here.
+         */
+        onClick={(event) => event.stopPropagation()}
+        onDblClick={(event) => event.stopPropagation()}
+        onMouseDown={(event) => event.stopPropagation()}
         onInput={(event) => setDraft(event.currentTarget.value)}
         onBlur={() => void commit()}
         onKeyDown={(event) => {
