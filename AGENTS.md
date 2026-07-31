@@ -74,6 +74,18 @@ append-only. [`wt-tools`](crates/wt-tools) reads the list and never writes.
   owner to look.
 - **Never touch the running System instance**, its process, files or data directory. The
   store is single-writer. Use the Dev instance (`tauri.dev.conf.json`).
+  **Check before you decide it is closed, and check by the right name.** The binary is
+  `az-gui`, not AgencyZero, so a search for the product name finds nothing and reads as
+  "not running" while it is very much running. Ask the files who owns them instead:
+
+  ```sh
+  lsof +D ~/Library/Application\ Support/com.pathscale.agencyzero/db
+  ```
+
+  Empty means nothing holds the store. Any output at all means stop. On 2026-08-01 a
+  `pgrep` for the product name came back empty, the app was live on PID 3076 with the
+  whole store open, and only the choice of target saved it: what got deleted were
+  detached `db.superseded-*` copies nothing held.
 - **Ask before installing anything**, including writes to `~/Library/Caches`, `~/.cargo`
   and Homebrew. A doc here recommending a tool is not permission to fetch it.
 
