@@ -815,6 +815,8 @@ function RunningList(props: { projectId: string }): JSX.Element {
 function TaskLogList(props: { projectId: string }): JSX.Element {
   const { state } = useWorkspace();
   const entries = () => state.taskLog[props.projectId] ?? [];
+  /** The one entry showing its whole command, if any. */
+  const [expanded, setExpanded] = createSignal<string | null>(null);
 
   return (
     /*
@@ -847,9 +849,24 @@ function TaskLogList(props: { projectId: string }): JSX.Element {
                     : "text-az-muted"
               }`}
             />
-            <span class="min-w-0 flex-1 truncate text-az-body" title={entry.label}>
-              {entry.label}
-            </span>
+            {/*
+             * Expands in place rather than truncating for good. A task log
+             * entry *is* the command, and a command cut at the panel's width
+             * — "…gh run rerun \"$ID\" --failed 2>&1 | t" — cannot be read,
+             * checked or copied, which is the whole reason to keep a log.
+             * The title attribute was the only way to see the rest, and a
+             * tooltip cannot be selected.
+             */}
+            <button
+              type="button"
+              onClick={() => setExpanded(expanded() === entry.id ? null : entry.id)}
+              title={expanded() === entry.id ? "Collapse" : "Show the whole command"}
+              class={`min-w-0 flex-1 text-left text-az-body ${
+                expanded() === entry.id ? "whitespace-pre-wrap break-all" : "truncate"
+              }`}
+            >
+              <span data-selectable>{entry.label}</span>
+            </button>
             <span class={`shrink-0 ${entry.ok === false ? "text-error" : "text-az-muted"}`}>
               {taskMeta(entry)}
             </span>
