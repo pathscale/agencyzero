@@ -92,6 +92,12 @@ export function createMockApi(): AgencyZeroApi {
    * pre-written rules would show the panel in a state no fresh install reaches.
    */
   const notes = new Map<string, string>();
+  /*
+   * Which projects sample their knowledge as the context fills. Off everywhere
+   * to start, as on a real install — and the mock never runs an agent, so
+   * turning it on here changes the switch and nothing else.
+   */
+  const checkpoints = new Set<string>();
 
   const listeners = new Map<string, Set<(payload: unknown) => void>>();
 
@@ -472,6 +478,13 @@ export function createMockApi(): AgencyZeroApi {
      * and refusing it would leave the one surface that can correct a bad rule
      * untested everywhere except a live machine.
      */
+    getCheckpoints: (projectId) => settle(checkpoints.has(projectId)),
+    setCheckpoints: (projectId, enabled) => {
+      if (enabled) checkpoints.add(projectId);
+      else checkpoints.delete(projectId);
+      return settle(enabled);
+    },
+
     getProjectNotes: (projectId) => settle(notes.get(projectId) ?? ""),
     setProjectNotes: (projectId, text) => {
       // Clamped as the backend clamps, so the editor's budget behaviour is the

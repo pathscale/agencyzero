@@ -53,6 +53,8 @@ const COMMAND_FOR: Partial<Record<keyof AgencyZeroApi, string>> = {
   setTabModel: "set_tab_model",
   cancelRun: "cancel_run",
   compactProject: "compact_project",
+  getCheckpoints: "get_checkpoints",
+  setCheckpoints: "set_checkpoints",
   getProjectNotes: "get_project_notes",
   setProjectNotes: "set_project_notes",
   listRunningTasks: "list_running_tasks",

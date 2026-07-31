@@ -1450,6 +1450,9 @@ function createWorkspace() {
      * asks for them. Keeping a copy in state would mean another thing to
      * invalidate for no reader.
      */
+    getCheckpoints: (projectId: string) => client().getCheckpoints(projectId),
+    setCheckpoints: (projectId: string, enabled: boolean) =>
+      client().setCheckpoints(projectId, enabled),
     getProjectNotes: (projectId: string) => client().getProjectNotes(projectId),
     setProjectNotes: (projectId: string, notes: string) =>
       client().setProjectNotes(projectId, notes),

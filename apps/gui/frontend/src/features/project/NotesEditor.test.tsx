@@ -3,7 +3,7 @@ import { Show } from "solid-js";
 import { describe, expect, it } from "vitest";
 import { NOTES_BUDGET } from "~/api/client";
 import { ProjectPanel } from "~/features/project/ProjectPanel";
-import { setPrefs } from "~/stores/prefs";
+import { prefs, setPrefs } from "~/stores/prefs";
 import { useWorkspace, type Workspace, WorkspaceProvider } from "~/stores/workspace";
 import type { Project } from "~/types";
 
@@ -62,10 +62,13 @@ function mount() {
   const type = (text: string) => {
     fireEvent.input(box(), { target: { value: text } });
   };
-  /** Resolves once the panel is on screen with the stored notes loaded. */
+  /** Resolves once the panel is on screen and has read from the backend. */
   const ready = async () => {
     await waitFor(() => expect(workspace.state.boot.status).toBe("ready"), { timeout: 5_000 });
-    await waitFor(() => expect(box().value).toBe(""));
+    // Settled: the section's own read has landed. Only the notes section keeps
+    // a box, so the settings tests wait on the panel appearing instead.
+    if (prefs.panelSections.notes) await waitFor(() => expect(box().value).toBe(""));
+    else await waitFor(() => expect(screen.getByText("Settings")).toBeTruthy());
   };
   return { screen, box, button, type, ready };
 }
@@ -162,6 +165,51 @@ describe("the notes a compaction kept", () => {
 
     type("y".repeat(100));
     await waitFor(() => expect(screen.getByText(`${NOTES_BUDGET - 100} left`)).toBeTruthy());
+  });
+});
+
+/*
+ * A switch whose only effect is three extra billed turns, on a schedule the user
+ * does not control, has to explain itself before it is flipped — and default to
+ * off, so nobody pays for an experiment they did not opt into.
+ */
+describe("the knowledge checkpoint switch", () => {
+  // `mount` opens the notes section; this opens Settings alongside it, which is
+  // where the switch lives.
+  const openSettings = () => setPrefs("panelSections", "settings", true);
+
+  it("is off until it is asked for", async () => {
+    openSettings();
+    const { ready, screen } = mount();
+    await ready();
+
+    const toggle = screen.getByLabelText(
+      "Knowledge checkpoints for this project",
+    ) as HTMLInputElement;
+    await waitFor(() => expect(toggle.checked).toBe(false));
+  });
+
+  it("says what it costs and what it is for, in the settings themselves", async () => {
+    openSettings();
+    const { ready, screen } = mount();
+    await ready();
+
+    // The three thresholds, the price, and the reason — not a tooltip.
+    expect(screen.getByText(/300k/)).toBeTruthy();
+    expect(screen.getByText(/one extra turn each/)).toBeTruthy();
+    expect(screen.getByText(/whether the notes get worse under pressure/)).toBeTruthy();
+  });
+
+  it("keeps the switch where it was put", async () => {
+    openSettings();
+    const { ready, screen } = mount();
+    await ready();
+
+    const toggle = screen.getByLabelText(
+      "Knowledge checkpoints for this project",
+    ) as HTMLInputElement;
+    fireEvent.change(toggle, { target: { checked: true } });
+    await waitFor(() => expect(toggle.checked).toBe(true));
   });
 });
 

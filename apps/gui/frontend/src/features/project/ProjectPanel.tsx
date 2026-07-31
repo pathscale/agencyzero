@@ -398,6 +398,10 @@ function SettingsSection(props: { project: Project }): JSX.Element {
           />
         </div>
 
+        <div class="my-0.5 h-px bg-az-hairline-soft" />
+
+        <CheckpointToggle projectId={props.project.id} />
+
         <ApprovalRules projectId={props.project.id} />
 
         <div class="flex gap-[7px] pt-0.5 text-[11px] text-az-faint leading-[1.5]">
@@ -916,6 +920,74 @@ function CopyLogButton(props: { projectId: string }): JSX.Element {
     >
       Copy
     </button>
+  );
+}
+
+/**
+ * Sample the agent's knowledge as the context fills, to find out where
+ * compacting should happen.
+ *
+ * An experiment rather than a feature, and the description says so, because a
+ * switch whose only effect is three extra billed turns needs to explain itself
+ * before it is flipped. Nothing reads the samples back to the agent; they are
+ * evidence for a question nobody can answer from first principles — does the
+ * pre-compaction extraction get *worse* as the conversation it summarises gets
+ * bigger?
+ */
+function CheckpointToggle(props: { projectId: string }): JSX.Element {
+  const { actions, isLive } = useWorkspace();
+  const [enabled, setEnabled] = createSignal(false);
+
+  createEffect(() => {
+    const id = props.projectId;
+    void actions
+      .getCheckpoints(id)
+      .then(setEnabled)
+      .catch((cause) => log.warn(`could not read the checkpoint setting: ${describeError(cause)}`));
+  });
+
+  const toggle = async (next: boolean): Promise<void> => {
+    setEnabled(next);
+    try {
+      await actions.setCheckpoints(props.projectId, next);
+    } catch (cause) {
+      // Put it back: the control must not claim a setting that did not save.
+      setEnabled(!next);
+      log.error(`could not change knowledge checkpoints: ${describeError(cause)}`);
+    }
+  };
+
+  return (
+    <div class="flex flex-col gap-1.5">
+      <div class="flex items-center gap-2.5">
+        <Icon name="history" class="shrink-0 text-[14px] text-az-muted" />
+        <span class="min-w-0 flex-1 text-[12px] text-az-body">
+          Knowledge checkpoints
+          <span class="mt-px block text-[11px] text-az-muted">this project · off by default</span>
+        </span>
+        <Toggle
+          aria-label="Knowledge checkpoints for this project"
+          checked={enabled()}
+          color="accent"
+          size="sm"
+          disabled={!isLive("setCheckpoints")}
+          onChange={(event) => void toggle(event.currentTarget.checked)}
+        />
+      </div>
+      {/*
+        Spelled out rather than left to a tooltip. This one costs money on a
+        schedule the user does not control, so what it does, when it fires and
+        what it is for all have to be readable before the switch is flipped.
+      */}
+      <p class="pl-[26px] text-[11px] text-az-faint leading-[1.5]">
+        As this conversation grows past <b>300k</b>, <b>600k</b> and <b>900k</b> tokens, run the
+        same note-taking pass a compaction would and save the result to a file — one extra turn each
+        time, billed like any other. The agent never sees these; they exist so the three can be
+        compared to find out whether the notes get worse under pressure, and where compacting is
+        actually best done. Files land beside the database in <code>checkpoints/</code>, and the
+        marks re-arm after every compaction.
+      </p>
+    </div>
   );
 }
 

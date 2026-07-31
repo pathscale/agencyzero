@@ -183,6 +183,16 @@ export interface AgencyZeroApi {
    * of the project, and the only symptom would be behaviour nobody can account
    * for.
    */
+  /**
+   * Whether this project samples its knowledge as the context fills.
+   *
+   * Off by default. Each sample is a whole extra turn against a large
+   * conversation, and nothing reads them back to the agent — they are evidence
+   * for choosing when to compact, not a feature the agent benefits from.
+   */
+  getCheckpoints(projectId: string): Promise<boolean>;
+  setCheckpoints(projectId: string, enabled: boolean): Promise<boolean>;
+
   getProjectNotes(projectId: string): Promise<string>;
   /** Returns the text as stored — clamped to the budget, so the editor shows
    *  what the agent will actually be told rather than what was typed. */

@@ -2154,6 +2154,25 @@ pub async fn compact_project(
      * Only ever on a session that exists. On a fresh one there is nothing to
      * learn from, and asking would bill a turn to be told so.
      */
+    /*
+     * A compaction shrinks the conversation, so the thresholds re-arm: the next
+     * fill is a fresh set of samples, and comparing across fills is the point.
+     * Cleared before the compaction rather than after, so a failure part-way
+     * leaves the marks armed rather than stuck at 900k on a conversation that
+     * has since been cut to 30k.
+     */
+    if let Err(error) = state
+        .tables
+        .kv_put(&crate::notes::checkpoint_mark_key(&project_id), "0".into())
+        .await
+    {
+        crate::log!(
+            crate::log::Level::Warn,
+            "run",
+            "{project_id}: could not re-arm the checkpoint marks: {error}"
+        );
+    }
+
     let learned = if session.is_some() {
         let _ = app.emit(
             "run:compaction",
@@ -2651,6 +2670,47 @@ pub async fn delete_project(
     Ok(())
 }
 
+/// Whether this project samples its knowledge as the context fills.
+#[tauri::command]
+pub fn get_checkpoints(project_id: String, state: State<'_, AppState>) -> bool {
+    state
+        .tables
+        .kv_get(&crate::notes::checkpoints_key(&project_id))
+        .is_some_and(|value| value == "true")
+}
+
+/// Turn knowledge checkpoints on or off for one project.
+///
+/// Off by default, and it should stay off for anything but a project being
+/// measured: each sample is a whole extra turn against a large conversation, so
+/// three of them per fill is a real cost paid for evidence rather than for the
+/// agent's benefit — nothing ever reads the samples back to it.
+///
+/// # Errors
+/// Returns the store's error when the flag cannot be written.
+#[tauri::command]
+pub async fn set_checkpoints(
+    project_id: String,
+    enabled: bool,
+    state: State<'_, AppState>,
+) -> Result<bool, String> {
+    state
+        .tables
+        .kv_put(
+            &crate::notes::checkpoints_key(&project_id),
+            enabled.to_string(),
+        )
+        .await
+        .map_err(|error| error.to_string())?;
+    crate::log!(
+        crate::log::Level::Info,
+        "projects",
+        "{project_id}: knowledge checkpoints {}",
+        if enabled { "on" } else { "off" }
+    );
+    Ok(enabled)
+}
+
 /// What this project's agent has been told to remember across compactions.
 ///
 /// Empty until a compaction has taken some, which is the honest default: a
@@ -3004,6 +3064,21 @@ pub async fn send_message(
     // one. Without it every turn starts a fresh conversation.
     let resume = state.tables.kv_get(&session_key(&input.project_id));
 
+    /*
+     * Where this project's knowledge checkpoints go, or `None` for the projects
+     * that do not take them — which is all of them until someone asks.
+     *
+     * Resolved here rather than inside the run so the switch is read once, at
+     * the moment of sending, and so the destination follows a moved data
+     * directory rather than the platform default. `None` is the whole feature
+     * turned off, in one value: an off project cannot accidentally sample.
+     */
+    let checkpoint_dir = state
+        .tables
+        .kv_get(&crate::notes::checkpoints_key(&input.project_id))
+        .is_some_and(|value| value == "true")
+        .then(|| state.location.path.join("checkpoints"));
+
     let tables = state.tables.clone();
     let running = state.running.clone();
     let io = state.io.clone();
@@ -3029,6 +3104,7 @@ pub async fn send_message(
             cwd,
             extra_dirs,
             resume,
+            checkpoint_dir,
         )
         .await;
     });
@@ -3061,6 +3137,9 @@ async fn drive_run(
     cwd: String,
     extra_dirs: Vec<String>,
     resume: Option<String>,
+    // Where to write knowledge checkpoints, or `None` when this project does
+    // not take them. See `checkpoint_if_due`.
+    checkpoint_dir: Option<std::path::PathBuf>,
 ) {
     /*
      * Home's conversation is the task manager, and its replies have to become
@@ -3148,12 +3227,38 @@ async fn drive_run(
     let notes = tables
         .kv_get(&crate::notes::notes_key(&project_id))
         .unwrap_or_default();
+    let mut system = String::new();
     if !notes.trim().is_empty() {
-        request = request.system(format!(
+        system.push_str(
             "What you learned earlier in this project, kept across a compaction \
              that would otherwise have lost it. Treat it as standing \
-             instruction:\n\n{notes}"
+             instruction:\n\n",
+        );
+        system.push_str(&notes);
+    }
+    /*
+     * Where the checkpoints are, told to the agent rather than only logged.
+     *
+     * The transcript is this app's record, not the agent's conversation — none
+     * of it is sent — so a note saying "written to /…/600k-….md" tells the user
+     * and leaves the agent unable to answer "show me my checkpoints". One line
+     * in the system prompt is what makes that question answerable, and it costs
+     * a cache read.
+     */
+    if let Some(dir) = checkpoint_dir.as_deref() {
+        if !system.is_empty() {
+            system.push_str("\n\n");
+        }
+        system.push_str(&format!(
+            "Knowledge checkpoints for this project are written to {}. Each is a \
+             markdown file named for the context size it was taken at, with the \
+             pressure it was taken under in its front matter. Read them from \
+             there if you are asked about them.",
+            dir.join(&project_id).display()
         ));
+    }
+    if !system.is_empty() {
+        request = request.system(system);
     }
 
     crate::log!(
@@ -4108,6 +4213,227 @@ async fn drive_run(
             );
         }
     }
+
+    /*
+     * Closed before the checkpoint, and this is load-bearing rather than tidy.
+     *
+     * The run slot is still held here — the reservation lives until this
+     * function returns — so a message sent now is delivered into `inject`. The
+     * turn that was reading it has ended, so with the receiver still alive the
+     * words would go into a channel nobody drains and be lost without a trace.
+     * Dropping it makes the send fail instead, which is the case
+     * `run:inject_failed` already exists for: the message is queued and goes out
+     * for real once the slot frees.
+     *
+     * A checkpoint is a whole extra turn, so it widens that window from
+     * milliseconds to a minute. The race was survivable by accident before; it
+     * would not be now.
+     */
+    drop(inject_rx);
+    checkpoint_if_due(
+        &app,
+        &tables,
+        &project_id,
+        &cwd,
+        &turn_usage,
+        checkpoint_dir.as_deref(),
+    )
+    .await;
+}
+
+/// Take a knowledge sample if this turn pushed the conversation past a mark.
+///
+/// # What this is for
+///
+/// Not for the agent's benefit — the samples are never read back to it. It is a
+/// measurement, and the question it answers is whether the pre-compaction
+/// extraction gets *worse* as the conversation it summarises gets bigger. If it
+/// does, the right moment to compact is earlier than the moment the window
+/// forces, and nothing but evidence can say where.
+///
+/// So the samples are taken with exactly the prompt a real compaction would use,
+/// against exactly the notes it would be handed. A cheaper or shorter probe
+/// would measure the probe.
+///
+/// # Why it does not touch the live notes
+///
+/// Writing each sample into the project's notes would feed the 300k sample into
+/// the 600k one, and the comparison would be between an extraction and an
+/// extraction-of-an-extraction. These are observations; they are written to
+/// files and left alone.
+///
+/// # Why after the turn rather than during it
+///
+/// A sample is a turn of its own and a session runs one at a time. The crossing
+/// is noticed from the finished turn's usage and sampled immediately after,
+/// while the run slot is still held so nothing else can start in between.
+async fn checkpoint_if_due(
+    app: &AppHandle,
+    tables: &std::sync::Arc<crate::db::tables::Tables>,
+    project_id: &str,
+    cwd: &str,
+    usage: &agent_abstraction::Usage,
+    dir: Option<&std::path::Path>,
+) {
+    let Some(dir) = dir else { return };
+    let Some(context_tokens) = usage.context_tokens else {
+        return;
+    };
+    let mark = tables
+        .kv_get(&crate::notes::checkpoint_mark_key(project_id))
+        .and_then(|value| value.parse::<u64>().ok())
+        .unwrap_or(0);
+    let Some(threshold) = crate::notes::due(context_tokens, mark) else {
+        return;
+    };
+    // Nothing to resume means nothing to sample; the crossing cannot have
+    // happened without a session.
+    let Some(session) = tables
+        .kv_get(&session_key(project_id))
+        .filter(|id| !id.is_empty())
+    else {
+        return;
+    };
+
+    crate::log!(
+        crate::log::Level::Info,
+        "run",
+        "{project_id}: knowledge checkpoint at {threshold} (context {context_tokens})"
+    );
+    let _ = app.emit(
+        "run:checkpoint",
+        serde_json::json!({
+            "projectId": project_id,
+            "phase": "started",
+            "threshold": threshold,
+        }),
+    );
+
+    let existing = tables
+        .kv_get(&crate::notes::notes_key(project_id))
+        .unwrap_or_default();
+    let request = agent_abstraction::Request::new(
+        agent_abstraction::Agent::Claude,
+        crate::notes::merge_prompt(&existing),
+    )
+    .cwd(cwd)
+    .resume(&session);
+
+    let taken = match agent_abstraction::run(&request).await {
+        Ok(outcome) => crate::notes::clamp(&outcome.text),
+        Err(error) => {
+            crate::log!(
+                crate::log::Level::Warn,
+                "run",
+                "{project_id}: the {threshold} checkpoint failed: {error}"
+            );
+            String::new()
+        }
+    };
+
+    /*
+     * The mark advances even when the sample failed or came back empty.
+     *
+     * A conversation only passes 600k once, and retrying on the next turn would
+     * sample a bigger conversation while filing it under the smaller threshold —
+     * which is worse than a missing sample, because a missing one is visibly
+     * missing and a mislabelled one is not.
+     */
+    if let Err(error) = tables
+        .kv_put(
+            &crate::notes::checkpoint_mark_key(project_id),
+            threshold.to_string(),
+        )
+        .await
+    {
+        crate::log!(
+            crate::log::Level::Error,
+            "run",
+            "{project_id}: could not record the checkpoint mark: {error}"
+        );
+    }
+
+    let mut written = None;
+    if !taken.is_empty() {
+        let stamp = now();
+        let path = dir
+            .join(project_id)
+            .join(crate::notes::sample_name(threshold, &stamp));
+        let document = crate::notes::sample_document(
+            threshold,
+            context_tokens,
+            usage.context_window,
+            &stamp,
+            &session,
+            &taken,
+        );
+        match std::fs::create_dir_all(path.parent().unwrap_or(dir))
+            .and_then(|()| std::fs::write(&path, document))
+        {
+            Ok(()) => {
+                crate::log!(
+                    crate::log::Level::Info,
+                    "run",
+                    "{project_id}: checkpoint written to {}",
+                    path.display()
+                );
+                written = Some(path.display().to_string());
+
+                /*
+                 * Said in the transcript, with the path, because these files
+                 * exist to be read by a person and a sample nobody can find is
+                 * not evidence. The log has it too, but the log is not where
+                 * anyone is looking while the work is happening.
+                 */
+                let row = MessageRow {
+                    id: id("msg"),
+                    project_id: project_id.to_string(),
+                    item_id: String::new(),
+                    author: "system".into(),
+                    agent: "claude".into(),
+                    moderation: String::new(),
+                    model: String::new(),
+                    permission: String::new(),
+                    usage: String::new(),
+                    stop: "completed".into(),
+                    exit_code: 0,
+                    body: format!(
+                        "Knowledge checkpoint at {}k tokens ({} rule(s)) — {}",
+                        threshold / 1_000,
+                        taken.lines().filter(|line| !line.trim().is_empty()).count(),
+                        path.display()
+                    ),
+                    created_at: now(),
+                };
+                match tables.message.insert(row.clone()) {
+                    Ok(_) => {
+                        let _ = app.emit("message:appended", &MessageDto::from(row));
+                    }
+                    Err(error) => crate::log!(
+                        crate::log::Level::Warn,
+                        "run",
+                        "{project_id}: could not note the checkpoint: {error}"
+                    ),
+                }
+            }
+            Err(error) => crate::log!(
+                crate::log::Level::Error,
+                "run",
+                "{project_id}: could not write the checkpoint: {error}"
+            ),
+        }
+    }
+
+    let _ = app.emit(
+        "run:checkpoint",
+        serde_json::json!({
+            "projectId": project_id,
+            "phase": "finished",
+            "threshold": threshold,
+            "path": written,
+            "chars": taken.len(),
+        }),
+    );
 }
 
 #[cfg(test)]

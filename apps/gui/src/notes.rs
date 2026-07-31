@@ -61,6 +61,85 @@ pub fn notes_key(project_id: &str) -> String {
     format!("notes:{project_id}")
 }
 
+/// Whether this project takes knowledge checkpoints as its context fills.
+pub fn checkpoints_key(project_id: &str) -> String {
+    format!("checkpoints:{project_id}")
+}
+
+/// The largest threshold this project has already sampled, in context tokens.
+///
+/// Persisted rather than held in memory so a restart mid-session does not
+/// re-sample everything already captured. Reset to zero by a compaction, which
+/// is what makes the next fill re-arm all three.
+pub fn checkpoint_mark_key(project_id: &str) -> String {
+    format!("checkpoint-mark:{project_id}")
+}
+
+/// Where the samples are taken, in context tokens.
+///
+/// Thirds of a million-token window, which is the shape of the question being
+/// asked: does the pre-compaction extraction get worse as the conversation it is
+/// summarising gets bigger? Three points is the fewest that can show a *trend*
+/// rather than a difference — two could only say "not the same".
+///
+/// Nothing here decides when to compact. These are measurements, and the point
+/// of taking them is to find out where compacting should happen rather than to
+/// assume it.
+pub const CHECKPOINTS: [u64; 3] = [300_000, 600_000, 900_000];
+
+/// The next sample due for a conversation of this size, if any.
+///
+/// `mark` is the largest threshold already taken. Returns the *highest* crossed
+/// threshold rather than the lowest, so a run that jumps from 250k to 640k in
+/// one turn — which a long tool-using turn easily does — records one sample at
+/// 600k instead of firing 300k and 600k back to back against a context that is
+/// already past both.
+#[must_use]
+pub fn due(context_tokens: u64, mark: u64) -> Option<u64> {
+    CHECKPOINTS
+        .iter()
+        .rev()
+        .copied()
+        .find(|&threshold| context_tokens >= threshold && threshold > mark)
+}
+
+/// A sample's filename: sortable, and self-describing without opening it.
+#[must_use]
+pub fn sample_name(threshold: u64, stamp: &str) -> String {
+    // Colons are legal on the platforms this ships to but make a path awkward to
+    // pass to anything else, and the stamp is only ever read by eye.
+    format!("{}k-{}.md", threshold / 1_000, stamp.replace(':', "-"))
+}
+
+/// The header that makes a sample comparable to the others.
+///
+/// The whole exercise is a comparison, and a bare list of rules cannot be
+/// compared to anything — the reader has to know how full the window was, how
+/// long the conversation had run, and how much came back. Written as front
+/// matter so the file is still readable prose.
+#[must_use]
+pub fn sample_document(
+    threshold: u64,
+    context_tokens: u64,
+    context_window: Option<u64>,
+    stamp: &str,
+    session: &str,
+    body: &str,
+) -> String {
+    let window = context_window.map_or_else(|| "unknown".to_string(), |value| value.to_string());
+    let share = context_window.filter(|window| *window > 0).map_or_else(
+        || "unknown".to_string(),
+        |window| format!("{}%", (context_tokens * 100) / window),
+    );
+    format!(
+        "---\nthreshold: {threshold}\ncontext_tokens: {context_tokens}\n\
+         context_window: {window}\ncontext_used: {share}\ntaken_at: {stamp}\n\
+         session: {session}\nchars: {}\nlines: {}\n---\n\n{body}\n",
+        body.len(),
+        body.lines().filter(|line| !line.trim().is_empty()).count(),
+    )
+}
+
 /// Trim notes to [`BUDGET`], on a line boundary.
 ///
 /// Cut at a line rather than mid-sentence: half a rule is worse than no rule,
@@ -152,6 +231,82 @@ pub fn merge_prompt(existing: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /*
+     * The measurement this feature exists to make: does the extraction get
+     * worse as the conversation it summarises gets bigger? So the sampling has
+     * to be even-handed — one sample per threshold, never two for the same
+     * pressure, and never a sample skipped because a turn was large.
+     */
+    #[test]
+    fn nothing_is_due_below_the_first_threshold() {
+        assert_eq!(due(299_999, 0), None);
+        assert_eq!(due(0, 0), None);
+    }
+
+    #[test]
+    fn each_threshold_is_sampled_once() {
+        assert_eq!(due(300_000, 0), Some(300_000));
+        // Already taken, so a turn that lands at the same size takes nothing.
+        assert_eq!(due(310_000, 300_000), None);
+        assert_eq!(due(600_001, 300_000), Some(600_000));
+        assert_eq!(due(950_000, 600_000), Some(900_000));
+        assert_eq!(due(999_999, 900_000), None);
+    }
+
+    /// A long tool-using turn can add hundreds of thousands of tokens at once.
+    /// Firing every crossed threshold in turn would sample 300k against a
+    /// conversation already at 640k, which is not a 300k sample at all.
+    #[test]
+    fn a_turn_that_jumps_two_thresholds_samples_the_one_it_landed_on() {
+        assert_eq!(due(640_000, 0), Some(600_000));
+        assert_eq!(due(910_000, 0), Some(900_000));
+    }
+
+    /// A compaction resets the mark, so the next fill re-arms all three — and
+    /// that is the point: the interesting comparison is across fills.
+    #[test]
+    fn a_reset_mark_re_arms_the_thresholds() {
+        assert_eq!(due(320_000, 0), Some(300_000));
+    }
+
+    #[test]
+    fn a_sample_is_named_so_it_sorts_and_explains_itself() {
+        assert_eq!(
+            sample_name(600_000, "2026-08-01T00:30:00+00:00"),
+            "600k-2026-08-01T00-30-00+00-00.md"
+        );
+    }
+
+    /// A rule list with no idea how full the window was cannot be compared to
+    /// anything, which would defeat the whole exercise.
+    #[test]
+    fn a_sample_records_the_pressure_it_was_taken_under() {
+        let doc = sample_document(
+            300_000,
+            312_450,
+            Some(1_000_000),
+            "2026-08-01T00:30:00+00:00",
+            "abc-123",
+            "- Bump the version on every commit.",
+        );
+
+        assert!(doc.contains("threshold: 300000"));
+        assert!(doc.contains("context_tokens: 312450"));
+        assert!(doc.contains("context_used: 31%"));
+        assert!(doc.contains("session: abc-123"));
+        assert!(doc.contains("lines: 1"));
+        assert!(doc.ends_with("- Bump the version on every commit.\n"));
+    }
+
+    /// An agent that reports no window still gives a comparable sample: the
+    /// token count is the axis that matters and it is always there.
+    #[test]
+    fn a_missing_window_is_said_rather_than_guessed() {
+        let doc = sample_document(300_000, 312_450, None, "t", "s", "body");
+        assert!(doc.contains("context_window: unknown"));
+        assert!(doc.contains("context_used: unknown"));
+    }
 
     /// The window carries its own copy as `NOTES_BUDGET` in `api/client.ts`, so
     /// the editor can show the room left *before* saving rather than truncating
