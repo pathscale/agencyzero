@@ -1,4 +1,5 @@
 import { fireEvent, render, waitFor } from "@solidjs/testing-library";
+import { createSignal } from "solid-js";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { Composer } from "~/features/project/Composer";
 import { prefs, setPrefs } from "~/stores/prefs";
@@ -166,5 +167,51 @@ describe("an unsent draft", () => {
     fireEvent.click(screen.getByLabelText("Send"));
     await waitFor(() => expect(screen.onSend).toHaveBeenCalled());
     await waitFor(() => expect(prefs.composerDrafts["project:abc"] ?? "").toBe(""));
+  });
+});
+
+/*
+ * Two project tabs share one `<Match>` branch, so switching between them swaps
+ * this component's props without unmounting it. A draft held in local state
+ * survived that swap and appeared under the next tab — typing "test" in one
+ * session showed "test" in the next, and the draft it landed on was lost.
+ */
+describe("a draft belongs to its own tab", () => {
+  beforeEach(() => {
+    setPrefs("composerDrafts", {});
+  });
+
+  it("follows the key when the same composer is handed a different tab", async () => {
+    const [key, setKey] = createSignal("project:abc");
+    const screen = render(() => (
+      <WorkspaceProvider>
+        <Composer
+          draftKey={key()}
+          placeholder="Ask, or type / for commands…"
+          model="sonnet"
+          modelOptions={[{ value: "sonnet", label: "Sonnet" }]}
+          efforts={[]}
+          effort=""
+          permission="read_only"
+          onModelChange={() => {}}
+          onPermissionChange={() => {}}
+          onSend={vi.fn().mockResolvedValue(undefined)}
+        />
+      </WorkspaceProvider>
+    ));
+    const field = () =>
+      screen.getByLabelText("Ask, or type / for commands…") as HTMLTextAreaElement;
+
+    fireEvent.input(field(), { target: { value: "meant for abc" } });
+    await waitFor(() => expect(prefs.composerDrafts["project:abc"]).toBe("meant for abc"));
+
+    // The tab changes under the same component instance.
+    setKey("project:xyz");
+    await waitFor(() => expect(field().value).toBe(""));
+    expect(prefs.composerDrafts["project:xyz"]).toBeUndefined();
+
+    // And going back brings the first tab's words with it.
+    setKey("project:abc");
+    await waitFor(() => expect(field().value).toBe("meant for abc"));
   });
 });

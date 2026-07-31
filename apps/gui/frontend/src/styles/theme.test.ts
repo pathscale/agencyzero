@@ -108,10 +108,14 @@ const BEFORE: Record<string, [number, number, number]> = {
    * Converted from #1e1e1e / #2a2a2a / #e0e0e0, then given the neutral ladder's
    * hue so the reply follows the theme instead of staying grey. Lightness is
    * what still separates it from the user's bubble at base-300's 20%.
+   *
+   * Chroma matches the tier each one belongs to rather than sitting under it:
+   * the surface takes `base-300`'s 0.008, the text takes `az-title`'s 0.008.
+   * Held below them, the reply read as the one card that missed the theme.
    */
-  "az-bubble": [23.5, 0.006, 240],
+  "az-bubble": [23.5, 0.008, 240],
   "az-bubble-edge": [28.5, 0.008, 240],
-  "az-bubble-text": [90.67, 0.004, 245],
+  "az-bubble-text": [90.67, 0.008, 245],
 };
 
 describe("the theme axes", () => {
