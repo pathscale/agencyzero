@@ -1,0 +1,41 @@
+#!/bin/sh
+# Reject what the Overrides section forbids, before it becomes history.
+#
+# The prompt-level rules in AGENTS.md are best effort: they compete with an
+# agent's built-in defaults and they lose sometimes, silently. This does not
+# compete with anything. A commit either passes or it does not exist.
+#
+# Both checks below are here because they were broken in practice, not because
+# they seemed like good ideas. The attribution trailer went onto five commits in
+# one evening while the rule forbidding it was already written in AGENTS.md.
+#
+# Install: git config core.hooksPath .githooks
+set -eu
+
+message_file="$1"
+# Strip comments so the commit template's own text is never the thing that
+# fails the check.
+body=$(grep -v '^#' "$message_file" || true)
+failed=0
+
+if printf '%s' "$body" | grep -qiE 'co-authored-by:.*(claude|anthropic|copilot|gpt|gemini|cursor|codex)'; then
+  echo "commit-msg: AI co-author trailer found. AGENTS.md forbids AI attribution." >&2
+  failed=1
+fi
+
+if printf '%s' "$body" | grep -qiE 'generated with .*(claude|copilot|cursor|codex)|🤖'; then
+  echo "commit-msg: AI attribution footer found. AGENTS.md forbids AI attribution." >&2
+  failed=1
+fi
+
+# Em dash and en dash. The owner reads every one of these as a tell.
+if printf '%s' "$body" | grep -q '—'; then
+  echo "commit-msg: em dash found. Use a comma, a colon, parentheses, or a full stop." >&2
+  failed=1
+fi
+
+if [ "$failed" -ne 0 ]; then
+  echo "" >&2
+  echo "Fix the message and commit again. See the Overrides section of AGENTS.md." >&2
+  exit 1
+fi

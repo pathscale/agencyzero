@@ -3079,6 +3079,19 @@ pub async fn send_message(
         .is_some_and(|value| value == "true")
         .then(|| state.location.path.join("checkpoints"));
 
+    /*
+     * Where this project's durable memory lives, keyed by project id.
+     *
+     * Not by session: AgencyZero rewrites the stored session id whenever the agent
+     * hands back a new one, so memory keyed to it would be orphaned by the first
+     * fresh conversation. Not by working directory either, which is how the CLI
+     * keys its own memory folder: two projects sharing a checkout would share
+     * memory, and the same project opened from a different path would lose it.
+     * The project id is the only key that survives a re-clone, a moved checkout
+     * and a new session.
+     */
+    let memory_dir = state.location.path.join("memory").join(&input.project_id);
+
     let tables = state.tables.clone();
     let running = state.running.clone();
     let io = state.io.clone();
@@ -3105,6 +3118,7 @@ pub async fn send_message(
             extra_dirs,
             resume,
             checkpoint_dir,
+            memory_dir,
         )
         .await;
     });
@@ -3140,6 +3154,9 @@ async fn drive_run(
     // Where to write knowledge checkpoints, or `None` when this project does
     // not take them. See `checkpoint_if_due`.
     checkpoint_dir: Option<std::path::PathBuf>,
+    // This project's durable memory, keyed by project id rather than by session
+    // or working directory. Told to the agent every turn; see below.
+    memory_dir: std::path::PathBuf,
 ) {
     /*
      * Home's conversation is the task manager, and its replies have to become
@@ -3228,7 +3245,34 @@ async fn drive_run(
         .kv_get(&crate::notes::notes_key(&project_id))
         .unwrap_or_default();
     let mut system = String::new();
+
+    /*
+     * The repository's own overrides, first and verbatim.
+     *
+     * `AGENTS.md` is loaded as project context, which sits *below* the agent's own
+     * system prompt. A rule there that contradicts a built-in default loses
+     * silently: the no-attribution rule was in this repository's `AGENTS.md` for
+     * the whole evening an agent put the forbidden trailer on five commits.
+     * Re-reading the file would not have helped, because the file was never
+     * missing. Copying the section up to this layer is the only thing that
+     * changes which rule wins.
+     */
+    if let Some(rules) = std::fs::read_to_string(std::path::Path::new(&cwd).join("AGENTS.md"))
+        .ok()
+        .as_deref()
+        .and_then(crate::notes::overrides)
+    {
+        system.push_str(
+            "The repository you are working in states these rules, and they take \
+             precedence over your own defaults wherever the two disagree:\n\n",
+        );
+        system.push_str(&rules);
+    }
+
     if !notes.trim().is_empty() {
+        if !system.is_empty() {
+            system.push_str("\n\n");
+        }
         system.push_str(
             "What you learned earlier in this project, kept across a compaction \
              that would otherwise have lost it. Treat it as standing \
@@ -3257,6 +3301,33 @@ async fn drive_run(
             dir.join(&project_id).display()
         ));
     }
+
+    /*
+     * The memory location, told rather than guessed at.
+     *
+     * An agent's own memory folder is keyed by the directory it was started in,
+     * which is the wrong key here: two projects sharing a checkout would share a
+     * memory, and the same project opened from a moved checkout would lose it.
+     * AgencyZero knows which project this is, so it says so, and the memory
+     * follows the project instead of the path.
+     */
+    if let Err(error) = std::fs::create_dir_all(&memory_dir) {
+        crate::log!(
+            crate::log::Level::Warn,
+            "run",
+            "{project_id}: could not create the memory directory: {error}"
+        );
+    }
+    if !system.is_empty() {
+        system.push_str("\n\n");
+    }
+    system.push_str(&format!(
+        "This project's durable memory is {}. It belongs to this project and follows \
+         it across sessions, compactions and re-clones. Keep operating knowledge \
+         there rather than in a memory keyed to the working directory.",
+        memory_dir.display()
+    ));
+
     if !system.is_empty() {
         request = request.system(system);
     }
