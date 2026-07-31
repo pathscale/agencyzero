@@ -152,6 +152,16 @@ export interface AgencyZeroApi {
   setTabModel(tabKey: string, model: string, permission: Permission): Promise<void>;
   /** `Run::cancel` — resolves once the process group is gone. */
   cancelRun(projectId: string): Promise<void>;
+
+  /**
+   * Summarise this project's conversation and continue from the summary.
+   *
+   * A real turn against the agent's own session, so it claims the run slot and
+   * is refused while anything else is running. Rejects with the agent's own
+   * reason when it will not compact — a conversation too short to summarise is
+   * the common one, and is an answer rather than a fault.
+   */
+  compactProject(projectId: string): Promise<void>;
   listRunningTasks(projectId: string): Promise<RunningTask[]>;
   cancelTask(toolCallId: string): Promise<void>;
   /**

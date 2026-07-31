@@ -40,14 +40,30 @@ describe("parseSlash", () => {
   });
 
   /*
-   * The point of the whole module. Sent as a prompt, `/compact` would be billed
+   * `/compact` leaves this window. It was refused until agent-abstraction 0.4.1
+   * grew a command channel, because sending the literal would have been billed
    * as a turn in which the model read the word "compact" and guessed — a
-   * failure that looks exactly like the feature not working.
+   * failure that looks exactly like the feature working. It is now its own
+   * outcome, handed to the backend rather than answered here or sent as prose.
    */
-  it("refuses agent-session commands with the reason", () => {
-    const out = parseSlash("/compact", CONTEXT);
-    expect(out.kind).toBe("error");
-    expect(out.kind === "error" && out.message).toContain("agent-abstraction");
+  it("routes /compact to the backend rather than sending or refusing it", () => {
+    expect(parseSlash("/compact", CONTEXT).kind).toBe("compact");
+  });
+
+  /*
+   * The others stay refused, and each for its own reason rather than a shared
+   * "not supported": this app already resumes by id, and a dropped conversation
+   * the transcript went on showing would be worse than not dropping it.
+   */
+  it("refuses the session commands that have no meaning here", () => {
+    for (const [line, expected] of [
+      ["/resume", "session picker"],
+      ["/clear", "new project"],
+    ] as const) {
+      const out = parseSlash(line, CONTEXT);
+      expect(out.kind).toBe("error");
+      expect(out.kind === "error" && out.message).toContain(expected);
+    }
   });
 
   it("refuses an unknown command rather than sending it as text", () => {

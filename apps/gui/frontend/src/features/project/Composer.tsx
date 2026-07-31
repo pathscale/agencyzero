@@ -50,6 +50,15 @@ export type ComposerProps = {
   onModelChange: (model: string) => void;
   onPermissionChange: (permission: Permission) => void;
   /**
+   * Run `/compact` against this conversation's session.
+   *
+   * A callback rather than a project id, so the composer stays the controlled
+   * component it is everywhere else: it knows a command was typed, not which
+   * conversation it belongs to. Absent means the surface has no session to
+   * compact, which is the honest state for the mock and for a bare test mount.
+   */
+  onCompact?: () => Promise<void>;
+  /**
    * Resolves on success. The draft is held until then, so an IPC, database or
    * backend failure cannot swallow a prompt someone spent minutes writing.
    */
@@ -199,6 +208,24 @@ export function Composer(props: ComposerProps): JSX.Element {
         case "permission":
           props.onPermissionChange(command.permission);
           break;
+        // The one command that leaves this window. It runs a real turn against
+        // the agent's session, so the composer reports what came back rather
+        // than assuming: a refusal is the agent's answer, not a fault here.
+        case "compact": {
+          const compact = props.onCompact;
+          if (!compact) {
+            setError("This conversation has no session to compact.");
+            break;
+          }
+          setIsSending(true);
+          void compact()
+            .then(() =>
+              setError("Compacted. The agent now works from a summary of what came before."),
+            )
+            .catch((cause: unknown) => setError(describeError(cause)))
+            .finally(() => setIsSending(false));
+          break;
+        }
         default:
           setError(command.message);
       }

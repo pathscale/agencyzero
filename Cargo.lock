@@ -23,9 +23,9 @@ checksum = "320119579fcad9c21884f5c4861d16174d0e06250625266f50fe6898340abefa"
 
 [[package]]
 name = "agent-abstraction"
-version = "0.4.0"
+version = "0.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2499f04af3690cbb771718b6250239a1e6a9f398a6e504dda5cca44f332c1317"
+checksum = "a2b0279da4362efb49920470c1b388fedc5c2a00208497d5d69462a028a59008"
 dependencies = [
  "libc",
  "serde",

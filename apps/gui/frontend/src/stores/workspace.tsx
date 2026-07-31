@@ -1285,6 +1285,13 @@ function createWorkspace() {
     relaunchApp: () => client().relaunchApp(),
     cancelTask: (toolCallId: string) => client().cancelTask(toolCallId),
     cancelRun: (projectId: string) => client().cancelRun(projectId),
+    /*
+     * Left to reject. The composer shows the agent's own reason, and the
+     * reasons are answers rather than faults: too short to summarise, or a run
+     * already holding the slot. Swallowing them here would leave the user
+     * looking at an unchanged transcript with no explanation.
+     */
+    compactProject: (projectId: string) => client().compactProject(projectId),
     async clearTaskLog(projectId: string) {
       await client().clearTaskLog(projectId);
       batch(() => {

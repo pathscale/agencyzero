@@ -757,6 +757,7 @@ fn main() {
             projects::list_approval_rules,
             projects::clear_approval_rules,
             projects::cancel_run,
+            projects::compact_project,
             projects::get_cost_summary,
             get_build_info,
             projects::list_agent_io,

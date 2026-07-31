@@ -1887,6 +1887,182 @@ pub async fn cancel_run(project_id: String, state: State<'_, AppState>) -> Resul
     }
 }
 
+/// Summarise the conversation so far and continue from the summary.
+///
+/// The answer to a session that has filled its context window: past about
+/// four-fifths of it the model is measurably worse at what it was doing, and
+/// there is nothing a user can do about it from the composer.
+///
+/// Runs `agent-abstraction`'s `Command::Compact` rather than sending the text
+/// `/compact`, which is the whole point of the crate's typed surface: the
+/// literal would reach an agent without a command vocabulary as prose and come
+/// back as an essay about compaction, indistinguishable from success.
+///
+/// # Its own turn, and its own slot
+///
+/// A compaction is a turn: it resumes the session, rewrites it, and settles.
+/// So it claims the same one-run-per-project slot a message does, and is
+/// refused while anything else is running rather than racing it. It writes no
+/// assistant reply — a compaction produces no answer — so the transcript gets a
+/// moderator note instead, which is also the only durable record that the
+/// conversation the user is reading was rewritten underneath them.
+///
+/// # Errors
+/// When nothing has been said yet (no session to compact), when a run is
+/// already active, or when the agent refuses. A conversation too short to
+/// summarise is the agent's own refusal and comes back as its message, not as
+/// a crash.
+#[tauri::command]
+pub async fn compact_project(
+    app: AppHandle,
+    project_id: String,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let Some(session) = state
+        .tables
+        .kv_get(&session_key(&project_id))
+        .filter(|id| !id.is_empty())
+    else {
+        return Err("there is no conversation to compact yet".into());
+    };
+    {
+        let active = state
+            .active
+            .lock()
+            .map_err(|_| "the run registry is unavailable".to_string())?;
+        if active.contains_key(&project_id) {
+            return Err("a run is already active in this project — let it finish first".into());
+        }
+    }
+
+    let mut dirs = state
+        .tables
+        .project
+        .select(project_id.clone())
+        .and_then(|row| serde_json::from_str::<Vec<String>>(&row.dirs).ok())
+        .unwrap_or_default();
+    dirs.retain(|dir| !dir.trim().is_empty());
+    let cwd = if dirs.is_empty() {
+        crate::workspace_root_path(&app, &state)
+    } else {
+        dirs.remove(0)
+    };
+
+    let request = agent_abstraction::Request::command(
+        agent_abstraction::Agent::Claude,
+        &agent_abstraction::Command::Compact { instructions: None },
+    )
+    .cwd(&cwd)
+    .resume(&session);
+
+    let io = state.io.clone();
+    note_io(
+        &app,
+        &io,
+        &project_id,
+        "sent",
+        "request",
+        format!("claude /compact cwd={cwd} resume={session}"),
+    );
+    crate::log!(
+        crate::log::Level::Info,
+        "run",
+        "{project_id}: compacting session {session}"
+    );
+
+    let mut run = agent_abstraction::stream(&request)
+        .map_err(|error| format!("could not start the compaction: {error}"))?;
+
+    let _ = app.emit(
+        "run:compaction",
+        serde_json::json!({ "projectId": project_id, "phase": "started" }),
+    );
+
+    /*
+     * Only the compaction events are read. A compaction emits no text and no
+     * usage worth recording, and the run's own `result` carries an empty answer
+     * by design, so draining the stream for anything else would be reading
+     * fields that are blank on purpose.
+     */
+    let mut outcome_note = None;
+    while let Some(event) = run.recv().await {
+        if let agent_abstraction::Event::Compaction(phase) = event
+            && let agent_abstraction::Compaction::Finished { ok, error } = phase
+        {
+            outcome_note = Some((ok, error));
+        }
+    }
+    let finished = run.finish().await;
+
+    let (ok, why) = match (&finished, outcome_note) {
+        // The agent's own verdict outranks the exit: a refusal is a completed
+        // run carrying a reason.
+        (_, Some((ok, error))) => (ok, error),
+        (Err(error), None) => (false, Some(error.to_string())),
+        // A run that ended without ever saying it compacted has not compacted,
+        // and reporting success here is exactly the lie the typed command
+        // exists to prevent.
+        (Ok(_), None) => (
+            false,
+            Some("the agent ended without reporting a compaction".into()),
+        ),
+    };
+
+    let body = if ok {
+        "Compacted the conversation. What came before is now a summary, so the agent remembers the gist rather than the words.".to_string()
+    } else {
+        format!(
+            "Could not compact: {}",
+            why.as_deref().unwrap_or("no reason given")
+        )
+    };
+    note_io(
+        &app,
+        &io,
+        &project_id,
+        "received",
+        if ok { "compacted" } else { "error" },
+        body.clone(),
+    );
+
+    let row = MessageRow {
+        id: id("msg"),
+        project_id: project_id.clone(),
+        item_id: String::new(),
+        author: "moderator".into(),
+        agent: "claude".into(),
+        moderation: String::new(),
+        model: String::new(),
+        permission: String::new(),
+        usage: String::new(),
+        stop: if ok { "completed" } else { "error" }.into(),
+        exit_code: 0,
+        body,
+        created_at: now(),
+    };
+    state
+        .tables
+        .message
+        .insert(row.clone())
+        .map_err(|error| error.to_string())?;
+    let _ = app.emit("message:appended", &MessageDto::from(row));
+    let _ = app.emit(
+        "run:compaction",
+        serde_json::json!({
+            "projectId": project_id,
+            "phase": "finished",
+            "ok": ok,
+            "error": why,
+        }),
+    );
+
+    if ok {
+        Ok(())
+    } else {
+        Err(why.unwrap_or_else(|| "the compaction did not complete".into()))
+    }
+}
+
 /// Start the Home task manager's next prompt on a fresh conversation.
 ///
 /// Clears the stored session id, so the next turn does not resume. The

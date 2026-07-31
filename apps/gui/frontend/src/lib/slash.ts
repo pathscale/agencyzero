@@ -10,17 +10,20 @@
  * fail halfway.
  *
  * **Agent-session** commands ask the CLI to do something to its own
- * conversation. `/compact` is the example: it is a Claude Code REPL feature that
- * rewrites the session's history. This app does not drive the REPL — it spawns
- * non-interactive runs and resumes by session id — and `agent_abstraction`'s
- * `Request` carries no command channel: `prompt`, `system`, `model`, `effort`,
- * `cont`, `extra_args`, and nothing that means "run a command".
+ * conversation. `/compact` is the example: it rewrites the session's history
+ * into a summary, which is the only answer to a context window that has filled
+ * up and taken the model's judgement with it.
  *
- * So a typed `/compact` cannot work today, and the failure would be silent and
- * expensive: the string would go out as the prompt, the model would read the
- * word "compact" as a request, and a turn would be billed for a misunderstanding
- * that looks like the feature not working. It is recognised and refused instead,
- * with the reason — an honest "not yet" beats a plausible wrong answer.
+ * These used to be refused here, because sending the literal would have been
+ * worse than refusing: the string goes out as the prompt, the model reads the
+ * word as a request, and a turn is billed for a misunderstanding that looks
+ * exactly like the feature not working. `agent-abstraction` 0.4.1 added the
+ * command channel that was missing, so `/compact` now runs as a real command
+ * against the session and this file routes it there.
+ *
+ * The rest stay refused, and for their own reasons rather than a shared one:
+ * `/resume` is the CLI's own session picker and this app already resumes by id,
+ * `/clear` would drop a conversation the transcript would go on showing.
  */
 
 import { PERMISSION_ORDER } from "~/lib/labels";
@@ -33,12 +36,12 @@ export type SlashOutcome =
   | { kind: "effort"; effort: string }
   | { kind: "permission"; permission: Permission }
   | { kind: "help"; message: string }
+  /** Run the agent's own `/compact` against this project's session. */
+  | { kind: "compact" }
   | { kind: "error"; message: string };
 
 /** Commands that need the agent's own session, which the run path cannot reach. */
 const NEEDS_THE_AGENT: Record<string, string> = {
-  compact:
-    "/compact is a Claude Code REPL command; this app resumes sessions non-interactively and the crate's Request has no command channel. Tracked — it needs agent-abstraction.",
   resume:
     "/resume is the CLI's own session picker. This app already resumes by session id, so there is nothing for it to pick.",
   clear:
@@ -49,6 +52,7 @@ const HELP = [
   "/model <id> — the model this tab uses",
   "/effort <level> — reasoning level",
   "/permission <posture> — read_only · plan · ask · edit · auto · bypass",
+  "/compact — summarise this conversation so the model stops running out of room",
   "/help — this list",
 ].join("\n");
 
@@ -80,6 +84,11 @@ export function parseSlash(
   switch (name) {
     case "help":
       return { kind: "help", message: HELP };
+
+    // Handed to the backend rather than answered here: it is a real turn
+    // against the agent's own session, not a change to this tab's state.
+    case "compact":
+      return { kind: "compact" };
 
     case "model": {
       if (!argument)

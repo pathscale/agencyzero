@@ -441,6 +441,14 @@ export function createMockApi(): AgencyZeroApi {
       return settle(undefined);
     },
 
+    /*
+     * Refused rather than faked. A compaction rewrites the agent's own
+     * conversation, and the mock has no agent and no session: reporting success
+     * would put "Compacted the conversation" on screen over a transcript
+     * nothing touched, which is the one thing this file refuses to do.
+     */
+    compactProject: () => Promise.reject(new Error("the mock has no agent session to compact")),
+
     listRunningTasks: (projectId) => settle(running.filter((task) => task.projectId === projectId)),
 
     async cancelTask(toolCallId) {
