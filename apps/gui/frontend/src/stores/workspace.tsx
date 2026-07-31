@@ -1340,6 +1340,10 @@ function createWorkspace() {
       const picked = await client().chooseDataDirectory();
       if (picked) await actions.setDataLocation(picked);
     },
+    /** How much disk each table holds. Read on demand; nothing caches it. */
+    listTableSizes() {
+      return client().listTableSizes();
+    },
     /** Create the workspace directory, then re-read so the row updates. */
     async createWorkspaceRoot() {
       setState("workspaceRoot", await client().createWorkspaceRoot());

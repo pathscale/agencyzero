@@ -144,3 +144,19 @@ export function countdown(iso: string | null, now = Date.now()): string {
   const days = Math.floor(hours / 24);
   return `${days}d ${hours % 24}h`;
 }
+
+/**
+ * Bytes as a person reads them: `2.3 MB`, `412 KB`.
+ *
+ * Decimal units rather than binary, because this sits next to a disk figure the
+ * OS also reports decimally — a table Finder calls 2.3 MB should not read 2.2
+ * here. One decimal place above a megabyte, none below: `412.4 KB` is precision
+ * nobody acts on.
+ */
+export function formatBytes(bytes: number): string {
+  if (!Number.isFinite(bytes) || bytes < 0) return "—";
+  if (bytes < 1_000) return `${bytes} B`;
+  if (bytes < 1_000_000) return `${Math.round(bytes / 1_000)} KB`;
+  if (bytes < 1_000_000_000) return `${(bytes / 1_000_000).toFixed(1)} MB`;
+  return `${(bytes / 1_000_000_000).toFixed(2)} GB`;
+}

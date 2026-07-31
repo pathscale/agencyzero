@@ -390,6 +390,20 @@ export function createMockApi(): AgencyZeroApi {
      * claiming a real path, and `isEditable: false` keeps the browser from
      * offering to move something that does not exist.
      */
+    /* Plausible shapes rather than a real walk: there is no store outside Tauri,
+     * and the point of the row is the *ordering* — that the log dwarfs the
+     * transcript is the thing worth seeing. */
+    listTableSizes: () =>
+      settle([
+        { name: "task_log", bytes: 2_411_724 },
+        { name: "agent_io_row", bytes: 968_320 },
+        { name: "message", bytes: 430_080 },
+        { name: "kv", bytes: 397_312 },
+        { name: "usage_ledger", bytes: 131_072 },
+        { name: "project_item", bytes: 126_976 },
+        { name: "project", bytes: 65_536 },
+      ]),
+
     getDataLocation(): Promise<DataLocationView> {
       return settle({
         path: "(in-memory fixtures)",

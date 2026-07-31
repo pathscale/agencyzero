@@ -78,6 +78,7 @@ const IMPLEMENTED: &[&str] = &[
     "list_models",
     "log_frontend",
     "get_log_path",
+    "list_table_sizes",
     "check_for_update",
     "install_update",
 ];
@@ -152,6 +153,50 @@ fn get_build_info() -> BuildInfo {
 #[tauri::command]
 fn log_frontend(level: String, message: String) {
     crate::log!(log::Level::parse(&level), "webview", "{message}");
+}
+
+/// One table's footprint on disk, for the Data section.
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct TableSize {
+    name: String,
+    bytes: u64,
+}
+
+/// How much room each table takes, largest first.
+///
+/// The store grows silently and unevenly: the task log and the raw agent I/O
+/// are written per tool call and per event, so they outgrow the transcript by
+/// an order of magnitude while nothing on screen says so. "Some of these logs
+/// may get very big" is only checkable if the app can be asked.
+///
+/// Directory sizes rather than row counts, because the question behind it is
+/// about disk. Walks one level: WorkTable keeps a directory per table with its
+/// pages inside, and a deep walk would be a stat storm on every Settings open.
+#[tauri::command]
+fn list_table_sizes(state: State<'_, AppState>) -> Vec<TableSize> {
+    let mut sizes: Vec<TableSize> = std::fs::read_dir(&state.location.path)
+        .into_iter()
+        .flatten()
+        .flatten()
+        .filter(|entry| entry.file_type().is_ok_and(|kind| kind.is_dir()))
+        .map(|entry| {
+            let bytes = std::fs::read_dir(entry.path())
+                .into_iter()
+                .flatten()
+                .flatten()
+                .filter_map(|file| file.metadata().ok())
+                .filter(|meta| meta.is_file())
+                .map(|meta| meta.len())
+                .sum();
+            TableSize {
+                name: entry.file_name().to_string_lossy().into_owned(),
+                bytes,
+            }
+        })
+        .collect();
+    sizes.sort_by(|a, b| b.bytes.cmp(&a.bytes));
+    sizes
 }
 
 /// Where the log file is, so Settings can point at it rather than describing it.
@@ -685,7 +730,8 @@ fn main() {
             list_agent_status,
             models::list_models,
             log_frontend,
-            get_log_path
+            get_log_path,
+            list_table_sizes
         ])
         .setup(|app| {
             app.set_menu(build_menu(app.handle())?)?;

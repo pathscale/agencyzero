@@ -4,6 +4,7 @@ import {
   countdown,
   duration,
   elapsed,
+  formatBytes,
   isTransientStop,
   relativeTime,
   taskMeta,
@@ -179,5 +180,21 @@ describe("clockTime", () => {
   it("renders nothing when the provider did not say when the limit resets", () => {
     expect(clockTime(null)).toBe("");
     expect(clockTime("nonsense")).toBe("");
+  });
+});
+
+describe("formatBytes", () => {
+  it("reads the way a disk figure is quoted", () => {
+    expect(formatBytes(0)).toBe("0 B");
+    expect(formatBytes(999)).toBe("999 B");
+    expect(formatBytes(2_411_724)).toBe("2.4 MB");
+    expect(formatBytes(430_080)).toBe("430 KB");
+    expect(formatBytes(3_200_000_000)).toBe("3.20 GB");
+  });
+
+  /* A store that cannot be measured reports nothing rather than "NaN B". */
+  it("refuses a figure it cannot render", () => {
+    expect(formatBytes(Number.NaN)).toBe("—");
+    expect(formatBytes(-1)).toBe("—");
   });
 });
