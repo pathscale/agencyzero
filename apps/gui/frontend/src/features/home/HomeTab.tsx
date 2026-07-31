@@ -75,7 +75,7 @@ export function HomeTab(): JSX.Element {
             <TaskManagerComposer />
 
             <div class="flex min-w-0 flex-1 items-center gap-2.5 rounded-[11px] border border-white/11 bg-az-inset px-3 py-2.5 focus-within:border-primary/40">
-              <Icon name="search" class="shrink-0 text-[14px] text-az-muted" />
+              <Icon name="search" class="shrink-0 text-[14px] text-primary/70" />
               <input
                 type="search"
                 value={query()}

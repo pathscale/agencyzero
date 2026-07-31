@@ -165,10 +165,26 @@ describe("the theme axes", () => {
     }
   });
 
-  /* The accent drives the ring and the halo; a literal yellow there would not
-   * follow the picker, which is how it was written before. */
-  it("derives the ring and halo from the accent rather than a literal", () => {
-    expect(CSS).not.toMatch(/rgb\(255 238 88/);
-    expect(CSS.match(/rgb\(from var\(--color-primary\)/g)?.length).toBe(3);
+  /*
+   * Everything the accent should reach. A literal here would keep its colour
+   * when the wheel moves — which is exactly what three of these did until it
+   * was noticed in the running app, because they hide inside shadow and
+   * gradient values rather than colour ones.
+   */
+  it("derives the app's chrome from the accent rather than from literals", () => {
+    expect(CSS, "no palette yellow may be spelled out outside the accent tokens").not.toMatch(
+      /rgb\(255 238 88|#fff176/,
+    );
+    for (const rule of [
+      "--color-az-hairline:",
+      "--color-az-hairline-soft:",
+      "--color-az-hairline-strong:",
+      "--color-az-primary-hover:",
+    ]) {
+      const decl = CSS.match(new RegExp(`${rule}\\s*([^;]+);`))?.[1] ?? "";
+      expect(decl, `${rule} must follow the accent`).toMatch(/var\(--color-primary\)/);
+    }
+    // The ring pair, the halo, the desk's dot grid and both scrollbar rules.
+    expect(CSS.match(/rgb\(from var\(--color-primary\)/g)?.length).toBeGreaterThanOrEqual(8);
   });
 });

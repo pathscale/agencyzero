@@ -3041,6 +3041,15 @@ async fn drive_run(
                     serde_json::json!({
                         "projectId": project_id,
                         "contextTokens": turn_usage.context_tokens,
+                        /*
+                         * Null for the whole run today, and sent anyway. The
+                         * crate reads the window from `modelUsage` on the
+                         * terminal record, so no mid-turn event carries one;
+                         * the webview falls back to what the finished turns
+                         * reported. Relaying the field means the day the crate
+                         * does report it mid-turn, a first turn starts showing
+                         * a share with no change here.
+                         */
                         "contextWindow": turn_usage.context_window,
                     }),
                 );

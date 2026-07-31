@@ -911,7 +911,7 @@ function Section(props: {
   return (
     <Panel class="flex-none rounded-[13px]">
       <div class="flex flex-wrap items-baseline gap-x-2.5 gap-y-1 px-3.5 pt-3 pb-2.5">
-        <Icon name={props.icon} class="relative top-0.5 text-[14px] text-az-muted" />
+        <Icon name={props.icon} class="relative top-0.5 text-[14px] text-primary" />
         <h2
           class="font-semibold text-[13px]"
           classList={{ "text-az-title": !props.pending, "text-az-muted": !!props.pending }}

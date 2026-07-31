@@ -208,10 +208,17 @@
     oklch(calc(24% + var(--az-lift)) calc(0.01 * var(--az-tint)) var(--az-hue))
   );
 
-  /* Hairlines are base-content at low alpha; three weights cover every divider. */
-  --color-az-hairline: rgb(255 255 255 / 9%);
-  --color-az-hairline-soft: rgb(255 255 255 / 7%);
-  --color-az-hairline-strong: rgb(255 255 255 / 14%);
+  /*
+   * Hairlines carry the accent at low alpha rather than plain white.
+   *
+   * They are the app's connective tissue — every panel edge, every row divider —
+   * so tinting them is what puts the chosen colour *everywhere* without any one
+   * control shouting. At 9-16% the hue is felt rather than seen; what reads is
+   * that the edges belong to the same theme as the buttons.
+   */
+  --color-az-hairline: rgb(from var(--color-primary) r g b / 11%);
+  --color-az-hairline-soft: rgb(from var(--color-primary) r g b / 8%);
+  --color-az-hairline-strong: rgb(from var(--color-primary) r g b / 18%);
 
   /*
    * The transcript's own surface — the one you read for hours, so it follows
@@ -318,7 +325,13 @@
   /* The desk: dot grid over the window interior. */
   .az-desk {
     background-color: var(--color-az-desk);
-    background-image: radial-gradient(rgb(255 255 255 / 4.5%) 1px, transparent 1px);
+    /* The dot grid is the largest single surface in the window; in the accent
+     * rather than white it tints the whole desk at a density the eye reads as
+     * texture. */
+    background-image: radial-gradient(
+      rgb(from var(--color-primary) r g b / 7%) 1px,
+      transparent 1px
+    );
     background-size: 22px 22px;
   }
 
@@ -367,7 +380,7 @@
   .az-scroll {
     overflow-y: auto;
     scrollbar-width: thin;
-    scrollbar-color: rgb(255 255 255 / 14%) transparent;
+    scrollbar-color: rgb(from var(--color-primary) r g b / 20%) transparent;
   }
 
   .az-scroll::-webkit-scrollbar {
@@ -376,7 +389,7 @@
   }
 
   .az-scroll::-webkit-scrollbar-thumb {
-    background-color: rgb(255 255 255 / 14%);
+    background-color: rgb(from var(--color-primary) r g b / 20%);
     border-radius: 999px;
   }
 
