@@ -1,6 +1,7 @@
-import { render, waitFor } from "@solidjs/testing-library";
-import { describe, expect, it, vi } from "vitest";
+import { fireEvent, render, waitFor } from "@solidjs/testing-library";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { Composer } from "~/features/project/Composer";
+import { prefs, setPrefs } from "~/stores/prefs";
 import { WorkspaceProvider } from "~/stores/workspace";
 
 function mount(overrides: Partial<Parameters<typeof Composer>[0]> = {}) {
@@ -121,5 +122,49 @@ describe("the model pill", () => {
     const pill = getByLabelText("Model");
     expect(pill.textContent?.match(/Sonnet/g) ?? []).toHaveLength(1);
     expect(pill).not.toHaveTextContent("fable");
+  });
+});
+
+/*
+ * Tabs unmount: `App.tsx` renders one `Match` at a time, so leaving a project
+ * destroys its composer. A reply typed and not sent used to die with it — the
+ * owner lost one mid-sentence and reported it as text vanishing on tab-away.
+ */
+describe("an unsent draft", () => {
+  beforeEach(() => {
+    setPrefs("composerDrafts", {});
+  });
+
+  it("survives the screen being unmounted and mounted again", async () => {
+    const first = mount({ draftKey: "project:abc" });
+    fireEvent.input(first.field, { target: { value: "half a thought" } });
+    await waitFor(() => expect(prefs.composerDrafts["project:abc"]).toBe("half a thought"));
+    first.unmount();
+
+    const second = mount({ draftKey: "project:abc" });
+    expect(second.field.value).toBe("half a thought");
+  });
+
+  /* Drafts are per tab: typing in one project must not leak into the next. */
+  it("is kept per tab rather than shared", async () => {
+    const first = mount({ draftKey: "project:abc" });
+    fireEvent.input(first.field, { target: { value: "for abc" } });
+    await waitFor(() => expect(prefs.composerDrafts["project:abc"]).toBe("for abc"));
+    first.unmount();
+
+    const other = mount({ draftKey: "project:xyz" });
+    expect(other.field.value).toBe("");
+  });
+
+  /* Sending is the one thing that clears it — otherwise the message someone
+   * just sent would reappear in the box on the next visit. */
+  it("is cleared once the message goes", async () => {
+    const screen = mount({ draftKey: "project:abc" });
+    fireEvent.input(screen.field, { target: { value: "ship it" } });
+    await waitFor(() => expect(prefs.composerDrafts["project:abc"]).toBe("ship it"));
+
+    fireEvent.click(screen.getByLabelText("Send"));
+    await waitFor(() => expect(screen.onSend).toHaveBeenCalled());
+    await waitFor(() => expect(prefs.composerDrafts["project:abc"] ?? "").toBe(""));
   });
 });

@@ -580,6 +580,16 @@ export interface UiPrefs {
    * it. See `RESET_ONCE` in `stores/prefs.ts`.
    */
   seenSections: string[];
+  /**
+   * Half-written messages, by project id.
+   *
+   * Switching tabs unmounts the project screen — `App.tsx` renders one `Match`
+   * at a time — so a composer's local state dies with it and an unsent reply
+   * was simply gone on return. Persisted rather than merely hoisted, because
+   * the same reasoning applies to closing the window: text someone typed is
+   * theirs, and losing it is never the smaller surprise.
+   */
+  composerDrafts: Record<string, string>;
 }
 
 /**
