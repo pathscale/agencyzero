@@ -13,7 +13,7 @@
 //!
 //! Anything inside the conversation is compactable. Anything in the system
 //! prompt is not. So durable knowledge cannot be re-taught by *saying* it to the
-//! agent — that turn is conversation too, and the next compaction eats it, and
+//! agent: that turn is conversation too, and the next compaction eats it, and
 //! you pay for the lesson again every time.
 //!
 //! These notes are held by the app, per project, and delivered through
@@ -26,7 +26,7 @@
 //! AgencyZero's, entirely. The crate's job ends at "run `/compact` against this
 //! session and report what happened"; it has no opinion about what a compaction
 //! costs its caller. Catching the command here and doing the right thing around
-//! it — learn first, then compact, then keep teaching — is the app's own
+//! it, learn first then compact then keep teaching, is the app's own
 //! behaviour, and nothing in this file asks the crate for anything it does not
 //! already do for any other request.
 //!
@@ -35,7 +35,7 @@
 //! Extraction runs against the conversation about to be summarised, so it can
 //! only see what is still there. After the first compaction the agent no longer
 //! remembers what it knew before it, and an extraction that replaced the notes
-//! would quietly drop everything learned earlier — the knowledge would decay one
+//! would quietly drop everything learned earlier. The knowledge would decay one
 //! compaction at a time, which is the failure this module exists to prevent.
 //! [`merge_prompt`] hands the agent what it already wrote and asks for one
 //! deduplicated set back.
@@ -56,7 +56,7 @@
 pub const BUDGET: usize = 4_000;
 
 /// Where a project's notes are kept. Keyed like [`crate::projects::session_key`]
-/// — a kv row rather than a column, so it can be absent without a migration.
+/// A kv row rather than a column, so it can be absent without a migration.
 pub fn notes_key(project_id: &str) -> String {
     format!("notes:{project_id}")
 }
@@ -99,7 +99,7 @@ pub fn checkpoint_mark_key(project_id: &str) -> String {
 /// Thirds of a million-token window, which is the shape of the question being
 /// asked: does the pre-compaction extraction get worse as the conversation it is
 /// summarising gets bigger? Three points is the fewest that can show a *trend*
-/// rather than a difference — two could only say "not the same".
+/// rather than a difference: two could only say "not the same".
 ///
 /// Nothing here decides when to compact. These are measurements, and the point
 /// of taking them is to find out where compacting should happen rather than to
@@ -110,7 +110,7 @@ pub const CHECKPOINTS: [u64; 3] = [300_000, 600_000, 900_000];
 ///
 /// `mark` is the largest threshold already taken. Returns the *highest* crossed
 /// threshold rather than the lowest, so a run that jumps from 250k to 640k in
-/// one turn — which a long tool-using turn easily does — records one sample at
+/// one turn, which a long tool-using turn easily does, records one sample at
 /// 600k instead of firing 300k and 600k back to back against a context that is
 /// already past both.
 #[must_use]
@@ -133,7 +133,7 @@ pub fn sample_name(threshold: u64, stamp: &str) -> String {
 /// The header that makes a sample comparable to the others.
 ///
 /// The whole exercise is a comparison, and a bare list of rules cannot be
-/// compared to anything — the reader has to know how full the window was, how
+/// compared to anything: the reader has to know how full the window was, how
 /// long the conversation had run, and how much came back. Written as front
 /// matter so the file is still readable prose.
 #[must_use]
@@ -168,7 +168,7 @@ pub fn sample_document(
 ///
 /// [`merge_prompt`] tells the agent "if you must cut, keep the corrections", and
 /// the agent obeys by listing them first. This dropped lines from the *front*,
-/// so an over-budget set lost exactly what the prompt had just protected —
+/// so an over-budget set lost exactly what the prompt had just protected,
 /// silently, and only once a session was long enough to matter.
 ///
 /// The doc that shipped with it argued the opposite and contradicted itself in
@@ -199,7 +199,7 @@ pub fn clamp(notes: &str) -> String {
 ///
 /// # Why it is this specific
 ///
-/// "Write down what matters" produces confident generalities — an agent asked to
+/// "Write down what matters" produces confident generalities, an agent asked to
 /// summarise its own knowledge will describe the codebase, which is the one
 /// thing already on disk and re-readable at any time. So the ask is restricted
 /// to categories that require *evidence from this conversation*: something the
@@ -209,12 +209,37 @@ pub fn clamp(notes: &str) -> String {
 /// from the code, the tests or the git log is banned outright, because that is
 /// exactly the filler that crowds out the twenty lines that are not.
 ///
-/// # Why the imperative
+/// # Why the imperative, and why a handover
 ///
 /// The result becomes a system prompt, so it has to read as instructions to
 /// follow rather than as minutes of a meeting. "The user prefers X" is a fact
 /// about a conversation; "Do X" is a rule, and only one of them changes what the
 /// next turn does.
+///
+/// It is also addressed to a *successor* rather than to "yourself", which is a
+/// small word doing real work. "Notes to yourself" invites the shorthand you can
+/// only read if you were there, and after a compaction you were not: a line like
+/// "this project is the other one" survives perfectly and means nothing. Writing
+/// for someone competent who has read none of it forces every line to stand up
+/// alone, which is exactly the test the reader will apply.
+///
+/// # Why this order
+///
+/// [`clamp`] cuts from the end, so the order is a priority list whether or not
+/// anyone intended it to be. Both real samples came in at 3,864 and 3,868
+/// characters against a 4,000 ceiling, so both were cut, and each lost whatever
+/// sat at the end.
+///
+/// "What you are in the middle of" is second because it is the one category that
+/// exists nowhere else. Corrections can be re-learned, painfully. A rejected
+/// design can be re-derived, expensively. That a pull request is open and
+/// awaiting review is written in no file, and it was the first thing dropped
+/// when it sat last.
+///
+/// The budget is stated to the writer along with the fact that the tail is what
+/// goes, because a writer who knows where the cut falls front-loads. Raising the
+/// budget instead does not work: the model fills whatever number it is given,
+/// and both samples landed within 140 characters of the ceiling.
 #[must_use]
 pub fn merge_prompt(existing: &str) -> String {
     let carried = if existing.trim().is_empty() {
@@ -233,26 +258,30 @@ pub fn merge_prompt(existing: &str) -> String {
          summary will lose everything except roughly what we discussed. Before \
          that happens, write the operating knowledge that must survive.\n\n\
          {carried}\n\n\
+         Write it as a handover to the person taking over from you. They are \
+         competent and they have read none of this conversation, so any line \
+         that only makes sense if you were here is a line they cannot use. Say \
+         which project, which file, which branch, by name.\n\n\
          Produce one merged list, deduplicated, newest understanding winning \
-         where it conflicts. Write it as instructions to yourself in the \
-         imperative — \"Bump the version on every commit\", not \"the user likes \
-         version bumps\" — because this becomes your standing instructions, not \
-         a record of a chat.\n\n\
-         Include only these, and only where this conversation is the evidence:\n\
+         where it conflicts. Use the imperative: \"Bump the version on every \
+         commit\", not \"the user likes version bumps\". This becomes their \
+         standing instructions, not a record of a chat.\n\n\
+         Include only these, in this order, and only where this conversation is \
+         the evidence:\n\
          - Corrections you were given, each with the reason behind it.\n\
-         - Decisions taken, and the alternatives that were rejected and why.\n\
-         - Constraints and conventions that are not visible in the code.\n\
+         - What you are in the middle of, and the next concrete step.\n\
          - Approaches already tried and ruled out, so they are not retried.\n\
-         - What is in flight right now and what the next step is.\n\n\
-         Exclude anything re-derivable from the repository — how the code is \
+         - Constraints and conventions that are not visible in the code.\n\
+         - Decisions taken, and the alternatives that were rejected and why.\n\n\
+         Exclude anything re-derivable from the repository: how the code is \
          structured, what a function does, what the tests cover, what is in the \
-         git log. You can read those again in seconds; that is not what gets \
-         lost.\n\n\
-         Hard limit: {BUDGET} characters. If you must cut, keep the corrections \
-         — they are the ones that cost a person their time to give you.\n\n\
+         git log. They can read those in seconds; that is not what gets lost.\n\n\
+         Hard limit: {BUDGET} characters, and anything over it is cut from the \
+         end. Write in the order above and put the specifics first, so what is \
+         lost is the least you could afford to lose.\n\n\
          Reply with the list and nothing else: no preamble, no sign-off, no \
-         offer to help further. Your entire reply is stored verbatim and fed \
-         back to you as instructions."
+         offer to help further. Your entire reply is stored verbatim and handed \
+         over as instructions."
     )
 }
 
@@ -263,7 +292,7 @@ mod tests {
     /*
      * The measurement this feature exists to make: does the extraction get
      * worse as the conversation it summarises gets bigger? So the sampling has
-     * to be even-handed — one sample per threshold, never two for the same
+     * to be even-handed, one sample per threshold, never two for the same
      * pressure, and never a sample skipped because a turn was large.
      */
     #[test]
@@ -291,7 +320,7 @@ mod tests {
         assert_eq!(due(910_000, 0), Some(900_000));
     }
 
-    /// A compaction resets the mark, so the next fill re-arms all three — and
+    /// A compaction resets the mark, so the next fill re-arms all three, and
     /// that is the point: the interesting comparison is across fills.
     #[test]
     fn a_reset_mark_re_arms_the_thresholds() {
@@ -338,8 +367,8 @@ mod tests {
 
     /// The window carries its own copy as `NOTES_BUDGET` in `api/client.ts`, so
     /// the editor can show the room left *before* saving rather than truncating
-    /// silently afterwards. This one binds — the backend clamps whatever it is
-    /// handed — and both are pinned so they cannot drift apart unnoticed.
+    /// silently afterwards. This one binds, the backend clamps whatever it is
+    /// handed, and both are pinned so they cannot drift apart unnoticed.
     #[test]
     fn the_budget_matches_the_window() {
         assert_eq!(BUDGET, 4_000);
@@ -400,6 +429,42 @@ mod tests {
         assert!(prompt.contains("Bump the version on every commit."));
         assert!(!prompt.contains("no notes yet"));
         assert!(prompt.contains("carry them forward"));
+    }
+
+    /*
+     * `clamp` cuts from the end, so the order in the prompt is a priority list
+     * whether or not anyone meant it to be. Both real samples came in just
+     * under the ceiling and both were cut, and the 600k one lost exactly what
+     * sat last: what was in flight, and what to do next.
+     *
+     * That is the one category written down nowhere else. Corrections can be
+     * re-learned and a rejected design re-derived, but "PR #36 is open and
+     * waiting on review" exists in no file.
+     */
+    #[test]
+    fn what_is_in_flight_outranks_everything_but_the_corrections() {
+        let prompt = merge_prompt("");
+        let at = |needle: &str| prompt.find(needle).expect("the category is asked for");
+
+        assert!(at("Corrections you were given") < at("What you are in the middle of"));
+        assert!(at("What you are in the middle of") < at("Approaches already tried"));
+        assert!(at("Approaches already tried") < at("Decisions taken"));
+    }
+
+    /// A successor, not "yourself". Shorthand that only reads if you were there
+    /// survives a compaction perfectly and means nothing afterwards.
+    #[test]
+    fn the_reader_is_someone_who_was_not_here() {
+        let prompt = merge_prompt("");
+        assert!(prompt.contains("handover"));
+        assert!(prompt.contains("read none of this conversation"));
+    }
+
+    /// A writer who knows where the cut falls front-loads. Raising the budget
+    /// does not help: the model fills whatever number it is given.
+    #[test]
+    fn the_writer_is_told_the_tail_is_what_goes() {
+        assert!(merge_prompt("").contains("cut from the end"));
     }
 
     #[test]
