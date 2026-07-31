@@ -22,6 +22,9 @@ const DEFAULTS: UiPrefs = {
     recent: true,
     homeIo: true,
     tmDebug: false,
+    // Closed by default: empty until a compaction has happened, so an open
+    // section reading "nothing kept yet" on every project would be furniture.
+    notes: false,
   },
   lastTabKey: "home",
   openTabKeys: [],

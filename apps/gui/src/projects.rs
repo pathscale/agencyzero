@@ -2627,6 +2627,10 @@ pub async fn delete_project(
         session_key(&id),
         io_persist_key(&id),
         partial_reply_key(&id),
+        // The notes kept across compactions. Ids are not recycled, so this is
+        // only an orphan — but it is an orphan that would be fed to an agent as
+        // standing instructions if one ever were.
+        crate::notes::notes_key(&id),
     ] {
         if let Err(error) = state.tables.kv_put(&key, String::new()).await {
             crate::log!(
@@ -2645,6 +2649,66 @@ pub async fn delete_project(
     crate::log!(crate::log::Level::Info, "projects", "deleted {id}");
     let _ = app.emit("project:deleted", serde_json::json!({ "id": id }));
     Ok(())
+}
+
+/// What this project's agent has been told to remember across compactions.
+///
+/// Empty until a compaction has taken some, which is the honest default: a
+/// conversation that has never been summarised has lost nothing yet.
+#[tauri::command]
+pub fn get_project_notes(project_id: String, state: State<'_, AppState>) -> String {
+    state
+        .tables
+        .kv_get(&crate::notes::notes_key(&project_id))
+        .unwrap_or_default()
+}
+
+/// Correct, extend or delete what the agent kept.
+///
+/// # Why this is not read-only
+///
+/// These notes are standing instructions: they ride every turn and the model
+/// treats them as true. An agent that wrote down a wrong rule — misread a
+/// correction, generalised from one incident — would otherwise carry it for the
+/// life of the project, and the user's only clue would be behaviour they cannot
+/// account for. Invisible durable memory is a liability; editable memory is a
+/// feature. This is the edit.
+///
+/// Clamped on the way in for the same reason it is clamped on the way out:
+/// [`crate::notes::BUDGET`] is what keeps the notes from becoming the context
+/// problem they exist to solve, and a hand-pasted essay would defeat it just as
+/// well as a verbose agent.
+///
+/// # Errors
+/// Returns the store's error when the row cannot be written.
+#[tauri::command]
+pub async fn set_project_notes(
+    project_id: String,
+    notes: String,
+    state: State<'_, AppState>,
+) -> Result<String, String> {
+    let kept = crate::notes::clamp(&notes);
+    state
+        .tables
+        .kv_put(&crate::notes::notes_key(&project_id), kept.clone())
+        .await
+        .map_err(|error| {
+            crate::log!(
+                crate::log::Level::Error,
+                "projects",
+                "{project_id}: could not write the notes: {error}"
+            );
+            error.to_string()
+        })?;
+    crate::log!(
+        crate::log::Level::Info,
+        "projects",
+        "{project_id}: notes set by hand, {} characters",
+        kept.len()
+    );
+    // The clamped text, so the editor shows what was actually stored rather
+    // than what was typed.
+    Ok(kept)
 }
 
 /// Drop this project's history. The badge goes to zero because the rows are

@@ -1,5 +1,6 @@
 import { Toggle } from "@pathscale/ui";
 import { createEffect, createSignal, For, type JSX, Show } from "solid-js";
+import { NOTES_BUDGET } from "~/api/client";
 import { Icon } from "~/components/Icon";
 import { SectionPanel } from "~/components/Panel";
 import { ItemMarker } from "~/components/StatusDot";
@@ -84,6 +85,16 @@ export function ProjectPanel(props: { project: Project }): JSX.Element {
         class={prefs.panelSections.io ? "flex min-h-[160px] flex-col" : "flex-none"}
       >
         <AgentIoList projectId={props.project.id} />
+      </SectionPanel>
+
+      <SectionPanel
+        icon="sparkles"
+        title="Kept across compaction"
+        isOpen={prefs.panelSections.notes}
+        onToggle={() => togglePanelSection("notes")}
+        class="flex-none"
+      >
+        <NotesEditor projectId={props.project.id} />
       </SectionPanel>
 
       {/* Last, deliberately: directories and the moderator toggle are set once
@@ -905,6 +916,135 @@ function CopyLogButton(props: { projectId: string }): JSX.Element {
     >
       Copy
     </button>
+  );
+}
+
+/**
+ * What the agent kept when the conversation was summarised — and the only place
+ * it can be corrected.
+ *
+ * These notes are standing instructions: they ride every turn and the model
+ * treats them as true. That is the point of them, and also the risk. An agent
+ * that misread a correction, or generalised a one-off into a rule, would carry
+ * it for the life of the project, and the only symptom would be behaviour with
+ * no visible cause. Durable memory nobody can inspect is a liability; this
+ * section is what makes it a feature.
+ *
+ * Editable rather than merely visible, for the same reason. Seeing a wrong rule
+ * and having no way to strike it out would be its own kind of maddening.
+ */
+function NotesEditor(props: { projectId: string }): JSX.Element {
+  const { actions, isLive } = useWorkspace();
+  const [draft, setDraft] = createSignal("");
+  const [saved, setSaved] = createSignal("");
+  const [status, setStatus] = createSignal<"idle" | "saving" | "error">("idle");
+  const [message, setMessage] = createSignal("");
+
+  // Re-read when the tab changes under a reused instance, and after a
+  // compaction has had a chance to write.
+  createEffect(() => {
+    const projectId = props.projectId;
+    void actions
+      .getProjectNotes(projectId)
+      .then((notes) => {
+        setDraft(notes);
+        setSaved(notes);
+      })
+      .catch((cause) => log.warn(`could not read the notes: ${describeError(cause)}`));
+  });
+
+  const dirty = () => draft() !== saved();
+  const remaining = () => NOTES_BUDGET - draft().length;
+
+  const save = async (next: string): Promise<void> => {
+    setStatus("saving");
+    try {
+      // The stored text comes back clamped, so what is on screen after a save
+      // is what the agent will actually be told.
+      const kept = await actions.setProjectNotes(props.projectId, next);
+      setDraft(kept);
+      setSaved(kept);
+      setStatus("idle");
+      setMessage("");
+    } catch (cause) {
+      setStatus("error");
+      setMessage(describeError(cause));
+    }
+  };
+
+  return (
+    <div class="flex flex-col gap-2 p-3">
+      <p class="text-[11.5px] text-az-muted leading-[1.5]">
+        Written by the agent before each compaction and sent with every turn since. Correct anything
+        wrong here — it is being followed.
+      </p>
+
+      {/*
+        Always an editor, never an empty state.
+
+        An empty box with a placeholder can be *typed into*, which a "nothing
+        kept yet" panel cannot — and seeding the rules by hand before the first
+        compaction is worth having on its own. Waiting for a compaction to earn
+        the right to state a house rule would be an odd thing to enforce.
+      */}
+      <textarea
+        value={draft()}
+        onInput={(event) => setDraft(event.currentTarget.value)}
+        rows={8}
+        aria-label="Notes kept across compaction"
+        placeholder={
+          "Nothing kept yet — the first /compact fills this in.\n\n" +
+          "You can also write rules here yourself; they are sent with every turn either way."
+        }
+        disabled={!isLive("setProjectNotes")}
+        class="az-scroll w-full resize-y rounded-lg border border-az-hairline-strong bg-base-300 p-2.5 font-mono text-[11.5px] text-az-body leading-[1.6] placeholder:text-az-faint focus:border-primary/40 focus:outline-none disabled:opacity-50"
+      />
+      <div class="flex items-center gap-2">
+        <span
+          class={`text-[11px] ${remaining() < 0 ? "text-error" : "text-az-faint"}`}
+          title={`The budget is ${NOTES_BUDGET} characters; anything over is dropped from the top when saved.`}
+        >
+          {remaining() < 0
+            ? `${-remaining()} over — the oldest lines will be dropped`
+            : `${remaining()} left`}
+        </span>
+        <div class="flex-1" />
+        <Show when={dirty()}>
+          <button
+            type="button"
+            onClick={() => setDraft(saved())}
+            class="shrink-0 text-[11px] text-az-faint transition-colors hover:text-base-content"
+          >
+            Revert
+          </button>
+        </Show>
+        <button
+          type="button"
+          onClick={() => void save(draft())}
+          disabled={!dirty() || status() === "saving" || !isLive("setProjectNotes")}
+          class="shrink-0 rounded-lg border border-primary/18 px-2.5 py-[3px] text-[11.5px] text-az-body transition-colors hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          {status() === "saving" ? "Saving…" : "Save"}
+        </button>
+        {/* Forgetting on purpose is a real thing to want: a project that
+              changed direction is better off with nothing than with rules
+              written for the work it used to be doing. */}
+        <button
+          type="button"
+          onClick={() => void save("")}
+          disabled={!saved().trim() || !isLive("setProjectNotes")}
+          class="shrink-0 text-[11px] text-az-faint transition-colors hover:text-error disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          Forget
+        </button>
+      </div>
+
+      <Show when={status() === "error"}>
+        <p role="alert" class="text-[11.5px] text-error">
+          Could not save — what you typed is still here. {message()}
+        </p>
+      </Show>
+    </div>
   );
 }
 

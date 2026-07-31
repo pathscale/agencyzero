@@ -25,6 +25,16 @@ import type {
 } from "~/types";
 
 /**
+ * How much room a project's kept notes get, in characters.
+ *
+ * Mirrors `notes::BUDGET` in the Rust, which is the one that binds — the
+ * backend clamps whatever it is handed. This copy is what lets the editor show
+ * the remaining room *before* saving, rather than silently truncating and
+ * leaving the user to notice their last three rules are missing.
+ */
+export const NOTES_BUDGET = 4_000;
+
+/**
  * The Tauri surface, as proposed in `design/data-model.html`.
  *
  * Commands are `invoke()` calls; {@link AppEvent} names are `listen()` topics.
@@ -163,6 +173,20 @@ export interface AgencyZeroApi {
    * short to summarise is the common one, and is an answer rather than a fault.
    */
   compactProject(projectId: string): Promise<void>;
+
+  /**
+   * What this project's agent keeps across compactions.
+   *
+   * Empty until a compaction has taken some. These are standing instructions —
+   * they ride every turn — so they are readable and writable rather than hidden:
+   * an agent that wrote down a wrong rule would otherwise carry it for the life
+   * of the project, and the only symptom would be behaviour nobody can account
+   * for.
+   */
+  getProjectNotes(projectId: string): Promise<string>;
+  /** Returns the text as stored — clamped to the budget, so the editor shows
+   *  what the agent will actually be told rather than what was typed. */
+  setProjectNotes(projectId: string, notes: string): Promise<string>;
   listRunningTasks(projectId: string): Promise<RunningTask[]>;
   cancelTask(toolCallId: string): Promise<void>;
   /**

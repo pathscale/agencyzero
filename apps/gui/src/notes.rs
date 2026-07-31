@@ -153,6 +153,15 @@ pub fn merge_prompt(existing: &str) -> String {
 mod tests {
     use super::*;
 
+    /// The window carries its own copy as `NOTES_BUDGET` in `api/client.ts`, so
+    /// the editor can show the room left *before* saving rather than truncating
+    /// silently afterwards. This one binds — the backend clamps whatever it is
+    /// handed — and both are pinned so they cannot drift apart unnoticed.
+    #[test]
+    fn the_budget_matches_the_window() {
+        assert_eq!(BUDGET, 4_000);
+    }
+
     #[test]
     fn notes_within_budget_are_left_alone() {
         assert_eq!(

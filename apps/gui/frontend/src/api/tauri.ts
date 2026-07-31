@@ -84,6 +84,8 @@ export function createTauriApi(): AgencyZeroApi {
       call("set_tab_model", { tabKey, model, permission }),
     cancelRun: (projectId) => call("cancel_run", { projectId }),
     compactProject: (projectId) => call("compact_project", { projectId }),
+    getProjectNotes: (projectId) => call("get_project_notes", { projectId }),
+    setProjectNotes: (projectId, notes) => call("set_project_notes", { projectId, notes }),
     listRunningTasks: (projectId) => call("list_running_tasks", { projectId }),
     cancelTask: (toolCallId) => call("cancel_task", { toolCallId }),
     listTaskLog: (projectId, limit, before) => call("list_task_log", { projectId, limit, before }),

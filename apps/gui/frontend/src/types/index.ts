@@ -565,6 +565,8 @@ export interface UiPrefs {
     log: boolean;
     /** The raw agent exchange. Closed by default — it is a diagnostic. */
     io: boolean;
+    /** What the agent kept across a compaction. Closed until there is any. */
+    notes: boolean;
     /** Home's right column. */
     pinned: boolean;
     recent: boolean;

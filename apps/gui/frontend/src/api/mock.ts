@@ -13,7 +13,13 @@ import type {
   RunningTask,
   TaskLogEntry,
 } from "~/types";
-import type { AgencyZeroApi, AppEvents, DeepPartial, Unlisten } from "./client";
+import {
+  type AgencyZeroApi,
+  type AppEvents,
+  type DeepPartial,
+  NOTES_BUDGET,
+  type Unlisten,
+} from "./client";
 import * as fixtures from "./fixtures";
 
 /**
@@ -78,6 +84,14 @@ export function createMockApi(): AgencyZeroApi {
   const models = clone(fixtures.MODEL_CATALOGUE);
   let settings = clone(fixtures.SETTINGS);
   const pullRequests = clone(fixtures.PULL_REQUESTS);
+  /*
+   * What a project's agent kept across a compaction, per project.
+   *
+   * Starts empty for every project rather than seeded from a fixture: notes
+   * exist only where a compaction has happened, and a mock that shipped
+   * pre-written rules would show the panel in a state no fresh install reaches.
+   */
+  const notes = new Map<string, string>();
 
   const listeners = new Map<string, Set<(payload: unknown) => void>>();
 
@@ -448,6 +462,24 @@ export function createMockApi(): AgencyZeroApi {
      * nothing touched, which is the one thing this file refuses to do.
      */
     compactProject: () => Promise.reject(new Error("the mock has no agent session to compact")),
+
+    /*
+     * Notes are real here, unlike the compaction that produces them.
+     *
+     * Nothing is faked: an unwritten project reads empty, which is exactly what
+     * the backend returns. Storing what the editor saves is what makes the panel
+     * drivable without an agent — the round trip is the behaviour under test,
+     * and refusing it would leave the one surface that can correct a bad rule
+     * untested everywhere except a live machine.
+     */
+    getProjectNotes: (projectId) => settle(notes.get(projectId) ?? ""),
+    setProjectNotes: (projectId, text) => {
+      // Clamped as the backend clamps, so the editor's budget behaviour is the
+      // same on both.
+      const kept = text.trim().slice(0, NOTES_BUDGET);
+      notes.set(projectId, kept);
+      return settle(kept);
+    },
 
     listRunningTasks: (projectId) => settle(running.filter((task) => task.projectId === projectId)),
 

@@ -1444,6 +1444,15 @@ function createWorkspace() {
      * looking at an unchanged transcript with no explanation.
      */
     compactProject: (projectId: string) => client().compactProject(projectId),
+    /*
+     * Read on demand rather than held in the store: the notes change once per
+     * compaction, and the only screen that shows them is the panel section that
+     * asks for them. Keeping a copy in state would mean another thing to
+     * invalidate for no reader.
+     */
+    getProjectNotes: (projectId: string) => client().getProjectNotes(projectId),
+    setProjectNotes: (projectId: string, notes: string) =>
+      client().setProjectNotes(projectId, notes),
     async clearTaskLog(projectId: string) {
       await client().clearTaskLog(projectId);
       batch(() => {
