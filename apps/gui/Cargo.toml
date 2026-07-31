@@ -9,6 +9,8 @@ publish.workspace = true
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
+# Carries the store forward when a column changes; see crates/wt-migrate.
+wt-migrate = { path = "../../crates/wt-migrate" }
 agent-abstraction = "0.4.1"
 az-core.workspace = true
 worktable = "0.9"
