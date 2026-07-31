@@ -12,15 +12,28 @@ export type TabKind = "home" | "draft" | "settings" | "project";
 
 /** One enum for both layers: a Project and its ProjectItems share it. */
 /**
- * `shipped` sits between working on a thing and it being done.
+ * The life of a row, in order.
  *
- * An agent can say it shipped something; it cannot say the thing works, because
- * it is not the one looking at the screen. So a row it has finished waits here,
- * naming its pull request, until the owner confirms. Without this state a fix
- * reported as done was indistinguishable from a fix that worked, and a copy bug
- * was reported fixed three times in one evening.
+ * - `new` is proposed and untriaged. Nobody has decided anything about it.
+ * - `pending` is accepted and queued.
+ * - `planning` is the phase before work, where the shape is still being argued
+ *   about. A list that jumped from proposed to in-progress could not show it.
+ * - `active` is being worked on.
+ * - `shipped` names a pull request and waits for the owner. An agent can say it
+ *   shipped something; it cannot say the thing works, because it is not the one
+ *   looking at the screen. Without this state a fix reported as done was
+ *   indistinguishable from one that worked, and a copy bug was reported fixed
+ *   three times in one evening.
+ * - `finished` is the owner's word, never the agent's.
  */
-export type ProjectStatus = "pending" | "active" | "shipped" | "finished" | "canceled";
+export type ProjectStatus =
+  | "new"
+  | "pending"
+  | "planning"
+  | "active"
+  | "shipped"
+  | "finished"
+  | "canceled";
 
 /**
  * The dot on a project tab.

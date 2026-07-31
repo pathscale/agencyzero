@@ -9,7 +9,7 @@ import { statusSuffix } from "~/lib/labels";
 import { describeError, log } from "~/lib/log";
 import { prefs, togglePanelSection } from "~/stores/prefs";
 import { useNow, useWorkspace } from "~/stores/workspace";
-import type { Project, ProjectItem } from "~/types";
+import type { Project, ProjectItem, ProjectStatus } from "~/types";
 
 /**
  * The project's right-hand column: Items · Running · Task log · Agent I/O ·
@@ -519,9 +519,20 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
   }
 
   /** Clicking an item cycles pending → active → finished → pending. */
+  /*
+   * The ladder, in order, wrapping back to the start.
+   *
+   * `shipped` is in the cycle because bouncing a fix that did not work is the
+   * move this list most needs to make easy: one click takes it back to active,
+   * where the next attempt begins. `finished` wraps to `new` rather than
+   * sticking, so a row that turns out not to be done can be reopened.
+   */
+  const LADDER: ProjectStatus[] = ["new", "planning", "active", "shipped", "finished"];
+
   function advance(item: ProjectItem): void {
-    const next =
-      item.status === "pending" ? "active" : item.status === "active" ? "finished" : "pending";
+    const at = LADDER.indexOf(item.status);
+    // `pending` and `canceled` are not on the ladder; a click starts them over.
+    const next = at < 0 ? "new" : LADDER[(at + 1) % LADDER.length];
     void actions.setItemStatus(item.id, next);
   }
 
@@ -653,7 +664,7 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
               >
                 <span
                   class={`min-w-0 flex-1 text-[12.5px] ${
-                    item.status === "active"
+                    item.status === "active" || item.status === "planning"
                       ? "text-base-content"
                       : item.status === "finished"
                         ? "text-az-muted"
@@ -668,9 +679,11 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
                       ? "font-semibold text-primary"
                       : item.status === "shipped"
                         ? "font-semibold text-warning"
-                        : item.status === "finished"
-                          ? "text-success"
-                          : "text-az-muted"
+                        : item.status === "planning"
+                          ? "text-info"
+                          : item.status === "finished"
+                            ? "text-success"
+                            : "text-az-muted"
                   }`}
                 >
                   {/*

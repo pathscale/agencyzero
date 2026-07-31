@@ -371,8 +371,13 @@ fn items_from_reply(reply: &str) -> Vec<Checked> {
                 .trim_start();
 
             /*
-             * `[ ]` proposes, `[/]` starts, `[>]` ships, `[x]` closes, `[-]`
-             * removes.
+             * `[ ]` proposes, `[~]` plans, `[/]` starts, `[>]` ships, `[x]`
+             * closes, `[-]` removes.
+             *
+             * `[ ]` opens a row as `new`: proposed, and nobody has decided
+             * anything about it yet. `[~]` is the phase before work, where the
+             * shape of the thing is still being argued about, which a list that
+             * jumped from proposed to in-progress could not show at all.
              *
              * The last two are this contract's own. Markdown has no "strike
              * this row" checkbox, and a project session needs one: an obsolete
@@ -390,7 +395,8 @@ fn items_from_reply(reply: &str) -> Vec<Checked> {
              * have been deleted after the first.
              */
             let (marker, title) = [
-                ("pending", "[ ] "),
+                ("new", "[ ] "),
+                ("planning", "[~] "),
                 ("active", "[/] "),
                 ("shipped", "[>] "),
                 ("deleted", "[-] "),
@@ -575,7 +581,7 @@ pub async fn set_item_status(
 ) -> Result<ProjectItemDto, String> {
     if !matches!(
         status.as_str(),
-        "pending" | "active" | "shipped" | "finished"
+        "new" | "pending" | "planning" | "active" | "shipped" | "finished"
     ) {
         return Err(format!("not an item status: {status}"));
     }
@@ -1015,6 +1021,19 @@ async fn write_items_from_reply(
          */
         if let Some(row) = by_title.get(&title.to_lowercase()) {
             if row.status == status {
+                continue;
+            }
+            /*
+             * A proposal never moves a row that already exists.
+             *
+             * `- [ ]` means "this should be done", which is already true of
+             * every row on the list, so re-listing the backlog in a reply must
+             * not knock a row being worked on back to the start. The contract
+             * has always said a proposal leaves an existing title alone; the
+             * code updated it anyway, which was survivable while `[ ]` meant
+             * `pending` and is not now that it means `new`.
+             */
+            if status == "new" {
                 continue;
             }
             /*
@@ -4889,9 +4908,9 @@ mod tests {
         assert_eq!(
             seen,
             vec![
-                ("Port the model into az-core", "pending"),
+                ("Port the model into az-core", "new"),
                 ("Decide the store", "finished"),
-                ("Pick the id scheme", "pending"),
+                ("Pick the id scheme", "new"),
             ]
         );
     }
@@ -4914,6 +4933,21 @@ mod tests {
         assert_eq!(read[0].reference, None);
         assert_eq!(read[1].status, "shipped");
         assert_eq!(read[1].reference.as_deref(), Some("35"));
+    }
+
+    /*
+     * The ladder a row climbs, and the two rungs that were missing.
+     *
+     * `new` is proposed and untriaged; `planning` is the phase before work,
+     * where the shape is still being argued about. A list that could only say
+     * proposed or in-progress had nowhere to put either.
+     */
+    #[test]
+    fn a_row_can_be_new_and_then_planned() {
+        let read = items_from_reply("- [ ] Decide the memory key\n- [~] Decide the memory key\n");
+
+        assert_eq!(read[0].status, "new");
+        assert_eq!(read[1].status, "planning");
     }
 
     /// The reference is its own field, so the title stays the match key: a row
