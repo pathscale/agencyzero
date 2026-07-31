@@ -337,6 +337,9 @@ export function SettingsTab(): JSX.Element {
                   onAccent={(accent) => void actions.saveSettings({ theme: { accent } })}
                   onSoftness={(softness) => void actions.saveSettings({ theme: { softness } })}
                   onWash={(wash) => void actions.saveSettings({ theme: { wash } })}
+                  onBrightness={(textBrightness) =>
+                    void actions.saveSettings({ theme: { textBrightness } })
+                  }
                 />
                 <Row
                   label="Reset"
@@ -345,7 +348,11 @@ export function SettingsTab(): JSX.Element {
                 >
                   <button
                     type="button"
-                    disabled={current().theme.accent === "" && current().theme.softness === 0}
+                    disabled={
+                      current().theme.accent === "" &&
+                      current().theme.softness === 0 &&
+                      current().theme.textBrightness === 0
+                    }
                     onClick={() =>
                       void actions.saveSettings({
                         theme: { accent: "", softness: 0, wash: DEFAULT_WASH },

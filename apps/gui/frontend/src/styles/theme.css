@@ -256,8 +256,15 @@
   --color-az-highlight: #22d3ee;
   --color-az-active: #f59e0b;
 
-  /* The lighter yellow six screens reach for on a primary hover. */
-  --color-az-primary-hover: #fff176;
+  /*
+   * The hover tint for a primary button: the accent, lightened.
+   *
+   * Was the palette's lighter yellow spelled out, which survived the first
+   * theming pass and would have flashed yellow on hover under a blue accent.
+   * Relative colour syntax keeps it a lightening *of whatever the accent is*,
+   * so it follows the wheel with no second value to maintain.
+   */
+  --color-az-primary-hover: oklch(from var(--color-primary) calc(l + 0.06) c h);
 
   /* PR chips over the composer: border/tint, and the brighter text on top. */
   --color-az-pr: #7e6bd0;

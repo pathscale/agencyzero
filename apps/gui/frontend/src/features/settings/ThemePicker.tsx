@@ -1,6 +1,12 @@
 import { ColorPickerContext, ColorWheelFlower } from "@pathscale/ui/components/color-wheel-flower";
-import { For, type JSX } from "solid-js";
-import { DEFAULT_ACCENT, MAX_SOFTNESS, toColorValue, WASH_STOPS } from "~/lib/theme";
+import { For, type JSX, Show } from "solid-js";
+import {
+  BRIGHTNESS_STOPS,
+  DEFAULT_ACCENT,
+  MAX_SOFTNESS,
+  toColorValue,
+  WASH_STOPS,
+} from "~/lib/theme";
 import type { ThemeSettings } from "~/types";
 
 /**
@@ -23,6 +29,7 @@ export function ThemePicker(props: {
   onAccent: (hex: string) => void;
   onSoftness: (value: number) => void;
   onWash: (value: number) => void;
+  onBrightness: (value: number) => void;
 }): JSX.Element {
   /*
    * The wheel wants a full ColorValue and hands one back on change. An empty
@@ -33,6 +40,10 @@ export function ThemePicker(props: {
 
   /** Five stops across the comfort range, matching the strength row beside it. */
   const softnessStops = () => Array.from({ length: 5 }, (_, i) => (i * MAX_SOFTNESS) / 4);
+
+  /** The desk as currently configured — what every swatch sits on. */
+  const deskPreview = (theme: ThemeSettings) =>
+    `color-mix(in oklab, ${theme.accent || DEFAULT_ACCENT} ${theme.wash * 1.1}%, oklch(calc(10.5% + ${theme.softness}%) 0.004 240))`;
 
   return (
     <div class="flex items-start gap-4 px-3.5 py-3">
@@ -83,6 +94,23 @@ export function ThemePicker(props: {
           }
           format={(stop) => `${Math.round((stop / MAX_SOFTNESS) * 100)}%`}
         />
+
+        {/*
+         * The rungs are the point here, so these swatches carry a letter in
+         * the text colour they produce rather than showing the colour as a
+         * fill. A row of five near-identical pale circles says nothing; five
+         * letters at different weights is the actual question being asked.
+         */}
+        <Axis
+          label="Text brightness"
+          hint="how far the text rises off the surface"
+          stops={[...BRIGHTNESS_STOPS]}
+          value={props.theme.textBrightness}
+          onPick={props.onBrightness}
+          preview={() => deskPreview(props.theme)}
+          ink={(stop) => `oklch(calc(75% - ${props.theme.softness * 0.45 - stop}%) 0.009 245)`}
+          format={(_stop, index) => `${Math.round((index / (BRIGHTNESS_STOPS.length - 1)) * 100)}%`}
+        />
       </div>
     </div>
   );
@@ -102,7 +130,9 @@ function Axis(props: {
   value: number;
   onPick: (value: number) => void;
   preview: (stop: number) => string;
-  format: (stop: number) => string;
+  /** When present, the swatch shows a letter in this colour instead of a fill alone. */
+  ink?: (stop: number) => string;
+  format: (stop: number, index: number) => string;
 }): JSX.Element {
   const selected = (stop: number) => Math.abs(props.value - stop) < 0.01;
   return (
@@ -115,10 +145,10 @@ function Axis(props: {
       </div>
       <div class="flex items-center gap-2">
         <For each={props.stops}>
-          {(stop) => (
+          {(stop, index) => (
             <button
               type="button"
-              aria-label={`${props.label} ${props.format(stop)}`}
+              aria-label={`${props.label} ${props.format(stop, index())}`}
               aria-pressed={selected(stop)}
               onClick={() => props.onPick(stop)}
               class="size-7 rounded-full border-2 transition-colors"
@@ -127,7 +157,18 @@ function Axis(props: {
                 "border-az-hairline-strong hover:border-az-hairline-strong/60": !selected(stop),
               }}
               style={{ "background-color": props.preview(stop) }}
-            />
+            >
+              <Show when={props.ink}>
+                {(ink) => (
+                  <span
+                    class="font-semibold text-[12px] leading-none"
+                    style={{ color: ink()(stop) }}
+                  >
+                    A
+                  </span>
+                )}
+              </Show>
+            </button>
           )}
         </For>
       </div>

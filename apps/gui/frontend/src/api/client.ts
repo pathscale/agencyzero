@@ -265,12 +265,19 @@ export interface AppEvents {
    */
   "run:persisted": { projectId: string; chars: number };
   /**
-   * The turn's charged work so far, refreshed as each API request inside the
-   * turn completes (`Event::Usage`, 0.3.8). `tokens` is input + output summed
-   * across the turn — the live counter's figure; the estimate from streamed
-   * characters survives only as the fallback before the first report.
+   * How full the context is, refreshed as each API request inside the turn
+   * completes (`Event::Usage`, 0.3.8). Context rather than new work because
+   * new work is not knowable mid-turn — `Event::Usage` withholds
+   * `output_tokens`, and `input_tokens` counts only the uncached delta. These
+   * two are exact. Both are null for agents that report neither (Codex sends
+   * no usage at all mid-turn), and the estimate from streamed characters
+   * survives as the fallback for exactly that case.
    */
-  "run:usage": { projectId: string; tokens: number; contextTokens: number | null };
+  "run:usage": {
+    projectId: string;
+    contextTokens: number | null;
+    contextWindow: number | null;
+  };
   "run:rate_limit": RateLimit;
   /**
    * The limit has lifted. Without this the header pill and the tab dot stay

@@ -3023,19 +3023,25 @@ async fn drive_run(
             Event::Usage(usage) => {
                 /*
                  * One API request's figures; the ledger keeps the turn's
-                 * running truth. `tokens` is the turn's new work so far
-                 * (input + output), matching the header's own metric; the
-                 * context rides along for a future gauge. No note_io — a
-                 * tool-heavy turn would bury the panel in bookkeeping.
+                 * running truth. Only the context goes out, and deliberately:
+                 * new work cannot be counted mid-turn. `Event::Usage` never
+                 * carries `output_tokens` (the crate withholds it because the
+                 * mid-turn figure understates badly), and Claude's
+                 * `input_tokens` is only the uncached delta -- single digits
+                 * per call against a six-figure cache read. Summing those two
+                 * put "60 tokens" on a ten-minute run. The context figures are
+                 * exact and latest-wins, so they are the honest live counter;
+                 * the true new work arrives with the `Outcome` and the header
+                 * shows it there. No note_io -- a tool-heavy turn would bury
+                 * the panel in bookkeeping.
                  */
                 turn_usage.accumulate(&usage);
                 let _ = app.emit(
                     "run:usage",
                     serde_json::json!({
                         "projectId": project_id,
-                        "tokens": turn_usage.input_tokens.unwrap_or(0)
-                            + turn_usage.output_tokens.unwrap_or(0),
                         "contextTokens": turn_usage.context_tokens,
+                        "contextWindow": turn_usage.context_window,
                     }),
                 );
             }
