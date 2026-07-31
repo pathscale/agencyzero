@@ -48,6 +48,24 @@ Read that rather than the source. `projects.rs` grew these verbs late — `[x]` 
 append-only path and concludes, wrongly, that it can add rows but never retire one.
 [`wt-tools`](crates/wt-tools) reads the list; it never writes, by construction.
 
+**Close the rows in the same turn the work ships**, not when someone asks. A list
+that lags behind the release is worse than no list: it sends the next session to
+re-do finished work, and it makes the owner audit you instead of reading it.
+Shipped means merged and released — a row struck while the PR is still open is a
+different kind of lie.
+
+Three habits, each learned by getting it wrong here:
+
+- **Read the title before striking it.** Matching is exact and case-insensitive, so
+  a paraphrase is a silent no-op — `wt-tools search-items <word>` prints the row as
+  stored. "Preserve user message formatting generally" struck nothing, because the
+  row said "Preserve message formatting on interrupt".
+- **Verify afterwards.** `wt-tools list-items --project <id>` and count. The reply
+  that strikes a row gets no acknowledgement, so an unverified strike is an
+  assumption.
+- **Say what you did not close, and why.** A row left open because it needs a
+  decision is information; a row left open because you forgot is a defect.
+
 ## Working on the machine you share with a human
 
 The owner uses this Mac while you work. Rules of the road:
