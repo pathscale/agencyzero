@@ -62,6 +62,7 @@ const IMPLEMENTED: &[&str] = &[
     "list_approval_rules",
     "clear_approval_rules",
     "cancel_run",
+    "compact_project",
     "get_cost_summary",
     "get_build_info",
     "relaunch_app",

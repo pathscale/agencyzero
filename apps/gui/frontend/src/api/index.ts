@@ -52,6 +52,7 @@ const COMMAND_FOR: Partial<Record<keyof AgencyZeroApi, string>> = {
   createWorkspaceRoot: "create_workspace_root",
   setTabModel: "set_tab_model",
   cancelRun: "cancel_run",
+  compactProject: "compact_project",
   listRunningTasks: "list_running_tasks",
   cancelTask: "cancel_task",
   listTaskLog: "list_task_log",

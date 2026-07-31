@@ -215,3 +215,47 @@ describe("a draft belongs to its own tab", () => {
     await waitFor(() => expect(field().value).toBe("meant for abc"));
   });
 });
+
+/*
+ * The same reuse that leaked the draft leaked everything else the composer
+ * holds. An error raised in one conversation appeared under every tab, which is
+ * how a failure in a single project came to look like the whole app being
+ * broken — the reported symptom was "I see this error across all prompts".
+ */
+describe("what the composer holds is per tab", () => {
+  it("keeps an error under the conversation that raised it", async () => {
+    const [key, setKey] = createSignal("project:abc");
+    const failing = vi.fn().mockRejectedValue(new Error("no session to compact"));
+    const screen = render(() => (
+      <WorkspaceProvider>
+        <Composer
+          draftKey={key()}
+          placeholder="Ask, or type / for commands…"
+          model="sonnet"
+          modelOptions={[{ value: "sonnet", label: "Sonnet" }]}
+          efforts={[]}
+          effort=""
+          permission="read_only"
+          onModelChange={() => {}}
+          onPermissionChange={() => {}}
+          onCompact={failing}
+          onSend={vi.fn().mockResolvedValue(undefined)}
+        />
+      </WorkspaceProvider>
+    ));
+    const field = () =>
+      screen.getByLabelText("Ask, or type / for commands…") as HTMLTextAreaElement;
+
+    fireEvent.input(field(), { target: { value: "/compact" } });
+    fireEvent.click(screen.getByLabelText("Send"));
+    await waitFor(() => expect(screen.getByText(/no session to compact/)).toBeTruthy());
+
+    // The other tab is a different conversation and never failed at anything.
+    setKey("project:xyz");
+    await waitFor(() => expect(screen.queryByText(/no session to compact/)).toBeNull());
+
+    // Coming back finds it where it was left, rather than having been cleared.
+    setKey("project:abc");
+    await waitFor(() => expect(screen.getByText(/no session to compact/)).toBeTruthy());
+  });
+});
