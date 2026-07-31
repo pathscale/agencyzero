@@ -100,7 +100,14 @@ const item = (
   order: number,
   title: string,
   status: ProjectItem["status"],
-): ProjectItem => ({ id: `${projectId}-${order}`, projectId, title, status, order });
+): ProjectItem => ({
+  id: `${projectId}-${order}`,
+  projectId,
+  title,
+  status,
+  order,
+  reference: null,
+});
 
 export const ITEMS: ProjectItem[] = [
   item("worktable", 0, "Phase A — safety quick-wins → 0.9.3", "active"),

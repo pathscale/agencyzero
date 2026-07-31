@@ -16,6 +16,9 @@ import type { Project, ProjectItem } from "~/types";
 const STATUS_TONE: Record<ProjectItem["status"], string> = {
   active: "font-semibold text-primary",
   pending: "text-az-muted",
+  // Warning, not success: shipped means it is waiting on you to say whether it
+  // worked, and reading it as done is the mistake the state exists to prevent.
+  shipped: "font-semibold text-warning",
   finished: "text-success",
   canceled: "text-az-faint",
 };
