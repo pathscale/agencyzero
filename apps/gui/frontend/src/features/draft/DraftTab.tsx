@@ -22,6 +22,7 @@ export function DraftTab(props: { tab: Tab }): JSX.Element {
     <Panel class="flex min-w-0 flex-1 items-center justify-center p-7">
       <div class="w-full max-w-[620px]">
         <Composer
+          draftKey={props.tab.key}
           size="lg"
           autofocus
           placeholder="Type to start your new project…"

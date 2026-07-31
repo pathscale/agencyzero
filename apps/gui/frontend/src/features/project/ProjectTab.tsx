@@ -199,6 +199,7 @@ export function ProjectTab(props: { tab: Tab; project: Project }): JSX.Element {
             </div>
           </Show>
           <Composer
+            draftKey={props.tab.key}
             autofocus
             placeholder="Ask, or type / for commands…"
             model={props.tab.model}

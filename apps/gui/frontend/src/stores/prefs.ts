@@ -28,6 +28,7 @@ const DEFAULTS: UiPrefs = {
   collapsedGroups: [],
   taskPlacement: "panel",
   seenSections: [],
+  composerDrafts: {},
 };
 
 /**

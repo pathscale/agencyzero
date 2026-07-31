@@ -3,6 +3,7 @@ import { Icon } from "~/components/Icon";
 import { PillMenu } from "~/components/PillMenu";
 import { PERMISSION_LABELS, PERMISSION_ORDER } from "~/lib/labels";
 import { describeError, log } from "~/lib/log";
+import { prefs, setPrefs } from "~/stores/prefs";
 import { useWorkspace } from "~/stores/workspace";
 import type { Permission } from "~/types";
 
@@ -16,6 +17,14 @@ const PERMISSION_HINTS: Record<Permission, string> = {
 };
 
 export type ComposerProps = {
+  /**
+   * Where a half-written message is filed, usually the tab key.
+   *
+   * Switching tabs unmounts the screen this lives on, so without somewhere
+   * outside the component to keep it, an unsent reply dies with the unmount.
+   * Absent means "do not persist" — the tests mount a bare composer.
+   */
+  draftKey?: string;
   placeholder: string;
   model: string;
   /**
@@ -103,7 +112,23 @@ export function AttachmentPills(props: {
  */
 export function Composer(props: ComposerProps): JSX.Element {
   const { actions, isLive } = useWorkspace();
-  const [draft, setDraft] = createSignal("");
+  /*
+   * Seeded from the stored drafts and written back on every keystroke. Straight
+   * through rather than debounced: this is a localStorage write of a few
+   * hundred bytes per keypress, far cheaper than the reflow the same keypress
+   * already causes, and a debounce is exactly what would drop the last few
+   * words when the tab changes mid-flight.
+   */
+  const [draft, setDraft] = createSignal(
+    props.draftKey ? (prefs.composerDrafts[props.draftKey] ?? "") : "",
+  );
+
+  const remember = (text: string) => {
+    setDraft(text);
+    if (!props.draftKey) return;
+    if (text) setPrefs("composerDrafts", props.draftKey, text);
+    else setPrefs("composerDrafts", props.draftKey, undefined!);
+  };
   const [attachments, setAttachments] = createSignal<string[]>([]);
   const [isSending, setIsSending] = createSignal(false);
   const [error, setError] = createSignal<string | null>(null);
@@ -151,7 +176,7 @@ export function Composer(props: ComposerProps): JSX.Element {
         .filter((part) => part.length > 0)
         .join("\n\n");
       await props.onSend(body);
-      setDraft("");
+      remember("");
       setAttachments([]);
       resize();
     } catch (cause) {
@@ -197,7 +222,7 @@ export function Composer(props: ComposerProps): JSX.Element {
           placeholder={props.placeholder}
           aria-label={props.placeholder}
           onInput={(event) => {
-            setDraft(event.currentTarget.value);
+            remember(event.currentTarget.value);
             resize();
           }}
           onKeyDown={(event) => {
