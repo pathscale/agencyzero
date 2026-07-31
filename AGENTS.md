@@ -1,189 +1,100 @@
+# Most important rules
+@./AgencyZero.md
+
 # Working agreement: agencyzero
 
-The operating contract for **any** coding agent working in this repository. This file is
-the single source of truth for the rules: Codex, Cursor and Gemini CLI read `AGENTS.md`
-natively, and Claude Code loads it through the `@AGENTS.md` import in
-[`CLAUDE.md`](CLAUDE.md). **Never fork these rules into a per-vendor file.**
+Operating contract for any coding agent here, and the single source of truth. Codex,
+Cursor and Gemini read `AGENTS.md` natively; Claude Code imports it from
+[`CLAUDE.md`](CLAUDE.md). Never fork these rules into a per-vendor file.
 
-Rust Cargo workspace hosting five executables (Tauri GUI harness, agent, MCP proxy,
-agent proxy, WorkTable read CLI) plus a shared `az-core` library. See [README.md](README.md) for the layout
-and build commands.
+Rust workspace: Tauri GUI, agent, MCP proxy, agent proxy, WorkTable read CLI, plus
+`az-core`. Layout and build commands in [README.md](README.md).
 
 ## Rules that outrank your defaults
 
-They live in [AgencyZero.md](AgencyZero.md), which AgencyZero includes whole in every
-prompt. Project context loads *below* an agent's own system prompt, so a rule kept only
-here loses to a conflicting default, silently. That is not hypothetical: the
-no-attribution rule was in this file for the whole evening an agent put the forbidden
-trailer on five commits.
-
-Put a rule there only when a violation would be silent and expensive. Everything else
-belongs in this file, and every line added there weakens the rest.
-
-## Invariants (don't break these)
-
-- **Docs describe what is true now.** If you change behaviour, update the README and any affected doc in the same change.
-
-
-## Verification
-
-Run what you build before reporting it done. Type-checks and tests verify code correctness,
-not feature correctness. **If you can't run it, say so explicitly** rather than implying
-success.
-
-- Compare against the base branch rather than asserting: a pre-existing failing test or lint
-  error is not something you introduced, and saying so requires checking.
-- A build that finishes suspiciously fast was cached, not rebuilt. Force a real rebuild when
-  the rebuild is the thing you're verifying.
-
-## PR discipline
-
-**Always paste the full PR URL** (`https://github.com/pathscale/agencyzero/pull/<n>`), not just the number, so it's
-clickable.
-
-**Leave nothing dangling.** When your change lands on master, whether the PR was merged
-or the commits were rebased in, close the PR and delete its branch in the same breath
-(`gh pr merge --delete-branch`, or `gh pr close --delete-branch` for a superseded one).
-An open PR whose content is already on master reads as unfinished work to everyone else.
-
-## Closing an item you were given
-
-A project session edits its own item list with checkboxes in the reply:
-`- [ ]` proposes, `- [x] <exact title>` closes, `- [-] <exact title>` strikes an
-obsolete row. Titles match exactly and case-insensitively; a paraphrase silently
-appends a near-duplicate instead. Full contract, including what "close" does:
-[`docs/task-manager.md`](docs/task-manager.md#the-project-session-contract-three-checkboxes).
-
-Read that rather than the source. `projects.rs` grew these verbs late, `[x]` in
-0.1.6, `[-]` in 0.1.10, so an agent inferring the rules from an older tree finds an
-append-only path and concludes, wrongly, that it can add rows but never retire one.
-[`wt-tools`](crates/wt-tools) reads the list; it never writes, by construction.
-
-**Close the rows in the same turn the work ships**, not when someone asks. A list
-that lags behind the release is worse than no list: it sends the next session to
-re-do finished work, and it makes the owner audit you instead of reading it.
-Shipped means merged and released: a row struck while the PR is still open is a
-different kind of lie.
-
-Three habits, each learned by getting it wrong here:
-
-- **Read the title before striking it.** Matching is exact and case-insensitive, so
-  a paraphrase is a silent no-op. `wt-tools search-items <word>` prints the row as
-  stored. "Preserve user message formatting generally" struck nothing, because the
-  row said "Preserve message formatting on interrupt".
-- **Verify afterwards.** `wt-tools list-items --project <id>` and count. The reply
-  that strikes a row gets no acknowledgement, so an unverified strike is an
-  assumption.
-- **Say what you did not close, and why.** A row left open because it needs a
-  decision is information; a row left open because you forgot is a defect.
-
-## Working on the machine you share with a human
-
-The owner uses this Mac while you work. Rules of the road:
-
-- **Never take over the desktop without asking first.** Launching or relaunching GUI
-  apps, focusing windows, `open` on apps or URLs, screenshots, AppleScript UI control.
-  All of it steals the screen mid-keystroke. Ask, wait for a yes, then do it. Say what
-  it will do and roughly how long, so the answer can be an informed one.
-  [`.claude/hooks/ask-before-gui-takeover.sh`](.claude/hooks/ask-before-gui-takeover.sh)
-  prompts for those command families every time, without trying to work out whether
-  anyone is watching. It cannot see a compiled helper posting synthetic events, which is
-  how this rule got broken on 2026-07-31 despite already being written here, the hook is
-  a reminder, not the boundary.
-- **Don't drive the real app's UI to verify visual changes.** The frontend runs
-  standalone against the mock (`bun run dev` in `apps/gui/frontend`, port 3010) and can
-  be driven headlessly by accessibility roles and labels, see
-  [`docs/ui-verification.md`](docs/ui-verification.md) for the technique and its two
-  hard-won rules (no pixel coordinates, no synthetic Enter). For what fixtures cannot
-  show, build + test, then ask the owner to look, with one precise sentence about what
-  to check. A human glance takes seconds; a desktop takeover is never the answer.
-- **Never touch the running System instance**, its process, its WorkTable files, its
-  data directory. The store is single-writer and the running GUI is the writer. Try
-  changes on the Dev instance (`tauri.dev.conf.json`; see the README's dev-instance
-  section).
-- **Ask before installing anything**, and prefer what is already here. This covers
-  writes outside the repo too, `~/Library/Caches`, `~/.cargo`, Homebrew, not just
-  `package.json`. A doc in this repo recommending a tool is not permission to fetch
-  it: the line about `bunx playwright` cost 95 MB of someone else's disk before
-  anyone was asked. For browser work, Brave is already installed and is the agent
-  browser; see [`docs/ui-verification.md`](docs/ui-verification.md).
-
-<!-- DORMANT: CI-green gating. Do not follow this rule yet; re-enable it as its own project.
-
-Why it's off: CI here does not reliably attach checks to pull requests, so
-`statusCheckRollup` comes back empty and "wait for green" would teach an agent to wait on
-nothing. Verify per repo before switching this on.
-
-To enable: ensure the workflow runs on `pull_request:`, confirm checks attach to a PR, then
-uncomment the rule below.
-
-    After any push or PR, **check CI and don't call it done until it's green**:
-
-    ```bash
-    gh pr view <number> --repo pathscale/agencyzero --json statusCheckRollup
-    ```
-
-    CI running → wait and recheck. CI failed → read the logs, fix, push, wait for green.
--->
-
-## Keeping docs honest
-
-Hit a factual error here, a stale path, a wrong command, a moved status? Fix it in the same
-change. Don't open cosmetic rewording PRs.
+[AgencyZero.md](AgencyZero.md) is injected whole into every prompt. This file loads as
+project context, which sits *below* your own system prompt, so a rule kept only here
+loses to a conflicting default in silence. Put a rule there only when a violation would
+be silent and expensive: every line added weakens the rest.
 
 ## Where knowledge goes
 
-The four stores are listed in [AgencyZero.md](AgencyZero.md). Two things that list is
-too short to say:
+- **Procedure**: this file.
+- **Why code is shaped the way it is**: a comment at the site, never a separate file.
+- **Decisions, corrections, preferences**: the project memory named in your system
+  prompt. Keyed by project id, so it survives sessions, compactions, re-clones and a
+  moved checkout. Never committed: it describes the working relationship, not the repo.
+- **What is in flight**: the knowledge checkpoint.
 
-- **Check the destination before writing**, so the same fact is not recorded twice.
-- **A decision sometimes hardens into procedure.** When it does the rule moves here and
-  the reasoning stays in memory. Same fact, two homes, phrased for each.
+Check the destination before writing, so one fact is not stored twice. A decision that
+hardens into procedure moves here; the reasoning stays in memory.
 
-Preferences and corrections stay out of committed files on purpose. They describe the
-working relationship rather than the repository, and should not outlive it in public
-history.
+## Versioning
+
+- Patch only: `0.1.28` to `0.1.29`, never `0.1` to `0.2`.
+- Bump on every commit that should ship. Release fires on a version change alone, so an
+  unbumped commit reaches nobody.
+
+## Verification
+
+Run what you build before calling it done. **If you can't run it, say so.**
+
+- Compare against the base branch: a pre-existing failure is not yours, and saying so
+  requires checking.
+- A suspiciously fast build was cached. Force a rebuild when the rebuild is the point.
+
+## PR discipline
+
+- Paste the full PR URL, not the number.
+- When the change lands on master, close the PR and delete the branch in the same breath
+  (`gh pr merge --delete-branch`). An open PR whose content already shipped reads as
+  unfinished work.
+
+## Closing an item you were given
+
+Reply checkboxes edit the project's item list: `- [ ]` proposes, `- [x] <exact title>`
+closes, `- [-] <exact title>` strikes an obsolete row. Titles match exactly and
+case-insensitively, so a paraphrase silently appends a near-duplicate. Full contract:
+[`docs/task-manager.md`](docs/task-manager.md#the-project-session-contract-three-checkboxes).
+Read that, not `projects.rs`: the verbs arrived late, and an older tree reads as
+append-only. [`wt-tools`](crates/wt-tools) reads the list and never writes.
+
+- **Close in the same turn the work ships.** Shipped means merged and released.
+- **Read the title before striking it.** `wt-tools search-items <word>` prints it as stored.
+- **Verify after.** `wt-tools list-items --project <id>`. A strike gets no acknowledgement.
+- **Say what you did not close, and why.** Forgotten and blocked are different.
+
+## Working on the machine you share with a human
+
+- **Never take over the desktop without asking.** Launching or focusing apps, `open`,
+  screenshots, AppleScript UI control. Say what it does and how long, then wait for yes.
+- **Don't drive the real app to check visuals.** The frontend runs standalone against the
+  mock (`bun run dev`, port 3010) and is drivable by roles and labels:
+  [`docs/ui-verification.md`](docs/ui-verification.md). Otherwise build, test, and ask the
+  owner to look.
+- **Never touch the running System instance**, its process, files or data directory. The
+  store is single-writer. Use the Dev instance (`tauri.dev.conf.json`).
+- **Ask before installing anything**, including writes to `~/Library/Caches`, `~/.cargo`
+  and Homebrew. A doc here recommending a tool is not permission to fetch it.
 
 ## Git workflow
 
-- **One change per commit.** One bug fix or one feature per commit, committed as it is
-  finished, not a batch "round" commit blobbing several features together at the end.
-  Blobbed commits cannot be reverted, bisected, or reviewed one decision at a time.
-  When features share files, that is an ordering problem, not an excuse: build and
-  commit them sequentially.
-- **Always specify the branch when pushing**: `git push origin branch-name`
-- **Branch naming**: `fix/issue-description` or `feat/issue-description`
-- **Force-push your own branch freely.** Rebasing a feature branch onto a moved
-  base, or amending before review, is normal and correct, use
-  `--force-with-lease` so you don't clobber someone else's push.
-- **Never force-push the default branch** (`main`/`master`). That is the history
-  everyone else builds on, and it is protected server-side for a reason.
+- **One change per commit.** Shared files are an ordering problem, not an excuse.
+- **Name the branch when pushing**: `git push origin branch-name`.
+- **Branch naming**: `fix/description` or `feat/description`.
+- **Force-push your own branch freely**, with `--force-with-lease`. Never the default branch.
 
 ## Guardrails
 
-[`.claude/settings.json`](.claude/settings.json) and [`.claude/hooks/`](.claude/hooks/) make
-Claude Code prompt a human before prod-affecting or destructive commands, pushes, publishing
-to a registry, `gh pr merge`, cloud CLIs, recursive deletes, deploy scripts.
+[`.claude/hooks/`](.claude/hooks/) prompts before destructive commands and before anything
+taking over screen, focus or keyboard. A `commit-msg` hook rejects AI attribution and em
+dashes outright; enable it with `git config core.hooksPath .githooks`.
 
-A second hook,
-[`.claude/hooks/ask-before-gui-takeover.sh`](.claude/hooks/ask-before-gui-takeover.sh),
-prompts before a command takes over the screen, focus or keyboard, every time, rather
-than guessing whether anyone is watching. A hook rather than `permissions.ask` entries
-because the decision needs more than a glob: `osascript` is a takeover only when it
-speaks the UI-scripting vocabulary, a bundle's binary is recognised by path, and a
-takeover wrapped in `bash -c '…'` has to be seen through.
-
-**Other agents don't get that net automatically.** Apply the same rule yourself: ask before
-running any command family listed in either hook:
+**Other agents don't get that net.** Ask before running any command family listed in
 [`ask-before-risky-commands.sh`](.claude/hooks/ask-before-risky-commands.sh) or
-[`ask-before-gui-takeover.sh`](.claude/hooks/ask-before-gui-takeover.sh).
-They are one layer of defence, not a guarantee: a pattern match over a command string is
-best-effort.
+[`ask-before-gui-takeover.sh`](.claude/hooks/ask-before-gui-takeover.sh). A pattern match
+over a command string is best-effort, not a boundary.
 
-## No AI attribution
+## Keeping docs honest
 
-Never add AI attribution to anything in this repo or leaving it: no "Generated with
-Claude Code" / robot-emoji footers, no `Co-Authored-By: Claude` (or any AI) trailers,
-and no AI credit in commit messages, PR or issue titles/bodies, changelogs, release
-notes, or code comments. Applies to every agent and every vendor. Work product should
-be indistinguishable from a human teammate's.
+Fix a stale path or a wrong command in the same change. No cosmetic rewording PRs.
