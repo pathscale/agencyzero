@@ -288,6 +288,32 @@ describe("what the composer holds is per tab", () => {
  * your message is still here. Compacted." on a compaction that had succeeded.
  */
 describe("the alert slot means failure", () => {
+  /*
+   * A compaction runs for about a minute, and holding the composer for it meant
+   * Enter did nothing for that whole minute — reported as "compact shouldn't
+   * block the prompt". The queue exists precisely so those words are kept and
+   * sent when the session comes back, and it cannot do that if the box is shut.
+   */
+  it("leaves the prompt usable while a compaction runs", async () => {
+    // Never settles: the composer must be usable *during* the compaction, not
+    // merely after it.
+    const onCompact = vi.fn().mockReturnValue(new Promise<void>(() => {}));
+    const onSend = vi.fn().mockResolvedValue(undefined);
+    const { field, booted, getByLabelText } = mount({ onCompact, onSend });
+    await booted();
+
+    type(field, "/compact");
+    fireEvent.click(getByLabelText("Send"));
+    await waitFor(() => expect(onCompact).toHaveBeenCalled());
+
+    type(field, "and this should wait its turn");
+    const send = getByLabelText("Send") as HTMLButtonElement;
+    expect(send.disabled).toBe(false);
+
+    fireEvent.click(send);
+    await waitFor(() => expect(onSend).toHaveBeenCalledWith("and this should wait its turn"));
+  });
+
   it("says nothing when a compaction succeeds", async () => {
     const onCompact = vi.fn().mockResolvedValue(undefined);
     const { field, booted, queryByRole, getByLabelText } = mount({ onCompact });
