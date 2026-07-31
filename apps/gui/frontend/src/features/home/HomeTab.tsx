@@ -74,7 +74,7 @@ export function HomeTab(): JSX.Element {
           <div class="flex items-stretch gap-2.5">
             <TaskManagerComposer />
 
-            <div class="flex min-w-0 flex-1 items-center gap-2.5 rounded-[11px] border border-white/11 bg-az-inset px-3 py-2.5 focus-within:border-primary/40">
+            <div class="flex min-w-0 flex-1 items-center gap-2.5 rounded-[11px] border border-primary/11 bg-az-inset px-3 py-2.5 focus-within:border-primary/40">
               <Icon name="search" class="shrink-0 text-[14px] text-primary/70" />
               <input
                 type="search"
@@ -84,7 +84,7 @@ export function HomeTab(): JSX.Element {
                 aria-label="Search projects and items"
                 class="min-w-0 flex-1 bg-transparent text-[12.5px] text-base-content placeholder:text-az-muted focus:outline-none"
               />
-              <kbd class="shrink-0 rounded-md border border-white/10 bg-base-300 px-[7px] py-0.5 font-mono text-[10.5px] text-az-faint">
+              <kbd class="shrink-0 rounded-md border border-primary/25 bg-primary/8 px-[7px] py-0.5 font-mono text-[10.5px] text-primary/70">
                 ⌘K
               </kbd>
             </div>
@@ -277,7 +277,7 @@ function TaskManagerComposer(): JSX.Element {
       <div
         class={`flex min-w-0 flex-1 gap-2.5 rounded-[11px] border bg-az-inset px-3 py-2.5 focus-within:border-primary/40 ${
           tall() ? "items-start" : "items-center"
-        } ${error() ? "border-error/40" : "border-white/11"}`}
+        } ${error() ? "border-error/40" : "border-primary/11"}`}
       >
         <Icon
           name="list-checks"
@@ -346,7 +346,7 @@ function TaskManagerComposer(): JSX.Element {
         <Show
           when={isRunning()}
           fallback={
-            <kbd class="shrink-0 rounded-md border border-white/10 bg-base-300 px-[7px] py-0.5 font-mono text-[10.5px] text-az-faint">
+            <kbd class="shrink-0 rounded-md border border-primary/25 bg-primary/8 px-[7px] py-0.5 font-mono text-[10.5px] text-primary/70">
               ↵
             </kbd>
           }

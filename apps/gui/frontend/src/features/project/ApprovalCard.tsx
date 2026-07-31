@@ -92,7 +92,7 @@ export function ApprovalCard(props: { projectId: string; approval: PendingApprov
           <button
             type="button"
             onClick={() => answer(false)}
-            class="rounded-lg border border-white/18 px-3 py-[5px] text-[12px] text-az-body transition-colors hover:border-error hover:text-error"
+            class="rounded-lg border border-primary/18 px-3 py-[5px] text-[12px] text-az-body transition-colors hover:border-error hover:text-error"
           >
             Deny
           </button>

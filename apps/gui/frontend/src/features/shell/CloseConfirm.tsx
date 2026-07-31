@@ -75,7 +75,7 @@ export function CloseConfirm(props: CloseConfirmProps): JSX.Element {
               <button
                 type="button"
                 onClick={props.onCancel}
-                class="rounded-lg border border-az-hairline-strong px-3.5 py-1.5 text-[12.5px] text-az-body transition-colors hover:border-white/30 hover:text-az-title"
+                class="rounded-lg border border-az-hairline-strong px-3.5 py-1.5 text-[12.5px] text-az-body transition-colors hover:border-primary/30 hover:text-az-title"
               >
                 Cancel
               </button>

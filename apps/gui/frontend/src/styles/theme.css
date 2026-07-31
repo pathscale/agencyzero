@@ -310,6 +310,33 @@
     -webkit-user-select: text;
   }
 
+  /*
+   * Every live button carries a hairline of the accent.
+   *
+   * `outline` with a negative offset rather than a border: it draws on the edge
+   * pixel without joining the box model, so nothing reflows and buttons that
+   * already have a border keep their metrics exactly. Outlines follow
+   * `border-radius`, so pills stay pills.
+   *
+   * Disabled is the one exclusion — an inactive control claiming the accent
+   * reads as available, which is the opposite of what it means.
+   */
+  button:not(:disabled):not([aria-disabled="true"]):not([class*="w-full"]):not([class*="flex-1"]) {
+    outline: 1px solid rgb(from var(--color-primary) r g b / 14%);
+    outline-offset: -1px;
+  }
+
+  /*
+   * Panels take the same treatment. They already carry a hairline border, and
+   * the outline lands on the same pixel — so this reads as one slightly firmer
+   * edge rather than two lines, and every card in the workspace is bounded by
+   * the accent instead of by grey.
+   */
+  .rounded-panel {
+    outline: 1px solid rgb(from var(--color-primary) r g b / 16%);
+    outline-offset: -1px;
+  }
+
   @media (prefers-reduced-motion: reduce) {
     *,
     *::before,

@@ -43,8 +43,8 @@ export function PillMenu<T extends string>(props: PillMenuProps<T>): JSX.Element
         disabled={props.isDisabled}
         class={`flex h-[30px] shrink-0 items-center gap-[7px] rounded-full px-3 text-[12.5px] transition-colors ${
           props.variant === "outline"
-            ? "border border-az-hairline-strong text-az-body hover:border-white/28 hover:text-az-title"
-            : "border border-white/11 bg-base-300 hover:border-primary/40"
+            ? "border border-primary/35 text-az-body hover:border-primary/60 hover:text-az-title"
+            : "border border-primary/35 bg-base-300 hover:border-primary/60"
         } disabled:pointer-events-none disabled:opacity-50`}
       >
         <Show when={props.icon}>
