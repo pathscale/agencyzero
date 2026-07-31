@@ -197,6 +197,10 @@ pub struct Report {
     /// Tables that start empty because their columns changed and nothing here
     /// knows how to convert them.
     pub reset: Vec<String>,
+    /// Tables whose migration was attempted and failed, with the reason. A
+    /// subset of `reset`, kept apart because "no migration exists" and "the
+    /// migration ran and could not" are different things to be told.
+    pub failed: Vec<(String, String)>,
 }
 
 /// Carry a store from `source` to `target`.
@@ -246,7 +250,23 @@ pub async fn carry_forward(
                     copy_dir(&from, &target.join(&table)).await?;
                     report.copied.push(table);
                 }
-                Err(error) => return Err(error),
+                /*
+                 * One table that cannot be read must not cost the others.
+                 *
+                 * This aborted the whole run once, on a `project_item` holding
+                 * a mix of old and new rows: the duplicate-key error it raised
+                 * took the transcripts, projects and task log with it, all of
+                 * which were perfectly readable and had not been reached yet
+                 * because the tables are walked in alphabetical order.
+                 *
+                 * A table nobody can read is a table that starts empty. That is
+                 * a real loss and it is reported as one, and it is a far smaller
+                 * loss than the store.
+                 */
+                Err(error) => {
+                    report.failed.push((table.clone(), error.to_string()));
+                    report.reset.push(table);
+                }
             }
             continue;
         }

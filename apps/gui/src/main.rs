@@ -884,14 +884,26 @@ fn main() {
                     &found,
                     wt_migrate::CURRENT_FINGERPRINT,
                 )) {
-                    Ok(report) => crate::log!(
-                        log::Level::Info,
-                        "boot",
-                        "carried the store forward: migrated [{}], copied [{}], reset [{}]",
-                        report.migrated.join(", "),
-                        report.copied.join(", "),
-                        report.reset.join(", ")
-                    ),
+                    Ok(report) => {
+                        crate::log!(
+                            log::Level::Info,
+                            "boot",
+                            "carried the store forward: migrated [{}], copied [{}], reset [{}]",
+                            report.migrated.join(", "),
+                            report.copied.join(", "),
+                            report.reset.join(", ")
+                        );
+                        // Named one by one, with the reason. A table that could
+                        // not be carried is the thing someone will come looking
+                        // for, and a comma-separated list does not say why.
+                        for (table, reason) in &report.failed {
+                            crate::log!(
+                                log::Level::Warn,
+                                "boot",
+                                "{table} could not be carried forward and starts empty: {reason}"
+                            );
+                        }
+                    }
                     Err(error) => crate::log!(
                         log::Level::Error,
                         "boot",
