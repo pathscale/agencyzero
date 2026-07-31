@@ -2133,6 +2133,32 @@ pub async fn delete_project(
         .delete_by_project(id.clone())
         .await
         .map_err(|error| failed("the approval rules", &error))?;
+    /*
+     * The raw exchange and the PR chips, which were being left behind.
+     *
+     * Both tables have carried a `ByProject` delete since they were added and
+     * neither was ever called here, so every deleted project left its I/O rows
+     * and its pull-request rows in the store — invisible, because nothing reads
+     * them without a project to hang them off, and unbounded, because the I/O
+     * table is the largest thing this app writes.
+     *
+     * The usage ledger is deliberately *not* cleared and has no such verb: the
+     * money was spent whether or not the project still exists, and a cost
+     * summary that shrinks when you tidy up is a cost summary nobody can
+     * reconcile. It carries the project id for grouping, not for ownership.
+     */
+    state
+        .tables
+        .agent_io
+        .delete_by_project(id.clone())
+        .await
+        .map_err(|error| failed("the agent I/O rows", &error))?;
+    state
+        .tables
+        .pull_request
+        .delete_by_project(id.clone())
+        .await
+        .map_err(|error| failed("the pull request rows", &error))?;
     for key in [
         session_key(&id),
         io_persist_key(&id),
