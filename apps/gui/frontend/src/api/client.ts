@@ -333,12 +333,17 @@ export interface AppEvents {
    * CLI compacting on its own as the window fills, mid-answer — weather during
    * someone else's run, which must not touch that run's status line.
    *
-   * `ok` and `error` are absent on `started`: nothing has been decided yet.
+   * `learning` is the pass that runs *before* the summary, asking the
+   * conversation what must outlive it — see `notes.rs`. It is a separate phase
+   * because it is the slow half and the user is watching a frozen composer:
+   * "compacting" while the agent is actually taking notes reads as a hang.
+   *
+   * `ok` and `error` are absent until `finished`: nothing has been decided yet.
    */
   "run:compaction": {
     projectId: string;
     driver: "command" | "agent";
-    phase: "started" | "finished";
+    phase: "learning" | "started" | "finished";
     ok?: boolean;
     error?: string | null;
   };

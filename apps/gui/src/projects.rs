@@ -1909,6 +1909,109 @@ pub async fn cancel_run(project_id: String, state: State<'_, AppState>) -> Resul
     }
 }
 
+/// Ask the conversation what it must not forget, and keep the answer.
+///
+/// Runs against the session about to be summarised, because that is the only
+/// place the knowledge still exists. The reply is stored verbatim (clamped) and
+/// becomes this project's standing instructions — see [`crate::notes`] for why
+/// it lives outside the conversation rather than being told to the agent.
+///
+/// # Failure is not fatal
+///
+/// Returns `None` and leaves the existing notes untouched if anything goes
+/// wrong. A compaction the user asked for must still happen: refusing to
+/// compact because the note-taking failed would hold a full context window
+/// hostage to an optional feature, and the agent is already struggling — that
+/// is why they reached for `/compact`.
+///
+/// No tools, no approvals, and the crate's default read-only posture: this turn
+/// writes prose, and a run that could touch the repository while the user
+/// believes it is taking notes would be a surprise nobody asked for.
+async fn learn_before_compacting(
+    app: &AppHandle,
+    io: &AgentIo,
+    state: &State<'_, AppState>,
+    project_id: &str,
+    cwd: &str,
+    session: Option<&str>,
+) -> Option<String> {
+    let existing = state
+        .tables
+        .kv_get(&crate::notes::notes_key(project_id))
+        .unwrap_or_default();
+
+    let mut request = agent_abstraction::Request::new(
+        agent_abstraction::Agent::Claude,
+        crate::notes::merge_prompt(&existing),
+    )
+    .cwd(cwd);
+    if let Some(session) = session {
+        request = request.resume(session);
+    }
+
+    note_io(
+        app,
+        io,
+        project_id,
+        "sent",
+        "request",
+        format!("claude <pre-compaction notes> cwd={cwd}"),
+    );
+
+    let outcome = match agent_abstraction::run(&request).await {
+        Ok(outcome) => outcome,
+        Err(error) => {
+            crate::log!(
+                crate::log::Level::Warn,
+                "run",
+                "{project_id}: could not take notes before compacting: {error}"
+            );
+            return None;
+        }
+    };
+
+    let learned = crate::notes::clamp(&outcome.text);
+    if learned.is_empty() {
+        // Nothing said is not the same as "forget everything you knew": an
+        // empty reply leaves the previous set standing.
+        crate::log!(
+            crate::log::Level::Warn,
+            "run",
+            "{project_id}: the pre-compaction pass returned nothing to keep"
+        );
+        return None;
+    }
+
+    if let Err(error) = state
+        .tables
+        .kv_put(&crate::notes::notes_key(project_id), learned.clone())
+        .await
+    {
+        crate::log!(
+            crate::log::Level::Error,
+            "run",
+            "{project_id}: could not store what was learned: {error}"
+        );
+        return None;
+    }
+
+    note_io(
+        app,
+        io,
+        project_id,
+        "received",
+        "notes",
+        format!("kept {} characters for after the compaction", learned.len()),
+    );
+    crate::log!(
+        crate::log::Level::Info,
+        "run",
+        "{project_id}: kept {} characters of notes before compacting",
+        learned.len()
+    );
+    Some(learned)
+}
+
 /// Who gets to say whether a compaction happened, and why it did not.
 ///
 /// Four sources, deliberately ranked, because they disagree. `reported` is the
@@ -2037,6 +2140,34 @@ pub async fn compact_project(
         dirs.remove(0)
     };
 
+    let io = state.io.clone();
+
+    /*
+     * Learn before forgetting.
+     *
+     * A compaction is the only operation in the app that destroys something on
+     * purpose, and what it destroys is not evenly valuable: the narrative
+     * compresses well and the operating rules do not survive at all. So the
+     * command is caught here and wrapped — one turn to write down what must
+     * outlive the summary, then the summary.
+     *
+     * Only ever on a session that exists. On a fresh one there is nothing to
+     * learn from, and asking would bill a turn to be told so.
+     */
+    let learned = if session.is_some() {
+        let _ = app.emit(
+            "run:compaction",
+            serde_json::json!({
+                "projectId": project_id,
+                "driver": "command",
+                "phase": "learning",
+            }),
+        );
+        learn_before_compacting(&app, &io, &state, &project_id, &cwd, session.as_deref()).await
+    } else {
+        None
+    };
+
     let mut request = agent_abstraction::Request::command(
         agent_abstraction::Agent::Claude,
         &agent_abstraction::Command::Compact { instructions: None },
@@ -2047,7 +2178,6 @@ pub async fn compact_project(
     }
 
     let resumed = session.as_deref().unwrap_or("<new session>");
-    let io = state.io.clone();
     note_io(
         &app,
         &io,
@@ -2147,7 +2277,22 @@ pub async fn compact_project(
     );
 
     let body = if ok {
-        "Compacted the conversation. What came before is now a summary, so the agent remembers the gist rather than the words.".to_string()
+        /*
+         * The note says what was kept, not just that something was thrown
+         * away. A compaction is destructive and silent, and "kept 14 rules"
+         * is the only evidence the user has that the destruction was survivable
+         * — it is also the prompt to go and check them if the agent starts
+         * behaving oddly afterwards.
+         */
+        match learned.as_deref() {
+            Some(notes) => format!(
+                "Compacted the conversation, keeping {} rule(s) learned so far. \
+                 What came before is now a summary, but those rules ride every \
+                 turn from here and no later compaction can lose them.",
+                notes.lines().filter(|line| !line.trim().is_empty()).count()
+            ),
+            None => "Compacted the conversation. What came before is now a summary, so the agent remembers the gist rather than the words.".to_string(),
+        }
     } else {
         format!(
             "Could not compact: {}",
@@ -2922,6 +3067,29 @@ async fn drive_run(
      */
     if let Some(session) = resume.as_deref().filter(|id| !id.is_empty()) {
         request = request.resume(session);
+    }
+
+    /*
+     * What the last compaction taught, carried on every turn since.
+     *
+     * This is the half of the compaction the crate cannot do for us. A summary
+     * loses the operating rules, and re-teaching them in a message would only
+     * put them back inside the conversation for the next compaction to lose
+     * again. The system prompt is the one channel a compaction cannot touch, so
+     * the notes ride here — re-sent every turn, read from cache, and immune.
+     *
+     * Empty until a compaction has happened, which is the honest default: a
+     * conversation that has never been summarised has lost nothing yet.
+     */
+    let notes = tables
+        .kv_get(&crate::notes::notes_key(&project_id))
+        .unwrap_or_default();
+    if !notes.trim().is_empty() {
+        request = request.system(format!(
+            "What you learned earlier in this project, kept across a compaction \
+             that would otherwise have lost it. Treat it as standing \
+             instruction:\n\n{notes}"
+        ));
     }
 
     crate::log!(

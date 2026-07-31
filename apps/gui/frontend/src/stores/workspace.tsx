@@ -839,10 +839,22 @@ function createWorkspace() {
      */
     await bind("run:compaction", ({ projectId, driver, phase }) => {
       if (driver !== "command") return;
-      if (phase === "started") {
+      if (phase !== "finished") {
+        /*
+         * Both in-flight phases hold the session, and both say which one they
+         * are. The note-taking pass is the slow half — it is a whole turn
+         * against a full context window — so labelling it "compacting" would
+         * leave the user watching a held composer through the longest part of
+         * the operation with the wrong explanation for it.
+         */
         batch(() => {
           setState("compacting", projectId, true);
-          touchRunStatus(projectId, "compacting — the session is busy, please wait");
+          touchRunStatus(
+            projectId,
+            phase === "learning"
+              ? "learning what to keep before compacting — please wait"
+              : "compacting — the session is busy, please wait",
+          );
         });
         return;
       }

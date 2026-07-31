@@ -4,6 +4,7 @@ mod agents;
 mod db;
 mod log;
 mod models;
+mod notes;
 mod projects;
 mod prs;
 mod quota;
