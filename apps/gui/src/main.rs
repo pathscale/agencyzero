@@ -79,6 +79,7 @@ const IMPLEMENTED: &[&str] = &[
     "log_frontend",
     "get_log_path",
     "list_table_sizes",
+    "open_external",
     "check_for_update",
     "install_update",
 ];
@@ -197,6 +198,45 @@ fn list_table_sizes(state: State<'_, AppState>) -> Vec<TableSize> {
         .collect();
     sizes.sort_by(|a, b| b.bytes.cmp(&a.bytes));
     sizes
+}
+
+/// Hand a URL to the browser.
+///
+/// A PR chip carries the one link you actually want to follow, and a webview
+/// with no navigation of its own can only copy it — "click to copy, now go
+/// paste it" is two steps for the commonest action on the row.
+///
+/// `open(1)` rather than a plugin: it is one line of std, and the alternative
+/// is a dependency for a subprocess this app can spawn itself. The argument is
+/// passed as an argv entry, never through a shell, so there is no quoting to
+/// get wrong.
+///
+/// **Only http and https.** `open` will happily launch a `file://` path or a
+/// registered custom scheme, and the URLs reaching this come from an agent's
+/// reply — text this app did not author. A scheme allowlist is what keeps
+/// "click the link" from being an arbitrary-handler invocation.
+///
+/// # Errors
+/// Returns a message when the scheme is not allowed, or when the browser could
+/// not be launched.
+#[tauri::command]
+fn open_external(url: String) -> Result<(), String> {
+    if !(url.starts_with("https://") || url.starts_with("http://")) {
+        crate::log!(
+            log::Level::Warn,
+            "shell",
+            "refused to open a non-web URL: {url}"
+        );
+        return Err("only http and https links can be opened".into());
+    }
+    std::process::Command::new("open")
+        .arg(&url)
+        .spawn()
+        .map(|_| ())
+        .map_err(|error| {
+            crate::log!(log::Level::Error, "shell", "could not open {url}: {error}");
+            format!("could not open the link: {error}")
+        })
 }
 
 /// Where the log file is, so Settings can point at it rather than describing it.
@@ -731,7 +771,8 @@ fn main() {
             models::list_models,
             log_frontend,
             get_log_path,
-            list_table_sizes
+            list_table_sizes,
+            open_external
         ])
         .setup(|app| {
             app.set_menu(build_menu(app.handle())?)?;

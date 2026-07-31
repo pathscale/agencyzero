@@ -1340,6 +1340,10 @@ function createWorkspace() {
       const picked = await client().chooseDataDirectory();
       if (picked) await actions.setDataLocation(picked);
     },
+    /** Open a link in the browser. See the Rust command for the scheme rule. */
+    openExternal(url: string) {
+      return client().openExternal(url);
+    },
     /** How much disk each table holds. Read on demand; nothing caches it. */
     listTableSizes() {
       return client().listTableSizes();
