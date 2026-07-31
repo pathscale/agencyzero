@@ -1,7 +1,13 @@
 import { render, waitFor } from "@solidjs/testing-library";
 import { beforeEach, describe, expect, it } from "vitest";
 import { setPrefs } from "~/stores/prefs";
-import { isLimitLive, useWorkspace, type Workspace, WorkspaceProvider } from "~/stores/workspace";
+import {
+  isLimitLive,
+  queueReason,
+  useWorkspace,
+  type Workspace,
+  WorkspaceProvider,
+} from "~/stores/workspace";
 
 /**
  * Mounts the provider and hands back the live workspace once it has loaded.
@@ -324,6 +330,44 @@ describe("isLimitLive", () => {
   it("keeps a limit the provider gave no reset time for, rather than guessing", () => {
     expect(isLimitLive(limit(null), now)).toBe(true);
     expect(isLimitLive(limit("nonsense"), now)).toBe(true);
+  });
+});
+
+/*
+ * Which refusals are worth waiting out. The backend's own wording is asserted
+ * in `queue_markers` (apps/gui/src/projects.rs) — between the two, rewording a
+ * refusal on one side without the other fails a test rather than quietly
+ * turning a queued prompt into red text under the composer.
+ */
+describe("queueReason", () => {
+  it("waits out a command holding the session", () => {
+    expect(
+      queueReason(
+        new Error(
+          "a command is running in this project — the message will be sent when it finishes",
+        ),
+      ),
+    ).toBe("compacting");
+  });
+
+  it("waits out a run that has the slot", () => {
+    expect(
+      queueReason(new Error("a run is already active in this project — stop it or let it finish")),
+    ).toBe("busy");
+    expect(
+      queueReason(new Error("a run is already active in this project — let it finish first")),
+    ).toBe("busy");
+  });
+
+  /*
+   * The rule that keeps a prompt from waiting forever. A refusal the window
+   * cannot name is not a busy signal — nothing will free, nothing will flush —
+   * so the words go back to the composer where they can be seen and resent.
+   */
+  it("hands back anything it cannot name, rather than queueing it", () => {
+    expect(queueReason(new Error("the working directory no longer exists"))).toBeNull();
+    expect(queueReason(new Error("you are out of quota"))).toBeNull();
+    expect(queueReason("not even an error")).toBeNull();
   });
 });
 

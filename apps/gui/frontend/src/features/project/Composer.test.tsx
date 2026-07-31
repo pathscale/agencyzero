@@ -259,3 +259,75 @@ describe("what the composer holds is per tab", () => {
     await waitFor(() => expect(screen.getByText(/no session to compact/)).toBeTruthy());
   });
 });
+
+/*
+ * The alert under the box is for things that went wrong, and it says so in red.
+ * A compaction that *worked* was reported through it, under the prefix every
+ * message in the slot used to get — so the screenshot read "Could not send —
+ * your message is still here. Compacted." on a compaction that had succeeded.
+ */
+describe("the alert slot means failure", () => {
+  const mount = (props: { onCompact?: () => Promise<void>; onSend?: () => Promise<void> }) => {
+    const screen = render(() => (
+      <WorkspaceProvider>
+        <Composer
+          placeholder="Ask, or type / for commands…"
+          model="sonnet"
+          modelOptions={[{ value: "sonnet", label: "Sonnet" }]}
+          efforts={[]}
+          effort=""
+          permission="read_only"
+          onModelChange={() => {}}
+          onPermissionChange={() => {}}
+          onCompact={props.onCompact}
+          onSend={props.onSend ?? vi.fn().mockResolvedValue(undefined)}
+        />
+      </WorkspaceProvider>
+    ));
+    return {
+      screen,
+      field: () => screen.getByLabelText("Ask, or type / for commands…") as HTMLTextAreaElement,
+      send: () => screen.getByLabelText("Send"),
+    };
+  };
+
+  it("says nothing when a compaction succeeds", async () => {
+    const compact = vi.fn().mockResolvedValue(undefined);
+    const { screen, field, send } = mount({ onCompact: compact });
+
+    fireEvent.input(field(), { target: { value: "/compact" } });
+    fireEvent.click(send());
+
+    await waitFor(() => expect(compact).toHaveBeenCalled());
+    // The transcript reports it — a status line while it runs, a note when it
+    // lands. Here there is nothing to report.
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("still explains a compaction that was refused, without blaming the draft", async () => {
+    const compact = vi.fn().mockRejectedValue(new Error("a run is already active"));
+    const { screen, field, send } = mount({ onCompact: compact });
+
+    fireEvent.input(field(), { target: { value: "/compact" } });
+    fireEvent.click(send());
+
+    const alert = await waitFor(() => screen.getByRole("alert"));
+    expect(alert.textContent).toContain("a run is already active");
+    // Nothing was sent, so nothing is "still here" waiting to be resent.
+    expect(alert.textContent).not.toContain("still here");
+  });
+
+  it("keeps the prefix on a send that actually failed", async () => {
+    const onSend = vi.fn().mockRejectedValue(new Error("the backend is unreachable"));
+    const { screen, field, send } = mount({ onSend });
+
+    fireEvent.input(field(), { target: { value: "a real prompt" } });
+    fireEvent.click(send());
+
+    const alert = await waitFor(() => screen.getByRole("alert"));
+    expect(alert.textContent).toContain("still here");
+    expect(alert.textContent).toContain("the backend is unreachable");
+    // And the words are where the alert says they are.
+    expect(field().value).toBe("a real prompt");
+  });
+});

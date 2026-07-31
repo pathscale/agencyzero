@@ -46,8 +46,16 @@ export interface PendingApproval {
   input: unknown;
 }
 
-/** Who is speaking in the transcript. */
-export type MessageAuthor = "user" | "agent" | "moderator";
+/**
+ * Who is speaking in the transcript.
+ *
+ * `system` is the app's own voice — something that happened *to* the
+ * conversation rather than in it, like a compaction rewriting everything above
+ * it. Distinct from `moderator`, which is the supervision feature and carries a
+ * verdict; a compaction filed as a moderator note rendered as an empty amber
+ * card, because the card is built out of a verdict it did not have.
+ */
+export type MessageAuthor = "user" | "agent" | "moderator" | "system";
 
 /** `Stop` in the crate; anything other than these two arrives as a bare string. */
 export type StopReason = "completed" | "error" | (string & {});

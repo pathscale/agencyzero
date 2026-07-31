@@ -1502,10 +1502,32 @@ const APPROVAL_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30 
 /// mid-run correction an interruption rather than a queued afterthought.
 pub struct ActiveRun {
     pub cancel: tokio::sync::watch::Sender<bool>,
-    pub inject: tokio::sync::mpsc::UnboundedSender<String>,
+    /// `None` when the run has no conversation to interrupt.
+    ///
+    /// A command turn — `/compact` — rewrites the session instead of answering
+    /// it, and its stream is drained for the command's own events. Words
+    /// delivered into that turn would be read by nobody and would disappear
+    /// with it, so the send is refused and the frontend holds them for the
+    /// session that comes out the other side.
+    pub inject: Option<tokio::sync::mpsc::UnboundedSender<String>>,
 }
 
 pub type ActiveRuns = std::sync::Mutex<std::collections::HashMap<String, ActiveRun>>;
+
+/*
+ * The two refusals that mean "hold this, do not hand it back".
+ *
+ * A Tauri command's error crosses to the window as a bare string, so
+ * `queueReason` in `stores/workspace.tsx` reads these by their wording — there
+ * is nothing else on the wire to key on. Reworded here without being reworded
+ * there, a prompt that should have waited in the queue turns into red text
+ * under the composer instead. Named, and asserted in `queue_markers`, so the
+ * coupling is at least visible from this end.
+ */
+const BUSY_WITH_COMMAND: &str =
+    "a command is running in this project — the message will be sent when it finishes";
+const BUSY_WITH_RUN: &str = "a run is already active in this project — stop it or let it finish";
+const BUSY_WITH_RUN_ALREADY: &str = "a run is already active in this project — let it finish first";
 
 /// Releases a project's run slot when the run is over, however it ends.
 ///
@@ -1887,6 +1909,46 @@ pub async fn cancel_run(project_id: String, state: State<'_, AppState>) -> Resul
     }
 }
 
+/// Who gets to say whether a compaction happened, and why it did not.
+///
+/// Four sources, deliberately ranked, because they disagree. `reported` is the
+/// agent's own compaction record and outranks everything: a refusal is a
+/// *completed* run carrying a reason, and reading the clean exit instead would
+/// report a compaction that did not happen. `spoken` is the last resort and the
+/// one that matters in practice — an agent with nothing to compact says
+/// `Error: No messages to compact` as plain assistant text and emits no
+/// compaction record at all, so without it the honest-but-useless "ended
+/// without reporting a compaction" was all the user ever saw.
+///
+/// Silence is never success. A run that finished cleanly having said nothing
+/// about compacting has not compacted, and saying otherwise is precisely the
+/// lie the typed command exists to prevent.
+fn compaction_verdict(
+    cancelled: bool,
+    reported: Option<(bool, Option<String>)>,
+    exit: Option<String>,
+    spoken: &str,
+) -> (bool, Option<String>) {
+    if cancelled {
+        // Asked for, so reported as itself rather than as whatever error the
+        // torn-down agent happened to exit with.
+        return (false, Some("you stopped the compaction".into()));
+    }
+    if let Some((ok, error)) = reported {
+        return (ok, error);
+    }
+    if let Some(error) = exit {
+        return (false, Some(error));
+    }
+    (
+        false,
+        Some(match spoken.trim() {
+            "" => "the agent ended without reporting a compaction".into(),
+            said => said.to_string(),
+        }),
+    )
+}
+
 /// Summarise the conversation so far and continue from the summary.
 ///
 /// The answer to a session that has filled its context window: past about
@@ -1901,39 +1963,66 @@ pub async fn cancel_run(project_id: String, state: State<'_, AppState>) -> Resul
 /// # Its own turn, and its own slot
 ///
 /// A compaction is a turn: it resumes the session, rewrites it, and settles.
-/// So it claims the same one-run-per-project slot a message does, and is
-/// refused while anything else is running rather than racing it. It writes no
-/// assistant reply — a compaction produces no answer — so the transcript gets a
-/// moderator note instead, which is also the only durable record that the
-/// conversation the user is reading was rewritten underneath them.
+/// So it claims the same one-run-per-project slot a message does — really
+/// claims it, by holding a [`RunReservation`] for its whole body. Checking the
+/// registry without inserting into it was the bug behind "why is my message not
+/// queued": nothing knew a compaction was running, so a send during one started
+/// a second run against the same session.
+///
+/// It writes no assistant reply — a compaction produces no answer — so the
+/// transcript gets a system note instead, which is the only durable record that
+/// the conversation the user is reading was rewritten underneath them.
+///
+/// # Without a session
+///
+/// Runs on a fresh one and records the id the agent hands back. A command that
+/// demanded an existing session made `/compact` fail on an untouched project
+/// until the user sent a throwaway message to bring a session into being, which
+/// is the opposite of what a command is for. Compacting an empty conversation
+/// is the agent's own question to answer, and it answers it.
 ///
 /// # Errors
-/// When nothing has been said yet (no session to compact), when a run is
-/// already active, or when the agent refuses. A conversation too short to
-/// summarise is the agent's own refusal and comes back as its message, not as
-/// a crash.
+/// When a run is already active, or when the agent refuses. A conversation too
+/// short to summarise is the agent's own refusal and comes back as its message,
+/// not as a crash.
 #[tauri::command]
 pub async fn compact_project(
     app: AppHandle,
     project_id: String,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
-    let Some(session) = state
+    let session = state
         .tables
         .kv_get(&session_key(&project_id))
-        .filter(|id| !id.is_empty())
-    else {
-        return Err("there is no conversation to compact yet".into());
-    };
-    {
-        let active = state
+        .filter(|id| !id.is_empty());
+
+    // Held for the rest of the body: the slot is released when this drops,
+    // however the compaction ends.
+    let (_reservation, mut cancel) = {
+        let mut active = state
             .active
             .lock()
             .map_err(|_| "the run registry is unavailable".to_string())?;
         if active.contains_key(&project_id) {
-            return Err("a run is already active in this project — let it finish first".into());
+            return Err(BUSY_WITH_RUN_ALREADY.into());
         }
-    }
+        let (cancel_tx, cancel_rx) = tokio::sync::watch::channel(false);
+        active.insert(
+            project_id.clone(),
+            ActiveRun {
+                cancel: cancel_tx,
+                // Nothing to say into: see `ActiveRun::inject`.
+                inject: None,
+            },
+        );
+        (
+            RunReservation {
+                active: state.active.clone(),
+                project_id: project_id.clone(),
+            },
+            cancel_rx,
+        )
+    };
 
     let mut dirs = state
         .tables
@@ -1948,13 +2037,16 @@ pub async fn compact_project(
         dirs.remove(0)
     };
 
-    let request = agent_abstraction::Request::command(
+    let mut request = agent_abstraction::Request::command(
         agent_abstraction::Agent::Claude,
         &agent_abstraction::Command::Compact { instructions: None },
     )
-    .cwd(&cwd)
-    .resume(&session);
+    .cwd(&cwd);
+    if let Some(session) = &session {
+        request = request.resume(session);
+    }
 
+    let resumed = session.as_deref().unwrap_or("<new session>");
     let io = state.io.clone();
     note_io(
         &app,
@@ -1962,12 +2054,12 @@ pub async fn compact_project(
         &project_id,
         "sent",
         "request",
-        format!("claude /compact cwd={cwd} resume={session}"),
+        format!("claude /compact cwd={cwd} resume={resumed}"),
     );
     crate::log!(
         crate::log::Level::Info,
         "run",
-        "{project_id}: compacting session {session}"
+        "{project_id}: compacting session {resumed}"
     );
 
     let mut run = agent_abstraction::stream(&request)
@@ -1975,38 +2067,84 @@ pub async fn compact_project(
 
     let _ = app.emit(
         "run:compaction",
-        serde_json::json!({ "projectId": project_id, "phase": "started" }),
+        serde_json::json!({
+            "projectId": project_id,
+            "driver": "command",
+            "phase": "started",
+        }),
     );
 
     /*
-     * Only the compaction events are read. A compaction emits no text and no
-     * usage worth recording, and the run's own `result` carries an empty answer
-     * by design, so draining the stream for anything else would be reading
-     * fields that are blank on purpose.
+     * Three events matter, and the third is the one an empty conversation
+     * answers with. A compaction reports no usage worth recording and its
+     * `result` is empty by design — but an agent that will not compact at all
+     * says so as ordinary assistant text and emits no compaction record
+     * whatsoever. Checked against the CLI on a fresh session: the entire reply
+     * is `Error: No messages to compact`, the run exits `success`, and nothing
+     * else is said. Dropping that text left the user reading "the agent ended
+     * without reporting a compaction" while the agent had explained itself
+     * perfectly well.
      */
     let mut outcome_note = None;
-    while let Some(event) = run.recv().await {
-        if let agent_abstraction::Event::Compaction(phase) = event
-            && let agent_abstraction::Compaction::Finished { ok, error } = phase
-        {
-            outcome_note = Some((ok, error));
+    let mut spoken = String::new();
+    let mut cancelled = false;
+    loop {
+        let event = tokio::select! {
+            _ = cancel.changed() => {
+                cancelled = true;
+                break;
+            }
+            event = run.recv() => match event {
+                Some(event) => event,
+                None => break,
+            },
+        };
+        match event {
+            agent_abstraction::Event::Compaction(agent_abstraction::Compaction::Finished {
+                ok,
+                error,
+            }) => outcome_note = Some((ok, error)),
+            // Kept only as a fallback reason. A compaction that works says
+            // nothing here, so text almost always means it did not.
+            agent_abstraction::Event::Text(text) => spoken.push_str(&text),
+            // The session this command is running on, which is news only when
+            // there was none to resume — the command has just brought one into
+            // being and the next message has to resume *it*.
+            agent_abstraction::Event::Started {
+                session: started, ..
+            } => {
+                if let Err(error) = state
+                    .tables
+                    .kv_put(&session_key(&project_id), started.clone())
+                    .await
+                {
+                    crate::log!(
+                        crate::log::Level::Error,
+                        "run",
+                        "{project_id}: could not record the session id: {error}"
+                    );
+                } else if let Some(row) = state.tables.project.select(project_id.clone()) {
+                    let _ = app.emit(
+                        "project:updated",
+                        with_session(ProjectDto::from(row), &state.tables),
+                    );
+                }
+            }
+            _ => {}
         }
     }
-    let finished = run.finish().await;
-
-    let (ok, why) = match (&finished, outcome_note) {
-        // The agent's own verdict outranks the exit: a refusal is a completed
-        // run carrying a reason.
-        (_, Some((ok, error))) => (ok, error),
-        (Err(error), None) => (false, Some(error.to_string())),
-        // A run that ended without ever saying it compacted has not compacted,
-        // and reporting success here is exactly the lie the typed command
-        // exists to prevent.
-        (Ok(_), None) => (
-            false,
-            Some("the agent ended without reporting a compaction".into()),
-        ),
+    let finished = if cancelled {
+        run.cancel().await
+    } else {
+        run.finish().await
     };
+
+    let (ok, why) = compaction_verdict(
+        cancelled,
+        outcome_note,
+        finished.as_ref().err().map(ToString::to_string),
+        &spoken,
+    );
 
     let body = if ok {
         "Compacted the conversation. What came before is now a summary, so the agent remembers the gist rather than the words.".to_string()
@@ -2029,7 +2167,11 @@ pub async fn compact_project(
         id: id("msg"),
         project_id: project_id.clone(),
         item_id: String::new(),
-        author: "moderator".into(),
+        // The app's own voice, not the moderator's. Written as a moderator note
+        // this rendered as an empty amber card reading "Moderator supervising ·"
+        // — the transcript builds that card out of the `moderation` verdict,
+        // which a compaction does not have and should not fake.
+        author: "system".into(),
         agent: "claude".into(),
         moderation: String::new(),
         model: String::new(),
@@ -2050,6 +2192,7 @@ pub async fn compact_project(
         "run:compaction",
         serde_json::json!({
             "projectId": project_id,
+            "driver": "command",
             "phase": "finished",
             "ok": ok,
             "error": why,
@@ -2500,7 +2643,17 @@ pub async fn send_message(
             .lock()
             .map_err(|_| "the run registry is unavailable".to_string())?;
         if let Some(running) = active.get(&input.project_id) {
-            let inject = running.inject.clone();
+            /*
+             * A command turn takes no passengers. Refused *before* the row is
+             * written, unlike the injection below: the words were not said to
+             * anyone, so leaving a user message in the transcript with nothing
+             * answering it would be the lie. The frontend queues them and sends
+             * them for real once the command lands.
+             */
+            let Some(inject) = running.inject.clone() else {
+                drop(active);
+                return Err(BUSY_WITH_COMMAND.into());
+            };
             drop(active);
 
             let user_row = MessageRow {
@@ -2541,9 +2694,7 @@ pub async fn send_message(
                 // The run tore down in the race window. The row stands (the
                 // words were said); the refusal tells the frontend to queue
                 // the body for a fresh turn so the agent actually hears it.
-                return Err(
-                    "a run is already active in this project — stop it or let it finish".into(),
-                );
+                return Err(BUSY_WITH_RUN.into());
             }
             return Ok(user_message);
         }
@@ -2553,7 +2704,7 @@ pub async fn send_message(
             input.project_id.clone(),
             ActiveRun {
                 cancel: cancel_tx,
-                inject: inject_tx,
+                inject: Some(inject_tx),
             },
         );
         (
@@ -3283,6 +3434,11 @@ async fn drive_run(
                     "run:compaction",
                     serde_json::json!({
                         "projectId": project_id,
+                        // Whose turn this is happening inside. The window holds
+                        // the composer for a compaction it asked for; this one
+                        // is weather during someone else's run, and clearing
+                        // that run's status line would be a lie about it.
+                        "driver": "agent",
                         "phase": if done { "finished" } else { "started" },
                         "ok": ok,
                         "error": why,
@@ -4079,6 +4235,71 @@ mod tests {
             elapsed_ms("2026-07-29T12:00:02+00:00", "2026-07-29T12:00:00+00:00"),
             Some(0)
         );
+    }
+
+    /*
+     * The window queues a refused prompt by reading these refusals, so the
+     * words below are load-bearing across the IPC boundary rather than prose.
+     * Reword one without rewording `queueReason` in `stores/workspace.tsx` and
+     * the prompt stops waiting for the slot and starts being an error message.
+     */
+    /*
+     * Checked against Claude Code 2.1.212 on an empty session: `/compact`
+     * replies `Error: No messages to compact` as assistant text, emits no
+     * compaction record, and exits `success`. Read by the old rules that was a
+     * clean run with no verdict, so the user was told the agent had "ended
+     * without reporting a compaction" — true, unhelpful, and standing in front
+     * of the actual answer.
+     */
+    #[test]
+    fn an_agent_with_nothing_to_compact_is_quoted_rather_than_paraphrased() {
+        let (ok, why) = compaction_verdict(false, None, None, "Error: No messages to compact");
+        assert!(!ok);
+        assert_eq!(why.as_deref(), Some("Error: No messages to compact"));
+    }
+
+    #[test]
+    fn a_silent_run_is_not_a_compaction() {
+        let (ok, why) = compaction_verdict(false, None, None, "   ");
+        assert!(!ok, "silence is not success");
+        assert_eq!(
+            why.as_deref(),
+            Some("the agent ended without reporting a compaction")
+        );
+    }
+
+    /// A refusal is a *completed* run carrying a reason, so the agent's own
+    /// record outranks both the exit and anything it said on the way.
+    #[test]
+    fn the_agents_own_verdict_outranks_the_exit() {
+        let refused = Some((false, Some("conversation too short".to_string())));
+        let (ok, why) = compaction_verdict(false, refused, None, "some chatter");
+        assert!(!ok);
+        assert_eq!(why.as_deref(), Some("conversation too short"));
+
+        // And a success stays a success even though the run also spoke.
+        let (ok, why) = compaction_verdict(false, Some((true, None)), None, "some chatter");
+        assert!(ok);
+        assert_eq!(why, None);
+    }
+
+    #[test]
+    fn stopping_it_is_reported_as_stopping_it() {
+        let (ok, why) = compaction_verdict(
+            true,
+            Some((true, None)),
+            Some("killed".into()),
+            "half a sentence",
+        );
+        assert!(!ok);
+        assert_eq!(why.as_deref(), Some("you stopped the compaction"));
+    }
+
+    #[test]
+    fn queue_markers() {
+        assert!(BUSY_WITH_COMMAND.contains("a command is running"));
+        assert!(BUSY_WITH_RUN.contains("already active"));
+        assert!(BUSY_WITH_RUN_ALREADY.contains("already active"));
     }
 
     /// An agent that reported nothing must not look like a free turn.

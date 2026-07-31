@@ -157,9 +157,10 @@ export interface AgencyZeroApi {
    * Summarise this project's conversation and continue from the summary.
    *
    * A real turn against the agent's own session, so it claims the run slot and
-   * is refused while anything else is running. Rejects with the agent's own
-   * reason when it will not compact — a conversation too short to summarise is
-   * the common one, and is an answer rather than a fault.
+   * is refused while anything else is running. A project with no session yet
+   * gets one — the command establishes it rather than demanding it. Rejects
+   * with the agent's own reason when it will not compact; a conversation too
+   * short to summarise is the common one, and is an answer rather than a fault.
    */
   compactProject(projectId: string): Promise<void>;
   listRunningTasks(projectId: string): Promise<RunningTask[]>;
@@ -310,12 +311,23 @@ export interface AppEvents {
    * run yet has none and the composer falls back to what it knows itself.
    */
   "run:commands": { projectId: string; all: string[]; skills: string[] };
-  /** A compaction the CLI drove on its own, mid-turn, as the window filled. */
+  /**
+   * A conversation being rewritten into a summary of itself.
+   *
+   * `driver` says whose turn it is happening inside, and the window treats the
+   * two very differently. `command` is a `/compact` this app asked for: it owns
+   * the run, holds the composer, and the status line is its own. `agent` is the
+   * CLI compacting on its own as the window fills, mid-answer — weather during
+   * someone else's run, which must not touch that run's status line.
+   *
+   * `ok` and `error` are absent on `started`: nothing has been decided yet.
+   */
   "run:compaction": {
     projectId: string;
+    driver: "command" | "agent";
     phase: "started" | "finished";
-    ok: boolean;
-    error: string | null;
+    ok?: boolean;
+    error?: string | null;
   };
   "run:rate_limit": RateLimit;
   /**

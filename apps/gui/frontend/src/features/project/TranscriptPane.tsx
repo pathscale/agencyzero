@@ -75,6 +75,9 @@ export function TranscriptPane(props: {
               <Match when={message.author === "moderator"}>
                 <ModeratorNote message={message} />
               </Match>
+              <Match when={message.author === "system"}>
+                <SystemNote message={message} />
+              </Match>
               <Match when={message.author === "agent"}>
                 <AgentBubble
                   message={message}
@@ -359,6 +362,43 @@ function MessageTime(props: { at: string }): JSX.Element {
     <span title={props.at} class="shrink-0 text-[10.5px] text-az-faint">
       {relativeTime(props.at, now())}
     </span>
+  );
+}
+
+/**
+ * The app's own voice: something that happened *to* the conversation.
+ *
+ * A compaction is the case it exists for — the transcript above it now
+ * summarises a conversation the agent no longer remembers word for word, and
+ * that is a fact about the thread rather than a turn in it. So: centred, quiet,
+ * and ruled off, reading as a seam rather than as someone speaking.
+ *
+ * Not a moderator note, which is what this used to be. That card is built out
+ * of a `moderation` verdict — severity, reason, the approve/deny pair — and a
+ * compaction has none of it, so the note rendered as an empty amber box saying
+ * "Moderator supervising ·" and nothing else. The result of the compaction was
+ * invisible, and the moderator appeared to have opinions about a conversation
+ * nobody had asked it to supervise.
+ */
+function SystemNote(props: { message: Message }): JSX.Element {
+  // A failed compaction is still a fact about the thread, not an agent turn —
+  // same seam, but it says so rather than reading as something that worked.
+  const failed = () => props.message.stop !== "completed";
+
+  return (
+    <div class="flex items-center gap-3 py-0.5">
+      <span class="h-px flex-1 bg-az-hairline" />
+      <span
+        data-selectable
+        class={`flex items-center gap-1.5 text-center text-[11.5px] ${
+          failed() ? "text-error" : "text-az-muted"
+        }`}
+      >
+        <Icon name={failed() ? "info" : "sparkles"} class="relative top-px shrink-0 text-[12px]" />
+        {props.message.body}
+      </span>
+      <span class="h-px flex-1 bg-az-hairline" />
+    </div>
   );
 }
 

@@ -9,7 +9,7 @@ import { clockTime } from "~/lib/format";
 import { AGENT_LABELS } from "~/lib/labels";
 import { describeError, log } from "~/lib/log";
 import { compactCount, contextUsed, costLabel, usageTotals } from "~/lib/stats";
-import { useWorkspace } from "~/stores/workspace";
+import { QUEUE_REASONS, useWorkspace } from "~/stores/workspace";
 import type { Project, PullRequest, Tab } from "~/types";
 
 /**
@@ -180,11 +180,15 @@ export function ProjectTab(props: { tab: Tab; project: Project }): JSX.Element {
           <Show when={(state.queued[props.project.id] ?? []).length > 0}>
             <div class="flex flex-col gap-1">
               <For each={state.queued[props.project.id]}>
-                {(body, index) => (
+                {(prompt, index) => (
                   <div class="flex items-center gap-2 rounded-[11px] border border-primary/14 border-dashed bg-az-inset px-3 py-1.5 text-[12px]">
                     <Icon name="history" class="shrink-0 text-[12px] text-az-faint" />
-                    <span class="min-w-0 flex-1 truncate text-az-body">{body}</span>
-                    <span class="shrink-0 text-[10.5px] text-az-faint">queued</span>
+                    <span class="min-w-0 flex-1 truncate text-az-body">{prompt.body}</span>
+                    {/* Why, not just that. A wait with no stated cause reads as
+                        the message having been swallowed. */}
+                    <span class="shrink-0 text-[10.5px] text-az-faint">
+                      {QUEUE_REASONS[prompt.reason]}
+                    </span>
                     <button
                       type="button"
                       onClick={() => actions.removeQueued(props.project.id, index())}

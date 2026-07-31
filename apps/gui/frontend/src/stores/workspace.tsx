@@ -112,8 +112,21 @@ type WorkspaceState = {
    * Prompts written while a run was busy, oldest first. Sent automatically,
    * one per finished run — the backend's one-run-per-project rule holds; this
    * just stops the composer from bouncing the words back at the user.
+   *
+   * Each carries why it is waiting. "Queued" alone reads as the app having
+   * quietly swallowed the message: the wait is only tolerable if you can see
+   * what it is waiting *for*, and whether that is something you can end.
    */
-  queued: Record<string, string[]>;
+  queued: Record<string, QueuedPrompt[]>;
+  /**
+   * Projects whose session is being rewritten by a `/compact` this window
+   * asked for.
+   *
+   * Separate from `runStatus`, which a compaction also sets: this is the reason
+   * *why* the project is busy, and it is what lets a send be queued under the
+   * right label without reading it back out of an error string.
+   */
+  compacting: Record<string, boolean>;
   /**
    * What each project's agent reported it can do, from its own catalogue.
    *
@@ -160,6 +173,49 @@ export type RunStatus = {
    */
   liveTokens: number | null;
 };
+
+/**
+ * Why a prompt is waiting instead of being sent.
+ *
+ * Only what the window can actually tell apart. `busy` is the settle-race and
+ * the mock's refusal — the slot is taken and frees itself. `compacting` is the
+ * session being rewritten, which is the one the user has to be told about,
+ * because a compaction takes long enough that silence reads as a lost message.
+ *
+ * Deliberately short of the full list: telling a backend that is down from a
+ * model that refused needs the crate's own error classification carried across
+ * the IPC boundary, which is its own piece of work.
+ */
+export type QueueReason = "busy" | "compacting";
+
+/** A prompt held back, and what it is held back for. */
+export type QueuedPrompt = { body: string; reason: QueueReason };
+
+/** What the chip above the composer says while a prompt waits. */
+export const QUEUE_REASONS: Record<QueueReason, string> = {
+  busy: "queued · session busy",
+  compacting: "queued · waiting for the compaction",
+};
+
+/**
+ * Whether a refused send is worth holding on to, and under what label.
+ *
+ * Matched on the message text, which is the honest description of what this
+ * does rather than a defence of it: the backend's refusals cross the IPC
+ * boundary as plain strings, so there is nothing else to match on. Kept in one
+ * place so replacing it — by carrying the crate's own error classification
+ * across that boundary — is one edit rather than a hunt.
+ *
+ * Anything unrecognised is *not* queued. A prompt held for a reason the window
+ * cannot name would wait for a slot that may never free, so it goes back to the
+ * composer as an error instead.
+ */
+export function queueReason(cause: unknown): QueueReason | null {
+  const text = describeError(cause);
+  if (text.includes("a command is running")) return "compacting";
+  if (text.includes("already active")) return "busy";
+  return null;
+}
 
 /**
  * A limit is only in force until its reset time; after that it is history.
@@ -213,6 +269,7 @@ function createWorkspace() {
     availableUpdate: null,
     streaming: {},
     runStatus: {},
+    compacting: {},
     queued: {},
     commands: {},
     tabs: [HOME_TAB],
@@ -760,7 +817,40 @@ function createWorkspace() {
       // The turn settled before the interruption reached it. The transcript
       // already shows the words; queue them so a fresh turn actually hears
       // them once the slot frees.
-      setState("queued", projectId, (waiting = []) => [...waiting, body]);
+      enqueue(projectId, body, "busy");
+    });
+
+    /*
+     * A conversation being rewritten. Only a compaction this window asked for
+     * gets the status line and the queue: the CLI's own mid-turn compaction is
+     * reported by the run that is already showing one, and taking that run's
+     * status line away to say "compacting" would leave it with nothing when the
+     * compaction finished and the answer carried on.
+     */
+    await bind("run:compaction", ({ projectId, driver, phase }) => {
+      if (driver !== "command") return;
+      if (phase === "started") {
+        batch(() => {
+          setState("compacting", projectId, true);
+          touchRunStatus(projectId, "compacting — the session is busy, please wait");
+        });
+        return;
+      }
+      batch(() => {
+        setState(
+          "compacting",
+          produce((busy) => delete busy[projectId]),
+        );
+        setState(
+          "runStatus",
+          produce((status) => delete status[projectId]),
+        );
+      });
+      // Same cue as `run:stopped`, and the same beat of delay: the slot is
+      // released as this run unwinds, a moment after the event goes out.
+      if ((state.queued[projectId] ?? []).length > 0) {
+        window.setTimeout(() => void flushQueue(projectId, 0), 250);
+      }
     });
 
     await bind("run:text", ({ projectId, delta }) => {
@@ -1175,19 +1265,37 @@ function createWorkspace() {
     });
   };
 
+  /** Hold a prompt, and say what it is waiting for. */
+  function enqueue(projectId: string, body: string, reason: QueueReason): void {
+    setState("queued", projectId, (waiting = []) => [...waiting, { body, reason }]);
+  }
+
   const send = async (projectId: string, body: string): Promise<void> => {
     /*
-     * Sent regardless of a live run: the backend delivers a mid-run message
-     * *into* the open turn (0.3.6's `Run::send`), so typing a correction
-     * interrupts rather than waits. The refusal below only remains for the
-     * mock (which fakes no run) and the settle-race — there the store queues,
-     * and the run's stop flushes. Either way the words are never handed back.
+     * A compaction is the one busy state worth checking *before* dispatching.
+     * It is not a turn that can be interrupted — the words would go into a run
+     * that is rewriting the session and reading nobody — and it is slow enough
+     * that a message vanishing into it looks like the app dropping it.
+     */
+    if (state.compacting[projectId]) {
+      enqueue(projectId, body, "compacting");
+      return;
+    }
+
+    /*
+     * Otherwise sent regardless of a live run: the backend delivers a mid-run
+     * message *into* the open turn (0.3.6's `Run::send`), so typing a
+     * correction interrupts rather than waits. The refusal below only remains
+     * for the mock (which fakes no run) and the settle-race — there the store
+     * queues, and the run's stop flushes. Either way the words are never handed
+     * back.
      */
     try {
       await dispatch(projectId, body);
     } catch (cause) {
-      if (describeError(cause).includes("already active")) {
-        setState("queued", projectId, (waiting = []) => [...waiting, body]);
+      const reason = queueReason(cause);
+      if (reason) {
+        enqueue(projectId, body, reason);
         return;
       }
       throw cause;
@@ -1203,14 +1311,14 @@ function createWorkspace() {
    */
   async function flushQueue(projectId: string, attempt: number): Promise<void> {
     const waiting = state.queued[projectId] ?? [];
-    const body = waiting[0];
-    if (body === undefined) return;
+    const next = waiting[0];
+    if (next === undefined) return;
     if (isBusy(projectId)) return; // a newer run took the slot; its stop will re-cue
     setState("queued", projectId, waiting.slice(1));
     try {
-      await dispatch(projectId, body);
+      await dispatch(projectId, next.body);
     } catch (cause) {
-      setState("queued", projectId, (rest = []) => [body, ...rest]);
+      setState("queued", projectId, (rest = []) => [next, ...rest]);
       if (attempt < 4) {
         window.setTimeout(() => void flushQueue(projectId, attempt + 1), 500 * 2 ** attempt);
       } else {
