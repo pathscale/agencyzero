@@ -272,6 +272,13 @@ function TabPill(props: {
         type="button"
         onClick={() => actions.focus(props.tab.key)}
         aria-current={isActive() ? "page" : undefined}
+        /*
+         * The pill's shape belongs to the wrapper, not to this button: it fills
+         * a `rounded-full` div and has no radius of its own, so the accent
+         * outline would draw a rectangle inside the pill. Squared-off inactive
+         * tabs are exactly what that looked like.
+         */
+        data-no-outline
         class={`flex h-full min-w-0 items-center gap-2 pl-3.5 text-[12.5px] ${isClosable() ? "pr-2" : "pr-3.5"}`}
       >
         <Show when={TAB_ICON[props.tab.kind]}>
