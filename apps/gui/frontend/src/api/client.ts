@@ -301,6 +301,22 @@ export interface AppEvents {
    * all — and the estimate from streamed characters covers that case.
    */
   "run:usage": { projectId: string; tokens: number };
+  /**
+   * What this agent can do, from its own catalogue at run start.
+   *
+   * `all` includes `skills`; the rest are the CLI's built-in utilities. Read
+   * from the agent rather than compiled in, since plugins and installed skills
+   * make the set per-machine. Arrives once per run, so a session that has not
+   * run yet has none and the composer falls back to what it knows itself.
+   */
+  "run:commands": { projectId: string; all: string[]; skills: string[] };
+  /** A compaction the CLI drove on its own, mid-turn, as the window filled. */
+  "run:compaction": {
+    projectId: string;
+    phase: "started" | "finished";
+    ok: boolean;
+    error: string | null;
+  };
   "run:rate_limit": RateLimit;
   /**
    * The limit has lifted. Without this the header pill and the tab dot stay

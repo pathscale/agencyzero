@@ -3246,6 +3246,49 @@ async fn drive_run(
                     }),
                 );
             }
+            /*
+             * What this install's agent can actually do, from its own init
+             * record rather than a list compiled in here. Plugins, skills and
+             * user commands make the set per-machine, so a hardcoded one would
+             * describe the developer's laptop.
+             *
+             * Relayed and not stored: it arrives with every run, and a
+             * catalogue held across restarts would go stale the moment someone
+             * installed a skill. The composer falls back to what it knows on
+             * its own until the first run of a session reports one.
+             */
+            Event::Commands(commands) => {
+                let _ = app.emit(
+                    "run:commands",
+                    serde_json::json!({
+                        "projectId": project_id,
+                        "all": commands.all,
+                        "skills": commands.skills,
+                    }),
+                );
+            }
+            Event::Compaction(phase) => {
+                // The compaction a `/compact` run drives reports through
+                // `compact_project`, which owns that run. This arm exists for
+                // the other way a compaction happens: the CLI compacts on its
+                // own when the window fills, mid-turn, and the conversation is
+                // rewritten underneath an answer being written.
+                let (done, ok, why) = match &phase {
+                    agent_abstraction::Compaction::Finished { ok, error } => {
+                        (true, *ok, error.clone())
+                    }
+                    _ => (false, false, None),
+                };
+                let _ = app.emit(
+                    "run:compaction",
+                    serde_json::json!({
+                        "projectId": project_id,
+                        "phase": if done { "finished" } else { "started" },
+                        "ok": ok,
+                        "error": why,
+                    }),
+                );
+            }
             Event::Usage(usage) => {
                 /*
                  * One API request's figures, folded into the turn's running

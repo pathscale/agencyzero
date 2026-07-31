@@ -201,6 +201,7 @@ export function ProjectTab(props: { tab: Tab; project: Project }): JSX.Element {
           <Composer
             draftKey={props.tab.key}
             onCompact={() => actions.compactProject(props.project.id)}
+            available={state.commands[props.project.id]}
             autofocus
             placeholder="Ask, or type / for commands…"
             model={props.tab.model}

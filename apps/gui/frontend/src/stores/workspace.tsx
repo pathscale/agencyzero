@@ -114,6 +114,15 @@ type WorkspaceState = {
    * just stops the composer from bouncing the words back at the user.
    */
   queued: Record<string, string[]>;
+  /**
+   * What each project's agent reported it can do, from its own catalogue.
+   *
+   * Per project because the agent, its plugins and its skills can differ per
+   * conversation. Empty until a run reports one, which is why the composer's
+   * parser treats an absent catalogue as "do not second-guess me" rather than
+   * as "nothing exists".
+   */
+  commands: Record<string, { all: string[]; skills: string[] }>;
   tabs: Tab[];
   activeKey: string;
   backend: "tauri" | "mock" | "hybrid" | "loading";
@@ -205,6 +214,7 @@ function createWorkspace() {
     streaming: {},
     runStatus: {},
     queued: {},
+    commands: {},
     tabs: [HOME_TAB],
     activeKey: "home",
     backend: "loading",
@@ -771,6 +781,10 @@ function createWorkspace() {
         liveTokens: current?.liveTokens ?? null,
         persistedChars: chars,
       }));
+    });
+
+    await bind("run:commands", ({ projectId, all, skills }) => {
+      setState("commands", projectId, { all, skills });
     });
 
     await bind("run:usage", ({ projectId, tokens }) => {

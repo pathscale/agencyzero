@@ -67,7 +67,25 @@ const HELP = [
  */
 export function parseSlash(
   line: string,
-  context: { models: string[]; efforts: string[] },
+  context: {
+    models: string[];
+    efforts: string[];
+    /**
+     * What the agent said it can do, from its own catalogue.
+     *
+     * Absent means no run has reported one yet, and absence is treated as "do
+     * not second-guess me" rather than "nothing exists": a session that has not
+     * run cannot enumerate anything, and refusing everything on that basis
+     * would be worse than the old hardcoded list.
+     *
+     * Used only to *explain*, never to dispatch. A command this app does not
+     * implement is still refused — knowing the agent has `/context` is not the
+     * same as knowing what AgencyZero should do with it, and running an
+     * arbitrary REPL command headlessly is how you get a turn billed for
+     * something nobody can see.
+     */
+    available?: { all: string[]; skills: string[] };
+  },
 ): SlashOutcome {
   const trimmed = line.trim();
   if (!trimmed.startsWith("/") || trimmed === "/") return { kind: "none" };
@@ -82,8 +100,15 @@ export function parseSlash(
   if (unavailable) return { kind: "error", message: unavailable };
 
   switch (name) {
-    case "help":
-      return { kind: "help", message: HELP };
+    case "help": {
+      const catalogue = context.available;
+      if (!catalogue) return { kind: "help", message: HELP };
+      // Counted rather than listed: 43 names would bury the four that work.
+      return {
+        kind: "help",
+        message: `${HELP}\n\nThis agent also reports ${catalogue.all.length} of its own commands (${catalogue.skills.length} skills), which AgencyZero does not run from here yet.`,
+      };
+    }
 
     // Handed to the backend rather than answered here: it is a real turn
     // against the agent's own session, not a change to this tab's state.
@@ -127,10 +152,27 @@ export function parseSlash(
           };
     }
 
-    default:
+    default: {
+      /*
+       * Three different situations, and telling them apart is the whole
+       * reason the catalogue is threaded down here. "Unknown command" for a
+       * skill the user installed and can see in their own CLI reads as this
+       * app being broken.
+       */
+      const known = context.available?.all.includes(name) ?? false;
+      if (known) {
+        const isSkill = context.available?.skills.includes(name) ?? false;
+        return {
+          kind: "error",
+          message: isSkill
+            ? `/${name} is one of the agent's skills. AgencyZero does not run skills from the composer yet — ask for it in words instead.`
+            : `The agent offers /${name}, but AgencyZero does not run it yet. Only /compact is wired.`,
+        };
+      }
       return {
         kind: "error",
         message: `Unknown command "/${name}". Try /help.`,
       };
+    }
   }
 }

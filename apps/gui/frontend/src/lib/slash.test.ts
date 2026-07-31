@@ -78,3 +78,54 @@ describe("parseSlash", () => {
     expect(out.kind === "help" && out.message).toContain("/model");
   });
 });
+
+/*
+ * The catalogue is the agent's own, read from its init record, so the composer
+ * can tell three situations apart that all used to read "Unknown command":
+ * a typo, a command the agent has that this app does not run, and a skill.
+ *
+ * It explains and never dispatches. Knowing the agent offers `/context` is not
+ * knowing what AgencyZero should do with it, and a REPL command run headlessly
+ * bills a turn for something nobody can see.
+ */
+describe("the agent's own command catalogue", () => {
+  const WITH_CATALOGUE = {
+    ...CONTEXT,
+    available: { all: ["compact", "context", "usage", "code-review"], skills: ["code-review"] },
+  };
+
+  it("names a command the agent has but this app does not run", () => {
+    const out = parseSlash("/context", WITH_CATALOGUE);
+    expect(out.kind).toBe("error");
+    expect(out.kind === "error" && out.message).toContain("agent offers /context");
+  });
+
+  it("tells a skill apart from a built-in utility", () => {
+    const out = parseSlash("/code-review", WITH_CATALOGUE);
+    expect(out.kind).toBe("error");
+    expect(out.kind === "error" && out.message).toContain("skills");
+  });
+
+  it("still calls a typo a typo", () => {
+    const out = parseSlash("/contxt", WITH_CATALOGUE);
+    expect(out.kind).toBe("error");
+    expect(out.kind === "error" && out.message).toContain("Unknown command");
+  });
+
+  /*
+   * A session that has not run yet cannot enumerate anything, and refusing on
+   * that basis would be worse than the hardcoded list this replaced.
+   */
+  it("does not second-guess an unknown word when no catalogue has arrived", () => {
+    const out = parseSlash("/context", CONTEXT);
+    expect(out.kind).toBe("error");
+    expect(out.kind === "error" && out.message).toContain("Unknown command");
+  });
+
+  it("counts the agent's commands in /help rather than listing all of them", () => {
+    const out = parseSlash("/help", WITH_CATALOGUE);
+    expect(out.kind).toBe("help");
+    expect(out.kind === "help" && out.message).toContain("4 of its own commands");
+    expect(out.kind === "help" && out.message).toContain("1 skills");
+  });
+});
