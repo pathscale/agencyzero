@@ -93,16 +93,16 @@ const IMPLEMENTED: &[&str] = &[
 /// What the GUI carries for the life of the process.
 pub(crate) struct AppState {
     tables: Arc<Tables>,
-    /// Tool calls in flight, by project. Not persisted, on purpose — see
+    /// Tool calls in flight, by project. Not persisted, on purpose, see
     /// [`projects::RunningTasks`].
     running: Arc<projects::RunningTasks>,
     /// The raw exchange with the agent, by project. In memory for the life of
-    /// the process — see [`projects::AgentIo`].
+    /// the process, see [`projects::AgentIo`].
     io: Arc<projects::AgentIo>,
     /// Approval questions waiting on the user, by project. The run is blocked
-    /// mid-turn until `resolve_approval` answers — see [`projects::PendingApprovals`].
+    /// mid-turn until `resolve_approval` answers, see [`projects::PendingApprovals`].
     approvals: Arc<projects::PendingApprovals>,
-    /// The live run per project: at most one, and how to stop it — see
+    /// The live run per project: at most one, and how to stop it, see
     /// [`projects::ActiveRuns`].
     active: Arc<projects::ActiveRuns>,
     /// Serializes `set_settings`. The update is a read-merge-write over one
@@ -129,7 +129,7 @@ fn list_capabilities() -> Vec<String> {
 /// Exactly which build this process is.
 ///
 /// The version number names every build for weeks at a time, so it cannot
-/// answer "am I running the fix or the stale bundle?" — the question behind
+/// answer "am I running the fix or the stale bundle?", the question behind
 /// two wasted debugging rounds. The commit and compile time can. Stamped by
 /// `build.rs`; a `*` after the sha means the tree had uncommitted edits.
 #[derive(Clone, Copy, serde::Serialize)]
@@ -210,7 +210,7 @@ fn list_table_sizes(state: State<'_, AppState>) -> Vec<TableSize> {
 /// Hand a URL to the browser.
 ///
 /// A PR chip carries the one link you actually want to follow, and a webview
-/// with no navigation of its own can only copy it — "click to copy, now go
+/// with no navigation of its own can only copy it, "click to copy, now go
 /// paste it" is two steps for the commonest action on the row.
 ///
 /// `open(1)` rather than a plugin: it is one line of std, and the alternative
@@ -220,7 +220,7 @@ fn list_table_sizes(state: State<'_, AppState>) -> Vec<TableSize> {
 ///
 /// **Only http and https.** `open` will happily launch a `file://` path or a
 /// registered custom scheme, and the URLs reaching this come from an agent's
-/// reply — text this app did not author. A scheme allowlist is what keeps
+/// reply, text this app did not author. A scheme allowlist is what keeps
 /// "click the link" from being an arbitrary-handler invocation.
 ///
 /// # Errors
@@ -330,7 +330,7 @@ fn get_data_location(state: State<'_, AppState>) -> location::LocationView {
 /// has no visible effect at all. A native picker is both the path that works and
 /// the right affordance for a filesystem path.
 ///
-/// `None` means the user cancelled, which is not an error — the caller writes no
+/// `None` means the user cancelled, which is not an error, the caller writes no
 /// pointer and the row is left alone.
 ///
 /// # Errors
@@ -362,7 +362,7 @@ async fn choose_data_directory(
     /*
      * The callback form, not `blocking_pick_folder`. Tauri runs a synchronous
      * command on the main thread, and the blocking variant asks the main thread
-     * to run the panel and then waits for it — from the main thread that is a
+     * to run the panel and then waits for it, from the main thread that is a
      * deadlock, with the window frozen behind a dialog that never appears.
      */
     let (tx, rx) = tokio::sync::oneshot::channel();
@@ -379,7 +379,7 @@ async fn choose_data_directory(
 
 /// Ask the OS for files, for the composer's Attach button.
 ///
-/// The chosen paths land in the prompt as text — the agents take file paths
+/// The chosen paths land in the prompt as text, the agents take file paths
 /// in prose, so "attach" honestly means "put the path where the model will
 /// read it", not an upload. An empty list means the user cancelled, which is
 /// not an error.
@@ -436,12 +436,12 @@ fn set_data_location(path: Option<String>, state: State<'_, AppState>) -> Result
 ///
 /// The self-hosting keystone: after `cargo tauri build` lands a new bundle at
 /// the same path, the running instance is the stale copy. Draining the tables
-/// first and then exec'ing our own path is "restart into the new build" — and
+/// first and then exec'ing our own path is "restart into the new build", and
 /// the clean half of any upgrade. It has to be the app's own move: an agent
 /// quitting the app from inside a run kills its own parent mid-flight.
 ///
 /// # Errors
-/// None reachable — the tail never returns. `Result` for command uniformity.
+/// None reachable, the tail never returns. `Result` for command uniformity.
 #[tauri::command]
 async fn relaunch_app(app: AppHandle, state: State<'_, AppState>) -> Result<(), String> {
     crate::log!(
@@ -579,7 +579,7 @@ const RESTART: &str = "restart";
 ///
 /// Hand-built rather than `Menu::default`, for one reason: the predefined
 /// Close Window item owns Cmd+W, and in a tabbed window Cmd+W has to close the
-/// tab. Everything else here is the standard macOS menu — and the Edit submenu
+/// tab. Everything else here is the standard macOS menu, and the Edit submenu
 /// is not optional, because without it copy and paste stop working in the
 /// composer.
 ///
@@ -596,7 +596,7 @@ fn build_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> {
 
     // The About box carries the full stamp, so "which build is this?" has an
     // answer reachable without opening Settings. macOS renders it as
-    // "Version {short_version} ({version})" and shows nothing else —
+    // "Version {short_version} ({version})" and shows nothing else
     // `comments` in particular is Linux-only, so the stamp has to ride in
     // `version` to appear at all.
     let stamp = format!("{} · built {}", BUILD.git_sha, BUILD.built_at);
@@ -634,7 +634,7 @@ fn build_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> {
     // reserves a Ctrl-letter set for text editing (Ctrl+A E B F P N K T), so
     // any Ctrl accelerator takes one of those away from every text field.
     //
-    // Ctrl+T is *also* bound to this, in the webview rather than here — see
+    // Ctrl+T is *also* bound to this, in the webview rather than here, see
     // frontend/src/features/tabs/shortcuts.ts. Leaving it out of the menu is
     // what lets the keydown reach the page, which is the only way it can fire
     // while the composer has focus.
@@ -685,7 +685,7 @@ fn build_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> {
 /// Take the user's real `PATH` from their login shell.
 ///
 /// An app launched from Finder inherits launchd's minimal `PATH`
-/// (`/usr/bin:/bin:...`), not the terminal's — so every agent probe spawned
+/// (`/usr/bin:/bin:...`), not the terminal's, so every agent probe spawned
 /// `claude` by name, found nothing, and Settings reported three installed
 /// CLIs as "not installed" while dev runs (launched from a terminal) worked.
 /// Asking the login shell is the same trick every GUI editor uses.
@@ -714,7 +714,7 @@ fn main() {
     /*
      * Panics must reach the log file. A Finder-launched app's stderr goes
      * nowhere, so before this hook a crash left a DiagnosticReports entry
-     * saying only "abort()" — the message and location of the panic itself
+     * saying only "abort()", the message and location of the panic itself
      * were discarded with the stream.
      */
     std::panic::set_hook(Box::new(|info| {
@@ -804,7 +804,7 @@ fn main() {
 
             // Before anything that can fail, so whatever happens next is on the
             // record. Opening the tables is the first thing that can, and it is
-            // fatal — a fatal error nobody can read is how this app lost an
+            // fatal, a fatal error nobody can read is how this app lost an
             // afternoon.
             log::init(&data_dir.join("logs"));
 
@@ -840,7 +840,7 @@ fn main() {
 
             /*
              * A store written by a build with a different schema is not stale,
-             * it is unreadable — rkyv reads the old bytes through the new layout
+             * it is unreadable, rkyv reads the old bytes through the new layout
              * and hands back plausible-looking nonsense. So the old directory is
              * moved aside and this launch starts clean, rather than showing
              * projects whose ids are garbage and whose every command fails.
@@ -858,7 +858,7 @@ fn main() {
                     log::Level::Warn,
                     "boot",
                     "the store was written by a different schema and cannot be read safely. \
-                     Moving it to {aside:?} and starting clean. Found: {found}"
+                     Moving it to {aside:?} and carrying it forward. Found: {found}"
                 );
                 // Close the handles before moving the directory out from under them.
                 drop(tables);
@@ -867,12 +867,45 @@ fn main() {
                 })?;
 
                 /*
+                 * Carried forward before anything opens the store, and before
+                 * the window exists, because a half-migrated store that someone
+                 * is already typing into is the state with no good answer.
+                 *
+                 * The changed tables are migrated row by row and the rest are
+                 * copied, so one new column costs one table's worth of work
+                 * rather than every project, transcript and item. The source
+                 * stays where it was moved to: if this fails, nothing has been
+                 * destroyed and the directory named in the log is the whole
+                 * store, intact.
+                 */
+                match tauri::async_runtime::block_on(wt_migrate::carry_forward(
+                    &aside,
+                    &location.path,
+                    &found,
+                    wt_migrate::CURRENT_FINGERPRINT,
+                )) {
+                    Ok(report) => crate::log!(
+                        log::Level::Info,
+                        "boot",
+                        "carried the store forward: migrated [{}], copied [{}], reset [{}]",
+                        report.migrated.join(", "),
+                        report.copied.join(", "),
+                        report.reset.join(", ")
+                    ),
+                    Err(error) => crate::log!(
+                        log::Level::Error,
+                        "boot",
+                        "could not carry the store forward, starting clean instead: {error}. \
+                         The previous store is intact at {aside:?}"
+                    ),
+                }
+
+                /*
                  * Reopened here, in this launch, rather than reported as a
                  * startup error. Returning `Err` from the setup hook does not
-                 * show anyone a message — Tauri turns it into a panic, so the
+                 * show anyone a message: Tauri turns it into a panic, so the
                  * window never appears and the app dies on the launch that was
-                 * supposed to recover. Starting clean is the recovery; the log
-                 * and the directory left on disk are the record.
+                 * supposed to recover.
                  */
                 tauri::async_runtime::block_on(Tables::open(&location.path)).map_err(|error| {
                     let message = format!("could not open a fresh store: {error}");

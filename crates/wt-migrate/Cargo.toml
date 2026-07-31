@@ -1,0 +1,23 @@
+[package]
+name = "wt-migrate"
+description = "Carries a WorkTable store forward when a column changes"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[dependencies]
+worktable = "0.9"
+# The `worktable!` and `worktable_version!` macros emit code that names these by
+# bare path rather than through a re-export, so a consumer of the macros has to
+# declare them too. Kept identical to the block in wt-tools and apps/gui: the
+# schema files compiled here are the gui's own (see src/lib.rs).
+eyre = "0.6"
+rkyv = { version = "0.8.9", features = ["uuid-1"] }
+derive_more = { version = "2.0.1", features = ["from", "error", "display", "debug", "into"] }
+futures = "0.3"
+uuid = "1"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "fs", "time"] }
+
+[[bin]]
+name = "wt-migrate"
+path = "src/main.rs"

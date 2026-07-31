@@ -12,6 +12,7 @@ use worktable::PersistedWorkTable;
 use worktable::persistence::PersistenceEngine;
 use worktable::prelude::DiskConfig;
 
+pub use crate::db::fingerprint::{FINGERPRINT_KEY, SCHEMA_FINGERPRINT, SchemaState, check_schema};
 use crate::db::schema::agent_io::{AgentIoRowPersistenceEngine, AgentIoRowWorkTable};
 use crate::db::schema::approval_rule::{ApprovalRulePersistenceEngine, ApprovalRuleWorkTable};
 use crate::db::schema::kv::{KvPersistenceEngine, KvRow, KvWorkTable};
@@ -46,76 +47,6 @@ pub struct Tables {
     pub approval_rule: Arc<ApprovalRuleWorkTable>,
     /// One row per PR cut during a run. See `schema/pull_request.rs`.
     pub pull_request: Arc<PullRequestWorkTable>,
-}
-
-/// Where the fingerprint of the schema this build expects is recorded.
-const FINGERPRINT_KEY: &str = "schema-fingerprint";
-
-/// The schema this build reads. **Bump on any column change, in the same commit.**
-///
-/// # Why this exists
-///
-/// WorkTable persists rows with rkyv, positionally, and `version()` is a fixed
-/// constant the macro emits, it does not change when a column does. So adding
-/// one field to a table makes every row already on disk get read through the new
-/// layout, silently, with no error anywhere.
-///
-/// It does not look like corruption. It looks like a project whose id reads as
-/// `00:00   `: delete, pin and the session write all return `NotFound` against
-/// an id that does not exist, two tabs collide on one garbage key, and a single
-/// composer feeds two conversations. Every one of those was reported as its own
-/// bug before the cause was one line of schema.
-///
-/// The string is the column lists, written out. Any edit to a schema changes it,
-/// which is the point, it is a human-maintained fingerprint precisely so that
-/// changing a schema and not thinking about the rows on disk is impossible.
-const SCHEMA_FINGERPRINT: &str = concat!(
-    "kv(key,value,updated_at);",
-    "project(id,name,status,position,dirs,pinned,moderator_enabled,forked_from,last_activity_at);",
-    "project_item(id,project_id,title,status,position,reference);",
-    "message(id,project_id,item_id,author,agent,moderation,model,permission,usage,stop,exit_code,body,created_at);",
-    "task_log(id,tool_call_id,project_id,item_id,label,tool,ok,output,duration_ms,exit_code,finished_at);",
-    "agent_io_row(id,project_id,at,direction,kind,detail);",
-    // Tables appended after first ship go at the end: `check_schema` treats a
-    // stored fingerprint that is a prefix of this one as a match, because a
-    // brand-new table has no rows on disk to misread.
-    "usage_ledger(id,at,day,project_id,model,cost_micro,input_tokens,output_tokens);",
-    "approval_rule(id,project_id,signature,created_at);",
-    "pull_request(id,project_id,url,repo,number,branch,state,additions,deletions,ci,dismissed,updated_at);",
-);
-
-/// What opening the tables found, so the caller can say something useful.
-#[derive(Debug, PartialEq, Eq)]
-pub enum SchemaState {
-    /// First run, or a store this build wrote.
-    Match,
-    /// Written by a build with a different schema. The rows cannot be trusted.
-    Mismatch { found: String },
-}
-
-/// Compare the fingerprint on disk with the one this build expects.
-///
-/// Returns `Mismatch` rather than deciding what to do: refusing to start and
-/// silently wiping someone's transcripts are both wrong, and the caller is the
-/// one that can say which.
-#[must_use]
-pub fn check_schema(stored: Option<&str>) -> SchemaState {
-    match stored {
-        // First run. Nothing on disk to misread.
-        None => SchemaState::Match,
-        Some(found) if found == SCHEMA_FINGERPRINT => SchemaState::Match,
-        /*
-         * The store predates a table this build added. Every table it does
-         * know is unchanged, additions append to the fingerprint, and a
-         * new table has no rows on disk to misread, so this is not the
-         * silent-corruption case the fingerprint exists to catch. Boot
-         * restamps, upgrading the marker to the full string.
-         */
-        Some(found) if SCHEMA_FINGERPRINT.starts_with(found) => SchemaState::Match,
-        Some(found) => SchemaState::Mismatch {
-            found: found.to_string(),
-        },
-    }
 }
 
 impl Tables {
