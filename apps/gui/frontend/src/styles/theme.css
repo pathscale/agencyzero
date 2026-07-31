@@ -229,19 +229,35 @@
    * hole rather than a card. That reasoning holds for 8-15%; the bubble sits at
    * 23.5%, where oklch has room.
    *
+   * The 5%/9% floors are why this reads as themed at all. Everything else takes
+   * the accent only through `--az-wash`, which is 0 until a colour is picked —
+   * so on the designed palette the reply stayed the grey card it had always
+   * been, and the fix that was supposed to theme it changed nothing anyone
+   * could see. The floor makes it lean on the accent from the first launch.
+   *
    * It follows the theme rather than staying neutral grey. Held apart from the
    * user's own bubble by *lightness* rather than by hue: the user is `base-300`
    * at 20% and this is 23.5%, so the reply reads as the lighter card whatever
-   * colour is picked. It takes a smaller share of the wash than the surfaces
-   * around it — enough to belong to the theme, short of tinting a wall of prose.
+   * colour is picked.
    *
-   * Contrast stays a number that can be checked: 90.67% on 23.5% is the 12.6:1
-   * the original hex pair gave.
+   * It takes the *same* share of the wash as the tier it belongs to, and that
+   * is the whole point. Held back at 0.8 of the wash against `base-300`'s 1.2,
+   * the reply was the least-themed surface in the window while the user's own
+   * message beside it was the most — which read as the one card that missed the
+   * memo, not as restraint. The text rung had the same problem twice over: 0.15
+   * of the wash where every other rung takes 0.25, at chroma 0.004 where
+   * `az-title` takes 0.008. Matching the siblings is what keeps it from
+   * standing out; the earlier fear of tinting a wall of prose is already
+   * answered by `az-title` and `az-body` carrying 0.25 over far more of the
+   * window than this bubble covers.
+   *
+   * Lightness is untouched, so contrast stays a number that can be checked:
+   * 90.67% on 23.5% is the 12.6:1 the original hex pair gave.
    */
   --color-az-bubble: color-mix(
     in oklab,
-    var(--color-primary) calc(var(--az-wash) * 0.8),
-    oklch(calc(23.5% + var(--az-lift)) calc(0.006 * var(--az-tint)) var(--az-hue))
+    var(--color-primary) calc(var(--az-wash) * 1.2),
+    oklch(calc(23.5% + var(--az-lift)) calc(0.008 * var(--az-tint)) var(--az-hue))
   );
   --color-az-bubble-edge: color-mix(
     in oklab,
@@ -250,8 +266,8 @@
   );
   --color-az-bubble-text: color-mix(
     in oklab,
-    var(--color-primary) calc(var(--az-wash) * 0.15),
-    oklch(calc(90.67% - var(--az-damp)) calc(0.004 * var(--az-tint)) var(--az-hue-text))
+    var(--color-primary) calc(var(--az-wash) * 0.25),
+    oklch(calc(90.67% - var(--az-damp)) calc(0.008 * var(--az-tint)) var(--az-hue-text))
   );
 
   /*
