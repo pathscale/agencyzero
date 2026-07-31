@@ -318,7 +318,7 @@ function SettingsSection(props: { project: Project }): JSX.Element {
         <For each={props.project.dirs}>
           {(dir) => (
             <div class="flex min-w-0 items-center gap-2 rounded-[9px] border border-az-hairline-soft bg-base-300 px-2.5 py-[7px]">
-              <Icon name="folder" class="shrink-0 text-[13px] text-az-muted" />
+              <Icon name="folder" class="shrink-0 text-[13px] text-primary/70" />
               <span class="min-w-0 flex-1 truncate font-mono text-[11.5px] text-az-body">
                 {dir}
               </span>

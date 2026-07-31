@@ -66,7 +66,7 @@ export function SectionPanel(props: SectionPanelProps): JSX.Element {
         >
           <Show when={props.trailing}>{props.trailing}</Show>
           <Show when={props.icon}>
-            {(name) => <Icon name={name()} class="text-[15px] text-az-body" />}
+            {(name) => <Icon name={name()} class="text-[15px] text-primary" />}
           </Show>
           <span class="font-semibold text-[12.5px] text-base-content">{props.title}</span>
           <Show when={props.count !== undefined}>
@@ -92,7 +92,10 @@ export function SectionPanel(props: SectionPanelProps): JSX.Element {
           aria-label={`${props.isOpen ? "Collapse" : "Expand"} ${props.title}`}
           class="shrink-0 text-az-muted"
         >
-          <Icon name={props.isOpen ? "chevron-up" : "chevron-down"} class="text-[15px]" />
+          <Icon
+            name={props.isOpen ? "chevron-up" : "chevron-down"}
+            class="text-[15px] text-primary/70"
+          />
         </button>
       </div>
 
