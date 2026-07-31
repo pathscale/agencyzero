@@ -221,36 +221,37 @@
   --color-az-hairline-strong: rgb(from var(--color-primary) r g b / 18%);
 
   /*
-   * The transcript's own surface — the one you read for hours, so it follows
-   * the comfort axes rather than sitting outside them.
+   * The transcript's own surface — the one you read for hours.
    *
    * These were hex (#1e1e1e / #2a2a2a / #e0e0e0) because the oklch ladder
    * compresses hard at the *desk's* lightnesses: 8% lands on #010202 and 12.5%
    * on #050708, four sRGB points apart, which is why the bubble once read as a
-   * hole rather than a card. That reasoning holds for 8–15%; the bubble sits at
-   * 23.5%, where oklch has room, so the exact sRGB equivalents below render
-   * identically and gain `--az-lift` / `--az-damp`.
+   * hole rather than a card. That reasoning holds for 8-15%; the bubble sits at
+   * 23.5%, where oklch has room.
    *
-   * Chroma stays 0: the reply is a neutral card by choice, and the accent has
-   * no business tinting a wall of text. Raise it here if that ever changes.
+   * It follows the theme rather than staying neutral grey. Held apart from the
+   * user's own bubble by *lightness* rather than by hue: the user is `base-300`
+   * at 20% and this is 23.5%, so the reply reads as the lighter card whatever
+   * colour is picked. It takes a smaller share of the wash than the surfaces
+   * around it — enough to belong to the theme, short of tinting a wall of prose.
    *
-   * Contrast is still a number that can be checked — 90.67% on 23.5% is the
-   * 12.6:1 the hex pair gave.
+   * Contrast stays a number that can be checked: 90.67% on 23.5% is the 12.6:1
+   * the original hex pair gave.
    */
   --color-az-bubble: color-mix(
     in oklab,
-    var(--color-primary) calc(var(--az-wash) * 0.5),
-    oklch(calc(23.5% + var(--az-lift)) 0 var(--az-hue))
+    var(--color-primary) calc(var(--az-wash) * 0.8),
+    oklch(calc(23.5% + var(--az-lift)) calc(0.006 * var(--az-tint)) var(--az-hue))
   );
   --color-az-bubble-edge: color-mix(
     in oklab,
-    var(--color-primary) calc(var(--az-wash) * 0.6),
-    oklch(calc(28.5% + var(--az-lift)) 0 var(--az-hue))
+    var(--color-primary) calc(var(--az-wash) * 1.1),
+    oklch(calc(28.5% + var(--az-lift)) calc(0.008 * var(--az-tint)) var(--az-hue))
   );
   --color-az-bubble-text: color-mix(
     in oklab,
     var(--color-primary) calc(var(--az-wash) * 0.15),
-    oklch(calc(90.67% - var(--az-damp)) 0 var(--az-hue))
+    oklch(calc(90.67% - var(--az-damp)) calc(0.004 * var(--az-tint)) var(--az-hue-text))
   );
 
   /*
@@ -321,7 +322,9 @@
    * Disabled is the one exclusion — an inactive control claiming the accent
    * reads as available, which is the opposite of what it means.
    */
-  button:not(:disabled):not([aria-disabled="true"]):not([class*="w-full"]):not([class*="flex-1"]) {
+  button:not(:disabled):not([aria-disabled="true"]):not([class*="w-full"]):not(
+    [class*="flex-1"]
+  ):not([data-no-outline]) {
     outline: 1px solid rgb(from var(--color-primary) r g b / 14%);
     outline-offset: -1px;
   }
