@@ -3,6 +3,7 @@ import { Icon } from "~/components/Icon";
 import { PillMenu } from "~/components/PillMenu";
 import { PERMISSION_LABELS, PERMISSION_ORDER } from "~/lib/labels";
 import { describeError, log } from "~/lib/log";
+import { parseSlash } from "~/lib/slash";
 import { prefs, setPrefs } from "~/stores/prefs";
 import { useWorkspace } from "~/stores/workspace";
 import type { Permission } from "~/types";
@@ -176,6 +177,41 @@ export function Composer(props: ComposerProps): JSX.Element {
     if (!canSend()) return;
 
     setError(null);
+
+    /*
+     * A slash command is handled here and never sent. It changes this tab's own
+     * state, so there is nothing for an agent to do with it — and for the
+     * commands that *would* need one, being told costs nothing where sending
+     * would bill a turn for the model reading "/compact" as a request.
+     */
+    const command = parseSlash(draft(), {
+      models: props.modelOptions.map((option) => option.value),
+      efforts: props.efforts,
+    });
+    if (command.kind !== "none") {
+      switch (command.kind) {
+        case "model":
+          props.onModelChange(command.model);
+          break;
+        case "effort":
+          props.onEffortChange?.(command.effort);
+          break;
+        case "permission":
+          props.onPermissionChange(command.permission);
+          break;
+        default:
+          setError(command.message);
+      }
+      // Only a command that took effect clears the box; an error leaves the
+      // words there to be corrected rather than retyped.
+      if (command.kind !== "error" && command.kind !== "help") {
+        remember("");
+        resize();
+      }
+      if (command.kind === "help") setError(command.message);
+      return;
+    }
+
     setIsSending(true);
     try {
       // The pills become prose here: the paths ride at the end of the body,
