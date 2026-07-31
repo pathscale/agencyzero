@@ -141,24 +141,34 @@ pub struct UsageDto {
     pub duration_ms: Option<u64>,
 }
 
+/// Everything the model processed, cache included.
+///
+/// The app's one definition of "tokens", used for the finished turn and for the
+/// figure ticking over while it runs, so the status line cannot drift from the
+/// header the way it did.
+///
+/// Was input + output, which for Claude counts only the *uncached* input: on a
+/// long conversation each call reads six figures from cache and writes more,
+/// and none of it appeared. That is what put "54.6k tok" next to "$9.409" in
+/// the header, two numbers that cannot both describe the same turns. Cache
+/// reads are billed, so they are consumption and they belong in the figure
+/// sitting beside the price.
+///
+/// Missing fields count as zero, which is what makes one function serve both
+/// callers: mid-turn `Event::Usage` carries no `output_tokens` by design, so a
+/// live total is the prompt side and settles onto the full figure when the
+/// `Outcome` lands.
+fn processed_tokens(usage: &agent_abstraction::Usage) -> u64 {
+    usage.input_tokens.unwrap_or(0)
+        + usage.output_tokens.unwrap_or(0)
+        + usage.cache_read_tokens.unwrap_or(0)
+        + usage.cache_write_tokens.unwrap_or(0)
+}
+
 impl From<&agent_abstraction::Usage> for UsageDto {
     fn from(usage: &agent_abstraction::Usage) -> Self {
         UsageDto {
-            /*
-             * Everything the model processed this turn, cache included.
-             *
-             * Was input + output, which for Claude counts only the *uncached*
-             * input: on a long conversation each call reads six figures from
-             * cache and writes more, and none of it appeared. That is what put
-             * "54.6k tok" next to "$9.409" in the header, two numbers that
-             * cannot both describe the same turn. Cache reads are billed, so
-             * they are consumption and they belong in the figure sitting next
-             * to the price.
-             */
-            tokens: usage.input_tokens.unwrap_or(0)
-                + usage.output_tokens.unwrap_or(0)
-                + usage.cache_read_tokens.unwrap_or(0)
-                + usage.cache_write_tokens.unwrap_or(0),
+            tokens: processed_tokens(usage),
             context_tokens: usage.context_tokens,
             context_window: usage.context_window,
             cache_reads: usage.cache_read_tokens,
@@ -3065,9 +3075,7 @@ async fn drive_run(
                  * bookkeeping.
                  */
                 turn_usage.accumulate(&usage);
-                turn_tokens += usage.input_tokens.unwrap_or(0)
-                    + usage.cache_read_tokens.unwrap_or(0)
-                    + usage.cache_write_tokens.unwrap_or(0);
+                turn_tokens += processed_tokens(&usage);
                 let _ = app.emit(
                     "run:usage",
                     serde_json::json!({
@@ -3553,6 +3561,51 @@ mod tests {
         // Anything unrecognized is the safest posture, never the widest.
         assert_eq!(parse_permission(Some("nonsense")), Permission::ReadOnly);
         assert_eq!(parse_permission(None), Permission::ReadOnly);
+    }
+
+    /// The arithmetic that read "60 tokens" on a ten-minute run.
+    ///
+    /// Numbers from the crate's own parser fixture: two calls in one turn,
+    /// reporting 4 and 6 uncached input tokens against cache reads of 100000
+    /// and 102000. Counting input alone is what produced dozens; counting what
+    /// the model processed produces the figure the cost can be read against.
+    #[test]
+    fn tokens_count_the_cache_the_model_actually_read() {
+        let mut first = agent_abstraction::Usage::default();
+        first.input_tokens = Some(4);
+        first.cache_read_tokens = Some(100_000);
+        first.cache_write_tokens = Some(2_000);
+
+        let mut second = agent_abstraction::Usage::default();
+        second.input_tokens = Some(6);
+        second.cache_read_tokens = Some(102_000);
+        second.cache_write_tokens = Some(500);
+
+        // Mid-turn there is no output: `Event::Usage` withholds it, and the
+        // absent field counting as zero is what lets one definition serve the
+        // live counter and the finished turn alike.
+        assert_eq!(processed_tokens(&first), 102_004);
+        assert_eq!(processed_tokens(&second), 102_506);
+
+        let live = processed_tokens(&first) + processed_tokens(&second);
+        assert_eq!(live, 204_510);
+        assert!(
+            live > 60,
+            "the bug this replaces reported 60 for a turn like this"
+        );
+
+        // The same turn's terminal record, where the output finally arrives and
+        // the cache figures are already summed across both calls.
+        let mut terminal = agent_abstraction::Usage::default();
+        terminal.input_tokens = Some(10);
+        terminal.output_tokens = Some(497);
+        terminal.cache_read_tokens = Some(202_000);
+        terminal.cache_write_tokens = Some(2_500);
+        assert_eq!(
+            processed_tokens(&terminal),
+            live + 497,
+            "the live figure is the terminal one less the output still to come"
+        );
     }
 
     /// The exact mismatch that crashed the transcript: the crate's field names

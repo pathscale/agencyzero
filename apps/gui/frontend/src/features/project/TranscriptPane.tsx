@@ -149,8 +149,13 @@ export function TranscriptPane(props: {
  * via the dot — whether the words on screen would survive the app dying this
  * instant. Cancel lives here because this line *is* the run: the window
  * between sending and the first reply used to have no way out at all.
+ *
+ * Exported for its own test. Nothing below the real backend emits `run:usage`
+ * — the mock fakes no agent output on purpose — so this component is the only
+ * place the token figure can be exercised, and it went a whole release
+ * reporting "60 tokens" for want of one.
  */
-function RunStatusLine(props: {
+export function RunStatusLine(props: {
   projectId: string;
   status: RunStatus;
   streamedChars: number;
