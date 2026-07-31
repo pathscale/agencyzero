@@ -196,7 +196,8 @@ fn list_table_sizes(state: State<'_, AppState>) -> Vec<TableSize> {
             }
         })
         .collect();
-    sizes.sort_by(|a, b| b.bytes.cmp(&a.bytes));
+    // Largest first: the point of the list is which table is eating the disk.
+    sizes.sort_by_key(|table| std::cmp::Reverse(table.bytes));
     sizes
 }
 
