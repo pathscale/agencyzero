@@ -104,10 +104,14 @@ const BEFORE: Record<string, [number, number, number]> = {
   "az-badge": [24, 0.01, 240],
   "az-dim": [56, 0.01, 245],
   "az-ghost": [48, 0.01, 245],
-  // Converted from #1e1e1e / #2a2a2a / #e0e0e0. Neutral, so chroma is 0.
-  "az-bubble": [23.5, 0, 240],
-  "az-bubble-edge": [28.5, 0, 240],
-  "az-bubble-text": [90.67, 0, 240],
+  /*
+   * Converted from #1e1e1e / #2a2a2a / #e0e0e0, then given the neutral ladder's
+   * hue so the reply follows the theme instead of staying grey. Lightness is
+   * what still separates it from the user's bubble at base-300's 20%.
+   */
+  "az-bubble": [23.5, 0.006, 240],
+  "az-bubble-edge": [28.5, 0.008, 240],
+  "az-bubble-text": [90.67, 0.004, 245],
 };
 
 describe("the theme axes", () => {
