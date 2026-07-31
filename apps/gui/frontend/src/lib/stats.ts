@@ -65,10 +65,10 @@ function isNumber(value: unknown): value is number {
  *   grows with the session.
  *
  * `cacheReads` sits with the summed fields, and not — as it did here, and as
- * `accumulate` still does — with the cumulative ones. A turn's cache figure is
- * not the conversation's size: Claude's terminal record already sums the reads
- * of every call in the turn, so it is billing-shaped and adds up across turns.
- * Taking the latest reported one turn's reads as the whole session's.
+ * `accumulate` did before 0.4 — with the cumulative ones. A turn's cache figure
+ * is not the conversation's size: Claude's terminal record already sums the
+ * reads of every call in the turn, so it is billing-shaped and adds up across
+ * turns. Taking the latest reported one turn's reads as the whole session's.
  *
  * Only `author: "agent"` counts. A user message has no usage, and counting it as
  * a turn would double every conversation.

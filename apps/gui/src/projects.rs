@@ -2657,17 +2657,11 @@ async fn drive_run(
 
     /*
      * The live token counter's ledger. Each `Event::Usage` carries one API
-     * request's figures; `accumulate` sums the summed fields and keeps the
-     * context latest, exactly as the terminal total will. For the eye only —
-     * `Outcome::usage` remains the record.
+     * request's figures; `accumulate` sums the tokens, cache included, and
+     * keeps the context latest, exactly as the terminal total will. For the
+     * eye only — `Outcome::usage` remains the record.
      */
     let mut turn_usage = agent_abstraction::Usage::default();
-    /*
-     * The turn's tokens so far, on the same definition the header totals use:
-     * everything the model processed, cache included. Kept beside `turn_usage`
-     * rather than inside it because the cache fields there are latest-wins.
-     */
-    let mut turn_tokens: u64 = 0;
 
     // Set by the cancel signal, wherever the loop happens to be waiting when
     // it lands. The loop exits, and the tail below tears the agent down.
@@ -3053,17 +3047,10 @@ async fn drive_run(
             Event::Usage(usage) => {
                 /*
                  * One API request's figures, folded into the turn's running
-                 * total on the prompt side.
-                 *
-                 * Counted here rather than read off `turn_usage` because
-                 * `Usage::accumulate` keeps the cache fields latest-wins, on
-                 * the reasoning that context figures are already cumulative.
-                 * That holds for `context_tokens` and not for these: Claude's
-                 * terminal record sums the cache reads of every call in the
-                 * turn (the crate's own fixture has calls of 100000 and 102000
-                 * arriving as 202000), so they are billing-shaped and add up.
-                 * Taking the latest would report one call's reads as the
-                 * turn's.
+                 * total. `accumulate` sums the cache fields as of 0.4, so the
+                 * running usage is the turn's own consumption and the live
+                 * figure is just the same `processed_tokens` the finished turn
+                 * gets. One definition, one accumulator, nothing to drift.
                  *
                  * `output_tokens` is absent from `Event::Usage` by design and
                  * is not guessed at. It arrives with the `Outcome`, where the
@@ -3075,12 +3062,11 @@ async fn drive_run(
                  * bookkeeping.
                  */
                 turn_usage.accumulate(&usage);
-                turn_tokens += processed_tokens(&usage);
                 let _ = app.emit(
                     "run:usage",
                     serde_json::json!({
                         "projectId": project_id,
-                        "tokens": turn_tokens,
+                        "tokens": processed_tokens(&turn_usage),
                     }),
                 );
             }
@@ -3587,8 +3573,25 @@ mod tests {
         assert_eq!(processed_tokens(&first), 102_004);
         assert_eq!(processed_tokens(&second), 102_506);
 
-        let live = processed_tokens(&first) + processed_tokens(&second);
+        /*
+         * Folded the way the run loop folds them. This is the seam with the
+         * crate: before 0.4 `accumulate` kept the cache fields latest-wins, so
+         * the same two calls came out as 102506 rather than 204510 and the app
+         * carried its own accumulator to avoid it. The assertion belongs here
+         * because a crate that went back to latest-wins would be silent
+         * otherwise, and this is the number on screen.
+         */
+        let mut turn = agent_abstraction::Usage::default();
+        turn.accumulate(&first);
+        turn.accumulate(&second);
+
+        let live = processed_tokens(&turn);
         assert_eq!(live, 204_510);
+        assert_eq!(turn.cache_read_tokens, Some(202_000), "cache reads add up");
+        assert_eq!(
+            turn.output_tokens, None,
+            "mid-turn output is withheld, and absence must read as zero"
+        );
         assert!(
             live > 60,
             "the bug this replaces reported 60 for a turn like this"
