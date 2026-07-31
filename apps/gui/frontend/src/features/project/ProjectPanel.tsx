@@ -464,6 +464,23 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
    * a dozen items should be readable without a 300px porthole.
    */
   const [tall, setTall] = createSignal(false);
+  /**
+   * Narrows the list as you type. Substring, case-insensitive — the same rule
+   * `wt-tools search-items` uses, so what you find here and what a query finds
+   * from the terminal are the same set.
+   *
+   * Filtering hides rows rather than reordering them, and reorder is disabled
+   * while a filter is on: dragging row 3 above row 1 means something different
+   * when rows 2 and 4 are invisible.
+   */
+  const [query, setQuery] = createSignal("");
+  const shown = () => {
+    const needle = query().trim().toLowerCase();
+    if (!needle) return props.items;
+    return props.items.filter((item) => item.title.toLowerCase().includes(needle));
+  };
+  const filtering = () => query().trim().length > 0;
+
   /** The item whose title is being rewritten in place, if any. */
   const [editingId, setEditingId] = createSignal<string | null>(null);
   const [editTitle, setEditTitle] = createSignal("");
@@ -534,7 +551,33 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
     <div
       class={`az-scroll flex flex-col gap-0.5 px-2 pt-1.5 pb-2.5 ${tall() ? "" : "max-h-[300px]"}`}
     >
-      <For each={props.items}>
+      <Show when={props.items.length > 3}>
+        <div class="flex items-center gap-2 rounded-[9px] border border-az-hairline bg-az-inset px-2.5 py-1.5">
+          <Icon name="search" class="shrink-0 text-[12px] text-primary/70" />
+          <input
+            type="text"
+            value={query()}
+            onInput={(event) => setQuery(event.currentTarget.value)}
+            placeholder="Filter items…"
+            aria-label="Filter items"
+            class="min-w-0 flex-1 bg-transparent text-[12px] text-az-body outline-none placeholder:text-az-faint"
+          />
+          <Show when={filtering()}>
+            <button
+              type="button"
+              onClick={() => setQuery("")}
+              aria-label="Clear the filter"
+              class="shrink-0 rounded-md p-0.5 text-az-faint transition-colors hover:text-az-body"
+            >
+              <Icon name="x" class="text-[11px]" />
+            </button>
+          </Show>
+        </div>
+      </Show>
+      <Show when={filtering() && shown().length === 0}>
+        <p class="px-2.5 py-3 text-[12px] text-az-muted">No item matches “{query().trim()}”.</p>
+      </Show>
+      <For each={shown()}>
         {(item, index) => (
           <Show
             when={editingId() !== item.id}
@@ -560,11 +603,21 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
                   : "hover:bg-white/5"
               }`}
             >
+              {/*
+               * The marker is the status control, and the only one.
+               *
+               * The whole row used to be a button titled "Change status", so
+               * reading a list meant hovering a row that offered to mutate it
+               * and clicking one by accident cycled it. A status change is a
+               * deliberate act: it gets the smallest target that can carry it,
+               * and the title beside it goes back to being text.
+               */}
               <button
                 type="button"
                 onClick={() => advance(item)}
-                title="Change status"
-                class="flex min-w-0 flex-1 items-baseline gap-2.5 rounded-[9px] px-2.5 py-2 text-left"
+                aria-label={`Change the status of ${item.title}`}
+                title={`${statusSuffix(item.status) || "pending"} — click to change`}
+                class="ml-2.5 shrink-0 rounded-md p-0.5 transition-colors hover:bg-primary/12"
               >
                 <Show
                   when={item.status === "finished"}
@@ -572,6 +625,11 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
                 >
                   <Icon name="check" class="relative top-0.5 shrink-0 text-[12px] text-success" />
                 </Show>
+              </button>
+              <div
+                data-selectable
+                class="flex min-w-0 flex-1 items-baseline gap-2.5 px-2.5 py-2 text-left"
+              >
                 <span
                   class={`min-w-0 flex-1 text-[12.5px] ${
                     item.status === "active"
@@ -594,7 +652,7 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
                 >
                   {statusSuffix(item.status)}
                 </span>
-              </button>
+              </div>
               <Show when={item.status !== "finished"}>
                 <button
                   type="button"
@@ -646,7 +704,7 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
                 <button
                   type="button"
                   onClick={() => move(index(), -1)}
-                  disabled={index() === 0}
+                  disabled={filtering() || index() === 0}
                   aria-label={`Move ${item.title} up`}
                   class="rounded-sm px-0.5 text-az-faint transition-colors hover:text-az-body disabled:opacity-25"
                 >
@@ -655,7 +713,7 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
                 <button
                   type="button"
                   onClick={() => move(index(), 1)}
-                  disabled={index() === props.items.length - 1}
+                  disabled={filtering() || index() === props.items.length - 1}
                   aria-label={`Move ${item.title} down`}
                   class="rounded-sm px-0.5 text-az-faint transition-colors hover:text-az-body disabled:opacity-25"
                 >
