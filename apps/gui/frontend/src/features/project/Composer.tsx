@@ -113,22 +113,30 @@ export function AttachmentPills(props: {
 export function Composer(props: ComposerProps): JSX.Element {
   const { actions, isLive } = useWorkspace();
   /*
-   * Seeded from the stored drafts and written back on every keystroke. Straight
-   * through rather than debounced: this is a localStorage write of a few
-   * hundred bytes per keypress, far cheaper than the reflow the same keypress
-   * already causes, and a debounce is exactly what would drop the last few
-   * words when the tab changes mid-flight.
+   * The draft is *derived* from the key, never copied into local state.
+   *
+   * Switching between two project tabs does not unmount this component — both
+   * live in the same `<Match>` branch, so Solid reuses the instance and only
+   * swaps the props. A signal seeded once at mount therefore kept the previous
+   * tab's words, showed them under the new tab, and wrote them back under the
+   * new key on the next keystroke: one draft leaked into the next tab and the
+   * one it landed on was overwritten. Reading through `props.draftKey` on every
+   * render is what makes the box always show *this* tab's text.
+   *
+   * The local signal is only for a composer mounted without a key, which is how
+   * the tests drive it.
    */
-  const [draft, setDraft] = createSignal(
-    props.draftKey ? (prefs.composerDrafts[props.draftKey] ?? "") : "",
-  );
+  const [unkeyed, setUnkeyed] = createSignal("");
+  const draft = () => (props.draftKey ? (prefs.composerDrafts[props.draftKey] ?? "") : unkeyed());
 
   const remember = (text: string) => {
-    setDraft(text);
-    if (!props.draftKey) return;
-    if (text) setPrefs("composerDrafts", props.draftKey, text);
-    else setPrefs("composerDrafts", props.draftKey, undefined!);
+    if (!props.draftKey) {
+      setUnkeyed(text);
+      return;
+    }
+    setPrefs("composerDrafts", props.draftKey, text);
   };
+
   const [attachments, setAttachments] = createSignal<string[]>([]);
   const [isSending, setIsSending] = createSignal(false);
   const [error, setError] = createSignal<string | null>(null);
