@@ -61,6 +61,7 @@ pub mod project_item;
 pub mod task_log;
 
 use approval_rule::{ApprovalRuleRow, ApprovalRuleWorkTable};
+use message::{MessageRow, MessageWorkTable};
 use project::{ProjectRow, ProjectWorkTable};
 use project_item::{ProjectItemRow, ProjectItemWorkTable};
 
@@ -150,6 +151,16 @@ open_read_only!(
     /// The remembered-approval table, read-only.
     open_rules,
     ApprovalRuleWorkTable
+);
+open_read_only!(
+    /// The transcript, read-only.
+    ///
+    /// Added to answer one question the GUI cannot: does the *store* hold what
+    /// the window is showing? A transcript that comes back short after a tab
+    /// switch is either a persistence bug or a render bug, and telling those
+    /// apart needs a reader that is not the app.
+    open_messages,
+    MessageWorkTable
 );
 
 /// A project row as the CLI prints it: one JSON object, one line.
@@ -293,6 +304,60 @@ pub fn list_items(
     }
     sort_items(&mut rows);
     Ok(rows.into_iter().map(ItemOut::from).collect())
+}
+
+/// One transcript row as the CLI prints it.
+///
+/// The body is reported by length rather than printed: a transcript is the
+/// largest thing in the store and the question this answers is "how many rows,
+/// in what order, how big" — not "what did it say". `--bodies` prints them when
+/// the words themselves are the question.
+#[derive(Debug, Serialize)]
+pub struct MessageOut {
+    pub id: String,
+    pub project_id: String,
+    pub author: String,
+    pub model: String,
+    pub stop: String,
+    pub chars: usize,
+    pub created_at: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub body: Option<String>,
+}
+
+impl MessageOut {
+    fn from_row(row: MessageRow, bodies: bool) -> Self {
+        MessageOut {
+            id: row.id,
+            project_id: row.project_id,
+            author: row.author,
+            model: row.model,
+            stop: row.stop,
+            chars: row.body.chars().count(),
+            created_at: row.created_at,
+            body: bodies.then_some(row.body),
+        }
+    }
+}
+
+/// The transcript, oldest first — the order the GUI renders.
+///
+/// # Errors
+/// Returns the read error when the table cannot be scanned.
+pub fn list_messages(
+    table: &MessageWorkTable,
+    project: Option<&str>,
+    bodies: bool,
+) -> eyre::Result<Vec<MessageOut>> {
+    let mut rows = table.select_all().execute()?;
+    if let Some(project) = project {
+        rows.retain(|row| row.project_id == project);
+    }
+    rows.sort_by(|a, b| a.created_at.cmp(&b.created_at));
+    Ok(rows
+        .into_iter()
+        .map(|row| MessageOut::from_row(row, bodies))
+        .collect())
 }
 
 /// Items whose title contains `query`, case-insensitively.
