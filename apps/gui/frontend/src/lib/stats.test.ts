@@ -54,8 +54,9 @@ describe("usageTotals", () => {
     expect(totals.turns).toBe(2);
     expect(totals.tokens).toBe(300);
     expect(totals.costUsd).toBeCloseTo(0.03, 6);
-    // Latest, not 30: see the accumulation test below.
-    expect(totals.cacheReads).toBe(20);
+    // Summed: a turn's cache figure is what that turn read, not the size of
+    // the conversation, so the session's reads add up.
+    expect(totals.cacheReads).toBe(30);
   });
 
   /*
@@ -132,22 +133,28 @@ describe("the accumulation rule", () => {
    * This is the bug the crate's `Usage::accumulate` doc warns about, and which
    * this module had: summing the context-shaped fields.
    *
-   * The agent re-sends the whole conversation each turn and reports it, mostly
-   * as cache reads. Adding those up counts the same conversation once per turn,
-   * so the error grows with the session — by turn ten a 30k-token conversation
-   * reads as 300k. Additive fields add; context-shaped fields take the latest.
+   * `contextTokens` is the conversation's size as the model last saw it. Adding
+   * those up counts the same conversation once per turn, so the error grows
+   * with the session — by turn ten a 30k-token conversation reads as 300k.
+   *
+   * `cacheReads` looks like it belongs with them and does not. A turn's figure
+   * is what that turn's calls actually read, already summed across them by
+   * Claude's terminal record, and every read is billed. Taking the latest
+   * reported the last turn's reads as the whole session's. The two rules are
+   * tested together because the difference between them is the whole point.
    */
-  it("takes the latest context figure rather than summing it", () => {
+  it("takes the latest context figure, but sums what each turn processed", () => {
     const totals = usageTotals([
       turn("agent", usage({ tokens: 100, contextTokens: 10_000, cacheReads: 9_000 })),
       turn("agent", usage({ tokens: 100, contextTokens: 22_000, cacheReads: 20_000 })),
       turn("agent", usage({ tokens: 100, contextTokens: 31_000, cacheReads: 29_000 })),
     ]);
 
-    // New work each turn, so this one does add.
+    // Processed each turn, so these add.
     expect(totals.tokens).toBe(300);
+    expect(totals.cacheReads).toBe(58_000);
+    // The conversation's size, not a running tally.
     expect(totals.contextTokens).toBe(31_000);
-    expect(totals.cacheReads).toBe(29_000);
   });
 
   it("reports the share of the context window in use", () => {

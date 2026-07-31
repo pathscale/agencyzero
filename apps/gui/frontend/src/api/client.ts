@@ -265,19 +265,19 @@ export interface AppEvents {
    */
   "run:persisted": { projectId: string; chars: number };
   /**
-   * How full the context is, refreshed as each API request inside the turn
-   * completes (`Event::Usage`, 0.3.8). Context rather than new work because
-   * new work is not knowable mid-turn — `Event::Usage` withholds
-   * `output_tokens`, and `input_tokens` counts only the uncached delta. These
-   * two are exact. Both are null for agents that report neither (Codex sends
-   * no usage at all mid-turn), and the estimate from streamed characters
-   * survives as the fallback for exactly that case.
+   * The turn's tokens so far, refreshed as each API request inside the turn
+   * completes (`Event::Usage`, 0.3.8). Same definition as the header totals:
+   * everything the model processed, cache included.
+   *
+   * The prompt side only. `Event::Usage` withholds `output_tokens` because the
+   * mid-turn figure understates badly, so it is left out rather than guessed
+   * at, and the number steps up to the final one instead of overshooting it.
+   * Cache dominates, so the gap is small.
+   *
+   * Never sent by agents that report no mid-turn usage — Codex reports none at
+   * all — and the estimate from streamed characters covers that case.
    */
-  "run:usage": {
-    projectId: string;
-    contextTokens: number | null;
-    contextWindow: number | null;
-  };
+  "run:usage": { projectId: string; tokens: number };
   "run:rate_limit": RateLimit;
   /**
    * The limit has lifted. Without this the header pill and the tab dot stay

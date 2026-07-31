@@ -19,7 +19,7 @@ export interface UsageTotals {
   turns: number;
   /** Turns that reported usage. Below `turns` means the totals are partial. */
   reported: number;
-  /** Summed: the new work each turn did. */
+  /** Summed: everything each turn processed, cache included. */
   tokens: number;
   /** Summed. */
   reasoningTokens: number;
@@ -54,15 +54,21 @@ function isNumber(value: unknown): value is number {
  *
  * # Two kinds of field, and mixing them up inflates the numbers
  *
- * This mirrors `agent_abstraction::Usage::accumulate`, which exists because the
+ * This follows `agent_abstraction::Usage::accumulate`, which exists because the
  * obvious loop is wrong:
  *
- * - **Summed** — `tokens`, `reasoningTokens`, `costUsd`, `premiumRequests`.
- *   New work each turn.
- * - **Latest** — `contextTokens`, `cacheReads`, `contextWindow`. These are
- *   already cumulative: the agent re-sends the whole conversation every turn and
- *   reports it, mostly as cache reads. Summing them counts the same conversation
- *   once per turn, and the error grows with the session.
+ * - **Summed** — `tokens`, `cacheReads`, `reasoningTokens`, `costUsd`,
+ *   `premiumRequests`. What each turn processed and was charged for.
+ * - **Latest** — `contextTokens`, `contextWindow`. Already cumulative: the
+ *   agent re-sends the whole conversation every turn and reports its size.
+ *   Summing them counts the same conversation once per turn, and the error
+ *   grows with the session.
+ *
+ * `cacheReads` sits with the summed fields, and not — as it did here, and as
+ * `accumulate` still does — with the cumulative ones. A turn's cache figure is
+ * not the conversation's size: Claude's terminal record already sums the reads
+ * of every call in the turn, so it is billing-shaped and adds up across turns.
+ * Taking the latest reported one turn's reads as the whole session's.
  *
  * Only `author: "agent"` counts. A user message has no usage, and counting it as
  * a turn would double every conversation.
@@ -85,6 +91,7 @@ export function usageTotals(messages: readonly Message[]): UsageTotals {
     // Field by field, because rows written by older builds carry the crate's
     // own shape and every field can be absent. See `usageLabel`.
     if (isNumber(usage.tokens)) totals.tokens += usage.tokens;
+    if (isNumber(usage.cacheReads)) totals.cacheReads = (totals.cacheReads ?? 0) + usage.cacheReads;
     if (isNumber(usage.reasoningTokens)) totals.reasoningTokens += usage.reasoningTokens;
     if (isNumber(usage.costUsd)) totals.costUsd = (totals.costUsd ?? 0) + usage.costUsd;
     if (isNumber(usage.premiumRequests)) {
@@ -94,7 +101,6 @@ export function usageTotals(messages: readonly Message[]): UsageTotals {
     // Latest wins for the context-shaped figures.
     if (isNumber(usage.contextTokens)) totals.contextTokens = usage.contextTokens;
     if (isNumber(usage.contextWindow)) totals.contextWindow = usage.contextWindow;
-    if (isNumber(usage.cacheReads)) totals.cacheReads = usage.cacheReads;
   }
 
   return totals;

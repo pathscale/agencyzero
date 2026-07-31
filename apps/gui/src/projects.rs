@@ -118,7 +118,7 @@ impl From<ProjectItemRow> for ProjectItemDto {
 #[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct UsageDto {
-    /// Input plus output for this turn: the new work it did.
+    /// Everything this turn processed: input, output and both cache figures.
     pub tokens: u64,
     /// Every input token the turn was charged for, cached or not — the size of
     /// the conversation as the model saw it.
@@ -144,7 +144,21 @@ pub struct UsageDto {
 impl From<&agent_abstraction::Usage> for UsageDto {
     fn from(usage: &agent_abstraction::Usage) -> Self {
         UsageDto {
-            tokens: usage.input_tokens.unwrap_or(0) + usage.output_tokens.unwrap_or(0),
+            /*
+             * Everything the model processed this turn, cache included.
+             *
+             * Was input + output, which for Claude counts only the *uncached*
+             * input: on a long conversation each call reads six figures from
+             * cache and writes more, and none of it appeared. That is what put
+             * "54.6k tok" next to "$9.409" in the header, two numbers that
+             * cannot both describe the same turn. Cache reads are billed, so
+             * they are consumption and they belong in the figure sitting next
+             * to the price.
+             */
+            tokens: usage.input_tokens.unwrap_or(0)
+                + usage.output_tokens.unwrap_or(0)
+                + usage.cache_read_tokens.unwrap_or(0)
+                + usage.cache_write_tokens.unwrap_or(0),
             context_tokens: usage.context_tokens,
             context_window: usage.context_window,
             cache_reads: usage.cache_read_tokens,
@@ -2638,6 +2652,12 @@ async fn drive_run(
      * `Outcome::usage` remains the record.
      */
     let mut turn_usage = agent_abstraction::Usage::default();
+    /*
+     * The turn's tokens so far, on the same definition the header totals use:
+     * everything the model processed, cache included. Kept beside `turn_usage`
+     * rather than inside it because the cache fields there are latest-wins.
+     */
+    let mut turn_tokens: u64 = 0;
 
     // Set by the cancel signal, wherever the loop happens to be waiting when
     // it lands. The loop exits, and the tail below tears the agent down.
@@ -3022,35 +3042,37 @@ async fn drive_run(
             }
             Event::Usage(usage) => {
                 /*
-                 * One API request's figures; the ledger keeps the turn's
-                 * running truth. Only the context goes out, and deliberately:
-                 * new work cannot be counted mid-turn. `Event::Usage` never
-                 * carries `output_tokens` (the crate withholds it because the
-                 * mid-turn figure understates badly), and Claude's
-                 * `input_tokens` is only the uncached delta -- single digits
-                 * per call against a six-figure cache read. Summing those two
-                 * put "60 tokens" on a ten-minute run. The context figures are
-                 * exact and latest-wins, so they are the honest live counter;
-                 * the true new work arrives with the `Outcome` and the header
-                 * shows it there. No note_io -- a tool-heavy turn would bury
-                 * the panel in bookkeeping.
+                 * One API request's figures, folded into the turn's running
+                 * total on the prompt side.
+                 *
+                 * Counted here rather than read off `turn_usage` because
+                 * `Usage::accumulate` keeps the cache fields latest-wins, on
+                 * the reasoning that context figures are already cumulative.
+                 * That holds for `context_tokens` and not for these: Claude's
+                 * terminal record sums the cache reads of every call in the
+                 * turn (the crate's own fixture has calls of 100000 and 102000
+                 * arriving as 202000), so they are billing-shaped and add up.
+                 * Taking the latest would report one call's reads as the
+                 * turn's.
+                 *
+                 * `output_tokens` is absent from `Event::Usage` by design and
+                 * is not guessed at. It arrives with the `Outcome`, where the
+                 * ledger adds it, so this figure steps up to the final one
+                 * rather than jumping past it. Cache dominates it by orders of
+                 * magnitude, so the live number is close throughout.
+                 *
+                 * No note_io -- a tool-heavy turn would bury the panel in
+                 * bookkeeping.
                  */
                 turn_usage.accumulate(&usage);
+                turn_tokens += usage.input_tokens.unwrap_or(0)
+                    + usage.cache_read_tokens.unwrap_or(0)
+                    + usage.cache_write_tokens.unwrap_or(0);
                 let _ = app.emit(
                     "run:usage",
                     serde_json::json!({
                         "projectId": project_id,
-                        "contextTokens": turn_usage.context_tokens,
-                        /*
-                         * Null for the whole run today, and sent anyway. The
-                         * crate reads the window from `modelUsage` on the
-                         * terminal record, so no mid-turn event carries one;
-                         * the webview falls back to what the finished turns
-                         * reported. Relaying the field means the day the crate
-                         * does report it mid-turn, a first turn starts showing
-                         * a share with no change here.
-                         */
-                        "contextWindow": turn_usage.context_window,
+                        "tokens": turn_tokens,
                     }),
                 );
             }
@@ -3549,7 +3571,10 @@ mod tests {
 
         let encoded = serde_json::to_value(UsageDto::from(&crate_usage)).expect("should serialize");
 
-        assert_eq!(encoded["tokens"], 1_500, "input and output are summed");
+        assert_eq!(
+            encoded["tokens"], 5_660,
+            "everything processed: input, output and both cache figures"
+        );
         assert_eq!(encoded["cacheReads"], 4_096);
         assert_eq!(encoded["costUsd"], 0.017);
         assert!(encoded["premiumRequests"].is_null());

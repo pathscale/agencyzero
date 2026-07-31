@@ -147,7 +147,7 @@ export interface ProjectDraft {
 
 /** From `Outcome::usage`. Absent means "the agent did not say", never zero. */
 export interface Usage {
-  /** Input plus output for this turn: the new work it did. */
+  /** Everything this turn processed: input, output and both cache figures. */
   tokens: number;
   /**
    * Every input token the turn was charged for, cached or not — the size of the
