@@ -56,7 +56,7 @@ const FINGERPRINT_KEY: &str = "schema-fingerprint";
 /// # Why this exists
 ///
 /// WorkTable persists rows with rkyv, positionally, and `version()` is a fixed
-/// constant the macro emits — it does not change when a column does. So adding
+/// constant the macro emits, it does not change when a column does. So adding
 /// one field to a table makes every row already on disk get read through the new
 /// layout, silently, with no error anywhere.
 ///
@@ -67,12 +67,12 @@ const FINGERPRINT_KEY: &str = "schema-fingerprint";
 /// bug before the cause was one line of schema.
 ///
 /// The string is the column lists, written out. Any edit to a schema changes it,
-/// which is the point — it is a human-maintained fingerprint precisely so that
+/// which is the point, it is a human-maintained fingerprint precisely so that
 /// changing a schema and not thinking about the rows on disk is impossible.
 const SCHEMA_FINGERPRINT: &str = concat!(
     "kv(key,value,updated_at);",
     "project(id,name,status,position,dirs,pinned,moderator_enabled,forked_from,last_activity_at);",
-    "project_item(id,project_id,title,status,position);",
+    "project_item(id,project_id,title,status,position,reference);",
     "message(id,project_id,item_id,author,agent,moderation,model,permission,usage,stop,exit_code,body,created_at);",
     "task_log(id,tool_call_id,project_id,item_id,label,tool,ok,output,duration_ms,exit_code,finished_at);",
     "agent_io_row(id,project_id,at,direction,kind,detail);",
@@ -106,7 +106,7 @@ pub fn check_schema(stored: Option<&str>) -> SchemaState {
         Some(found) if found == SCHEMA_FINGERPRINT => SchemaState::Match,
         /*
          * The store predates a table this build added. Every table it does
-         * know is unchanged — additions append to the fingerprint — and a
+         * know is unchanged, additions append to the fingerprint, and a
          * new table has no rows on disk to misread, so this is not the
          * silent-corruption case the fingerprint exists to catch. Boot
          * restamps, upgrading the marker to the full string.
@@ -205,6 +205,72 @@ impl Tables {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /*
+     * The fingerprint is hand-maintained, and on 2026-08-01 a column was added
+     * to `project_item` without touching it. Nothing failed. The guard did not
+     * fire, every row already on disk was read through the new layout, and the
+     * item list came back with every field shifted one place: ids reading as
+     * titles, titles as statuses, positions as garbage.
+     *
+     * A comment saying "bump this" did not prevent that, so this asserts it
+     * instead. The row is serialized and its real field names are compared with
+     * what the fingerprint claims, which fails on the commit that adds a column
+     * rather than on the launch that eats the data.
+     */
+    fn columns_in_fingerprint(table: &str) -> Vec<String> {
+        let entry = SCHEMA_FINGERPRINT
+            .split(';')
+            .find(|part| part.trim_start().starts_with(&format!("{table}(")))
+            .unwrap_or_else(|| panic!("{table} is missing from the fingerprint"));
+        entry
+            .trim_start()
+            .trim_start_matches(&format!("{table}("))
+            .trim_end_matches(')')
+            .split(',')
+            .map(|column| column.trim().to_string())
+            .collect()
+    }
+
+    #[test]
+    fn the_fingerprint_lists_the_columns_a_row_really_has() {
+        let row = crate::db::schema::project_item::ProjectItemRow {
+            id: String::new(),
+            project_id: String::new(),
+            title: String::new(),
+            status: String::new(),
+            position: 0,
+            reference: String::new(),
+        };
+        /*
+         * Exhaustively destructured on purpose. Adding a column stops this
+         * compiling, which is the whole guard: the build breaks in the commit
+         * that changes the schema, instead of the store breaking on the launch
+         * that reads it. Update the pattern and the fingerprint together.
+         */
+        let crate::db::schema::project_item::ProjectItemRow {
+            id: _,
+            project_id: _,
+            title: _,
+            status: _,
+            position: _,
+            reference: _,
+        } = row;
+
+        assert_eq!(
+            columns_in_fingerprint("project_item"),
+            vec![
+                "id",
+                "project_id",
+                "title",
+                "status",
+                "position",
+                "reference"
+            ],
+            "project_item changed shape without the fingerprint changing, so every \
+             row on disk would be read through the wrong layout"
+        );
+    }
 
     /// Opening a fresh directory must produce every table, and a blob must
     /// survive a write and a read. This is the only behaviour the commands
@@ -306,16 +372,16 @@ mod restart_tests {
     /// has to survive the process that made it. The round-trip test above opens
     /// once, so it would pass even if nothing reached disk.
     ///
-    /// Drained before the reopen, because that is what the app does — `shutdown`
-    /// is called on exit — and because without it this test was a race it lost
+    /// Drained before the reopen, because that is what the app does, `shutdown`
+    /// is called on exit, and because without it this test was a race it lost
     /// under load. There is no `Drop` that drains, so a single row's arrival on
     /// disk came down to whether WorkTable's background writer happened to run
     /// first; on an idle machine it did, and on a loaded CI box it sometimes did
     /// not. It failed for a fortnight as "flaky", which is the reading that
     /// keeps a real question unanswered.
     ///
-    /// The harder property — rows surviving an exit that never reaches the drain
-    /// — is what `transcript_rows_survive_a_reopen_with_no_drain` is for, and it
+    /// The harder property, rows surviving an exit that never reaches the drain
+    ///, is what `transcript_rows_survive_a_reopen_with_no_drain` is for, and it
     /// uses a batch big enough to settle the question on any machine rather than
     /// only on a bad day.
     #[tokio::test]
@@ -346,7 +412,7 @@ mod restart_tests {
     ///
     /// No `shutdown` on purpose: that is the drain, and a test that calls it
     /// proves only that the drain works. What has to hold is that rows are on
-    /// disk *without* one, because the exits that lose data never reach it — a
+    /// disk *without* one, because the exits that lose data never reach it, a
     /// crash, a panic, a force quit.
     ///
     /// A single row does not discriminate: on an idle SSD the background writer
