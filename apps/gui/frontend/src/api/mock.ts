@@ -393,6 +393,10 @@ export function createMockApi(): AgencyZeroApi {
     /* Plausible shapes rather than a real walk: there is no store outside Tauri,
      * and the point of the row is the *ordering* — that the log dwarfs the
      * transcript is the thing worth seeing. */
+    /* No browser to hand it to outside Tauri; the fixture path says so rather
+     * than pretending the click worked. */
+    openExternal: () => settle(undefined),
+
     listTableSizes: () =>
       settle([
         { name: "task_log", bytes: 2_411_724 },

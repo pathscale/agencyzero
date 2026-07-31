@@ -300,10 +300,19 @@ function PrChip(props: { pr: PullRequest }): JSX.Element {
         name={merged() ? "git-merge" : "git-pull-request"}
         class={`shrink-0 text-[14px] ${merged() ? "text-az-pr-strong" : closed() ? "text-az-muted" : "text-success"}`}
       />
+      {/*
+       * The row opens the PR. Copying it was the only thing a click did, which
+       * made the commonest action — go look at it — a two-step through the
+       * clipboard and a browser address bar.
+       */}
       <button
         type="button"
-        onClick={() => void copy()}
-        title={copied() ? "Copied" : `${props.pr.url} — click to copy`}
+        onClick={() =>
+          void actions
+            .openExternal(props.pr.url)
+            .catch((cause) => log.warn(`could not open the PR: ${describeError(cause)}`))
+        }
+        title={`Open ${props.pr.url}`}
         class="flex min-w-0 flex-1 items-center gap-2.5 text-left"
       >
         <span class={`shrink-0 font-semibold ${merged() ? "text-az-pr-strong" : "text-az-strong"}`}>
@@ -347,6 +356,15 @@ function PrChip(props: { pr: PullRequest }): JSX.Element {
       >
         <span class="shrink-0 font-semibold text-[11.5px] text-az-pr-strong">Merged</span>
       </Show>
+      <button
+        type="button"
+        onClick={() => void copy()}
+        aria-label={`Copy the link to PR ${props.pr.number}`}
+        title={copied() ? "Copied" : "Copy the link"}
+        class="shrink-0 rounded-md p-1 text-az-faint transition-colors hover:text-az-body"
+      >
+        <Icon name={copied() ? "check" : "copy"} class="text-[12px]" />
+      </button>
       <button
         type="button"
         onClick={() => void actions.dismissPullRequest(props.pr.id)}

@@ -112,6 +112,11 @@ export interface AgencyZeroApi {
    * The store grows unevenly — the task log and the raw I/O are written per
    * tool call and per event — and nothing on screen said so.
    */
+  /**
+   * Hand a URL to the browser. Only http and https; anything else is refused by
+   * Rust, since these URLs arrive inside an agent's reply.
+   */
+  openExternal(url: string): Promise<void>;
   listTableSizes(): Promise<TableSize[]>;
   /** Where the tables were opened from this launch, and where the next will. */
   getDataLocation(): Promise<DataLocationView>;
