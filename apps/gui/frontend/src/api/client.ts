@@ -301,7 +301,20 @@ export interface AppEvents {
    * Never sent by agents that report no mid-turn usage — Codex reports none at
    * all — and the estimate from streamed characters covers that case.
    */
-  "run:usage": { projectId: string; tokens: number };
+  "run:usage": {
+    projectId: string;
+    tokens: number;
+    /**
+     * How full the window is right now — the one figure here that is exact
+     * mid-turn rather than an understatement.
+     *
+     * Null from an agent that does not report it. The header otherwise learns
+     * this only from a finished turn's stored row, so it stood still for the
+     * length of a run and moved in a single jump at the end.
+     */
+    contextTokens: number | null;
+    contextWindow: number | null;
+  };
   /**
    * What this agent can do, from its own catalogue at run start.
    *

@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { claudeWindowKind, compactCount, contextUsed, costLabel, usageTotals } from "~/lib/stats";
+import {
+  claudeWindowKind,
+  compactCount,
+  contextUsed,
+  costLabel,
+  usageTotals,
+  withLiveContext,
+} from "~/lib/stats";
 import type { Message } from "~/types";
 
 function usage(partial: Partial<NonNullable<Message["usage"]>>): Message["usage"] {
@@ -179,6 +186,57 @@ describe("the accumulation rule", () => {
       turn("agent", usage({ tokens: 1, contextTokens: 10, contextWindow: 0 })),
     ]);
     expect(contextUsed(totals)).toBeNull();
+  });
+});
+
+/*
+ * A row is written when a turn lands, so a readout built only from rows stands
+ * still for the length of a run. Reported as "the context after compact doesn't
+ * appear to be growing" — the compaction had worked, cutting 942k to 31k, and
+ * the figure then sat there because nothing was redrawing it.
+ */
+describe("withLiveContext", () => {
+  const history = () =>
+    usageTotals([
+      turn("agent", usage({ tokens: 100, contextTokens: 31_000, contextWindow: 200_000 })),
+      turn("agent", usage({ tokens: 100, contextTokens: 44_000, contextWindow: 200_000 })),
+    ]);
+
+  it("prefers what the turn in flight reports", () => {
+    const standing = withLiveContext(history(), {
+      contextTokens: 57_000,
+      contextWindow: 200_000,
+    });
+    expect(standing.contextTokens).toBe(57_000);
+    expect(contextUsed(standing)).toBeCloseTo(0.285, 6);
+  });
+
+  /*
+   * The session's consumption is not the current turn's, and this is the shape
+   * of mistake that put "60 tokens" on a ten-minute run: one turn's figure
+   * standing in for the whole conversation's.
+   */
+  it("leaves the summed history alone", () => {
+    const standing = withLiveContext(history(), {
+      contextTokens: 57_000,
+      contextWindow: 200_000,
+    });
+    expect(standing.tokens).toBe(200);
+    expect(standing.turns).toBe(2);
+  });
+
+  it("keeps the stored figure when no run is in flight", () => {
+    expect(withLiveContext(history(), undefined).contextTokens).toBe(44_000);
+  });
+
+  /*
+   * An agent that reports tokens without a window, or reports neither, must not
+   * blank a readout that was right a moment ago.
+   */
+  it("does not blank a good figure with a run that reports none", () => {
+    const standing = withLiveContext(history(), { contextTokens: null, contextWindow: null });
+    expect(standing.contextTokens).toBe(44_000);
+    expect(standing.contextWindow).toBe(200_000);
   });
 });
 

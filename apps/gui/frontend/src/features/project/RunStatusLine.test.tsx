@@ -20,6 +20,8 @@ function status(overrides: Partial<RunStatus> = {}): RunStatus {
     activity: "working…",
     persistedChars: 0,
     liveTokens: null,
+    contextTokens: null,
+    contextWindow: null,
     ...overrides,
   };
 }

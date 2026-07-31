@@ -172,6 +172,16 @@ export type RunStatus = {
    * gap.
    */
   liveTokens: number | null;
+  /**
+   * The conversation's size and the window it sits in, as of the last report.
+   *
+   * Kept here rather than read back out of the stored rows because a row is
+   * only written when a turn lands: the composer's context readout froze for
+   * the whole of a run and then jumped. Null until the agent reports one, and
+   * for agents that never do — the readout falls back to the stored totals.
+   */
+  contextTokens: number | null;
+  contextWindow: number | null;
 };
 
 /**
@@ -869,6 +879,8 @@ function createWorkspace() {
         startedAt: current?.startedAt ?? Date.now(),
         activity: current?.activity ?? "working…",
         liveTokens: current?.liveTokens ?? null,
+        contextTokens: current?.contextTokens ?? null,
+        contextWindow: current?.contextWindow ?? null,
         persistedChars: chars,
       }));
     });
@@ -877,12 +889,16 @@ function createWorkspace() {
       setState("commands", projectId, { all, skills });
     });
 
-    await bind("run:usage", ({ projectId, tokens }) => {
+    await bind("run:usage", ({ projectId, tokens, contextTokens, contextWindow }) => {
       setState("runStatus", projectId, (current) => ({
         startedAt: current?.startedAt ?? Date.now(),
         activity: current?.activity ?? "working…",
         persistedChars: current?.persistedChars ?? 0,
         liveTokens: tokens,
+        // Held rather than overwritten with a null: an agent that reports the
+        // window once and the tokens thereafter would otherwise blank it.
+        contextTokens: contextTokens ?? current?.contextTokens ?? null,
+        contextWindow: contextWindow ?? current?.contextWindow ?? null,
       }));
     });
 
@@ -1237,6 +1253,8 @@ function createWorkspace() {
       startedAt: current?.startedAt ?? Date.now(),
       persistedChars: current?.persistedChars ?? 0,
       liveTokens: current?.liveTokens ?? null,
+      contextTokens: current?.contextTokens ?? null,
+      contextWindow: current?.contextWindow ?? null,
       activity,
     }));
   }

@@ -8,7 +8,7 @@ import { TranscriptPane } from "~/features/project/TranscriptPane";
 import { clockTime } from "~/lib/format";
 import { AGENT_LABELS } from "~/lib/labels";
 import { describeError, log } from "~/lib/log";
-import { compactCount, contextUsed, costLabel, usageTotals } from "~/lib/stats";
+import { compactCount, contextUsed, costLabel, usageTotals, withLiveContext } from "~/lib/stats";
 import { QUEUE_REASONS, useWorkspace } from "~/stores/workspace";
 import type { Project, PullRequest, Tab } from "~/types";
 
@@ -78,7 +78,10 @@ export function ProjectTab(props: { tab: Tab; project: Project }): JSX.Element {
    * the others — `Usage::context_used` returns nothing without both numbers, and
    * a context bar drawn from a guess is exactly the figure someone would act on.
    */
-  const context = createMemo(() => contextUsed(totals()));
+  // The session's history, with the context figures live from the turn in
+  // flight — see `withLiveContext`.
+  const standing = createMemo(() => withLiveContext(totals(), state.runStatus[props.project.id]));
+  const context = createMemo(() => contextUsed(standing()));
 
   /**
    * What the composer shows where the usage line used to be.
@@ -89,7 +92,7 @@ export function ProjectTab(props: { tab: Tab; project: Project }): JSX.Element {
    */
   const contextLabel = createMemo(() => {
     const share = context();
-    const it = totals();
+    const it = standing();
     if (share === null) {
       // No window reported, so no share can be shown — but the tokens are real.
       return isCount(it.contextTokens) ? `${compactCount(it.contextTokens)} ctx` : "—";

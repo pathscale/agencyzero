@@ -107,6 +107,36 @@ export function usageTotals(messages: readonly Message[]): UsageTotals {
 }
 
 /**
+ * The session's totals, with the context figures brought up to date by a turn
+ * in flight.
+ *
+ * `usageTotals` reads stored rows, and a row is written only when a turn lands,
+ * so the context readout stood still for the whole of a run and then moved in a
+ * single jump. It shows worst just after a compaction: the conversation has
+ * been cut from 942k to 31k and the next turn is the one worth watching, and
+ * the number sits there looking like nothing is happening.
+ *
+ * Only the two context fields are taken from the run. Everything else in
+ * `totals` is the session's summed history, which one turn's report knows
+ * nothing about — overwriting `tokens` from here would replace the whole
+ * conversation's consumption with the current turn's.
+ *
+ * A run reporting no context figure leaves the stored one standing, rather than
+ * blanking a readout that was correct a moment ago.
+ */
+export function withLiveContext(
+  totals: UsageTotals,
+  live: { contextTokens: number | null; contextWindow: number | null } | undefined,
+): UsageTotals {
+  if (!live) return totals;
+  return {
+    ...totals,
+    contextTokens: live.contextTokens ?? totals.contextTokens,
+    contextWindow: live.contextWindow ?? totals.contextWindow,
+  };
+}
+
+/**
  * Share of the context window in use, 0..1.
  *
  * Null unless the agent reported both the tokens and the window — today that

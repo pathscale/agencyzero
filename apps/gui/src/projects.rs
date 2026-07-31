@@ -3468,6 +3468,23 @@ async fn drive_run(
                     serde_json::json!({
                         "projectId": project_id,
                         "tokens": processed_tokens(&turn_usage),
+                        /*
+                         * How full the window is *now*, which is the one figure
+                         * here that is exact mid-turn — the crate says so, and
+                         * `Event::Usage` exists to carry it.
+                         *
+                         * The header used to learn this only from a finished
+                         * turn's stored row, so it froze for the whole length of
+                         * a run and moved in one jump at the end. During a long
+                         * turn, and in the minutes after a compaction, that is
+                         * exactly when someone is watching it: a conversation
+                         * just cut from 942k to 31k looks like it is not
+                         * recovering when the number simply is not being
+                         * redrawn. Latest wins, so `accumulate`'s per-field
+                         * rules give the current standing rather than a sum.
+                         */
+                        "contextTokens": turn_usage.context_tokens,
+                        "contextWindow": turn_usage.context_window,
                     }),
                 );
             }
