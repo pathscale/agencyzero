@@ -3,6 +3,58 @@ import { Icon } from "~/components/Icon";
 import { describeError, log } from "~/lib/log";
 
 /**
+ * Put text on the clipboard, by whichever route works here.
+ *
+ * `navigator.clipboard` is the right API and is not always available: it needs
+ * a secure context and a permission the webview may not grant, and when it is
+ * refused it rejects rather than degrading. That left the copy buttons doing
+ * nothing but writing a line to the log.
+ *
+ * `execCommand("copy")` is deprecated and works everywhere, including here. It
+ * needs a real selection, so it borrows one from an off-screen textarea and
+ * puts back whatever the user had selected — otherwise clicking Copy would
+ * clear the selection they were about to copy by hand.
+ */
+export async function copyText(text: string): Promise<boolean> {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch (cause) {
+    log.warn(`the clipboard API refused, falling back: ${describeError(cause)}`);
+  }
+
+  const holder = document.createElement("textarea");
+  holder.value = text;
+  // Off-screen rather than hidden: `display:none` cannot be selected, and the
+  // selection is what `execCommand` copies.
+  holder.setAttribute("readonly", "");
+  holder.style.position = "fixed";
+  holder.style.top = "-1000px";
+  holder.style.opacity = "0";
+  document.body.appendChild(holder);
+
+  const previous = document.getSelection()?.rangeCount
+    ? document.getSelection()?.getRangeAt(0)
+    : null;
+  holder.select();
+
+  let ok = false;
+  try {
+    ok = document.execCommand("copy");
+  } catch (cause) {
+    log.error(`could not copy: ${describeError(cause)}`);
+  }
+
+  holder.remove();
+  if (previous) {
+    const selection = document.getSelection();
+    selection?.removeAllRanges();
+    selection?.addRange(previous);
+  }
+  return ok;
+}
+
+/**
  * Enough markdown for what the agent actually emits: paragraphs, `**bold**`,
  * `` `code` `` and fenced blocks.
  *
@@ -113,13 +165,9 @@ function CodeBlock(props: { text: string; lang: string }): JSX.Element {
   const [copied, setCopied] = createSignal(false);
 
   const copy = async (): Promise<void> => {
-    try {
-      await navigator.clipboard.writeText(props.text);
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), 1_400);
-    } catch (cause) {
-      log.warn(`could not copy the block: ${describeError(cause)}`);
-    }
+    if (!(await copyText(props.text))) return;
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 1_400);
   };
 
   return (
@@ -135,7 +183,7 @@ function CodeBlock(props: { text: string; lang: string }): JSX.Element {
         onClick={() => void copy()}
         aria-label={`Copy this ${props.lang || "code"} block`}
         title="Copy"
-        class="absolute top-1.5 right-1.5 flex items-center gap-1 rounded-md border border-az-hairline-strong bg-base-200 px-1.5 py-[3px] text-[10.5px] text-az-faint opacity-0 transition-opacity hover:text-base-content focus:opacity-100 group-hover:opacity-100"
+        class="absolute top-1.5 right-1.5 flex items-center gap-1 rounded-md border border-az-hairline-strong bg-base-200 px-1.5 py-[3px] text-[10.5px] text-az-faint transition-colors hover:text-base-content"
       >
         <Icon name={copied() ? "check" : "copy"} class="text-[11px]" />
         {copied() ? "Copied" : "Copy"}
@@ -152,17 +200,15 @@ export function CopyMessageButton(props: { body: string }): JSX.Element {
     <button
       type="button"
       onClick={() => {
-        void navigator.clipboard
-          .writeText(props.body)
-          .then(() => {
-            setCopied(true);
-            window.setTimeout(() => setCopied(false), 1_400);
-          })
-          .catch((cause) => log.warn(`could not copy the message: ${describeError(cause)}`));
+        void copyText(props.body).then((ok) => {
+          if (!ok) return;
+          setCopied(true);
+          window.setTimeout(() => setCopied(false), 1_400);
+        });
       }}
       aria-label="Copy this message"
       title="Copy the whole message"
-      class="shrink-0 text-az-faint opacity-0 transition-opacity hover:text-base-content focus:opacity-100 group-hover:opacity-100"
+      class="shrink-0 text-az-faint transition-colors hover:text-base-content"
     >
       <Show when={copied()} fallback={<Icon name="copy" class="text-[12px]" />}>
         <Icon name="check" class="text-[12px]" />

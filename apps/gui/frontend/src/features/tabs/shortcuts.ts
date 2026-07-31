@@ -1,4 +1,5 @@
 import { onCleanup, onMount } from "solid-js";
+import { copyText } from "~/features/project/MessageBody";
 import { isTauri } from "~/lib/platform";
 import { useWorkspace } from "~/stores/workspace";
 
@@ -28,6 +29,26 @@ export function useTabShortcuts(): void {
   const { actions } = useWorkspace();
 
   const onKeyDown = (event: KeyboardEvent) => {
+    /*
+     * ⌘C / ⌃C, handled here as well as by the Edit menu.
+     *
+     * The menu carries a predefined Copy item and it was still coming back
+     * empty, so the keystroke is served directly from the DOM selection: read
+     * what is selected, put it on the clipboard, and only then let the default
+     * proceed. Nothing is prevented — if the native copy does work, it writes
+     * the same text and this is harmless.
+     *
+     * Skipped inside a field, where the browser's own copy is already correct
+     * and the selection API would return the document selection instead.
+     */
+    if ((event.metaKey || event.ctrlKey) && (event.key === "c" || event.code === "KeyC")) {
+      const target = event.target as HTMLElement | null;
+      const typing = target?.tagName === "INPUT" || target?.tagName === "TEXTAREA";
+      const selected = document.getSelection()?.toString() ?? "";
+      if (!typing && selected.length > 0) void copyText(selected);
+      return;
+    }
+
     if (event.altKey || event.shiftKey) return;
 
     // ⌃T — the second way to open a new project, and the one that works while
