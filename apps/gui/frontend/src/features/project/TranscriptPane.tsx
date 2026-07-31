@@ -52,9 +52,17 @@ export function TranscriptPane(props: {
   });
 
   return (
+    /*
+     * The whole scroller is selectable, not each bubble.
+     *
+     * A conversation is read and quoted across messages, so the selection has
+     * to survive crossing the gaps between them. Marking only the bubbles left
+     * every gap unselectable, and a drag over one collapsed the selection.
+     */
     <div
       ref={scroller}
       onScroll={trackScroll}
+      data-selectable
       class="az-scroll flex min-h-0 flex-1 flex-col gap-4 px-6 pt-5 pb-2 leading-relaxed"
     >
       <Show

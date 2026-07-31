@@ -320,11 +320,30 @@
     -webkit-user-select: none;
   }
 
+  /*
+   * `[data-selectable] *` and not just the element itself.
+   *
+   * Opting in per text element was not enough for what people actually do:
+   * dragging across several messages. The containers, padding and gaps between
+   * them were still `none`, so a selection that had to cross one collapsed and
+   * the copy came back empty — silently, which is what made it read as the chat
+   * area eating the copy rather than as a selection that never formed.
+   */
   input,
   textarea,
-  [data-selectable] {
+  [data-selectable],
+  [data-selectable] * {
     user-select: text;
     -webkit-user-select: text;
+  }
+
+  /*
+   * Controls stay unselectable even inside one, so dragging across a transcript
+   * does not sweep "Copy", "Retry" and "Cancel" into what you paste.
+   */
+  [data-selectable] button {
+    user-select: none;
+    -webkit-user-select: none;
   }
 
   /*
@@ -357,6 +376,9 @@
   }
 
   @media (prefers-reduced-motion: reduce) {
+    /* biome-ignore lint/style/noDescendingSpecificity: this sets animation and
+       transition only, and shares no property with the selection rules above
+       it, so the specificity order cannot decide anything between them. */
     *,
     *::before,
     *::after {
