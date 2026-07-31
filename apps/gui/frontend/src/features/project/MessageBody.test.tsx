@@ -58,6 +58,61 @@ describe("MessageBody", () => {
   });
 });
 
+/*
+ * Reported as "the chat area ate my ctrl+c copy" while lifting a checkpoint
+ * path out of a reply. Two faults met there: nothing rendered a fenced block,
+ * so the path's line breaks collapsed into spaces and what could be selected
+ * was not the path — and `user-select: none` on the body meant a drag beginning
+ * on the bubble's padding started no selection at all.
+ */
+describe("fenced blocks", () => {
+  const PATH =
+    "~/Library/Application Support/com.pathscale.agencyzero/db/checkpoints/\n  proj-6cf/300k.md";
+
+  it("keeps the line breaks that make a path a path", () => {
+    const { container } = render(() => <MessageBody body={`Here:\n\n\`\`\`\n${PATH}\n\`\`\``} />);
+    const code = container.querySelector("pre code");
+
+    expect(code).toBeTruthy();
+    // Verbatim, newline included. Rendered as prose this became one line with a
+    // space in the middle of the path, which is not a path.
+    expect(code?.textContent).toBe(PATH);
+  });
+
+  it("does not show the fences as text", () => {
+    const { container } = render(() => <MessageBody body={"```\nsome code\n```"} />);
+    expect(container.textContent).not.toContain("```");
+  });
+
+  it("keeps the prose on both sides of a block", () => {
+    const { container } = render(() => (
+      <MessageBody body={"Before.\n\n```\ncode\n```\n\nAfter."} />
+    ));
+    const paragraphs = [...container.querySelectorAll("p")].map((p) => p.textContent);
+    expect(paragraphs).toEqual(["Before.", "After."]);
+    expect(container.querySelector("pre code")?.textContent).toBe("code");
+  });
+
+  /*
+   * A cancelled run cuts the agent off mid-block. Half a command shown as a
+   * command is honest; half a command reflowed into a sentence is not.
+   */
+  it("takes an unterminated fence as code rather than dropping it", () => {
+    const { container } = render(() => <MessageBody body={"```sh\nrm -rf ./tmp\nand then"} />);
+    expect(container.querySelector("pre code")?.textContent).toContain("rm -rf ./tmp");
+  });
+
+  it("offers a copy button, so lifting a path never depends on the drag", () => {
+    const { getByLabelText } = render(() => <MessageBody body={"```sh\nls -la\n```"} />);
+    expect(getByLabelText("Copy this sh block")).toBeTruthy();
+  });
+
+  it("is selectable even though the window is not", () => {
+    const { container } = render(() => <MessageBody body={"```\ncode\n```"} />);
+    expect(container.querySelector("pre[data-selectable]")).toBeTruthy();
+  });
+});
+
 describe("InlineText", () => {
   it("applies the same marks to a single run of text", () => {
     const { container } = render(() => (

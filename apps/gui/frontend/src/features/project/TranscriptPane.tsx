@@ -2,7 +2,7 @@ import { EmptyState } from "@pathscale/ui";
 import { createEffect, createSignal, For, type JSX, Match, Show, Switch, untrack } from "solid-js";
 import { Icon } from "~/components/Icon";
 import { ApprovalCard } from "~/features/project/ApprovalCard";
-import { InlineText, MessageBody } from "~/features/project/MessageBody";
+import { CopyMessageButton, InlineText, MessageBody } from "~/features/project/MessageBody";
 import { isTransientStop, relativeTime } from "~/lib/format";
 import { AGENT_LABELS } from "~/lib/labels";
 import { compactCount } from "~/lib/stats";
@@ -282,7 +282,16 @@ function AgentBubble(props: { message: Message; onRetry?: () => void }): JSX.Ele
   const transient = () => isTransientStop(props.message.stop);
 
   return (
-    <div class={AGENT_BUBBLE}>
+    /*
+     * `data-selectable` on the bubble, not only on the text inside it.
+     *
+     * The window sets `user-select: none` on the body and opts back in per
+     * element, so a drag that begins on the bubble's padding — a pixel outside
+     * the prose, which is most of the target — started no selection at all and
+     * ⌘C then copied nothing. The failure is silent, which is what made it read
+     * as the chat area eating the copy.
+     */
+    <div class={`group ${AGENT_BUBBLE}`} data-selectable>
       <div class="flex items-baseline gap-2">
         <span class="font-semibold text-[11px] text-az-muted">
           {AGENT_LABELS[props.message.agent]}
@@ -301,6 +310,8 @@ function AgentBubble(props: { message: Message; onRetry?: () => void }): JSX.Ele
             {transient() ? "provider outage · temporary" : props.message.stop}
           </span>
         </Show>
+        <div class="flex-1" />
+        <CopyMessageButton body={props.message.body} />
       </div>
       <MessageBody body={props.message.body} class={AGENT_TEXT} />
       <Show when={failed() && props.onRetry}>
@@ -386,7 +397,7 @@ function SystemNote(props: { message: Message }): JSX.Element {
   const failed = () => props.message.stop !== "completed";
 
   return (
-    <div class="flex items-center gap-3 py-0.5">
+    <div class="group flex items-center gap-3 py-0.5">
       <span class="h-px flex-1 bg-az-hairline" />
       <span
         data-selectable
@@ -397,6 +408,9 @@ function SystemNote(props: { message: Message }): JSX.Element {
         <Icon name={failed() ? "info" : "sparkles"} class="relative top-px shrink-0 text-[12px]" />
         {props.message.body}
       </span>
+      {/* These notes carry the one thing most worth copying out of a
+          transcript: the path a checkpoint was just written to. */}
+      <CopyMessageButton body={props.message.body} />
       <span class="h-px flex-1 bg-az-hairline" />
     </div>
   );

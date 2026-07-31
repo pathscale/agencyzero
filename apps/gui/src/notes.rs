@@ -144,9 +144,19 @@ pub fn sample_document(
 ///
 /// Cut at a line rather than mid-sentence: half a rule is worse than no rule,
 /// because the agent cannot tell it is reading a fragment and will act on it.
-/// The oldest lines go first — the agent writes the set in the order it thinks
-/// matters, and a later extraction has had more chances to confirm what is
-/// really load-bearing.
+///
+/// # The head is what survives
+///
+/// [`merge_prompt`] tells the agent "if you must cut, keep the corrections", and
+/// the agent obeys by listing them first. This dropped lines from the *front*,
+/// so an over-budget set lost exactly what the prompt had just protected —
+/// silently, and only once a session was long enough to matter.
+///
+/// The doc that shipped with it argued the opposite and contradicted itself in
+/// the same sentence: "the agent writes the set in the order it thinks matters"
+/// is precisely the reason to keep the front. A real sample came back at 3868 of
+/// 4000 characters, so the first clamp was one slightly longer conversation
+/// away.
 #[must_use]
 pub fn clamp(notes: &str) -> String {
     let trimmed = notes.trim();
@@ -155,7 +165,7 @@ pub fn clamp(notes: &str) -> String {
     }
     let mut kept: Vec<&str> = Vec::new();
     let mut used = 0;
-    for line in trimmed.lines().rev() {
+    for line in trimmed.lines() {
         // +1 for the newline this line will be joined with.
         if used + line.len() + 1 > BUDGET {
             break;
@@ -163,7 +173,6 @@ pub fn clamp(notes: &str) -> String {
         used += line.len() + 1;
         kept.push(line);
     }
-    kept.reverse();
     kept.join("\n")
 }
 
@@ -342,15 +351,19 @@ mod tests {
         );
     }
 
-    /// The newest understanding is the one that has been confirmed most often,
-    /// so the oldest lines are what a full set gives up.
+    /// The prompt says "if you must cut, keep the corrections" and the agent
+    /// lists them first, so a cut has to come off the end. Cutting from the
+    /// front deleted the one category the prompt protects, which is the failure
+    /// the whole module exists to prevent.
     #[test]
-    fn the_tail_is_what_survives_a_cut() {
+    fn the_head_is_what_survives_a_cut() {
         let filler = "y".repeat(BUDGET);
-        let clamped = clamp(&format!("the oldest rule\n{filler}\nthe newest rule"));
+        let clamped = clamp(&format!(
+            "the correction that cost someone time\n{filler}\ntrailing"
+        ));
 
-        assert!(clamped.ends_with("the newest rule"));
-        assert!(!clamped.contains("the oldest rule"));
+        assert!(clamped.starts_with("the correction that cost someone time"));
+        assert!(!clamped.contains("trailing"));
     }
 
     /// A first pass must not invite the agent to invent a history it never had.

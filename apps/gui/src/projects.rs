@@ -4279,6 +4279,26 @@ async fn checkpoint_if_due(
     let Some(context_tokens) = usage.context_tokens else {
         return;
     };
+    /*
+     * The window comes from the finished turn's row, not from `usage`.
+     *
+     * `Event::Usage` never carries it — the crate's mid-turn parser sets
+     * `context_window: None` outright, and only the terminal `result` record
+     * reads it from the model. So every sample recorded `context_used: unknown`,
+     * losing the one axis that makes 390k on a million-token window comparable
+     * to 390k on a two-hundred-thousand one.
+     */
+    let context_window = usage.context_window.or_else(|| {
+        tables
+            .message
+            .select_by_project_id(project_id.to_string())
+            .execute()
+            .ok()?
+            .into_iter()
+            .filter_map(|row| serde_json::from_str::<UsageDto>(&row.usage).ok())
+            .filter_map(|dto| dto.context_window)
+            .next_back()
+    });
     let mark = tables
         .kv_get(&crate::notes::checkpoint_mark_key(project_id))
         .and_then(|value| value.parse::<u64>().ok())
@@ -4362,7 +4382,7 @@ async fn checkpoint_if_due(
         let document = crate::notes::sample_document(
             threshold,
             context_tokens,
-            usage.context_window,
+            context_window,
             &stamp,
             &session,
             &taken,
