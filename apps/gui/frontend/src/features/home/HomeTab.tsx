@@ -518,6 +518,8 @@ function GroupItemRow(props: {
   item: ProjectItem;
   onFold: () => void;
   onOpen: () => void;
+  /** Cycles pending → active → finished → pending, from the marker. */
+  onAdvance: () => void;
 }): JSX.Element {
   const { actions } = useWorkspace();
   const [editing, setEditing] = createSignal(false);
@@ -542,6 +544,15 @@ function GroupItemRow(props: {
           autofocus
           value={title()}
           aria-label={`Edit ${props.item.title}`}
+          /*
+           * Selecting text inside a field must not reach the row behind it.
+           * Home's group header and item rows open a project on double click,
+           * so double-clicking a word to select it — the ordinary way to fix a
+           * typo — navigated away mid-edit and abandoned the change.
+           */
+          onClick={(event) => event.stopPropagation()}
+          onDblClick={(event) => event.stopPropagation()}
+          onMouseDown={(event) => event.stopPropagation()}
           onInput={(event) => setTitle(event.currentTarget.value)}
           onKeyDown={(event) => {
             if (event.key === "Enter") void save();
@@ -553,11 +564,20 @@ function GroupItemRow(props: {
       }
     >
       <div class="group flex items-baseline gap-2.5 px-3.5 py-2.5 transition-colors hover:bg-white/4">
+        {/*
+         * The marker is the status control here too, matching the project
+         * panel: a status change is deliberate, so it gets its own small
+         * target rather than riding on a click meant to read the row.
+         */}
         <button
           type="button"
-          onClick={props.onFold}
-          onDblClick={props.onOpen}
-          class="flex min-w-0 flex-1 items-baseline gap-2.5 text-left"
+          onClick={(event) => {
+            event.stopPropagation();
+            props.onAdvance();
+          }}
+          aria-label={`Change the status of ${props.item.title}`}
+          title={`${props.item.status} — click to change`}
+          class="shrink-0 rounded-md p-0.5 transition-colors hover:bg-primary/12"
         >
           <Show
             when={props.item.status === "finished"}
@@ -565,6 +585,13 @@ function GroupItemRow(props: {
           >
             <Icon name="check" class="relative top-0.5 shrink-0 text-[13px] text-success" />
           </Show>
+        </button>
+        <button
+          type="button"
+          onClick={props.onFold}
+          onDblClick={props.onOpen}
+          class="flex min-w-0 flex-1 items-baseline gap-2.5 text-left"
+        >
           <span
             class={`min-w-0 flex-1 text-[12.5px] ${
               props.item.status === "active"
@@ -795,7 +822,26 @@ function ProjectGroup(props: { project: Project }): JSX.Element {
       <Show when={!collapsed()}>
         <div class="flex flex-col border-az-hairline-soft border-t">
           <For each={items()}>
-            {(item) => <GroupItemRow item={item} onFold={foldSoon} onOpen={openNow} />}
+            {(item) => (
+              <GroupItemRow
+                item={item}
+                onFold={foldSoon}
+                onOpen={openNow}
+                onAdvance={() => {
+                  const next =
+                    item.status === "pending"
+                      ? "active"
+                      : item.status === "active"
+                        ? "finished"
+                        : "pending";
+                  void actions
+                    .setItemStatus(item.id, next)
+                    .catch((cause) =>
+                      log.error(`could not change the status: ${describeError(cause)}`),
+                    );
+                }}
+              />
+            )}
           </For>
         </div>
       </Show>
