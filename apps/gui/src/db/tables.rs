@@ -328,6 +328,66 @@ mod restart_tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
+    /// The durability guarantee, stated as the failure it prevents.
+    ///
+    /// No `shutdown` on purpose: that is the drain, and a test that calls it
+    /// proves only that the drain works. What has to hold is that rows are on
+    /// disk *without* one, because the exits that lose data never reach it — a
+    /// crash, a panic, a force quit.
+    ///
+    /// A single row does not discriminate: on an idle SSD the background writer
+    /// beats the reopen almost every time, which is exactly why the older
+    /// `a_write_survives_a_reopen` failed only under CI load and was written
+    /// off as flaky. A batch outruns the writer on any machine, so this fails
+    /// loudly if the drain is ever removed rather than only on a bad day.
+    #[tokio::test]
+    async fn transcript_rows_survive_a_reopen_with_no_drain() {
+        use crate::db::schema::message::MessageRow;
+        // `execute` on a select builder is a trait method.
+        use worktable::prelude::SelectQueryExecutor;
+
+        const ROWS: usize = 300;
+        let dir = std::env::temp_dir().join(format!("az-durable-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+
+        {
+            let tables = Tables::open(&dir).await.expect("should open");
+            for n in 0..ROWS {
+                let row = MessageRow {
+                    id: format!("msg-{n}"),
+                    project_id: "proj-1".into(),
+                    item_id: String::new(),
+                    author: "agent".into(),
+                    agent: "claude".into(),
+                    moderation: String::new(),
+                    model: "sonnet".into(),
+                    permission: "read_only".into(),
+                    usage: String::new(),
+                    stop: "completed".into(),
+                    exit_code: 0,
+                    body: format!("reply {n}, already on screen"),
+                    created_at: format!("2026-07-31T00:00:{:02}Z", n % 60),
+                };
+                tables.message.insert(row).expect("should insert");
+            }
+            // Dropped without a drain, standing in for a process that died.
+        }
+
+        let reopened = Tables::open(&dir).await.expect("should reopen");
+        let found: Vec<MessageRow> = reopened
+            .message
+            .select_by_project_id("proj-1".to_string())
+            .execute()
+            .expect("should read");
+        assert_eq!(
+            found.len(),
+            ROWS,
+            "every transcript row must reach disk without waiting for a clean exit"
+        );
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     /// The whole point of giving the task log a table: the panel is populated
     /// from the database on boot, so a tool call recorded in one launch has to
     /// still be there in the next. An in-memory log would have passed every
