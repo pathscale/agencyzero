@@ -11,9 +11,19 @@ use std::process::ExitCode;
 #[derive(Debug, PartialEq, Eq)]
 enum Command {
     ListProjects,
-    ListItems { project: Option<String> },
-    SearchItems { query: String },
-    ListRules { project: Option<String> },
+    ListItems {
+        project: Option<String>,
+    },
+    SearchItems {
+        query: String,
+    },
+    ListRules {
+        project: Option<String>,
+    },
+    ListMessages {
+        project: Option<String>,
+        bodies: bool,
+    },
 }
 
 const USAGE: &str = "\
@@ -67,6 +77,17 @@ fn parse_args(args: &[String]) -> Result<Command, String> {
         "list-rules" => {
             return Ok(Command::ListRules {
                 project: project_filter(args)?,
+            });
+        }
+        "list-messages" => {
+            // `--bodies` may sit on either side of `--project`, so it is pulled
+            // out before the project filter reads what is left.
+            let rest: Vec<String> = args.map(ToString::to_string).collect();
+            let bodies = rest.iter().any(|arg| arg == "--bodies");
+            let kept: Vec<String> = rest.into_iter().filter(|arg| arg != "--bodies").collect();
+            return Ok(Command::ListMessages {
+                project: project_filter(&mut kept.iter())?,
+                bodies,
             });
         }
         "search-items" => {
@@ -130,6 +151,14 @@ fn run(command: Command) -> eyre::Result<()> {
             Command::ListRules { project } => {
                 let table = wt_tools::open_rules(&dir).await?;
                 print_lines(&wt_tools::list_rules(&table, project.as_deref())?)
+            }
+            Command::ListMessages { project, bodies } => {
+                let table = wt_tools::open_messages(&dir).await?;
+                print_lines(&wt_tools::list_messages(
+                    &table,
+                    project.as_deref(),
+                    bodies,
+                )?)
             }
         }
     })
