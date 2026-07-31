@@ -305,6 +305,19 @@ mod restart_tests {
     /// The behaviour the whole app depends on and that nothing covered: a write
     /// has to survive the process that made it. The round-trip test above opens
     /// once, so it would pass even if nothing reached disk.
+    ///
+    /// Drained before the reopen, because that is what the app does — `shutdown`
+    /// is called on exit — and because without it this test was a race it lost
+    /// under load. There is no `Drop` that drains, so a single row's arrival on
+    /// disk came down to whether WorkTable's background writer happened to run
+    /// first; on an idle machine it did, and on a loaded CI box it sometimes did
+    /// not. It failed for a fortnight as "flaky", which is the reading that
+    /// keeps a real question unanswered.
+    ///
+    /// The harder property — rows surviving an exit that never reaches the drain
+    /// — is what `transcript_rows_survive_a_reopen_with_no_drain` is for, and it
+    /// uses a batch big enough to settle the question on any machine rather than
+    /// only on a bad day.
     #[tokio::test]
     async fn a_write_survives_a_reopen() {
         let dir = std::env::temp_dir().join(format!("az-reopen-{}", std::process::id()));
@@ -316,6 +329,7 @@ mod restart_tests {
                 .kv_put("settings", "{\"models\":\"chosen\"}".into())
                 .await
                 .expect("should write");
+            tables.shutdown().await;
         }
 
         let reopened = Tables::open(&dir).await.expect("should reopen");
