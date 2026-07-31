@@ -636,7 +636,13 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
               >
                 <Show
                   when={item.status === "finished"}
-                  fallback={<ItemMarker status={item.status === "active" ? "active" : "pending"} />}
+                  fallback={
+                    <ItemMarker
+                      status={
+                        item.status === "active" || item.status === "shipped" ? "active" : "pending"
+                      }
+                    />
+                  }
                 >
                   <Icon name="check" class="relative top-0.5 shrink-0 text-[12px] text-success" />
                 </Show>
@@ -660,12 +666,23 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
                   class={`shrink-0 text-[11px] ${
                     item.status === "active"
                       ? "font-semibold text-primary"
-                      : item.status === "finished"
-                        ? "text-success"
-                        : "text-az-muted"
+                      : item.status === "shipped"
+                        ? "font-semibold text-warning"
+                        : item.status === "finished"
+                          ? "text-success"
+                          : "text-az-muted"
                   }`}
                 >
-                  {statusSuffix(item.status)}
+                  {/*
+                    A shipped row shows its pull request instead of the word,
+                    because the number is the thing you need to go and check.
+                    Amber rather than green: shipped is a claim awaiting your
+                    verdict, and colouring it as done is exactly the mistake
+                    this state exists to prevent.
+                  */}
+                  <Show when={item.reference} fallback={statusSuffix(item.status)}>
+                    {(number) => <>(PR #{number()})</>}
+                  </Show>
                 </span>
               </div>
               <Show when={item.status !== "finished"}>

@@ -11,7 +11,16 @@
 export type TabKind = "home" | "draft" | "settings" | "project";
 
 /** One enum for both layers: a Project and its ProjectItems share it. */
-export type ProjectStatus = "pending" | "active" | "finished" | "canceled";
+/**
+ * `shipped` sits between working on a thing and it being done.
+ *
+ * An agent can say it shipped something; it cannot say the thing works, because
+ * it is not the one looking at the screen. So a row it has finished waits here,
+ * naming its pull request, until the owner confirms. Without this state a fix
+ * reported as done was indistinguishable from a fix that worked, and a copy bug
+ * was reported fixed three times in one evening.
+ */
+export type ProjectStatus = "pending" | "active" | "shipped" | "finished" | "canceled";
 
 /**
  * The dot on a project tab.
@@ -138,6 +147,8 @@ export interface ProjectItem {
   title: string;
   status: ProjectStatus;
   order: number;
+  /** The pull request this shipped as, without the `#`. Null until one exists. */
+  reference: string | null;
 }
 
 /**

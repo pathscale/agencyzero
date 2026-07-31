@@ -293,6 +293,8 @@ export function createMockApi(): AgencyZeroApi {
       const item: ProjectItem = {
         id: nextId("item"),
         projectId,
+        // Nothing has shipped for a row that was only just created.
+        reference: null,
         title,
         status: "pending",
         order: siblings.length,

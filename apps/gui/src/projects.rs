@@ -31,7 +31,8 @@ use crate::db::schema::message::MessageRow;
 use crate::db::schema::project::{NameByIdQuery, PinnedByIdQuery, ProjectRow};
 use crate::db::schema::project_item::{
     PositionByIdQuery as ItemPositionByIdQuery, ProjectItemRow,
-    StatusByIdQuery as ItemStatusByIdQuery, TitleByIdQuery as ItemTitleByIdQuery,
+    ReferenceByIdQuery as ItemReferenceByIdQuery, StatusByIdQuery as ItemStatusByIdQuery,
+    TitleByIdQuery as ItemTitleByIdQuery,
 };
 use crate::db::schema::task_log::TaskLogRow;
 use crate::db::tables::Tables;
@@ -91,6 +92,9 @@ pub struct ProjectItemDto {
     pub title: String,
     pub status: String,
     pub order: u32,
+    /// The pull request or issue this shipped as, without the `#`. `None`
+    /// until something has shipped, which is most of a row's life.
+    pub reference: Option<String>,
 }
 
 impl From<ProjectItemRow> for ProjectItemDto {
@@ -101,6 +105,9 @@ impl From<ProjectItemRow> for ProjectItemDto {
             title: row.title,
             status: row.status,
             order: row.position,
+            // Absent rather than empty: "no pull request yet" is a different
+            // fact from "a pull request named the empty string".
+            reference: (!row.reference.is_empty()).then_some(row.reference),
         }
     }
 }
@@ -309,7 +316,38 @@ const MAX_ITEMS_PER_REPLY: usize = 20;
 ///
 /// Returns `(title, status)` in the order they appear, with `[x]` mapping onto
 /// the `finished` status the panel already renders struck through.
-fn items_from_reply(reply: &str) -> Vec<(String, String)> {
+/// One checkbox line, read.
+#[derive(Debug, PartialEq, Eq)]
+struct Checked {
+    /// The match key, and never carries the reference. See the `reference`
+    /// column on `ProjectItem` for why the two are kept apart.
+    title: String,
+    status: String,
+    /// A pull request or issue the line pointed at, without the `#`.
+    reference: Option<String>,
+}
+
+/// Split a trailing `(#35)` off a checkbox line.
+///
+/// Written as a suffix because that is how a person writes it, and because the
+/// alternative is a second field in a format whose whole appeal is that it is
+/// one line of markdown. Only a trailing group of digits counts: a title that
+/// happens to contain `(#3)` mid-sentence keeps it.
+fn split_reference(line: &str) -> (&str, Option<&str>) {
+    let Some(open) = line.rfind("(#") else {
+        return (line, None);
+    };
+    let rest = &line[open + 2..];
+    let Some(digits) = rest.strip_suffix(')') else {
+        return (line, None);
+    };
+    if digits.is_empty() || !digits.chars().all(|c| c.is_ascii_digit()) {
+        return (line, None);
+    }
+    (line[..open].trim_end(), Some(digits))
+}
+
+fn items_from_reply(reply: &str) -> Vec<Checked> {
     reply
         .lines()
         .filter_map(|line| {
@@ -333,28 +371,43 @@ fn items_from_reply(reply: &str) -> Vec<(String, String)> {
                 .trim_start();
 
             /*
-             * `[ ]` proposes, `[x]` closes, `[-]` removes. The third box is
-             * this contract's own: markdown has no "strike this row" checkbox,
-             * and a project session needs one — an obsolete item is not a
-             * *finished* item, and before this verb existed an agent working
-             * a backlog could add rows but never retire one, so the list only
-             * grew. `[-]` never creates: removing something that does not
-             * exist is already true.
+             * `[ ]` proposes, `[/]` starts, `[>]` ships, `[x]` closes, `[-]`
+             * removes.
+             *
+             * The last two are this contract's own. Markdown has no "strike
+             * this row" checkbox, and a project session needs one: an obsolete
+             * item is not a *finished* item, and before `[-]` existed an agent
+             * working a backlog could add rows but never retire one, so the
+             * list only grew. `[-]` never creates, since removing something
+             * that does not exist is already true.
+             *
+             * `[>]` is the answer to a fix that was reported as done and was
+             * not. An agent can say it shipped something; it cannot say the
+             * thing works, because it is not the one looking at the screen.
+             * So it moves a row to `shipped` naming the pull request, and the
+             * row waits there for the owner. A copy bug was called fixed three
+             * times in one evening, and under the old vocabulary the row would
+             * have been deleted after the first.
              */
-            let (marker, title) = match rest.strip_prefix("[ ] ") {
-                Some(title) => ("pending", title),
-                None => match rest.strip_prefix("[-] ") {
-                    Some(title) => ("deleted", title),
-                    None => (
-                        "finished",
-                        rest.strip_prefix("[x] ")
-                            .or_else(|| rest.strip_prefix("[X] "))?,
-                    ),
-                },
-            };
+            let (marker, title) = [
+                ("pending", "[ ] "),
+                ("active", "[/] "),
+                ("shipped", "[>] "),
+                ("deleted", "[-] "),
+                ("finished", "[x] "),
+                ("finished", "[X] "),
+            ]
+            .into_iter()
+            .find_map(|(marker, checkbox)| {
+                rest.strip_prefix(checkbox).map(|title| (marker, title))
+            })?;
 
-            let title = title.trim();
-            (!title.is_empty()).then(|| (truncate_on_char_boundary(title, 120), marker.to_string()))
+            let (title, reference) = split_reference(title.trim());
+            (!title.is_empty()).then(|| Checked {
+                title: truncate_on_char_boundary(title, 120),
+                status: marker.to_string(),
+                reference: reference.map(str::to_string),
+            })
         })
         .take(MAX_ITEMS_PER_REPLY)
         .collect()
@@ -495,6 +548,8 @@ pub fn create_item(
         title,
         status: "pending".into(),
         position: u32::try_from(count).unwrap_or(u32::MAX),
+        // Nothing has shipped for a row that was only just proposed.
+        reference: String::new(),
     };
     state
         .tables
@@ -518,7 +573,10 @@ pub async fn set_item_status(
     status: String,
     state: State<'_, AppState>,
 ) -> Result<ProjectItemDto, String> {
-    if !matches!(status.as_str(), "pending" | "active" | "finished") {
+    if !matches!(
+        status.as_str(),
+        "pending" | "active" | "shipped" | "finished"
+    ) {
         return Err(format!("not an item status: {status}"));
     }
     state
@@ -879,6 +937,7 @@ async fn write_tasks_from_reply(
             title: task.item,
             status: task.status,
             position: u32::try_from(existing.len()).unwrap_or(0),
+            reference: String::new(),
         };
         match tables.project_item.insert(row.clone()) {
             Ok(_) => {
@@ -941,7 +1000,12 @@ async fn write_items_from_reply(
         .completed_items
         == "delete";
 
-    for (title, status) in proposed {
+    for Checked {
+        title,
+        status,
+        reference,
+    } in proposed
+    {
         /*
          * A checkbox line naming an item that already exists is a status
          * report, not a proposal: `- [x] Fix the picker` from the session
@@ -977,6 +1041,30 @@ async fn write_items_from_reply(
                 continue;
             }
             let row_id = row.id.clone();
+            /*
+             * The reference is recorded before the status, so a row that
+             * reaches `shipped` always names where it went. A shipped row with
+             * no pull request on it is the state this whole verb exists to
+             * make impossible: it reads exactly like the "done" that was not.
+             */
+            if let Some(number) = reference.as_deref()
+                && row.reference != number
+                && let Err(error) = tables
+                    .project_item
+                    .update_reference_by_id(
+                        ItemReferenceByIdQuery {
+                            reference: number.to_string(),
+                        },
+                        row_id.clone(),
+                    )
+                    .await
+            {
+                crate::log!(
+                    crate::log::Level::Error,
+                    "items",
+                    "{project_id}: could not record the item's reference: {error}"
+                );
+            }
             match tables
                 .project_item
                 .update_status_by_id(ItemStatusByIdQuery { status }, row_id.clone())
@@ -1006,6 +1094,7 @@ async fn write_items_from_reply(
             title,
             status,
             position: next,
+            reference: reference.unwrap_or_default(),
         };
         match tables.project_item.insert(row.clone()) {
             Ok(_) => {
@@ -3410,6 +3499,16 @@ async fn drive_run(
      * fallback for a run that never streamed.
      */
     let mut streamed_text = String::new();
+    /*
+     * How much of `streamed_text` has been scanned for checkbox lines.
+     *
+     * Items used to be written only from the finished reply, which made it
+     * impossible to open one and then work on it in the same turn: the row did
+     * not exist until the turn that proposed it had already ended. So a session
+     * asked to follow the procedure could not follow it, and the list only ever
+     * described work that was already over.
+     */
+    let mut items_scanned_to = 0usize;
 
     /*
      * The checkpoint clock. The reply is flushed to `kv` on the first delta
@@ -3639,6 +3738,29 @@ async fn drive_run(
                     "run:text",
                     serde_json::json!({ "projectId": project_id, "delta": delta }),
                 );
+                /*
+                 * Checkbox lines take effect as they are written.
+                 *
+                 * Only whole lines: the scan stops at the last newline seen, so
+                 * a title still being streamed is never read as a shorter one.
+                 * Without that, "Fix the copy bug" would land as "Fix the" and
+                 * the real title would arrive later as a second row.
+                 *
+                 * The end-of-turn pass still runs and is the backstop for a
+                 * final line with no newline after it. It cannot double-apply:
+                 * a row already at the status the line asks for is skipped.
+                 */
+                if !is_task_manager {
+                    while let Some(at) = streamed_text[items_scanned_to..].find('\n') {
+                        let end = items_scanned_to + at + 1;
+                        let line = streamed_text[items_scanned_to..end].to_string();
+                        items_scanned_to = end;
+                        if !items_from_reply(&line).is_empty() {
+                            write_items_from_reply(&app, &tables, &project_id, &line).await;
+                        }
+                    }
+                }
+
                 if partial_flushed_at.elapsed() >= PARTIAL_FLUSH_EVERY {
                     partial_flushed_at = std::time::Instant::now();
                     match tables
@@ -4759,13 +4881,65 @@ mod tests {
              2. An ordinary numbered line\n\
              Some prose about [x] brackets in a sentence.";
 
+        let read = items_from_reply(reply);
+        let seen: Vec<(&str, &str)> = read
+            .iter()
+            .map(|item| (item.title.as_str(), item.status.as_str()))
+            .collect();
         assert_eq!(
-            items_from_reply(reply),
+            seen,
             vec![
-                ("Port the model into az-core".into(), "pending".into()),
-                ("Decide the store".into(), "finished".into()),
-                ("Pick the id scheme".into(), "pending".into()),
+                ("Port the model into az-core", "pending"),
+                ("Decide the store", "finished"),
+                ("Pick the id scheme", "pending"),
             ]
+        );
+    }
+
+    /*
+     * The state that only exists because "done" was not.
+     *
+     * An agent can say it shipped something; it cannot say the thing works,
+     * because it is not the one looking at the screen. A copy bug was reported
+     * fixed three times in one evening, and under the old vocabulary its row
+     * would have been deleted after the first.
+     */
+    #[test]
+    fn a_row_can_be_started_and_shipped_without_being_finished() {
+        let read = items_from_reply(
+            "- [/] Fix copy in the prompt area\n- [>] Add a shipped state (#35)\n",
+        );
+
+        assert_eq!(read[0].status, "active");
+        assert_eq!(read[0].reference, None);
+        assert_eq!(read[1].status, "shipped");
+        assert_eq!(read[1].reference.as_deref(), Some("35"));
+    }
+
+    /// The reference is its own field, so the title stays the match key: a row
+    /// shipped as `(#35)` still answers to the line that closes it.
+    #[test]
+    fn a_reference_never_becomes_part_of_the_title() {
+        let read = items_from_reply("- [>] Add a shipped state (#35)\n");
+        assert_eq!(read[0].title, "Add a shipped state");
+
+        let closing = items_from_reply("- [x] Add a shipped state\n");
+        assert_eq!(closing[0].title, read[0].title, "the same row is meant");
+    }
+
+    /// Only a trailing group of digits is a reference. A title that mentions
+    /// one mid-sentence keeps every character it was written with.
+    #[test]
+    fn only_a_trailing_number_reads_as_a_reference() {
+        assert_eq!(
+            split_reference("Fix the (#3) case in the parser"),
+            ("Fix the (#3) case in the parser", None)
+        );
+        assert_eq!(split_reference("Ship it (#12)"), ("Ship it", Some("12")));
+        assert_eq!(split_reference("Not a ref (#)"), ("Not a ref (#)", None));
+        assert_eq!(
+            split_reference("Not a ref (#abc)"),
+            ("Not a ref (#abc)", None)
         );
     }
 
@@ -4793,7 +4967,10 @@ mod tests {
     #[test]
     fn a_struck_box_parses_as_deleted() {
         assert_eq!(
-            items_from_reply("- [-] Verify release 0.1.4 upgrade path"),
+            items_from_reply("- [-] Verify release 0.1.4 upgrade path")
+                .into_iter()
+                .map(|item| (item.title, item.status))
+                .collect::<Vec<_>>(),
             vec![(
                 "Verify release 0.1.4 upgrade path".to_string(),
                 "deleted".to_string()
