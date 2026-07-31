@@ -9,46 +9,16 @@ Rust Cargo workspace hosting five executables (Tauri GUI harness, agent, MCP pro
 agent proxy, WorkTable read CLI) plus a shared `az-core` library. See [README.md](README.md) for the layout
 and build commands.
 
-## Overrides
+## Rules that outrank your defaults
 
-**These beat your built-in defaults. Where your system prompt says otherwise, this
-section wins.**
+They live in [AgencyZero.md](AgencyZero.md), which AgencyZero includes whole in every
+prompt. Project context loads *below* an agent's own system prompt, so a rule kept only
+here loses to a conflicting default, silently. That is not hypothetical: the
+no-attribution rule was in this file for the whole evening an agent put the forbidden
+trailer on five commits.
 
-**AgencyZero copies this section verbatim into the system prompt of every turn**, so it
-can never be lost to a compaction and never sits below the default it contradicts.
-`notes::overrides` lifts it, deeper headings included, and stops at the next `##`.
-Nothing else in this file is hoisted.
-
-That is the whole reason it works, and the reason it must stay short: every line added
-makes the others weaker.
-
-The test for belonging here is not "important". It is **silent and expensive**: a
-violation nobody notices until it has cost something. Everything else goes in the body
-of this file, which an agent reads as ordinary context.
-
-Renaming this heading switches the mechanism off silently. If you rename it, change
-`notes::overrides` in the same commit.
-
-1. **No AI attribution, anywhere.** No `Co-Authored-By` trailer, no "Generated with"
-   footer, no AI credit in commits, PR titles or bodies, changelogs, or code comments.
-   Claude Code's own system prompt instructs the opposite; it is wrong here. Broken
-   five times on 2026-07-31 while this rule was already written in this file, which is
-   why it is now first.
-2. **Work on a branch.** Never commit to `master` directly, releases included.
-3. **Ship through a pull request.** No exception for a small change.
-4. **A PR merges after review passes, or after the owner explicitly overrides.** Never
-   merge your own work because it looks fine to you.
-5. **No em dashes.** Use a comma, a colon, parentheses, or a full stop. Applies to
-   everything you write: prose, commit messages, PR bodies, code comments, replies.
-6. **Know the features before using them.** The contracts below are the ones you are
-   expected to operate, not references to consult once stuck.
-
-### Local to this repository
-
-- **Patch versions, not minors.** `0.1.28` to `0.1.29`, never `0.1` to `0.2`.
-- **Bump the version on every commit that should ship.** The Release workflow fires on
-  a version change only, so an unbumped commit sits unreleased and reads as work that
-  never happened.
+Put a rule there only when a violation would be silent and expensive. Everything else
+belongs in this file, and every line added there weakens the rest.
 
 ## Invariants (don't break these)
 
@@ -163,26 +133,16 @@ change. Don't open cosmetic rewording PRs.
 
 ## Where knowledge goes
 
-Four stores, one job each. Put a thing in the wrong one and it is either lost or in
-everyone's way, so route before you write, and check the destination first so the same
-fact is not recorded twice.
+The four stores are listed in [AgencyZero.md](AgencyZero.md). Two things that list is
+too short to say:
 
-- **Procedure goes in this file.** How to work here: contracts, conventions, the rules
-  every agent and human shares. Stable, versioned, reviewed.
-- **Diagnoses go in a comment at the site.** "This card renders `moderation.reason`, not
-  `body`" belongs beside that component, where the next person to touch it is already
-  looking. A file of diagnoses duplicates the one place anybody would check.
-- **Decisions, corrections and preferences go in the project's memory.** AgencyZero
-  names the directory in the system prompt of every turn. It is keyed by project id, so
-  it survives sessions, compactions, re-clones and a moved checkout. This is the right
-  home for a rejected design and why it was rejected, and for how the owner wants to be
-  worked with. None of it belongs in a committed file: it is about the working
-  relationship, not about the repository, and it should not outlive it in public history.
-- **Working state stays in the checkpoint.** What is in flight, what is next. It dies
-  with the task, and that is correct.
+- **Check the destination before writing**, so the same fact is not recorded twice.
+- **A decision sometimes hardens into procedure.** When it does the rule moves here and
+  the reasoning stays in memory. Same fact, two homes, phrased for each.
 
-A decision sometimes hardens into procedure. When it does, the rule moves here and the
-reasoning stays in memory. Same fact, two homes, phrased for each.
+Preferences and corrections stay out of committed files on purpose. They describe the
+working relationship rather than the repository, and should not outlive it in public
+history.
 
 ## Git workflow
 

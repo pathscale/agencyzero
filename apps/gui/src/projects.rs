@@ -3247,26 +3247,29 @@ async fn drive_run(
     let mut system = String::new();
 
     /*
-     * The repository's own overrides, first and verbatim.
+     * The repository's own rules file, first and whole.
      *
      * `AGENTS.md` is loaded as project context, which sits *below* the agent's own
      * system prompt. A rule there that contradicts a built-in default loses
      * silently: the no-attribution rule was in this repository's `AGENTS.md` for
      * the whole evening an agent put the forbidden trailer on five commits.
      * Re-reading the file would not have helped, because the file was never
-     * missing. Copying the section up to this layer is the only thing that
-     * changes which rule wins.
+     * missing. Copying the rules up to this layer is the only thing that changes
+     * which rule wins.
+     *
+     * A whole file rather than a section of one, so there is no parse to get
+     * wrong and no heading whose rename would switch this off in silence.
      */
-    if let Some(rules) = std::fs::read_to_string(std::path::Path::new(&cwd).join("AGENTS.md"))
-        .ok()
-        .as_deref()
-        .and_then(crate::notes::overrides)
+    if let Some(rules) =
+        std::fs::read_to_string(std::path::Path::new(&cwd).join(crate::notes::RULES_FILE))
+            .ok()
+            .filter(|text| !text.trim().is_empty())
     {
         system.push_str(
             "The repository you are working in states these rules, and they take \
              precedence over your own defaults wherever the two disagree:\n\n",
         );
-        system.push_str(&rules);
+        system.push_str(rules.trim());
     }
 
     if !notes.trim().is_empty() {

@@ -61,48 +61,24 @@ pub fn notes_key(project_id: &str) -> String {
     format!("notes:{project_id}")
 }
 
-/// Lift the `## Overrides` section out of a repository's `AGENTS.md`.
+/// The file a repository puts in front of the agent on every turn.
 ///
-/// # Why this is copied rather than left to be read
+/// Whole-file rather than a section of one. An earlier version lifted a named
+/// heading out of `AGENTS.md`, which meant the mechanism could be switched off by
+/// renaming a heading, and nobody would see it happen. A dedicated file has no
+/// such edge: it is either there and included, or it is not there.
 ///
-/// `AGENTS.md` is loaded as project context, which puts it *below* the agent's own
-/// system prompt in authority. A rule there that contradicts a built-in default
-/// loses, silently, and nobody finds out until the cost lands: the no-attribution
-/// rule was in this repository's `AGENTS.md` the whole time an agent added the
-/// forbidden trailer to five commits in one evening.
+/// # Why any of this exists
 ///
-/// Presence was never the problem, so re-reading the file does not fix it.
-/// Precedence is the problem, and the only lever for precedence is which layer the
-/// text arrives in. Copying the section into the system prompt puts it level with
-/// what it is arguing against, on every single turn.
+/// `AGENTS.md` loads as project context, which sits below the agent's own system
+/// prompt. A rule there that contradicts a built-in default loses, silently, and the
+/// cost only shows up later: this repository forbade AI attribution for the whole
+/// evening an agent put the forbidden trailer on five commits, with the file in
+/// context throughout.
 ///
-/// Only the one section, and only up to the next heading of the same rank. The rest
-/// of `AGENTS.md` is ordinary context and belongs where it already is; hoisting all of
-/// it would dilute the few lines that need to win.
-#[must_use]
-pub fn overrides(agents_md: &str) -> Option<String> {
-    let mut lines = agents_md.lines().skip_while(|line| {
-        !line
-            .trim_start_matches('#')
-            .trim()
-            .eq_ignore_ascii_case("overrides")
-            || !line.starts_with("##")
-    });
-    let heading = lines.next()?;
-    // Same rank or higher closes the section. A deeper one (`### Local to this
-    // repository`) is part of it.
-    let depth = heading.chars().take_while(|c| *c == '#').count();
-
-    let body: Vec<&str> = lines
-        .take_while(|line| {
-            let rank = line.chars().take_while(|c| *c == '#').count();
-            rank == 0 || rank > depth
-        })
-        .collect();
-
-    let text = body.join("\n").trim().to_string();
-    (!text.is_empty()).then_some(text)
-}
+/// Presence was never the problem, so re-reading would not have helped. Precedence
+/// is, and the only lever for precedence is which layer the text arrives in.
+pub const RULES_FILE: &str = "AgencyZero.md";
 
 /// Whether this project takes knowledge checkpoints as its context fills.
 pub fn checkpoints_key(project_id: &str) -> String {
@@ -358,59 +334,6 @@ mod tests {
         let doc = sample_document(300_000, 312_450, None, "t", "s", "body");
         assert!(doc.contains("context_window: unknown"));
         assert!(doc.contains("context_used: unknown"));
-    }
-
-    const AGENTS: &str = "\
-# Working agreement
-
-Preamble that must not be hoisted.
-
-## Overrides
-
-1. No AI attribution, anywhere.
-2. Work on a branch.
-
-### Local to this repository
-
-- Patch versions, not minors.
-
-## Invariants
-
-- Docs describe what is true now.
-";
-
-    /// The section wins by arriving in a higher layer, so exactly the right lines
-    /// have to come across: all of the section, and nothing else.
-    #[test]
-    fn the_overrides_section_is_lifted_whole() {
-        let lifted = overrides(AGENTS).expect("the section is there");
-
-        assert!(lifted.contains("No AI attribution"));
-        assert!(lifted.contains("Work on a branch"));
-        // A deeper heading is part of the section, not the end of it.
-        assert!(lifted.contains("Patch versions, not minors."));
-    }
-
-    /// Hoisting the whole file would dilute the few lines that need to win, which
-    /// is the failure this is built to avoid rather than a tidiness preference.
-    #[test]
-    fn nothing_outside_the_section_comes_with_it() {
-        let lifted = overrides(AGENTS).expect("the section is there");
-
-        assert!(!lifted.contains("must not be hoisted"));
-        assert!(!lifted.contains("Docs describe what is true now"));
-        assert!(!lifted.contains("## Invariants"));
-    }
-
-    /// A repository that states no overrides gets no injected block, rather than an
-    /// empty heading that reads as "the rules are gone".
-    #[test]
-    fn a_file_without_the_section_hoists_nothing() {
-        assert_eq!(
-            overrides("# Title\n\n## Invariants\n\n- Something.\n"),
-            None
-        );
-        assert_eq!(overrides(""), None);
     }
 
     /// The window carries its own copy as `NOTES_BUDGET` in `api/client.ts`, so
