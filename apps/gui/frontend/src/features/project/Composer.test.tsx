@@ -3,14 +3,20 @@ import { createSignal } from "solid-js";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { Composer } from "~/features/project/Composer";
 import { prefs, setPrefs } from "~/stores/prefs";
-import { WorkspaceProvider } from "~/stores/workspace";
+import { useWorkspace, type Workspace, WorkspaceProvider } from "~/stores/workspace";
 
 function mount(overrides: Partial<Parameters<typeof Composer>[0]> = {}) {
   const onSend = vi.fn().mockResolvedValue(undefined);
+  let workspace!: Workspace;
+  function Probe() {
+    workspace = useWorkspace();
+    return null;
+  }
   // Wrapped since the Attach button made the composer a workspace consumer
   // (isLive gating and the picker action come from context).
   const screen = render(() => (
     <WorkspaceProvider>
+      <Probe />
       <Composer
         placeholder="Ask, or type / for commands…"
         model="sonnet"
@@ -29,7 +35,22 @@ function mount(overrides: Partial<Parameters<typeof Composer>[0]> = {}) {
     </WorkspaceProvider>
   ));
   const field = screen.getByLabelText("Ask, or type / for commands…") as HTMLTextAreaElement;
-  return { ...screen, field, onSend };
+  /*
+   * Waits for the provider to finish booting.
+   *
+   * It hydrates and logs asynchronously, so a test that finishes before it does
+   * leaves that work to land during teardown — which vitest reports as an
+   * unhandled rejection and fails the whole run on, with all 233 tests still
+   * passing and nothing pointing at the culprit. It only bites the tests quick
+   * enough to outrun the boot, which is why it survived a green local run and
+   * broke CI.
+   *
+   * A function rather than a promise created here: an un-awaited `waitFor` that
+   * timed out would be a second unhandled rejection, which is the disease.
+   */
+  const booted = () =>
+    waitFor(() => expect(workspace.state.boot.status).toBe("ready"), { timeout: 5_000 });
+  return { ...screen, field, onSend, booted };
 }
 
 function type(field: HTMLTextAreaElement, value: string) {
@@ -267,51 +288,29 @@ describe("what the composer holds is per tab", () => {
  * your message is still here. Compacted." on a compaction that had succeeded.
  */
 describe("the alert slot means failure", () => {
-  const mount = (props: { onCompact?: () => Promise<void>; onSend?: () => Promise<void> }) => {
-    const screen = render(() => (
-      <WorkspaceProvider>
-        <Composer
-          placeholder="Ask, or type / for commands…"
-          model="sonnet"
-          modelOptions={[{ value: "sonnet", label: "Sonnet" }]}
-          efforts={[]}
-          effort=""
-          permission="read_only"
-          onModelChange={() => {}}
-          onPermissionChange={() => {}}
-          onCompact={props.onCompact}
-          onSend={props.onSend ?? vi.fn().mockResolvedValue(undefined)}
-        />
-      </WorkspaceProvider>
-    ));
-    return {
-      screen,
-      field: () => screen.getByLabelText("Ask, or type / for commands…") as HTMLTextAreaElement,
-      send: () => screen.getByLabelText("Send"),
-    };
-  };
-
   it("says nothing when a compaction succeeds", async () => {
-    const compact = vi.fn().mockResolvedValue(undefined);
-    const { screen, field, send } = mount({ onCompact: compact });
+    const onCompact = vi.fn().mockResolvedValue(undefined);
+    const { field, booted, queryByRole, getByLabelText } = mount({ onCompact });
+    await booted();
 
-    fireEvent.input(field(), { target: { value: "/compact" } });
-    fireEvent.click(send());
+    type(field, "/compact");
+    fireEvent.click(getByLabelText("Send"));
 
-    await waitFor(() => expect(compact).toHaveBeenCalled());
+    await waitFor(() => expect(onCompact).toHaveBeenCalled());
     // The transcript reports it — a status line while it runs, a note when it
     // lands. Here there is nothing to report.
-    expect(screen.queryByRole("alert")).toBeNull();
+    expect(queryByRole("alert")).toBeNull();
   });
 
   it("still explains a compaction that was refused, without blaming the draft", async () => {
-    const compact = vi.fn().mockRejectedValue(new Error("a run is already active"));
-    const { screen, field, send } = mount({ onCompact: compact });
+    const onCompact = vi.fn().mockRejectedValue(new Error("a run is already active"));
+    const { field, booted, getByRole, getByLabelText } = mount({ onCompact });
+    await booted();
 
-    fireEvent.input(field(), { target: { value: "/compact" } });
-    fireEvent.click(send());
+    type(field, "/compact");
+    fireEvent.click(getByLabelText("Send"));
 
-    const alert = await waitFor(() => screen.getByRole("alert"));
+    const alert = await waitFor(() => getByRole("alert"));
     expect(alert.textContent).toContain("a run is already active");
     // Nothing was sent, so nothing is "still here" waiting to be resent.
     expect(alert.textContent).not.toContain("still here");
@@ -319,15 +318,16 @@ describe("the alert slot means failure", () => {
 
   it("keeps the prefix on a send that actually failed", async () => {
     const onSend = vi.fn().mockRejectedValue(new Error("the backend is unreachable"));
-    const { screen, field, send } = mount({ onSend });
+    const { field, booted, getByRole, getByLabelText } = mount({ onSend });
+    await booted();
 
-    fireEvent.input(field(), { target: { value: "a real prompt" } });
-    fireEvent.click(send());
+    type(field, "a real prompt");
+    fireEvent.click(getByLabelText("Send"));
 
-    const alert = await waitFor(() => screen.getByRole("alert"));
+    const alert = await waitFor(() => getByRole("alert"));
     expect(alert.textContent).toContain("still here");
     expect(alert.textContent).toContain("the backend is unreachable");
     // And the words are where the alert says they are.
-    expect(field().value).toBe("a real prompt");
+    expect(field.value).toBe("a real prompt");
   });
 });
