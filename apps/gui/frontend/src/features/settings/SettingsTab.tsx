@@ -1003,7 +1003,7 @@ function AgentRow(props: { status: AgentStatus }): JSX.Element {
       <span class="flex shrink-0 gap-[5px]">
         <For each={props.status.caps}>
           {(cap) => (
-            <span class="rounded-full border border-white/10 bg-base-300 px-[7px] py-0.5 font-mono text-[10.5px] text-az-muted">
+            <span class="rounded-full border border-primary/25 bg-primary/8 px-[7px] py-0.5 font-mono text-[10.5px] text-primary/85">
               {cap}
             </span>
           )}

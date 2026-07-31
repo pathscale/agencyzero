@@ -122,7 +122,7 @@ export function TabStrip(): JSX.Element {
           onClick={() => actions.openDraft()}
           title="New project"
           aria-label="New project"
-          class="flex h-8 shrink-0 items-center justify-center rounded-full border border-white/22 border-dashed px-3 text-az-muted transition-colors hover:border-primary hover:bg-primary/8 hover:text-primary"
+          class="flex h-8 shrink-0 items-center justify-center rounded-full border border-primary/22 border-dashed px-3 text-az-muted transition-colors hover:border-primary hover:bg-primary/8 hover:text-primary"
         >
           <Icon name="plus" class="text-[15px]" />
         </button>
@@ -237,8 +237,8 @@ function TabPill(props: {
   const shell = () => {
     if (props.tab.kind === "draft") {
       return isActive()
-        ? `${PILL} border border-white/30 border-dashed bg-az-tab text-base-content italic`
-        : `${PILL} border border-white/16 border-dashed text-az-muted italic hover:border-white/30 hover:text-base-content`;
+        ? `${PILL} border border-primary/30 border-dashed bg-az-tab text-base-content italic`
+        : `${PILL} border border-primary/16 border-dashed text-az-muted italic hover:border-primary/30 hover:text-base-content`;
     }
     if (!isActive()) return `${PILL} ${IDLE} ${props.tab.kind === "home" ? "font-semibold" : ""}`;
     return props.tab.kind === "home"

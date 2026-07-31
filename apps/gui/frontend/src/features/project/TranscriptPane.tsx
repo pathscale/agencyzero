@@ -276,7 +276,7 @@ function RunStatusLine(props: {
         <button
           type="button"
           onClick={() => void actions.cancelRun(props.projectId)}
-          class="rounded-md border border-white/16 px-2 py-px text-[11.5px] text-az-body transition-colors hover:border-error hover:text-error"
+          class="rounded-md border border-primary/16 px-2 py-px text-[11.5px] text-az-body transition-colors hover:border-error hover:text-error"
         >
           Cancel
         </button>
@@ -347,7 +347,7 @@ function AgentBubble(props: { message: Message; onRetry?: () => void }): JSX.Ele
             <button
               type="button"
               onClick={() => retry()()}
-              class="rounded-lg border border-white/18 px-3 py-[5px] text-[12px] text-az-body transition-colors hover:border-primary hover:text-primary"
+              class="rounded-lg border border-primary/18 px-3 py-[5px] text-[12px] text-az-body transition-colors hover:border-primary hover:text-primary"
             >
               Retry
             </button>
@@ -439,7 +439,7 @@ function ModeratorNote(props: { message: Message }): JSX.Element {
             <button
               type="button"
               onClick={() => void actions.resolveModeration(props.message.id, false)}
-              class="rounded-lg border border-white/18 px-3 py-[5px] text-[12px] text-az-body transition-colors hover:border-error hover:text-error"
+              class="rounded-lg border border-primary/18 px-3 py-[5px] text-[12px] text-az-body transition-colors hover:border-error hover:text-error"
             >
               Deny
             </button>

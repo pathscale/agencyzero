@@ -82,7 +82,7 @@ export function ItemMarker(props: { status: "pending" | "active" | "finished" })
         <span class="az-halo-primary relative top-[3px] size-2 shrink-0 rounded-full bg-primary" />
       }
     >
-      <span class="relative top-[3px] size-2 shrink-0 rounded-full border-[1.5px] border-white/30" />
+      <span class="relative top-[3px] size-2 shrink-0 rounded-full border-[1.5px] border-primary/30" />
     </Show>
   );
 }

@@ -181,7 +181,7 @@ export function ProjectTab(props: { tab: Tab; project: Project }): JSX.Element {
             <div class="flex flex-col gap-1">
               <For each={state.queued[props.project.id]}>
                 {(body, index) => (
-                  <div class="flex items-center gap-2 rounded-[11px] border border-white/14 border-dashed bg-az-inset px-3 py-1.5 text-[12px]">
+                  <div class="flex items-center gap-2 rounded-[11px] border border-primary/14 border-dashed bg-az-inset px-3 py-1.5 text-[12px]">
                     <Icon name="history" class="shrink-0 text-[12px] text-az-faint" />
                     <span class="min-w-0 flex-1 truncate text-az-body">{body}</span>
                     <span class="shrink-0 text-[10.5px] text-az-faint">queued</span>

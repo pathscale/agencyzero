@@ -247,7 +247,7 @@ export function Composer(props: ComposerProps): JSX.Element {
             disabled={!isLive("chooseAttachments")}
             title="Attach files — their paths go into the prompt"
             aria-label="Attach files"
-            class="flex size-[30px] items-center justify-center rounded-full border border-az-hairline-strong text-az-body transition-colors hover:border-white/30 hover:text-az-title disabled:cursor-not-allowed disabled:opacity-40"
+            class="flex size-[30px] items-center justify-center rounded-full border border-az-hairline-strong text-az-body transition-colors hover:border-primary/30 hover:text-az-title disabled:cursor-not-allowed disabled:opacity-40"
           >
             <Icon name="plus" class="text-[16px]" />
           </button>

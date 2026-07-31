@@ -340,7 +340,7 @@ function SettingsSection(props: { project: Project }): JSX.Element {
             <button
               type="button"
               onClick={() => setAdding(true)}
-              class="flex items-center gap-[7px] rounded-[9px] border border-white/16 border-dashed px-2.5 py-[7px] text-[11.5px] text-az-muted transition-colors hover:border-primary hover:text-primary"
+              class="flex items-center gap-[7px] rounded-[9px] border border-primary/16 border-dashed px-2.5 py-[7px] text-[11.5px] text-az-muted transition-colors hover:border-primary hover:text-primary"
             >
               <Icon name="folder-plus" class="text-[13px]" />
               Add dir
@@ -438,7 +438,7 @@ function ApprovalRules(props: { projectId: string }): JSX.Element {
         <button
           type="button"
           onClick={forget}
-          class="shrink-0 rounded-md border border-white/16 px-2 py-0.5 text-[11px] text-az-body transition-colors hover:border-error hover:text-error"
+          class="shrink-0 rounded-md border border-primary/16 px-2 py-0.5 text-[11px] text-az-body transition-colors hover:border-error hover:text-error"
         >
           Forget all
         </button>
@@ -686,7 +686,7 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
           <button
             type="button"
             onClick={() => setAdding(true)}
-            class="mt-1 flex items-center gap-2 rounded-[9px] border border-white/16 border-dashed px-2.5 py-2 text-[12px] text-az-muted transition-colors hover:border-primary hover:text-primary"
+            class="mt-1 flex items-center gap-2 rounded-[9px] border border-primary/16 border-dashed px-2.5 py-2 text-[12px] text-az-muted transition-colors hover:border-primary hover:text-primary"
           >
             <Icon name="plus" class="text-[13px]" />
             New item
@@ -736,7 +736,7 @@ function RunningList(props: { projectId: string }): JSX.Element {
                  */
                 disabled={!task.isCancelable || !task.toolCallId || !isLive("cancelTask")}
                 onClick={() => task.toolCallId && void actions.cancelTask(task.toolCallId)}
-                class="rounded-md border border-white/16 px-2 py-0.5 text-az-body transition-colors hover:border-error hover:text-error disabled:opacity-40"
+                class="rounded-md border border-primary/16 px-2 py-0.5 text-az-body transition-colors hover:border-error hover:text-error disabled:opacity-40"
               >
                 Stop
               </button>
@@ -746,7 +746,7 @@ function RunningList(props: { projectId: string }): JSX.Element {
       </For>
 
       <Show when={tasks().length === 0}>
-        <p class="rounded-[11px] border border-white/12 border-dashed p-3 text-center text-[11.5px] text-az-muted">
+        <p class="rounded-[11px] border border-primary/12 border-dashed p-3 text-center text-[11.5px] text-az-muted">
           Nothing running
         </p>
       </Show>
