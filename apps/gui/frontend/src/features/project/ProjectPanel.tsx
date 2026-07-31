@@ -556,7 +556,7 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
             <div
               class={`group flex items-center gap-1 rounded-[9px] pr-1 transition-colors ${
                 item.status === "active"
-                  ? "bg-base-300 shadow-[inset_2px_0_0_#ffee58]"
+                  ? "bg-base-300 shadow-[inset_2px_0_0_var(--color-primary)]"
                   : "hover:bg-white/5"
               }`}
             >

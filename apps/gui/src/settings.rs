@@ -82,6 +82,13 @@ pub struct Theme {
     /// Ignored while `accent` is empty: the designed palette is grey, not grey
     /// washed with its own yellow.
     pub wash: f32,
+    /// Lightness added back to every text rung, in oklch percentage points.
+    ///
+    /// Softness dims the text as it lifts the surfaces, which is right for
+    /// glare and wrong for anyone who then finds the prose faded — the two
+    /// wants are separate and this is the second one. Negative dims further,
+    /// positive brightens; 0 leaves the ladder where softness put it.
+    pub text_brightness: f32,
 }
 
 impl Default for Theme {
@@ -92,6 +99,7 @@ impl Default for Theme {
             // Matches `DEFAULT_WASH` in the webview's lib/theme.ts: a colour
             // picked with no opinion about strength washes at 10%.
             wash: 10.0,
+            text_brightness: 0.0,
         }
     }
 }

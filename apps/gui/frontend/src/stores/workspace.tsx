@@ -144,11 +144,17 @@ export type RunStatus = {
    */
   persistedChars: number;
   /**
-   * The turn's real charged work so far (input + output), from `run:usage`.
-   * Null until the first API request completes; the character estimate
-   * covers that gap.
+   * How many tokens of context the conversation is carrying, from
+   * `run:usage`. Null until the first API request completes, and for agents
+   * that never report it; the character estimate covers that gap.
    */
-  liveTokens: number | null;
+  contextTokens: number | null;
+  /**
+   * The model's context window, for turning `contextTokens` into a share.
+   * Only Claude reports one, so the status line shows a bare count without it
+   * rather than a percentage of a guess.
+   */
+  contextWindow: number | null;
 };
 
 /**
@@ -767,17 +773,25 @@ function createWorkspace() {
       setState("runStatus", projectId, (current) => ({
         startedAt: current?.startedAt ?? Date.now(),
         activity: current?.activity ?? "working…",
-        liveTokens: current?.liveTokens ?? null,
+        contextTokens: current?.contextTokens ?? null,
+        contextWindow: current?.contextWindow ?? null,
         persistedChars: chars,
       }));
     });
 
-    await bind("run:usage", ({ projectId, tokens }) => {
+    await bind("run:usage", ({ projectId, contextTokens, contextWindow }) => {
       setState("runStatus", projectId, (current) => ({
         startedAt: current?.startedAt ?? Date.now(),
         activity: current?.activity ?? "working…",
         persistedChars: current?.persistedChars ?? 0,
-        liveTokens: tokens,
+        /*
+         * Latest-wins on the backend, but a later report carrying nothing must
+         * not blank a figure the run already established — the line would
+         * fall back to the character estimate mid-run and read as a collapse
+         * in usage.
+         */
+        contextTokens: contextTokens ?? current?.contextTokens ?? null,
+        contextWindow: contextWindow ?? current?.contextWindow ?? null,
       }));
     });
 
@@ -1131,7 +1145,8 @@ function createWorkspace() {
     setState("runStatus", projectId, (current) => ({
       startedAt: current?.startedAt ?? Date.now(),
       persistedChars: current?.persistedChars ?? 0,
-      liveTokens: current?.liveTokens ?? null,
+      contextTokens: current?.contextTokens ?? null,
+      contextWindow: current?.contextWindow ?? null,
       activity,
     }));
   }

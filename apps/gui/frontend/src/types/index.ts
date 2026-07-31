@@ -451,6 +451,12 @@ export interface ThemeSettings {
    * workspace. Ignored while `accent` is empty.
    */
   wash: number;
+  /**
+   * Lightness added back to every text rung, in oklch points. Softness dims the
+   * text as it lifts the surfaces; this is the counterweight, so "less glare"
+   * and "less faded" stop being one number. Negative dims further.
+   */
+  textBrightness: number;
 }
 
 /** Mirrors `settings::TaskManager`. Claude only for now; see the Rust doc. */

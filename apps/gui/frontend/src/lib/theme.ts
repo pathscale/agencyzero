@@ -51,6 +51,19 @@ export const WASH_STOPS = [0, 6, 10, 14, 20] as const;
 /** What a freshly picked colour washes at, before anyone touches the strength. */
 export const DEFAULT_WASH = 10;
 
+/**
+ * How far the text ladder can be pushed back up, in oklch percentage points.
+ *
+ * Softness dims the text as it lifts the surfaces — right for glare, and the
+ * reason prose can end up reading faded. This is the counterweight, so the two
+ * wants stop being one number.
+ *
+ * The ceiling is 6: the design's top rung is 86% and its stated rule is that
+ * nothing reaches pure white, so +6 puts the title at 92% and leaves the rule
+ * intact. The floor is symmetric for anyone who wants prose quieter still.
+ */
+export const BRIGHTNESS_STOPS = [-4, -2, 0, 3, 6] as const;
+
 /** `#rgb` and `#rrggbb`, the two forms the wheel emits. */
 const HEX = /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i;
 
@@ -81,6 +94,10 @@ export function applyTheme(
   const wash = chosen
     ? Math.min(Math.max(theme.wash ?? DEFAULT_WASH, 0), WASH_STOPS[WASH_STOPS.length - 1])
     : 0;
+  const brightness = Math.min(
+    Math.max(theme.textBrightness || 0, BRIGHTNESS_STOPS[0]),
+    BRIGHTNESS_STOPS[BRIGHTNESS_STOPS.length - 1],
+  );
 
   root.style.setProperty("--color-primary", accent);
   root.style.setProperty("--color-accent", accent);
@@ -96,7 +113,13 @@ export function applyTheme(
   root.style.setProperty("--color-accent-content", ink);
 
   root.style.setProperty("--az-lift", `${softness}%`);
-  root.style.setProperty("--az-damp", `${(softness * DAMP_RATIO).toFixed(2)}%`);
+  /*
+   * Damp is what softness takes off the text; brightness gives it back, and may
+   * overshoot into negative damp — that is the point, since the complaint that
+   * produced this axis was prose reading washed out at the *designed* palette,
+   * before any softness was applied at all.
+   */
+  root.style.setProperty("--az-damp", `${(softness * DAMP_RATIO - brightness).toFixed(2)}%`);
 }
 
 /**

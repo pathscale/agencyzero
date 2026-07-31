@@ -5,6 +5,7 @@ import { ApprovalCard } from "~/features/project/ApprovalCard";
 import { InlineText, MessageBody } from "~/features/project/MessageBody";
 import { isTransientStop } from "~/lib/format";
 import { AGENT_LABELS } from "~/lib/labels";
+import { compactCount, usageTotals } from "~/lib/stats";
 import { type RunStatus, useNow, useWorkspace } from "~/stores/workspace";
 import type { Message, Project } from "~/types";
 
@@ -132,6 +133,7 @@ export function TranscriptPane(props: {
               projectId={props.project.id}
               status={status()}
               streamedChars={props.streaming.length}
+              sessionWindow={usageTotals(props.messages).contextWindow}
             />
           )}
         </Show>
@@ -153,6 +155,11 @@ function RunStatusLine(props: {
   projectId: string;
   status: RunStatus;
   streamedChars: number;
+  /**
+   * The window as the finished turns reported it, which is the only place it
+   * can come from mid-run — see `contextShare`.
+   */
+  sessionWindow: number | null;
 }): JSX.Element {
   const { actions, isLive } = useWorkspace();
   const now = useNow();
@@ -163,22 +170,62 @@ function RunStatusLine(props: {
   };
 
   /*
-   * Real when the crate reports it, estimated until then. 0.3.8's
-   * `Event::Usage` carries each API request's true figures as it completes,
-   * so the counter moves through tool phases too — the phases where the
-   * character estimate sat frozen because nothing was streaming. The `~`
-   * marks the estimate and only the estimate.
+   * Context, not new work — the only figure that is both exact and knowable
+   * mid-turn. 0.3.8's `Event::Usage` withholds `output_tokens` on purpose
+   * (the mid-turn count understates badly) and Claude's `input_tokens` is
+   * just the uncached delta, so a "tokens so far" counter built from them
+   * reads in the dozens for a run that has done real work. The context
+   * figures are exact, and they move through tool phases too — the phases
+   * where the character estimate sits frozen because nothing is streaming.
+   *
+   * This is also the number worth watching: a run eating its window is one
+   * you may want to cancel, and a bare count cannot say that. The share does.
    */
-  const tokenText = () => {
-    const live = props.status.liveTokens;
-    if (live !== null && live > 0) {
-      return live < 1000 ? `${live} tokens` : `${(live / 1000).toFixed(1)}k tokens`;
+  /*
+   * The window does not arrive mid-turn. The crate reads it from `modelUsage`
+   * on the terminal record, so `Event::Usage` carries none and `run:usage`
+   * relays that null faithfully — the finished turns are the only source, and
+   * `usageTotals` already keeps it latest-wins for the header's own readout.
+   *
+   * The consequence is that a conversation's first turn shows a bare count
+   * and every turn after it shows a share. Better than the alternatives: the
+   * catalogue has no window to look up, and inferring one from the model name
+   * would be a guess that trap 10 exists to punish (`claude-opus-5` is 200k,
+   * every other 5-series model is 1M). A share is only shown when it is known.
+   */
+  const contextShare = () => {
+    const used = props.status.contextTokens;
+    const window = props.status.contextWindow ?? props.sessionWindow;
+    if (used === null || window === null || window <= 0) return null;
+    return used / window;
+  };
+
+  /* The `~` marks the estimate and only the estimate. */
+  const usageText = () => {
+    const used = props.status.contextTokens;
+    if (used !== null && used > 0) {
+      const share = contextShare();
+      const count = compactCount(used);
+      return share === null ? `${count} ctx` : `${count} ctx · ${Math.round(share * 100)}%`;
     }
     const tokens = props.streamedChars / 4;
     if (tokens < 1) return null;
     return tokens < 1000
       ? `~${Math.round(tokens)} tokens`
       : `~${(tokens / 1000).toFixed(1)}k tokens`;
+  };
+
+  /*
+   * Muted until the window is genuinely filling up. The point of the figure is
+   * that it can prompt a cancel, and it cannot do that reading as the same
+   * grey as the elapsed timer next to it.
+   */
+  const usageClass = () => {
+    const share = contextShare();
+    if (share === null) return "";
+    if (share >= 0.9) return "text-error";
+    if (share >= 0.75) return "text-warning";
+    return "";
   };
 
   const isSynced = () => props.status.persistedChars >= props.streamedChars;
@@ -190,7 +237,23 @@ function RunStatusLine(props: {
       </span>
       <span>
         {elapsedText()}
-        <Show when={tokenText()}>{(tokens) => <> · {tokens()}</>}</Show>
+        <Show when={usageText()}>
+          {(usage) => (
+            <>
+              {" · "}
+              <span
+                class={usageClass()}
+                title={
+                  props.status.contextTokens === null
+                    ? "Estimated from the characters streamed so far"
+                    : "Context this conversation is carrying. The turn's token count lands in the header when the run finishes."
+                }
+              >
+                {usage()}
+              </span>
+            </>
+          )}
+        </Show>
         {" · "}
         {props.status.activity}
       </span>
