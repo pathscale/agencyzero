@@ -4,7 +4,7 @@ import { Icon, type IconProps } from "~/components/Icon";
 import { Panel } from "~/components/Panel";
 import { PillMenu } from "~/components/PillMenu";
 import { AgentStateDot } from "~/components/StatusDot";
-import { formatBytes, relativeTime } from "~/lib/format";
+import { countdown, formatBytes, relativeTime } from "~/lib/format";
 import {
   AGENT_LABELS,
   AGENT_STATE_LABELS,
@@ -14,7 +14,7 @@ import {
 } from "~/lib/labels";
 import { describeError, log } from "~/lib/log";
 import { DEFAULT_WASH } from "~/lib/theme";
-import { useWorkspace } from "~/stores/workspace";
+import { useNow, useWorkspace } from "~/stores/workspace";
 import type {
   Agent,
   AgentModels,
@@ -943,13 +943,55 @@ function CostSection(): JSX.Element {
     <span class="font-mono text-[12.5px] text-az-strong">{dollars(value)}</span>
   );
 
+  /*
+   * When each window turns over, and how long that is from now.
+   *
+   * A figure labelled "Today" raises the question immediately: today by whose
+   * clock, and how much of it is left. The answer is the machine's own
+   * midnight, because `get_cost_summary` matches on a local `%Y-%m-%d`, and
+   * the month on a local `%Y-%m`. The countdown is worth more than the time:
+   * "$4.10 today" reads very differently at 23:50 than at 00:10.
+   *
+   * On the app's coarse clock, so these tick without a timer of their own.
+   */
+  const now = useNow();
+  const nextMidnight = (from: number): Date => {
+    const at = new Date(from);
+    at.setHours(24, 0, 0, 0);
+    return at;
+  };
+  const nextMonth = (from: number): Date => {
+    const at = new Date(from);
+    at.setHours(0, 0, 0, 0);
+    at.setDate(1);
+    at.setMonth(at.getMonth() + 1);
+    return at;
+  };
+  const untilMidnight = () => countdown(nextMidnight(now()).toISOString(), now());
+  const untilMonth = () => countdown(nextMonth(now()).toISOString(), now());
+  const monthLabel = () =>
+    nextMonth(now()).toLocaleDateString(undefined, { day: "numeric", month: "long" });
+
   return (
     <Section icon="gauge" title="Cost" hint="all sessions · summed from the usage ledger">
-      <Row label="Today">{figure(summary()?.todayUsd)}</Row>
-      <Row label="This week" hint="the trailing seven days, so a Monday reset cannot hide Sunday">
+      <Row label="Today" hint={`resets at midnight local · in ${untilMidnight()}`}>
+        {figure(summary()?.todayUsd)}
+      </Row>
+      {/*
+       * No countdown on the week, because there is nothing to count down to.
+       * It is a trailing window rather than a period that resets, and a timer
+       * beside it would promise a reset that never comes. What happens at
+       * midnight is that the oldest of the seven days falls off the back.
+       */}
+      <Row
+        label="This week"
+        hint="the trailing seven days, so a Monday reset cannot hide Sunday · the oldest day drops at midnight"
+      >
         {figure(summary()?.weekUsd)}
       </Row>
-      <Row label="This month">{figure(summary()?.monthUsd)}</Row>
+      <Row label="This month" hint={`resets ${monthLabel()} · in ${untilMonth()}`}>
+        {figure(summary()?.monthUsd)}
+      </Row>
       <Row
         label="All time"
         hint={`${summary()?.turns ?? 0} priced turn(s) · priced by the agent at API list rates — consumption, not a bill`}
