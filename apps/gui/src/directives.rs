@@ -56,6 +56,14 @@ pub enum Directive {
     },
     /// Attach a pull request to an item.
     PrLink { number: String, item: String },
+    /// Remove a row, by id.
+    ///
+    /// The cleanup verb, and the reason it exists is that the old one deleted
+    /// by *title*. On a duplicate pair, which is exactly what the title-matching
+    /// bug produced, both rows carry the same title, so a delete by title picks
+    /// one of them at random. That is not a cleanup tool. This one names the
+    /// row it means, and an unknown id is refused like everywhere else.
+    ItemRetire { id: String },
 }
 
 /// What became of one directive, in the agent's own words back to it.
@@ -160,6 +168,10 @@ pub fn parse(line: &str) -> Option<Directive> {
                 .to_string(),
         });
     }
+    if verb.eq_ignore_ascii_case("@agency:items.retire") {
+        let id = arg(args, "id")?;
+        return (!id.is_empty()).then(|| Directive::ItemRetire { id: id.to_string() });
+    }
     if verb.eq_ignore_ascii_case("@agency:pr.link") {
         let number = arg(args, "number")?.trim_start_matches('#').to_string();
         let item = arg(args, "item")?.to_string();
@@ -253,6 +265,21 @@ mod tests {
         assert!(settable("questions"));
         assert!(!settable("finished"));
         assert!(!settable("canceled"));
+    }
+
+    /// Retiring names the row. The verb it replaces matched by title, which on
+    /// a duplicate pair, the exact thing this whole shape exists to stop
+    /// producing, would have removed one of the two at random.
+    #[test]
+    fn retiring_takes_an_id_and_nothing_else() {
+        assert_eq!(
+            parse(r#"<ps @agency:items.retire(id: "item-26f0")>"#),
+            Some(Directive::ItemRetire {
+                id: "item-26f0".into()
+            })
+        );
+        assert!(parse(r#"<ps @agency:items.retire(title: "Some row")>"#).is_none());
+        assert!(parse(r#"<ps @agency:items.retire(id: "")>"#).is_none());
     }
 
     #[test]
