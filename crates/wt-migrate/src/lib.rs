@@ -43,7 +43,7 @@
 //! Migration needed worktable 0.9.3: `worktable_version!` would not compile for
 //! a `String` primary key before it, and every table here has one.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 
 // The app's own fingerprint, included rather than copied: a second copy of this
@@ -245,6 +245,100 @@ pub struct Report {
     pub dropped: Vec<(String, usize)>,
 }
 
+/// Salvage a mixed-shape `project_item` table, row by row, both readings.
+///
+/// A table written on both sides of a schema change holds v1 and v2 rows with
+/// no per-row version to tell them apart, and any single reading misreads the
+/// other generation into field-shifted debris. But the misreads are mutually
+/// recognizable: a real item row has an `item-<uuid>` id and a real project
+/// reference, and a shifted one cannot fake both. So the table is read twice,
+/// once through each shape, each pass keeps only the rows that read sane, and
+/// the union is the table's actual content. Rows already in `target` keep the
+/// target's version (the newer store wins).
+///
+/// Returns (salvaged, skipped as already present, unreadable-in-both-shapes).
+///
+/// # Errors
+/// When either store cannot be opened at all.
+pub async fn salvage_items(source: &Path, target: &Path) -> eyre::Result<(usize, usize, usize)> {
+    let open_v2 = |dir: &Path| {
+        let config = worktable::prelude::DiskConfig::new_with_table_name(
+            dir.to_string_lossy().into_owned(),
+            ProjectItemWorkTable::name_snake_case(),
+            ProjectItemWorkTable::version(),
+        );
+        async move {
+            let engine = ProjectItemPersistenceEngine::new(config).await?;
+            ProjectItemWorkTable::load(engine).await
+        }
+    };
+
+    // Pass one: the current shape. True v2 rows read correctly; v1 rows come
+    // out shifted and fail the sanity check.
+    let mut sane: BTreeMap<String, ProjectItemRow> = BTreeMap::new();
+    let mut seen = 0usize;
+    {
+        let table = open_v2(source).await?;
+        for row in table.select_all().execute()? {
+            seen += 1;
+            if looks_like_an_item(&row) {
+                sane.insert(row.id.clone(), row);
+            }
+        }
+    }
+
+    // Pass two: the v1 shape, read the way the migration engine reads it.
+    // True v1 rows read correctly (and gain an empty `reference` through the
+    // same mapping the migration uses); v2 rows come out shifted and fail.
+    // A row both passes read sanely is the same row.
+    {
+        let config = worktable::prelude::DiskConfig::new_with_table_name(
+            source.to_string_lossy().into_owned(),
+            "project_item",
+            1,
+        );
+        let engine = worktable::prelude::ReadOnlyPersistenceEngine::create(config).await?;
+        let table = v1::ProjectItemWorkTable::load(engine).await?;
+        for row in table.select_all().execute()? {
+            let carried = Migrator::migrate(row, &Context);
+            if looks_like_an_item(&carried) {
+                sane.entry(carried.id.clone()).or_insert(carried);
+            }
+        }
+    }
+
+    let unreadable = seen.saturating_sub(sane.len());
+    let target_table = open_v2(target).await?;
+    // The target is held to the same standard: debris rows it already carries
+    // (the incident's shifted writes) leave as the history arrives.
+    let mut existing: std::collections::BTreeSet<String> = BTreeSet::new();
+    for row in target_table.select_all().execute()? {
+        if looks_like_an_item(&row) {
+            existing.insert(row.id);
+        } else {
+            target_table
+                .delete(row.id)
+                .await
+                .map_err(|error| eyre::eyre!("{error}"))?;
+        }
+    }
+
+    let mut salvaged = 0usize;
+    let mut skipped = 0usize;
+    for (id, row) in sane {
+        if existing.contains(&id) {
+            skipped += 1;
+            continue;
+        }
+        target_table
+            .insert(row)
+            .map_err(|error| eyre::eyre!("{error}"))?;
+        salvaged += 1;
+    }
+    target_table.wait_for_ops().await;
+    Ok((salvaged, skipped, unreadable))
+}
+
 /// Whether a migrated item row is shaped like an item row at all.
 ///
 /// The checkable facts: item ids are minted as `item-<uuid>` and a project
@@ -348,28 +442,51 @@ pub async fn carry_forward(
                     report.copied.push(table);
                 }
                 /*
-                 * One table that cannot be read must not cost the others.
+                 * One table that cannot be engine-migrated must not cost the
+                 * others, and it must not cost its own readable rows either.
                  *
-                 * This aborted the whole run once, on a `project_item` holding
-                 * a mix of old and new rows: the duplicate-key error it raised
-                 * took the transcripts, projects and task log with it, all of
-                 * which were perfectly readable and had not been reached yet
-                 * because the tables are walked in alphabetical order.
+                 * The engine is all-or-nothing per table and a mixed-shape
+                 * table defeats it: rows written on both sides of a schema
+                 * change, no per-row version, so any single reading misreads
+                 * one generation and the duplicate keys the misreads produce
+                 * abort the run. That abort once took the transcripts, task
+                 * log and projects with it (tables walked alphabetically),
+                 * and its partial output was left behind as data.
                  *
-                 * A table nobody can read is a table that starts empty. That is
-                 * a real loss and it is reported as one, and it is a far smaller
-                 * loss than the store.
-                 *
-                 * Empty means EMPTY. The engine may have written rows before it
-                 * failed, and those rows are exactly the ones read through the
-                 * wrong layout — the live store once kept a row whose id slot
-                 * held a project id because this cleanup was missing. A failed
-                 * table's partial output is deleted, not left as data.
+                 * So: delete the partial output, then salvage. The table is
+                 * read through both shapes, each pass keeps only rows that
+                 * read sane, and the union carries forward. Only what is
+                 * unreadable in both shapes is lost, and it is counted.
                  */
                 Err(error) => {
                     let _ = tokio::fs::remove_dir_all(target.join(&table)).await;
-                    report.failed.push((table.clone(), error.to_string()));
-                    report.reset.push(table);
+                    match salvage_items(source, target).await {
+                        Ok((salvaged, _, unreadable)) if salvaged > 0 => {
+                            if unreadable > 0 {
+                                report.dropped.push((table.clone(), unreadable));
+                            }
+                            report.failed.push((
+                                table.clone(),
+                                format!(
+                                    "engine migration failed ({error}); salvaged {salvaged} \
+                                     row(s) by two-shape reading instead"
+                                ),
+                            ));
+                            report.migrated.push(table);
+                        }
+                        salvage => {
+                            if let Err(salvage_error) = salvage {
+                                let _ = tokio::fs::remove_dir_all(target.join(&table)).await;
+                                report.failed.push((
+                                    table.clone(),
+                                    format!("{error}; salvage also failed: {salvage_error}"),
+                                ));
+                            } else {
+                                report.failed.push((table.clone(), error.to_string()));
+                            }
+                            report.reset.push(table);
+                        }
+                    }
                 }
             }
             continue;
