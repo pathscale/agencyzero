@@ -46,18 +46,21 @@ Run what you build before calling it done. **If you can't run it, say so.**
 ## PR discipline
 
 - Paste the full PR URL, not the number.
+- Record it through the declared surface too: prose URLs are inert, so use
+  `@agency:pr.link(url: "<full URL>", item: "<item id>")` or the `pr:` field on
+  `items.state` when shipping an item.
 - When the change lands on master, close the PR and delete the branch in the same breath
   (`gh pr merge --delete-branch`). An open PR whose content already shipped reads as
   unfinished work.
 
 ## Closing an item you were given
 
-Reply checkboxes edit the project's item list: `- [ ]` proposes, `- [x] <exact title>`
-closes, `- [-] <exact title>` strikes an obsolete row. Titles match exactly and
-case-insensitively, so a paraphrase silently appends a near-duplicate. Full contract:
-[`docs/task-manager.md`](docs/task-manager.md#the-project-session-contract-three-checkboxes).
-Read that, not `projects.rs`: the verbs arrived late, and an older tree reads as
-append-only. [`wt-tools`](crates/wt-tools) reads the list and never writes.
+The project prompt supplies item ids and the declared Prompt Syntax surface. Report
+state with `@agency:items.state`, create with `@agency:items.add`, and remove an
+incorrect row with `@agency:items.retire`. Never address an existing row by title:
+paraphrases were how the old checkbox contract created near-duplicates. Full contract:
+[`docs/task-manager.md`](docs/task-manager.md#the-project-session-contract).
+[`wt-tools`](crates/wt-tools) reads the list and never writes.
 
 - **Close in the same turn the work ships.** Shipped means merged and released.
 - **Read the title before striking it.** `wt-tools search-items <word>` prints it as stored.

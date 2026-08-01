@@ -21,7 +21,7 @@
 //!
 //! These are Prompt Syntax spans, and PS's inert-content rule applies: only
 //! text the agent authored is parsed, never a quoted or fenced example. The
-//! caller is responsible for that (see `items_from_reply`), which is why this
+//! caller is responsible for that (see `apply_directives`), which is why this
 //! module reads one line at a time and knows nothing about fences.
 
 /// The authoring surface this application declares, per Prompt Syntax 13.2.
@@ -47,10 +47,10 @@ pub struct Surface {
     pub reserved: &'static [&'static str],
     /// 13.2.3. The reach, written down rather than implied by a parameter.
     ///
-    /// `items.inject` takes a project, so the surface can write outside the
-    /// project the turn came from. That is deliberate and is the whole reason
-    /// this field exists: cross-scope reach must be part of the declared bound,
-    /// never left implicit in what a verb happens to do.
+    /// `items.add(project: ...)` can write outside the project the turn came
+    /// from. Home may also create the explicitly named project. Item ids are
+    /// installation-wide. That reach is deliberate and must be declared,
+    /// never left implicit in verb semantics.
     pub bound: &'static str,
 }
 
@@ -58,16 +58,11 @@ pub struct Surface {
 pub const SURFACE: Surface = Surface {
     delimiter: "<ps …> on its own line, outside fenced or quoted content",
     namespace: "agency",
-    verbs: &[
-        "items.state",
-        "items.add",
-        "items.retire",
-        "items.inject",
-        "pr.link",
-    ],
+    verbs: &["items.state", "items.add", "items.retire", "pr.link"],
     reserved: &["status:finished", "status:canceled"],
     bound: "any project in this installation's store, named by id or by name; \
-            no reach outside it, and no other namespace is live",
+            Home Task Manager may create a named project inside that store through \
+            items.add; no reach outside it, and no other namespace is live",
 };
 
 /// The statuses an agent may set.
@@ -97,11 +92,24 @@ pub enum Directive {
     /// module exists to remove.
     ItemAdd {
         handle: Option<String>,
+        /// Another project in this installation, by id or exact name.
+        ///
+        /// Used by Home's task manager so it speaks the same item language as
+        /// an ordinary project instead of switching to a JSONL dialect.
+        project: Option<String>,
         title: String,
         status: String,
     },
-    /// Attach a pull request to an item.
-    PrLink { number: String, item: String },
+    /// Track a pull request, and optionally attach it to an item.
+    ///
+    /// A URL creates the PR row. A number is enough only when an item is also
+    /// named, because a bare number says nothing about which repository owns
+    /// it. Keeping both forms lets an already tracked PR be attached cheaply.
+    PrLink {
+        url: Option<String>,
+        number: Option<String>,
+        item: Option<String>,
+    },
     /// Remove a row, by id.
     ///
     /// The cleanup verb, and the reason it exists is that the old one deleted
@@ -207,6 +215,9 @@ pub fn parse(line: &str) -> Option<Directive> {
             handle: arg(args, "ref")
                 .map(str::to_string)
                 .filter(|handle| !handle.is_empty()),
+            project: arg(args, "project")
+                .map(str::to_string)
+                .filter(|project| !project.is_empty()),
             title: title.to_string(),
             status: arg(args, "status")
                 .unwrap_or("new")
@@ -219,10 +230,19 @@ pub fn parse(line: &str) -> Option<Directive> {
         return (!id.is_empty()).then(|| Directive::ItemRetire { id: id.to_string() });
     }
     if verb.eq_ignore_ascii_case("@agency:pr.link") {
-        let number = arg(args, "number")?.trim_start_matches('#').to_string();
-        let item = arg(args, "item")?.to_string();
-        return (!number.is_empty() && !item.is_empty())
-            .then_some(Directive::PrLink { number, item });
+        let url = arg(args, "url")
+            .map(str::to_string)
+            .filter(|url| !url.is_empty());
+        let number = arg(args, "number")
+            .map(|number| number.trim_start_matches('#').to_string())
+            .filter(|number| !number.is_empty());
+        let item = arg(args, "item")
+            .map(str::to_string)
+            .filter(|item| !item.is_empty());
+        // A URL can be tracked without an item. A number alone cannot: it has
+        // no repository and therefore cannot identify a pull request row.
+        return (url.is_some() || (number.is_some() && item.is_some()))
+            .then_some(Directive::PrLink { url, number, item });
     }
     None
 }
@@ -279,10 +299,48 @@ mod tests {
             parse(r#"<ps @agency:items.add(ref: "t1", title: "Wrap it, then ship it")>"#),
             Some(Directive::ItemAdd {
                 handle: Some("t1".into()),
+                project: None,
                 title: "Wrap it, then ship it".into(),
                 status: "new".into(),
             })
         );
+    }
+
+    #[test]
+    fn an_item_add_may_name_another_project() {
+        assert_eq!(
+            parse(
+                r#"<ps @agency:items.add(project: "Prompt Syntax", ref: "t1", title: "Unify the surface", status: "planning")>"#
+            ),
+            Some(Directive::ItemAdd {
+                handle: Some("t1".into()),
+                project: Some("Prompt Syntax".into()),
+                title: "Unify the surface".into(),
+                status: "planning".into(),
+            })
+        );
+    }
+
+    #[test]
+    fn a_pr_url_may_be_tracked_with_or_without_an_item() {
+        let url = "https://github.com/pathscale/agencyzero/pull/76";
+        assert_eq!(
+            parse(&format!(r#"<ps @agency:pr.link(url: "{url}")>"#)),
+            Some(Directive::PrLink {
+                url: Some(url.into()),
+                number: None,
+                item: None,
+            })
+        );
+        assert_eq!(
+            parse(r#"<ps @agency:pr.link(number: 76, item: "item-a3f9")>"#),
+            Some(Directive::PrLink {
+                url: None,
+                number: Some("76".into()),
+                item: Some("item-a3f9".into()),
+            })
+        );
+        assert!(parse(r#"<ps @agency:pr.link(number: 76)>"#).is_none());
     }
 
     /// Casual capitalisation compiles to the canonical verb; a confusable does
@@ -297,6 +355,8 @@ mod tests {
     fn anything_that_is_not_ours_is_not_a_directive() {
         assert!(parse("<ps @file:glossary.md>").is_none());
         assert!(parse(r#"<ps @agency:items.destroy(id: "a")>"#).is_none());
+        assert!(parse(r#"<ps @agency:items.inject(project: "ui")>"#).is_none());
+        assert!(parse("- [ ] A checklist is display text").is_none());
         assert!(parse("Mention @agency:items.state in a sentence").is_none());
         // Missing the fields it exists to carry.
         assert!(parse(r#"<ps @agency:items.state(status: "new")>"#).is_none());

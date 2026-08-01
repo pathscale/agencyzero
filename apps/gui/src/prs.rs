@@ -1,10 +1,11 @@
 //! Pull requests cut during runs, tracked as chips over the composer.
 //!
-//! The transcript is the source: any GitHub PR URL in an agent's reply becomes
-//! a row (once per project), and `gh` — when installed — fills in what the
-//! chip shows: state, branch, +adds −dels, and the CI rollup. No `gh`, no
-//! problem: the chip still exists with what the URL alone says, which is the
-//! repo and the number. Everything else reads `unknown` rather than a guess.
+//! An authored Prompt Syntax directive is the source: `@agency:pr.link` or an
+//! item's `pr:` field turns a GitHub PR URL into a row (once per project), and
+//! `gh`, when installed, fills in what the chip shows: state, branch, +adds
+//! −dels, and the CI rollup. A URL in prose is inert. No `gh`, no problem: the
+//! chip still exists with what the directive says, and everything else reads
+//! `unknown` rather than a guess.
 
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, State};
@@ -86,81 +87,60 @@ fn pr_urls(text: &str) -> Vec<(String, String, u32)> {
     found
 }
 
-/// Record any PRs a reply mentions and start a background refresh for each.
+/// Record the one GitHub PR URL an authored directive names.
 ///
-/// Called from the run's completion path, after the reply row is safe. Rows
-/// are born `unknown` and honest; `gh` upgrades them moments later when it is
-/// installed and authenticated.
+/// URLs in prose are inert. The old completion hook scanned every reply and
+/// wrote a row for anything URL-shaped, which made ordinary model text an
+/// undeclared authoring surface. The caller now reaches this function only
+/// after `<ps @agency:pr.link(...)>` or an item's `pr:` field has parsed.
 ///
-/// `started_from` is the item the run began on, when it began on one. A pull
-/// request opened during that run belongs to that item, and the app knows it
-/// without being told: the association is a fact about the run, not something
-/// the agent has to remember to report. Only a newly recorded pull request
-/// attaches, and only to a row that names none yet, so nothing already linked
-/// is ever overwritten.
-pub fn harvest_prs(
+/// Rows are born `unknown` and honest; `gh` upgrades them moments later when
+/// it is installed and authenticated. The number is returned so the same
+/// directive can attach it to an item without parsing the URL twice.
+pub fn record_url(
     app: &AppHandle,
     tables: &Tables,
     project_id: &str,
-    reply: &str,
-    started_from: Option<&str>,
-) {
-    let mentioned = pr_urls(reply);
-    if mentioned.is_empty() {
-        return;
-    }
+    authored_url: &str,
+) -> Result<u32, String> {
+    let Some((url, repo, number)) = pr_urls(authored_url).into_iter().next() else {
+        return Err("ENTITY_NOT_FOUND: not a GitHub pull request URL".into());
+    };
     let existing: Vec<PullRequestRow> = tables
         .pull_request
         .select_by_project_id(project_id.to_string())
         .execute()
         .unwrap_or_default();
 
-    for (url, repo, number) in mentioned {
-        let known = existing.iter().find(|row| row.url == url);
-        let id = match known {
-            Some(row) => row.id.clone(),
-            None => {
-                let row = PullRequestRow {
-                    id: crate::projects::id("pr"),
-                    project_id: project_id.to_string(),
-                    url: url.clone(),
-                    repo,
-                    number,
-                    branch: String::new(),
-                    state: "unknown".into(),
-                    additions: 0,
-                    deletions: 0,
-                    ci: "unknown".into(),
-                    dismissed: false,
-                    updated_at: crate::projects::now(),
-                };
-                let id = row.id.clone();
-                let opened = row.number;
-                match tables.pull_request.insert(row.clone()) {
-                    Ok(_) => {
-                        let _ = app.emit("pr:updated", PullRequestDto::from(row));
-                        if let Some(item) = started_from {
-                            attach(app, tables, item, opened);
-                        }
-                    }
-                    Err(error) => {
-                        crate::log!(
-                            crate::log::Level::Error,
-                            "prs",
-                            "{project_id}: could not record {url}: {error}"
-                        );
-                        continue;
-                    }
-                }
-                id
-            }
+    if !existing.iter().any(|row| row.url == url) {
+        let row = PullRequestRow {
+            id: crate::projects::id("pr"),
+            project_id: project_id.to_string(),
+            url: url.clone(),
+            repo,
+            number,
+            branch: String::new(),
+            state: "unknown".into(),
+            additions: 0,
+            deletions: 0,
+            ci: "unknown".into(),
+            dismissed: false,
+            updated_at: crate::projects::now(),
         };
-        // A mention of a known PR is still news: merged since last time, CI
-        // done. One batched refresh covers every row this reply touched.
-        let _ = id;
+        tables.pull_request.insert(row.clone()).map_err(|error| {
+            crate::log!(
+                crate::log::Level::Error,
+                "prs",
+                "{project_id}: could not record {url}: {error}"
+            );
+            format!("WRITE_FAILED: {error}")
+        })?;
+        let _ = app.emit("pr:updated", PullRequestDto::from(row));
     }
-    // One query for the project, after every mention in this reply is recorded.
+
+    // A known PR is still news: it may have merged since the last refresh.
     refresh_project(app.clone(), project_id.to_string());
+    Ok(number)
 }
 
 /// The `owner/name` this working directory pushes to, if any.
@@ -555,55 +535,12 @@ pub fn refresh_pull_request(app: AppHandle, id: String) {
     }
 }
 
-/// Point an item at the pull request its run produced.
-///
-/// Nothing happens if the row already names one: a run that mentions a second
-/// pull request has not changed which one the item shipped as, and quietly
-/// repointing it would lose the first.
-fn attach(app: &AppHandle, tables: &Tables, item_id: &str, number: u32) {
-    let Some(row) = tables.project_item.select(item_id.to_string()) else {
-        return;
-    };
-    if !row.reference.is_empty() {
-        return;
-    }
-    let app = app.clone();
-    // Just this table's handle: `Tables` is a bag of `Arc`s and the write is
-    // one row on one of them.
-    let items = tables.project_item.clone();
-    let id = item_id.to_string();
-    tauri::async_runtime::spawn(async move {
-        if let Err(error) = items
-            .update_reference_by_id(
-                crate::db::schema::project_item::ReferenceByIdQuery {
-                    reference: number.to_string(),
-                },
-                id.clone(),
-            )
-            .await
-        {
-            crate::log!(
-                crate::log::Level::Error,
-                "prs",
-                "could not attach #{number} to {id}: {error}"
-            );
-            return;
-        }
-        if let Some(updated) = items.select(id) {
-            let _ = app.emit(
-                "item:updated",
-                crate::projects::ProjectItemDto::from(updated),
-            );
-        }
-    });
-}
-
 #[cfg(test)]
 mod tests {
     use super::pr_urls;
 
     #[test]
-    fn urls_are_found_in_prose_and_markdown() {
+    fn authored_values_may_contain_markdown_link_syntax() {
         let text = "Opened [PR #16](https://github.com/pathscale/agencyzero/pull/16) and \
                     https://github.com/pathscale/agencyzero/pull/17. Done.";
         let found = pr_urls(text);

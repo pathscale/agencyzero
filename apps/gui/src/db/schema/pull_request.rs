@@ -1,6 +1,6 @@
 //! Pull requests cut during a project's runs, tracked as chips over the composer.
 //!
-//! One row per PR URL per project, upserted when a reply mentions the URL and
+//! One row per PR URL per project, created from an authored PS directive and
 //! refreshed through `gh` when available. `state` is GitHub's own word
 //! (`OPEN` | `MERGED` | `CLOSED`, or `unknown` before the first refresh);
 //! `ci` is the check rollup reduced to `pass` | `fail` | `pending` | `none` |
