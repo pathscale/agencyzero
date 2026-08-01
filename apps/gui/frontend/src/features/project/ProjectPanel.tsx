@@ -5,11 +5,11 @@ import { Icon } from "~/components/Icon";
 import { SectionPanel } from "~/components/Panel";
 import { ItemMarker } from "~/components/StatusDot";
 import { clockTime, elapsed, taskMeta } from "~/lib/format";
-import { statusSuffix } from "~/lib/labels";
+import { nextStatus, STATUS_LABELS, statusSuffix } from "~/lib/labels";
 import { describeError, log } from "~/lib/log";
 import { prefs, togglePanelSection } from "~/stores/prefs";
 import { useNow, useWorkspace } from "~/stores/workspace";
-import type { Project, ProjectItem, ProjectStatus } from "~/types";
+import type { Project, ProjectItem } from "~/types";
 
 /**
  * The project's right-hand column: Items · Running · Task log · Agent I/O ·
@@ -518,22 +518,17 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
     setAdding(false);
   }
 
-  /** Clicking an item cycles pending → active → finished → pending. */
   /*
-   * The ladder, in order, wrapping back to the start.
+   * The ladder lives in `lib/labels` now, because Home had its own and the
+   * same click on the same row did different things on the two screens.
    *
    * `shipped` is in the cycle because bouncing a fix that did not work is the
-   * move this list most needs to make easy: one click takes it back to active,
-   * where the next attempt begins. `finished` wraps to `new` rather than
-   * sticking, so a row that turns out not to be done can be reopened.
+   * move this list most needs to make easy: one click takes it back to `new`,
+   * where the next attempt begins. `finished` wraps rather than sticking, so a
+   * row that turns out not to be done can be reopened.
    */
-  const LADDER: ProjectStatus[] = ["new", "planning", "active", "shipped", "finished"];
-
   function advance(item: ProjectItem): void {
-    const at = LADDER.indexOf(item.status);
-    // `pending` and `canceled` are not on the ladder; a click starts them over.
-    const next = at < 0 ? "new" : LADDER[(at + 1) % LADDER.length];
-    void actions.setItemStatus(item.id, next);
+    void actions.setItemStatus(item.id, nextStatus(item.status));
   }
 
   const isRunning = () => (state.running[props.projectId] ?? []).length > 0;
@@ -642,21 +637,10 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
                 type="button"
                 onClick={() => advance(item)}
                 aria-label={`Change the status of ${item.title}`}
-                title={`${statusSuffix(item.status) || "pending"} — click to change`}
-                class="ml-2.5 shrink-0 rounded-md p-0.5 transition-colors hover:bg-primary/12"
+                title={`${statusSuffix(item.status)} — click for ${STATUS_LABELS[nextStatus(item.status)]}`}
+                class="ml-2.5 shrink-0 cursor-pointer rounded-md p-0.5 transition-colors hover:bg-primary/12"
               >
-                <Show
-                  when={item.status === "finished"}
-                  fallback={
-                    <ItemMarker
-                      status={
-                        item.status === "active" || item.status === "shipped" ? "active" : "pending"
-                      }
-                    />
-                  }
-                >
-                  <Icon name="check" class="relative top-0.5 shrink-0 text-[12px] text-success" />
-                </Show>
+                <ItemMarker status={item.status} />
               </button>
               <div
                 data-selectable

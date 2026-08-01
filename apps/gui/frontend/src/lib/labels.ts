@@ -60,9 +60,56 @@ export const TASK_PLACEMENT_LABELS: Record<TaskPlacement, string> = {
   inline: "In the transcript",
 };
 
+/**
+ * What each status is called on screen.
+ *
+ * Written out rather than capitalised from the value, because a status is a
+ * word chosen for the store and a label is a word chosen for a person, and
+ * `questions` capitalised reads as a noun with no verb.
+ */
+export const STATUS_LABELS: Record<ProjectStatus, string> = {
+  new: "New",
+  pending: "Pending",
+  planning: "Planning",
+  active: "Active",
+  questions: "Open questions",
+  shipped: "Shipped",
+  finished: "Finished",
+  canceled: "Canceled",
+};
+
 /** The "(…)" suffix on a project or item row. */
 export function statusSuffix(status: ProjectStatus): string {
-  return `(${status.charAt(0).toUpperCase()}${status.slice(1)})`;
+  return `(${STATUS_LABELS[status] ?? status})`;
+}
+
+/**
+ * The order the marker cycles through, and the only such order.
+ *
+ * Home and the project panel each had their own: the panel walked
+ * new to planning to active to shipped to finished, and Home walked pending to
+ * active to finished, so the same click on the same item did different things
+ * depending on which screen you were looking at.
+ *
+ * `pending` and `canceled` are deliberately not on it. `pending` is the legacy
+ * value every old row carries and the ladder's job is to get rows off it;
+ * `canceled` is an ending, and cycling into it by clicking past `finished`
+ * would retire work by accident.
+ */
+export const ITEM_LADDER: ProjectStatus[] = [
+  "new",
+  "planning",
+  "active",
+  "questions",
+  "shipped",
+  "finished",
+];
+
+/** The next status a click on the marker means. */
+export function nextStatus(status: ProjectStatus): ProjectStatus {
+  const at = ITEM_LADDER.indexOf(status);
+  // Off the ladder, including `pending`: the first rung is where it belongs.
+  return at === -1 ? "new" : (ITEM_LADDER[(at + 1) % ITEM_LADDER.length] ?? "new");
 }
 
 /** Models the composer offers. Real values will come from the agent probe. */

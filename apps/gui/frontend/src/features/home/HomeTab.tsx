@@ -7,7 +7,7 @@ import { ApprovalCard } from "~/features/project/ApprovalCard";
 import { AttachmentPills } from "~/features/project/Composer";
 import { AgentIoList } from "~/features/project/ProjectPanel";
 import { relativeTime } from "~/lib/format";
-import { statusSuffix } from "~/lib/labels";
+import { nextStatus, statusSuffix } from "~/lib/labels";
 import { describeError, log } from "~/lib/log";
 import { prefs, setPrefs, togglePanelSection } from "~/stores/prefs";
 import { TASK_MANAGER_ID, useWorkspace } from "~/stores/workspace";
@@ -18,6 +18,8 @@ const STATUS_TONE: Record<ProjectItem["status"], string> = {
   new: "text-az-muted",
   pending: "text-az-muted",
   planning: "text-info",
+  // Amber and bold: this row is waiting on the person reading it.
+  questions: "font-semibold text-warning",
   // Warning, not success: shipped means it is waiting on you to say whether it
   // worked, and reading it as done is the mistake the state exists to prevent.
   shipped: "font-semibold text-warning",
@@ -833,14 +835,15 @@ function ProjectGroup(props: { project: Project }): JSX.Element {
                 onFold={foldSoon}
                 onOpen={openNow}
                 onAdvance={() => {
-                  const next =
-                    item.status === "pending"
-                      ? "active"
-                      : item.status === "active"
-                        ? "finished"
-                        : "pending";
+                  /*
+                   * The same ladder the project panel walks. Home had its own,
+                   * shorter one, so the same click on the same row meant two
+                   * different things depending on which screen you were
+                   * reading it from, and neither could reach `planning`,
+                   * `shipped` or a row that needs an answer.
+                   */
                   void actions
-                    .setItemStatus(item.id, next)
+                    .setItemStatus(item.id, nextStatus(item.status))
                     .catch((cause) =>
                       log.error(`could not change the status: ${describeError(cause)}`),
                     );
