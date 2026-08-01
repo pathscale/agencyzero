@@ -39,13 +39,16 @@ export function ProjectTab(props: { tab: Tab; project: Project }): JSX.Element {
     "claude";
   const running = () => state.running[props.project.id] ?? [];
   /*
-   * Only shown when something was actually refused. The provider emits a record
-   * on healthy runs too, with status `allowed`, and rendering that as an orange
-   * warning told you a run was limited when it was not.
+   * A refusal, or a warning that one is coming. Not the heartbeat: the provider
+   * emits a record on healthy runs too, with status `allowed`, and rendering
+   * that as an orange warning told you a run was limited when it was not.
+   *
+   * The warning used to be dropped here along with the heartbeat, which threw
+   * away the one report you can still act on. A refusal is news after the fact.
    */
   const rateLimit = () => {
     const limit = state.rateLimits[props.project.id];
-    return limit?.isBlocking ? limit : undefined;
+    return limit?.isBlocking || limit?.isWarning ? limit : undefined;
   };
 
   /**
