@@ -66,7 +66,7 @@ export interface AgencyZeroApi {
   setProjectPinned(id: string, pinned: boolean): Promise<Project>;
   /** Per-session override of the global moderator setting. */
   setProjectModerator(id: string, enabled: boolean): Promise<Project>;
-  /** Claude only — `Error::Unsupported` on Codex and Copilot. */
+  /** Requires the provider's fork capability; unsupported providers return an error. */
   forkProject(projectId: string, messageId: string): Promise<Project>;
   addDir(projectId: string, path: string): Promise<Project>;
   removeDir(projectId: string, path: string): Promise<Project>;
@@ -175,7 +175,7 @@ export interface AgencyZeroApi {
    * with the agent's own reason when it will not compact; a conversation too
    * short to summarise is the common one, and is an answer rather than a fault.
    */
-  compactProject(projectId: string): Promise<void>;
+  compactProject(projectId: string, agent: Agent): Promise<void>;
 
   /**
    * What this project's agent keeps across compactions.
@@ -309,7 +309,12 @@ export interface AppEvents {
    * the transcript's status line; `run:stopped` ends it. The mock never emits
    * this, which is correct — it fakes no run.
    */
-  "run:accepted": { projectId: string };
+  "run:accepted": {
+    projectId: string;
+    agent: Agent;
+    model: string;
+    permission: Permission;
+  };
   /**
    * A message sent into a live run could not be delivered — the turn settled
    * in the race window. The words are already in the transcript; this hands
@@ -360,7 +365,7 @@ export interface AppEvents {
    * make the set per-machine. Arrives once per run, so a session that has not
    * run yet has none and the composer falls back to what it knows itself.
    */
-  "run:commands": { projectId: string; all: string[]; skills: string[] };
+  "run:commands": { projectId: string; agent: Agent; all: string[]; skills: string[] };
   /**
    * A conversation being rewritten into a summary of itself.
    *
@@ -379,6 +384,7 @@ export interface AppEvents {
    */
   "run:compaction": {
     projectId: string;
+    agent: Agent;
     driver: "command" | "agent";
     phase: "learning" | "started" | "finished";
     ok?: boolean;
@@ -390,7 +396,7 @@ export interface AppEvents {
    * blocked for the rest of the session, since `resetsAt` passing is not
    * something the window can observe on its own.
    */
-  "run:rate_limit_cleared": { projectId: string };
+  "run:rate_limit_cleared": { projectId: string; agent: Agent };
   /**
    * A tool call is waiting on the user. The run is blocked mid-turn until
    * `resolveApproval` answers, so this must render somewhere it will be seen.
@@ -398,7 +404,14 @@ export interface AppEvents {
   "run:approval": { projectId: string } & PendingApproval;
   /** The question above was answered (by the user, or denied on timeout). */
   "run:approval_resolved": { projectId: string; approvalId: string; allow: boolean };
-  "run:stopped": { projectId: string; stop: string; exitCode: number | null };
+  "run:stopped": {
+    projectId: string;
+    agent: Agent;
+    model: string;
+    permission: Permission;
+    stop: string;
+    exitCode: number | null;
+  };
 }
 
 export type AppEvent = keyof AppEvents;

@@ -12,6 +12,7 @@ import {
 import { createStore, produce, reconcile } from "solid-js/store";
 import type { AgencyZeroApi, AppEvents, Unlisten } from "~/api";
 import { selectApi } from "~/api";
+import { PERMISSION_ORDER } from "~/lib/labels";
 import { describeError, installGlobalErrorLogging, log } from "~/lib/log";
 import { applyTheme } from "~/lib/theme";
 import { prefs, setPrefs } from "~/stores/prefs";
@@ -57,7 +58,7 @@ type WorkspaceState = {
   logTotals: Record<string, number>;
   /** The raw exchange with the agent, per project. Diagnostic, not persisted. */
   agentIo: Record<string, AgentIoEntry[]>;
-  rateLimits: Record<string, RateLimit>;
+  rateLimits: Record<string, Partial<Record<Agent, RateLimit>>>;
   /**
    * The approval question each project's run is blocked on, if any.
    *
@@ -135,7 +136,7 @@ type WorkspaceState = {
    * parser treats an absent catalogue as "do not second-guess me" rather than
    * as "nothing exists".
    */
-  commands: Record<string, { all: string[]; skills: string[] }>;
+  commands: Record<string, Partial<Record<Agent, { all: string[]; skills: string[] }>>>;
   tabs: Tab[];
   activeKey: string;
   backend: "tauri" | "mock" | "hybrid" | "loading";
@@ -156,6 +157,10 @@ export type BootState =
 
 /** What the transcript's status line knows about a run in flight. */
 export type RunStatus = {
+  /** The provider and posture of this run, independent of the tab's next turn. */
+  agent: Agent;
+  model: string;
+  permission: Permission;
   /** Wall-clock ms when the send was accepted; the elapsed timer's zero. */
   startedAt: number;
   /** What the agent is doing right now, in a couple of words. */
@@ -263,9 +268,13 @@ function isProjectAgent(agent: Agent): agent is "claude" | "codex" {
   return agent === "claude" || agent === "codex";
 }
 
-/** Codex has no live approval channel, so Ask cannot be a visible Codex posture. */
-function compatiblePermission(agent: Agent, permission: Permission): Permission {
-  return agent !== "claude" && permission === "ask" ? "read_only" : permission;
+function compatiblePermission(
+  statuses: readonly AgentStatus[],
+  agent: Agent,
+  permission: Permission,
+): Permission {
+  const canAsk = statuses.find((status) => status.agent === agent)?.capabilities.approvals ?? false;
+  return !canAsk && permission === "ask" ? "read_only" : permission;
 }
 
 function createWorkspace() {
@@ -422,7 +431,13 @@ function createWorkspace() {
      * Liveness is checked rather than trusted: a suspended app misses timers, so
      * an entry can outlive its reset time without anything having cleared it.
      */
-    const limit = state.rateLimits[projectId];
+    const selectedAgent =
+      state.runStatus[projectId]?.agent ??
+      state.tabs.find((tab) => tab.projectId === projectId)?.agent ??
+      [...(state.messages[projectId] ?? [])].reverse().find((message) => message.author === "agent")
+        ?.agent ??
+      "claude";
+    const limit = state.rateLimits[projectId]?.[selectedAgent];
     if (limit?.isBlocking && isLimitLive(limit, clock())) return "blocked";
     if ((state.running[projectId] ?? []).length > 0) return "running";
 
@@ -482,6 +497,16 @@ function createWorkspace() {
   function effortsFor(agent: Agent, modelId: string): string[] {
     const catalogue = state.models.find((entry) => entry.agent === agent);
     return catalogue?.models.find((model) => model.id === modelId)?.efforts ?? [];
+  }
+
+  function capabilitiesFor(agent: Agent) {
+    return state.agents.find((status) => status.agent === agent)?.capabilities;
+  }
+
+  function permissionsFor(agent: Agent): Permission[] {
+    return capabilitiesFor(agent)?.approvals
+      ? [...PERMISSION_ORDER]
+      : PERMISSION_ORDER.filter((permission) => permission !== "ask");
   }
 
   function itemsFor(projectId: string): ProjectItem[] {
@@ -598,9 +623,12 @@ function createWorkspace() {
         setState(
           "rateLimits",
           // A limit whose reset time has already passed is history, not state.
-          Object.fromEntries(
-            rateLimits.filter(isLimitLive).map((limit) => [limit.projectId, limit]),
-          ),
+          rateLimits.filter(isLimitLive).reduce<WorkspaceState["rateLimits"]>((indexed, limit) => {
+            const projectLimits = indexed[limit.projectId] ?? {};
+            projectLimits[limit.agent] = limit;
+            indexed[limit.projectId] = projectLimits;
+            return indexed;
+          }, {}),
         );
         /*
          * Only the tabs that were open when the app last ran. Boot used to
@@ -749,6 +777,7 @@ function createWorkspace() {
         ? last.model
         : (selection?.default ?? "");
     const permission = compatiblePermission(
+      state.agents,
       agent,
       last?.permission ?? state.settings?.defaultPermission ?? "read_only",
     );
@@ -900,13 +929,16 @@ function createWorkspace() {
       // A limit replayed from the buffer, or delivered late, can already be
       // spent by the time it lands.
       if (!isLimitLive(limit)) return;
-      setState("rateLimits", limit.projectId, limit);
+      setState("rateLimits", limit.projectId, limit.agent, limit);
     });
 
-    await bind("run:rate_limit_cleared", ({ projectId }) => {
+    await bind("run:rate_limit_cleared", ({ projectId, agent }) => {
       setState(
         "rateLimits",
-        produce((limits) => delete limits[projectId]),
+        produce((limits) => {
+          delete limits[projectId]?.[agent];
+          if (Object.keys(limits[projectId] ?? {}).length === 0) delete limits[projectId];
+        }),
       );
     });
 
@@ -927,8 +959,8 @@ function createWorkspace() {
       });
     });
 
-    await bind("run:accepted", ({ projectId }) => {
-      touchRunStatus(projectId, "waiting for the agent…");
+    await bind("run:accepted", ({ projectId, agent, model, permission }) => {
+      touchRunStatus(projectId, "waiting for the agent…", { agent, model, permission });
     });
 
     await bind("run:inject_failed", ({ projectId, body }) => {
@@ -945,7 +977,7 @@ function createWorkspace() {
      * status line away to say "compacting" would leave it with nothing when the
      * compaction finished and the answer carried on.
      */
-    await bind("run:compaction", ({ projectId, driver, phase }) => {
+    await bind("run:compaction", ({ projectId, agent, driver, phase }) => {
       if (driver !== "command") return;
       if (phase !== "finished") {
         /*
@@ -962,6 +994,15 @@ function createWorkspace() {
             phase === "learning"
               ? "learning what to keep before compacting — please wait"
               : "compacting — the session is busy, please wait",
+            {
+              agent,
+              model:
+                state.tabs.find((tab) => tab.projectId === projectId && tab.agent === agent)
+                  ?.model ?? "",
+              permission:
+                state.tabs.find((tab) => tab.projectId === projectId && tab.agent === agent)
+                  ?.permission ?? "read_only",
+            },
           );
         });
         return;
@@ -996,6 +1037,7 @@ function createWorkspace() {
 
     await bind("run:persisted", ({ projectId, chars }) => {
       setState("runStatus", projectId, (current) => ({
+        ...runIdentity(projectId, current),
         startedAt: current?.startedAt ?? Date.now(),
         activity: current?.activity ?? "working…",
         liveTokens: current?.liveTokens ?? null,
@@ -1005,12 +1047,13 @@ function createWorkspace() {
       }));
     });
 
-    await bind("run:commands", ({ projectId, all, skills }) => {
-      setState("commands", projectId, { all, skills });
+    await bind("run:commands", ({ projectId, agent, all, skills }) => {
+      setState("commands", projectId, agent, { all, skills });
     });
 
     await bind("run:usage", ({ projectId, tokens, contextTokens, contextWindow }) => {
       setState("runStatus", projectId, (current) => ({
+        ...runIdentity(projectId, current),
         startedAt: current?.startedAt ?? Date.now(),
         activity: current?.activity ?? "working…",
         persistedChars: current?.persistedChars ?? 0,
@@ -1022,7 +1065,7 @@ function createWorkspace() {
       }));
     });
 
-    await bind("run:stopped", ({ projectId, stop, exitCode }) => {
+    await bind("run:stopped", ({ projectId, agent, model, permission, stop, exitCode }) => {
       /*
        * The task manager's session id is recorded at `Event::Started`, but
        * with no project row there is no `project:updated` to carry it here —
@@ -1060,10 +1103,10 @@ function createWorkspace() {
             projectId,
             itemId: null,
             author: "agent",
-            agent: "claude",
+            agent,
             moderation: null,
-            model: "",
-            permission: "read_only",
+            model,
+            permission,
             usage: null,
             stop,
             exitCode,
@@ -1202,7 +1245,11 @@ function createWorkspace() {
         agent,
         model: defaultModel(),
         effort: defaultEffort(),
-        permission: compatiblePermission(agent, state.settings?.defaultPermission ?? "read_only"),
+        permission: compatiblePermission(
+          state.agents,
+          agent,
+          state.settings?.defaultPermission ?? "read_only",
+        ),
         status: "quiet",
       },
     ]);
@@ -1284,7 +1331,7 @@ function createWorkspace() {
         setState("tabs", index, {
           agent: defaultAgent,
           model: selection.default,
-          permission: compatiblePermission(defaultAgent, settings.defaultPermission),
+          permission: compatiblePermission(state.agents, defaultAgent, settings.defaultPermission),
           effort: settings.defaultEffort,
         });
         return;
@@ -1300,7 +1347,7 @@ function createWorkspace() {
       setState("tabs", index, {
         agent: defaultAgent,
         model: selection.default,
-        permission: compatiblePermission(defaultAgent, tab.permission),
+        permission: compatiblePermission(state.agents, defaultAgent, tab.permission),
       });
     });
   }
@@ -1316,7 +1363,7 @@ function createWorkspace() {
     if (index < 0) return;
     // The selection is frontend state. A sent message records it durably, and
     // reopening the project restores it from that ordered conversation.
-    const nextPermission = compatiblePermission(agent, permission);
+    const nextPermission = compatiblePermission(state.agents, agent, permission);
     // Effort only when the caller sent one: the model and permission pills
     // must not clobber a level someone picked a moment ago.
     setState(
@@ -1385,8 +1432,37 @@ function createWorkspace() {
    * `run:stopped`. Create-if-missing because every event arm calls this — the
    * first one to land after a send is whichever the agent got to first.
    */
-  function touchRunStatus(projectId: string, activity: string): void {
+  function runIdentity(
+    projectId: string,
+    current?: RunStatus,
+    incoming?: Pick<RunStatus, "agent" | "model" | "permission">,
+  ): Pick<RunStatus, "agent" | "model" | "permission"> {
+    if (incoming) return incoming;
+    if (current) {
+      return {
+        agent: current.agent,
+        model: current.model,
+        permission: current.permission,
+      };
+    }
+    const tab = state.tabs.find((candidate) => candidate.projectId === projectId);
+    const message = [...(state.messages[projectId] ?? [])]
+      .reverse()
+      .find((candidate) => candidate.author === "user" || candidate.author === "agent");
+    return {
+      agent: tab?.agent ?? message?.agent ?? "claude",
+      model: tab?.model ?? message?.model ?? "",
+      permission: tab?.permission ?? message?.permission ?? "read_only",
+    };
+  }
+
+  function touchRunStatus(
+    projectId: string,
+    activity: string,
+    identity?: Pick<RunStatus, "agent" | "model" | "permission">,
+  ): void {
     setState("runStatus", projectId, (current) => ({
+      ...runIdentity(projectId, current, identity),
       startedAt: current?.startedAt ?? Date.now(),
       persistedChars: current?.persistedChars ?? 0,
       liveTokens: current?.liveTokens ?? null,
@@ -1435,6 +1511,16 @@ function createWorkspace() {
      */
     if (state.compacting[projectId]) {
       enqueue(projectId, body, "compacting");
+      return;
+    }
+
+    const runningAgent = state.runStatus[projectId]?.agent;
+    if (
+      isBusy(projectId) &&
+      runningAgent !== undefined &&
+      !capabilitiesFor(runningAgent)?.liveFollowUp
+    ) {
+      enqueue(projectId, body, "busy");
       return;
     }
 
@@ -1490,18 +1576,19 @@ function createWorkspace() {
    * deliberately runs on `GlobalSettings.taskManager` — a list keeper running
    * unattended should not be silently billed at the prompt's model.
    *
-   * `ask`, not `read_only`: read_only silently denies anything outside the
-   * working tree, which is how "read that file in ~/code/…" died with the
-   * question buried in the I/O panel. Under `ask` the gated call becomes an
-   * approval card on Home instead, and Home is where you already are.
+   * Provider, model, effort and posture all come from the Task Manager block.
+   * Its conversation is separate from project tabs, including one native
+   * session per provider.
    */
   const sendTaskPrompt = async (body: string): Promise<void> => {
+    const taskManager = state.settings?.taskManager;
     await client().sendMessage({
       projectId: TASK_MANAGER_ID,
       body,
-      model: state.settings?.taskManager.model,
-      permission: "ask",
-      effort: state.settings?.taskManager.effort,
+      agent: taskManager?.agent,
+      model: taskManager?.model,
+      permission: taskManager?.permission,
+      effort: taskManager?.effort,
     });
   };
 
@@ -1569,7 +1656,7 @@ function createWorkspace() {
      * already holding the slot. Swallowing them here would leave the user
      * looking at an unchanged transcript with no explanation.
      */
-    compactProject: (projectId: string) => client().compactProject(projectId),
+    compactProject: (projectId: string, agent: Agent) => client().compactProject(projectId, agent),
     /*
      * Read on demand rather than held in the store: the notes change once per
      * compaction, and the only screen that shows them is the panel section that
@@ -1602,6 +1689,10 @@ function createWorkspace() {
         setState("settings", next);
         reconcileTabModels(next);
       });
+      if (patch.taskManager) {
+        const taskManager = await client().getTaskManager();
+        if (ticket === settingsWrite) setState("taskManagerSession", taskManager.sessionId);
+      }
       // The record is the only source for the palette, so the document follows
       // whatever came back rather than what was optimistically sent — a
       // rejected or clamped theme shows as the value that was actually stored.
@@ -1714,6 +1805,8 @@ function createWorkspace() {
     tabStatus,
     isLive,
     effortsFor,
+    capabilitiesFor,
+    permissionsFor,
     itemsFor,
     openItemCount,
     promptModels,

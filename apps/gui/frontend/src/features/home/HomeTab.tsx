@@ -7,7 +7,7 @@ import { ApprovalCard } from "~/features/project/ApprovalCard";
 import { AttachmentPills } from "~/features/project/Composer";
 import { AgentIoList } from "~/features/project/ProjectPanel";
 import { relativeTime } from "~/lib/format";
-import { nextStatus, statusSuffix } from "~/lib/labels";
+import { AGENT_LABELS, nextStatus, statusSuffix } from "~/lib/labels";
 import { describeError, log } from "~/lib/log";
 import { prefs, setPrefs, togglePanelSection } from "~/stores/prefs";
 import { TASK_MANAGER_ID, useWorkspace } from "~/stores/workspace";
@@ -225,7 +225,7 @@ export function HomeTab(): JSX.Element {
  * backend failure must not swallow a prompt someone spent minutes writing.
  */
 function TaskManagerComposer(): JSX.Element {
-  const { state, actions, isLive } = useWorkspace();
+  const { state, actions, capabilitiesFor, isLive } = useWorkspace();
   const [draft, setDraft] = createSignal("");
   const [isSending, setIsSending] = createSignal(false);
   const [error, setError] = createSignal<string | null>(null);
@@ -250,8 +250,19 @@ function TaskManagerComposer(): JSX.Element {
   };
 
   const isRunning = () =>
+    TASK_MANAGER_ID in state.runStatus ||
     (state.running[TASK_MANAGER_ID] ?? []).length > 0 ||
     (state.streaming[TASK_MANAGER_ID] ?? "") !== "";
+  const canFollowUp = () => {
+    const selectedAgent = state.settings?.taskManager.agent ?? "claude";
+    const runningAgent = state.runStatus[TASK_MANAGER_ID]?.agent;
+    const agent = runningAgent ?? selectedAgent;
+    return (
+      (runningAgent === undefined || runningAgent === selectedAgent) &&
+      (capabilitiesFor(agent)?.liveFollowUp ?? false)
+    );
+  };
+  const waitsForRun = () => isRunning() && !canFollowUp();
 
   const submit = async (): Promise<void> => {
     // The pills become prose on the way out; a file alone is a sendable
@@ -259,7 +270,7 @@ function TaskManagerComposer(): JSX.Element {
     const body = [draft().trim(), attachments().join("\n")]
       .filter((part) => part.length > 0)
       .join("\n\n");
-    if (!body || isSending()) return;
+    if (!body || isSending() || waitsForRun()) return;
 
     setError(null);
     setIsSending(true);
@@ -274,10 +285,13 @@ function TaskManagerComposer(): JSX.Element {
     }
   };
 
-  const placeholder = () =>
-    state.taskManagerSession
-      ? `Tell the task manager… · ${state.taskManagerSession}`
-      : "Tell the task manager…";
+  const placeholder = () => {
+    const label = AGENT_LABELS[state.settings?.taskManager.agent ?? "claude"];
+    if (waitsForRun()) return `${label} task manager is finishing its current turn…`;
+    return state.taskManagerSession
+      ? `Tell ${label} task manager… · ${state.taskManagerSession}`
+      : `Tell ${label} task manager…`;
+  };
 
   return (
     <div class="flex min-w-0 flex-1 flex-col">
@@ -307,7 +321,7 @@ function TaskManagerComposer(): JSX.Element {
                */
               placeholder={placeholder()}
               aria-label="Task manager prompt"
-              disabled={isSending()}
+              disabled={isSending() || waitsForRun()}
               class="min-w-0 flex-1 bg-transparent text-[12.5px] text-base-content placeholder:text-az-muted focus:outline-none disabled:opacity-60"
             />
           }
@@ -326,7 +340,7 @@ function TaskManagerComposer(): JSX.Element {
             }}
             placeholder={placeholder()}
             aria-label="Task manager prompt"
-            disabled={isSending()}
+            disabled={isSending() || waitsForRun()}
             class="az-scroll min-w-0 flex-1 resize-none bg-transparent text-[12.5px] text-base-content leading-[1.5] placeholder:text-az-muted focus:outline-none disabled:opacity-60"
           />
         </Show>

@@ -16,6 +16,9 @@ import { type RunStatus, WorkspaceProvider } from "~/stores/workspace";
  */
 function status(overrides: Partial<RunStatus> = {}): RunStatus {
   return {
+    agent: "claude",
+    model: "sonnet",
+    permission: "read_only",
     startedAt: Date.now(),
     activity: "working…",
     persistedChars: 0,

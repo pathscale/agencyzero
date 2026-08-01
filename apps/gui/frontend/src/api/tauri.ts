@@ -82,7 +82,7 @@ export function createTauriApi(): AgencyZeroApi {
     createWorkspaceRoot: () => call("create_workspace_root"),
 
     cancelRun: (projectId) => call("cancel_run", { projectId }),
-    compactProject: (projectId) => call("compact_project", { projectId }),
+    compactProject: (projectId, agent) => call("compact_project", { projectId, agent }),
     getCheckpoints: (projectId) => call("get_checkpoints", { projectId }),
     setCheckpoints: (projectId, enabled) => call("set_checkpoints", { projectId, enabled }),
     getProjectNotes: (projectId) => call("get_project_notes", { projectId }),

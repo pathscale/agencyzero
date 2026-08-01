@@ -308,8 +308,20 @@ export interface AgentStatus {
   minVersion: string;
   /** From the crate: fork (Claude only), caller-minted session id, agent-printed thread id. */
   caps: string[];
+  /** Structured facts used to decide which controls are safe to offer. */
+  capabilities: ProviderCapabilities;
   /** ISO 8601. Drives "last checked 2 min ago". */
   checkedAt: string;
+}
+
+export interface ProviderCapabilities {
+  session: boolean;
+  fork: boolean;
+  events: boolean;
+  nativeSystem: boolean;
+  commands: boolean;
+  liveFollowUp: boolean;
+  approvals: boolean;
 }
 
 /**
@@ -506,10 +518,12 @@ export interface ThemeSettings {
   textBrightness: number;
 }
 
-/** Mirrors `settings::TaskManager`. Claude only for now; see the Rust doc. */
+/** Mirrors `settings::TaskManager`. */
 export interface TaskManagerSettings {
+  agent: Agent;
   model: string;
   effort: string;
+  permission: Permission;
   /**
    * Where its runs execute, first entry as the working directory. Empty means
    * the workspace root — which, under read_only's deny-outside-the-tree
@@ -560,6 +574,7 @@ export interface AvailableUpdate {
  * ordinary path hangs off `Project` has nowhere else to travel.
  */
 export interface TaskManagerState {
+  agent: Agent;
   sessionId: string | null;
 }
 
@@ -689,6 +704,8 @@ export interface QuotaReport {
 /** `Event::RateLimit` — the crate reports rather than retries. */
 export interface RateLimit {
   projectId: string;
+  /** The provider account whose window this describes. */
+  agent: Agent;
   /**
    * Whether anything was actually refused.
    *

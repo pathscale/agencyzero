@@ -176,26 +176,28 @@ impl Default for Notifications {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase", default)]
 pub struct TaskManager {
-    /// A Claude model id. Claude only for now — it is the one agent the run
-    /// path drives, so offering the others here would be a control that cannot
-    /// take effect.
+    /// Which provider owns this conversation.
+    pub agent: String,
     pub model: String,
     pub effort: String,
+    /// The same posture vocabulary project tabs use.
+    pub permission: String,
     /// Where its runs execute, first entry as the working directory.
     ///
     /// The task manager has no project row to carry directories the way a
-    /// project does, and the run's scope matters: `read_only` maps to Claude's
-    /// don't-ask mode, which denies reads *outside* the working tree without
-    /// prompting. Empty means the workspace root, which can only read itself.
+    /// project does, and every provider applies its permission posture within
+    /// this scope. Empty means the workspace root.
     pub dirs: Vec<String>,
 }
 
 impl Default for TaskManager {
     fn default() -> Self {
         TaskManager {
+            agent: "claude".into(),
             // Cheap and fast: this is a list keeper, not a reasoner.
             model: "haiku".into(),
             effort: "medium".into(),
+            permission: "ask".into(),
             dirs: Vec::new(),
         }
     }
@@ -280,6 +282,8 @@ mod tests {
         let json = serde_json::to_string(&GlobalSettings::default()).expect("should serialize");
         let back: GlobalSettings = serde_json::from_str(&json).expect("should deserialize");
         assert_eq!(back.models["claude"].default, "sonnet");
+        assert_eq!(back.task_manager.agent, "claude");
+        assert_eq!(back.task_manager.permission, "ask");
         assert!(json.contains("defaultAgent"), "must be camelCase: {json}");
     }
 
@@ -288,9 +292,11 @@ mod tests {
     /// everything the user chose.
     #[test]
     fn a_record_missing_newer_fields_still_loads() {
-        let old = r#"{"defaultAgent":"codex"}"#;
+        let old = r#"{"defaultAgent":"codex","taskManager":{"model":"haiku","effort":"medium","dirs":[]}}"#;
         let loaded: GlobalSettings = serde_json::from_str(old).expect("should tolerate absence");
         assert_eq!(loaded.default_agent, "codex");
+        assert_eq!(loaded.task_manager.agent, "claude");
+        assert_eq!(loaded.task_manager.permission, "ask");
         assert_eq!(
             loaded.moderator.model, "haiku",
             "absent blocks use defaults"

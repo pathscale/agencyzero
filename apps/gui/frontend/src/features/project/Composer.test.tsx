@@ -102,6 +102,17 @@ describe("Composer", () => {
     expect(onSend).not.toHaveBeenCalled();
   });
 
+  it("labels a busy send from the provider follow-up capability", async () => {
+    const queued = mount({ isRunning: true, canFollowUp: false });
+    expect(queued.getByLabelText("Queue after the running turn")).toBeTruthy();
+    await queued.booted();
+    queued.unmount();
+
+    const live = mount({ isRunning: true, canFollowUp: true });
+    expect(live.getByLabelText("Send into the running turn")).toBeTruthy();
+    await live.booted();
+  });
+
   it("treats Shift+Enter as a newline rather than a send", () => {
     const { field, onSend } = mount();
     type(field, "first line");

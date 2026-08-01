@@ -24,7 +24,8 @@ function isCount(value: number | null): value is number {
 }
 
 export function ProjectTab(props: { tab: Tab; project: Project }): JSX.Element {
-  const { state, actions, promptModels, effortsFor, isLive } = useWorkspace();
+  const { state, actions, promptModels, effortsFor, permissionsFor, capabilitiesFor, isLive } =
+    useWorkspace();
 
   const messages = () => state.messages[props.project.id] ?? [];
 
@@ -37,6 +38,14 @@ export function ProjectTab(props: { tab: Tab; project: Project }): JSX.Element {
     [...messages()].reverse().find((message) => message.author === "agent")?.agent ??
     props.tab.agent;
   const running = () => state.running[props.project.id] ?? [];
+  const canFollowUp = () => {
+    const runningAgent = state.runStatus[props.project.id]?.agent;
+    const agent = runningAgent ?? props.tab.agent;
+    return (
+      (runningAgent === undefined || runningAgent === props.tab.agent) &&
+      (capabilitiesFor(agent)?.liveFollowUp ?? false)
+    );
+  };
   /*
    * A refusal, or a warning that one is coming. Not the heartbeat: the provider
    * emits a record on healthy runs too, with status `allowed`, and rendering
@@ -46,7 +55,8 @@ export function ProjectTab(props: { tab: Tab; project: Project }): JSX.Element {
    * away the one report you can still act on. A refusal is news after the fact.
    */
   const rateLimit = () => {
-    const limit = state.rateLimits[props.project.id];
+    const selectedAgent = state.runStatus[props.project.id]?.agent ?? props.tab.agent;
+    const limit = state.rateLimits[props.project.id]?.[selectedAgent];
     return limit?.isBlocking || limit?.isWarning ? limit : undefined;
   };
 
@@ -222,11 +232,11 @@ export function ProjectTab(props: { tab: Tab; project: Project }): JSX.Element {
           <Composer
             draftKey={props.tab.key}
             onCompact={
-              props.tab.agent === "claude"
-                ? () => actions.compactProject(props.project.id)
+              capabilitiesFor(props.tab.agent)?.commands
+                ? () => actions.compactProject(props.project.id, props.tab.agent)
                 : undefined
             }
-            available={state.commands[props.project.id]}
+            available={state.commands[props.project.id]?.[props.tab.agent]}
             autofocus
             placeholder="Ask, or type / for commands…"
             agent={props.tab.agent}
@@ -249,6 +259,7 @@ export function ProjectTab(props: { tab: Tab; project: Project }): JSX.Element {
               )
             }
             permission={props.tab.permission}
+            permissions={permissionsFor(props.tab.agent)}
             usage={contextLabel()}
             /*
              * The full turn, not just its visible parts: `runStatus` exists
@@ -261,6 +272,7 @@ export function ProjectTab(props: { tab: Tab; project: Project }): JSX.Element {
               running().length > 0 ||
               (state.streaming[props.project.id] ?? "") !== ""
             }
+            canFollowUp={canFollowUp()}
             /*
              * Only offered when the backend can actually stop the run. An
              * ungated Stop routed to the mock, which emitted `run:stopped`

@@ -62,6 +62,12 @@ describe("startup", () => {
     const workspace = await mountWorkspace();
     expect(workspace.state.backend).toBe("mock");
   });
+
+  it("derives approval postures from provider capabilities", async () => {
+    const workspace = await mountWorkspace();
+    expect(workspace.permissionsFor("claude")).toContain("ask");
+    expect(workspace.permissionsFor("codex")).not.toContain("ask");
+  });
 });
 
 describe("cycleTab", () => {
@@ -307,6 +313,7 @@ describe("isLimitLive", () => {
   const now = Date.parse("2026-07-29T12:00:00Z");
   const limit = (resetsAt: string | null) => ({
     projectId: "p",
+    agent: "claude" as const,
     // A real refusal. `isLimitLive` is only about expiry; whether a record
     // restricts anything is a separate question, asked at the call sites.
     isBlocking: true,
