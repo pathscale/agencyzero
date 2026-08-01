@@ -4,6 +4,36 @@ What protects the WorkTable store, what to do when a launch fails anyway,
 and how the pieces earned their existence on 2026-08-01, when a botched
 migration plus a second writer turned every launch into a silent bus error.
 
+## The rules, before anything else
+
+Three corruptions in two days each broke exactly one of these. They are not
+advice.
+
+1. **Never hand the engine a row that might not fit a 16K page.** An
+   oversized insert is not refused cleanly: it poisons the table's internal
+   page accounting on disk. Every persisted string goes through a byte-counted
+   cap (`MAX_PERSISTED_BLOB`, `capped_body`); a new column or a new insert
+   site must say what bounds it.
+2. **A table that ever logged `could not persist ... but 16356 allowed` is
+   condemned.** It will open, read, and boot for weeks, and then die on an
+   append. Do not copy it forward — a file copy carries the poison, which is
+   how one incident became three. Rebuild it row by row into a fresh table:
+   `wt-migrate rebuild-task-log <source> <target>`.
+3. **Never open the live store from a second process, and never trust a name
+   to tell you it is closed.** The binary is `az-gui`. Ask the files:
+   `lsof +D ~/Library/Application\ Support/com.pathscale.agencyzero/db` —
+   empty means free, anything means stop. The `db.lock` flock enforces this
+   for the GUI and `wt-migrate`, but raw `cp`/`mv` bypasses an advisory lock,
+   so the check is yours before any hand repair.
+4. **Repair on copies, verify, then swap.** Never operate on the live
+   directory first. A repaired store is verified by booting a debug build on
+   a *copy* (`AZ_DATA_DIR=<copy> az-gui`; debug converts the SIGBUS into a
+   named abort) before the real one is touched.
+5. **A "working" store proves nothing about its history.** Reads succeed on
+   damaged accounting; only appends detect it. The log is the record: grep
+   for `could not persist` before declaring any store, backup, or snapshot
+   clean.
+
 ## The invariants
 
 - **One writer, mechanically.** The GUI holds an exclusive `flock` on
@@ -42,13 +72,34 @@ AZ_NO_PERSIST=1 open -a AgencyZero   # or: az-gui --debug-no-persist
 A failed migration already behaves like the second flag on its own: store
 untouched, scratch session, options in the log.
 
+## The rolling snapshot
+
+Every boot, with the exclusive lock held and before any table opens, the
+store is copied to `db.snapshot-1` (the previous one rotating to
+`db.snapshot-2`). Boot is the one moment the store is guaranteed whole and
+unheld, and every corruption so far was written during a session and found
+at the next launch — exactly the window between two snapshots. Restoring
+needs no tooling and costs at most one session:
+
+```bash
+rm -rf "~/Library/Application Support/com.pathscale.agencyzero/db" && cp -R "~/Library/Application Support/com.pathscale.agencyzero/db.snapshot-1" "~/Library/Application Support/com.pathscale.agencyzero/db"
+```
+
+A snapshot inherits rule 5: it is a file copy, so it also inherits any
+poisoned accounting the store had when it was taken. It protects against
+torn writes and bad sessions, not against rule 1 violations — those are
+prevented at the insert, and repaired by rebuild, never by copy.
+
 ## Recovering data by hand
 
 `wt-migrate <source> <target>` carries a store forward out of band: source
-read-only and locked, target must be new, report printed. `wt-tools` reads
-any store read-only for inspection (`AZ_DATA_DIR=<dir> wt-tools
-list-messages`). Neither will ever write into a store the GUI has open; the
-lock sees to it.
+read-only and locked, target must be new, report printed.
+`wt-migrate rebuild-task-log <source> <target>` reads every task-log row out
+of a damaged-but-readable store and inserts them into a brand-new table in
+the target — the only form of copy that sheds poisoned page accounting.
+`wt-tools` reads any store read-only for inspection (`AZ_DATA_DIR=<dir>
+wt-tools list-messages`). None will ever write into a store the GUI has
+open; the lock sees to it.
 
 ## The incident this file is made of
 
@@ -59,3 +110,10 @@ running GUI already had open (a torn `task_log`, and every subsequent launch
 died inside `Tables::open` before the window existed). Each invariant above
 removes one link of that chain; the flags exist for whatever chain nobody has
 imagined yet.
+
+The third corruption taught rule 2 the hard way: the store was twice
+"repaired" by copying `task_log` back from a backup that had itself refused
+oversized inserts hours before it was taken. The copy read fine, booted
+fine, and died on the first append of the next session — the caps shipped
+that morning were working, and the mine was already in the ground. The
+rebuild verb exists so that repair is never done by copy again.
