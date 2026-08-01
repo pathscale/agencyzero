@@ -155,135 +155,214 @@ pub fn harvest_prs(
                 id
             }
         };
-        // A mention of a known PR is still news — merged since last time, CI
-        // done — so every mention refreshes.
-        spawn_refresh(app.clone(), id);
+        // A mention of a known PR is still news: merged since last time, CI
+        // done. One batched refresh covers every row this reply touched.
+        let _ = id;
+    }
+    // One query for the project, after every mention in this reply is recorded.
+    refresh_project(app.clone(), project_id.to_string());
+}
+
+/// One word for the pill, from the rollup's single state.
+///
+/// Failure outranks pending outranks pass, because the pill exists to say the
+/// worst true thing. A null rollup is `none`: a repository without CI must not
+/// read as passing.
+fn ci_word(state: Option<&str>) -> String {
+    match state.unwrap_or("").to_uppercase().as_str() {
+        "" => "none".into(),
+        "FAILURE" | "ERROR" | "TIMED_OUT" | "ACTION_REQUIRED" => "fail".into(),
+        "PENDING" | "IN_PROGRESS" | "QUEUED" | "WAITING" | "EXPECTED" => "pending".into(),
+        "SUCCESS" | "NEUTRAL" | "SKIPPED" => "pass".into(),
+        _ => "unknown".into(),
     }
 }
 
-/// Ask `gh` about one PR and write what it says onto the row, off the run's
-/// own path so a slow network cannot hold a reply hostage.
-fn spawn_refresh(app: AppHandle, pr_id: String) {
+/// Ask about every open pull request in one query, per repository.
+///
+/// This was one `gh pr view` process per pull request per cycle: six open ones
+/// meant six process spawns and six round trips, which is why the interval had
+/// to be slow enough to hide the cost. One `gh api graphql` returns them all,
+/// so the cadence can be short enough that "polled" and "pushed" are the same
+/// thing to anyone watching.
+///
+/// `gh` keeps doing the authentication. Nothing here reads or stores a token.
+pub fn refresh_project(app: AppHandle, project_id: String) {
     tauri::async_runtime::spawn(async move {
         let state = app.state::<AppState>();
-        let Some(row) = state.tables.pull_request.select(pr_id.clone()) else {
+        let rows: Vec<PullRequestRow> = state
+            .tables
+            .pull_request
+            .select_by_project_id(project_id.clone())
+            .execute()
+            .unwrap_or_default()
+            .into_iter()
+            // Endings, and rows nobody is looking at. A settled list costs
+            // nothing, which is what makes a short interval affordable.
+            .filter(|row| !row.dismissed && row.state != "MERGED" && row.state != "CLOSED")
+            .collect();
+        if rows.is_empty() {
             return;
-        };
-        let asked = tokio::process::Command::new("gh")
-            .args([
-                "pr",
-                "view",
-                &row.url,
-                "--json",
-                "state,additions,deletions,headRefName,statusCheckRollup",
-            ])
-            .output()
-            .await;
-        let output = match asked {
-            Ok(output) if output.status.success() => output.stdout,
-            Ok(output) => {
-                crate::log!(
-                    crate::log::Level::Warn,
-                    "prs",
-                    "gh could not describe {}: {}",
-                    row.url,
-                    String::from_utf8_lossy(&output.stderr).trim()
-                );
-                return;
-            }
-            Err(error) => {
-                // No gh at all. The chip keeps its URL-derived facts.
-                crate::log!(crate::log::Level::Info, "prs", "gh unavailable: {error}");
-                return;
-            }
-        };
-        let Ok(facts) = serde_json::from_slice::<serde_json::Value>(&output) else {
-            return;
-        };
+        }
 
-        let as_u32 = |key: &str| {
-            u32::try_from(
-                facts
-                    .get(key)
-                    .and_then(serde_json::Value::as_u64)
-                    .unwrap_or(0),
-            )
-            .unwrap_or(u32::MAX)
-        };
-        /*
-         * The rollup reduced to one word for the pill. Failure outranks
-         * pending outranks pass, because the pill exists to say the worst
-         * true thing; an empty rollup is `none` — repos without CI must not
-         * read as passing.
-         */
-        let ci = match facts
-            .get("statusCheckRollup")
-            .and_then(serde_json::Value::as_array)
-        {
-            None => "none".to_string(),
-            Some(checks) if checks.is_empty() => "none".to_string(),
-            Some(checks) => {
-                let word = |check: &serde_json::Value, key: &str| {
-                    check
+        let mut by_repo: std::collections::BTreeMap<String, Vec<PullRequestRow>> =
+            std::collections::BTreeMap::new();
+        for row in rows {
+            by_repo.entry(row.repo.clone()).or_default().push(row);
+        }
+
+        for (repo, prs) in by_repo {
+            let Some((owner, name)) = repo.split_once('/') else {
+                continue;
+            };
+            let selections = prs
+                .iter()
+                .map(|pr| {
+                    format!(
+                        "    pr{n}: pullRequest(number: {n}) {{ ...pr }}",
+                        n = pr.number
+                    )
+                })
+                .collect::<Vec<_>>()
+                .join("\n");
+            let query = format!(
+                "query($owner:String!, $name:String!) {{\n                   repository(owner:$owner, name:$name) {{\n{selections}\n  }}\n}}\n\
+                 fragment pr on PullRequest {{\n                   number state isDraft headRefName additions deletions reviewDecision\n                   commits(last:1) {{ nodes {{ commit {{ statusCheckRollup {{ state }} }} }} }}\n}}"
+            );
+
+            let asked = tokio::process::Command::new("gh")
+                .args(["api", "graphql", "-f"])
+                .arg(format!("owner={owner}"))
+                .arg("-f")
+                .arg(format!("name={name}"))
+                .arg("-f")
+                .arg(format!("query={query}"))
+                .output()
+                .await;
+            let output = match asked {
+                Ok(output) if output.status.success() => output.stdout,
+                Ok(output) => {
+                    /*
+                     * A repository that was renamed, deleted or lost access
+                     * answers here. The rows used to keep saying whatever they
+                     * last said, forever, which is a stale claim presented as
+                     * current. They go to `unknown` instead.
+                     */
+                    crate::log!(
+                        crate::log::Level::Warn,
+                        "prs",
+                        "gh could not describe {repo}: {}",
+                        String::from_utf8_lossy(&output.stderr).trim()
+                    );
+                    for pr in &prs {
+                        mark_unknown(&app, &state, pr).await;
+                    }
+                    continue;
+                }
+                Err(error) => {
+                    // No gh at all. The chips keep their URL-derived facts,
+                    // which are still true.
+                    crate::log!(crate::log::Level::Info, "prs", "gh unavailable: {error}");
+                    return;
+                }
+            };
+            let Ok(body) = serde_json::from_slice::<serde_json::Value>(&output) else {
+                continue;
+            };
+            let found = body.get("data").and_then(|data| data.get("repository"));
+
+            for pr in &prs {
+                let Some(facts) = found.and_then(|repo| repo.get(format!("pr{}", pr.number)))
+                else {
+                    // Present in the response but null: the pull request is
+                    // gone rather than the repository.
+                    mark_unknown(&app, &state, pr).await;
+                    continue;
+                };
+                if facts.is_null() {
+                    mark_unknown(&app, &state, pr).await;
+                    continue;
+                }
+                let text = |key: &str| {
+                    facts
                         .get(key)
                         .and_then(serde_json::Value::as_str)
                         .unwrap_or("")
-                        .to_uppercase()
+                        .to_string()
                 };
-                let any = |what: &[&str]| {
-                    checks.iter().any(|check| {
-                        let status = word(check, "status");
-                        let conclusion = word(check, "conclusion");
-                        let state = word(check, "state");
-                        what.contains(&status.as_str())
-                            || what.contains(&conclusion.as_str())
-                            || what.contains(&state.as_str())
-                    })
+                let count = |key: &str| {
+                    u32::try_from(
+                        facts
+                            .get(key)
+                            .and_then(serde_json::Value::as_u64)
+                            .unwrap_or(0),
+                    )
+                    .unwrap_or(u32::MAX)
                 };
-                if any(&["FAILURE", "ERROR", "TIMED_OUT", "ACTION_REQUIRED"]) {
-                    "fail".to_string()
-                } else if any(&["PENDING", "IN_PROGRESS", "QUEUED", "WAITING", "EXPECTED"]) {
-                    "pending".to_string()
-                } else {
-                    "pass".to_string()
+                let rollup = facts
+                    .pointer("/commits/nodes/0/commit/statusCheckRollup/state")
+                    .and_then(serde_json::Value::as_str);
+
+                let update = PrFactsByIdQuery {
+                    branch: text("headRefName"),
+                    state: {
+                        let state = text("state");
+                        if state.is_empty() {
+                            "unknown".to_string()
+                        } else {
+                            state
+                        }
+                    },
+                    additions: count("additions"),
+                    deletions: count("deletions"),
+                    ci: ci_word(rollup),
+                    updated_at: crate::projects::now(),
+                };
+                if let Err(error) = state
+                    .tables
+                    .pull_request
+                    .update_pr_facts_by_id(update, pr.id.clone())
+                    .await
+                {
+                    crate::log!(
+                        crate::log::Level::Error,
+                        "prs",
+                        "could not update {}: {error}",
+                        pr.url
+                    );
+                    continue;
+                }
+                if let Some(updated) = state.tables.pull_request.select(pr.id.clone()) {
+                    let _ = app.emit("pr:updated", PullRequestDto::from(updated));
                 }
             }
-        };
-
-        let update = PrFactsByIdQuery {
-            branch: facts
-                .get("headRefName")
-                .and_then(serde_json::Value::as_str)
-                .unwrap_or("")
-                .to_string(),
-            state: facts
-                .get("state")
-                .and_then(serde_json::Value::as_str)
-                .unwrap_or("unknown")
-                .to_string(),
-            additions: as_u32("additions"),
-            deletions: as_u32("deletions"),
-            ci,
-            updated_at: crate::projects::now(),
-        };
-        if let Err(error) = state
-            .tables
-            .pull_request
-            .update_pr_facts_by_id(update, pr_id.clone())
-            .await
-        {
-            crate::log!(
-                crate::log::Level::Error,
-                "prs",
-                "could not update {}: {error}",
-                row.url
-            );
-            return;
-        }
-        if let Some(updated) = state.tables.pull_request.select(pr_id) {
-            let _ = app.emit("pr:updated", PullRequestDto::from(updated));
         }
     });
+}
+
+/// Say that we no longer know, rather than repeating what we last knew.
+async fn mark_unknown(app: &AppHandle, state: &State<'_, AppState>, row: &PullRequestRow) {
+    if row.state == "unknown" {
+        return;
+    }
+    let update = PrFactsByIdQuery {
+        branch: row.branch.clone(),
+        state: "unknown".into(),
+        additions: row.additions,
+        deletions: row.deletions,
+        ci: "unknown".into(),
+        updated_at: crate::projects::now(),
+    };
+    if state
+        .tables
+        .pull_request
+        .update_pr_facts_by_id(update, row.id.clone())
+        .await
+        .is_ok()
+        && let Some(updated) = state.tables.pull_request.select(row.id.clone())
+    {
+        let _ = app.emit("pr:updated", PullRequestDto::from(updated));
+    }
 }
 
 /// This project's tracked PRs, newest row last, dismissed ones included —
@@ -329,7 +408,17 @@ pub async fn dismiss_pull_request(
 /// Ask `gh` again, for the refresh affordance on the chip.
 #[tauri::command]
 pub fn refresh_pull_request(app: AppHandle, id: String) {
-    spawn_refresh(app, id);
+    // Asked about one, answered for its whole project: the query costs the
+    // same either way, and a chip nobody clicked is no less stale.
+    let project = app
+        .state::<AppState>()
+        .tables
+        .pull_request
+        .select(id)
+        .map(|row| row.project_id);
+    if let Some(project) = project {
+        refresh_project(app, project);
+    }
 }
 
 /// Point an item at the pull request its run produced.
