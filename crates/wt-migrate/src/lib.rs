@@ -514,7 +514,9 @@ mod scrub_tests {
                 ProjectItemWorkTable::name_snake_case(),
                 ProjectItemWorkTable::version(),
             );
-            let engine = ProjectItemPersistenceEngine::new(config).await.expect("engine");
+            let engine = ProjectItemPersistenceEngine::new(config)
+                .await
+                .expect("engine");
             let table = ProjectItemWorkTable::load(engine).await.expect("table");
 
             table.insert(item("item-1", "proj-846b")).expect("good row");
@@ -528,7 +530,9 @@ mod scrub_tests {
             table
                 .insert(item("proj-6cf80cb0", "Recover the item list"))
                 .expect("shifted row");
-            table.insert(item("ment)", "item-03fd09c6")).expect("worse row");
+            table
+                .insert(item("ment)", "item-03fd09c6"))
+                .expect("worse row");
             table.wait_for_ops().await;
         }
 
@@ -540,7 +544,9 @@ mod scrub_tests {
             ProjectItemWorkTable::name_snake_case(),
             ProjectItemWorkTable::version(),
         );
-        let engine = ProjectItemPersistenceEngine::new(config).await.expect("engine");
+        let engine = ProjectItemPersistenceEngine::new(config)
+            .await
+            .expect("engine");
         let table = ProjectItemWorkTable::load(engine).await.expect("table");
         let mut kept: Vec<String> = table
             .select_all()

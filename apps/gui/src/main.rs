@@ -743,10 +743,7 @@ fn ephemeral_location() -> location::DataLocation {
 /// # Errors
 /// Only when even the scratch store cannot open, which is a disk problem no
 /// flow survives.
-fn migrate_forward(
-    location: &mut location::DataLocation,
-    found: &str,
-) -> Result<Tables, String> {
+fn migrate_forward(location: &mut location::DataLocation, found: &str) -> Result<Tables, String> {
     let stamp = chrono::Utc::now().format("%Y%m%dT%H%M%SZ").to_string();
     let next = location.path.with_extension(format!("next-{stamp}"));
     crate::log!(
@@ -766,7 +763,9 @@ fn migrate_forward(
 
     match carried {
         Ok(report) => {
-            let keep = location.path.with_extension(format!("pre-migration-{stamp}"));
+            let keep = location
+                .path
+                .with_extension(format!("pre-migration-{stamp}"));
             let swapped = std::fs::rename(&location.path, &keep)
                 .and_then(|()| std::fs::rename(&next, &location.path));
             if let Err(error) = swapped {
@@ -1003,20 +1002,19 @@ fn main() {
              */
             let stored = tauri::async_runtime::block_on(Tables::peek_fingerprint(&location.path));
             let tables = match db::tables::check_schema(stored.as_deref()) {
-                db::tables::SchemaState::Match => {
-                    tauri::async_runtime::block_on(Tables::open(&location.path)).map_err(
-                        |error| {
-                            let message = format!(
-                                "could not open the tables in {:?}: {error}. \
+                db::tables::SchemaState::Match => tauri::async_runtime::block_on(Tables::open(
+                    &location.path,
+                ))
+                .map_err(|error| {
+                    let message = format!(
+                        "could not open the tables in {:?}: {error}. \
                                  Relaunch with AZ_NO_PERSIST=1 (or --debug-no-persist) to start \
                                  the app without touching the store, then diagnose.",
-                                location.path
-                            );
-                            crate::log!(log::Level::Error, "boot", "{message}");
-                            message
-                        },
-                    )?
-                }
+                        location.path
+                    );
+                    crate::log!(log::Level::Error, "boot", "{message}");
+                    message
+                })?,
                 db::tables::SchemaState::Mismatch { found } if no_migration => {
                     crate::log!(
                         log::Level::Warn,
