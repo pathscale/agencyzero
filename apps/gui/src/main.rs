@@ -1226,6 +1226,45 @@ fn main() {
             });
 
             /*
+             * The cafe standard, ported: SIGTERM, SIGINT and SIGHUP route
+             * into the same graceful exit the Quit menu takes, so `kill`,
+             * a Ctrl+C on a dev run, or a script recycling the app all
+             * drain the tables instead of dying with CDC ops in flight.
+             * Persistence here is best-effort by design — the accepted
+             * loss window is the instant between in-memory and on-disk —
+             * and honoring that design means every exit anyone can catch
+             * must drain. Only SIGKILL and a crash remain uncatchable,
+             * and the boot snapshot carries those.
+             */
+            let signal_handle = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                use tokio::signal::unix::{SignalKind, signal};
+                let (Ok(mut term), Ok(mut int), Ok(mut hup)) = (
+                    signal(SignalKind::terminate()),
+                    signal(SignalKind::interrupt()),
+                    signal(SignalKind::hangup()),
+                ) else {
+                    crate::log!(
+                        log::Level::Warn,
+                        "boot",
+                        "could not install signal handlers; kill/Ctrl+C will not drain the store"
+                    );
+                    return;
+                };
+                let which = tokio::select! {
+                    _ = term.recv() => "SIGTERM",
+                    _ = int.recv() => "SIGINT",
+                    _ = hup.recv() => "SIGHUP",
+                };
+                crate::log!(
+                    log::Level::Info,
+                    "boot",
+                    "{which} received; draining the tables and exiting"
+                );
+                signal_handle.exit(0);
+            });
+
+            /*
              * Shown here, not by the config, because everything above it can
              * take a while.
              *
@@ -1282,11 +1321,27 @@ fn main() {
         .run(|app, event| {
             // `Exit` fires once, after the last window is gone and before the
             // process ends, which is the only point where nothing else can
-            // still be writing.
+            // still be writing. Bounded like the cafe's drain: fifteen
+            // seconds is more than any real queue needs, and a wedged drain
+            // must not turn "quit" into "hang until force-killed", because
+            // the force-kill is the one exit that loses data.
             if matches!(event, tauri::RunEvent::Exit)
                 && let Some(state) = app.try_state::<AppState>()
             {
-                tauri::async_runtime::block_on(state.tables.shutdown());
+                let drained = tauri::async_runtime::block_on(async {
+                    tokio::time::timeout(
+                        std::time::Duration::from_secs(15),
+                        state.tables.shutdown(),
+                    )
+                    .await
+                });
+                if drained.is_err() {
+                    crate::log!(
+                        log::Level::Error,
+                        "boot",
+                        "the exit drain did not finish within 15s; exiting with ops possibly in flight"
+                    );
+                }
             }
         });
 }
