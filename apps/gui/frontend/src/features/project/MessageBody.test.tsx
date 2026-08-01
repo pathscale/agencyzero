@@ -111,6 +111,35 @@ describe("fenced blocks", () => {
     const { container } = render(() => <MessageBody body={"```\ncode\n```"} />);
     expect(container.querySelector("pre[data-selectable]")).toBeTruthy();
   });
+
+  /*
+   * The reported bug, verbatim in shape: a fence indented under a numbered
+   * step. Anchored at column 0 it was not a fence at all, so the block joined
+   * the paragraph, its newlines collapsed, and the opening and closing
+   * backticks paired as inline code with step 2 swallowed into the span. The
+   * assertions below are each a symptom that was visible on screen.
+   */
+  it("reads a fence indented inside a list item", () => {
+    const body = [
+      "1. **Run it yourself**:",
+      "",
+      "   ```bash",
+      "   cd ~/code/WorkTable",
+      "   cargo publish -p worktable_codegen",
+      "   ```",
+      "",
+      "2. **Restart me**, where the `ask` rule becomes a prompt.",
+    ].join("\n");
+    const { container } = render(() => <MessageBody body={body} />);
+
+    const block = container.querySelector("pre code");
+    expect(block?.textContent).toBe("cd ~/code/WorkTable\ncargo publish -p worktable_codegen");
+    // Step 2 is prose, not the tail of a code span.
+    expect(container.textContent).toContain("Restart me");
+    expect(container.textContent).not.toContain("**Restart me**");
+    // And its own inline code still reads as code.
+    expect([...container.querySelectorAll("code")].map((c) => c.textContent)).toContain("ask");
+  });
 });
 
 describe("InlineText", () => {

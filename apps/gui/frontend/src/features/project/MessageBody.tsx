@@ -88,6 +88,7 @@ export function splitBlocks(body: string): Block[] {
   let prose: string[] = [];
   let code: string[] | null = null;
   let lang = "";
+  let indent = "";
 
   const flushProse = () => {
     const text = prose.join("\n");
@@ -95,20 +96,37 @@ export function splitBlocks(body: string): Block[] {
     prose = [];
   };
 
+  /*
+   * A fence inside a list item is indented to sit under it, which is how
+   * anyone writes "step 1, then run this". Anchoring the fence at column 0
+   * missed those: the block fell through to prose, its newlines collapsed into
+   * the paragraph, and the two fences then paired off as inline code with the
+   * step after them swallowed into the span. The block is de-indented by
+   * however far its opening fence was, so the code reads as written.
+   */
+  const deindent = (line: string) => {
+    let cut = 0;
+    while (cut < indent.length && (line[cut] === " " || line[cut] === "\t")) cut += 1;
+    return line.slice(cut);
+  };
+
   for (const line of body.split("\n")) {
-    const fence = /^```(.*)$/.exec(line);
+    const fence = /^(\s*)```(.*)$/.exec(line);
     if (!fence) {
-      (code ?? prose).push(line);
+      if (code === null) prose.push(line);
+      else code.push(deindent(line));
       continue;
     }
     if (code === null) {
       flushProse();
       code = [];
-      lang = fence[1].trim();
+      indent = fence[1];
+      lang = fence[2].trim();
     } else {
       blocks.push({ kind: "code", text: code.join("\n"), lang });
       code = null;
       lang = "";
+      indent = "";
     }
   }
 
