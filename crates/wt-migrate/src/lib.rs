@@ -201,6 +201,48 @@ pub struct Report {
     /// subset of `reset`, kept apart because "no migration exists" and "the
     /// migration ran and could not" are different things to be told.
     pub failed: Vec<(String, String)>,
+    /// Rows dropped from an otherwise-migrated table because they failed the
+    /// sanity check — the field-shifted debris a mixed-shape source produces.
+    pub dropped: Vec<(String, usize)>,
+}
+
+/// Whether a migrated item row is shaped like an item row at all.
+///
+/// The checkable facts: item ids are minted as `item-<uuid>` and a project
+/// reference is `proj-<uuid>` or the task manager's fixed id. A field-shifted
+/// row fails both instantly. Statuses are deliberately not checked — the
+/// vocabulary grows (`shipped`, `planning`) and a new word must not read as
+/// corruption.
+fn looks_like_an_item(row: &ProjectItemRow) -> bool {
+    row.id.starts_with("item-")
+        && (row.project_id.starts_with("proj-") || row.project_id == "home-task-manager")
+}
+
+/// Delete migrated item rows that cannot be item rows. Returns how many.
+async fn scrub_items(target: &Path) -> eyre::Result<usize> {
+    let config = worktable::prelude::DiskConfig::new_with_table_name(
+        target.to_string_lossy().into_owned(),
+        ProjectItemWorkTable::name_snake_case(),
+        ProjectItemWorkTable::version(),
+    );
+    let engine = ProjectItemPersistenceEngine::new(config).await?;
+    let table = ProjectItemWorkTable::load(engine).await?;
+    let doomed: Vec<String> = table
+        .select_all()
+        .execute()?
+        .into_iter()
+        .filter(|row| !looks_like_an_item(row))
+        .map(|row| row.id)
+        .collect();
+    let count = doomed.len();
+    for id in doomed {
+        table
+            .delete(id)
+            .await
+            .map_err(|error| eyre::eyre!("{error}"))?;
+    }
+    table.wait_for_ops().await;
+    Ok(count)
 }
 
 /// Carry a store from `source` to `target`.
@@ -243,7 +285,23 @@ pub async fn carry_forward(
             )
             .await
             {
-                Ok(_) => report.migrated.push(table),
+                Ok(_) => {
+                    /*
+                     * The engine cannot tell a v2 row misread as v1 from a real
+                     * v1 row — there is no per-row version — so a mixed-shape
+                     * source comes out with some rows field-shifted: a project
+                     * id where the item id belongs, a title where the project
+                     * belongs. Those are checkable facts, so check them, and a
+                     * row that fails is dropped and counted rather than kept as
+                     * data. Losing a garbled row is a report line; keeping it
+                     * is a store nobody can trust.
+                     */
+                    let dropped = scrub_items(target).await?;
+                    if dropped > 0 {
+                        report.dropped.push((table.clone(), dropped));
+                    }
+                    report.migrated.push(table);
+                }
                 Err(error) if error.to_string().contains("Unsupported version") => {
                     // Already current. Copy rather than fail, so a re-run is
                     // harmless.
@@ -262,8 +320,15 @@ pub async fn carry_forward(
                  * A table nobody can read is a table that starts empty. That is
                  * a real loss and it is reported as one, and it is a far smaller
                  * loss than the store.
+                 *
+                 * Empty means EMPTY. The engine may have written rows before it
+                 * failed, and those rows are exactly the ones read through the
+                 * wrong layout — the live store once kept a row whose id slot
+                 * held a project id because this cleanup was missing. A failed
+                 * table's partial output is deleted, not left as data.
                  */
                 Err(error) => {
+                    let _ = tokio::fs::remove_dir_all(target.join(&table)).await;
                     report.failed.push((table.clone(), error.to_string()));
                     report.reset.push(table);
                 }
@@ -375,3 +440,78 @@ mod tests {
 #[cfg(test)]
 #[path = "../../../apps/gui/src/db/schema/project_item.rs"]
 mod app_project_item;
+
+#[cfg(test)]
+mod scrub_tests {
+    use super::*;
+
+    fn item(id: &str, project: &str) -> ProjectItemRow {
+        ProjectItemRow {
+            id: id.into(),
+            project_id: project.into(),
+            title: "a title".into(),
+            status: "pending".into(),
+            position: 0,
+            reference: String::new(),
+        }
+    }
+
+    /*
+     * The debris this guards against is real: the live store held a row whose
+     * id slot carried a project id and whose title slot carried a status,
+     * written by the engine reading a v2 row through the v1 shape. The scrub
+     * keeps every row that is shaped like an item — including task-manager
+     * rows and unfamiliar statuses — and drops only what cannot be one.
+     */
+    #[tokio::test]
+    async fn shifted_debris_is_dropped_and_real_rows_survive() {
+        let dir = std::env::temp_dir().join(format!("wt-migrate-scrub-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).expect("tmp dir");
+
+        {
+            let config = DiskConfig::new_with_table_name(
+                dir.to_string_lossy().into_owned(),
+                ProjectItemWorkTable::name_snake_case(),
+                ProjectItemWorkTable::version(),
+            );
+            let engine = ProjectItemPersistenceEngine::new(config).await.expect("engine");
+            let table = ProjectItemWorkTable::load(engine).await.expect("table");
+
+            table.insert(item("item-1", "proj-846b")).expect("good row");
+            table
+                .insert(item("item-2", "home-task-manager"))
+                .expect("tm row");
+            let mut odd = item("item-3", "proj-846b");
+            odd.status = "someday-maybe".into();
+            table.insert(odd).expect("odd status row");
+            // The real debris shapes, verbatim from the incident.
+            table
+                .insert(item("proj-6cf80cb0", "Recover the item list"))
+                .expect("shifted row");
+            table.insert(item("ment)", "item-03fd09c6")).expect("worse row");
+            table.wait_for_ops().await;
+        }
+
+        let dropped = scrub_items(&dir).await.expect("scrub");
+        assert_eq!(dropped, 2, "exactly the two debris rows go");
+
+        let config = DiskConfig::new_with_table_name(
+            dir.to_string_lossy().into_owned(),
+            ProjectItemWorkTable::name_snake_case(),
+            ProjectItemWorkTable::version(),
+        );
+        let engine = ProjectItemPersistenceEngine::new(config).await.expect("engine");
+        let table = ProjectItemWorkTable::load(engine).await.expect("table");
+        let mut kept: Vec<String> = table
+            .select_all()
+            .execute()
+            .expect("rows")
+            .into_iter()
+            .map(|row| row.id)
+            .collect();
+        kept.sort();
+        assert_eq!(kept, vec!["item-1", "item-2", "item-3"]);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+}
