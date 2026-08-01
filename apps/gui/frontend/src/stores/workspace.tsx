@@ -1553,6 +1553,10 @@ function createWorkspace() {
       const picked = await client().chooseDataDirectory();
       if (picked) await actions.setDataLocation(picked);
     },
+    /** The native folder panel, for a project's working directories. */
+    chooseProjectDirectory() {
+      return client().chooseProjectDirectory();
+    },
     /** Open a link in the browser. See the Rust command for the scheme rule. */
     openExternal(url: string) {
       return client().openExternal(url);

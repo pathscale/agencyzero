@@ -445,6 +445,8 @@ export function createMockApi(): AgencyZeroApi {
      * they do not have.
      */
     chooseDataDirectory: () => settle(null),
+    // No native panel in the preview; the typed path still works.
+    chooseProjectDirectory: () => settle(null),
     // A fixed fixture path: the preview has no OS picker to open.
     chooseAttachments: () => settle(["/tmp/mock-attachment.txt"]),
 

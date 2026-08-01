@@ -241,12 +241,14 @@ fn ci_word(state: Option<&str>) -> String {
 pub fn refresh_project(app: AppHandle, project_id: String) {
     tauri::async_runtime::spawn(async move {
         let state = app.state::<AppState>();
-        let rows: Vec<PullRequestRow> = state
+        let known: Vec<PullRequestRow> = state
             .tables
             .pull_request
             .select_by_project_id(project_id.clone())
             .execute()
-            .unwrap_or_default()
+            .unwrap_or_default();
+        let rows: Vec<PullRequestRow> = known
+            .clone()
             .into_iter()
             // Endings, and rows nobody is looking at. A settled list costs
             // nothing, which is what makes a short interval affordable.
@@ -258,7 +260,23 @@ pub fn refresh_project(app: AppHandle, project_id: String) {
          * yet. That is what lets a pull request appear because it exists
          * rather than because someone wrote its URL in a reply.
          */
-        let repos = repos_for(&state, &project_id, &rows).await;
+        /*
+         * Every row, not the open ones. A merged pull request still says which
+         * repository it belonged to, and reading only the open rows meant the
+         * repository was forgotten the moment the last one settled: discovery
+         * then had nothing to ask about and stopped, silently, exactly when
+         * the list looked finished.
+         */
+        let repos = repos_for(&state, &project_id, &known).await;
+        if repos.is_empty() {
+            crate::log!(
+                crate::log::Level::Warn,
+                "prs",
+                "{project_id}: no repository to ask about. None of its directories is a git \
+                 checkout and no pull request has been recorded, so none can be discovered. \
+                 Add the checkout to the project's directories."
+            );
+        }
         if repos.is_empty() {
             return;
         }

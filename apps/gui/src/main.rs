@@ -38,6 +38,7 @@ const IMPLEMENTED: &[&str] = &[
     "get_data_location",
     "set_data_location",
     "choose_data_directory",
+    "choose_project_directory",
     "get_workspace_root",
     "create_workspace_root",
     "list_projects",
@@ -386,6 +387,36 @@ async fn choose_data_directory(
         .await
         .map_err(|_| "the directory picker closed without answering".to_string())?;
     Ok(picked.map(|path| path.to_string()))
+}
+
+/// Ask the OS for a working directory, for a project's Settings section.
+///
+/// Separate from [`choose_data_directory`] because it starts somewhere else:
+/// a checkout lives under home, not beside the store. The panel asked for a
+/// typed path with a note saying a picker needed the dialog plugin, which has
+/// been wired since; a typed path is also how a project ends up pointed at a
+/// directory that is not a checkout, which is exactly what stopped pull
+/// requests being discovered.
+#[tauri::command]
+async fn choose_project_directory(app: AppHandle) -> Result<Option<String>, String> {
+    let mut dialog = app.dialog().file().set_title("Choose a working directory");
+    if let Some(home) = dirs_home() {
+        dialog = dialog.set_directory(home);
+    }
+    // The callback form, never the blocking one: see `choose_data_directory`.
+    let (tx, rx) = tokio::sync::oneshot::channel();
+    dialog.pick_folder(move |picked| {
+        let _ = tx.send(picked);
+    });
+    let picked = rx
+        .await
+        .map_err(|_| "the directory picker closed without answering".to_string())?;
+    Ok(picked.map(|path| path.to_string()))
+}
+
+/// The user's home, or nothing when the platform will not say.
+fn dirs_home() -> Option<std::path::PathBuf> {
+    std::env::var_os("HOME").map(std::path::PathBuf::from)
 }
 
 /// Ask the OS for files, for the composer's Attach button.
@@ -982,6 +1013,7 @@ fn main() {
             get_data_location,
             set_data_location,
             choose_data_directory,
+            choose_project_directory,
             get_workspace_root,
             create_workspace_root,
             projects::list_projects,

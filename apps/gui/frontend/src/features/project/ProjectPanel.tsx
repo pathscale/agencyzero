@@ -300,11 +300,25 @@ const IO_TONE: Record<string, string> = {
  * in the composer, which is the note this section ends on.
  */
 function SettingsSection(props: { project: Project }): JSX.Element {
-  const { state, actions } = useWorkspace();
+  const { state, actions, isLive } = useWorkspace();
   const [adding, setAdding] = createSignal(false);
   const [path, setPath] = createSignal("");
 
   const moderatorDefault = () => state.settings?.moderator.enabled ?? true;
+
+  /** The native panel, then straight into the list: no second confirmation. */
+  async function pick(): Promise<void> {
+    try {
+      const picked = await actions.chooseProjectDirectory();
+      if (picked) {
+        await actions.addDir(props.project.id, picked);
+        setAdding(false);
+        setPath("");
+      }
+    } catch (cause) {
+      log.error(`could not choose a directory: ${describeError(cause)}`);
+    }
+  }
 
   async function addDir(): Promise<void> {
     const value = path().trim();
@@ -359,22 +373,36 @@ function SettingsSection(props: { project: Project }): JSX.Element {
           }
         >
           {/*
-            A typed path rather than a native folder picker: opening one needs
-            the Tauri dialog plugin, which is not wired up on the Rust side yet.
+            Type a path or pick one. The picker matters more than it looks: a
+            typed path is how a project ends up pointed at a directory that is
+            not a checkout, and a project with no checkout can have no pull
+            requests discovered for it, silently.
           */}
-          <input
-            autofocus
-            value={path()}
-            placeholder="~/src/…"
-            aria-label="Working directory path"
-            onInput={(event) => setPath(event.currentTarget.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Enter") void addDir();
-              if (event.key === "Escape") setAdding(false);
-            }}
-            onBlur={() => void addDir()}
-            class="rounded-[9px] border border-primary/40 bg-base-300 px-2.5 py-[7px] font-mono text-[11.5px] text-az-body focus:outline-none"
-          />
+          <div class="flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => void pick()}
+              disabled={!isLive("chooseProjectDirectory")}
+              aria-label="Choose a working directory"
+              title="Choose a folder"
+              class="shrink-0 cursor-pointer rounded-[9px] border border-primary/40 px-2 py-[7px] text-az-body transition-colors hover:border-primary hover:text-primary disabled:opacity-40"
+            >
+              <Icon name="folder-plus" class="text-[13px]" />
+            </button>
+            <input
+              autofocus
+              value={path()}
+              placeholder="~/src/…"
+              aria-label="Working directory path"
+              onInput={(event) => setPath(event.currentTarget.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") void addDir();
+                if (event.key === "Escape") setAdding(false);
+              }}
+              onBlur={() => void addDir()}
+              class="min-w-0 flex-1 rounded-[9px] border border-primary/40 bg-base-300 px-2.5 py-[7px] font-mono text-[11.5px] text-az-body focus:outline-none"
+            />
+          </div>
         </Show>
 
         <div class="my-0.5 h-px bg-az-hairline-soft" />
