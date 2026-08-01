@@ -12,7 +12,12 @@ concurrency:
 jobs:
   frontend:
     name: Frontend
-    runs-on: ubicloud-standard-2
+    # Trialling Namespace on this job only. The Rust job stays on ubicloud
+    # because it installs webkit2gtk through `apt-get`, so aiming it at a macOS
+    # profile would fail for a reason that says nothing about the runner. This
+    # job is bun and nothing else, so it runs anywhere, and its time sits next
+    # to the Rust job's ubicloud time as a comparison.
+    runs-on: namespace-profile-agency-tahoe
     defaults:
       run:
         working-directory: apps/gui/frontend
