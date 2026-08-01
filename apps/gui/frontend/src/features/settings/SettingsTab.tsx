@@ -1,5 +1,16 @@
 import { Toggle } from "@pathscale/ui";
-import { createSignal, For, type JSX, onMount, Show } from "solid-js";
+import {
+  createContext,
+  createEffect,
+  createMemo,
+  createSignal,
+  For,
+  type JSX,
+  onCleanup,
+  onMount,
+  Show,
+  useContext,
+} from "solid-js";
 import { Icon, type IconProps } from "~/components/Icon";
 import { Panel } from "~/components/Panel";
 import { PillMenu } from "~/components/PillMenu";
@@ -57,6 +68,35 @@ const AGENT_USE: Record<Agent, string> = {
   codex: "for the code review UI",
   copilot: "for the code review UI",
 };
+
+/**
+ * What the search box at the top holds.
+ *
+ * Module scope rather than a prop threaded through eleven sections and their
+ * rows. The alternative was passing a signal into every `Section` and `Row`,
+ * which is the same coupling written out longhand.
+ */
+const [settingsQuery, setSettingsQuery] = createSignal("");
+
+/** Whether some label or hint answers what is being searched for. */
+function matchesSearch(text: string): boolean {
+  const needle = settingsQuery().trim().toLowerCase();
+  return needle === "" || text.toLowerCase().includes(needle);
+}
+
+/**
+ * How a row tells its section that it matched.
+ *
+ * A section is shown when its own words match *or* when anything inside it
+ * does, and only the rows know the latter. So they report, and the section
+ * counts. Both hide with a class rather than unmounting: a row removed from
+ * the DOM stops reporting, and a section that has forgotten it ever had a
+ * matching row can never come back when the query changes.
+ */
+const SearchScope = createContext<{
+  titleMatches: () => boolean;
+  report: (label: string, hit: boolean) => void;
+}>();
 
 /**
  * Global settings, opened by the gear as a real tab you can leave open.
@@ -129,6 +169,22 @@ export function SettingsTab(): JSX.Element {
           <span class="text-[11.5px] text-az-muted">
             defaults for every new tab · each project can override
           </span>
+        </div>
+
+        {/*
+          Eleven sections and something over sixty rows, which is past the
+          point where reading them all is how you find one.
+        */}
+        <div class="flex items-center gap-2.5 rounded-[11px] border border-primary/11 bg-az-inset px-3 py-2.5 focus-within:border-primary/40">
+          <Icon name="search" class="shrink-0 text-[14px] text-primary/70" />
+          <input
+            type="search"
+            value={settingsQuery()}
+            onInput={(event) => setSettingsQuery(event.currentTarget.value)}
+            placeholder="Search settings…"
+            aria-label="Search settings"
+            class="min-w-0 flex-1 bg-transparent text-[12.5px] text-base-content placeholder:text-az-muted focus:outline-none"
+          />
         </div>
 
         <Show when={settings()}>
@@ -1018,38 +1074,57 @@ function Section(props: {
   pending?: string;
   children: JSX.Element;
 }): JSX.Element {
+  /*
+   * Hidden with a class, never unmounted. An unmounted section takes its rows
+   * with it, the rows stop reporting whether they match, and the section can
+   * then never learn that a later query does match one of them.
+   */
+  const [hits, setHits] = createSignal(new Set<string>());
+  const titleMatches = createMemo(() => matchesSearch(`${props.title} ${props.hint}`));
+  const visible = () => settingsQuery().trim() === "" || titleMatches() || hits().size > 0;
+  const report = (label: string, hit: boolean): void => {
+    setHits((prev) => {
+      const next = new Set(prev);
+      if (hit) next.add(label);
+      else next.delete(label);
+      return next;
+    });
+  };
+
   return (
-    <Panel class="flex-none rounded-[13px]">
-      <div class="flex flex-wrap items-baseline gap-x-2.5 gap-y-1 px-3.5 pt-3 pb-2.5">
-        <Icon name={props.icon} class="relative top-0.5 text-[14px] text-primary" />
-        <h2
-          class="font-semibold text-[13px]"
-          classList={{ "text-az-title": !props.pending, "text-az-muted": !!props.pending }}
-        >
-          {props.title}
-        </h2>
-        <span class="text-[11.5px] text-az-muted">{props.hint}</span>
-        <Show when={props.pending}>
-          {(reason) => (
-            <span class="ml-auto shrink-0 rounded border border-az-hairline px-1.5 py-px text-[10px] text-az-muted">
-              not wired · {reason()}
-            </span>
-          )}
-        </Show>
-      </div>
-      {/*
+    <SearchScope.Provider value={{ titleMatches, report }}>
+      <Panel class="flex-none rounded-[13px]" classList={{ hidden: !visible() }}>
+        <div class="flex flex-wrap items-baseline gap-x-2.5 gap-y-1 px-3.5 pt-3 pb-2.5">
+          <Icon name={props.icon} class="relative top-0.5 text-[14px] text-primary" />
+          <h2
+            class="font-semibold text-[13px]"
+            classList={{ "text-az-title": !props.pending, "text-az-muted": !!props.pending }}
+          >
+            {props.title}
+          </h2>
+          <span class="text-[11.5px] text-az-muted">{props.hint}</span>
+          <Show when={props.pending}>
+            {(reason) => (
+              <span class="ml-auto shrink-0 rounded border border-az-hairline px-1.5 py-px text-[10px] text-az-muted">
+                not wired · {reason()}
+              </span>
+            )}
+          </Show>
+        </div>
+        {/*
         `inert` rather than a disabled prop on every control: it takes the whole
         subtree out of the tab order and out of pointer events in one place, so
         a control added later cannot be accidentally live.
       */}
-      <div
-        // @ts-expect-error inert is valid HTML but not yet in Solid's JSX types
-        inert={props.pending ? "" : undefined}
-        classList={{ "pointer-events-none opacity-45": !!props.pending }}
-      >
-        {props.children}
-      </div>
-    </Panel>
+        <div
+          // @ts-expect-error inert is valid HTML but not yet in Solid's JSX types
+          inert={props.pending ? "" : undefined}
+          classList={{ "pointer-events-none opacity-45": !!props.pending }}
+        >
+          {props.children}
+        </div>
+      </Panel>
+    </SearchScope.Provider>
   );
 }
 
@@ -1059,8 +1134,19 @@ function Row(props: {
   isLast?: boolean;
   children: JSX.Element;
 }): JSX.Element {
+  const scope = useContext(SearchScope);
+  const hit = createMemo(() => matchesSearch(`${props.label} ${props.hint ?? ""}`));
+  // Reported rather than read: only the row knows its own words, and the
+  // section needs to know whether any of them answered the search.
+  createEffect(() => scope?.report(props.label, hit()));
+  onCleanup(() => scope?.report(props.label, false));
+  // A section named by the query shows all of its rows: someone searching
+  // "cost" wants the section, not the one row whose label repeats the word.
+  const visible = () => settingsQuery().trim() === "" || scope?.titleMatches() === true || hit();
+
   return (
     <div
+      classList={{ hidden: !visible() }}
       class={`flex items-center gap-3 px-3.5 py-2.5 ${props.isLast ? "" : "border-az-hairline-soft border-b"}`}
     >
       <span class="min-w-0 flex-1 text-[12.5px] text-az-body">
