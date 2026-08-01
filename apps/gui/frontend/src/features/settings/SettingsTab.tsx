@@ -302,10 +302,7 @@ export function SettingsTab(): JSX.Element {
                     onChange={(defaultEffort) => void actions.saveSettings({ defaultEffort })}
                   />
                 </Row>
-                <Row
-                  label="Completed items"
-                  hint="what marking an item finished does to the row"
-                >
+                <Row label="Completed items" hint="what marking an item finished does to the row">
                   <PillMenu
                     label="Completed items"
                     value={current().completedItems}

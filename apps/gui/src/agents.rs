@@ -249,8 +249,8 @@ mod tests {
         assert!(claude.live_follow_up);
         assert!(claude.approvals);
         assert!(claude.commands);
-        assert!(!codex.live_follow_up);
-        assert!(!codex.approvals);
+        assert!(codex.live_follow_up);
+        assert!(codex.approvals);
         assert!(!codex.commands);
     }
 }
