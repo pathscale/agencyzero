@@ -4708,6 +4708,61 @@ async fn drive_run(
                 "run",
                 "{project_id}: the run failed: {error}"
             );
+            /*
+             * A failure after the agent spoke does not unsay the words.
+             *
+             * This branch used to report the error and drop `streamed_text`,
+             * so a turn the user had just watched arrive vanished and was
+             * replaced by a banner. That is the visible half of every
+             * misclassification: on 2026-08-01 an account crossing 75% of its
+             * weekly window made the crate read `allowed_warning` as a
+             * refusal, and every finished answer was erased by a rate-limit
+             * notice quoting one of its own sentences back.
+             *
+             * The crate-side fixes are in 0.4.3, and this is the half that
+             * does not depend on them being right. Whatever the classifier
+             * decides, an answer that reached the screen reaches the
+             * transcript, and the error is reported alongside it rather than
+             * instead of it. The cancelled branch above has always worked
+             * this way; a failure is the same situation with a different
+             * label.
+             *
+             * No usage row and no harvest, exactly as with a cancellation: a
+             * turn that ended badly reported no cost, and its words are not a
+             * finished answer to mine for tasks.
+             */
+            if !streamed_text.trim().is_empty() {
+                let row = MessageRow {
+                    id: id("msg"),
+                    project_id: project_id.clone(),
+                    item_id: String::new(),
+                    author: "agent".into(),
+                    agent: "claude".into(),
+                    moderation: String::new(),
+                    model: model.clone(),
+                    permission,
+                    usage: String::new(),
+                    // The reason, kept with the words it interrupted, so the
+                    // transcript can explain itself later.
+                    stop: error.to_string(),
+                    exit_code: -1,
+                    body: capped_body(streamed_text),
+                    created_at: now(),
+                };
+                match tables.message.insert(row.clone()) {
+                    Ok(_) => {
+                        let _ = app.emit("message:appended", MessageDto::from(row));
+                        clear_partial_reply(&tables, &project_id).await;
+                    }
+                    // Left in place deliberately: the checkpoint is what the
+                    // next boot recovers these words from.
+                    Err(error) => crate::log!(
+                        crate::log::Level::Error,
+                        "run",
+                        "{project_id}: could not persist the failed turn: {error}"
+                    ),
+                }
+            }
             let _ = app.emit(
                 "run:stopped",
                 serde_json::json!({
