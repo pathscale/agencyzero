@@ -603,6 +603,21 @@ fn truncate_on_char_boundary(text: &str, max: usize) -> String {
     format!("{}…", kept.trim_end())
 }
 
+/// The most characters a persisted diagnostic blob may carry.
+///
+/// WorkTable pages are 16K and a row must fit one: handing the engine a
+/// bigger row does not merely fail, it has twice corrupted the table's
+/// on-disk state on this machine — `need 18336, but 16356 allowed` in the
+/// log, then a store that bus-errors at the next open. Both times the blob
+/// was a tool output (`git show` on a large commit, reviewing recent work).
+///
+/// 8K of characters leaves the rest of the page for the row's other fields
+/// with a wide margin. These are diagnostic tails, not records: the full
+/// output lived on screen and in the agent's own transcript; what the panel
+/// needs is the head of it. The engine-side fix (an oversized insert must be
+/// an atomic refusal) belongs upstream and is tracked there.
+const MAX_PERSISTED_BLOB: usize = 8_000;
+
 fn parse_permission(raw: Option<&str>) -> Permission {
     match raw.unwrap_or("read_only") {
         "plan" => Permission::Plan,
@@ -3993,8 +4008,23 @@ async fn drive_run(
 
                 if partial_flushed_at.elapsed() >= PARTIAL_FLUSH_EVERY {
                     partial_flushed_at = std::time::Instant::now();
+                    /*
+                     * Capped like every persisted blob: an oversized row has
+                     * corrupted a table twice on this machine, and this one
+                     * shares a table with the schema fingerprint. A truncated
+                     * checkpoint recovers the head of an interrupted reply,
+                     * which beats both a corrupted kv and no checkpoint; the
+                     * finished reply is unaffected — it lands as a message
+                     * row, not here.
+                     */
+                    let checkpoint = if streamed_text.chars().count() > MAX_PERSISTED_BLOB {
+                        truncate_on_char_boundary(&streamed_text, MAX_PERSISTED_BLOB)
+                            + "\n\n[checkpoint truncated; the reply continued]"
+                    } else {
+                        streamed_text.clone()
+                    };
                     match tables
-                        .kv_put(&partial_reply_key(&project_id), streamed_text.clone())
+                        .kv_put(&partial_reply_key(&project_id), checkpoint)
                         .await
                     {
                         Ok(()) => {
@@ -4090,7 +4120,9 @@ async fn drive_run(
                         .as_ref()
                         .map_or_else(String::new, |task| task.name.clone()),
                     ok,
-                    output,
+                    // Capped: an oversized row corrupts the table it was
+                    // refused from. See MAX_PERSISTED_BLOB.
+                    output: truncate_on_char_boundary(&output, MAX_PERSISTED_BLOB),
                     duration_ms: started
                         .as_ref()
                         .and_then(|task| elapsed_ms(&task.started_at, &finished_at)),
