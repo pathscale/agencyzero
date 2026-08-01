@@ -163,7 +163,22 @@ const MIGRATABLE: [&str; 1] = ["project_item"];
 pub fn lock_store(store: &std::path::Path) -> Result<std::fs::File, String> {
     use std::os::fd::AsRawFd;
 
-    let lock_path = store.with_extension("lock");
+    /*
+     * Appended, not `with_extension`, which replaces everything after the last
+     * dot. `db`, `db.next-<stamp>` and `db.pre-migration-<stamp>` all reduced
+     * to the single path `db.lock`, so the lock guarded a name rather than a
+     * store. Two consequences, both real: `salvage-items db.pre-migration-X db`
+     * took the same lock twice in one process and always failed, since flock
+     * conflicts across open file descriptions even within a process; and
+     * recovering from a kept backup was refused whenever the GUI was open,
+     * naming a store the command was not touching.
+     *
+     * Appending keeps `db` on `db.lock`, which is the file the GUI holds, so
+     * the one collision that matters still works.
+     */
+    let mut lock_name = store.as_os_str().to_os_string();
+    lock_name.push(".lock");
+    let lock_path = std::path::PathBuf::from(lock_name);
     if let Some(parent) = lock_path.parent() {
         std::fs::create_dir_all(parent)
             .map_err(|error| format!("could not create {parent:?} for the store lock: {error}"))?;
@@ -406,8 +421,24 @@ pub async fn carry_forward(
             continue;
         }
         if safe.contains(&table) {
-            copy_dir(&from, &target.join(&table)).await?;
-            report.copied.push(table);
+            /*
+             * Recorded, not propagated. The per-table isolation that this
+             * crate was fixed for once already lived only inside the migrate
+             * branch below, so a table that could not be *copied* still ended
+             * the walk and took every table after it alphabetically. That is
+             * the same loss, one branch over: an unreadable `agent_io_row`
+             * sorts first and would cost `message`, `project` and the rest.
+             */
+            match copy_dir(&from, &target.join(&table)).await {
+                Ok(()) => report.copied.push(table),
+                Err(error) => {
+                    let _ = tokio::fs::remove_dir_all(target.join(&table)).await;
+                    report
+                        .failed
+                        .push((table.clone(), format!("could not copy: {error}")));
+                    report.reset.push(table);
+                }
+            }
             continue;
         }
         if MIGRATABLE.contains(&table.as_str()) {
@@ -429,18 +460,43 @@ pub async fn carry_forward(
                      * data. Losing a garbled row is a report line; keeping it
                      * is a store nobody can trust.
                      */
-                    let dropped = scrub_items(target).await?;
-                    if dropped > 0 {
-                        report.dropped.push((table.clone(), dropped));
+                    // Same rule: a scrub that fails is this table's problem.
+                    match scrub_items(target).await {
+                        Ok(dropped) => {
+                            if dropped > 0 {
+                                report.dropped.push((table.clone(), dropped));
+                            }
+                            report.migrated.push(table);
+                        }
+                        Err(error) => {
+                            let _ = tokio::fs::remove_dir_all(target.join(&table)).await;
+                            report
+                                .failed
+                                .push((table.clone(), format!("could not scrub: {error}")));
+                            report.reset.push(table);
+                        }
                     }
-                    report.migrated.push(table);
                 }
-                Err(error) if error.to_string().contains("Unsupported version") => {
-                    // Already current. Copy rather than fail, so a re-run is
-                    // harmless.
-                    copy_dir(&from, &target.join(&table)).await?;
-                    report.copied.push(table);
-                }
+                /*
+                 * `Unsupported version` used to be caught here and answered by
+                 * copying the table verbatim, on the reading that it was
+                 * already current and a re-run should be harmless.
+                 *
+                 * A re-run is already harmless: an unchanged table never
+                 * reaches the engine at all, because the fingerprint diff
+                 * copies it above. So the only way to arrive here is with a
+                 * table whose columns *have* changed and a version the engine
+                 * has no hop for, and copying that is the field-shift this
+                 * crate exists to prevent, performed by the migration and
+                 * reported as `copied`.
+                 *
+                 * It is armed today rather than hypothetical: the generated
+                 * engine stamps its target version 2, so every store that has
+                 * already been carried forward once now answers 2, and the
+                 * next column added to this table would land exactly here.
+                 *
+                 * So it falls through to salvage below with everything else.
+                 */
                 /*
                  * One table that cannot be engine-migrated must not cost the
                  * others, and it must not cost its own readable rows either.
@@ -674,6 +730,27 @@ mod scrub_tests {
             .collect();
         kept.sort();
         assert_eq!(kept, vec!["item-1", "item-2", "item-3"]);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// `db`, `db.next-<stamp>` and `db.pre-migration-<stamp>` are three stores.
+    ///
+    /// They shared one lock file, because `with_extension` replaces everything
+    /// after the last dot. So the documented recovery,
+    /// `salvage-items db.pre-migration-X db`, locked the same file twice in one
+    /// process and could never run: flock conflicts across open file
+    /// descriptions even within a process. Both locks are taken here, in one
+    /// process, which is exactly the case that used to fail.
+    #[test]
+    fn stores_that_share_a_stem_do_not_share_a_lock() {
+        let dir = std::env::temp_dir().join(format!("wt-migrate-lock-{}", std::process::id()));
+        let _ = std::fs::create_dir_all(&dir);
+
+        let live = super::lock_store(&dir.join("db")).expect("the live store locks");
+        let kept = super::lock_store(&dir.join("db.pre-migration-20260801T000000Z"))
+            .expect("a store with the same stem must lock separately");
+
+        drop((live, kept));
         let _ = std::fs::remove_dir_all(&dir);
     }
 }
