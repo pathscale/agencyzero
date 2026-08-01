@@ -24,6 +24,11 @@ export type TabKind = "home" | "draft" | "settings" | "project";
  *   looking at the screen. Without this state a fix reported as done was
  *   indistinguishable from one that worked, and a copy bug was reported fixed
  *   three times in one evening.
+ * - `questions` is started and stopped on something only the owner can answer.
+ *   Distinct from `active`, which claims work is happening, and from `new`,
+ *   which claims nobody has looked yet. A row waiting on a person used to read
+ *   as one of those two, so a list could not say which of its items were
+ *   waiting on the person reading it.
  * - `finished` is the owner's word, never the agent's.
  */
 export type ProjectStatus =
@@ -31,6 +36,7 @@ export type ProjectStatus =
   | "pending"
   | "planning"
   | "active"
+  | "questions"
   | "shipped"
   | "finished"
   | "canceled";

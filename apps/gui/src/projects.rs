@@ -470,6 +470,16 @@ fn checkbox(line: &str) -> Option<Checked> {
         ("new", "[ ] "),
         ("planning", "[~] "),
         ("active", "[/] "),
+        /*
+         * `[?]` is started and stuck on something only the owner can answer.
+         *
+         * Without it the agent's only honest options were to leave the row
+         * `active`, which claims work is happening while nothing is, or to
+         * write the question into the transcript, where it scrolls away. The
+         * list could not answer "which of these are waiting on me", which is
+         * the question the owner asks it most.
+         */
+        ("questions", "[?] "),
         ("shipped", "[>] "),
         ("deleted", "[-] "),
         ("finished", "[x] "),
@@ -5468,6 +5478,20 @@ mod tests {
             .collect::<Vec<_>>()
             .join("\n");
         assert_eq!(items_from_reply(&many).len(), MAX_ITEMS_PER_REPLY);
+    }
+
+    /// `[?]` is the state an agent needs when it is stuck on the owner.
+    ///
+    /// Without it the honest options were to leave the row `active`, which
+    /// claims work is happening while nothing is, or to put the question in the
+    /// transcript, where it scrolls away. Not destructive, so prose may say it:
+    /// an agent that stops mid-answer must be able to record that plainly.
+    #[test]
+    fn a_question_box_marks_a_row_as_waiting_on_the_owner() {
+        let read = items_from_reply("- [?] Which runner should macOS use\n");
+        assert_eq!(read[0].status, "questions");
+        assert_eq!(read[0].title, "Which runner should macOS use");
+        assert!(!read[0].authored);
     }
 
     /// The third box: `[-]` marks a row for removal, so an agent can retire an
