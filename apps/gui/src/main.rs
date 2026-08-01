@@ -953,6 +953,38 @@ fn main() {
                 data_dir,
                 location,
             });
+
+            /*
+             * Shown here, not by the config, because everything above it can
+             * take a while.
+             *
+             * A store carried forward across a schema change is copied and
+             * rewritten table by table, and the window is created before this
+             * hook runs. Left visible it sits there empty and unresponsive for
+             * the whole migration, which is indistinguishable from a hang and
+             * invites the one action that would corrupt the store: force-quit
+             * partway through.
+             *
+             * `visible: false` in `tauri.conf.json` is the other half. If the
+             * window fails to show for any reason the app is running with no
+             * way to reach it, so that is logged loudly rather than ignored.
+             */
+            if let Some(window) = app.get_webview_window("main") {
+                if let Err(error) = window.show() {
+                    crate::log!(
+                        log::Level::Error,
+                        "boot",
+                        "the main window could not be shown: {error}"
+                    );
+                }
+            } else {
+                crate::log!(
+                    log::Level::Error,
+                    "boot",
+                    "no window labelled `main` to show after setup"
+                );
+            }
+
             Ok(())
         })
         .on_menu_event(|app, event| {

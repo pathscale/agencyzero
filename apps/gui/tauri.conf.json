@@ -12,6 +12,7 @@
     "windows": [
       {
         "label": "main",
+        "visible": false,
         "title": "AgencyZero",
         "width": 1344,
         "height": 900,
