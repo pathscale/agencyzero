@@ -307,7 +307,6 @@ function AgentBubble(props: { message: Message; onRetry?: () => void }): JSX.Ele
         <Show when={props.message.model}>
           {(model) => <span class="text-[11px] text-az-faint">{model()}</span>}
         </Show>
-        <MessageTime at={props.message.createdAt} />
         <Show when={failed()}>
           <span
             title={props.message.stop}
@@ -340,6 +339,15 @@ function AgentBubble(props: { message: Message; onRetry?: () => void }): JSX.Ele
           </div>
         )}
       </Show>
+      {/*
+       * Under the reply, where the user's own timestamp sits.
+       *
+       * It used to ride in the header between the model name and the failure
+       * chip, so the two sides of the same conversation dated themselves in
+       * different places and the eye had to go looking. A timestamp is what
+       * the message turned out to be, not an announcement before it.
+       */}
+      <MessageTime at={props.message.createdAt} />
     </div>
   );
 }
