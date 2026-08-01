@@ -306,11 +306,21 @@ fn agent_wire_name(agent: Agent) -> &'static str {
 
 /// Whether the next provider text event starts a new visible block.
 ///
-/// Codex `exec --json` emits each completed commentary or final message as a
-/// whole `Event::Text`. Claude and Copilot may emit adjacent deltas of one
-/// message, so their consecutive text events must stay adjacent.
-fn needs_text_break(agent: Agent, streamed_any: bool, last_was_text: bool) -> bool {
-    streamed_any && (!last_was_text || agent == Agent::Codex)
+/// Every interactive provider may emit adjacent deltas of one message, so
+/// consecutive text events must stay adjacent. A tool, reasoning event, or
+/// injected user message establishes a visible block boundary.
+fn needs_text_break(streamed_any: bool, last_was_text: bool) -> bool {
+    streamed_any && !last_was_text
+}
+
+/// Whether this run needs an approval callback as well as its sandbox posture.
+///
+/// `ask` is explicitly human-gated for every capable provider. Codex `auto`
+/// also keeps the callback open so a path outside the declared workspace roots
+/// can ask the user for access instead of being silently denied and provoking
+/// the model to clone a second copy somewhere writable.
+fn should_route_approvals(agent: Agent, permission: &str) -> bool {
+    permission == "ask" || (agent == Agent::Codex && permission == "auto")
 }
 
 /// The Markdown fence currently making reply content inert.
@@ -1962,7 +1972,7 @@ const APPROVAL_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30 
 /// loop watches the receiver and tears the agent down cooperatively.
 ///
 /// `inject` is the other direction: a message typed while the run is live is
-/// delivered *into* the turn over the agent's open stdin (`Run::send`, 0.3.6),
+/// delivered *into* the provider's interactive control channel (`Run::send`),
 /// and the model takes it at its next step boundary. That is what makes a
 /// mid-run correction an interruption rather than a queued afterthought.
 pub struct ActiveRun {
@@ -3444,8 +3454,8 @@ pub async fn send_message(
      * dangling with no reply, and the frontend keeps the draft to retry.
      *
      * A message during a live run is not a second run: it is delivered *into*
-     * the turn over the agent's open stdin, and the model takes it at its next
-     * step boundary. The interruption the owner asked for.
+     * the provider's interactive control channel, and the model takes it at
+     * its next step boundary. The interruption the owner asked for.
      */
     let (reservation, cancel, inject_rx) = {
         let mut active = state
@@ -3585,9 +3595,8 @@ pub async fn send_message(
     // directories. Its provider applies the chosen permission posture within
     // the directories stored in Settings.
     //
-    // The first directory becomes the cwd; every further one rides along as
-    // `--add-dir`, so a project spanning two repos is in scope for both
-    // instead of generating an approval question per out-of-tree read.
+    // The first directory becomes the cwd; every further one is another typed
+    // working root, so a project spanning two repos is in scope for both.
     let mut dirs = if input.project_id == crate::tasks::TASK_MANAGER_ID {
         state
             .tables
@@ -3799,26 +3808,20 @@ async fn drive_run(
     let mut request = Request::new(agent, prompt)
         .permission(parse_permission(Some(&permission)))
         .cwd(&cwd);
-    /*
-     * Every directory after the first widens the working tree. Passed through
-     * `unchecked_args` because the crate has no unified spelling for it yet.
-     * Verified as `--add-dir <DIR>` against claude 2.1.212 and codex-cli
-     * 0.145.0 (`codex exec --help`) on 2026-08-02.
-     * Each directory is one argv value passed directly to the CLI; no shell
-     * parses it, so metacharacters remain path characters rather than syntax.
-     */
+    // The library maps these typed roots to each provider and, for interactive
+    // Codex, to both app-server runtime roots and workspace-write roots.
     for dir in &extra_dirs {
-        request = request.unchecked_args(["--add-dir", dir]);
+        request = request.add_dir(dir);
     }
     // `ask`: every gated call — a write, a command, a read outside the working
     // tree — arrives as an approval question instead of a silent pre-decision.
-    let asks = permission == "ask";
+    let asks = should_route_approvals(agent, &permission);
     if asks && agent.caps().approvals {
         request = request.approvals();
     }
     // Always, not only under `ask` (approvals implies it anyway): the open
-    // stdin is what lets a message typed mid-turn reach the model at its next
-    // step boundary instead of waiting out the whole turn.
+    // control channel is what lets a message typed mid-turn reach the model at
+    // its next step boundary instead of waiting out the whole turn.
     if agent.caps().live_follow_up {
         request = request.interactive();
     }
@@ -4314,15 +4317,13 @@ async fn drive_run(
             }
             Event::Text(delta) => {
                 /*
-                 * Codex emits each completed commentary/final message as a
-                 * separate Text event, not as deltas of one message. Joining
-                 * two of them byte-for-byte glued a directive to the prose
-                 * before it (`sentence.<ps ...>`), turning a valid authored
-                 * segment into inert text. Other providers may genuinely
-                 * stream adjacent deltas, so only Codex gets a block break at
-                 * every Text boundary.
+                 * Interactive providers may emit one visible message as many
+                 * adjacent Text deltas. Preserve that adjacency. A tool,
+                 * reasoning event, or injected user message clears
+                 * `last_was_text`, which gives the next visible message its
+                 * own block without inserting whitespace between tokens.
                  */
-                let delta = if needs_text_break(agent, streamed_any, last_was_text) {
+                let delta = if needs_text_break(streamed_any, last_was_text) {
                     format!("\n\n{delta}")
                 } else {
                     delta
@@ -5549,9 +5550,17 @@ mod tests {
     #[test]
     fn live_follow_up_uses_the_providers_capability() {
         assert!(can_inject(Agent::Claude, Agent::Claude));
-        assert!(!can_inject(Agent::Codex, Agent::Codex));
+        assert!(can_inject(Agent::Codex, Agent::Codex));
         assert!(!can_inject(Agent::Claude, Agent::Codex));
         assert!(!can_inject(Agent::Codex, Agent::Claude));
+    }
+
+    #[test]
+    fn codex_auto_can_ask_for_a_missing_workspace_root() {
+        assert!(should_route_approvals(Agent::Codex, "auto"));
+        assert!(should_route_approvals(Agent::Codex, "ask"));
+        assert!(!should_route_approvals(Agent::Codex, "edit"));
+        assert!(!should_route_approvals(Agent::Claude, "auto"));
     }
 
     /// The arithmetic that read "60 tokens" on a ten-minute run.
@@ -5895,16 +5904,10 @@ mod tests {
     }
 
     #[test]
-    fn codex_message_boundaries_cannot_glue_a_directive_to_prose() {
-        assert!(needs_text_break(Agent::Codex, true, true));
-        assert!(needs_text_break(Agent::Codex, true, false));
-        assert!(!needs_text_break(Agent::Codex, false, false));
-
-        // Adjacent events from the other providers may be deltas of one
-        // message. Tool or thinking events still establish a block break.
-        assert!(!needs_text_break(Agent::Claude, true, true));
-        assert!(needs_text_break(Agent::Claude, true, false));
-        assert!(!needs_text_break(Agent::Copilot, true, true));
+    fn streamed_deltas_stay_together_and_other_events_make_blocks() {
+        assert!(!needs_text_break(true, true));
+        assert!(needs_text_break(true, false));
+        assert!(!needs_text_break(false, false));
     }
 
     #[test]

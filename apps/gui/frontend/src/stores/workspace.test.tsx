@@ -66,7 +66,7 @@ describe("startup", () => {
   it("derives approval postures from provider capabilities", async () => {
     const workspace = await mountWorkspace();
     expect(workspace.permissionsFor("claude")).toContain("ask");
-    expect(workspace.permissionsFor("codex")).not.toContain("ask");
+    expect(workspace.permissionsFor("codex")).toContain("ask");
   });
 });
 

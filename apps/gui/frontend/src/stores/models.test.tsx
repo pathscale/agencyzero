@@ -203,14 +203,14 @@ describe("what the prompt offers", () => {
     expect(sent?.model).toBe("gpt-5.6-sol");
   });
 
-  it("moves Ask to read-only when switching to OpenAI", async () => {
+  it("keeps Ask when switching to an approval-capable OpenAI model", async () => {
     const workspace = await mountWorkspace();
     workspace.actions.setTabModel("worktable", "claude", "sonnet", "ask");
     workspace.actions.setTabModel("worktable", "codex", "gpt-5.6-sol", "ask");
 
     const tab = workspace.state.tabs.find((candidate) => candidate.key === "worktable");
     expect(tab?.agent).toBe("codex");
-    expect(tab?.permission).toBe("read_only");
+    expect(tab?.permission).toBe("ask");
   });
 
   it("restores the last provider when a project is closed and reopened", async () => {
@@ -322,7 +322,7 @@ describe("posture follows Settings too", () => {
     expect(workspace.activeTab().permission).toBe("read_only");
   });
 
-  it("opens a Codex draft as read-only when Settings says Ask", async () => {
+  it("opens a Codex draft with Ask when Settings says Ask", async () => {
     const workspace = await mountWorkspace();
     await workspace.actions.saveSettings({ defaultAgent: "codex", defaultPermission: "ask" });
 
@@ -330,7 +330,7 @@ describe("posture follows Settings too", () => {
 
     await waitFor(() => expect(workspace.activeTab().kind).toBe("draft"));
     expect(workspace.activeTab().agent).toBe("codex");
-    expect(workspace.activeTab().permission).toBe("read_only");
+    expect(workspace.activeTab().permission).toBe("ask");
   });
 
   it("keeps Copilot out of project tabs until project runs support it", async () => {
