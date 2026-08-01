@@ -258,6 +258,16 @@ const HOME_TAB: Tab = {
   status: "quiet",
 };
 
+/** Project runs support these two providers; Copilot remains Settings-only. */
+function isProjectAgent(agent: Agent): agent is "claude" | "codex" {
+  return agent === "claude" || agent === "codex";
+}
+
+/** Codex has no live approval channel, so Ask cannot be a visible Codex posture. */
+function compatiblePermission(agent: Agent, permission: Permission): Permission {
+  return agent !== "claude" && permission === "ask" ? "read_only" : permission;
+}
+
 function createWorkspace() {
   const [state, setState] = createStore<WorkspaceState>({
     projects: [],
@@ -498,6 +508,8 @@ function createWorkspace() {
       backend.listAgentIo(projectId),
       backend.listPullRequests(projectId),
     ]);
+    const project = state.projects.find((candidate) => candidate.id === projectId);
+    const hydratedTab = project ? projectTab(project, messages) : null;
     batch(() => {
       setState("items", projectId, reconcile(items));
       setState("messages", projectId, reconcile(messages));
@@ -506,6 +518,16 @@ function createWorkspace() {
       setState("logTotals", projectId, log.total);
       setState("agentIo", projectId, reconcile(io));
       setState("pullRequests", projectId, reconcile(prs));
+      if (hydratedTab) {
+        const tabIndex = state.tabs.findIndex((tab) => tab.key === projectId);
+        if (tabIndex >= 0) {
+          setState("tabs", tabIndex, {
+            agent: hydratedTab.agent,
+            model: hydratedTab.model,
+            permission: hydratedTab.permission,
+          });
+        }
+      }
     });
     /*
      * Ask about this project's open pull requests now rather than at the next
@@ -589,7 +611,9 @@ function createWorkspace() {
         const remembered = new Set(prefs.openTabKeys);
         setState("tabs", [
           HOME_TAB,
-          ...projects.filter((project) => remembered.has(project.id)).map(projectTab),
+          ...projects
+            .filter((project) => remembered.has(project.id))
+            .map((project) => projectTab(project)),
         ]);
         const restored = state.tabs.some((tab) => tab.key === prefs.lastTabKey);
         setState("activeKey", restored ? prefs.lastTabKey : "home");
@@ -672,7 +696,7 @@ function createWorkspace() {
   }
 
   /**
-   * What a new tab starts on: the default agent's default model from Settings.
+   * What a new tab starts on: the default project-capable agent and model.
    *
    * Read from settings rather than from `prefs.lastModel`, which used to seed
    * this and silently won. Two places claiming to own "the default model" meant
@@ -684,26 +708,64 @@ function createWorkspace() {
     return state.settings?.defaultEffort ?? FALLBACK_EFFORT;
   }
 
+  function defaultAgent(): "claude" | "codex" {
+    return state.settings?.defaultAgent === "codex" ? "codex" : "claude";
+  }
+
   function defaultModel(): string {
     const settings = state.settings;
     if (!settings) return "";
-    return settings.models[settings.defaultAgent]?.default ?? "";
+    return settings.models[defaultAgent()]?.default ?? "";
   }
 
-  function defaultAgent(): Agent {
-    return state.settings?.defaultAgent ?? "claude";
+  /**
+   * Restore the provider that most recently owned this conversation.
+   *
+   * Messages are authoritative because they preserve ordering. The session map
+   * is only the pre-hydration fallback, and only when exactly one provider has
+   * a session; two session ids cannot say which one ran last.
+   */
+  function projectSelection(project: Project, transcript: readonly Message[]) {
+    const last = [...transcript]
+      .reverse()
+      .find(
+        (message) =>
+          (message.author === "user" || message.author === "agent") &&
+          isProjectAgent(message.agent),
+      );
+    const lastAgent = last && isProjectAgent(last.agent) ? last.agent : null;
+    const hasClaude = Boolean(project.sessions.claude ?? project.sessionId);
+    const hasCodex = Boolean(project.sessions.codex);
+    const agent = lastAgent
+      ? lastAgent
+      : hasClaude !== hasCodex
+        ? hasCodex
+          ? "codex"
+          : "claude"
+        : defaultAgent();
+    const selection = state.settings?.models[agent];
+    const model =
+      last?.model && selection?.enabled.includes(last.model)
+        ? last.model
+        : (selection?.default ?? "");
+    const permission = compatiblePermission(
+      agent,
+      last?.permission ?? state.settings?.defaultPermission ?? "read_only",
+    );
+    return { agent, model, permission };
   }
 
-  function projectTab(project: Project): Tab {
+  function projectTab(project: Project, transcript = state.messages[project.id] ?? []): Tab {
+    const selection = projectSelection(project, transcript);
     return {
       key: project.id,
       kind: "project",
       projectId: project.id,
       label: project.name,
-      agent: defaultAgent(),
-      model: defaultModel(),
+      agent: selection.agent,
+      model: selection.model,
       effort: defaultEffort(),
-      permission: state.settings?.defaultPermission ?? "read_only",
+      permission: selection.permission,
       status: "quiet",
     };
   }
@@ -1129,6 +1191,7 @@ function createWorkspace() {
       return;
     }
     const key = `draft-${Date.now()}`;
+    const agent = defaultAgent();
     setState("tabs", (tabs) => [
       ...tabs,
       {
@@ -1136,10 +1199,10 @@ function createWorkspace() {
         kind: "draft",
         projectId: null,
         label: "Untitled",
-        agent: defaultAgent(),
+        agent,
         model: defaultModel(),
         effort: defaultEffort(),
-        permission: state.settings?.defaultPermission ?? "read_only",
+        permission: compatiblePermission(agent, state.settings?.defaultPermission ?? "read_only"),
         status: "quiet",
       },
     ]);
@@ -1206,7 +1269,7 @@ function createWorkspace() {
    * editing an unrelated setting should not silently reset it.
    */
   function reconcileTabModels(settings: GlobalSettings): void {
-    const defaultAgent = settings.defaultAgent;
+    const defaultAgent = settings.defaultAgent === "codex" ? "codex" : "claude";
     const selection = settings.models[defaultAgent];
     if (!selection || selection.enabled.length === 0) return;
 
@@ -1221,7 +1284,7 @@ function createWorkspace() {
         setState("tabs", index, {
           agent: defaultAgent,
           model: selection.default,
-          permission: settings.defaultPermission,
+          permission: compatiblePermission(defaultAgent, settings.defaultPermission),
           effort: settings.defaultEffort,
         });
         return;
@@ -1233,11 +1296,12 @@ function createWorkspace() {
        * silently reset a deliberate override.
        */
       const tabSelection = settings.models[tab.agent];
-      if (tabSelection?.enabled.includes(tab.model)) return;
-      setState("tabs", index, { agent: defaultAgent, model: selection.default });
-      // The backend keeps per-tab state, so a migration has to reach it too, or
-      // the next send would use the model the frontend just moved away from.
-      void client().setTabModel(tab.key, selection.default, tab.permission);
+      if (isProjectAgent(tab.agent) && tabSelection?.enabled.includes(tab.model)) return;
+      setState("tabs", index, {
+        agent: defaultAgent,
+        model: selection.default,
+        permission: compatiblePermission(defaultAgent, tab.permission),
+      });
     });
   }
 
@@ -1250,20 +1314,18 @@ function createWorkspace() {
   ): void {
     const index = state.tabs.findIndex((tab) => tab.key === key);
     if (index < 0) return;
-    // Codex has no mid-run approval channel. Moving an Ask tab to OpenAI also
-    // moves its visible posture to read-only, instead of failing only on send.
-    const compatiblePermission =
-      agent !== "claude" && permission === "ask" ? "read_only" : permission;
+    // The selection is frontend state. A sent message records it durably, and
+    // reopening the project restores it from that ordered conversation.
+    const nextPermission = compatiblePermission(agent, permission);
     // Effort only when the caller sent one: the model and permission pills
     // must not clobber a level someone picked a moment ago.
     setState(
       "tabs",
       index,
       effort === undefined
-        ? { agent, model, permission: compatiblePermission }
-        : { agent, model, permission: compatiblePermission, effort },
+        ? { agent, model, permission: nextPermission }
+        : { agent, model, permission: nextPermission, effort },
     );
-    void client().setTabModel(key, model, compatiblePermission);
   }
 
   // — mutations ————————————————————————————————————————————————————

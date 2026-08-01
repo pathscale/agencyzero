@@ -65,7 +65,6 @@ pub struct ProjectDto {
 
 /// Attach the project's session id, which lives in `kv` rather than on the row.
 fn with_session(mut dto: ProjectDto, tables: &crate::db::tables::Tables) -> ProjectDto {
-    dto.session_id = tables.kv_get(&session_key(&dto.id));
     for agent in [Agent::Claude, Agent::Codex] {
         if let Some(session) = tables
             .kv_get(&agent_session_key(&dto.id, agent))
@@ -74,6 +73,8 @@ fn with_session(mut dto: ProjectDto, tables: &crate::db::tables::Tables) -> Proj
             dto.sessions.insert(agent_wire_name(agent).into(), session);
         }
     }
+    // The legacy field is the same Claude key, kept for older frontends.
+    dto.session_id = dto.sessions.get("claude").cloned();
     dto
 }
 
@@ -3467,16 +3468,18 @@ pub async fn delete_project(
         .delete_by_project(id.clone())
         .await
         .map_err(|error| failed("the pull request rows", &error))?;
-    for key in [
-        session_key(&id),
-        agent_session_key(&id, Agent::Codex),
+    let mut keys = [Agent::Claude, Agent::Codex, Agent::Copilot]
+        .map(|agent| agent_session_key(&id, agent))
+        .to_vec();
+    keys.extend([
         io_persist_key(&id),
         partial_reply_key(&id),
         // The notes kept across compactions. Ids are not recycled, so this is
         // only an orphan — but it is an orphan that would be fed to an agent as
         // standing instructions if one ever were.
         crate::notes::notes_key(&id),
-    ] {
+    ]);
+    for key in keys {
         if let Err(error) = state.tables.kv_put(&key, String::new()).await {
             crate::log!(
                 crate::log::Level::Warn,
@@ -3736,7 +3739,7 @@ pub async fn send_message(
     if agent != Agent::Claude && permission == "ask" {
         return Err(format!(
             "{} cannot ask for approval during a run; choose read only, edit, auto, or bypass",
-            agent_wire_name(agent)
+            agent_name
         ));
     }
 
@@ -4104,6 +4107,8 @@ async fn drive_run(
      * `unchecked_args` because the crate has no unified spelling for it yet.
      * Verified as `--add-dir <DIR>` against claude 2.1.212 and codex-cli
      * 0.145.0 (`codex exec --help`) on 2026-08-02.
+     * Each directory is one argv value passed directly to the CLI; no shell
+     * parses it, so metacharacters remain path characters rather than syntax.
      */
     for dir in &extra_dirs {
         request = request.unchecked_args(["--add-dir", dir]);

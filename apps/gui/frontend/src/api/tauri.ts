@@ -81,8 +81,6 @@ export function createTauriApi(): AgencyZeroApi {
     getWorkspaceRoot: () => call("get_workspace_root"),
     createWorkspaceRoot: () => call("create_workspace_root"),
 
-    setTabModel: (tabKey, model, permission) =>
-      call("set_tab_model", { tabKey, model, permission }),
     cancelRun: (projectId) => call("cancel_run", { projectId }),
     compactProject: (projectId) => call("compact_project", { projectId }),
     getCheckpoints: (projectId) => call("get_checkpoints", { projectId }),

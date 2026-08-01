@@ -104,7 +104,7 @@ emits its event.
       Tauri dialog plugin at the same time — the panel currently takes a typed path
       because there is no native folder picker.
 - [ ] `create_item`, `delete_item`, `set_item_status`, `reorder_items`.
-- [ ] `set_tab_model(tab_key, model, permission)` — persistence for `UiPrefs`-adjacent tab
+- [ ] `set_tab_model(tab_key, agent, model, permission)` — persist an unsent per-tab selection
       state. The frontend keeps this in memory and in `localStorage`; decide whether Rust
       should own it at all, or whether this command should be dropped.
 

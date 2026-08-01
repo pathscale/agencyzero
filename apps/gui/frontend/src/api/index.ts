@@ -51,7 +51,6 @@ const COMMAND_FOR: Partial<Record<keyof AgencyZeroApi, string>> = {
   chooseAttachments: "choose_attachments",
   getWorkspaceRoot: "get_workspace_root",
   createWorkspaceRoot: "create_workspace_root",
-  setTabModel: "set_tab_model",
   cancelRun: "cancel_run",
   compactProject: "compact_project",
   getCheckpoints: "get_checkpoints",

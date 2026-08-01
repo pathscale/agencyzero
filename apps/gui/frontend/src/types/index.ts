@@ -55,7 +55,7 @@ export type ProjectStatus =
  */
 export type TabStatus = "running" | "blocked" | "error" | "ready" | "quiet";
 
-/** `Agent` in the crate. Projects currently expose Claude and Codex. */
+/** `Agent` in the crate. Settings covers all three; project tabs expose Claude and Codex. */
 export type Agent = "claude" | "codex" | "copilot";
 
 /** `Permission` in the crate. `read_only` is the default and widens deliberately. */

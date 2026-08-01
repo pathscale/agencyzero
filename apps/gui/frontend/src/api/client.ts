@@ -163,8 +163,6 @@ export interface AgencyZeroApi {
   createWorkspaceRoot(): Promise<WorkspaceRoot>;
 
   // — Runs and tasks ——————————————————————————————————————————
-  /** The tab's model and posture stick until changed again. */
-  setTabModel(tabKey: string, model: string, permission: Permission): Promise<void>;
   /** `Run::cancel` — resolves once the process group is gone. */
   cancelRun(projectId: string): Promise<void>;
 

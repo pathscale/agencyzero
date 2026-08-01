@@ -455,8 +455,6 @@ export function createMockApi(): AgencyZeroApi {
     getWorkspaceRoot: () => settle({ path: "(no filesystem)", exists: false, isDefault: true }),
     createWorkspaceRoot: () => settle({ path: "(no filesystem)", exists: false, isDefault: true }),
 
-    setTabModel: () => settle(undefined),
-
     async cancelRun(projectId) {
       for (let i = running.length - 1; i >= 0; i--) {
         if (running[i].projectId !== projectId) continue;
