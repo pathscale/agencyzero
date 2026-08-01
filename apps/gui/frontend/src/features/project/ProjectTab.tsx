@@ -310,20 +310,13 @@ function PrChip(props: { pr: PullRequest }): JSX.Element {
         class={`shrink-0 text-[14px] ${merged() ? "text-az-pr-strong" : closed() ? "text-az-muted" : "text-success"}`}
       />
       {/*
-       * The row opens the PR. Copying it was the only thing a click did, which
-       * made the commonest action — go look at it — a two-step through the
-       * clipboard and a browser address bar.
+       * What the row *is*, and nothing that acts. The whole row used to be the
+       * button that opened the pull request, so the one obvious action was
+       * discoverable only by clicking text that did not look like a link, and
+       * every other click on the row went to GitHub whether or not that was
+       * what you meant.
        */}
-      <button
-        type="button"
-        onClick={() =>
-          void actions
-            .openExternal(props.pr.url)
-            .catch((cause) => log.warn(`could not open the PR: ${describeError(cause)}`))
-        }
-        title={`Open ${props.pr.url}`}
-        class="flex min-w-0 flex-1 items-center gap-2.5 text-left"
-      >
+      <div class="flex min-w-0 flex-1 items-center gap-2.5">
         <span class={`shrink-0 font-semibold ${merged() ? "text-az-pr-strong" : "text-az-strong"}`}>
           #{props.pr.number}
         </span>
@@ -334,6 +327,19 @@ function PrChip(props: { pr: PullRequest }): JSX.Element {
         <Show when={copied()}>
           <span class="shrink-0 text-[10.5px] text-success">copied</span>
         </Show>
+      </div>
+      {/* Coloured and underlined, because it leaves the app. */}
+      <button
+        type="button"
+        onClick={() =>
+          void actions
+            .openExternal(props.pr.url)
+            .catch((cause) => log.warn(`could not open the PR: ${describeError(cause)}`))
+        }
+        title={`Open ${props.pr.url}`}
+        class="shrink-0 cursor-pointer text-primary underline decoration-dotted underline-offset-2 transition-opacity hover:opacity-75"
+      >
+        Open GitHub
       </button>
       <Show
         when={merged()}

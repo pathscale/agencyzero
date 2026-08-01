@@ -480,6 +480,14 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
    */
   const [tall, setTall] = createSignal(false);
   /**
+   * The pull request a shipped row names, when this project has one by that
+   * number. The item stores the number alone, deliberately: it is the match
+   * key's neighbour, not a URL to be kept in sync with a repository rename.
+   * The URL is looked up from the project's own pull requests instead.
+   */
+  const prUrl = (reference: string) =>
+    (state.pullRequests[props.projectId] ?? []).find((pr) => String(pr.number) === reference)?.url;
+  /**
    * Narrows the list as you type. Substring, case-insensitive — the same rule
    * `wt-tools search-items` uses, so what you find here and what a query finds
    * from the terminal are the same set.
@@ -694,7 +702,27 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
                     this state exists to prevent.
                   */}
                   <Show when={item.reference} fallback={statusSuffix(item.status)}>
-                    {(number) => <>(PR #{number()})</>}
+                    {(number) => (
+                      /*
+                        And it opens. The number is there to be checked, so
+                        reading it and then going to find the pull request by
+                        hand is the one thing it should not cost. Plain text
+                        when the project has no pull request by that number,
+                        rather than a link that goes nowhere.
+                      */
+                      <Show when={prUrl(number())} fallback={<>(PR #{number()})</>}>
+                        {(url) => (
+                          <button
+                            type="button"
+                            onClick={() => void actions.openExternal(url())}
+                            title={`Open ${url()}`}
+                            class="cursor-pointer underline decoration-dotted underline-offset-2 hover:text-primary"
+                          >
+                            (PR #{number()})
+                          </button>
+                        )}
+                      </Show>
+                    )}
                   </Show>
                 </span>
               </div>
@@ -824,7 +852,16 @@ function RunningList(props: { projectId: string }): JSX.Element {
       <For each={tasks()}>
         {(task) => (
           <div class="rounded-[11px] border border-primary/22 bg-base-300 px-3 py-2.5">
-            <div class="truncate font-mono text-[12px] text-az-strong">{task.label}</div>
+            {/*
+             * Wrapped rather than truncated. This panel answers "what is it
+             * doing right now", and a truncated command answers it for the
+             * first forty characters. The task log below can be clicked open
+             * because its rows are history; a running row is the present, so
+             * it shows the whole thing.
+             */}
+            <div class="whitespace-pre-wrap break-words font-mono text-[12px] text-az-strong">
+              {task.label}
+            </div>
             <div class="mt-2 flex items-center gap-2 text-[11px]">
               <span class="font-mono text-az-muted">{task.name}</span>
               <span class="text-primary">{elapsed(task.startedAt, now())}</span>
@@ -902,11 +939,24 @@ function TaskLogList(props: { projectId: string }): JSX.Element {
              * The title attribute was the only way to see the rest, and a
              * tooltip cannot be selected.
              */}
+            {/*
+             * The verb, which the label alone does not carry. A row reading
+             * `Cargo.toml` says a file was involved and nothing about what
+             * happened to it: read, searched, written and stat'd all look
+             * identical. The tool name was already on the row's data and
+             * simply was not rendered.
+             */}
+            <span class="shrink-0 font-mono text-[11px] text-az-muted">{entry.tool}</span>
+            {/*
+             * `aria-label` rather than `title`: the tooltip fired on hover
+             * over every row on the way past, which reads as the panel
+             * flinching. The pointer already says the row is a control.
+             */}
             <button
               type="button"
               onClick={() => setExpanded(expanded() === entry.id ? null : entry.id)}
-              title={expanded() === entry.id ? "Collapse" : "Show the whole command"}
-              class={`min-w-0 flex-1 text-left text-az-body ${
+              aria-label={expanded() === entry.id ? "Collapse" : "Show the whole command"}
+              class={`min-w-0 flex-1 cursor-pointer text-left text-az-body ${
                 expanded() === entry.id ? "whitespace-pre-wrap break-all" : "truncate"
               }`}
             >
