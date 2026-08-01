@@ -637,6 +637,23 @@ fn truncate_to_bytes(text: &str, max_bytes: usize) -> String {
 /// an atomic refusal) belongs upstream and is tracked there.
 const MAX_PERSISTED_BLOB: usize = 8_000;
 
+/// Cap a message body under the page limit, saying so in the text when it
+/// bites.
+///
+/// Bodies are the record, so they get the roomiest cap in the store: 12K of a
+/// 16K page, the rest left for the row's other fields. The longest body ever
+/// persisted here is 7.4K, so the marker should never be seen; the cap exists
+/// because "should" is what the store has died of three times. The full text
+/// still exists in the agent's own transcript.
+fn capped_body(body: String) -> String {
+    const MAX_MESSAGE_BODY: usize = 12_000;
+    if body.len() <= MAX_MESSAGE_BODY {
+        return body;
+    }
+    truncate_to_bytes(&body, MAX_MESSAGE_BODY)
+        + "\n\n[truncated: the full text exceeded the store's page limit]"
+}
+
 fn parse_permission(raw: Option<&str>) -> Permission {
     match raw.unwrap_or("read_only") {
         "plan" => Permission::Plan,
@@ -1537,7 +1554,7 @@ pub async fn recover_partial_replies(tables: &Tables) {
             usage: String::new(),
             stop: "interrupted".into(),
             exit_code: 0,
-            body: row.value,
+            body: capped_body(row.value),
             created_at: now(),
         };
         if let Err(error) = tables.message.insert(message) {
@@ -3291,7 +3308,7 @@ pub async fn send_message(
                 usage: String::new(),
                 stop: "completed".into(),
                 exit_code: -1,
-                body: input.body.clone(),
+                body: capped_body(input.body.clone()),
                 created_at: now(),
             };
             state
@@ -3352,7 +3369,7 @@ pub async fn send_message(
         usage: String::new(),
         stop: "completed".into(),
         exit_code: -1,
-        body: input.body.clone(),
+        body: capped_body(input.body.clone()),
         created_at: now(),
     };
     state
@@ -4451,7 +4468,7 @@ async fn drive_run(
                 },
                 stop: stop.clone(),
                 exit_code: i64::from(outcome.exit_code),
-                body: body.clone(),
+                body: capped_body(body.clone()),
                 created_at: now(),
             };
             crate::log!(
@@ -4649,7 +4666,7 @@ async fn drive_run(
                     usage: String::new(),
                     stop: "canceled".into(),
                     exit_code: -1,
-                    body: streamed_text,
+                    body: capped_body(streamed_text),
                     created_at: now(),
                 };
                 match tables.message.insert(row.clone()) {
