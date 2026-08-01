@@ -376,13 +376,26 @@ fn directive_arg<'a>(args: &'a str, key: &str) -> Option<&'a str> {
 /// the tag is what keeps that true as the tag grows other uses.
 fn segment_open(line: &str) -> Option<Segment> {
     let inner = line.trim().strip_prefix("<ps")?.strip_suffix('>')?.trim();
-    let rest = inner.strip_prefix(INJECT_VERB)?.trim();
-    if rest.is_empty() {
-        return Some(Segment { project: None });
+    let (verb, args) = match inner.split_once('(') {
+        Some((verb, args)) => (verb.trim(), Some(args.strip_suffix(')')?)),
+        None => (inner, None),
+    };
+
+    /*
+     * Canonical is lowercase; a capitalized spelling is casual input that
+     * compiles to it. Folded as ASCII on purpose, and this is the one place
+     * that rule differs from how project names are matched: a name is prose
+     * and folds by Unicode, whereas a verb is an identifier with an ASCII
+     * canonical form. The difference is what makes a homoglyph inert. A verb
+     * written with a Cyrillic `а` is not this verb, does not open a segment,
+     * and cannot quietly become one.
+     */
+    if !verb.eq_ignore_ascii_case(INJECT_VERB) {
+        return None;
     }
-    let args = rest.strip_prefix('(')?.strip_suffix(')')?;
     Some(Segment {
-        project: directive_arg(args, "project")
+        project: args
+            .and_then(|args| directive_arg(args, "project"))
             .filter(|named| !named.is_empty())
             .map(str::to_string),
     })
@@ -5265,6 +5278,24 @@ mod tests {
             segment_open("Mention @agency:items.inject in a sentence"),
             None
         );
+    }
+
+    /// Lowercase is canonical, and a capitalized spelling is casual input that
+    /// compiles to it.
+    ///
+    /// The fold is ASCII, which is the security half of the same decision. The
+    /// second case is the canonical verb with a Cyrillic `а` in `agency`: a
+    /// confusable that bound silently would be how a directive gets past a
+    /// reader who can see no difference at all.
+    #[test]
+    fn a_capitalized_verb_is_an_alias_and_a_confusable_is_not() {
+        assert_eq!(
+            segment_open("<ps @Agency:Items.Inject(project: \"ui\")>"),
+            Some(Segment {
+                project: Some("ui".into())
+            })
+        );
+        assert_eq!(segment_open("<ps @аgency:items.inject>"), None);
     }
 
     /// The bug this whole shape exists to close. An agent quoting a file is
