@@ -304,7 +304,7 @@ export function SettingsTab(): JSX.Element {
                 </Row>
                 <Row
                   label="Completed items"
-                  hint="what a session's own “done” report does to the row"
+                  hint="what marking an item finished does to the row"
                 >
                   <PillMenu
                     label="Completed items"
