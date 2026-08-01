@@ -4,21 +4,36 @@ What protects the WorkTable store, what to do when a launch fails anyway,
 and how the pieces earned their existence on 2026-08-01, when a botched
 migration plus a second writer turned every launch into a silent bus error.
 
+## The engine bug at the bottom of it
+
+Four corruptions in two days, and the fourth finally named the disease:
+**WorkTable cannot grow a loaded table's primary index file. When the index
+is at capacity, the next append writes past the mapping instead of refusing
+— SIGBUS, torn table.** The evidence is a signature: a table dies with its
+`primary.wt.idx` frozen at the size it was loaded with while `.wt.data`
+kept growing (task_log died at exactly 229376, message at exactly 65536),
+and the same rows rebuilt into a fresh table get a larger index with
+headroom and work again. Tables built up from empty in one process grow
+their indexes fine; tables *loaded* from disk cannot. The fix belongs
+upstream in worktable. Until it lands, every table in this store is a
+countdown to its own index capacity, and the tooling below is how time is
+bought and data is kept.
+
 ## The rules, before anything else
 
-Three corruptions in two days each broke exactly one of these. They are not
-advice.
+Each of these was paid for by an incident. They are not advice.
 
 1. **Never hand the engine a row that might not fit a 16K page.** An
-   oversized insert is not refused cleanly: it poisons the table's internal
-   page accounting on disk. Every persisted string goes through a byte-counted
-   cap (`MAX_PERSISTED_BLOB`, `capped_body`); a new column or a new insert
-   site must say what bounds it.
-2. **A table that ever logged `could not persist ... but 16356 allowed` is
-   condemned.** It will open, read, and boot for weeks, and then die on an
-   append. Do not copy it forward — a file copy carries the poison, which is
-   how one incident became three. Rebuild it row by row into a fresh table:
-   `wt-migrate rebuild-task-log <source> <target>`.
+   oversized insert is refused with `could not persist ... but 16356
+   allowed` in the log — the row is lost. Every persisted string goes
+   through a byte-counted cap (`MAX_PERSISTED_BLOB`, `capped_body`); a new
+   column or a new insert site must say what bounds it.
+2. **A table that SIGBUS'd, or whose `primary.wt.idx` has stopped growing
+   while its data grows, is condemned.** It will open, read, and boot, and
+   then die on an append. Do not copy it forward — a file copy carries the
+   full index, which is how one incident became four. Rebuild row by row
+   into fresh tables: `wt-migrate rebuild-store <source> <target>` (whole
+   store, the default choice) or `rebuild-task-log` (that one table).
 3. **Never open the live store from a second process, and never trust a name
    to tell you it is closed.** The binary is `az-gui`. Ask the files:
    `lsof +D ~/Library/Application\ Support/com.pathscale.agencyzero/db` —
@@ -112,8 +127,16 @@ removes one link of that chain; the flags exist for whatever chain nobody has
 imagined yet.
 
 The third corruption taught rule 2 the hard way: the store was twice
-"repaired" by copying `task_log` back from a backup that had itself refused
-oversized inserts hours before it was taken. The copy read fine, booted
-fine, and died on the first append of the next session — the caps shipped
-that morning were working, and the mine was already in the ground. The
-rebuild verb exists so that repair is never done by copy again.
+"repaired" by copying `task_log` back from a backup. The copy read fine,
+booted fine, and died on the first append of the next session — the caps
+shipped that morning were working, and the mine was already in the ground.
+The rebuild verbs exist so that repair is never done by copy again.
+
+The fourth corruption named the mine. With every cap in place, a clean
+session appended one 1K message row and the store died: `message`'s
+`primary.wt.idx` had been sitting at exactly 65536 bytes — loaded capacity
+— while its data file grew, the same frozen-index signature `task_log`
+showed at its own death (229376). The oversized-insert refusals were never
+the killer; index growth on a loaded table is. That is the engine bug at
+the top of this file, and until it is fixed upstream the whole-store
+rebuild is the periodic cure.
