@@ -603,7 +603,25 @@ fn truncate_on_char_boundary(text: &str, max: usize) -> String {
     format!("{}…", kept.trim_end())
 }
 
-/// The most characters a persisted diagnostic blob may carry.
+/// Cut to at most `max_bytes` bytes, never mid-character.
+///
+/// The page-safety caps count bytes, not characters, because the engine does:
+/// a WorkTable page holds 16356 *bytes* and a row must fit one. A char-counted
+/// cap of 8000 passes 32K of CJK through untouched, which is the corruption
+/// vector wearing a costume. Display caps stay char-counted; anything sized
+/// against the page limit goes through here.
+fn truncate_to_bytes(text: &str, max_bytes: usize) -> String {
+    if text.len() <= max_bytes {
+        return text.to_string();
+    }
+    let mut end = max_bytes.saturating_sub('…'.len_utf8());
+    while end > 0 && !text.is_char_boundary(end) {
+        end -= 1;
+    }
+    format!("{}…", text[..end].trim_end())
+}
+
+/// The most bytes a persisted diagnostic blob may carry.
 ///
 /// WorkTable pages are 16K and a row must fit one: handing the engine a
 /// bigger row does not merely fail, it has twice corrupted the table's
@@ -611,7 +629,8 @@ fn truncate_on_char_boundary(text: &str, max: usize) -> String {
 /// log, then a store that bus-errors at the next open. Both times the blob
 /// was a tool output (`git show` on a large commit, reviewing recent work).
 ///
-/// 8K of characters leaves the rest of the page for the row's other fields
+/// Bytes, because the engine's limit is bytes: as characters this cap let 32K
+/// of CJK through. 8K leaves the rest of the page for the row's other fields
 /// with a wide margin. These are diagnostic tails, not records: the full
 /// output lived on screen and in the agent's own transcript; what the panel
 /// needs is the head of it. The engine-side fix (an oversized insert must be
@@ -1607,7 +1626,8 @@ fn note_io(
         at: now(),
         direction: direction.to_string(),
         kind: kind.to_string(),
-        detail: truncate_on_char_boundary(&detail.into(), 4_000),
+        // Byte-counted: this row persists, so it is sized against the page.
+        detail: truncate_to_bytes(&detail.into(), 4_000),
     };
 
     if let Ok(mut io) = io.lock() {
@@ -4017,8 +4037,8 @@ async fn drive_run(
                      * finished reply is unaffected — it lands as a message
                      * row, not here.
                      */
-                    let checkpoint = if streamed_text.chars().count() > MAX_PERSISTED_BLOB {
-                        truncate_on_char_boundary(&streamed_text, MAX_PERSISTED_BLOB)
+                    let checkpoint = if streamed_text.len() > MAX_PERSISTED_BLOB {
+                        truncate_to_bytes(&streamed_text, MAX_PERSISTED_BLOB)
                             + "\n\n[checkpoint truncated; the reply continued]"
                     } else {
                         streamed_text.clone()
@@ -4122,7 +4142,7 @@ async fn drive_run(
                     ok,
                     // Capped: an oversized row corrupts the table it was
                     // refused from. See MAX_PERSISTED_BLOB.
-                    output: truncate_on_char_boundary(&output, MAX_PERSISTED_BLOB),
+                    output: truncate_to_bytes(&output, MAX_PERSISTED_BLOB),
                     duration_ms: started
                         .as_ref()
                         .and_then(|task| elapsed_ms(&task.started_at, &finished_at)),
@@ -5129,6 +5149,21 @@ mod tests {
         assert_eq!(cut.chars().count(), 160, "counted in characters, not bytes");
         assert!(cut.ends_with('…'));
         assert_eq!(truncate_on_char_boundary("short", 160), "short");
+    }
+
+    /// The page-safety caps count bytes, because the engine does. A
+    /// char-counted cap waved 32K of CJK through and the store died of it.
+    #[test]
+    fn a_page_safety_cap_counts_bytes_not_characters() {
+        let wide = "字".repeat(4_000);
+        assert!(wide.len() > 8_000, "the setup must exceed the cap in bytes");
+
+        let cut = truncate_to_bytes(&wide, 8_000);
+        assert!(cut.len() <= 8_000, "cut to bytes, not characters");
+        assert!(cut.ends_with('…'));
+        let head: String = cut.chars().take(10).collect();
+        assert_eq!(head, "字".repeat(10), "no character was split");
+        assert_eq!(truncate_to_bytes("short", 8_000), "short");
     }
 
     /// Checkboxes are tasks. Bullets and prose are not, and reading items out of
