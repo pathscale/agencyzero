@@ -308,7 +308,7 @@ const MAX_ITEMS_PER_REPLY: usize = 20;
 
 /// Work items found in the agent's reply.
 ///
-/// **Markdown checkboxes only** — `- [ ] title` and `- [x] title`. Deliberately
+/// **Markdown checkboxes only**: `- [ ] title` and `- [x] title`. Deliberately
 /// not bullets, numbered lists or headings: a checkbox is unambiguously a task,
 /// whereas a bulleted list is just as often prose. Reading structure into
 /// ordinary paragraphs would write items the agent never proposed, and an
@@ -325,6 +325,9 @@ struct Checked {
     status: String,
     /// A pull request or issue the line pointed at, without the `#`.
     reference: Option<String>,
+    /// The project the line named, when it named one other than the session's.
+    /// A name as a person would write it, or a raw `proj-` id.
+    project: Option<String>,
 }
 
 /// Split a trailing `(#35)` off a checkbox line.
@@ -345,6 +348,28 @@ fn split_reference(line: &str) -> (&str, Option<&str>) {
         return (line, None);
     }
     (line[..open].trim_end(), Some(digits))
+}
+
+/// Split a trailing `(@somewhere)` off a checkbox line.
+///
+/// The same shape as the reference suffix because it is the same kind of fact:
+/// a small piece of routing that does not belong in the title, which is the
+/// match key. Both may appear, in either order.
+///
+/// Anything non-empty counts, since project names are prose. A title that ends
+/// in an email address keeps it: `(@` has to open the group.
+fn split_project(line: &str) -> (&str, Option<&str>) {
+    let Some(open) = line.rfind("(@") else {
+        return (line, None);
+    };
+    let Some(named) = line[open + 2..].strip_suffix(')') else {
+        return (line, None);
+    };
+    let named = named.trim();
+    if named.is_empty() || named.contains(')') {
+        return (line, None);
+    }
+    (line[..open].trim_end(), Some(named))
 }
 
 fn items_from_reply(reply: &str) -> Vec<Checked> {
@@ -408,11 +433,33 @@ fn items_from_reply(reply: &str) -> Vec<Checked> {
                 rest.strip_prefix(checkbox).map(|title| (marker, title))
             })?;
 
-            let (title, reference) = split_reference(title.trim());
+            /*
+             * Both suffixes come off before the title is read, in whichever
+             * order they were written, because a person writing one of each
+             * has no reason to think the order matters.
+             */
+            let mut title = title.trim();
+            let (mut reference, mut project) = (None, None);
+            loop {
+                if reference.is_none()
+                    && let (rest, found @ Some(_)) = split_reference(title)
+                {
+                    (title, reference) = (rest, found);
+                    continue;
+                }
+                if project.is_none()
+                    && let (rest, found @ Some(_)) = split_project(title)
+                {
+                    (title, project) = (rest, found);
+                    continue;
+                }
+                break;
+            }
             (!title.is_empty()).then(|| Checked {
                 title: truncate_on_char_boundary(title, 120),
                 status: marker.to_string(),
                 reference: reference.map(str::to_string),
+                project: project.map(str::to_string),
             })
         })
         .take(MAX_ITEMS_PER_REPLY)
@@ -976,6 +1023,13 @@ async fn write_tasks_from_reply(
 /// a later turn restating the plan must not delete the rows they added or the
 /// ones they already ticked off. Duplicate titles are skipped so an agent that
 /// repeats its checklist each turn does not stack the same line up.
+///
+/// A line lands on the session's own project unless it names another with
+/// `(@somewhere)`. Every session can write anywhere for the same reason the
+/// task manager always could: the app owns the store, so which project a row
+/// belongs to is a fact the line states, not a consequence of where it was
+/// typed. Work spills across projects constantly, and the alternative is
+/// telling the user to go and re-type it in the right window.
 async fn write_items_from_reply(
     app: &AppHandle,
     tables: &crate::db::tables::Tables,
@@ -987,6 +1041,73 @@ async fn write_items_from_reply(
         return;
     }
 
+    /*
+     * A line may say where it goes. Grouped rather than written one at a time
+     * so that each project is read once and its positions stay contiguous,
+     * and kept in the order the reply wrote them.
+     */
+    let mut targets: Vec<(String, Vec<Checked>)> = Vec::new();
+    let mut projects: Option<Vec<ProjectRow>> = None;
+    for item in proposed {
+        let target = match item.project.as_deref() {
+            None => project_id.to_string(),
+            Some(named) => {
+                let rows = projects.get_or_insert_with(|| {
+                    tables.project.select_all().execute().unwrap_or_default()
+                });
+                match resolve_project(rows, named) {
+                    Some(found) => found,
+                    None => {
+                        crate::log!(
+                            crate::log::Level::Error,
+                            "items",
+                            "{project_id}: no project matches {named:?}, so {:?} was not written",
+                            item.title
+                        );
+                        continue;
+                    }
+                }
+            }
+        };
+        match targets.iter_mut().find(|(id, _)| *id == target) {
+            Some((_, group)) => group.push(item),
+            None => targets.push((target, vec![item])),
+        }
+    }
+
+    for (target, group) in targets {
+        write_items_into(app, tables, &target, group).await;
+    }
+}
+
+/// Find the project a line named, by id or by name, case-insensitively.
+///
+/// Never creates one. The task manager creates a project it cannot find,
+/// because organising is the entire job there. An ordinary session that names
+/// something missing has far more likely mistyped it, and a silently created
+/// near-duplicate project is much harder to notice than an item that never
+/// appeared.
+fn resolve_project(rows: &[ProjectRow], named: &str) -> Option<String> {
+    let named = named.trim();
+    // Folded the same way the task manager folds its names, so the two ways
+    // into the same table cannot disagree about which project was meant.
+    let folded = named.to_lowercase();
+    rows.iter()
+        .find(|row| row.id == named)
+        .or_else(|| {
+            rows.iter()
+                .find(|row| row.name.trim().to_lowercase() == folded)
+        })
+        .map(|row| row.id.clone())
+}
+
+/// Write one project's worth of checkbox lines.
+async fn write_items_into(
+    app: &AppHandle,
+    tables: &crate::db::tables::Tables,
+    project_id: &str,
+    proposed: Vec<Checked>,
+) {
     let existing: Vec<ProjectItemRow> = tables
         .project_item
         .select_by_project_id(project_id.to_string())
@@ -1010,6 +1131,8 @@ async fn write_items_from_reply(
         title,
         status,
         reference,
+        // Already spent: grouping the reply is what chose `project_id`.
+        project: _,
     } in proposed
     {
         /*
@@ -4975,6 +5098,87 @@ mod tests {
             split_reference("Not a ref (#abc)"),
             ("Not a ref (#abc)", None)
         );
+    }
+
+    /// Only the two fields resolution looks at matter here; the rest is what an
+    /// empty project is.
+    fn project_row(id: &str, name: &str) -> ProjectRow {
+        ProjectRow {
+            id: id.into(),
+            name: name.into(),
+            status: "active".into(),
+            position: 0,
+            dirs: "[]".into(),
+            pinned: false,
+            moderator_enabled: false,
+            forked_from: String::new(),
+            last_activity_at: String::new(),
+        }
+    }
+
+    /// A line can say which project it belongs to, and the title it is matched
+    /// by must not carry that routing any more than it carries the reference.
+    #[test]
+    fn a_line_can_name_another_project() {
+        let read = items_from_reply("- [ ] Audit the token counter (@Other project)\n");
+        assert_eq!(read[0].title, "Audit the token counter");
+        assert_eq!(read[0].project.as_deref(), Some("Other project"));
+
+        // An id is accepted for the same reason: a session that knows where a
+        // row belongs may not know what that project is called.
+        let by_id = items_from_reply("- [ ] Audit (@proj-846b5542-fe2d-4d60-a296-7c10e1119562)\n");
+        assert_eq!(
+            by_id[0].project.as_deref(),
+            Some("proj-846b5542-fe2d-4d60-a296-7c10e1119562")
+        );
+
+        // No suffix is the overwhelmingly common case and still means "here".
+        assert_eq!(items_from_reply("- [/] Plain\n")[0].project, None);
+    }
+
+    /// Both suffixes, in either order, because nobody writing one of each has
+    /// any reason to believe the order matters.
+    #[test]
+    fn a_line_carries_a_project_and_a_reference_in_either_order() {
+        for line in [
+            "- [>] Ship the thing (@Other) (#35)\n",
+            "- [>] Ship the thing (#35) (@Other)\n",
+        ] {
+            let read = items_from_reply(line);
+            assert_eq!(read[0].title, "Ship the thing", "{line:?}");
+            assert_eq!(read[0].reference.as_deref(), Some("35"), "{line:?}");
+            assert_eq!(read[0].project.as_deref(), Some("Other"), "{line:?}");
+        }
+    }
+
+    /// The suffix has to be a suffix. Prose that happens to contain a handle
+    /// keeps every character it was written with.
+    #[test]
+    fn only_a_trailing_group_reads_as_a_project() {
+        assert_eq!(
+            split_project("Mention (@someone) mid-sentence here"),
+            ("Mention (@someone) mid-sentence here", None)
+        );
+        assert_eq!(split_project("Empty (@)"), ("Empty (@)", None));
+        assert_eq!(split_project("Blank (@   )"), ("Blank (@   )", None));
+        assert_eq!(split_project("Write it (@ui)"), ("Write it", Some("ui")));
+    }
+
+    /// Resolution never guesses. An unknown name returns nothing, and the
+    /// caller reports it, rather than a project appearing out of a typo.
+    #[test]
+    fn a_project_resolves_by_id_or_by_name_and_never_by_guess() {
+        let rows = vec![
+            project_row("proj-1", "AgencyZero"),
+            project_row("proj-2", "ui"),
+        ];
+
+        assert_eq!(resolve_project(&rows, "proj-2"), Some("proj-2".into()));
+        assert_eq!(resolve_project(&rows, "agencyzero"), Some("proj-1".into()));
+        assert_eq!(resolve_project(&rows, "  UI  "), Some("proj-2".into()));
+        assert_eq!(resolve_project(&rows, "Agency"), None);
+        assert_eq!(resolve_project(&rows, "proj-3"), None);
+        assert_eq!(resolve_project(&[], "AgencyZero"), None);
     }
 
     #[test]
