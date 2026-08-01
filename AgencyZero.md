@@ -15,8 +15,9 @@
 8. Report item state by id, on its own line, as it happens:
    `<ps @agency:items.state(id: "item-a3f9", status: "active")>`
    `<ps @agency:items.add(ref: "t1", title: "One line", status: "planning")>`
-   The turn's prompt lists the open items and their ids, and answers back with
-   what each directive did. Never address a row by its title.
+   `<ps @agency:items.retire(id: "item-a3f9")>` removes one that should not
+   be there. The turn's prompt lists the open items and their ids, and answers
+   back with what each directive did. Never address a row by its title.
 9. Ask before installing anything: a download, a global cache, a browser, a
    toolchain. A repo doc recommending it is not permission.
 10. Persisted data goes in a WorkTable table. Not a JSON file beside the store,

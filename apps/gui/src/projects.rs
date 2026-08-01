@@ -1243,6 +1243,7 @@ fn state_snapshot(
          <ps @agency:items.state(id: \"<id>\", status: \"active\")>\n\
          <ps @agency:items.state(id: \"<id>\", status: \"shipped\", pr: 66)>\n\
          <ps @agency:items.add(ref: \"t1\", title: \"<one line>\", status: \"planning\")>\n\
+         <ps @agency:items.retire(id: \"<id>\")> removes a row that should not be there\n\
          Statuses you may set: new, planning, active, questions, shipped. `questions` \
          means you are stopped on something only the owner can answer. `finished` and \
          `canceled` are refused: the owner closes a row. An id may be shortened to any \
@@ -1374,6 +1375,36 @@ async fn apply_directive(
                 }
                 Err(error) => Outcome::Refused {
                     what: format!("items.add({title:?})"),
+                    code: format!("WRITE_FAILED: {error}"),
+                },
+            }
+        }
+        Directive::ItemRetire { id } => {
+            let known: Vec<&str> = rows.iter().map(|row| row.id.as_str()).collect();
+            let resolved = match crate::directives::resolve(&known, &id) {
+                Ok(found) => found.to_string(),
+                Err(code) => {
+                    return Outcome::Refused {
+                        what: format!("items.retire({id})"),
+                        code,
+                    };
+                }
+            };
+            let title = rows
+                .iter()
+                .find(|row| row.id == resolved)
+                .map(|row| row.title.clone())
+                .unwrap_or_default();
+            match tables.project_item.delete(resolved.clone()).await {
+                Ok(()) => {
+                    let _ = app.emit(
+                        "item:deleted",
+                        serde_json::json!({ "id": resolved, "projectId": project_id }),
+                    );
+                    Outcome::Done(format!("{resolved} retired {title:?}"))
+                }
+                Err(error) => Outcome::Refused {
+                    what: format!("items.retire({resolved})"),
                     code: format!("WRITE_FAILED: {error}"),
                 },
             }
