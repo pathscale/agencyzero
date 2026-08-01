@@ -147,7 +147,13 @@ export function ProjectTab(props: { tab: Tab; project: Project }): JSX.Element {
             </Show>
           </span>
 
-          <SessionChip sessionId={props.project.sessionId} />
+          <SessionChip
+            sessionId={
+              props.tab.agent === "claude"
+                ? (props.project.sessions.claude ?? props.project.sessionId)
+                : (props.project.sessions[props.tab.agent] ?? null)
+            }
+          />
 
           <Show when={rateLimit()}>
             {(limit) => (
@@ -216,13 +222,18 @@ export function ProjectTab(props: { tab: Tab; project: Project }): JSX.Element {
           </Show>
           <Composer
             draftKey={props.tab.key}
-            onCompact={() => actions.compactProject(props.project.id)}
+            onCompact={
+              props.tab.agent === "claude"
+                ? () => actions.compactProject(props.project.id)
+                : undefined
+            }
             available={state.commands[props.project.id]}
             autofocus
             placeholder="Ask, or type / for commands…"
+            agent={props.tab.agent}
             model={props.tab.model}
             modelOptions={promptModels()}
-            efforts={effortsFor(props.tab.model)}
+            efforts={effortsFor(props.tab.agent, props.tab.model)}
             effort={props.tab.effort}
             /*
              * This was missing entirely: the effort menu rendered and called
@@ -230,7 +241,13 @@ export function ProjectTab(props: { tab: Tab; project: Project }): JSX.Element {
              * nothing. The bug read as "low cannot be selected".
              */
             onEffortChange={(effort) =>
-              actions.setTabModel(props.tab.key, props.tab.model, props.tab.permission, effort)
+              actions.setTabModel(
+                props.tab.key,
+                props.tab.agent,
+                props.tab.model,
+                props.tab.permission,
+                effort,
+              )
             }
             permission={props.tab.permission}
             usage={contextLabel()}
@@ -258,11 +275,11 @@ export function ProjectTab(props: { tab: Tab; project: Project }): JSX.Element {
                     })
                 : undefined
             }
-            onModelChange={(model) =>
-              actions.setTabModel(props.tab.key, model, props.tab.permission)
+            onModelChange={(agent, model) =>
+              actions.setTabModel(props.tab.key, agent, model, props.tab.permission)
             }
             onPermissionChange={(permission) =>
-              actions.setTabModel(props.tab.key, props.tab.model, permission)
+              actions.setTabModel(props.tab.key, props.tab.agent, props.tab.model, permission)
             }
             onSend={(body) => actions.send(props.project.id, body)}
           />

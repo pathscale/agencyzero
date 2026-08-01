@@ -153,43 +153,64 @@ describe("choosing models", () => {
 });
 
 describe("what the prompt offers", () => {
-  it("offers the enabled Claude models, in catalogue order", async () => {
+  it("offers the enabled Claude and OpenAI models, in catalogue order", async () => {
     const workspace = await mountWorkspace();
     expect(workspace.promptModels().map((option) => option.value)).toEqual([
-      "default",
-      "opus",
-      "sonnet",
-      "haiku",
+      "claude:default",
+      "claude:opus",
+      "claude:sonnet",
+      "claude:haiku",
+      "codex:gpt-5.6-sol",
+      "codex:gpt-5.6-terra",
+      "codex:gpt-5.5",
     ]);
   });
 
-  /** The pill shows vendor names, not the raw ids that go on the command line. */
-  it("labels an option with the vendor's display name", async () => {
+  /** The pill names both provider and model so a mixed list stays legible. */
+  it("labels options with their provider and display name", async () => {
     const workspace = await mountWorkspace();
-    const sonnet = workspace.promptModels().find((option) => option.value === "sonnet");
-    expect(sonnet?.label).toBe("Sonnet");
+    const sonnet = workspace.promptModels().find((option) => option.value === "claude:sonnet");
+    const sol = workspace.promptModels().find((option) => option.value === "codex:gpt-5.6-sol");
+    expect(sonnet?.label).toBe("Claude · Sonnet");
+    expect(sol?.label).toBe("OpenAI · GPT-5.6-Sol");
   });
 
   it("follows the selection as it changes", async () => {
     const workspace = await mountWorkspace();
     await workspace.actions.toggleModel("claude", "haiku", false);
 
-    expect(workspace.promptModels().map((option) => option.value)).not.toContain("haiku");
+    expect(workspace.promptModels().map((option) => option.value)).not.toContain("claude:haiku");
   });
 
-  /*
-   * Claude only for now. Codex and Copilot are selectable in Settings so the
-   * code review UI has something to open with, but nothing sends to them yet,
-   * and a Codex id reaching the prompt would be sent to Claude.
-   */
-  it("never offers a model belonging to another agent", async () => {
+  it("does not offer Copilot yet", async () => {
     const workspace = await mountWorkspace();
     await workspace.actions.toggleModel("codex", "gpt-5.4", true);
     await workspace.actions.toggleModel("copilot", "gemini-3.6-flash", true);
 
     const offered = workspace.promptModels().map((option) => option.value);
-    expect(offered).not.toContain("gpt-5.4");
-    expect(offered).not.toContain("gemini-3.6-flash");
+    expect(offered).toContain("codex:gpt-5.4");
+    expect(offered).not.toContain("copilot:gemini-3.6-flash");
+  });
+
+  it("sends an OpenAI selection through the Codex agent", async () => {
+    const workspace = await mountWorkspace();
+    workspace.actions.setTabModel("worktable", "codex", "gpt-5.6-sol", "read_only");
+
+    await workspace.actions.send("worktable", "Use OpenAI for this turn");
+
+    const sent = workspace.state.messages.worktable.at(-1);
+    expect(sent?.agent).toBe("codex");
+    expect(sent?.model).toBe("gpt-5.6-sol");
+  });
+
+  it("moves Ask to read-only when switching to OpenAI", async () => {
+    const workspace = await mountWorkspace();
+    workspace.actions.setTabModel("worktable", "claude", "sonnet", "ask");
+    workspace.actions.setTabModel("worktable", "codex", "gpt-5.6-sol", "ask");
+
+    const tab = workspace.state.tabs.find((candidate) => candidate.key === "worktable");
+    expect(tab?.agent).toBe("codex");
+    expect(tab?.permission).toBe("read_only");
   });
 });
 
@@ -211,7 +232,7 @@ describe("settings own the defaults", () => {
 
   it("does not let a per-tab override seed the next tab", async () => {
     const workspace = await mountWorkspace();
-    workspace.actions.setTabModel("worktable", "haiku", "read_only");
+    workspace.actions.setTabModel("worktable", "claude", "haiku", "read_only");
 
     workspace.actions.openDraft();
 
@@ -245,7 +266,7 @@ describe("settings own the defaults", () => {
    */
   it("leaves a tab alone when its model is still offered", async () => {
     const workspace = await mountWorkspace();
-    workspace.actions.setTabModel("worktable", "haiku", "read_only");
+    workspace.actions.setTabModel("worktable", "claude", "haiku", "read_only");
 
     await workspace.actions.toggleModel("claude", "fable", true);
 
@@ -258,7 +279,7 @@ describe("settings own the defaults", () => {
     await workspace.actions.setDefaultModel("claude", "opus");
     await workspace.actions.toggleModel("claude", "sonnet", false);
 
-    expect(workspace.promptModels().map((option) => option.value)).not.toContain("sonnet");
+    expect(workspace.promptModels().map((option) => option.value)).not.toContain("claude:sonnet");
   });
 });
 
@@ -279,7 +300,7 @@ describe("posture follows Settings too", () => {
 
   it("does not let a per-tab posture seed the next tab", async () => {
     const workspace = await mountWorkspace();
-    workspace.actions.setTabModel("worktable", "sonnet", "bypass");
+    workspace.actions.setTabModel("worktable", "claude", "sonnet", "bypass");
 
     workspace.actions.openDraft();
 

@@ -142,7 +142,10 @@ export function SettingsTab(): JSX.Element {
   const effortOptions = (): string[] => {
     const settings = state.settings;
     if (!settings) return [];
-    const ladder = effortsFor(settings.models[settings.defaultAgent]?.default ?? "");
+    const ladder = effortsFor(
+      settings.defaultAgent,
+      settings.models[settings.defaultAgent]?.default ?? "",
+    );
     return ladder.length > 0 ? ladder : [settings.defaultEffort];
   };
 
@@ -150,7 +153,7 @@ export function SettingsTab(): JSX.Element {
   const taskManagerEfforts = (): string[] => {
     const settings = state.settings;
     if (!settings) return [];
-    const ladder = effortsFor(settings.taskManager.model);
+    const ladder = effortsFor("claude", settings.taskManager.model);
     return ladder.length > 0 ? ladder : [settings.taskManager.effort];
   };
 

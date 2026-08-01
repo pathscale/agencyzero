@@ -28,6 +28,7 @@ const PROJECT: Project = {
   moderatorEnabled: false,
   forkedFrom: null,
   sessionId: null,
+  sessions: {},
   lastActivityAt: "2026-07-31T12:00:00.000Z",
 };
 

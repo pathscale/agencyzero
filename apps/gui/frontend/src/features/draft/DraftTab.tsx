@@ -26,19 +26,28 @@ export function DraftTab(props: { tab: Tab }): JSX.Element {
           size="lg"
           autofocus
           placeholder="Type to start your new project…"
+          agent={props.tab.agent}
           model={props.tab.model}
           modelOptions={promptModels()}
-          efforts={effortsFor(props.tab.model)}
+          efforts={effortsFor(props.tab.agent, props.tab.model)}
           effort={props.tab.effort}
           permission={props.tab.permission}
-          onModelChange={(model) => actions.setTabModel(props.tab.key, model, props.tab.permission)}
+          onModelChange={(agent, model) =>
+            actions.setTabModel(props.tab.key, agent, model, props.tab.permission)
+          }
           onPermissionChange={(permission) =>
-            actions.setTabModel(props.tab.key, props.tab.model, permission)
+            actions.setTabModel(props.tab.key, props.tab.agent, props.tab.model, permission)
           }
           // The same omission the project tab had: the effort menu called an
           // optional handler nobody passed, so a picked level never stuck.
           onEffortChange={(effort) =>
-            actions.setTabModel(props.tab.key, props.tab.model, props.tab.permission, effort)
+            actions.setTabModel(
+              props.tab.key,
+              props.tab.agent,
+              props.tab.model,
+              props.tab.permission,
+              effort,
+            )
           }
           onSend={(body) => actions.createProject(body, props.tab.key)}
         />

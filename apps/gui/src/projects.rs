@@ -57,12 +57,23 @@ pub struct ProjectDto {
     /// Filled from `kv` by [`with_session`] rather than read off the row: it is
     /// not a column, deliberately. See [`session_key`].
     pub session_id: Option<String>,
+    /// Native session ids by provider. Separate keys let a project switch
+    /// agents and later resume either conversation without crossing them.
+    pub sessions: std::collections::BTreeMap<String, String>,
     pub last_activity_at: String,
 }
 
 /// Attach the project's session id, which lives in `kv` rather than on the row.
 fn with_session(mut dto: ProjectDto, tables: &crate::db::tables::Tables) -> ProjectDto {
     dto.session_id = tables.kv_get(&session_key(&dto.id));
+    for agent in [Agent::Claude, Agent::Codex] {
+        if let Some(session) = tables
+            .kv_get(&agent_session_key(&dto.id, agent))
+            .filter(|session| !session.is_empty())
+        {
+            dto.sessions.insert(agent_wire_name(agent).into(), session);
+        }
+    }
     dto
 }
 
@@ -79,6 +90,7 @@ impl From<ProjectRow> for ProjectDto {
             forked_from: serde_json::from_str(&row.forked_from).ok(),
             // Filled by `with_session`, which has the tables to look it up in.
             session_id: None,
+            sessions: std::collections::BTreeMap::new(),
             last_activity_at: row.last_activity_at,
         }
     }
@@ -233,6 +245,7 @@ pub struct SendMessageInput {
     pub project_id: String,
     pub body: String,
     pub item_id: Option<String>,
+    pub agent: Option<String>,
     pub model: Option<String>,
     pub permission: Option<String>,
     pub effort: Option<String>,
@@ -242,6 +255,7 @@ pub struct SendMessageInput {
 #[serde(rename_all = "camelCase")]
 pub struct CreateProjectInput {
     pub first_message: String,
+    pub agent: Option<String>,
     pub model: Option<String>,
     pub permission: Option<String>,
     /// Reasoning effort, as `Request::effort`. `None` means the CLI's default.
@@ -269,6 +283,24 @@ pub(crate) fn now() -> String {
 /// module doc on `db/schema/project.rs`.
 fn session_key(project_id: &str) -> String {
     format!("session:{project_id}")
+}
+
+/// Provider-specific session storage. Claude keeps the legacy key so every
+/// existing project resumes exactly where it did before this feature.
+fn agent_session_key(project_id: &str, agent: Agent) -> String {
+    match agent {
+        Agent::Claude => session_key(project_id),
+        Agent::Codex => format!("session:codex:{project_id}"),
+        Agent::Copilot => format!("session:copilot:{project_id}"),
+    }
+}
+
+fn agent_wire_name(agent: Agent) -> &'static str {
+    match agent {
+        Agent::Claude => "claude",
+        Agent::Codex => "codex",
+        Agent::Copilot => "copilot",
+    }
 }
 
 pub(crate) fn id(prefix: &str) -> String {
@@ -675,6 +707,19 @@ fn parse_permission(raw: Option<&str>) -> Permission {
         "bypass" => Permission::Bypass,
         _ => Permission::ReadOnly,
     }
+}
+
+fn parse_agent(raw: Option<&str>) -> Result<Agent, String> {
+    match raw.unwrap_or("claude") {
+        "claude" => Ok(Agent::Claude),
+        "codex" => Ok(Agent::Codex),
+        "copilot" => Err("Copilot projects are not available yet".into()),
+        other => Err(format!("unknown project agent: {other}")),
+    }
+}
+
+fn can_inject(running: Agent, requested: Agent) -> bool {
+    running == Agent::Claude && requested == Agent::Claude
 }
 
 // — read path ——————————————————————————————————————————————————————
@@ -2278,6 +2323,9 @@ const APPROVAL_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30 
 /// mid-run correction an interruption rather than a queued afterthought.
 pub struct ActiveRun {
     pub cancel: tokio::sync::watch::Sender<bool>,
+    /// Provider owning the live session. A tab may switch providers while it
+    /// runs, but its next message must not be injected into the old provider.
+    pub agent: Agent,
     /// `None` when the run has no conversation to interrupt.
     ///
     /// A command turn — `/compact` — rewrites the session instead of answering
@@ -2890,6 +2938,7 @@ pub async fn compact_project(
             project_id.clone(),
             ActiveRun {
                 cancel: cancel_tx,
+                agent: Agent::Claude,
                 // Nothing to say into: see `ActiveRun::inject`.
                 inject: None,
             },
@@ -3420,6 +3469,7 @@ pub async fn delete_project(
         .map_err(|error| failed("the pull request rows", &error))?;
     for key in [
         session_key(&id),
+        agent_session_key(&id, Agent::Codex),
         io_persist_key(&id),
         partial_reply_key(&id),
         // The notes kept across compactions. Ids are not recycled, so this is
@@ -3644,6 +3694,7 @@ pub async fn create_project(
             project_id,
             body: input.first_message,
             item_id: None,
+            agent: input.agent,
             model: input.model,
             permission: input.permission,
             effort: input.effort,
@@ -3675,11 +3726,19 @@ pub async fn send_message(
     input: SendMessageInput,
     state: State<'_, AppState>,
 ) -> Result<MessageDto, String> {
+    let agent = parse_agent(input.agent.as_deref())?;
+    let agent_name = agent_wire_name(agent);
     let model = input.model.clone().unwrap_or_default();
     let permission = input
         .permission
         .clone()
         .unwrap_or_else(|| "read_only".into());
+    if agent != Agent::Claude && permission == "ask" {
+        return Err(format!(
+            "{} cannot ask for approval during a run; choose read only, edit, auto, or bypass",
+            agent_wire_name(agent)
+        ));
+    }
 
     /*
      * One run per project, enforced here rather than in the composer. A second
@@ -3698,6 +3757,10 @@ pub async fn send_message(
             .lock()
             .map_err(|_| "the run registry is unavailable".to_string())?;
         if let Some(running) = active.get(&input.project_id) {
+            if !can_inject(running.agent, agent) {
+                drop(active);
+                return Err(BUSY_WITH_RUN.into());
+            }
             /*
              * A command turn takes no passengers. Refused *before* the row is
              * written, unlike the injection below: the words were not said to
@@ -3716,7 +3779,7 @@ pub async fn send_message(
                 project_id: input.project_id.clone(),
                 item_id: input.item_id.clone().unwrap_or_default(),
                 author: "user".into(),
-                agent: "claude".into(),
+                agent: agent_name.into(),
                 moderation: String::new(),
                 model: model.clone(),
                 permission: permission.clone(),
@@ -3759,6 +3822,9 @@ pub async fn send_message(
             input.project_id.clone(),
             ActiveRun {
                 cancel: cancel_tx,
+                agent,
+                // Kept for the receiver's lifetime. The provider check above
+                // exposes live injection only for Claude.
                 inject: Some(inject_tx),
             },
         );
@@ -3777,7 +3843,7 @@ pub async fn send_message(
         project_id: input.project_id.clone(),
         item_id: input.item_id.clone().unwrap_or_default(),
         author: "user".into(),
-        agent: "claude".into(),
+        agent: agent_name.into(),
         moderation: String::new(),
         model: model.clone(),
         permission: permission.clone(),
@@ -3848,7 +3914,9 @@ pub async fn send_message(
 
     // The agent's own session id for this project, when a turn has produced
     // one. Without it every turn starts a fresh conversation.
-    let resume = state.tables.kv_get(&session_key(&input.project_id));
+    let resume = state
+        .tables
+        .kv_get(&agent_session_key(&input.project_id, agent));
 
     /*
      * Where this project's knowledge checkpoints go, or `None` for the projects
@@ -3941,6 +4009,7 @@ pub async fn send_message(
             inject_rx,
             project_id,
             input.body,
+            agent,
             model,
             permission,
             effort,
@@ -3984,6 +4053,7 @@ async fn drive_run(
     mut inject_rx: tokio::sync::mpsc::UnboundedReceiver<String>,
     project_id: String,
     prompt: String,
+    agent: Agent,
     model: String,
     permission: String,
     effort: Option<String>,
@@ -4026,14 +4096,14 @@ async fn drive_run(
     let prompt_echo = prompt.clone();
     let effort_echo = effort.clone().filter(|value| !value.is_empty());
 
-    let mut request = Request::new(Agent::Claude, prompt)
+    let mut request = Request::new(agent, prompt)
         .permission(parse_permission(Some(&permission)))
         .cwd(&cwd);
     /*
-     * Every directory after the first widens the working tree via Claude's
-     * `--add-dir`. Passed through `unchecked_args` — the crate has no unified
-     * spelling for this yet — which is safe here because the values are the
-     * user's own configured directories, not model output.
+     * Every directory after the first widens the working tree. Passed through
+     * `unchecked_args` because the crate has no unified spelling for it yet.
+     * Verified as `--add-dir <DIR>` against claude 2.1.212 and codex-cli
+     * 0.145.0 (`codex exec --help`) on 2026-08-02.
      */
     for dir in &extra_dirs {
         request = request.unchecked_args(["--add-dir", dir]);
@@ -4041,13 +4111,15 @@ async fn drive_run(
     // `ask`: every gated call — a write, a command, a read outside the working
     // tree — arrives as an approval question instead of a silent pre-decision.
     let asks = permission == "ask";
-    if asks {
+    if asks && agent == Agent::Claude {
         request = request.approvals();
     }
     // Always, not only under `ask` (approvals implies it anyway): the open
     // stdin is what lets a message typed mid-turn reach the model at its next
     // step boundary instead of waiting out the whole turn.
-    request = request.interactive();
+    if agent == Agent::Claude {
+        request = request.interactive();
+    }
     if !model.is_empty() {
         request = request.model(&model);
     }
@@ -4228,7 +4300,8 @@ async fn drive_run(
     crate::log!(
         crate::log::Level::Info,
         "run",
-        "{project_id}: starting claude model={} permission={permission} cwd={cwd} resume={}",
+        "{project_id}: starting {} model={} permission={permission} cwd={cwd} resume={}",
+        agent_wire_name(agent),
         if model.is_empty() {
             "<default>"
         } else {
@@ -4244,7 +4317,8 @@ async fn drive_run(
         "sent",
         "request",
         format!(
-            "claude model={} permission={permission} effort={} cwd={cwd}{}\n\n{prompt_echo}",
+            "{} model={} permission={permission} effort={} cwd={cwd}{}\n\n{prompt_echo}",
+            agent_wire_name(agent),
             if model.is_empty() {
                 "<default>"
             } else {
@@ -4909,7 +4983,7 @@ async fn drive_run(
                 // agent is free to hand back a new id and the stale one would
                 // resume the wrong conversation.
                 if let Err(error) = tables
-                    .kv_put(&session_key(&project_id), session.clone())
+                    .kv_put(&agent_session_key(&project_id, agent), session.clone())
                     .await
                 {
                     crate::log!(
@@ -5020,7 +5094,7 @@ async fn drive_run(
                 project_id: project_id.clone(),
                 item_id: String::new(),
                 author: "agent".into(),
-                agent: "claude".into(),
+                agent: agent_wire_name(agent).into(),
                 moderation: String::new(),
                 model: model.clone(),
                 permission,
@@ -5245,7 +5319,7 @@ async fn drive_run(
                     project_id: project_id.clone(),
                     item_id: String::new(),
                     author: "agent".into(),
-                    agent: "claude".into(),
+                    agent: agent_wire_name(agent).into(),
                     moderation: String::new(),
                     model: model.clone(),
                     permission,
@@ -5313,7 +5387,7 @@ async fn drive_run(
                     project_id: project_id.clone(),
                     item_id: String::new(),
                     author: "agent".into(),
-                    agent: "claude".into(),
+                    agent: agent_wire_name(agent).into(),
                     moderation: String::new(),
                     model: model.clone(),
                     permission,
@@ -5366,15 +5440,17 @@ async fn drive_run(
      * would not be now.
      */
     drop(inject_rx);
-    checkpoint_if_due(
-        &app,
-        &tables,
-        &project_id,
-        &cwd,
-        &turn_usage,
-        checkpoint_dir.as_deref(),
-    )
-    .await;
+    if agent == Agent::Claude {
+        checkpoint_if_due(
+            &app,
+            &tables,
+            &project_id,
+            &cwd,
+            &turn_usage,
+            checkpoint_dir.as_deref(),
+        )
+        .await;
+    }
 }
 
 /// Take a knowledge sample if this turn pushed the conversation past a mark.
@@ -5679,6 +5755,36 @@ mod tests {
         // Anything unrecognized is the safest posture, never the widest.
         assert_eq!(parse_permission(Some("nonsense")), Permission::ReadOnly);
         assert_eq!(parse_permission(None), Permission::ReadOnly);
+    }
+
+    #[test]
+    fn project_agents_are_explicit_and_copilot_stays_out() {
+        assert_eq!(parse_agent(None), Ok(Agent::Claude));
+        assert_eq!(parse_agent(Some("claude")), Ok(Agent::Claude));
+        assert_eq!(parse_agent(Some("codex")), Ok(Agent::Codex));
+        assert!(parse_agent(Some("copilot")).is_err());
+        assert!(parse_agent(Some("unknown")).is_err());
+    }
+
+    #[test]
+    fn provider_sessions_cannot_cross() {
+        assert_eq!(agent_session_key("proj-1", Agent::Claude), "session:proj-1");
+        assert_eq!(
+            agent_session_key("proj-1", Agent::Codex),
+            "session:codex:proj-1"
+        );
+        assert_ne!(
+            agent_session_key("proj-1", Agent::Claude),
+            agent_session_key("proj-1", Agent::Codex)
+        );
+    }
+
+    #[test]
+    fn only_a_claude_turn_accepts_a_live_follow_up() {
+        assert!(can_inject(Agent::Claude, Agent::Claude));
+        assert!(!can_inject(Agent::Codex, Agent::Codex));
+        assert!(!can_inject(Agent::Claude, Agent::Codex));
+        assert!(!can_inject(Agent::Codex, Agent::Claude));
     }
 
     /// The arithmetic that read "60 tokens" on a ten-minute run.

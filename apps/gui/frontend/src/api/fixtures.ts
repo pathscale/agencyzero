@@ -67,6 +67,7 @@ export const PROJECTS: Project[] = [
     moderatorEnabled: true,
     forkedFrom: null,
     sessionId: null,
+    sessions: {},
     lastActivityAt: ago(2 * 60_000),
   },
   {
@@ -79,6 +80,7 @@ export const PROJECTS: Project[] = [
     moderatorEnabled: true,
     forkedFrom: null,
     sessionId: null,
+    sessions: {},
     lastActivityAt: ago(9 * 60_000),
   },
   {
@@ -91,6 +93,7 @@ export const PROJECTS: Project[] = [
     moderatorEnabled: true,
     forkedFrom: null,
     sessionId: null,
+    sessions: {},
     lastActivityAt: ago(26 * 60 * 60_000),
   },
 ];

@@ -251,6 +251,7 @@ const HOME_TAB: Tab = {
   kind: "home",
   projectId: null,
   label: "Home",
+  agent: "claude",
   model: "sonnet",
   effort: FALLBACK_EFFORT,
   permission: "read_only",
@@ -427,23 +428,21 @@ function createWorkspace() {
     return project?.status === "active" ? "ready" : "quiet";
   }
 
-  /**
-   * What the prompt's model pill offers, as `{ value, label }` pairs.
-   *
-   * Claude only: the prompt sends to Claude today, and the Codex and Copilot
-   * selections in Settings are collected for the code review UI rather than
-   * consumed here. Ordered by the catalogue rather than by the saved selection,
-   * so the menu reads in the vendor's own ranking.
-   *
-   * Empty until boot finishes, which the composer covers by keeping the tab's
-   * own model as an option rather than rendering an empty menu.
-   */
+  /** Models enabled in Settings for the two project-capable agents. */
   const promptModels = createMemo(() => {
-    const catalogue = state.models.find((entry) => entry.agent === "claude");
-    const enabled = state.settings?.models.claude.enabled ?? [];
-    return (catalogue?.models ?? [])
-      .filter((model) => enabled.includes(model.id))
-      .map((model) => ({ value: model.id, label: model.name }));
+    return (["claude", "codex"] as const).flatMap((agent) => {
+      const catalogue = state.models.find((entry) => entry.agent === agent);
+      const enabled = state.settings?.models[agent].enabled ?? [];
+      const provider = agent === "claude" ? "Claude" : "OpenAI";
+      return (catalogue?.models ?? [])
+        .filter((model) => enabled.includes(model.id))
+        .map((model) => ({
+          value: `${agent}:${model.id}`,
+          label: `${provider} · ${model.name}`,
+          agent,
+          model: model.id,
+        }));
+    });
   });
 
   /**
@@ -470,8 +469,8 @@ function createWorkspace() {
    * the crate establishes no ladder for that model, and the composer hides the
    * control rather than guessing at one.
    */
-  function effortsFor(modelId: string): string[] {
-    const catalogue = state.models.find((entry) => entry.agent === "claude");
+  function effortsFor(agent: Agent, modelId: string): string[] {
+    const catalogue = state.models.find((entry) => entry.agent === agent);
     return catalogue?.models.find((model) => model.id === modelId)?.efforts ?? [];
   }
 
@@ -691,12 +690,17 @@ function createWorkspace() {
     return settings.models[settings.defaultAgent]?.default ?? "";
   }
 
+  function defaultAgent(): Agent {
+    return state.settings?.defaultAgent ?? "claude";
+  }
+
   function projectTab(project: Project): Tab {
     return {
       key: project.id,
       kind: "project",
       projectId: project.id,
       label: project.name,
+      agent: defaultAgent(),
       model: defaultModel(),
       effort: defaultEffort(),
       permission: state.settings?.defaultPermission ?? "read_only",
@@ -1132,6 +1136,7 @@ function createWorkspace() {
         kind: "draft",
         projectId: null,
         label: "Untitled",
+        agent: defaultAgent(),
         model: defaultModel(),
         effort: defaultEffort(),
         permission: state.settings?.defaultPermission ?? "read_only",
@@ -1201,7 +1206,8 @@ function createWorkspace() {
    * editing an unrelated setting should not silently reset it.
    */
   function reconcileTabModels(settings: GlobalSettings): void {
-    const selection = settings.models[settings.defaultAgent];
+    const defaultAgent = settings.defaultAgent;
+    const selection = settings.models[defaultAgent];
     if (!selection || selection.enabled.length === 0) return;
 
     state.tabs.forEach((tab, index) => {
@@ -1213,6 +1219,7 @@ function createWorkspace() {
        */
       if (tab.kind === "draft") {
         setState("tabs", index, {
+          agent: defaultAgent,
           model: selection.default,
           permission: settings.defaultPermission,
           effort: settings.defaultEffort,
@@ -1225,25 +1232,38 @@ function createWorkspace() {
        * on has actually been withdrawn. An unrelated settings edit must not
        * silently reset a deliberate override.
        */
-      if (selection.enabled.includes(tab.model)) return;
-      setState("tabs", index, { model: selection.default });
+      const tabSelection = settings.models[tab.agent];
+      if (tabSelection?.enabled.includes(tab.model)) return;
+      setState("tabs", index, { agent: defaultAgent, model: selection.default });
       // The backend keeps per-tab state, so a migration has to reach it too, or
       // the next send would use the model the frontend just moved away from.
       void client().setTabModel(tab.key, selection.default, tab.permission);
     });
   }
 
-  function setTabModel(key: string, model: string, permission: Permission, effort?: string): void {
+  function setTabModel(
+    key: string,
+    agent: Agent,
+    model: string,
+    permission: Permission,
+    effort?: string,
+  ): void {
     const index = state.tabs.findIndex((tab) => tab.key === key);
     if (index < 0) return;
+    // Codex has no mid-run approval channel. Moving an Ask tab to OpenAI also
+    // moves its visible posture to read-only, instead of failing only on send.
+    const compatiblePermission =
+      agent !== "claude" && permission === "ask" ? "read_only" : permission;
     // Effort only when the caller sent one: the model and permission pills
     // must not clobber a level someone picked a moment ago.
     setState(
       "tabs",
       index,
-      effort === undefined ? { model, permission } : { model, permission, effort },
+      effort === undefined
+        ? { agent, model, permission: compatiblePermission }
+        : { agent, model, permission: compatiblePermission, effort },
     );
-    void client().setTabModel(key, model, permission);
+    void client().setTabModel(key, model, compatiblePermission);
   }
 
   // — mutations ————————————————————————————————————————————————————
@@ -1255,6 +1275,7 @@ function createWorkspace() {
     const tab = state.tabs.find((candidate) => candidate.key === tabKey);
     const created = await client().createProject({
       firstMessage,
+      agent: tab?.agent,
       model: tab?.model,
       permission: tab?.permission,
       effort: tab?.effort,
@@ -1329,6 +1350,7 @@ function createWorkspace() {
     await client().sendMessage({
       projectId,
       body,
+      agent: tab?.agent,
       model: tab?.model,
       permission: tab?.permission,
       // The tab's effort, which was being dropped here: every run reached the

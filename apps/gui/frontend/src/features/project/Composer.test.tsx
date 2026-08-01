@@ -19,10 +19,11 @@ function mount(overrides: Partial<Parameters<typeof Composer>[0]> = {}) {
       <Probe />
       <Composer
         placeholder="Ask, or type / for commands…"
+        agent="claude"
         model="sonnet"
         modelOptions={[
-          { value: "sonnet", label: "Sonnet" },
-          { value: "opus", label: "Opus" },
+          { value: "claude:sonnet", label: "Claude · Sonnet", agent: "claude", model: "sonnet" },
+          { value: "claude:opus", label: "Claude · Opus", agent: "claude", model: "opus" },
         ]}
         efforts={[]}
         effort=""
@@ -139,11 +140,35 @@ describe("the model pill", () => {
   it("offers nothing beyond what it was given", async () => {
     const { getByLabelText } = mount({
       model: "sonnet",
-      modelOptions: [{ value: "sonnet", label: "Sonnet" }],
+      modelOptions: [
+        { value: "claude:sonnet", label: "Claude · Sonnet", agent: "claude", model: "sonnet" },
+      ],
     });
     const pill = getByLabelText("Model");
     expect(pill.textContent?.match(/Sonnet/g) ?? []).toHaveLength(1);
     expect(pill).not.toHaveTextContent("fable");
+  });
+
+  it("routes an OpenAI model command to Codex", async () => {
+    const onModelChange = vi.fn();
+    const { field, onSend } = mount({
+      onModelChange,
+      modelOptions: [
+        { value: "claude:sonnet", label: "Claude · Sonnet", agent: "claude", model: "sonnet" },
+        {
+          value: "codex:gpt-5.6-sol",
+          label: "OpenAI · GPT-5.6-Sol",
+          agent: "codex",
+          model: "gpt-5.6-sol",
+        },
+      ],
+    });
+    type(field, "/model gpt-5.6-sol");
+
+    field.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+
+    expect(onModelChange).toHaveBeenCalledWith("codex", "gpt-5.6-sol");
+    expect(onSend).not.toHaveBeenCalled();
   });
 });
 
@@ -209,8 +234,11 @@ describe("a draft belongs to its own tab", () => {
         <Composer
           draftKey={key()}
           placeholder="Ask, or type / for commands…"
+          agent="claude"
           model="sonnet"
-          modelOptions={[{ value: "sonnet", label: "Sonnet" }]}
+          modelOptions={[
+            { value: "claude:sonnet", label: "Claude · Sonnet", agent: "claude", model: "sonnet" },
+          ]}
           efforts={[]}
           effort=""
           permission="read_only"
@@ -252,8 +280,11 @@ describe("what the composer holds is per tab", () => {
         <Composer
           draftKey={key()}
           placeholder="Ask, or type / for commands…"
+          agent="claude"
           model="sonnet"
-          modelOptions={[{ value: "sonnet", label: "Sonnet" }]}
+          modelOptions={[
+            { value: "claude:sonnet", label: "Claude · Sonnet", agent: "claude", model: "sonnet" },
+          ]}
           efforts={[]}
           effort=""
           permission="read_only"
