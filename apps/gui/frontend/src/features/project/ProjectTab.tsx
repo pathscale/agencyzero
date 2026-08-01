@@ -348,7 +348,7 @@ function PrChip(props: { pr: PullRequest }): JSX.Element {
         title={`Open ${props.pr.url}`}
         class="shrink-0 cursor-pointer text-primary underline decoration-dotted underline-offset-2 transition-opacity hover:opacity-75"
       >
-        Open GitHub
+        GitHub ›
       </button>
       <Show
         when={merged()}
