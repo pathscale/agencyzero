@@ -767,10 +767,34 @@ pub async fn set_item_status(
     status: String,
     state: State<'_, AppState>,
 ) -> Result<ProjectItemDto, String> {
+    /*
+     * Every status the ladder can reach, including `questions` and `canceled`.
+     *
+     * `questions` was missing, and the marker's ladder walks through it, so a
+     * click on an `active` row asked for a status this command refused and the
+     * row did not move. From the outside that reads as the cycle stopping
+     * partway with no way to carry on or to correct a misclick, and nothing
+     * said why: the refusal reached the promise and not the panel.
+     *
+     * The list here and `ITEM_LADDER` in the frontend are the same vocabulary
+     * in two places, which is how they drifted. `ProjectStatus` is the source.
+     */
     if !matches!(
         status.as_str(),
-        "new" | "pending" | "planning" | "active" | "shipped" | "finished"
+        "new"
+            | "pending"
+            | "planning"
+            | "active"
+            | "questions"
+            | "shipped"
+            | "finished"
+            | "canceled"
     ) {
+        crate::log!(
+            crate::log::Level::Error,
+            "items",
+            "refused status {status:?} for {id}: not one this app knows"
+        );
         return Err(format!("not an item status: {status}"));
     }
     state
