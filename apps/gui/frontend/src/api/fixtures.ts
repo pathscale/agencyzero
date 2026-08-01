@@ -1,4 +1,5 @@
 import type {
+  Agent,
   AgentModels,
   AgentStatus,
   GlobalSettings,
@@ -371,6 +372,15 @@ export const AGENT_STATUS: AgentStatus[] = [
     version: "2.1.205",
     minVersion: "2.1.100",
     caps: ["fork", "session id"],
+    capabilities: {
+      session: true,
+      fork: true,
+      events: true,
+      nativeSystem: true,
+      commands: true,
+      liveFollowUp: true,
+      approvals: true,
+    },
     checkedAt: ago(2 * 60_000),
   },
   {
@@ -379,6 +389,15 @@ export const AGENT_STATUS: AgentStatus[] = [
     version: "1.0.61",
     minVersion: "1.0.75",
     caps: ["session id"],
+    capabilities: {
+      session: true,
+      fork: false,
+      events: true,
+      nativeSystem: false,
+      commands: false,
+      liveFollowUp: false,
+      approvals: false,
+    },
     checkedAt: ago(2 * 60_000),
   },
   {
@@ -387,6 +406,15 @@ export const AGENT_STATUS: AgentStatus[] = [
     version: null,
     minVersion: "0.9.0",
     caps: ["thread id"],
+    capabilities: {
+      session: true,
+      fork: false,
+      events: true,
+      nativeSystem: false,
+      commands: false,
+      liveFollowUp: false,
+      approvals: false,
+    },
     checkedAt: ago(2 * 60_000),
   },
 ];
@@ -547,7 +575,13 @@ export const SETTINGS: GlobalSettings = {
   },
   // Deliberately not the prompt's model: a list keeper running unattended
   // wants a cheap fast model far more often than a frontier one.
-  taskManager: { model: "haiku", effort: "medium", dirs: [] },
+  taskManager: {
+    agent: "claude",
+    model: "haiku",
+    effort: "medium",
+    permission: "ask",
+    dirs: [],
+  },
   envPolicy: "minimal",
   forwardProxyVars: false,
   completedItems: "resolve",
@@ -567,10 +601,11 @@ export const SETTINGS: GlobalSettings = {
  */
 export const RATE_LIMITS: Record<
   string,
-  { isBlocking: boolean; isWarning: boolean; message: string; resetsAt: string }
+  { agent: Agent; isBlocking: boolean; isWarning: boolean; message: string; resetsAt: string }
 > = {
   cafe: {
     // A real refusal, not the "allowed" heartbeat the provider also emits.
+    agent: "claude",
     isBlocking: true,
     isWarning: false,
     message: "Rate limited",

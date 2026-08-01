@@ -90,8 +90,14 @@ pub fn checkpoints_key(project_id: &str) -> String {
 /// Persisted rather than held in memory so a restart mid-session does not
 /// re-sample everything already captured. Reset to zero by a compaction, which
 /// is what makes the next fill re-arm all three.
-pub fn checkpoint_mark_key(project_id: &str) -> String {
-    format!("checkpoint-mark:{project_id}")
+pub fn checkpoint_mark_key(project_id: &str, agent: &str) -> String {
+    if agent == "claude" {
+        // Preserve the key older builds used for Claude so an upgrade does not
+        // repeat samples from a conversation already past a threshold.
+        format!("checkpoint-mark:{project_id}")
+    } else {
+        format!("checkpoint-mark:{agent}:{project_id}")
+    }
 }
 
 /// Where the samples are taken, in context tokens.
@@ -142,6 +148,7 @@ pub fn sample_document(
     context_tokens: u64,
     context_window: Option<u64>,
     stamp: &str,
+    agent: &str,
     session: &str,
     body: &str,
 ) -> String {
@@ -152,7 +159,7 @@ pub fn sample_document(
     );
     format!(
         "---\nthreshold: {threshold}\ncontext_tokens: {context_tokens}\n\
-         context_window: {window}\ncontext_used: {share}\ntaken_at: {stamp}\n\
+         context_window: {window}\ncontext_used: {share}\ntaken_at: {stamp}\nagent: {agent}\n\
          session: {session}\nchars: {}\nlines: {}\n---\n\n{body}\n",
         body.len(),
         body.lines().filter(|line| !line.trim().is_empty()).count(),
@@ -344,6 +351,7 @@ mod tests {
             312_450,
             Some(1_000_000),
             "2026-08-01T00:30:00+00:00",
+            "claude",
             "abc-123",
             "- Bump the version on every commit.",
         );
@@ -351,6 +359,7 @@ mod tests {
         assert!(doc.contains("threshold: 300000"));
         assert!(doc.contains("context_tokens: 312450"));
         assert!(doc.contains("context_used: 31%"));
+        assert!(doc.contains("agent: claude"));
         assert!(doc.contains("session: abc-123"));
         assert!(doc.contains("lines: 1"));
         assert!(doc.ends_with("- Bump the version on every commit.\n"));
@@ -360,9 +369,15 @@ mod tests {
     /// token count is the axis that matters and it is always there.
     #[test]
     fn a_missing_window_is_said_rather_than_guessed() {
-        let doc = sample_document(300_000, 312_450, None, "t", "s", "body");
+        let doc = sample_document(300_000, 312_450, None, "t", "codex", "s", "body");
         assert!(doc.contains("context_window: unknown"));
         assert!(doc.contains("context_used: unknown"));
+    }
+
+    #[test]
+    fn checkpoint_marks_are_provider_scoped_without_moving_claudes_legacy_key() {
+        assert_eq!(checkpoint_mark_key("p", "claude"), "checkpoint-mark:p");
+        assert_eq!(checkpoint_mark_key("p", "codex"), "checkpoint-mark:codex:p");
     }
 
     /// The window carries its own copy as `NOTES_BUDGET` in `api/client.ts`, so

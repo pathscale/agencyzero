@@ -28,6 +28,9 @@ pub struct AgentStatusDto {
     pub min_version: String,
     /// Short capability chips: fork, session id, thread id, events.
     pub caps: Vec<String>,
+    /// Machine-readable capabilities for controls whose behavior depends on
+    /// what the provider can actually do.
+    pub capabilities: ProviderCapabilitiesDto,
     pub checked_at: String,
     /// The CLI's own wording, so Settings can explain rather than just colour a
     /// dot. Empty when there is nothing useful to say.
@@ -40,6 +43,19 @@ pub struct AgentStatusDto {
     pub plan: Option<String>,
     /// The command that resolves a missing login, for the `logged_out` case.
     pub login_hint: String,
+}
+
+/// Stable wire shape for [`agent_abstraction::Caps`].
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProviderCapabilitiesDto {
+    pub session: bool,
+    pub fork: bool,
+    pub events: bool,
+    pub native_system: bool,
+    pub commands: bool,
+    pub live_follow_up: bool,
+    pub approvals: bool,
 }
 
 /// Probe every agent concurrently.
@@ -56,6 +72,7 @@ pub async fn detect_all() -> Vec<AgentStatusDto> {
 async fn detect_one(agent: Agent) -> AgentStatusDto {
     let checked_at = chrono::Utc::now().to_rfc3339();
     let caps = describe_caps(agent);
+    let capabilities = provider_capabilities(agent);
     let min_version = crate::models::verified_against(agent);
 
     let probe = Probe::run(agent).await;
@@ -71,6 +88,7 @@ async fn detect_one(agent: Agent) -> AgentStatusDto {
             version: None,
             min_version,
             caps,
+            capabilities,
             checked_at,
             detail: agent.install_hint().to_string(),
             auth_method: None,
@@ -131,12 +149,28 @@ async fn detect_one(agent: Agent) -> AgentStatusDto {
         version,
         min_version,
         caps,
+        capabilities,
         checked_at,
         detail,
         auth_method: method,
         account,
         plan,
         login_hint,
+    }
+}
+
+fn provider_capabilities(agent: Agent) -> ProviderCapabilitiesDto {
+    use agent_abstraction::SessionSupport;
+
+    let caps = agent.caps();
+    ProviderCapabilitiesDto {
+        session: !matches!(caps.session, SessionSupport::None),
+        fork: caps.fork,
+        events: caps.events,
+        native_system: caps.native_system,
+        commands: caps.commands,
+        live_follow_up: caps.live_follow_up,
+        approvals: caps.approvals,
     }
 }
 
@@ -206,5 +240,17 @@ mod tests {
             claude.iter().any(|c| c == "fork"),
             "fork is Claude's distinguishing capability: {claude:?}"
         );
+    }
+
+    #[test]
+    fn structured_caps_distinguish_interactive_providers() {
+        let claude = provider_capabilities(Agent::Claude);
+        let codex = provider_capabilities(Agent::Codex);
+        assert!(claude.live_follow_up);
+        assert!(claude.approvals);
+        assert!(claude.commands);
+        assert!(!codex.live_follow_up);
+        assert!(!codex.approvals);
+        assert!(!codex.commands);
     }
 }

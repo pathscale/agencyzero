@@ -21,7 +21,6 @@ import {
   AGENT_STATE_LABELS,
   ENV_POLICY_LABELS,
   PERMISSION_LABELS,
-  PERMISSION_ORDER,
 } from "~/lib/labels";
 import { describeError, log } from "~/lib/log";
 import { DEFAULT_WASH } from "~/lib/theme";
@@ -60,13 +59,13 @@ const SOURCE_LABELS: Record<ModelSource, string> = {
 /**
  * What each agent's selection is currently wired to.
  *
- * Only Claude reaches the prompt today. Codex and Copilot are collected now so
- * the code review UI has a selection to open with rather than a blank one.
+ * The two project providers can also own the Home task manager. Copilot stays
+ * collected for the later project integration.
  */
 const AGENT_USE: Record<Agent, string> = {
-  claude: "used by the prompt",
-  codex: "for the code review UI",
-  copilot: "for the code review UI",
+  claude: "available to projects and Task Manager",
+  codex: "available to projects and Task Manager",
+  copilot: "ready for later project support",
 };
 
 /**
@@ -107,7 +106,7 @@ const SearchScope = createContext<{
  * there is nothing to batch.
  */
 export function SettingsTab(): JSX.Element {
-  const { state, actions, isLive, effortsFor } = useWorkspace();
+  const { state, actions, isLive, effortsFor, permissionsFor } = useWorkspace();
   const settings = () => state.settings;
 
   /**
@@ -153,8 +152,63 @@ export function SettingsTab(): JSX.Element {
   const taskManagerEfforts = (): string[] => {
     const settings = state.settings;
     if (!settings) return [];
-    const ladder = effortsFor("claude", settings.taskManager.model);
+    const ladder = effortsFor(settings.taskManager.agent, settings.taskManager.model);
     return ladder.length > 0 ? ladder : [settings.taskManager.effort];
+  };
+
+  const selectDefaultAgent = (agent: Agent): void => {
+    const settings = state.settings;
+    if (!settings) return;
+    const model = settings.models[agent].default;
+    const ladder = effortsFor(agent, model);
+    const permissions = permissionsFor(agent);
+    void actions.saveSettings({
+      defaultAgent: agent,
+      defaultEffort: ladder.includes(settings.defaultEffort)
+        ? settings.defaultEffort
+        : (ladder[0] ?? settings.defaultEffort),
+      defaultPermission: permissions.includes(settings.defaultPermission)
+        ? settings.defaultPermission
+        : (permissions[0] ?? "read_only"),
+    });
+  };
+
+  const selectTaskManagerAgent = (agent: Agent): void => {
+    const settings = state.settings;
+    if (!settings) return;
+    const taskManager = settings.taskManager;
+    const model = settings.models[agent].default;
+    const ladder = effortsFor(agent, model);
+    const permissions = permissionsFor(agent);
+    void actions.saveSettings({
+      taskManager: {
+        ...taskManager,
+        agent,
+        model,
+        effort: ladder.includes(taskManager.effort)
+          ? taskManager.effort
+          : (ladder[0] ?? taskManager.effort),
+        permission: permissions.includes(taskManager.permission)
+          ? taskManager.permission
+          : (permissions[0] ?? "read_only"),
+      },
+    });
+  };
+
+  const selectTaskManagerModel = (model: string): void => {
+    const settings = state.settings;
+    if (!settings) return;
+    const taskManager = settings.taskManager;
+    const ladder = effortsFor(taskManager.agent, model);
+    void actions.saveSettings({
+      taskManager: {
+        ...taskManager,
+        model,
+        effort: ladder.includes(taskManager.effort)
+          ? taskManager.effort
+          : (ladder[0] ?? taskManager.effort),
+      },
+    });
   };
 
   const enabledModels = (agent: Agent): Model[] => {
@@ -223,11 +277,10 @@ export function SettingsTab(): JSX.Element {
                     label="Default agent"
                     icon="sparkles"
                     value={current().defaultAgent}
-                    // Only agents that report connected can be picked.
                     options={state.agents
-                      .filter((agent) => agent.state === "connected")
+                      .filter((agent) => agent.agent === "claude" || agent.agent === "codex")
                       .map((agent) => ({ value: agent.agent, label: AGENT_LABELS[agent.agent] }))}
-                    onChange={(defaultAgent) => void actions.saveSettings({ defaultAgent })}
+                    onChange={selectDefaultAgent}
                   />
                 </Row>
                 <Row label="Model" hint="chosen from what Models below has enabled">
@@ -276,7 +329,7 @@ export function SettingsTab(): JSX.Element {
                     label="Default permission"
                     icon="lock"
                     value={current().defaultPermission}
-                    options={PERMISSION_ORDER.map((permission) => ({
+                    options={permissionsFor(current().defaultAgent).map((permission) => ({
                       value: permission,
                       label: PERMISSION_LABELS[permission],
                     }))}
@@ -315,6 +368,20 @@ export function SettingsTab(): JSX.Element {
                 title="Task Manager"
                 hint="the Home conversation that keeps the lists in order"
               >
+                <Row label="Agent">
+                  <PillMenu<Agent>
+                    label="Task manager agent"
+                    icon="sparkles"
+                    value={current().taskManager.agent}
+                    options={state.agents
+                      .filter((status) => status.agent === "claude" || status.agent === "codex")
+                      .map((status) => ({
+                        value: status.agent,
+                        label: AGENT_LABELS[status.agent],
+                      }))}
+                    onChange={selectTaskManagerAgent}
+                  />
+                </Row>
                 <Row
                   label="Model"
                   hint="its own, deliberately — a list keeper running unattended should not bill at the prompt's rates"
@@ -322,15 +389,11 @@ export function SettingsTab(): JSX.Element {
                   <PillMenu
                     label="Task manager model"
                     value={current().taskManager.model}
-                    options={enabledModels("claude").map((model) => ({
+                    options={enabledModels(current().taskManager.agent).map((model) => ({
                       value: model.id,
                       label: model.name,
                     }))}
-                    onChange={(model) =>
-                      void actions.saveSettings({
-                        taskManager: { ...current().taskManager, model },
-                      })
-                    }
+                    onChange={selectTaskManagerModel}
                   />
                 </Row>
                 <Row label="Effort">
@@ -348,9 +411,25 @@ export function SettingsTab(): JSX.Element {
                     }
                   />
                 </Row>
+                <Row label="Permission posture">
+                  <PillMenu<Permission>
+                    label="Task manager permission"
+                    icon="lock"
+                    value={current().taskManager.permission}
+                    options={permissionsFor(current().taskManager.agent).map((permission) => ({
+                      value: permission,
+                      label: PERMISSION_LABELS[permission],
+                    }))}
+                    onChange={(permission) =>
+                      void actions.saveSettings({
+                        taskManager: { ...current().taskManager, permission },
+                      })
+                    }
+                  />
+                </Row>
                 <Row
                   label="Working directories"
-                  hint="read_only denies reads outside these; empty means the workspace root"
+                  hint="the first is the working directory; empty means the workspace root"
                 >
                   <TaskManagerDirs taskManager={current().taskManager} />
                 </Row>
@@ -691,11 +770,8 @@ export function SettingsTab(): JSX.Element {
 /**
  * The task manager's working directories — the fix for its sharpest failure.
  *
- * Its runs are read_only, which maps to Claude's don't-ask mode: reads outside
- * the working tree are denied without prompting. With no directory set, the
- * runs execute at the workspace root and "read that file in ~/code/…" fails
- * with a permission denial the user only sees in the I/O panel. The first
- * entry becomes the run's cwd.
+ * The first entry becomes the run's cwd and every later entry widens its
+ * working scope. With none set, runs execute at the workspace root.
  */
 /**
  * What each table costs on disk, largest first.

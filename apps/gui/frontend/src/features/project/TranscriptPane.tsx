@@ -24,6 +24,12 @@ export function TranscriptPane(props: {
 }): JSX.Element {
   const { state, actions } = useWorkspace();
   let scroller!: HTMLDivElement;
+  const streamingAgent = () =>
+    state.runStatus[props.project.id]?.agent ??
+    [...props.messages]
+      .reverse()
+      .find((message) => message.author === "user" || message.author === "agent")?.agent ??
+    "claude";
 
   /*
    * Whether the view is at (or near) the tail. Reading up through a long
@@ -129,7 +135,9 @@ export function TranscriptPane(props: {
             // The same container as a finished reply, so the bubble does not
             // appear, disappear and reappear as the run lands.
             <div class={`${AGENT_BUBBLE}`}>
-              <span class="text-[11px] text-az-muted">Claude · writing…</span>
+              <span class="text-[11px] text-az-muted">
+                {AGENT_LABELS[streamingAgent()]} · writing…
+              </span>
               <p class={`whitespace-pre-wrap ${AGENT_TEXT}`}>{text()}</p>
             </div>
           )}

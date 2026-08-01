@@ -48,6 +48,8 @@ export type ComposerProps = {
   effort: string;
   onEffortChange?: (effort: string) => void;
   permission: Permission;
+  /** Postures this provider can execute without silently degrading them. */
+  permissions?: Permission[];
   onModelChange: (agent: Agent, model: string) => void;
   onPermissionChange: (permission: Permission) => void;
   /**
@@ -77,6 +79,8 @@ export type ComposerProps = {
   usage?: string;
   /** A run is in flight: the send button becomes Stop. */
   isRunning?: boolean;
+  /** Whether a send during that run enters it instead of waiting for the slot. */
+  canFollowUp?: boolean;
   onStop?: () => void;
   /** Larger prompt text, centred layout — the new-project variant. */
   size?: "md" | "lg";
@@ -421,7 +425,7 @@ export function Composer(props: ComposerProps): JSX.Element {
             label="Permission"
             icon="lock"
             value={props.permission}
-            options={PERMISSION_ORDER.map((permission) => ({
+            options={(props.permissions ?? PERMISSION_ORDER).map((permission) => ({
               value: permission,
               label: PERMISSION_LABELS[permission],
               hint: PERMISSION_HINTS[permission],
@@ -481,20 +485,24 @@ export function Composer(props: ComposerProps): JSX.Element {
             />
           </Show>
 
-          {/*
-            While a run is live the pair reads: speak into the turn, or stop
-            it. A message sent now is delivered into the open turn and the
-            model takes it at its next step boundary — a real interruption,
-            so the button keeps its ordinary send face.
-          */}
+          {/* While a run is live, the provider capability decides whether this
+              interrupts the open turn or queues for the next one. */}
           <button
             type="button"
             onClick={() => void submit()}
             disabled={!canSend()}
-            aria-label={props.isRunning ? "Send into the running turn" : "Send"}
+            aria-label={
+              props.isRunning
+                ? props.canFollowUp
+                  ? "Send into the running turn"
+                  : "Queue after the running turn"
+                : "Send"
+            }
             title={
               props.isRunning
-                ? "Delivered into the running turn — the agent takes it at its next step"
+                ? props.canFollowUp
+                  ? "Delivered into the running turn; the agent takes it at its next step"
+                  : "Queued until the running turn finishes"
                 : undefined
             }
             class="flex size-8 items-center justify-center rounded-full bg-primary text-primary-content transition-colors hover:bg-az-primary-hover disabled:cursor-not-allowed disabled:opacity-40"

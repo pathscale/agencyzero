@@ -720,7 +720,7 @@ fn parse_agent(raw: Option<&str>) -> Result<Agent, String> {
 }
 
 fn can_inject(running: Agent, requested: Agent) -> bool {
-    running == Agent::Claude && requested == Agent::Claude
+    running == requested && requested.caps().live_follow_up
 }
 
 // — read path ——————————————————————————————————————————————————————
@@ -1855,6 +1855,57 @@ pub(crate) fn partial_reply_key(project_id: &str) -> String {
     format!("partial-reply:{project_id}")
 }
 
+/// Provider identity travels with a streamed-reply checkpoint.
+///
+/// Versioned because older builds stored the body as a bare string. Recovery
+/// treats those legacy values as Claude, which was the only possible writer at
+/// the time, while every new checkpoint preserves the provider that wrote it.
+#[derive(serde::Deserialize, serde::Serialize)]
+struct PartialReply {
+    version: u8,
+    body: String,
+    agent: String,
+    model: String,
+    permission: String,
+}
+
+fn encode_partial_reply(body: &str, agent: Agent, model: &str, permission: &str) -> String {
+    let suffix = "\n\n[checkpoint truncated; the reply continued]";
+    let mut body_limit = body.len().min(MAX_PERSISTED_BLOB);
+    loop {
+        let clipped = if body_limit < body.len() {
+            truncate_to_bytes(body, body_limit) + suffix
+        } else {
+            body.to_string()
+        };
+        let encoded = serde_json::to_string(&PartialReply {
+            version: 1,
+            body: clipped,
+            agent: agent_wire_name(agent).into(),
+            model: model.into(),
+            permission: permission.into(),
+        })
+        .unwrap_or_default();
+        if encoded.len() <= MAX_PERSISTED_BLOB || body_limit == 0 {
+            return encoded;
+        }
+        body_limit = body_limit.saturating_sub(encoded.len() - MAX_PERSISTED_BLOB + 1);
+    }
+}
+
+fn decode_partial_reply(raw: String) -> PartialReply {
+    serde_json::from_str::<PartialReply>(&raw)
+        .ok()
+        .filter(|checkpoint| checkpoint.version == 1)
+        .unwrap_or(PartialReply {
+            version: 0,
+            body: raw,
+            agent: "claude".into(),
+            model: String::new(),
+            permission: String::new(),
+        })
+}
+
 /// How stale the persisted copy of a streaming reply may get.
 ///
 /// Every text delta re-arms this; the write happens on the first delta after
@@ -1907,6 +1958,28 @@ async fn deliver_injection(
     }
 }
 
+fn emit_run_stopped(
+    app: &AppHandle,
+    project_id: &str,
+    agent: Agent,
+    model: &str,
+    permission: &str,
+    stop: impl Into<String>,
+    exit_code: Option<i64>,
+) {
+    let _ = app.emit(
+        "run:stopped",
+        serde_json::json!({
+            "projectId": project_id,
+            "agent": agent_wire_name(agent),
+            "model": model,
+            "permission": permission,
+            "stop": stop.into(),
+            "exitCode": exit_code,
+        }),
+    );
+}
+
 /// Drop a run's reply checkpoint, once a real row owns the words.
 async fn clear_partial_reply(tables: &Tables, project_id: &str) {
     if let Err(error) = tables
@@ -1946,19 +2019,20 @@ pub async fn recover_partial_replies(tables: &Tables) {
             let _ = tables.kv_put(&row.key, String::new()).await;
             continue;
         }
+        let checkpoint = decode_partial_reply(row.value);
         let message = MessageRow {
             id: id("msg"),
             project_id: project_id.clone(),
             item_id: String::new(),
             author: "agent".into(),
-            agent: "claude".into(),
+            agent: checkpoint.agent,
             moderation: String::new(),
-            model: String::new(),
-            permission: String::new(),
+            model: checkpoint.model,
+            permission: checkpoint.permission,
             usage: String::new(),
             stop: "interrupted".into(),
             exit_code: 0,
-            body: capped_body(row.value),
+            body: capped_body(checkpoint.body),
             created_at: now(),
         };
         if let Err(error) = tables.message.insert(message) {
@@ -2160,13 +2234,15 @@ pub fn list_agent_io(project_id: String, state: State<'_, AppState>) -> Vec<Agen
 /// current when it is not. Kept for the life of the process so the window can
 /// hydrate on boot and so a prompt can carry it, both of which need an answer
 /// before the next run reports one.
-pub type RateLimits = std::sync::Mutex<std::collections::HashMap<String, RateLimitReport>>;
+pub type RateLimits = std::sync::Mutex<std::collections::HashMap<(String, Agent), RateLimitReport>>;
 
 /// One usage report, as the provider worded it.
 #[derive(Clone, Debug, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RateLimitReport {
     pub project_id: String,
+    /// The account whose window this describes.
+    pub agent: Agent,
     /// `<status> (<window>)`, the provider's own vocabulary.
     pub message: String,
     /// ISO 8601, or absent when the provider did not say.
@@ -2565,6 +2641,8 @@ pub async fn get_cost_summary(state: State<'_, AppState>) -> Result<CostSummaryD
 #[derive(Debug, Clone, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TaskManagerDto {
+    /// The provider whose session is selected in Settings.
+    pub agent: Agent,
     /// The agent's native session id, once a prompt has produced one.
     pub session_id: Option<String>,
 }
@@ -2576,11 +2654,18 @@ pub struct TaskManagerDto {
 /// breaking change to the command's signature.
 #[tauri::command]
 pub async fn get_task_manager(state: State<'_, AppState>) -> Result<TaskManagerDto, String> {
+    let settings = state
+        .tables
+        .kv_get(crate::settings::KEY)
+        .and_then(|raw| serde_json::from_str::<crate::settings::GlobalSettings>(&raw).ok())
+        .unwrap_or_default();
+    let agent = parse_agent(Some(&settings.task_manager.agent))?;
     let session = state
         .tables
-        .kv_get(&session_key(crate::tasks::TASK_MANAGER_ID))
+        .kv_get(&agent_session_key(crate::tasks::TASK_MANAGER_ID, agent))
         .filter(|id| !id.is_empty());
     Ok(TaskManagerDto {
+        agent,
         session_id: session,
     })
 }
@@ -2757,6 +2842,7 @@ async fn learn_before_compacting(
     io: &AgentIo,
     state: &State<'_, AppState>,
     project_id: &str,
+    agent: Agent,
     cwd: &str,
     session: Option<&str>,
 ) -> Option<String> {
@@ -2765,11 +2851,8 @@ async fn learn_before_compacting(
         .kv_get(&crate::notes::notes_key(project_id))
         .unwrap_or_default();
 
-    let mut request = agent_abstraction::Request::new(
-        agent_abstraction::Agent::Claude,
-        crate::notes::merge_prompt(&existing),
-    )
-    .cwd(cwd);
+    let mut request =
+        agent_abstraction::Request::new(agent, crate::notes::merge_prompt(&existing)).cwd(cwd);
     if let Some(session) = session {
         request = request.resume(session);
     }
@@ -2780,7 +2863,10 @@ async fn learn_before_compacting(
         project_id,
         "sent",
         "request",
-        format!("claude <pre-compaction notes> cwd={cwd}"),
+        format!(
+            "{} <pre-compaction notes> cwd={cwd}",
+            agent_wire_name(agent)
+        ),
     );
 
     let outcome = match agent_abstraction::run(&request).await {
@@ -2917,11 +3003,19 @@ fn compaction_verdict(
 pub async fn compact_project(
     app: AppHandle,
     project_id: String,
+    agent: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
+    let agent = parse_agent(agent.as_deref())?;
+    if !agent.caps().commands {
+        return Err(format!(
+            "{} does not expose a command vocabulary, so this conversation cannot be compacted from AgencyZero",
+            agent_wire_name(agent)
+        ));
+    }
     let session = state
         .tables
-        .kv_get(&session_key(&project_id))
+        .kv_get(&agent_session_key(&project_id, agent))
         .filter(|id| !id.is_empty());
 
     // Held for the rest of the body: the slot is released when this drops,
@@ -2939,7 +3033,7 @@ pub async fn compact_project(
             project_id.clone(),
             ActiveRun {
                 cancel: cancel_tx,
-                agent: Agent::Claude,
+                agent,
                 // Nothing to say into: see `ActiveRun::inject`.
                 inject: None,
             },
@@ -2989,7 +3083,10 @@ pub async fn compact_project(
      */
     if let Err(error) = state
         .tables
-        .kv_put(&crate::notes::checkpoint_mark_key(&project_id), "0".into())
+        .kv_put(
+            &crate::notes::checkpoint_mark_key(&project_id, agent_wire_name(agent)),
+            "0".into(),
+        )
         .await
     {
         crate::log!(
@@ -3004,17 +3101,27 @@ pub async fn compact_project(
             "run:compaction",
             serde_json::json!({
                 "projectId": project_id,
+                "agent": agent,
                 "driver": "command",
                 "phase": "learning",
             }),
         );
-        learn_before_compacting(&app, &io, &state, &project_id, &cwd, session.as_deref()).await
+        learn_before_compacting(
+            &app,
+            &io,
+            &state,
+            &project_id,
+            agent,
+            &cwd,
+            session.as_deref(),
+        )
+        .await
     } else {
         None
     };
 
     let mut request = agent_abstraction::Request::command(
-        agent_abstraction::Agent::Claude,
+        agent,
         &agent_abstraction::Command::Compact { instructions: None },
     )
     .cwd(&cwd);
@@ -3029,7 +3136,10 @@ pub async fn compact_project(
         &project_id,
         "sent",
         "request",
-        format!("claude /compact cwd={cwd} resume={resumed}"),
+        format!(
+            "{} /compact cwd={cwd} resume={resumed}",
+            agent_wire_name(agent)
+        ),
     );
     crate::log!(
         crate::log::Level::Info,
@@ -3044,6 +3154,7 @@ pub async fn compact_project(
         "run:compaction",
         serde_json::json!({
             "projectId": project_id,
+            "agent": agent,
             "driver": "command",
             "phase": "started",
         }),
@@ -3090,7 +3201,7 @@ pub async fn compact_project(
             } => {
                 if let Err(error) = state
                     .tables
-                    .kv_put(&session_key(&project_id), started.clone())
+                    .kv_put(&agent_session_key(&project_id, agent), started.clone())
                     .await
                 {
                     crate::log!(
@@ -3162,7 +3273,7 @@ pub async fn compact_project(
         // — the transcript builds that card out of the `moderation` verdict,
         // which a compaction does not have and should not fake.
         author: "system".into(),
-        agent: "claude".into(),
+        agent: agent_wire_name(agent).into(),
         moderation: String::new(),
         model: String::new(),
         permission: String::new(),
@@ -3182,6 +3293,7 @@ pub async fn compact_project(
         "run:compaction",
         serde_json::json!({
             "projectId": project_id,
+            "agent": agent,
             "driver": "command",
             "phase": "finished",
             "ok": ok,
@@ -3207,16 +3319,23 @@ pub async fn compact_project(
 #[tauri::command]
 pub async fn reset_task_manager(app: AppHandle, state: State<'_, AppState>) -> Result<(), String> {
     let id = crate::tasks::TASK_MANAGER_ID;
+    let settings = state
+        .tables
+        .kv_get(crate::settings::KEY)
+        .and_then(|raw| serde_json::from_str::<crate::settings::GlobalSettings>(&raw).ok())
+        .unwrap_or_default();
+    let agent = parse_agent(Some(&settings.task_manager.agent))?;
     state
         .tables
-        .kv_put(&session_key(id), String::new())
+        .kv_put(&agent_session_key(id, agent), String::new())
         .await
         .map_err(|error| error.to_string())?;
 
     crate::log!(
         crate::log::Level::Info,
         "tasks",
-        "task manager session reset"
+        "{} task manager session reset",
+        agent_wire_name(agent)
     );
     note_gui(
         &app,
@@ -3474,6 +3593,10 @@ pub async fn delete_project(
     keys.extend([
         io_persist_key(&id),
         partial_reply_key(&id),
+        crate::notes::checkpoints_key(&id),
+        crate::notes::checkpoint_mark_key(&id, "claude"),
+        crate::notes::checkpoint_mark_key(&id, "codex"),
+        crate::notes::checkpoint_mark_key(&id, "copilot"),
         // The notes kept across compactions. Ids are not recycled, so this is
         // only an orphan — but it is an orphan that would be fed to an agent as
         // standing instructions if one ever were.
@@ -3736,7 +3859,7 @@ pub async fn send_message(
         .permission
         .clone()
         .unwrap_or_else(|| "read_only".into());
-    if agent != Agent::Claude && permission == "ask" {
+    if permission == "ask" && !agent.caps().approvals {
         return Err(format!(
             "{} cannot ask for approval during a run; choose read only, edit, auto, or bypass",
             agent_name
@@ -3826,8 +3949,8 @@ pub async fn send_message(
             ActiveRun {
                 cancel: cancel_tx,
                 agent,
-                // Kept for the receiver's lifetime. The provider check above
-                // exposes live injection only for Claude.
+                // Kept for the receiver's lifetime. The capability check above
+                // exposes live injection only when the active provider allows it.
                 inject: Some(inject_tx),
             },
         );
@@ -3876,7 +3999,12 @@ pub async fn send_message(
     // no run (the mock) shows no run.
     let _ = app.emit(
         "run:accepted",
-        serde_json::json!({ "projectId": input.project_id }),
+        serde_json::json!({
+            "projectId": input.project_id,
+            "agent": agent_name,
+            "model": model,
+            "permission": permission,
+        }),
     );
 
     // The working directories: the project's own if it has any, else the
@@ -3884,9 +4012,8 @@ pub async fn send_message(
     // bundled .app is `/`.
     //
     // The task manager is the special case: it has no project row to carry
-    // directories, and the scope matters more than it looks — `read_only`
-    // maps to Claude's don't-ask mode, which denies reads *outside* the
-    // working tree without prompting. Its directories live in Settings.
+    // directories. Its provider applies the chosen permission posture within
+    // the directories stored in Settings.
     //
     // The first directory becomes the cwd; every further one rides along as
     // `--add-dir`, so a project spanning two repos is in scope for both
@@ -4116,13 +4243,13 @@ async fn drive_run(
     // `ask`: every gated call — a write, a command, a read outside the working
     // tree — arrives as an approval question instead of a silent pre-decision.
     let asks = permission == "ask";
-    if asks && agent == Agent::Claude {
+    if asks && agent.caps().approvals {
         request = request.approvals();
     }
     // Always, not only under `ask` (approvals implies it anyway): the open
     // stdin is what lets a message typed mid-turn reach the model at its next
     // step boundary instead of waiting out the whole turn.
-    if agent == Agent::Claude {
+    if agent.caps().live_follow_up {
         request = request.interactive();
     }
     if !model.is_empty() {
@@ -4260,7 +4387,7 @@ async fn drive_run(
     if let Some(usage) = limits
         .lock()
         .ok()
-        .and_then(|kept| kept.get(&project_id).cloned())
+        .and_then(|kept| kept.get(&(project_id.clone(), agent)).cloned())
     {
         if !system.is_empty() {
             system.push_str("\n\n");
@@ -4348,13 +4475,14 @@ async fn drive_run(
                 "run",
                 "{project_id}: could not start the agent: {error}"
             );
-            let _ = app.emit(
-                "run:stopped",
-                serde_json::json!({
-                    "projectId": project_id,
-                    "stop": format!("could not start the agent: {error}"),
-                    "exitCode": null,
-                }),
+            emit_run_stopped(
+                &app,
+                &project_id,
+                agent,
+                &model,
+                &permission,
+                format!("could not start the agent: {error}"),
+                None,
             );
             return;
         }
@@ -4372,8 +4500,8 @@ async fn drive_run(
     let mut streamed_any = false;
     /*
      * Everything the model said, exactly as it streamed. The crate's
-     * `Outcome::text` is Claude's terminal `result` field — the *final* text
-     * block only — so persisting it clobbered the narration between tool
+     * `Outcome::text` is the provider's settled answer, which can be only the
+     * final text block, so persisting it clobbered the narration between tool
      * calls ("I'll check whether that exists.") the moment the run finished.
      * The transcript keeps what the user watched; the terminal text is the
      * fallback for a run that never streamed.
@@ -4509,6 +4637,7 @@ async fn drive_run(
                     "run:approval",
                     serde_json::json!({
                         "projectId": project_id,
+                        "agent": agent,
                         "approvalId": approval.id,
                         "tool": approval.tool,
                         "input": approval.input,
@@ -4678,12 +4807,8 @@ async fn drive_run(
                      * finished reply is unaffected — it lands as a message
                      * row, not here.
                      */
-                    let checkpoint = if streamed_text.len() > MAX_PERSISTED_BLOB {
-                        truncate_to_bytes(&streamed_text, MAX_PERSISTED_BLOB)
-                            + "\n\n[checkpoint truncated; the reply continued]"
-                    } else {
-                        streamed_text.clone()
-                    };
+                    let checkpoint =
+                        encode_partial_reply(&streamed_text, agent, &model, &permission);
                     match tables
                         .kv_put(&partial_reply_key(&project_id), checkpoint)
                         .await
@@ -4855,6 +4980,7 @@ async fn drive_run(
                     !limit.is_blocking() && limit.status.to_ascii_lowercase().contains("warning");
                 let report = RateLimitReport {
                     project_id: project_id.clone(),
+                    agent,
                     message: message.clone(),
                     resets_at: resets_at.clone(),
                     is_blocking: limit.is_blocking(),
@@ -4866,9 +4992,9 @@ async fn drive_run(
                     // is not worth keeping, so a warning stays visible until
                     // the provider says something else that matters.
                     if report.is_blocking || report.is_warning {
-                        kept.insert(project_id.clone(), report.clone());
+                        kept.insert((project_id.clone(), agent), report.clone());
                     } else {
-                        kept.remove(&project_id);
+                        kept.remove(&(project_id.clone(), agent));
                     }
                 }
                 let _ = app.emit("run:rate_limit", &report);
@@ -4889,6 +5015,7 @@ async fn drive_run(
                     "run:commands",
                     serde_json::json!({
                         "projectId": project_id,
+                        "agent": agent,
                         "all": commands.all,
                         "skills": commands.skills,
                     }),
@@ -4910,6 +5037,7 @@ async fn drive_run(
                     "run:compaction",
                     serde_json::json!({
                         "projectId": project_id,
+                        "agent": agent,
                         // Whose turn this is happening inside. The window holds
                         // the composer for a compaction it asked for; this one
                         // is weather during someone else's run, and clearing
@@ -5060,13 +5188,14 @@ async fn drive_run(
         // Including its checkpoint: recovery must not resurrect a deleted
         // project's half-written reply at the next boot.
         clear_partial_reply(&tables, &project_id).await;
-        let _ = app.emit(
-            "run:stopped",
-            serde_json::json!({
-                "projectId": project_id,
-                "stop": "canceled",
-                "exitCode": null,
-            }),
+        emit_run_stopped(
+            &app,
+            &project_id,
+            agent,
+            &model,
+            &permission,
+            "canceled",
+            None,
         );
         return;
     }
@@ -5075,8 +5204,8 @@ async fn drive_run(
         Ok(outcome) => {
             /*
              * The body is what the user watched stream, block breaks and all.
-             * `outcome.text` is Claude's terminal `result` field — the final
-             * block only — and persisting it was how the narration between
+             * `outcome.text` is the provider's settled answer, which can be
+             * only the final block, and persisting it was how the narration between
              * tool calls vanished the moment a run finished. The terminal
              * text remains the fallback for a run that never streamed.
              */
@@ -5102,7 +5231,7 @@ async fn drive_run(
                 agent: agent_wire_name(agent).into(),
                 moderation: String::new(),
                 model: model.clone(),
-                permission,
+                permission: permission.clone(),
                 // Empty means the agent reported nothing, which the transcript
                 // renders as an em dash. Zeroes would read as a free turn.
                 usage: if outcome.usage.is_empty() {
@@ -5210,13 +5339,14 @@ async fn drive_run(
                     "error",
                     format!("the reply could not be persisted: {error}"),
                 );
-                let _ = app.emit(
-                    "run:stopped",
-                    serde_json::json!({
-                        "projectId": project_id,
-                        "stop": format!("the reply could not be persisted: {error}"),
-                        "exitCode": null,
-                    }),
+                emit_run_stopped(
+                    &app,
+                    &project_id,
+                    agent,
+                    &model,
+                    &permission,
+                    format!("the reply could not be persisted: {error}"),
+                    None,
                 );
                 return;
             }
@@ -5295,13 +5425,14 @@ async fn drive_run(
             // Any PR the reply mentions becomes a chip; `gh` fills it in
             // off-path moments later.
             crate::prs::harvest_prs(&app, &tables, &project_id, &body, item_id.as_deref());
-            let _ = app.emit(
-                "run:stopped",
-                serde_json::json!({
-                    "projectId": project_id,
-                    "stop": stop,
-                    "exitCode": outcome.exit_code,
-                }),
+            emit_run_stopped(
+                &app,
+                &project_id,
+                agent,
+                &model,
+                &permission,
+                stop,
+                Some(i64::from(outcome.exit_code)),
             );
         }
         // The normal shape of a stop: `cancel()` reports `Cancelled` unless
@@ -5327,7 +5458,7 @@ async fn drive_run(
                     agent: agent_wire_name(agent).into(),
                     moderation: String::new(),
                     model: model.clone(),
-                    permission,
+                    permission: permission.clone(),
                     usage: String::new(),
                     stop: "canceled".into(),
                     exit_code: -1,
@@ -5348,13 +5479,14 @@ async fn drive_run(
                     ),
                 }
             }
-            let _ = app.emit(
-                "run:stopped",
-                serde_json::json!({
-                    "projectId": project_id,
-                    "stop": "canceled",
-                    "exitCode": null,
-                }),
+            emit_run_stopped(
+                &app,
+                &project_id,
+                agent,
+                &model,
+                &permission,
+                "canceled",
+                None,
             );
         }
         Err(error) => {
@@ -5395,7 +5527,7 @@ async fn drive_run(
                     agent: agent_wire_name(agent).into(),
                     moderation: String::new(),
                     model: model.clone(),
-                    permission,
+                    permission: permission.clone(),
                     usage: String::new(),
                     // The reason, kept with the words it interrupted, so the
                     // transcript can explain itself later.
@@ -5418,13 +5550,14 @@ async fn drive_run(
                     ),
                 }
             }
-            let _ = app.emit(
-                "run:stopped",
-                serde_json::json!({
-                    "projectId": project_id,
-                    "stop": error.to_string(),
-                    "exitCode": null,
-                }),
+            emit_run_stopped(
+                &app,
+                &project_id,
+                agent,
+                &model,
+                &permission,
+                error.to_string(),
+                None,
             );
         }
     }
@@ -5445,17 +5578,16 @@ async fn drive_run(
      * would not be now.
      */
     drop(inject_rx);
-    if agent == Agent::Claude {
-        checkpoint_if_due(
-            &app,
-            &tables,
-            &project_id,
-            &cwd,
-            &turn_usage,
-            checkpoint_dir.as_deref(),
-        )
-        .await;
-    }
+    checkpoint_if_due(
+        &app,
+        &tables,
+        &project_id,
+        agent,
+        &cwd,
+        &turn_usage,
+        checkpoint_dir.as_deref(),
+    )
+    .await;
 }
 
 /// Take a knowledge sample if this turn pushed the conversation past a mark.
@@ -5488,6 +5620,7 @@ async fn checkpoint_if_due(
     app: &AppHandle,
     tables: &std::sync::Arc<crate::db::tables::Tables>,
     project_id: &str,
+    agent: Agent,
     cwd: &str,
     usage: &agent_abstraction::Usage,
     dir: Option<&std::path::Path>,
@@ -5512,12 +5645,16 @@ async fn checkpoint_if_due(
             .execute()
             .ok()?
             .into_iter()
+            .filter(|row| row.agent == agent_wire_name(agent))
             .filter_map(|row| serde_json::from_str::<UsageDto>(&row.usage).ok())
             .filter_map(|dto| dto.context_window)
             .next_back()
     });
     let mark = tables
-        .kv_get(&crate::notes::checkpoint_mark_key(project_id))
+        .kv_get(&crate::notes::checkpoint_mark_key(
+            project_id,
+            agent_wire_name(agent),
+        ))
         .and_then(|value| value.parse::<u64>().ok())
         .unwrap_or(0);
     let Some(threshold) = crate::notes::due(context_tokens, mark) else {
@@ -5526,7 +5663,7 @@ async fn checkpoint_if_due(
     // Nothing to resume means nothing to sample; the crossing cannot have
     // happened without a session.
     let Some(session) = tables
-        .kv_get(&session_key(project_id))
+        .kv_get(&agent_session_key(project_id, agent))
         .filter(|id| !id.is_empty())
     else {
         return;
@@ -5541,6 +5678,7 @@ async fn checkpoint_if_due(
         "run:checkpoint",
         serde_json::json!({
             "projectId": project_id,
+            "agent": agent,
             "phase": "started",
             "threshold": threshold,
         }),
@@ -5549,12 +5687,9 @@ async fn checkpoint_if_due(
     let existing = tables
         .kv_get(&crate::notes::notes_key(project_id))
         .unwrap_or_default();
-    let request = agent_abstraction::Request::new(
-        agent_abstraction::Agent::Claude,
-        crate::notes::merge_prompt(&existing),
-    )
-    .cwd(cwd)
-    .resume(&session);
+    let request = agent_abstraction::Request::new(agent, crate::notes::merge_prompt(&existing))
+        .cwd(cwd)
+        .resume(&session);
 
     let taken = match agent_abstraction::run(&request).await {
         Ok(outcome) => crate::notes::clamp(&outcome.text),
@@ -5578,7 +5713,7 @@ async fn checkpoint_if_due(
      */
     if let Err(error) = tables
         .kv_put(
-            &crate::notes::checkpoint_mark_key(project_id),
+            &crate::notes::checkpoint_mark_key(project_id, agent_wire_name(agent)),
             threshold.to_string(),
         )
         .await
@@ -5595,12 +5730,14 @@ async fn checkpoint_if_due(
         let stamp = now();
         let path = dir
             .join(project_id)
+            .join(agent_wire_name(agent))
             .join(crate::notes::sample_name(threshold, &stamp));
         let document = crate::notes::sample_document(
             threshold,
             context_tokens,
             context_window,
             &stamp,
+            agent_wire_name(agent),
             &session,
             &taken,
         );
@@ -5627,7 +5764,7 @@ async fn checkpoint_if_due(
                     project_id: project_id.to_string(),
                     item_id: String::new(),
                     author: "system".into(),
-                    agent: "claude".into(),
+                    agent: agent_wire_name(agent).into(),
                     moderation: String::new(),
                     model: String::new(),
                     permission: String::new(),
@@ -5665,6 +5802,7 @@ async fn checkpoint_if_due(
         "run:checkpoint",
         serde_json::json!({
             "projectId": project_id,
+            "agent": agent,
             "phase": "finished",
             "threshold": threshold,
             "path": written,
@@ -5676,6 +5814,32 @@ async fn checkpoint_if_due(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn partial_reply_checkpoints_keep_provider_identity_within_the_blob_limit() {
+        let raw = encode_partial_reply(
+            &"reply ".repeat(MAX_PERSISTED_BLOB),
+            Agent::Codex,
+            "gpt-5.6-sol",
+            "edit",
+        );
+        assert!(raw.len() <= MAX_PERSISTED_BLOB);
+
+        let recovered = decode_partial_reply(raw);
+        assert_eq!(recovered.version, 1);
+        assert_eq!(recovered.agent, "codex");
+        assert_eq!(recovered.model, "gpt-5.6-sol");
+        assert_eq!(recovered.permission, "edit");
+        assert!(recovered.body.contains("checkpoint truncated"));
+    }
+
+    #[test]
+    fn legacy_partial_replies_recover_as_the_only_provider_that_could_write_them() {
+        let recovered = decode_partial_reply("unfinished words".into());
+        assert_eq!(recovered.version, 0);
+        assert_eq!(recovered.agent, "claude");
+        assert_eq!(recovered.body, "unfinished words");
+    }
 
     #[test]
     fn a_name_is_taken_from_the_front_of_the_prompt() {
@@ -5785,7 +5949,7 @@ mod tests {
     }
 
     #[test]
-    fn only_a_claude_turn_accepts_a_live_follow_up() {
+    fn live_follow_up_uses_the_providers_capability() {
         assert!(can_inject(Agent::Claude, Agent::Claude));
         assert!(!can_inject(Agent::Codex, Agent::Codex));
         assert!(!can_inject(Agent::Claude, Agent::Codex));

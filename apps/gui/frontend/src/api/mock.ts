@@ -460,7 +460,17 @@ export function createMockApi(): AgencyZeroApi {
         if (running[i].projectId !== projectId) continue;
         emit("task:finished", finishTask(running.splice(i, 1)[0], false));
       }
-      emit("run:stopped", { projectId, stop: "canceled", exitCode: null });
+      const last = [...messages]
+        .reverse()
+        .find((message) => message.projectId === projectId && message.author === "user");
+      emit("run:stopped", {
+        projectId,
+        agent: last?.agent ?? "claude",
+        model: last?.model ?? "",
+        permission: last?.permission ?? "read_only",
+        stop: "canceled",
+        exitCode: null,
+      });
       return settle(undefined);
     },
 
@@ -565,7 +575,8 @@ export function createMockApi(): AgencyZeroApi {
 
     // A fixture session id, so the design shows the faded "session" line the
     // way a real first prompt would produce it.
-    getTaskManager: () => settle({ sessionId: taskManagerSession }),
+    getTaskManager: () =>
+      settle({ agent: settings.taskManager.agent, sessionId: taskManagerSession }),
 
     async resetTaskManager() {
       taskManagerSession = null;
