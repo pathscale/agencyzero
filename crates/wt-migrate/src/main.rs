@@ -92,6 +92,73 @@ fn main() -> ExitCode {
         };
     }
 
+    /*
+     * rebuild-task-log <source> <target>: read every task_log row out of the
+     * source store and insert it into a brand-new task_log in the target
+     * store. Not a migration — same shape both sides. The verb exists because
+     * a table that ever refused an oversized insert carries inconsistent page
+     * accounting that a file copy preserves; only a row-by-row rebuild sheds
+     * it. Run it against a copy of the source: the scan opens it read-write.
+     */
+    if args.first().map(String::as_str) == Some("rebuild-task-log") {
+        args.remove(0);
+        let [source, target] = args.as_slice() else {
+            eprintln!("usage: wt-migrate rebuild-task-log <source-store> <target-store>");
+            return ExitCode::from(2);
+        };
+        let source = PathBuf::from(source);
+        let target = PathBuf::from(target);
+        if !source.join("task_log").is_dir() {
+            eprintln!(
+                "{source:?} has no task_log table, so there is nothing to rebuild from it. \
+                 Nothing was touched."
+            );
+            return ExitCode::from(2);
+        }
+        if source == target || source.canonicalize().ok() == target.canonicalize().ok() {
+            eprintln!("the source and the target are the same store; rebuild into another one.");
+            return ExitCode::from(2);
+        }
+        // A fresh table is the entire point; a target that already has one is
+        // either the wrong path or an old attempt that must be removed first.
+        if target.join("task_log").exists() {
+            eprintln!(
+                "{target:?} already has a task_log; remove or rename it first. \
+                 Rebuilding into existing accounting would keep the damage."
+            );
+            return ExitCode::from(2);
+        }
+        let (_s, _t) = match (
+            wt_migrate::lock_store(&source),
+            wt_migrate::lock_store(&target),
+        ) {
+            (Ok(s), Ok(t)) => (s, t),
+            (Err(m), _) | (_, Err(m)) => {
+                eprintln!("{m}");
+                return ExitCode::FAILURE;
+            }
+        };
+        let runtime = tokio::runtime::Builder::new_multi_thread()
+            .worker_threads(2)
+            .enable_io()
+            .enable_time()
+            .build()
+            .expect("runtime");
+        return match runtime.block_on(wt_migrate::rebuild_task_log(&source, &target)) {
+            Ok((rebuilt, dropped)) => {
+                println!("rebuilt {rebuilt} row(s), dropped {dropped} debris row(s)");
+                ExitCode::SUCCESS
+            }
+            Err(error) => {
+                eprintln!(
+                    "rebuild failed: {error}. The target's task_log may be partial; \
+                     remove it and re-run."
+                );
+                ExitCode::FAILURE
+            }
+        };
+    }
+
     let [source, target] = args.as_slice() else {
         eprintln!("usage: wt-migrate <source-store> <target-store>");
         eprintln!();
