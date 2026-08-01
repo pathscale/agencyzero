@@ -148,6 +148,45 @@ migration_engine!(
 /// guessed at, and [`Report::reset`] says so out loud.
 const MIGRATABLE: [&str; 1] = ["project_item"];
 
+/// Take the store's exclusive advisory lock, or say who cannot.
+///
+/// The single-writer rule used to live in prose; on 2026-08-01 a second
+/// process wrote table files the running GUI already had open and the store
+/// was corrupted into a bus error. The lock is a sibling file (`db.lock`
+/// beside `db`), `flock(LOCK_EX | LOCK_NB)`: advisory, cheap, released by the
+/// OS however the process dies, so a crash can never wedge the next launch.
+/// Every tool that opens the store for writing takes it; wt-migrate does.
+///
+/// # Errors
+/// A message naming the lock when another process holds it, or when the lock
+/// file cannot be created at all.
+pub fn lock_store(store: &std::path::Path) -> Result<std::fs::File, String> {
+    use std::os::fd::AsRawFd;
+
+    let lock_path = store.with_extension("lock");
+    if let Some(parent) = lock_path.parent() {
+        std::fs::create_dir_all(parent)
+            .map_err(|error| format!("could not create {parent:?} for the store lock: {error}"))?;
+    }
+    let file = std::fs::OpenOptions::new()
+        .create(true)
+        .truncate(false)
+        .write(true)
+        .open(&lock_path)
+        .map_err(|error| format!("could not open the store lock {lock_path:?}: {error}"))?;
+
+    // Safety: a valid fd from the file just opened; flock takes no pointers.
+    let taken = unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) } == 0;
+    if taken {
+        Ok(file)
+    } else {
+        Err(format!(
+            "another process holds the store at {store:?} (lock {lock_path:?}). The store is \
+             single-writer: close the other AgencyZero instance or migration tool first."
+        ))
+    }
+}
+
 /// Split a fingerprint into table name and column list.
 ///
 /// The format is its own documentation: `name(col,col);name(col);`. An entry

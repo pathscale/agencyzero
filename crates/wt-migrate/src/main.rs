@@ -30,6 +30,10 @@ fn main() -> ExitCode {
         eprintln!("no store at {}", source.display());
         return ExitCode::FAILURE;
     }
+    if source == target {
+        eprintln!("source and target are the same directory; migrate into a new one");
+        return ExitCode::FAILURE;
+    }
     if target.exists() {
         // Refused rather than merged into: a half-populated target that
         // already held rows is the one state nobody could reason about after.
@@ -39,6 +43,27 @@ fn main() -> ExitCode {
         );
         return ExitCode::FAILURE;
     }
+    /*
+     * The single-writer rule, mechanically. The live store was once corrupted
+     * by exactly this: a migration writing files a running GUI already had
+     * open. Both directions matter — reading a store mid-write copies torn
+     * pages, and two writers on the target is the same disease. The locks are
+     * held for the whole run by staying in scope.
+     */
+    let _source_lock = match wt_migrate::lock_store(&source) {
+        Ok(lock) => lock,
+        Err(message) => {
+            eprintln!("{message}");
+            return ExitCode::FAILURE;
+        }
+    };
+    let _target_lock = match wt_migrate::lock_store(&target) {
+        Ok(lock) => lock,
+        Err(message) => {
+            eprintln!("{message}");
+            return ExitCode::FAILURE;
+        }
+    };
 
     /*
      * The fingerprint the source was written with, read from its own kv table.
