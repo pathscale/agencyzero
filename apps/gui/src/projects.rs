@@ -3808,6 +3808,44 @@ pub async fn send_message(
     let limits = state.limits.clone();
     let receipts = state.receipts.clone();
     let item_id = input.item_id.clone();
+
+    /*
+     * A run starting on an item is that item becoming active, and the app
+     * watched it happen. Derived rather than asked for: this is the one
+     * transition an agent misses most, because it happens before it has said
+     * anything, and nothing about it needs the agent's cooperation.
+     *
+     * Only from a state that is not already it. A row that is `shipped` and
+     * gets worked on again is genuinely active again, but re-announcing
+     * `active` on every follow-up in the same conversation would be noise.
+     */
+    if let Some(item) = item_id.as_deref()
+        && let Some(row) = state.tables.project_item.select(item.to_string())
+        && row.status != "active"
+    {
+        match state
+            .tables
+            .project_item
+            .update_status_by_id(
+                ItemStatusByIdQuery {
+                    status: "active".into(),
+                },
+                item.to_string(),
+            )
+            .await
+        {
+            Ok(()) => {
+                if let Some(updated) = state.tables.project_item.select(item.to_string()) {
+                    let _ = app.emit("item:updated", ProjectItemDto::from(updated));
+                }
+            }
+            Err(error) => crate::log!(
+                crate::log::Level::Error,
+                "items",
+                "could not start {item}: {error}"
+            ),
+        }
+    }
     let project_id = input.project_id.clone();
     let effort = input.effort.clone();
 
@@ -5100,7 +5138,7 @@ async fn drive_run(
             }
             // Any PR the reply mentions becomes a chip; `gh` fills it in
             // off-path moments later.
-            crate::prs::harvest_prs(&app, &tables, &project_id, &body);
+            crate::prs::harvest_prs(&app, &tables, &project_id, &body, item_id.as_deref());
             let _ = app.emit(
                 "run:stopped",
                 serde_json::json!({
