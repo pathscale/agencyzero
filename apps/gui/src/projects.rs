@@ -313,6 +313,27 @@ fn needs_text_break(agent: Agent, streamed_any: bool, last_was_text: bool) -> bo
     streamed_any && (!last_was_text || agent == Agent::Codex)
 }
 
+/// The Markdown fence currently making reply content inert.
+///
+/// Marker and width both matter. A tilde fence cannot close a backtick fence,
+/// and a shorter run of backticks inside a longer fence is content, not its
+/// end. Treating either as a close would promote an example that is still
+/// quoted into a live authoring directive.
+#[derive(Debug, Default, PartialEq, Eq)]
+struct FenceState(Option<(char, usize)>);
+
+fn fence_marker(line: &str) -> Option<(char, usize, &str)> {
+    let marker = line.chars().next()?;
+    if !matches!(marker, '`' | '~') {
+        return None;
+    }
+    let width = line.chars().take_while(|char| *char == marker).count();
+    (width >= 3).then(|| {
+        let bytes = width * marker.len_utf8();
+        (marker, width, &line[bytes..])
+    })
+}
+
 pub(crate) fn id(prefix: &str) -> String {
     format!("{prefix}-{}", uuid::Uuid::new_v4())
 }
@@ -922,7 +943,6 @@ fn state_snapshot(
          <ps @agency:items.add(project: \"<project id or exact name>\", ref: \"t2\", title: \"<one line>\")>\n\
          <ps @agency:items.retire(id: \"<id>\")>\n\
          <ps @agency:pr.link(url: \"https://github.com/owner/repo/pull/66\", item: \"<id>\")>\n\
-{declared}\n\
          Statuses you may set: new, planning, active, questions, shipped. `questions` \
          means you are stopped on something only the owner can answer. `finished` and \
          `canceled` are refused: the owner closes a row. An id may be shortened to any \
@@ -1066,7 +1086,7 @@ async fn apply_directive(
                              */
                             let row = ProjectRow {
                                 id: id("proj"),
-                                name: named.trim().to_string(),
+                                name: truncate_on_char_boundary(named.trim(), 80),
                                 status: "active".into(),
                                 position: u32::try_from(projects.len()).unwrap_or(0),
                                 dirs: "[]".into(),
@@ -1200,6 +1220,12 @@ async fn apply_directive(
                 }
                 None => None,
             };
+            if linked.is_none() && project_id == crate::tasks::TASK_MANAGER_ID {
+                return Outcome::Refused {
+                    what: "pr.link(url) from Home".into(),
+                    code: "ENTITY_NOT_FOUND".into(),
+                };
+            }
             let target_project = linked
                 .as_ref()
                 .map(|(_, project)| project.as_str())
@@ -1261,14 +1287,33 @@ async fn apply_directive(
 /// inert. Keeping `fenced` outside this function is essential for streaming:
 /// an opening fence, its contents, and its closer usually arrive as separate
 /// calls.
-fn authored_directive_line<'a>(line: &'a str, fenced: &mut bool) -> Option<&'a str> {
+fn authored_directive_line<'a>(line: &'a str, fenced: &mut FenceState) -> Option<&'a str> {
     let line = line.trim_end_matches(['\r', '\n']);
     let trimmed = line.trim();
-    if trimmed.starts_with("```") || trimmed.starts_with("~~~") {
-        *fenced = !*fenced;
+
+    // Four-space and tab-indented blocks are inert, but are not fenced blocks
+    // and therefore must not alter fence state for following lines.
+    if line.starts_with("    ") || line.starts_with('\t') {
         return None;
     }
-    if *fenced || line.starts_with("    ") || line.starts_with('\t') || trimmed.starts_with('>') {
+    // A fence quoted inside a blockquote is quoted content, not a delimiter in
+    // the agent-authored stream.
+    if trimmed.starts_with('>') {
+        return None;
+    }
+    if let Some((marker, width, tail)) = fence_marker(trimmed) {
+        match fenced.0 {
+            None => fenced.0 = Some((marker, width)),
+            Some((open, minimum))
+                if marker == open && width >= minimum && tail.trim().is_empty() =>
+            {
+                fenced.0 = None;
+            }
+            Some(_) => {}
+        }
+        return None;
+    }
+    if fenced.0.is_some() {
         return None;
     }
     Some(trimmed)
@@ -1280,7 +1325,7 @@ async fn apply_directives_with_state(
     tables: &crate::db::tables::Tables,
     project_id: &str,
     text: &str,
-    fenced: &mut bool,
+    fenced: &mut FenceState,
 ) -> Vec<crate::directives::Outcome> {
     let mut done = Vec::new();
     for line in text.lines() {
@@ -1299,7 +1344,7 @@ async fn apply_directives(
     project_id: &str,
     text: &str,
 ) -> Vec<crate::directives::Outcome> {
-    apply_directives_with_state(app, tables, project_id, text, &mut false).await
+    apply_directives_with_state(app, tables, project_id, text, &mut FenceState::default()).await
 }
 
 /// Find the project a line named, by id or by name, case-insensitively.
@@ -4049,7 +4094,7 @@ async fn drive_run(
      * described work that was already over.
      */
     let mut directives_scanned_to = 0usize;
-    let mut directives_fenced = false;
+    let mut directives_fenced = FenceState::default();
 
     /*
      * The checkpoint clock. The reply is flushed to `kv` on the first delta
@@ -5865,13 +5910,13 @@ mod tests {
     #[test]
     fn streamed_fences_and_markdown_quotes_keep_ps_inert() {
         let directive = r#"<ps @agency:items.add(ref: "t1", title: "Do it")>"#;
-        let mut fenced = false;
+        let mut fenced = FenceState::default();
 
         assert_eq!(authored_directive_line("```text\n", &mut fenced), None);
-        assert!(fenced);
+        assert_eq!(fenced.0, Some(('`', 3)));
         assert_eq!(authored_directive_line(directive, &mut fenced), None);
         assert_eq!(authored_directive_line("```\n", &mut fenced), None);
-        assert!(!fenced);
+        assert_eq!(fenced, FenceState::default());
 
         assert_eq!(
             authored_directive_line(&format!("> {directive}"), &mut fenced),
@@ -5881,6 +5926,26 @@ mod tests {
             authored_directive_line(&format!("    {directive}"), &mut fenced),
             None
         );
+        assert_eq!(
+            authored_directive_line(directive, &mut fenced),
+            Some(directive)
+        );
+    }
+
+    #[test]
+    fn a_different_or_shorter_fence_cannot_promote_quoted_ps() {
+        let directive = r#"<ps @agency:items.retire(id: "item-a3f9")>"#;
+        let mut fenced = FenceState::default();
+
+        assert_eq!(authored_directive_line("````rust", &mut fenced), None);
+        assert_eq!(fenced.0, Some(('`', 4)));
+        assert_eq!(authored_directive_line("~~~", &mut fenced), None);
+        assert_eq!(authored_directive_line("```", &mut fenced), None);
+        assert_eq!(authored_directive_line(directive, &mut fenced), None);
+        assert_eq!(fenced.0, Some(('`', 4)));
+
+        assert_eq!(authored_directive_line("````", &mut fenced), None);
+        assert_eq!(fenced, FenceState::default());
         assert_eq!(
             authored_directive_line(directive, &mut fenced),
             Some(directive)

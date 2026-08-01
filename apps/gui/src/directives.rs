@@ -192,6 +192,17 @@ fn split_pair(args: &str) -> (&str, &str) {
 /// this way rather than with a Unicode fold.
 #[must_use]
 pub fn parse(line: &str) -> Option<Directive> {
+    // Prompt Syntax requires bidi controls inside an island to be rejected or
+    // neutralized. Rejection is the safer fit for a reverse-channel mutation:
+    // what the person sees must be the same ordering the parser acts on.
+    if line.chars().any(|char| {
+        matches!(
+            char,
+            '\u{061c}' | '\u{200e}' | '\u{200f}' | '\u{202a}'..='\u{202e}' | '\u{2066}'..='\u{2069}'
+        )
+    }) {
+        return None;
+    }
     let inner = line.trim().strip_prefix("<ps")?.strip_suffix('>')?.trim();
     let (verb, args) = match inner.split_once('(') {
         Some((verb, args)) => (verb.trim(), args.strip_suffix(')')?),
@@ -349,6 +360,14 @@ mod tests {
     fn the_verb_folds_as_ascii_only() {
         assert!(parse(r#"<ps @Agency:Items.State(id: "a", status: "new")>"#).is_some());
         assert!(parse(r#"<ps @аgency:items.state(id: "a", status: "new")>"#).is_none());
+    }
+
+    #[test]
+    fn bidi_controls_cannot_disguise_an_authored_mutation() {
+        assert!(
+            parse("<ps @agency:items.state(id: \"item-a3f9\", status: \"active\u{202e}\")>")
+                .is_none()
+        );
     }
 
     #[test]
