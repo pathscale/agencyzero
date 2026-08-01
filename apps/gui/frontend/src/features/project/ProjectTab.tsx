@@ -30,13 +30,12 @@ export function ProjectTab(props: { tab: Tab; project: Project }): JSX.Element {
 
   /*
    * The agent that actually ran, not a hardcoded name: the last message that
-   * recorded one, falling back to the configured default. Settings can select
-   * Codex or Copilot, and a header that always said "Claude" would be lying.
+   * recorded one, falling back to the tab's next provider. A project can be
+   * switched before its next reply, and a header hardcoded to Claude would lie.
    */
   const agent = () =>
     [...messages()].reverse().find((message) => message.author === "agent")?.agent ??
-    state.settings?.defaultAgent ??
-    "claude";
+    props.tab.agent;
   const running = () => state.running[props.project.id] ?? [];
   /*
    * A refusal, or a warning that one is coming. Not the heartbeat: the provider
