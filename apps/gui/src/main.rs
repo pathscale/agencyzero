@@ -2,6 +2,7 @@
 
 mod agents;
 mod db;
+mod directives;
 mod log;
 mod models;
 mod notes;
@@ -102,6 +103,9 @@ pub(crate) struct AppState {
     /// Approval questions waiting on the user, by project. The run is blocked
     /// mid-turn until `resolve_approval` answers, see [`projects::PendingApprovals`].
     approvals: Arc<projects::PendingApprovals>,
+    /// What became of the last turn's directives, by project. Quoted back to
+    /// the agent next turn, see [`projects::Receipts`].
+    receipts: Arc<projects::Receipts>,
     /// The live run per project: at most one, and how to stop it, see
     /// [`projects::ActiveRuns`].
     active: Arc<projects::ActiveRuns>,
@@ -1218,6 +1222,7 @@ fn main() {
                 io: Arc::default(),
                 approvals: Arc::default(),
                 active: Arc::default(),
+                receipts: Arc::default(),
                 settings_write: tokio::sync::Mutex::new(()),
                 config_dir,
                 data_dir,
