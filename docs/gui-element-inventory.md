@@ -91,7 +91,7 @@ fields the UI never reads. The inert and missing rows are the actual backlog.
 | Element | Status | Notes |
 | --- | --- | --- |
 | Text area, Enter to send, Shift+Enter newline | Local | Grows to 168px then scrolls. |
-| Model pill | **Live** | Per tab, sticky. Offers the Claude models enabled in Settings, from `agent-abstraction`'s catalogue via `list_models`. Claude only until the code review UI exists. A tab keeps a model the selection later drops, rather than silently switching. See [`agent-model-surface.md`](agent-model-surface.md). |
+| Model pill | **Live** | Per tab, sticky. Offers the Claude and OpenAI models enabled in Settings, from `agent-abstraction`'s catalogue via `list_models`. The provider and model move together; Copilot remains out of scope. A tab keeps a model the selection later drops, rather than silently switching. See [`agent-model-surface.md`](agent-model-surface.md). |
 | Permission pill | **Live** | Per tab, per session. `read_only` default. |
 | Usage readout | Display | Last message that reported usage. |
 | Send | **Live** | |

@@ -1,4 +1,5 @@
 import type {
+  Agent,
   AgentIoEntry,
   AgentModels,
   AgentStatus,
@@ -51,6 +52,7 @@ export interface AgencyZeroApi {
   /** The name and the initial items are parsed out of the agent's first reply. */
   createProject(input: {
     firstMessage: string;
+    agent?: Agent;
     model?: string;
     permission?: Permission;
     /** Reasoning effort, as `Request::effort`. Absent means the CLI's default. */
@@ -93,6 +95,7 @@ export interface AgencyZeroApi {
     projectId: string;
     body: string;
     itemId?: string | null;
+    agent?: Agent;
     model?: string;
     permission?: Permission;
     /** Reasoning effort, as `Request::effort`. Absent means the CLI's default. */

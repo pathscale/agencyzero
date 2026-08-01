@@ -143,6 +143,7 @@ export function createMockApi(): AgencyZeroApi {
         forkedFrom: null,
         // The mock never runs an agent, so there is no session to report.
         sessionId: null,
+        sessions: {},
         lastActivityAt: new Date().toISOString(),
       };
       projects.push(project);
@@ -152,9 +153,9 @@ export function createMockApi(): AgencyZeroApi {
         projectId: project.id,
         itemId: null,
         author: "user",
-        agent: settings.defaultAgent,
+        agent: input.agent ?? settings.defaultAgent,
         moderation: null,
-        model: input.model ?? settings.models[settings.defaultAgent].default,
+        model: input.model ?? settings.models[input.agent ?? settings.defaultAgent].default,
         permission: input.permission ?? settings.defaultPermission,
         usage: null,
         stop: "completed",
@@ -350,9 +351,9 @@ export function createMockApi(): AgencyZeroApi {
         projectId: input.projectId,
         itemId: input.itemId ?? null,
         author: "user",
-        agent: settings.defaultAgent,
+        agent: input.agent ?? settings.defaultAgent,
         moderation: null,
-        model: input.model ?? settings.models[settings.defaultAgent].default,
+        model: input.model ?? settings.models[input.agent ?? settings.defaultAgent].default,
         permission: input.permission ?? settings.defaultPermission,
         usage: null,
         stop: "completed",

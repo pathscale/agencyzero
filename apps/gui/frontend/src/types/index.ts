@@ -55,7 +55,7 @@ export type ProjectStatus =
  */
 export type TabStatus = "running" | "blocked" | "error" | "ready" | "quiet";
 
-/** `Agent` in the crate. Claude in practice today. */
+/** `Agent` in the crate. Projects currently expose Claude and Codex. */
 export type Agent = "claude" | "codex" | "copilot";
 
 /** `Permission` in the crate. `read_only` is the default and widens deliberately. */
@@ -134,6 +134,8 @@ export interface Project {
    * the project rather than to any one message.
    */
   sessionId: string | null;
+  /** Native session ids kept separately so changing providers can resume either conversation. */
+  sessions: Partial<Record<Agent, string>>;
   /** ISO 8601. Orders the Recent list. */
   lastActivityAt: string;
 }
@@ -569,6 +571,8 @@ export interface Tab {
   /** → `Project.id`; null only for home and an uncreated draft. */
   projectId: string | null;
   label: string;
+  /** Which CLI receives this tab's prompts. */
+  agent: Agent;
   /** The tab's model. Swapping it in the composer sticks until changed again. */
   model: string;
   /**
