@@ -319,6 +319,35 @@ function createWorkspace() {
   const clockTimer = setInterval(() => setClock(Date.now()), 30_000);
   onCleanup(() => clearInterval(clockTimer));
 
+  /*
+   * Pull requests are asked about again on a timer.
+   *
+   * Nothing did. A row was written when the agent mentioned the URL and then
+   * never changed unless someone clicked the CI badge, so a pull request that
+   * had merged an hour ago still read as open, and the panel that exists to
+   * tell you where your work stands was the least current thing on screen.
+   *
+   * Only rows that can still change: `MERGED` and `CLOSED` are endings, and
+   * a dismissed row is not on screen to be wrong. Ninety seconds because each
+   * one is a `gh` subprocess, and this is a state that changes on human
+   * timescales.
+   */
+  const PR_REFRESH_MS = 90_000;
+  const refreshOpenPullRequests = (projectId?: string): void => {
+    if (!isLive("refreshPullRequest")) return;
+    const lists = projectId ? [state.pullRequests[projectId]] : Object.values(state.pullRequests);
+    for (const list of lists) {
+      for (const pr of list ?? []) {
+        if (pr.dismissed || pr.state === "MERGED" || pr.state === "CLOSED") continue;
+        void Promise.resolve(client().refreshPullRequest(pr.id)).catch((cause) =>
+          log.warn(`could not refresh ${pr.repo}#${pr.number}: ${describeError(cause)}`),
+        );
+      }
+    }
+  };
+  const prTimer = setInterval(refreshOpenPullRequests, PR_REFRESH_MS);
+  onCleanup(() => clearInterval(prTimer));
+
   const client = (): AgencyZeroApi => {
     const current = api();
     if (!current) throw new Error("workspace used before the backend was selected");
@@ -472,6 +501,12 @@ function createWorkspace() {
       setState("agentIo", projectId, reconcile(io));
       setState("pullRequests", projectId, reconcile(prs));
     });
+    /*
+     * Ask about this project's open pull requests now rather than at the next
+     * tick. Opening a tab is exactly when the rows are read, and a stored row
+     * is only as current as the last time anyone asked.
+     */
+    refreshOpenPullRequests(projectId);
   }
 
   /**
