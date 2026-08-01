@@ -5556,6 +5556,7 @@ dependencies = [
  "derive_more 2.1.1",
  "eyre",
  "futures",
+ "libc",
  "rkyv 0.8.17",
  "tokio",
  "uuid",

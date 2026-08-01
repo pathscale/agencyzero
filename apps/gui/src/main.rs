@@ -118,6 +118,9 @@ pub(crate) struct AppState {
     /// Where the tables were opened from this launch. A change takes effect on
     /// the next one, so this is the answer for the whole session.
     location: DataLocation,
+    /// The store's exclusive flock, held for the life of the process — the
+    /// single-writer rule made mechanical. See `lock_store`.
+    _store_lock: std::fs::File,
 }
 
 /// Which commands Rust answers. See [`IMPLEMENTED`].
@@ -708,6 +711,124 @@ fn adopt_login_shell_path() {
     }
 }
 
+/// A scratch store for a session that must not touch the real one.
+///
+/// Per-pid, under the OS temp dir: two instances get two scratches, and the
+/// OS reclaims them. Nothing written here is meant to survive the session,
+/// and Settings says so by rendering the source as `ephemeral`.
+fn ephemeral_location() -> location::DataLocation {
+    location::DataLocation {
+        path: std::env::temp_dir().join(format!("agencyzero-ephemeral-{}", std::process::id())),
+        source: "ephemeral".into(),
+        is_editable: false,
+    }
+}
+
+/// Carry a mismatched store forward without ever putting it at risk.
+///
+/// The order is the whole design, learned from doing it the other way:
+///
+/// 1. Migrate `db` into `db.next-<stamp>`. The live store is only read.
+/// 2. Only on success: `db` becomes `db.pre-migration-<stamp>` (kept, whole),
+///    and `next` becomes `db`. Two renames on one filesystem.
+/// 3. On any failure: delete the partial `next`, leave `db` byte-for-byte
+///    untouched, and boot on a scratch store so the app still opens. The old
+///    build can still read the old store; nothing is stranded and nothing is
+///    lost.
+///
+/// The previous flow renamed the store aside *first* and built the target at
+/// the live path, so a failed migration left its partial output as "the
+/// store" and the app booted into debris believing it clean.
+///
+/// # Errors
+/// Only when even the scratch store cannot open, which is a disk problem no
+/// flow survives.
+fn migrate_forward(
+    location: &mut location::DataLocation,
+    found: &str,
+) -> Result<Tables, String> {
+    let stamp = chrono::Utc::now().format("%Y%m%dT%H%M%SZ").to_string();
+    let next = location.path.with_extension(format!("next-{stamp}"));
+    crate::log!(
+        log::Level::Warn,
+        "boot",
+        "the store was written by a different schema ({found}); migrating {:?} into {next:?} \
+         without touching the source",
+        location.path
+    );
+
+    let carried = tauri::async_runtime::block_on(wt_migrate::carry_forward(
+        &location.path,
+        &next,
+        found,
+        wt_migrate::CURRENT_FINGERPRINT,
+    ));
+
+    match carried {
+        Ok(report) => {
+            let keep = location.path.with_extension(format!("pre-migration-{stamp}"));
+            let swapped = std::fs::rename(&location.path, &keep)
+                .and_then(|()| std::fs::rename(&next, &location.path));
+            if let Err(error) = swapped {
+                let _ = std::fs::remove_dir_all(&next);
+                crate::log!(
+                    log::Level::Error,
+                    "boot",
+                    "could not swap the migrated store into place: {error}. The store at {:?} \
+                     is untouched; booting on a scratch store instead.",
+                    location.path
+                );
+                *location = ephemeral_location();
+                return tauri::async_runtime::block_on(Tables::open(&location.path))
+                    .map_err(|error| format!("could not open a scratch store: {error}"));
+            }
+            crate::log!(
+                log::Level::Info,
+                "boot",
+                "carried the store forward: migrated [{}], copied [{}], reset [{}]. The \
+                 pre-migration store is kept whole at {keep:?}",
+                report.migrated.join(", "),
+                report.copied.join(", "),
+                report.reset.join(", ")
+            );
+            for (table, reason) in &report.failed {
+                crate::log!(
+                    log::Level::Warn,
+                    "boot",
+                    "{table} could not be carried forward and starts empty: {reason}"
+                );
+            }
+            for (table, count) in &report.dropped {
+                crate::log!(
+                    log::Level::Warn,
+                    "boot",
+                    "{table}: dropped {count} row(s) that failed the sanity check during migration"
+                );
+            }
+            tauri::async_runtime::block_on(Tables::open(&location.path)).map_err(|error| {
+                let message = format!("could not open the migrated store: {error}");
+                crate::log!(log::Level::Error, "boot", "{message}");
+                message
+            })
+        }
+        Err(error) => {
+            let _ = std::fs::remove_dir_all(&next);
+            crate::log!(
+                log::Level::Error,
+                "boot",
+                "migration failed: {error}. The store at {:?} is byte-for-byte untouched. \
+                 Booting on a scratch store so the app still opens; relaunch with \
+                 AZ_NO_DB_MIGRATION=1 to keep doing this, or downgrade to the build that \
+                 wrote the store to use it as it is.",
+                location.path
+            );
+            *location = ephemeral_location();
+            tauri::async_runtime::block_on(Tables::open(&location.path))
+                .map_err(|error| format!("could not open a scratch store: {error}"))
+        }
+    }
+}
+
 fn main() {
     adopt_login_shell_path();
 
@@ -819,9 +940,41 @@ fn main() {
                 BUILD.built_at
             );
 
+            /*
+             * The escape hatches, read before anything touches a store. Both
+             * exist because of 2026-08-01: a corrupt table made every launch
+             * die inside `Tables::open`, before the window existed, and there
+             * was no way to start the app at all. Env and argv both work; a
+             * Finder launch has an environment, a terminal has arguments.
+             *
+             * - AZ_NO_PERSIST / --debug-no-persist: never open the real store.
+             *   The app runs on a scratch directory that dies with the
+             *   session. For diagnosing exactly the above.
+             * - AZ_NO_DB_MIGRATION / --no-db-migration: on a schema mismatch,
+             *   migrate nothing and touch nothing. The store stays byte-for-
+             *   byte as the old build wrote it, so downgrading to that build
+             *   is always a way back; this session runs on scratch.
+             */
+            let no_persist = std::env::var_os("AZ_NO_PERSIST").is_some()
+                || std::env::args().any(|arg| arg == "--debug-no-persist");
+            let no_migration = std::env::var_os("AZ_NO_DB_MIGRATION").is_some()
+                || std::env::args().any(|arg| arg == "--no-db-migration");
+
             // Resolved before anything opens, because the settings record that
             // would otherwise carry it lives in the database being located.
-            let location = location::resolve(&config_dir, &data_dir);
+            let mut location = location::resolve(&config_dir, &data_dir);
+            if no_persist {
+                let scratch = ephemeral_location();
+                crate::log!(
+                    log::Level::Warn,
+                    "boot",
+                    "no-persist mode: the real store at {:?} stays closed and untouched; \
+                     this session runs on {:?} and keeps nothing",
+                    location.path,
+                    scratch.path
+                );
+                location = scratch;
+            }
             crate::log!(
                 log::Level::Info,
                 "boot",
@@ -829,104 +982,60 @@ fn main() {
                 location.path,
                 location.source
             );
-            let tables =
-                tauri::async_runtime::block_on(Tables::open(&location.path)).map_err(|error| {
-                    let message =
-                        format!("could not open the tables in {:?}: {error}", location.path);
-                    crate::log!(log::Level::Error, "boot", "{message}");
-                    message
-                })?;
-            crate::log!(log::Level::Info, "boot", "tables open");
 
             /*
-             * A store written by a build with a different schema is not stale,
-             * it is unreadable, rkyv reads the old bytes through the new layout
-             * and hands back plausible-looking nonsense. So the old directory is
-             * moved aside and this launch starts clean, rather than showing
-             * projects whose ids are garbage and whose every command fails.
-             *
-             * Moved, never deleted: it is the only copy of someone's transcripts
-             * and the path is logged so they can be recovered by hand.
+             * The single-writer rule, enforced across processes. The store was
+             * once corrupted by a second process writing table files the
+             * running GUI already had open; an advisory flock on a sibling
+             * file makes that a refusal instead. Held for the whole session by
+             * living in AppState. wt-migrate takes the same lock.
              */
-            let tables = if let db::tables::SchemaState::Mismatch { found } = tables.schema_state()
-            {
-                let aside = location.path.with_extension(format!(
-                    "superseded-{}",
-                    chrono::Utc::now().format("%Y%m%dT%H%M%SZ")
-                ));
-                crate::log!(
-                    log::Level::Warn,
-                    "boot",
-                    "the store was written by a different schema and cannot be read safely. \
-                     Moving it to {aside:?} and carrying it forward. Found: {found}"
-                );
-                // Close the handles before moving the directory out from under them.
-                drop(tables);
-                std::fs::rename(&location.path, &aside).map_err(|error| {
-                    format!("could not move the superseded store aside: {error}")
-                })?;
+            let store_lock = wt_migrate::lock_store(&location.path).map_err(|message| {
+                crate::log!(log::Level::Error, "boot", "{message}");
+                message
+            })?;
 
-                /*
-                 * Carried forward before anything opens the store, and before
-                 * the window exists, because a half-migrated store that someone
-                 * is already typing into is the state with no good answer.
-                 *
-                 * The changed tables are migrated row by row and the rest are
-                 * copied, so one new column costs one table's worth of work
-                 * rather than every project, transcript and item. The source
-                 * stays where it was moved to: if this fails, nothing has been
-                 * destroyed and the directory named in the log is the whole
-                 * store, intact.
-                 */
-                match tauri::async_runtime::block_on(wt_migrate::carry_forward(
-                    &aside,
-                    &location.path,
-                    &found,
-                    wt_migrate::CURRENT_FINGERPRINT,
-                )) {
-                    Ok(report) => {
-                        crate::log!(
-                            log::Level::Info,
-                            "boot",
-                            "carried the store forward: migrated [{}], copied [{}], reset [{}]",
-                            report.migrated.join(", "),
-                            report.copied.join(", "),
-                            report.reset.join(", ")
-                        );
-                        // Named one by one, with the reason. A table that could
-                        // not be carried is the thing someone will come looking
-                        // for, and a comma-separated list does not say why.
-                        for (table, reason) in &report.failed {
-                            crate::log!(
-                                log::Level::Warn,
-                                "boot",
-                                "{table} could not be carried forward and starts empty: {reason}"
+            /*
+             * The fingerprint is read through the kv table alone, before any
+             * other table opens: a full open of a mismatched store loads every
+             * row through the wrong layout on the way to saying "mismatched",
+             * which is somewhere between garbage and a bus error.
+             */
+            let stored = tauri::async_runtime::block_on(Tables::peek_fingerprint(&location.path));
+            let tables = match db::tables::check_schema(stored.as_deref()) {
+                db::tables::SchemaState::Match => {
+                    tauri::async_runtime::block_on(Tables::open(&location.path)).map_err(
+                        |error| {
+                            let message = format!(
+                                "could not open the tables in {:?}: {error}. \
+                                 Relaunch with AZ_NO_PERSIST=1 (or --debug-no-persist) to start \
+                                 the app without touching the store, then diagnose.",
+                                location.path
                             );
-                        }
-                    }
-                    Err(error) => crate::log!(
-                        log::Level::Error,
-                        "boot",
-                        "could not carry the store forward, starting clean instead: {error}. \
-                         The previous store is intact at {aside:?}"
-                    ),
+                            crate::log!(log::Level::Error, "boot", "{message}");
+                            message
+                        },
+                    )?
                 }
-
-                /*
-                 * Reopened here, in this launch, rather than reported as a
-                 * startup error. Returning `Err` from the setup hook does not
-                 * show anyone a message: Tauri turns it into a panic, so the
-                 * window never appears and the app dies on the launch that was
-                 * supposed to recover.
-                 */
-                tauri::async_runtime::block_on(Tables::open(&location.path)).map_err(|error| {
-                    let message = format!("could not open a fresh store: {error}");
-                    crate::log!(log::Level::Error, "boot", "{message}");
-                    message
-                })?
-            } else {
-                tables
+                db::tables::SchemaState::Mismatch { found } if no_migration => {
+                    crate::log!(
+                        log::Level::Warn,
+                        "boot",
+                        "schema mismatch and AZ_NO_DB_MIGRATION is set: the store at {:?} stays \
+                         byte-for-byte untouched (its schema: {found}). Downgrade to the build \
+                         that wrote it to keep using it, or relaunch without the flag to \
+                         migrate. This session runs on scratch and keeps nothing.",
+                        location.path
+                    );
+                    location = ephemeral_location();
+                    tauri::async_runtime::block_on(Tables::open(&location.path))
+                        .map_err(|error| format!("could not open a scratch store: {error}"))?
+                }
+                db::tables::SchemaState::Mismatch { found } => {
+                    migrate_forward(&mut location, &found)?
+                }
             };
+            crate::log!(log::Level::Info, "boot", "tables open");
 
             // Stamped after the check, so the next launch can make it.
             if let Err(error) = tauri::async_runtime::block_on(tables.stamp_schema()) {
@@ -952,6 +1061,7 @@ fn main() {
                 config_dir,
                 data_dir,
                 location,
+                _store_lock: store_lock,
             });
 
             /*

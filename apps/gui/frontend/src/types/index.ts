@@ -321,7 +321,7 @@ export interface WorkspaceRoot {
 export interface DataLocation {
   path: string;
   /** `default` | `pointer` | `env`. */
-  source: "default" | "pointer" | "env";
+  source: "default" | "pointer" | "env" | "ephemeral";
   /** False when `AZ_DATA_DIR` set it, which a pointer file cannot override. */
   isEditable: boolean;
 }
