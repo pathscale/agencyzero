@@ -67,7 +67,19 @@ export async function copyText(text: string): Promise<boolean> {
  * the difference: everything outside one is wrapped prose, and everything inside
  * one is text whose line breaks are the content.
  */
-type Block = { kind: "code"; text: string; lang: string } | { kind: "prose"; text: string };
+type Block =
+  | { kind: "code"; text: string; lang: string }
+  | { kind: "directive"; text: string }
+  | { kind: "prose"; text: string };
+
+/** The same explicit authoring-line boundary Rust promotes. */
+export function isPromptSyntaxDirectiveLine(line: string): boolean {
+  if (line.startsWith("    ") || line.startsWith("\t")) return false;
+  const trimmed = line.trim();
+  if (trimmed.startsWith(">")) return false;
+  const afterTag = trimmed.slice(3);
+  return trimmed.startsWith("<ps") && /^\s/.test(afterTag) && trimmed.endsWith(">");
+}
 
 /**
  * Split a body into fenced blocks and the prose between them.
@@ -89,6 +101,7 @@ export function splitBlocks(body: string): Block[] {
   let code: string[] | null = null;
   let lang = "";
   let indent = "";
+  let marker = "";
 
   const flushProse = () => {
     const text = prose.join("\n");
@@ -111,22 +124,36 @@ export function splitBlocks(body: string): Block[] {
   };
 
   for (const line of body.split("\n")) {
-    const fence = /^(\s*)```(.*)$/.exec(line);
+    const fence = /^(\s*)(`{3,}|~{3,})(.*)$/.exec(line);
     if (!fence) {
-      if (code === null) prose.push(line);
-      else code.push(deindent(line));
+      if (code !== null) {
+        code.push(deindent(line));
+      } else if (isPromptSyntaxDirectiveLine(line)) {
+        flushProse();
+        blocks.push({ kind: "directive", text: line.trim() });
+      } else {
+        prose.push(line);
+      }
       continue;
     }
     if (code === null) {
       flushProse();
       code = [];
       indent = fence[1];
-      lang = fence[2].trim();
-    } else {
+      marker = fence[2];
+      lang = fence[3].trim();
+    } else if (
+      fence[2][0] === marker[0] &&
+      fence[2].length >= marker.length &&
+      fence[3].trim().length === 0
+    ) {
       blocks.push({ kind: "code", text: code.join("\n"), lang });
       code = null;
       lang = "";
       indent = "";
+      marker = "";
+    } else {
+      code.push(deindent(line));
     }
   }
 
@@ -146,6 +173,8 @@ export function MessageBody(props: { body: string; class?: string }): JSX.Elemen
         {(block) =>
           block.kind === "code" ? (
             <CodeBlock text={block.text} lang={block.lang} />
+          ) : block.kind === "directive" ? (
+            <PromptSyntaxDirective text={block.text} />
           ) : (
             <For
               each={block.text
@@ -161,6 +190,21 @@ export function MessageBody(props: { body: string; class?: string }): JSX.Elemen
           )
         }
       </For>
+    </div>
+  );
+}
+
+/** A promoted reverse-channel action, visibly distinct from ordinary prose. */
+function PromptSyntaxDirective(props: { text: string }): JSX.Element {
+  return (
+    <div
+      data-ps-directive
+      class="flex min-w-0 items-center gap-2 overflow-x-auto rounded-lg border border-primary/25 bg-primary/6 px-2.5 py-2"
+    >
+      <span class="shrink-0 rounded bg-primary/12 px-1.5 py-0.5 font-semibold text-[10px] text-primary uppercase tracking-[.05em]">
+        Prompt Syntax
+      </span>
+      <code class="whitespace-pre font-mono text-[11.5px] text-az-body">{props.text}</code>
     </div>
   );
 }

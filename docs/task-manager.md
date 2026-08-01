@@ -30,9 +30,12 @@ Home now uses the same declared Prompt Syntax surface as every project tab:
 <ps @agency:items.retire(id: "<item id>")>
 ```
 
-The `<ps ...>` line is the authority. Prose, quoted material, fenced examples,
-and URLs outside one of those lines are inert. Each directive ends in a receipt
-on the next turn, including typed failures for an unknown or ambiguous id.
+The `<ps ...>` line is the authority and is visually marked in the transcript.
+Prose, quoted material, fenced examples, and URLs outside one of those lines are
+inert. Each authored line ends in a receipt on the next turn, including typed
+failures for an unknown verb, malformed arguments, or an unknown or ambiguous
+id. A malformed authored line therefore cannot disappear as unexplained raw
+text.
 
 The Task Manager keeps one context-specific capability from the old contract.
 An explicit `items.add(project: ...)` that names no existing project creates a
@@ -64,7 +67,9 @@ Ordinary project conversations use the same directives. The prompt supplies
 the current ids and the declared closed verb set:
 
 - `items.add` creates a row. Its `ref` is a temporary handle echoed beside the
-  real id in the next-turn receipt.
+  real id in the next-turn receipt. Repeating one uniquely matching title
+  returns that stable id and applies the requested status; legacy duplicate
+  titles are refused as ambiguous rather than choosing one.
 - `items.state` moves an existing id through `new`, `planning`, `active`,
   `questions`, or `shipped`.
 - `items.retire` removes exactly the named id.
@@ -157,9 +162,9 @@ All built, on Home:
 
 ## Working directories, and asking instead of denying
 
-The runs go out as `ask` — `Permission::Edit` plus `Request::approvals()`
-(agent-abstraction 0.3.4). A gated call — a write, a command, a read outside
-the working tree — arrives as an approval card on Home and the run waits,
+The permission posture is selected in Settings. `Ask` is `Permission::Edit`
+plus `Request::approvals()`: a gated call (a write, a command, or a read outside
+the working tree) arrives as an approval card on Home and the run waits,
 mid-turn, until Allow or Deny; an abandoned question becomes a denial after 30
 minutes. It cannot be ReadOnly underneath: that posture strips the mutating
 tools, so nothing would ever ask, and the crate refuses the combination.
@@ -170,9 +175,11 @@ input; and silence is not proof nothing ran — Claude allows read-only commands
 without asking.
 
 `GlobalSettings.taskManager.dirs` still matters: the first entry becomes the
-run's cwd, and everything inside it runs unasked. Point it at the tree the
-task manager usually reads so approvals stay rare. One directory of reach for
-now — the crate has no `--add-dir` passthrough yet, so additional entries are
-stored but only the first takes effect until it grows one.
+run's cwd and every later entry is sent as another declared working root. Add
+every repository the Task Manager normally works across so permission requests
+stay rare. For Codex, a request for an undeclared write root names the exact
+path set in its approval card; a remembered answer applies only to that same
+set. Adding the path here is the persistent way to make it available from the
+start of later runs.
 
 `crates/wt-tools` is built too: the agent can see its own projects.

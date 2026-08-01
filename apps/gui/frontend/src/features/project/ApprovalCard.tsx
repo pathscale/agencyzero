@@ -17,6 +17,7 @@ import type { PendingApproval } from "~/types";
  */
 export function ApprovalCard(props: { projectId: string; approval: PendingApproval }): JSX.Element {
   const { actions } = useWorkspace();
+  const isPermissionGrant = () => props.approval.tool.toLowerCase() === "permissions";
 
   const answer = (allow: boolean, remember = false): void => {
     void actions
@@ -31,6 +32,16 @@ export function ApprovalCard(props: { projectId: string; approval: PendingApprov
       const record = input as Record<string, unknown>;
       for (const key of ["command", "file_path", "path", "url"]) {
         if (typeof record[key] === "string") return record[key] as string;
+      }
+      const permissions = record.permissions;
+      if (permissions && typeof permissions === "object") {
+        const fileSystem = (permissions as Record<string, unknown>).fileSystem;
+        if (fileSystem && typeof fileSystem === "object") {
+          const write = (fileSystem as Record<string, unknown>).write;
+          if (Array.isArray(write) && write.every((path) => typeof path === "string")) {
+            return write.join(", ");
+          }
+        }
       }
     }
     return null;
@@ -73,7 +84,7 @@ export function ApprovalCard(props: { projectId: string; approval: PendingApprov
             onClick={() => answer(true)}
             class="rounded-lg bg-primary px-[13px] py-[5px] font-semibold text-[12px] text-primary-content transition-colors hover:bg-az-primary-hover"
           >
-            Allow once
+            {isPermissionGrant() ? "Allow for session" : "Allow once"}
           </button>
           <button
             type="button"
@@ -84,10 +95,14 @@ export function ApprovalCard(props: { projectId: string; approval: PendingApprov
              * parent directory — and answers matching asks itself from now
              * on, each auto-allow audited in the Agent I/O panel.
              */
-            title="Remembers this kind of call for this project — the same command family or the same directory — and allows it automatically from now on"
+            title={
+              isPermissionGrant()
+                ? "Remembers this exact set of writable paths for this project and allows it automatically on later runs"
+                : "Remembers this kind of call for this project — the same command family or the same directory — and allows it automatically from now on"
+            }
             class="rounded-lg border border-primary/50 px-3 py-[5px] font-semibold text-[12px] text-primary transition-colors hover:border-primary hover:bg-primary/10"
           >
-            Always allow similar
+            {isPermissionGrant() ? "Always allow these paths" : "Always allow similar"}
           </button>
           <button
             type="button"
@@ -98,6 +113,11 @@ export function ApprovalCard(props: { projectId: string; approval: PendingApprov
           </button>
           <span class="text-[11.5px] text-az-muted">· the run is paused until you decide</span>
         </div>
+        <Show when={isPermissionGrant()}>
+          <p class="text-[11px] text-az-muted leading-[1.45]">
+            Add a folder to Working directories in Settings to make it writable from the start.
+          </p>
+        </Show>
       </div>
     </div>
   );

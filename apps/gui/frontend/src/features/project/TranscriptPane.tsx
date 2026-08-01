@@ -138,7 +138,7 @@ export function TranscriptPane(props: {
               <span class="text-[11px] text-az-muted">
                 {AGENT_LABELS[streamingAgent()]} · writing…
               </span>
-              <p class={`whitespace-pre-wrap ${AGENT_TEXT}`}>{text()}</p>
+              <MessageBody body={text()} class={AGENT_TEXT} />
             </div>
           )}
         </Show>

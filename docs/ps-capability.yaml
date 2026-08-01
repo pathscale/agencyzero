@@ -11,8 +11,8 @@ standing_promotion:
   # over undifferentiated output: fenced and quoted text stays inert.
   delimiter: "<ps …> on its own line, outside fenced or quoted content"
 
-  # 13.2.2 The live namespace and its closed verb set. An unlisted verb parses
-  # to nothing rather than being guessed at.
+  # 13.2.2 The live namespace and its closed verb set. An unlisted verb is
+  # refused as ENTITY_NOT_FOUND rather than guessed or silently left as text.
   namespace: agency
   verbs:
     - agency:items.state
@@ -51,7 +51,8 @@ standing_promotion:
   # no-op, and the outcomes are quoted back to the agent on the following turn.
   trace:
     per_directive_outcome: true
-    failure_codes: [ENTITY_NOT_FOUND, ENTITY_AMBIGUOUS, STATUS_NOT_YOURS, WRITE_FAILED]
+    failure_codes:
+      [ENTITY_NOT_FOUND, ENTITY_AMBIGUOUS, SYNTAX_INVALID, STATUS_NOT_YOURS, WRITE_FAILED]
     surfaced_to: [agent, agent_io_panel]
     # Not yet: outcomes are text lines rather than traced events carrying the
     # segment and its provenance type. Stated because an unmet obligation that
