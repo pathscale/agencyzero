@@ -101,17 +101,33 @@ impl Tables {
     /// shape has never changed (String to String, and the schema doc forbids
     /// touching it for exactly this reason), so it alone is safe to ask.
     ///
-    /// `None` means a fresh directory or an unreadable kv, both of which the
-    /// caller treats as "nothing to protect".
-    pub async fn peek_fingerprint(dir: &std::path::Path) -> Option<String> {
+    /// `Ok(None)` is a fresh directory: kv opened and holds no marker.
+    ///
+    /// # Errors
+    /// When kv itself cannot be opened or loaded, which is emphatically not the
+    /// same thing.
+    ///
+    /// The two used to share `None`, and the caller reads `None` as "nothing to
+    /// protect": it opens all nine tables and then stamps the current
+    /// fingerprint over the store. So a torn kv page, which is the exact damage
+    /// this app took on 2026-08-01, would answer "fresh", every table would be
+    /// read through whatever layout the new build declares, and the stamp would
+    /// then erase the evidence that they had ever disagreed. An unreadable
+    /// store is the case with the most to lose, and it was the case with no
+    /// error path at all.
+    pub async fn peek_fingerprint(dir: &std::path::Path) -> Result<Option<String>, String> {
         let config = DiskConfig::new_with_table_name(
             dir.to_string_lossy().into_owned(),
             KvWorkTable::name_snake_case(),
             KvWorkTable::version(),
         );
-        let engine = KvPersistenceEngine::new(config).await.ok()?;
-        let kv = KvWorkTable::load(engine).await.ok()?;
-        kv.select(FINGERPRINT_KEY.to_string()).map(|row| row.value)
+        let engine = KvPersistenceEngine::new(config)
+            .await
+            .map_err(|error| format!("kv would not open: {error}"))?;
+        let kv = KvWorkTable::load(engine)
+            .await
+            .map_err(|error| format!("kv would not load: {error}"))?;
+        Ok(kv.select(FINGERPRINT_KEY.to_string()).map(|row| row.value))
     }
 
     /// The blob at `key`, or `None` when nothing was ever written there.
