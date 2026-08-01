@@ -24,6 +24,52 @@
 //! caller is responsible for that (see `items_from_reply`), which is why this
 //! module reads one line at a time and knows nothing about fences.
 
+/// The authoring surface this application declares, per Prompt Syntax 13.2.
+///
+/// A standing promotion: model-generated text is inert by default, and an
+/// application may declare, once and at its own authority, that a named
+/// delimited grammar produced by its own agent is authored. The declaration
+/// has to say four things, and this is them.
+///
+/// It is the source rather than a description of one. `docs/ps-capability.yaml`
+/// is checked against it by a test, so the published document cannot drift
+/// away from what the parser actually does, which is the failure mode of every
+/// capability document that is written by hand beside the code.
+pub struct Surface {
+    /// 13.2.1. An explicit designation, never a scan over undifferentiated
+    /// output: a `<ps …>` span on its own line.
+    pub delimiter: &'static str,
+    /// 13.2.2. The vendor-extension namespace whose references are live.
+    pub namespace: &'static str,
+    /// 13.2.2. Closed and declared. An unlisted verb parses to nothing.
+    pub verbs: &'static [&'static str],
+    /// 13.2.2. Verbs and values reserved to principals above the agent.
+    pub reserved: &'static [&'static str],
+    /// 13.2.3. The reach, written down rather than implied by a parameter.
+    ///
+    /// `items.inject` takes a project, so the surface can write outside the
+    /// project the turn came from. That is deliberate and is the whole reason
+    /// this field exists: cross-scope reach must be part of the declared bound,
+    /// never left implicit in what a verb happens to do.
+    pub bound: &'static str,
+}
+
+/// What this build promotes. Referenced from the prompt, published as YAML.
+pub const SURFACE: Surface = Surface {
+    delimiter: "<ps …> on its own line, outside fenced or quoted content",
+    namespace: "agency",
+    verbs: &[
+        "items.state",
+        "items.add",
+        "items.retire",
+        "items.inject",
+        "pr.link",
+    ],
+    reserved: &["status:finished", "status:canceled"],
+    bound: "any project in this installation's store, named by id or by name; \
+            no reach outside it, and no other namespace is live",
+};
+
 /// The statuses an agent may set.
 ///
 /// `finished` is deliberately absent. The owner closes an item, because an
@@ -270,6 +316,29 @@ mod tests {
     /// Retiring names the row. The verb it replaces matched by title, which on
     /// a duplicate pair, the exact thing this whole shape exists to stop
     /// producing, would have removed one of the two at random.
+    /// The published document is generated from the declaration, not written
+    /// beside it. A capability document that drifts from the parser is worse
+    /// than none: it is a promise about behaviour that nothing enforces.
+    #[test]
+    fn the_published_capability_document_matches_the_declaration() {
+        let published = include_str!("../../../docs/ps-capability.yaml");
+        for verb in SURFACE.verbs {
+            assert!(
+                published.contains(&format!("- {}:{verb}", SURFACE.namespace)),
+                "{verb} is live and undeclared"
+            );
+        }
+        for reserved in SURFACE.reserved {
+            assert!(
+                published.contains(reserved),
+                "{reserved} is reserved and unpublished"
+            );
+        }
+        assert!(published.contains(SURFACE.namespace));
+        // The bound is the point of 13.2.3: reach that is real must be written.
+        assert!(published.contains("any project in this installation"));
+    }
+
     #[test]
     fn retiring_takes_an_id_and_nothing_else() {
         assert_eq!(

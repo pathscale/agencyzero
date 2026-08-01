@@ -626,156 +626,170 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
             }
           >
             <div
-              class={`group flex items-center gap-1 rounded-[9px] pr-1 transition-colors ${
+              /*
+               * A column, not a row. The controls sat beside the title and
+               * took a third of the width from it, so a title of any length
+               * wrapped into a four-word column while the buttons kept their
+               * space whether or not anyone was reaching for them.
+               */
+              class={`group flex flex-col rounded-[9px] transition-colors ${
                 item.status === "active"
                   ? "bg-base-300 shadow-[inset_2px_0_0_var(--color-primary)]"
                   : "hover:bg-white/5"
               }`}
             >
-              {/*
-               * The marker is the status control, and the only one.
-               *
-               * The whole row used to be a button titled "Change status", so
-               * reading a list meant hovering a row that offered to mutate it
-               * and clicking one by accident cycled it. A status change is a
-               * deliberate act: it gets the smallest target that can carry it,
-               * and the title beside it goes back to being text.
-               */}
-              <button
-                type="button"
-                onClick={() => advance(item)}
-                aria-label={`Change the status of ${item.title}`}
-                title={`${statusSuffix(item.status)} — click for ${STATUS_LABELS[nextStatus(item.status)]}`}
-                class="ml-2.5 shrink-0 cursor-pointer rounded-md p-0.5 transition-colors hover:bg-primary/12"
-              >
-                <ItemMarker status={item.status} />
-              </button>
-              <div
-                data-selectable
-                class="flex min-w-0 flex-1 items-baseline gap-2.5 px-2.5 py-2 text-left"
-              >
-                <span
-                  class={`min-w-0 flex-1 text-[12.5px] ${
-                    item.status === "active" || item.status === "planning"
-                      ? "text-base-content"
-                      : item.status === "finished"
-                        ? "text-az-muted"
-                        : "text-az-body"
-                  }`}
+              <div class="flex items-start gap-1 pt-0.5">
+                {/*
+                 * The marker is the status control, and the only one.
+                 *
+                 * The whole row used to be a button titled "Change status", so
+                 * reading a list meant hovering a row that offered to mutate it
+                 * and clicking one by accident cycled it. A status change is a
+                 * deliberate act: it gets the smallest target that can carry it,
+                 * and the title beside it goes back to being text.
+                 */}
+                <button
+                  type="button"
+                  onClick={() => advance(item)}
+                  aria-label={`Change the status of ${item.title}`}
+                  title={`${statusSuffix(item.status)} — click for ${STATUS_LABELS[nextStatus(item.status)]}`}
+                  class="ml-2.5 shrink-0 cursor-pointer rounded-md p-0.5 transition-colors hover:bg-primary/12"
                 >
-                  {item.title}
-                </span>
-                <span
-                  class={`shrink-0 text-[11px] ${
-                    item.status === "active"
-                      ? "font-semibold text-primary"
-                      : item.status === "shipped"
-                        ? "font-semibold text-warning"
-                        : item.status === "planning"
-                          ? "text-info"
-                          : item.status === "finished"
-                            ? "text-success"
-                            : "text-az-muted"
-                  }`}
+                  <ItemMarker status={item.status} />
+                </button>
+                <div
+                  data-selectable
+                  class="flex min-w-0 flex-1 items-baseline gap-2.5 px-2.5 py-2 text-left"
                 >
-                  {/*
+                  <span
+                    class={`min-w-0 flex-1 text-[12.5px] ${
+                      item.status === "active" || item.status === "planning"
+                        ? "text-base-content"
+                        : item.status === "finished"
+                          ? "text-az-muted"
+                          : "text-az-body"
+                    }`}
+                  >
+                    {item.title}
+                  </span>
+                  <span
+                    class={`shrink-0 text-[11px] ${
+                      item.status === "active"
+                        ? "font-semibold text-primary"
+                        : item.status === "shipped"
+                          ? "font-semibold text-warning"
+                          : item.status === "planning"
+                            ? "text-info"
+                            : item.status === "finished"
+                              ? "text-success"
+                              : "text-az-muted"
+                    }`}
+                  >
+                    {/*
                     A shipped row shows its pull request instead of the word,
                     because the number is the thing you need to go and check.
                     Amber rather than green: shipped is a claim awaiting your
                     verdict, and colouring it as done is exactly the mistake
                     this state exists to prevent.
                   */}
-                  <Show when={item.reference} fallback={statusSuffix(item.status)}>
-                    {(number) => (
-                      /*
+                    <Show when={item.reference} fallback={statusSuffix(item.status)}>
+                      {(number) => (
+                        /*
                         And it opens. The number is there to be checked, so
                         reading it and then going to find the pull request by
                         hand is the one thing it should not cost. Plain text
                         when the project has no pull request by that number,
                         rather than a link that goes nowhere.
                       */
-                      <Show when={prUrl(number())} fallback={<>(PR #{number()})</>}>
-                        {(url) => (
-                          <button
-                            type="button"
-                            onClick={() => void actions.openExternal(url())}
-                            title={`Open ${url()}`}
-                            class="cursor-pointer underline decoration-dotted underline-offset-2 hover:text-primary"
-                          >
-                            (PR #{number()})
-                          </button>
-                        )}
-                      </Show>
-                    )}
-                  </Show>
-                </span>
+                        <Show when={prUrl(number())} fallback={<>(PR #{number()})</>}>
+                          {(url) => (
+                            <button
+                              type="button"
+                              onClick={() => void actions.openExternal(url())}
+                              title={`Open ${url()}`}
+                              class="cursor-pointer underline decoration-dotted underline-offset-2 hover:text-primary"
+                            >
+                              (PR #{number()})
+                            </button>
+                          )}
+                        </Show>
+                      )}
+                    </Show>
+                  </span>
+                </div>
               </div>
-              <Show when={item.status !== "finished"}>
-                <button
-                  type="button"
-                  onClick={() => run(item)}
-                  // Not gated on isLive: the mock serves sendMessage the same
-                  // as the composer does, so the preview can exercise this.
-                  disabled={isRunning()}
-                  title={
-                    isRunning()
-                      ? "A run is already in flight on this project"
-                      : "Send this item to the agent, on this project's session"
-                  }
-                  aria-label={`Run ${item.title}`}
-                  class="shrink-0 rounded-md p-1 text-az-faint transition-colors hover:bg-primary/12 hover:text-primary disabled:opacity-30"
-                >
-                  <Icon name="play" class="text-[12px]" />
-                </button>
-              </Show>
-              {/* Revealed on hover: the controls all the time would be louder
+              {/*
+               * Bottom right, and only ink when the row is hovered or busy.
+               * These act on the row; they are not part of reading it.
+               */}
+              <div class="flex items-center justify-end gap-1 px-2.5 pb-1.5 opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100">
+                <Show when={item.status !== "finished"}>
+                  <button
+                    type="button"
+                    onClick={() => run(item)}
+                    // Not gated on isLive: the mock serves sendMessage the same
+                    // as the composer does, so the preview can exercise this.
+                    disabled={isRunning()}
+                    title={
+                      isRunning()
+                        ? "A run is already in flight on this project"
+                        : "Send this item to the agent, on this project's session"
+                    }
+                    aria-label={`Run ${item.title}`}
+                    class="shrink-0 rounded-md p-1 text-az-faint transition-colors hover:bg-primary/12 hover:text-primary disabled:opacity-30"
+                  >
+                    <Icon name="play" class="text-[12px]" />
+                  </button>
+                </Show>
+                {/* Revealed on hover: the controls all the time would be louder
                 than the titles they act on. */}
-              <button
-                type="button"
-                onClick={() => {
-                  setEditTitle(item.title);
-                  setEditingId(item.id);
-                }}
-                aria-label={`Edit ${item.title}`}
-                title="Edit this item"
-                class="shrink-0 rounded-md p-1 text-az-faint opacity-0 transition-[color,opacity] hover:text-az-body group-hover:opacity-100"
-              >
-                <Icon name="pencil" class="text-[11px]" />
-              </button>
-              <button
-                type="button"
-                onClick={() =>
-                  void actions
-                    .deleteItem(item.id)
-                    .catch((cause) =>
-                      log.error(`could not delete the item: ${describeError(cause)}`),
-                    )
-                }
-                aria-label={`Delete ${item.title}`}
-                title="Delete this item"
-                class="shrink-0 rounded-md p-1 text-az-faint opacity-0 transition-[color,opacity] hover:text-error group-hover:opacity-100"
-              >
-                <Icon name="x" class="text-[12px]" />
-              </button>
-              <div class="flex shrink-0 flex-col opacity-0 transition-opacity group-hover:opacity-100">
                 <button
                   type="button"
-                  onClick={() => move(index(), -1)}
-                  disabled={filtering() || index() === 0}
-                  aria-label={`Move ${item.title} up`}
-                  class="rounded-sm px-0.5 text-az-faint transition-colors hover:text-az-body disabled:opacity-25"
+                  onClick={() => {
+                    setEditTitle(item.title);
+                    setEditingId(item.id);
+                  }}
+                  aria-label={`Edit ${item.title}`}
+                  title="Edit this item"
+                  class="shrink-0 rounded-md p-1 text-az-faint opacity-0 transition-[color,opacity] hover:text-az-body group-hover:opacity-100"
                 >
-                  <Icon name="chevron-up" class="text-[10px]" />
+                  <Icon name="pencil" class="text-[11px]" />
                 </button>
                 <button
                   type="button"
-                  onClick={() => move(index(), 1)}
-                  disabled={filtering() || index() === props.items.length - 1}
-                  aria-label={`Move ${item.title} down`}
-                  class="rounded-sm px-0.5 text-az-faint transition-colors hover:text-az-body disabled:opacity-25"
+                  onClick={() =>
+                    void actions
+                      .deleteItem(item.id)
+                      .catch((cause) =>
+                        log.error(`could not delete the item: ${describeError(cause)}`),
+                      )
+                  }
+                  aria-label={`Delete ${item.title}`}
+                  title="Delete this item"
+                  class="shrink-0 rounded-md p-1 text-az-faint opacity-0 transition-[color,opacity] hover:text-error group-hover:opacity-100"
                 >
-                  <Icon name="chevron-down" class="text-[10px]" />
+                  <Icon name="x" class="text-[12px]" />
                 </button>
+                <div class="flex shrink-0 flex-col opacity-0 transition-opacity group-hover:opacity-100">
+                  <button
+                    type="button"
+                    onClick={() => move(index(), -1)}
+                    disabled={filtering() || index() === 0}
+                    aria-label={`Move ${item.title} up`}
+                    class="rounded-sm px-0.5 text-az-faint transition-colors hover:text-az-body disabled:opacity-25"
+                  >
+                    <Icon name="chevron-up" class="text-[10px]" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => move(index(), 1)}
+                    disabled={filtering() || index() === props.items.length - 1}
+                    aria-label={`Move ${item.title} down`}
+                    class="rounded-sm px-0.5 text-az-faint transition-colors hover:text-az-body disabled:opacity-25"
+                  >
+                    <Icon name="chevron-down" class="text-[10px]" />
+                  </button>
+                </div>
               </div>
             </div>
           </Show>

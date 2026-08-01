@@ -1,0 +1,47 @@
+# What AgencyZero declares to its own agent, per Prompt Syntax 13.2.
+#
+# Generated from `Surface` in apps/gui/src/directives.rs and checked against it
+# by a test. Edit the Rust, not this file: a capability document that drifts
+# from the parser is a promise about behaviour that nothing enforces.
+ps_version: "0.2.2"
+conformance: "PS/Core 0.2 (reverse channel, standing promotion), partial"
+
+standing_promotion:
+  # 13.2.1 The segment delimiter. An explicit designation, never a pattern scan
+  # over undifferentiated output: fenced and quoted text stays inert.
+  delimiter: "<ps …> on its own line, outside fenced or quoted content"
+
+  # 13.2.2 The live namespace and its closed verb set. An unlisted verb parses
+  # to nothing rather than being guessed at.
+  namespace: agency
+  verbs:
+    - agency:items.state
+    - agency:items.add
+    - agency:items.retire
+    - agency:items.inject
+    - agency:pr.link
+
+  # 13.2.2 Verbs and values reserved to principals above the agent. An agent may
+  # report that it shipped something; it cannot report that the thing works.
+  reserved:
+    - status:finished
+    - status:canceled
+
+  # 13.2.3 The capability bound. `items.inject` takes a project, so this surface
+  # can write outside the project a turn came from. Declared here rather than
+  # left implicit in what the verb happens to do.
+  bound: >-
+    any project in this installation's store, named by id or by name;
+    no reach outside it, and no other namespace is live
+
+  # 13.2.4 Trace obligations. Every directive ends in exactly one recorded
+  # outcome, an unresolvable reference is ENTITY_NOT_FOUND rather than a silent
+  # no-op, and the outcomes are quoted back to the agent on the following turn.
+  trace:
+    per_directive_outcome: true
+    failure_codes: [ENTITY_NOT_FOUND, ENTITY_AMBIGUOUS, STATUS_NOT_YOURS, WRITE_FAILED]
+    surfaced_to: [agent, agent_io_panel]
+    # Not yet: outcomes are text lines rather than traced events carrying the
+    # segment and its provenance type. Stated because an unmet obligation that
+    # is not written down reads as a met one.
+    typed_events: false

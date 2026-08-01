@@ -1238,12 +1238,34 @@ fn state_snapshot(
             "\nThis turn was started from item {item}. Report its state as it changes.\n"
         ));
     }
+    /*
+     * The declaration, read from the same constant the published capability
+     * document is checked against. Written into the prompt rather than
+     * described in prose, so the surface the agent is told about and the one
+     * the parser enforces cannot drift.
+     */
+    let declared = format!(
+        "\nThis is a declared authoring surface (Prompt Syntax 13.2). Segment: {}. \
+         Live verbs, and nothing else: {}. Reserved to the owner: {}. Reach: {}. \
+         Published at docs/ps-capability.yaml.\n",
+        crate::directives::SURFACE.delimiter,
+        crate::directives::SURFACE
+            .verbs
+            .iter()
+            .map(|verb| format!("@{}:{verb}", crate::directives::SURFACE.namespace))
+            .collect::<Vec<_>>()
+            .join(", "),
+        crate::directives::SURFACE.reserved.join(", "),
+        crate::directives::SURFACE.bound
+    );
+    out.push_str(&declared);
     out.push_str(
         "\nSay so with a directive on its own line, as it happens rather than at the end:\n\
          <ps @agency:items.state(id: \"<id>\", status: \"active\")>\n\
          <ps @agency:items.state(id: \"<id>\", status: \"shipped\", pr: 66)>\n\
          <ps @agency:items.add(ref: \"t1\", title: \"<one line>\", status: \"planning\")>\n\
          <ps @agency:items.retire(id: \"<id>\")> removes a row that should not be there\n\
+{declared}\n\
          Statuses you may set: new, planning, active, questions, shipped. `questions` \
          means you are stopped on something only the owner can answer. `finished` and \
          `canceled` are refused: the owner closes a row. An id may be shortened to any \
