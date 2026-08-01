@@ -91,7 +91,20 @@ fn pr_urls(text: &str) -> Vec<(String, String, u32)> {
 /// Called from the run's completion path, after the reply row is safe. Rows
 /// are born `unknown` and honest; `gh` upgrades them moments later when it is
 /// installed and authenticated.
-pub fn harvest_prs(app: &AppHandle, tables: &Tables, project_id: &str, reply: &str) {
+///
+/// `started_from` is the item the run began on, when it began on one. A pull
+/// request opened during that run belongs to that item, and the app knows it
+/// without being told: the association is a fact about the run, not something
+/// the agent has to remember to report. Only a newly recorded pull request
+/// attaches, and only to a row that names none yet, so nothing already linked
+/// is ever overwritten.
+pub fn harvest_prs(
+    app: &AppHandle,
+    tables: &Tables,
+    project_id: &str,
+    reply: &str,
+    started_from: Option<&str>,
+) {
     let mentioned = pr_urls(reply);
     if mentioned.is_empty() {
         return;
@@ -122,9 +135,13 @@ pub fn harvest_prs(app: &AppHandle, tables: &Tables, project_id: &str, reply: &s
                     updated_at: crate::projects::now(),
                 };
                 let id = row.id.clone();
+                let opened = row.number;
                 match tables.pull_request.insert(row.clone()) {
                     Ok(_) => {
                         let _ = app.emit("pr:updated", PullRequestDto::from(row));
+                        if let Some(item) = started_from {
+                            attach(app, tables, item, opened);
+                        }
                     }
                     Err(error) => {
                         crate::log!(
@@ -313,6 +330,49 @@ pub async fn dismiss_pull_request(
 #[tauri::command]
 pub fn refresh_pull_request(app: AppHandle, id: String) {
     spawn_refresh(app, id);
+}
+
+/// Point an item at the pull request its run produced.
+///
+/// Nothing happens if the row already names one: a run that mentions a second
+/// pull request has not changed which one the item shipped as, and quietly
+/// repointing it would lose the first.
+fn attach(app: &AppHandle, tables: &Tables, item_id: &str, number: u32) {
+    let Some(row) = tables.project_item.select(item_id.to_string()) else {
+        return;
+    };
+    if !row.reference.is_empty() {
+        return;
+    }
+    let app = app.clone();
+    // Just this table's handle: `Tables` is a bag of `Arc`s and the write is
+    // one row on one of them.
+    let items = tables.project_item.clone();
+    let id = item_id.to_string();
+    tauri::async_runtime::spawn(async move {
+        if let Err(error) = items
+            .update_reference_by_id(
+                crate::db::schema::project_item::ReferenceByIdQuery {
+                    reference: number.to_string(),
+                },
+                id.clone(),
+            )
+            .await
+        {
+            crate::log!(
+                crate::log::Level::Error,
+                "prs",
+                "could not attach #{number} to {id}: {error}"
+            );
+            return;
+        }
+        if let Some(updated) = items.select(id) {
+            let _ = app.emit(
+                "item:updated",
+                crate::projects::ProjectItemDto::from(updated),
+            );
+        }
+    });
 }
 
 #[cfg(test)]
