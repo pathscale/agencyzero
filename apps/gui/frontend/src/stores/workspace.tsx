@@ -332,9 +332,16 @@ function createWorkspace() {
    * one is a `gh` subprocess, and this is a state that changes on human
    * timescales.
    */
-  const PR_REFRESH_MS = 90_000;
+  /*
+   * Short, because the query is now one process per repository rather than
+   * one per pull request, and gated on focus, because most of the old cost
+   * was asking on behalf of a window nobody was looking at.
+   */
+  const PR_REFRESH_MS = 20_000;
   const refreshOpenPullRequests = (projectId?: string): void => {
     if (!isLive("refreshPullRequest")) return;
+    // A hidden window is not being read, so it is not worth asking for.
+    if (typeof document !== "undefined" && document.hidden && !projectId) return;
     const lists = projectId ? [state.pullRequests[projectId]] : Object.values(state.pullRequests);
     for (const list of lists) {
       for (const pr of list ?? []) {
