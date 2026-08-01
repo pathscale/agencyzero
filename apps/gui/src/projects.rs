@@ -325,9 +325,67 @@ struct Checked {
     status: String,
     /// A pull request or issue the line pointed at, without the `#`.
     reference: Option<String>,
-    /// The project the line named, when it named one other than the session's.
-    /// A name as a person would write it, or a raw `proj-` id.
+    /// Where the enclosing directive routed this row, when it routed it
+    /// anywhere. A project name as a person would write it, or a `proj-` id.
+    /// Never read off the line itself: which project a row belongs to is
+    /// something the host was asked to do, not something the row says about
+    /// itself.
     project: Option<String>,
+    /// Whether the line came from inside an authoring segment.
+    ///
+    /// A reply is model-generated text, so by default it is inert: it may
+    /// propose rows, and may not destroy them. Only text the agent deliberately
+    /// framed as a directive carries the destructive half of the vocabulary.
+    authored: bool,
+}
+
+/// The one host verb that opens an authoring segment.
+///
+/// Domain-qualified on purpose. `@project:ui` would name a *feature* of the
+/// app and read like a field; `@agency:items.inject` names the application, the
+/// surface, and the operation, so a reader can see it is the host being asked
+/// to act rather than a value being passed. Anything the app is asked to *do*
+/// is written this way, and the checkbox lines inside carry only what the row
+/// *is*.
+const INJECT_VERB: &str = "@agency:items.inject";
+
+/// What an authoring segment routes its lines to.
+#[derive(Debug, PartialEq, Eq)]
+struct Segment {
+    /// The project named in the directive's arguments, if any. Absent means
+    /// the session's own project, which is the overwhelmingly common case.
+    project: Option<String>,
+}
+
+/// Read one `key: value` out of a directive's argument list.
+///
+/// Quotes optional, since a project name is prose and a person writing one
+/// should not have to think about which half of the pair needs them.
+fn directive_arg<'a>(args: &'a str, key: &str) -> Option<&'a str> {
+    args.split(',').find_map(|pair| {
+        let (found, value) = pair.split_once(':')?;
+        (found.trim() == key).then(|| value.trim().trim_matches(|c| c == '"' || c == '\'').trim())
+    })
+}
+
+/// Recognize `<ps @agency:items.inject(project: "ui")>`.
+///
+/// The span is Prompt Syntax's own tag, and the verb inside it is what makes
+/// this segment ours: a `<ps>` carrying some other directive is not an item
+/// segment, and its contents stay inert. Naming the verb rather than trusting
+/// the tag is what keeps that true as the tag grows other uses.
+fn segment_open(line: &str) -> Option<Segment> {
+    let inner = line.trim().strip_prefix("<ps")?.strip_suffix('>')?.trim();
+    let rest = inner.strip_prefix(INJECT_VERB)?.trim();
+    if rest.is_empty() {
+        return Some(Segment { project: None });
+    }
+    let args = rest.strip_prefix('(')?.strip_suffix(')')?;
+    Some(Segment {
+        project: directive_arg(args, "project")
+            .filter(|named| !named.is_empty())
+            .map(str::to_string),
+    })
 }
 
 /// Split a trailing `(#35)` off a checkbox line.
@@ -350,120 +408,129 @@ fn split_reference(line: &str) -> (&str, Option<&str>) {
     (line[..open].trim_end(), Some(digits))
 }
 
-/// Split a trailing `(@somewhere)` off a checkbox line.
-///
-/// The same shape as the reference suffix because it is the same kind of fact:
-/// a small piece of routing that does not belong in the title, which is the
-/// match key. Both may appear, in either order.
-///
-/// Anything non-empty counts, since project names are prose. A title that ends
-/// in an email address keeps it: `(@` has to open the group.
-fn split_project(line: &str) -> (&str, Option<&str>) {
-    let Some(open) = line.rfind("(@") else {
-        return (line, None);
-    };
-    let Some(named) = line[open + 2..].strip_suffix(')') else {
-        return (line, None);
-    };
-    let named = named.trim();
-    if named.is_empty() || named.contains(')') {
-        return (line, None);
-    }
-    (line[..open].trim_end(), Some(named))
+/// Read one checkbox line, or nothing.
+fn checkbox(line: &str) -> Option<Checked> {
+    let line = line.trim_start();
+    // A list marker, then the box. `1.` and `1)` count: an agent writing
+    // an ordered checklist means the same thing.
+    let rest = line
+        .strip_prefix("- ")
+        .or_else(|| line.strip_prefix("* "))
+        .or_else(|| line.strip_prefix("+ "))
+        .or_else(|| {
+            let digits = line.trim_start_matches(|c: char| c.is_ascii_digit());
+            (digits.len() < line.len())
+                .then(|| {
+                    digits
+                        .strip_prefix(". ")
+                        .or_else(|| digits.strip_prefix(") "))
+                })
+                .flatten()
+        })?
+        .trim_start();
+
+    /*
+     * `[ ]` proposes, `[~]` plans, `[/]` starts, `[>]` ships, `[x]`
+     * closes, `[-]` removes.
+     *
+     * `[ ]` opens a row as `new`: proposed, and nobody has decided
+     * anything about it yet. `[~]` is the phase before work, where the
+     * shape of the thing is still being argued about, which a list that
+     * jumped from proposed to in-progress could not show at all.
+     *
+     * The last two are this contract's own. Markdown has no "strike
+     * this row" checkbox, and a project session needs one: an obsolete
+     * item is not a *finished* item, and before `[-]` existed an agent
+     * working a backlog could add rows but never retire one, so the
+     * list only grew. `[-]` never creates, since removing something
+     * that does not exist is already true.
+     *
+     * `[>]` is the answer to a fix that was reported as done and was
+     * not. An agent can say it shipped something; it cannot say the
+     * thing works, because it is not the one looking at the screen.
+     * So it moves a row to `shipped` naming the pull request, and the
+     * row waits there for the owner. A copy bug was called fixed three
+     * times in one evening, and under the old vocabulary the row would
+     * have been deleted after the first.
+     */
+    let (marker, title) = [
+        ("new", "[ ] "),
+        ("planning", "[~] "),
+        ("active", "[/] "),
+        ("shipped", "[>] "),
+        ("deleted", "[-] "),
+        ("finished", "[x] "),
+        ("finished", "[X] "),
+    ]
+    .into_iter()
+    .find_map(|(marker, checkbox)| rest.strip_prefix(checkbox).map(|title| (marker, title)))?;
+
+    let (title, reference) = split_reference(title.trim());
+    (!title.is_empty()).then(|| Checked {
+        title: truncate_on_char_boundary(title, 120),
+        status: marker.to_string(),
+        reference: reference.map(str::to_string),
+        // Both filled by the reader, from the directive around the line.
+        project: None,
+        authored: false,
+    })
 }
 
+/// Read a reply as a sequence of lines with a provenance for each.
+///
+/// Two rules, and they are the same rule twice. Fenced text is content: an
+/// agent quoting a file that happens to contain a checklist is reporting, not
+/// asking, and reading those lines as directives writes rows nobody proposed.
+/// Unfenced prose is content too, but weakly, because the checkbox vocabulary
+/// grew up there and an agent narrating its own work is genuinely proposing
+/// rows.
+///
+/// So an ordinary line may still open, plan, start and ship a row in the
+/// session's own project, and may not destroy one and may not reach another
+/// project. Both of those need `<ps @agency:items.inject(…)>`, which is the
+/// agent saying "this is a directive" rather than the app guessing.
 fn items_from_reply(reply: &str) -> Vec<Checked> {
-    reply
-        .lines()
-        .filter_map(|line| {
-            let line = line.trim_start();
-            // A list marker, then the box. `1.` and `1)` count: an agent writing
-            // an ordered checklist means the same thing.
-            let rest = line
-                .strip_prefix("- ")
-                .or_else(|| line.strip_prefix("* "))
-                .or_else(|| line.strip_prefix("+ "))
-                .or_else(|| {
-                    let digits = line.trim_start_matches(|c: char| c.is_ascii_digit());
-                    (digits.len() < line.len())
-                        .then(|| {
-                            digits
-                                .strip_prefix(". ")
-                                .or_else(|| digits.strip_prefix(") "))
-                        })
-                        .flatten()
-                })?
-                .trim_start();
+    let mut read = Vec::new();
+    let mut fenced = false;
+    let mut segment: Option<Segment> = None;
 
-            /*
-             * `[ ]` proposes, `[~]` plans, `[/]` starts, `[>]` ships, `[x]`
-             * closes, `[-]` removes.
-             *
-             * `[ ]` opens a row as `new`: proposed, and nobody has decided
-             * anything about it yet. `[~]` is the phase before work, where the
-             * shape of the thing is still being argued about, which a list that
-             * jumped from proposed to in-progress could not show at all.
-             *
-             * The last two are this contract's own. Markdown has no "strike
-             * this row" checkbox, and a project session needs one: an obsolete
-             * item is not a *finished* item, and before `[-]` existed an agent
-             * working a backlog could add rows but never retire one, so the
-             * list only grew. `[-]` never creates, since removing something
-             * that does not exist is already true.
-             *
-             * `[>]` is the answer to a fix that was reported as done and was
-             * not. An agent can say it shipped something; it cannot say the
-             * thing works, because it is not the one looking at the screen.
-             * So it moves a row to `shipped` naming the pull request, and the
-             * row waits there for the owner. A copy bug was called fixed three
-             * times in one evening, and under the old vocabulary the row would
-             * have been deleted after the first.
-             */
-            let (marker, title) = [
-                ("new", "[ ] "),
-                ("planning", "[~] "),
-                ("active", "[/] "),
-                ("shipped", "[>] "),
-                ("deleted", "[-] "),
-                ("finished", "[x] "),
-                ("finished", "[X] "),
-            ]
-            .into_iter()
-            .find_map(|(marker, checkbox)| {
-                rest.strip_prefix(checkbox).map(|title| (marker, title))
-            })?;
-
-            /*
-             * Both suffixes come off before the title is read, in whichever
-             * order they were written, because a person writing one of each
-             * has no reason to think the order matters.
-             */
-            let mut title = title.trim();
-            let (mut reference, mut project) = (None, None);
-            loop {
-                if reference.is_none()
-                    && let (rest, found @ Some(_)) = split_reference(title)
-                {
-                    (title, reference) = (rest, found);
-                    continue;
-                }
-                if project.is_none()
-                    && let (rest, found @ Some(_)) = split_project(title)
-                {
-                    (title, project) = (rest, found);
-                    continue;
-                }
-                break;
+    for line in reply.lines() {
+        let trimmed = line.trim();
+        if trimmed.starts_with("```") || trimmed.starts_with("~~~") {
+            fenced = !fenced;
+            continue;
+        }
+        if fenced {
+            continue;
+        }
+        if let Some(open) = segment_open(trimmed) {
+            segment = Some(open);
+            continue;
+        }
+        if trimmed == "</ps>" {
+            segment = None;
+            continue;
+        }
+        let Some(mut item) = checkbox(line) else {
+            continue;
+        };
+        match &segment {
+            Some(open) => {
+                item.project.clone_from(&open.project);
+                item.authored = true;
             }
-            (!title.is_empty()).then(|| Checked {
-                title: truncate_on_char_boundary(title, 120),
-                status: marker.to_string(),
-                reference: reference.map(str::to_string),
-                project: project.map(str::to_string),
-            })
-        })
-        .take(MAX_ITEMS_PER_REPLY)
-        .collect()
+            // The destructive half of the vocabulary needs a directive. A
+            // reply is model-generated text, and text can be quoted, echoed
+            // back or pasted from a file: none of that may remove a row.
+            None if item.status == "deleted" => continue,
+            None => {}
+        }
+        read.push(item);
+        if read.len() == MAX_ITEMS_PER_REPLY {
+            break;
+        }
+    }
+    read
 }
 
 /// What a task row reads as, built from the tool's own arguments.
@@ -1024,12 +1091,12 @@ async fn write_tasks_from_reply(
 /// ones they already ticked off. Duplicate titles are skipped so an agent that
 /// repeats its checklist each turn does not stack the same line up.
 ///
-/// A line lands on the session's own project unless it names another with
-/// `(@somewhere)`. Every session can write anywhere for the same reason the
-/// task manager always could: the app owns the store, so which project a row
-/// belongs to is a fact the line states, not a consequence of where it was
-/// typed. Work spills across projects constantly, and the alternative is
-/// telling the user to go and re-type it in the right window.
+/// A line lands on the session's own project unless a directive around it says
+/// otherwise. Every session can write anywhere for the same reason the task
+/// manager always could: the app owns the store, so which project a row belongs
+/// to is something the host can be asked to decide, not a consequence of which
+/// window the reply came from. Work spills across projects constantly, and the
+/// alternative is telling the user to go and re-type it somewhere else.
 async fn write_items_from_reply(
     app: &AppHandle,
     tables: &crate::db::tables::Tables,
@@ -1133,6 +1200,7 @@ async fn write_items_into(
         reference,
         // Already spent: grouping the reply is what chose `project_id`.
         project: _,
+        authored,
     } in proposed
     {
         /*
@@ -1165,7 +1233,14 @@ async fn write_items_into(
              * governs what "done" means, not what "gone" means. `[x]` defers
              * to the setting as before.
              */
-            if status == "deleted" || (status == "finished" && delete_completed) {
+            /*
+             * `[-]` cannot reach here from ordinary prose, the reader drops
+             * it. `[x]` can, and under "delete completed items" it destroys a
+             * row just as thoroughly, so outside a directive it is honoured as
+             * the status it names and nothing more. The setting still governs
+             * what "done" means; it does not lend that power to a quoted line.
+             */
+            if status == "deleted" || (status == "finished" && delete_completed && authored) {
                 let (row_id, row_project) = (row.id.clone(), row.project_id.clone());
                 match tables.project_item.delete(row_id.clone()).await {
                     Ok(()) => {
@@ -5116,52 +5191,133 @@ mod tests {
         }
     }
 
-    /// A line can say which project it belongs to, and the title it is matched
-    /// by must not carry that routing any more than it carries the reference.
+    /// The directive routes; the line stays a line. A title is data and must
+    /// not carry a word of the instruction that placed it.
     #[test]
-    fn a_line_can_name_another_project() {
-        let read = items_from_reply("- [ ] Audit the token counter (@Other project)\n");
+    fn a_directive_routes_the_lines_it_encloses() {
+        let read = items_from_reply(
+            "<ps @agency:items.inject(project: \"Other project\")>\n\
+             - [ ] Audit the token counter\n\
+             - [>] Ship the parser (#39)\n\
+             </ps>\n",
+        );
+        assert_eq!(read.len(), 2);
         assert_eq!(read[0].title, "Audit the token counter");
         assert_eq!(read[0].project.as_deref(), Some("Other project"));
+        assert!(read[0].authored);
+        // The reference is a fact about the row, so it stays on the row.
+        assert_eq!(read[1].reference.as_deref(), Some("39"));
+        assert_eq!(read[1].project.as_deref(), Some("Other project"));
 
-        // An id is accepted for the same reason: a session that knows where a
-        // row belongs may not know what that project is called.
-        let by_id = items_from_reply("- [ ] Audit (@proj-846b5542-fe2d-4d60-a296-7c10e1119562)\n");
+        // Closed, so the next line is ordinary prose again and lands here.
+        let after = items_from_reply(
+            "<ps @agency:items.inject(project: \"ui\")>\n\
+             - [ ] There\n\
+             </ps>\n\
+             - [ ] Here\n",
+        );
+        assert_eq!(after[1].project, None);
+        assert!(!after[1].authored);
+    }
+
+    /// An id is accepted for the same reason a name is: a session that knows
+    /// where a row belongs may not know what that project is called. Quotes
+    /// are optional, because a project name is prose.
+    #[test]
+    fn a_directive_takes_an_id_or_a_bare_name() {
+        let by_id = items_from_reply(
+            "<ps @agency:items.inject(project: proj-846b5542-fe2d-4d60-a296-7c10e1119562)>\n\
+             - [ ] Audit\n\
+             </ps>\n",
+        );
         assert_eq!(
             by_id[0].project.as_deref(),
             Some("proj-846b5542-fe2d-4d60-a296-7c10e1119562")
         );
 
-        // No suffix is the overwhelmingly common case and still means "here".
-        assert_eq!(items_from_reply("- [/] Plain\n")[0].project, None);
+        // No argument means here, which is the overwhelmingly common case and
+        // is still worth writing when the verbs need to be honoured.
+        let here = items_from_reply("<ps @agency:items.inject>\n- [-] Retire this\n</ps>\n");
+        assert_eq!(here[0].project, None);
+        assert_eq!(here[0].status, "deleted");
     }
 
-    /// Both suffixes, in either order, because nobody writing one of each has
-    /// any reason to believe the order matters.
+    /// The verb is what makes the segment ours. A span carrying some other
+    /// directive is somebody else's, and its contents stay content.
     #[test]
-    fn a_line_carries_a_project_and_a_reference_in_either_order() {
-        for line in [
-            "- [>] Ship the thing (@Other) (#35)\n",
-            "- [>] Ship the thing (#35) (@Other)\n",
-        ] {
-            let read = items_from_reply(line);
-            assert_eq!(read[0].title, "Ship the thing", "{line:?}");
-            assert_eq!(read[0].reference.as_deref(), Some("35"), "{line:?}");
-            assert_eq!(read[0].project.as_deref(), Some("Other"), "{line:?}");
-        }
-    }
-
-    /// The suffix has to be a suffix. Prose that happens to contain a handle
-    /// keeps every character it was written with.
-    #[test]
-    fn only_a_trailing_group_reads_as_a_project() {
+    fn only_our_verb_opens_a_segment() {
         assert_eq!(
-            split_project("Mention (@someone) mid-sentence here"),
-            ("Mention (@someone) mid-sentence here", None)
+            segment_open("<ps @agency:items.inject(project: \"ui\")>"),
+            Some(Segment {
+                project: Some("ui".into())
+            })
         );
-        assert_eq!(split_project("Empty (@)"), ("Empty (@)", None));
-        assert_eq!(split_project("Blank (@   )"), ("Blank (@   )", None));
-        assert_eq!(split_project("Write it (@ui)"), ("Write it", Some("ui")));
+        assert_eq!(
+            segment_open("<ps @agency:items.inject>"),
+            Some(Segment { project: None })
+        );
+        assert_eq!(segment_open("<ps @file:glossary.md>"), None);
+        assert_eq!(
+            segment_open("<ps @agency:items.read(project: \"ui\")>"),
+            None
+        );
+        assert_eq!(
+            segment_open("Mention @agency:items.inject in a sentence"),
+            None
+        );
+    }
+
+    /// The bug this whole shape exists to close. An agent quoting a file is
+    /// reporting, not instructing, and a checklist inside that quote must not
+    /// touch the store. Proved rather than asserted: this exact reply used to
+    /// delete a row and reach into another project.
+    #[test]
+    fn quoted_content_is_never_a_directive() {
+        let read = items_from_reply(
+            "Here is what the README says:\n\
+             \n\
+             ```markdown\n\
+             - [-] Ship the parser\n\
+             - [ ] Something nobody asked for\n\
+             ```\n\
+             \n\
+             That is the file, unchanged.\n",
+        );
+        assert!(read.is_empty(), "read {read:?} out of quoted content");
+
+        // A directive inside a fence is quoted too, and quoting a directive
+        // is not issuing one.
+        let fenced_directive = items_from_reply(
+            "An example of the syntax:\n\
+             \n\
+             ```\n\
+             <ps @agency:items.inject(project: \"ui\")>\n\
+             - [-] Delete everything\n\
+             </ps>\n\
+             ```\n",
+        );
+        assert!(
+            read.is_empty(),
+            "read {fenced_directive:?} out of a fenced example"
+        );
+    }
+
+    /// Unfenced prose keeps the vocabulary it grew up with, minus the half
+    /// that destroys. An agent narrating its own work is genuinely proposing
+    /// rows; it just cannot remove one without saying so deliberately.
+    #[test]
+    fn prose_may_proffer_a_row_but_never_remove_one() {
+        let read = items_from_reply(
+            "- [ ] Open one\n- [~] Plan one\n- [/] Start one\n- [>] Ship one (#1)\n- [-] Remove one\n",
+        );
+        assert_eq!(
+            read.iter()
+                .map(|item| item.status.as_str())
+                .collect::<Vec<_>>(),
+            ["new", "planning", "active", "shipped"],
+            "a bare `[-]` is not a directive"
+        );
+        assert!(read.iter().all(|item| !item.authored));
     }
 
     /// Resolution never guesses. An unknown name returns nothing, and the
@@ -5199,23 +5355,32 @@ mod tests {
         assert_eq!(items_from_reply(&many).len(), MAX_ITEMS_PER_REPLY);
     }
 
-    /// The third box: `[-]` marks a row for removal. It parses like the other
-    /// two so an agent can retire an obsolete item from a project session —
-    /// the write path deletes on match and refuses to create from it.
+    /// The third box: `[-]` marks a row for removal, so an agent can retire an
+    /// obsolete item. The write path deletes on match and refuses to create
+    /// from it.
+    ///
+    /// It needs a directive around it. That is the one behaviour this shape
+    /// took away, and deliberately: `[-]` was the only verb in the vocabulary
+    /// that could destroy something, sitting in text that anything upstream
+    /// could have written.
     #[test]
-    fn a_struck_box_parses_as_deleted() {
+    fn a_struck_box_parses_as_deleted_inside_a_directive() {
         assert_eq!(
-            items_from_reply("- [-] Verify release 0.1.4 upgrade path")
-                .into_iter()
-                .map(|item| (item.title, item.status))
-                .collect::<Vec<_>>(),
+            items_from_reply(
+                "<ps @agency:items.inject>\n\
+                 - [-] Verify release 0.1.4 upgrade path\n\
+                 </ps>"
+            )
+            .into_iter()
+            .map(|item| (item.title, item.status))
+            .collect::<Vec<_>>(),
             vec![(
                 "Verify release 0.1.4 upgrade path".to_string(),
                 "deleted".to_string()
             )]
         );
         // The box needs its title, same as the others.
-        assert!(items_from_reply("- [-] ").is_empty());
+        assert!(items_from_reply("<ps @agency:items.inject>\n- [-] \n</ps>").is_empty());
     }
 
     /// `ok` is a tri-state the column cannot hold, and the distinction between
