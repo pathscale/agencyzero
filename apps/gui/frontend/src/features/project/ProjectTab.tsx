@@ -5,8 +5,7 @@ import { Panel } from "~/components/Panel";
 import { Composer } from "~/features/project/Composer";
 import { ProjectPanel } from "~/features/project/ProjectPanel";
 import { TranscriptPane } from "~/features/project/TranscriptPane";
-import { clockTime } from "~/lib/format";
-import { AGENT_LABELS } from "~/lib/labels";
+import { AGENT_LABELS, rateLimitLabel } from "~/lib/labels";
 import { describeError, log } from "~/lib/log";
 import { compactCount, contextUsed, costLabel, usageTotals, withLiveContext } from "~/lib/stats";
 import { QUEUE_REASONS, useWorkspace } from "~/stores/workspace";
@@ -149,12 +148,19 @@ export function ProjectTab(props: { tab: Tab; project: Project }): JSX.Element {
 
           <Show when={rateLimit()}>
             {(limit) => (
-              <div class="mr-1.5 flex items-center gap-[7px] rounded-full border border-warning/34 bg-warning/15 px-2.5 py-1 text-[11.5px]">
+              /*
+               * One line, in words, and nothing else.
+               *
+               * It read `allowed_warning (seven_day) · resets 21:00`, which is
+               * the provider's status word, the provider's window name and a
+               * time, wrapped onto two lines in a pill. Three facts where one
+               * was wanted: whether to slow down. The window and the reset are
+               * dropped, and `whitespace-nowrap` is what keeps the pill on one
+               * line however narrow the header gets.
+               */
+              <div class="mr-1.5 flex items-center gap-[7px] whitespace-nowrap rounded-full border border-warning/34 bg-warning/15 px-2.5 py-1 text-[11.5px]">
                 <Icon name="pause" class="text-[12px] text-warning" />
-                <span class="font-semibold text-warning">{limit().message}</span>
-                <Show when={clockTime(limit().resetsAt)}>
-                  {(at) => <span class="text-az-body">· resets {at()}</span>}
-                </Show>
+                <span class="font-semibold text-warning">{rateLimitLabel(limit().message)}</span>
               </div>
             )}
           </Show>
