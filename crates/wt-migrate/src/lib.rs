@@ -418,6 +418,110 @@ async fn scrub_items(target: &Path) -> eyre::Result<usize> {
     Ok(count)
 }
 
+/// The app's schema, included whole so [`rebuild_store`] can open every
+/// table by its real shape. Included rather than restated: nine tables
+/// restated by hand is nine chances to drift, and the two restatements this
+/// crate already carries each needed a test to hold them still.
+#[path = "../../../apps/gui/src/db/schema"]
+pub mod app_schema {
+    pub mod agent_io;
+    pub mod approval_rule;
+    pub mod kv;
+    pub mod message;
+    pub mod project;
+    pub mod project_item;
+    pub mod pull_request;
+    pub mod task_log;
+    pub mod usage_ledger;
+}
+
+/// Rebuild every table of a store, row by row, into a brand-new store.
+///
+/// The nuclear form of [`rebuild_task_log`], for when the poisoned table
+/// cannot be named: every row that reads through the current schema is
+/// inserted into a fresh table in `target`, and every table's internal page
+/// accounting starts from zero. The kv rows carry the schema fingerprint
+/// across, so the result boots as a current store.
+///
+/// Rows are carried verbatim and unfiltered: the poison this launders lives
+/// in page accounting, not in rows, and a row that reads at all reads
+/// correctly. Returns (table, rows carried) per table.
+///
+/// # Errors
+/// When any table cannot be opened or any insert fails: a half-rebuilt store
+/// must not pass as a whole one, so the caller deletes the target and
+/// investigates. Run it against a copy or a snapshot, never the live store.
+pub async fn rebuild_store(source: &Path, target: &Path) -> eyre::Result<Vec<(String, usize)>> {
+    macro_rules! carry {
+        ($module:ident, $engine:ident, $table:ident) => {{
+            // Progress to stderr before the scan, so the one line a fatal
+            // signal cuts off names the table that killed it.
+            eprintln!(
+                "scanning {}...",
+                app_schema::$module::$table::name_snake_case()
+            );
+            let open = |dir: &Path| {
+                let config = worktable::prelude::DiskConfig::new_with_table_name(
+                    dir.to_string_lossy().into_owned(),
+                    app_schema::$module::$table::name_snake_case(),
+                    app_schema::$module::$table::version(),
+                );
+                async move {
+                    let engine = app_schema::$module::$engine::new(config).await?;
+                    app_schema::$module::$table::load(engine).await
+                }
+            };
+            let rows = {
+                let table = open(source).await?;
+                table.select_all().execute()?
+            };
+            let count = rows.len();
+            let fresh = open(target).await?;
+            for row in rows {
+                fresh.insert(row).map_err(|error| {
+                    eyre::eyre!(
+                        "{}: {error}",
+                        app_schema::$module::$table::name_snake_case()
+                    )
+                })?;
+            }
+            fresh.wait_for_ops().await;
+            (
+                app_schema::$module::$table::name_snake_case().to_string(),
+                count,
+            )
+        }};
+    }
+
+    Ok(vec![
+        carry!(kv, KvPersistenceEngine, KvWorkTable),
+        carry!(project, ProjectPersistenceEngine, ProjectWorkTable),
+        carry!(
+            project_item,
+            ProjectItemPersistenceEngine,
+            ProjectItemWorkTable
+        ),
+        carry!(message, MessagePersistenceEngine, MessageWorkTable),
+        carry!(task_log, TaskLogPersistenceEngine, TaskLogWorkTable),
+        carry!(agent_io, AgentIoRowPersistenceEngine, AgentIoRowWorkTable),
+        carry!(
+            usage_ledger,
+            UsageLedgerPersistenceEngine,
+            UsageLedgerWorkTable
+        ),
+        carry!(
+            approval_rule,
+            ApprovalRulePersistenceEngine,
+            ApprovalRuleWorkTable
+        ),
+        carry!(
+            pull_request,
+            PullRequestPersistenceEngine,
+            PullRequestWorkTable
+        ),
+    ])
+}
+
 /// Rebuild `task_log` row by row into a fresh table, discarding the old
 /// table's internal page accounting.
 ///
@@ -719,7 +823,7 @@ mod tests {
             position: 1,
             reference: "36".into(),
         };
-        let theirs = app_project_item::ProjectItemRow {
+        let theirs = app_schema::project_item::ProjectItemRow {
             id,
             project_id,
             title,
@@ -759,7 +863,7 @@ mod tests {
             exit_code: 0,
             finished_at: "2026-08-01T00:00:00Z".into(),
         };
-        let theirs = app_task_log::TaskLogRow {
+        let theirs = app_schema::task_log::TaskLogRow {
             id,
             tool_call_id,
             project_id,
@@ -776,16 +880,6 @@ mod tests {
         assert_eq!(theirs.ok, 1);
     }
 }
-
-/// The app's own `project_item`, for the drift check above.
-#[cfg(test)]
-#[path = "../../../apps/gui/src/db/schema/project_item.rs"]
-mod app_project_item;
-
-/// The app's own `task_log`, for the drift check above.
-#[cfg(test)]
-#[path = "../../../apps/gui/src/db/schema/task_log.rs"]
-mod app_task_log;
 
 #[cfg(test)]
 mod scrub_tests {

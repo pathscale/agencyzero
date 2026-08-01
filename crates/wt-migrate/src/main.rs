@@ -93,6 +93,67 @@ fn main() -> ExitCode {
     }
 
     /*
+     * rebuild-store <source> <target>: every table, row by row, into a brand
+     * new store. For when a table's page accounting is poisoned and the
+     * poisoned table cannot be named with certainty: rows are carried
+     * verbatim (the kv rows bring the fingerprint), accounting starts from
+     * zero everywhere. Target must not exist; run against a snapshot or a
+     * copy, never the live store.
+     */
+    if args.first().map(String::as_str) == Some("rebuild-store") {
+        args.remove(0);
+        let [source, target] = args.as_slice() else {
+            eprintln!("usage: wt-migrate rebuild-store <source-store> <new-target-store>");
+            return ExitCode::from(2);
+        };
+        let source = PathBuf::from(source);
+        let target = PathBuf::from(target);
+        if !source.join("kv").is_dir() {
+            eprintln!("{source:?} has no kv table, so it is not a store. Nothing was touched.");
+            return ExitCode::from(2);
+        }
+        if target.exists() {
+            eprintln!(
+                "{} already exists; rebuild into a new directory",
+                target.display()
+            );
+            return ExitCode::from(2);
+        }
+        let (_s, _t) = match (
+            wt_migrate::lock_store(&source),
+            wt_migrate::lock_store(&target),
+        ) {
+            (Ok(s), Ok(t)) => (s, t),
+            (Err(m), _) | (_, Err(m)) => {
+                eprintln!("{m}");
+                return ExitCode::FAILURE;
+            }
+        };
+        let runtime = tokio::runtime::Builder::new_multi_thread()
+            .worker_threads(2)
+            .enable_io()
+            .enable_time()
+            .build()
+            .expect("runtime");
+        return match runtime.block_on(wt_migrate::rebuild_store(&source, &target)) {
+            Ok(report) => {
+                for (table, rows) in report {
+                    println!("rebuilt {table}: {rows} row(s)");
+                }
+                println!("written to {}", target.display());
+                ExitCode::SUCCESS
+            }
+            Err(error) => {
+                eprintln!(
+                    "rebuild failed: {error}. The target is partial; delete it and \
+                     investigate before re-running."
+                );
+                ExitCode::FAILURE
+            }
+        };
+    }
+
+    /*
      * rebuild-task-log <source> <target>: read every task_log row out of the
      * source store and insert it into a brand-new task_log in the target
      * store. Not a migration — same shape both sides. The verb exists because
