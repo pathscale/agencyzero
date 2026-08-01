@@ -2,6 +2,7 @@
 
 mod agents;
 mod db;
+mod directives;
 mod log;
 mod models;
 mod notes;
@@ -106,6 +107,9 @@ pub(crate) struct AppState {
     /// persisted: it is a fact about an account right now, see
     /// [`projects::RateLimits`].
     limits: Arc<projects::RateLimits>,
+    /// What became of the last turn's directives, by project. Quoted back to
+    /// the agent next turn, see [`projects::Receipts`].
+    receipts: Arc<projects::Receipts>,
     /// The live run per project: at most one, and how to stop it, see
     /// [`projects::ActiveRuns`].
     active: Arc<projects::ActiveRuns>,
@@ -1223,6 +1227,7 @@ fn main() {
                 approvals: Arc::default(),
                 active: Arc::default(),
                 limits: Arc::default(),
+                receipts: Arc::default(),
                 settings_write: tokio::sync::Mutex::new(()),
                 config_dir,
                 data_dir,
