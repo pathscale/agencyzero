@@ -92,16 +92,32 @@ impl Tables {
 }
 
 impl Tables {
+    /// The stored schema fingerprint, read by opening **only** the kv table.
+    ///
+    /// The boot flow needs the fingerprint *before* deciding whether the other
+    /// tables are safe to open at all: a full `open` on a mismatched store
+    /// loads every row through the wrong layout on the way to answering, which
+    /// is somewhere between garbage and a bus error. kv is the one table whose
+    /// shape has never changed (String to String, and the schema doc forbids
+    /// touching it for exactly this reason), so it alone is safe to ask.
+    ///
+    /// `None` means a fresh directory or an unreadable kv, both of which the
+    /// caller treats as "nothing to protect".
+    pub async fn peek_fingerprint(dir: &std::path::Path) -> Option<String> {
+        let config = DiskConfig::new_with_table_name(
+            dir.to_string_lossy().into_owned(),
+            KvWorkTable::name_snake_case(),
+            KvWorkTable::version(),
+        );
+        let engine = KvPersistenceEngine::new(config).await.ok()?;
+        let kv = KvWorkTable::load(engine).await.ok()?;
+        kv.select(FINGERPRINT_KEY.to_string()).map(|row| row.value)
+    }
+
     /// The blob at `key`, or `None` when nothing was ever written there.
     #[must_use]
     pub fn kv_get(&self, key: &str) -> Option<String> {
         self.kv.select(key.to_string()).map(|row| row.value)
-    }
-
-    /// The schema fingerprint recorded by whichever build wrote this store.
-    #[must_use]
-    pub fn schema_state(&self) -> SchemaState {
-        check_schema(self.kv_get(FINGERPRINT_KEY).as_deref())
     }
 
     /// Record this build's schema, so the next launch can check it.
