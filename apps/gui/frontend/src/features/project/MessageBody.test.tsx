@@ -56,6 +56,26 @@ describe("MessageBody", () => {
     const { container } = render(() => <MessageBody body="text" />);
     expect(container.querySelector("[data-selectable]")).toBeTruthy();
   });
+
+  it("visually marks a standalone Prompt Syntax authoring directive", () => {
+    const directive = '<ps @agency:items.state(id: "item-869382d3", status: "active")>';
+    const { container } = render(() => (
+      <MessageBody body={`Working on it.\n${directive}\nContinuing.`} />
+    ));
+
+    const marked = container.querySelector("[data-ps-directive]");
+    expect(marked).toHaveTextContent("Prompt Syntax");
+    expect(marked).toHaveTextContent(directive);
+  });
+
+  it("leaves misframed and quoted Prompt Syntax inert", () => {
+    const directive = '<ps @agency:items.state(id: "item-a", status: "active")>';
+    const body = `Attached to prose: ${directive}\n\n> ${directive}\n\n    ${directive}`;
+    const { container } = render(() => <MessageBody body={body} />);
+
+    expect(container.querySelector("[data-ps-directive]")).toBeNull();
+    expect(container.textContent).toContain(directive);
+  });
 });
 
 /*
@@ -139,6 +159,18 @@ describe("fenced blocks", () => {
     expect(container.textContent).not.toContain("**Restart me**");
     // And its own inline code still reads as code.
     expect([...container.querySelectorAll("code")].map((c) => c.textContent)).toContain("ask");
+  });
+
+  it("keeps Prompt Syntax inert inside either Markdown fence marker", () => {
+    const directive = '<ps @agency:items.retire(id: "item-a")>';
+    const body = `\`\`\`\`text\n${directive}\n\`\`\`\n\`\`\`\`\n~~~~\n${directive}\n~~~~`;
+    const { container } = render(() => <MessageBody body={body} />);
+
+    expect(container.querySelector("[data-ps-directive]")).toBeNull();
+    expect([...container.querySelectorAll("pre code")].map((node) => node.textContent)).toEqual([
+      `${directive}\n\`\`\``,
+      directive,
+    ]);
   });
 });
 

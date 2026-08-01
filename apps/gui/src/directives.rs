@@ -41,7 +41,7 @@ pub struct Surface {
     pub delimiter: &'static str,
     /// 13.2.2. The vendor-extension namespace whose references are live.
     pub namespace: &'static str,
-    /// 13.2.2. Closed and declared. An unlisted verb parses to nothing.
+    /// 13.2.2. Closed and declared. An unlisted authored verb is refused.
     pub verbs: &'static [&'static str],
     /// 13.2.2. Verbs and values reserved to principals above the agent.
     pub reserved: &'static [&'static str],
@@ -127,6 +127,19 @@ pub enum Outcome {
     Done(String),
     /// Refused, with a code the agent can act on rather than a sentence.
     Refused { what: String, code: String },
+}
+
+/// What a standalone `<ps …>` authoring segment resolved to.
+///
+/// Ordinary prose is not represented here at all. Once a line explicitly
+/// enters the declared surface, however, it must become either a directive or
+/// a typed refusal. Treating an unknown or malformed reference as ordinary
+/// text would violate the reverse-channel fill contract and leave the agent
+/// unable to correct it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Authored {
+    Directive(Directive),
+    Refused(Outcome),
 }
 
 impl Outcome {
@@ -258,6 +271,50 @@ pub fn parse(line: &str) -> Option<Directive> {
     None
 }
 
+/// Resolve one explicit authoring segment, including its failure path.
+///
+/// `None` means the line never designated itself as this surface. A line that
+/// does start with the declared `<ps ` delimiter always returns an outcome:
+/// unknown references fail binding, while a known verb with an invalid shape
+/// fails syntax validation. Both are receipts rather than silent raw text.
+#[must_use]
+pub fn parse_authored(line: &str) -> Option<Authored> {
+    let trimmed = line.trim();
+    let after_tag = trimmed.strip_prefix("<ps")?;
+    if !after_tag.chars().next().is_some_and(char::is_whitespace) {
+        return None;
+    }
+    if let Some(directive) = parse(trimmed) {
+        return Some(Authored::Directive(directive));
+    }
+
+    let has_bidi = trimmed.chars().any(|char| {
+        matches!(
+            char,
+            '\u{061c}' | '\u{200e}' | '\u{200f}' | '\u{202a}'..='\u{202e}' | '\u{2066}'..='\u{2069}'
+        )
+    });
+    let inner = after_tag.strip_suffix('>').unwrap_or(after_tag).trim();
+    let verb = inner.split_once('(').map_or(inner, |(verb, _)| verb).trim();
+    let named = if verb.is_empty() {
+        "authored Prompt Syntax segment".to_string()
+    } else {
+        verb.chars().take(96).collect()
+    };
+    let known = SURFACE
+        .verbs
+        .iter()
+        .any(|candidate| verb.eq_ignore_ascii_case(&format!("@{}:{candidate}", SURFACE.namespace)));
+    Some(Authored::Refused(Outcome::Refused {
+        what: named,
+        code: if has_bidi || known {
+            "SYNTAX_INVALID".into()
+        } else {
+            "ENTITY_NOT_FOUND".into()
+        },
+    }))
+}
+
 /// Whether the agent is allowed to set this status.
 #[must_use]
 pub fn settable(status: &str) -> bool {
@@ -379,6 +436,32 @@ mod tests {
         assert!(parse("Mention @agency:items.state in a sentence").is_none());
         // Missing the fields it exists to carry.
         assert!(parse(r#"<ps @agency:items.state(status: "new")>"#).is_none());
+    }
+
+    #[test]
+    fn an_authored_segment_never_fails_as_silent_text() {
+        let valid =
+            parse_authored(r#"<ps @agency:items.state(id: "item-869382d3", status: "active")>"#);
+        assert!(matches!(
+            valid,
+            Some(Authored::Directive(Directive::ItemState { ref id, .. }))
+                if id == "item-869382d3"
+        ));
+
+        let unknown = parse_authored(r#"<ps @agency:items.destroy(id: "item-a3f9")>"#);
+        assert!(matches!(
+            unknown,
+            Some(Authored::Refused(Outcome::Refused { ref code, .. }))
+                if code == "ENTITY_NOT_FOUND"
+        ));
+
+        let malformed = parse_authored(r#"<ps @agency:items.state(status: "active")>"#);
+        assert!(matches!(
+            malformed,
+            Some(Authored::Refused(Outcome::Refused { ref code, .. }))
+                if code == "SYNTAX_INVALID"
+        ));
+        assert_eq!(parse_authored("ordinary prose"), None);
     }
 
     /// The owner closes an item. The agent can report that it shipped

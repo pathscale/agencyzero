@@ -1139,16 +1139,59 @@ async fn apply_directive(
                 .collect();
 
             // The same title twice is the agent restating itself, not a second
-            // item. It answers with the existing id so the next reference is
-            // by id, which is how a restatement stops becoming a duplicate.
-            if let Some(existing) = target_rows
+            // item. Resolve only a unique legacy match: old title-based flows
+            // could leave duplicates, and choosing one would repeat that bug.
+            //
+            // A restated add may carry newer state. Home used to acknowledge
+            // the existing title without applying that state, so a request to
+            // make an existing task active reported success while leaving it
+            // new. Reconcile the unique row, then answer with its id so every
+            // later reference can use the stable identity.
+            let mut matching = target_rows
                 .iter()
-                .find(|row| row.title.eq_ignore_ascii_case(title.trim()))
-            {
-                return Outcome::Done(match handle {
-                    Some(handle) => format!("{handle} -> {} (already open)", existing.id),
-                    None => format!("{} already open", existing.id),
-                });
+                .filter(|row| row.title.eq_ignore_ascii_case(title.trim()));
+            match (matching.next(), matching.next()) {
+                (Some(_), Some(_)) => {
+                    return Outcome::Refused {
+                        what: format!("items.add({title:?})"),
+                        code: "ENTITY_AMBIGUOUS".into(),
+                    };
+                }
+                (Some(existing), None) => {
+                    let moved = existing.status != status;
+                    if moved
+                        && let Err(error) = tables
+                            .project_item
+                            .update_status_by_id(
+                                ItemStatusByIdQuery {
+                                    status: status.clone(),
+                                },
+                                existing.id.clone(),
+                            )
+                            .await
+                    {
+                        return Outcome::Refused {
+                            what: format!("items.add({title:?})"),
+                            code: format!("WRITE_FAILED: {error}"),
+                        };
+                    }
+                    if moved && let Some(updated) = tables.project_item.select(existing.id.clone())
+                    {
+                        let _ = app.emit("item:updated", ProjectItemDto::from(updated));
+                    }
+                    let state = moved.then(|| format!("; -> {status}"));
+                    return Outcome::Done(match handle {
+                        Some(handle) => format!(
+                            "{handle} -> {} (already open{})",
+                            existing.id,
+                            state.unwrap_or_default()
+                        ),
+                        None => {
+                            format!("{} already open{}", existing.id, state.unwrap_or_default())
+                        }
+                    });
+                }
+                (None, _) => {}
             }
             let row = ProjectItemRow {
                 id: id("item"),
@@ -1339,10 +1382,12 @@ async fn apply_directives_with_state(
 ) -> Vec<crate::directives::Outcome> {
     let mut done = Vec::new();
     for line in text.lines() {
-        if let Some(directive) =
-            authored_directive_line(line, fenced).and_then(crate::directives::parse)
-        {
-            done.push(apply_directive(app, tables, project_id, directive).await);
+        match authored_directive_line(line, fenced).and_then(crate::directives::parse_authored) {
+            Some(crate::directives::Authored::Directive(directive)) => {
+                done.push(apply_directive(app, tables, project_id, directive).await);
+            }
+            Some(crate::directives::Authored::Refused(outcome)) => done.push(outcome),
+            None => {}
         }
     }
     done
@@ -1887,7 +1932,10 @@ pub type PendingApprovals =
 ///
 /// File tools collapse to the file's parent directory, so allowing one edit
 /// in a crate allows that directory, not the disk. URL tools collapse to the
-/// host. Anything else is the tool name alone.
+/// host. Codex permission requests carry their roots in a nested permission
+/// object; those collapse to the sorted, exact write-root set so remembering
+/// one directory can never silently approve another. Anything else is the tool
+/// name alone.
 fn approval_signature(tool: &str, input: &serde_json::Value) -> String {
     let text = |key: &str| {
         input
@@ -1913,6 +1961,22 @@ fn approval_signature(tool: &str, input: &serde_json::Value) -> String {
         } else {
             format!("{tool}: {program} {subcommand}")
         };
+    }
+
+    if tool.eq_ignore_ascii_case("permissions") {
+        let mut roots: Vec<&str> = input
+            .pointer("/permissions/fileSystem/write")
+            .and_then(serde_json::Value::as_array)
+            .into_iter()
+            .flatten()
+            .filter_map(serde_json::Value::as_str)
+            .filter(|root| !root.is_empty())
+            .collect();
+        roots.sort_unstable();
+        roots.dedup();
+        if !roots.is_empty() {
+            return format!("Permissions: write {}", roots.join(", "));
+        }
     }
 
     for key in ["file_path", "path", "notebook_path"] {
@@ -5507,6 +5571,26 @@ mod tests {
             &serde_json::json!({ "url": "https://docs.rs/tokio/latest/tokio/" }),
         );
         assert_eq!(sig, "WebFetch: docs.rs");
+    }
+
+    #[test]
+    fn codex_permission_rules_name_the_exact_write_roots() {
+        let input = serde_json::json!({
+            "permissions": {"fileSystem": {"write": ["/repo-b", "/repo-a", "/repo-a"]}}
+        });
+        assert_eq!(
+            approval_signature("Permissions", &input),
+            "Permissions: write /repo-a, /repo-b"
+        );
+        assert_ne!(
+            approval_signature("Permissions", &input),
+            approval_signature(
+                "Permissions",
+                &serde_json::json!({
+                    "permissions": {"fileSystem": {"write": ["/somewhere-else"]}}
+                })
+            )
+        );
     }
 
     /// A tool with no recognized shape falls back to the tool name alone —
