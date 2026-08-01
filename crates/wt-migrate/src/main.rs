@@ -15,7 +15,56 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 
 fn main() -> ExitCode {
-    let args: Vec<String> = std::env::args().skip(1).collect();
+    let mut args: Vec<String> = std::env::args().skip(1).collect();
+
+    /*
+     * salvage-items <source> <existing-target>: read a mixed-shape
+     * project_item through both schema generations, keep every row that reads
+     * sane in either, and insert the ones the target does not already have.
+     * The repair verb for a table the engine's all-or-nothing pass cannot
+     * carry. Unlike a full migration the target here is an existing store,
+     * which is the point: history flows into the store you kept.
+     */
+    if args.first().map(String::as_str) == Some("salvage-items") {
+        args.remove(0);
+        let [source, target] = args.as_slice() else {
+            eprintln!("usage: wt-migrate salvage-items <source-store> <existing-target-store>");
+            return ExitCode::from(2);
+        };
+        let source = PathBuf::from(source);
+        let target = PathBuf::from(target);
+        let (_s, _t) = match (
+            wt_migrate::lock_store(&source),
+            wt_migrate::lock_store(&target),
+        ) {
+            (Ok(s), Ok(t)) => (s, t),
+            (Err(m), _) | (_, Err(m)) => {
+                eprintln!("{m}");
+                return ExitCode::FAILURE;
+            }
+        };
+        let runtime = tokio::runtime::Builder::new_multi_thread()
+            .worker_threads(2)
+            .enable_io()
+            .enable_time()
+            .build()
+            .expect("runtime");
+        return match runtime.block_on(wt_migrate::salvage_items(&source, &target)) {
+            Ok((salvaged, skipped, unreadable)) => {
+                println!(
+                    "salvaged {salvaged} row(s), {skipped} already present, {unreadable} unreadable in both shapes"
+                );
+                ExitCode::SUCCESS
+            }
+            Err(error) => {
+                eprintln!(
+                    "salvage failed: {error}. The target may hold a partial salvage; re-run after fixing the cause, inserts are by id and idempotent."
+                );
+                ExitCode::FAILURE
+            }
+        };
+    }
+
     let [source, target] = args.as_slice() else {
         eprintln!("usage: wt-migrate <source-store> <target-store>");
         eprintln!();
