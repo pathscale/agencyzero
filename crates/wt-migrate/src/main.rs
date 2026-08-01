@@ -33,6 +33,33 @@ fn main() -> ExitCode {
         };
         let source = PathBuf::from(source);
         let target = PathBuf::from(target);
+
+        /*
+         * Checked before anything opens, because this verb is the one that
+         * writes into a store you already care about: it deletes every target
+         * row that does not look like an item, on the reading that a garbled
+         * row is worse than a missing one. That is right when the source
+         * really holds the history, and catastrophic otherwise.
+         *
+         * A mistyped source used to be the worst case. Nothing checked it
+         * existed, the read-write engine created the missing `project_item`
+         * inside it, zero rows came back, and the target was then scrubbed
+         * against nothing: rows whose ids did not match the convention were
+         * deleted and the command printed `salvaged 0 row(s)` and exited 0.
+         */
+        if !source.join("project_item").is_dir() {
+            eprintln!(
+                "{source:?} has no project_item table, so there is nothing to salvage from it.\n\
+                 Nothing was touched. Check the path: a store is the directory holding \
+                 project_item, message and the rest."
+            );
+            return ExitCode::from(2);
+        }
+        if source == target || source.canonicalize().ok() == target.canonicalize().ok() {
+            eprintln!("the source and the target are the same store; nothing to do.");
+            return ExitCode::from(2);
+        }
+
         let (_s, _t) = match (
             wt_migrate::lock_store(&source),
             wt_migrate::lock_store(&target),
@@ -154,8 +181,29 @@ fn main() -> ExitCode {
             if !report.reset.is_empty() {
                 println!("reset:    {}", report.reset.join(", "));
             }
+            /*
+             * The losses, said out loud and answered in the exit code.
+             *
+             * Both lists were built and then thrown away: a table the engine
+             * could not carry, and the count of rows dropped as unreadable,
+             * were constructed with their reasons and never printed. So a run
+             * that recovered one row out of five hundred printed
+             * `migrated: project_item`, `written to ...`, and exited 0. An
+             * operator checking a migration before trusting it was shown the
+             * good half only.
+             */
+            for (table, reason) in &report.failed {
+                eprintln!("FAILED    {table}: {reason}");
+            }
+            for (table, rows) in &report.dropped {
+                eprintln!("dropped   {table}: {rows} row(s) unreadable in either shape");
+            }
             println!("written to {}", target.display());
-            ExitCode::SUCCESS
+            if report.failed.is_empty() {
+                ExitCode::SUCCESS
+            } else {
+                ExitCode::FAILURE
+            }
         }
         Err(error) => {
             eprintln!("migration failed: {error}");
