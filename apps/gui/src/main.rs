@@ -839,17 +839,62 @@ fn migrate_forward(location: &mut location::DataLocation, found: &str) -> Result
             let keep = location
                 .path
                 .with_extension(format!("pre-migration-{stamp}"));
-            let swapped = std::fs::rename(&location.path, &keep)
-                .and_then(|()| std::fs::rename(&next, &location.path));
-            if let Err(error) = swapped {
+            /*
+             * Two renames, and they fail differently.
+             *
+             * They used to be chained, and both failures were reported with
+             * one message: "the store is untouched". That is true only of the
+             * first. If the *second* fails, the store has already been moved
+             * to `keep`, and the old handling then deleted the migrated copy
+             * and said nothing about where the original went, leaving an empty
+             * data directory, a timestamped one nobody was told about, and a
+             * next launch that finds no store at all and starts clean.
+             */
+            if let Err(error) = std::fs::rename(&location.path, &keep) {
                 let _ = std::fs::remove_dir_all(&next);
                 crate::log!(
                     log::Level::Error,
                     "boot",
-                    "could not swap the migrated store into place: {error}. The store at {:?} \
-                     is untouched; booting on a scratch store instead.",
+                    "could not move the store aside: {error}. The store at {:?} is untouched; \
+                     booting on a scratch store instead.",
                     location.path
                 );
+                *location = ephemeral_location();
+                return tauri::async_runtime::block_on(Tables::open(&location.path))
+                    .map_err(|error| format!("could not open a scratch store: {error}"));
+            }
+            if let Err(error) = std::fs::rename(&next, &location.path) {
+                // Put the original back, so the next launch finds its store
+                // where it expects rather than starting empty.
+                match std::fs::rename(&keep, &location.path) {
+                    Ok(()) => {
+                        let _ = std::fs::remove_dir_all(&next);
+                        crate::log!(
+                            log::Level::Error,
+                            "boot",
+                            "could not move the migrated store into place: {error}. The original \
+                             is back at {:?} and is unchanged; booting on a scratch store.",
+                            location.path
+                        );
+                    }
+                    Err(back) => {
+                        /*
+                         * Nothing is deleted here. Both copies are real data
+                         * and the only thing wrong is their names, so the log
+                         * says exactly where each one is and what to do.
+                         */
+                        crate::log!(
+                            log::Level::Error,
+                            "boot",
+                            "could not move the migrated store into place ({error}), and could \
+                             not put the original back ({back}). Nothing is lost and nothing was \
+                             deleted: your original store is at {keep:?} and the migrated copy \
+                             is at {next:?}. Rename one of them to {:?} to carry on. Booting on \
+                             a scratch store meanwhile.",
+                            location.path
+                        );
+                    }
+                }
                 *location = ephemeral_location();
                 return tauri::async_runtime::block_on(Tables::open(&location.path))
                     .map_err(|error| format!("could not open a scratch store: {error}"));
@@ -1088,8 +1133,37 @@ fn main() {
              * row through the wrong layout on the way to saying "mismatched",
              * which is somewhere between garbage and a bus error.
              */
-            let stored = tauri::async_runtime::block_on(Tables::peek_fingerprint(&location.path));
-            let tables = match db::tables::check_schema(stored.as_deref()) {
+            let peeked = tauri::async_runtime::block_on(Tables::peek_fingerprint(&location.path));
+            let tables = match peeked {
+                /*
+                 * kv is the one table whose shape has never changed, so if it
+                 * will not open, the store is damaged rather than old and
+                 * there is nothing here a migration can fix. This used to be
+                 * indistinguishable from a fresh directory: both answered
+                 * `None`, which sends the boot down the `Match` arm, opens all
+                 * nine tables through a layout nothing has checked, and then
+                 * stamps the current fingerprint over the store, erasing the
+                 * evidence that they ever disagreed.
+                 *
+                 * So: touch nothing, run on scratch, and say where the store
+                 * is and what can read it.
+                 */
+                Err(reason) => {
+                    crate::log!(
+                        log::Level::Error,
+                        "boot",
+                        "the store at {:?} could not be read ({reason}), so it is left exactly \
+                         as it is and this session runs on scratch, keeping nothing. Inspect it \
+                         read-only with `AZ_DATA_DIR={:?} wt-tools list-messages`, or carry what \
+                         is readable forward with `wt-migrate <that path> <a new path>`.",
+                        location.path,
+                        location.path
+                    );
+                    location = ephemeral_location();
+                    tauri::async_runtime::block_on(Tables::open(&location.path))
+                        .map_err(|error| format!("could not open a scratch store: {error}"))?
+                }
+                Ok(stored) => match db::tables::check_schema(stored.as_deref()) {
                 db::tables::SchemaState::Match => tauri::async_runtime::block_on(Tables::open(
                     &location.path,
                 ))
@@ -1117,9 +1191,10 @@ fn main() {
                     tauri::async_runtime::block_on(Tables::open(&location.path))
                         .map_err(|error| format!("could not open a scratch store: {error}"))?
                 }
-                db::tables::SchemaState::Mismatch { found } => {
-                    migrate_forward(&mut location, &found)?
-                }
+                    db::tables::SchemaState::Mismatch { found } => {
+                        migrate_forward(&mut location, &found)?
+                    }
+                },
             };
             crate::log!(log::Level::Info, "boot", "tables open");
 
