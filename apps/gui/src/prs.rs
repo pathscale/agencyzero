@@ -163,6 +163,57 @@ pub fn harvest_prs(
     refresh_project(app.clone(), project_id.to_string());
 }
 
+/// The `owner/name` this working directory pushes to, if any.
+///
+/// A project knows its directories, and a directory knows its remote, so the
+/// app can find the repository without being told and without a pull request
+/// existing yet. That last part is the point: until now a row was only ever
+/// created from a URL an agent happened to write in prose, so a pull request
+/// existed in the panel if and only if it had been mentioned. Opening one was
+/// not enough.
+async fn repo_of(dir: &str) -> Option<String> {
+    let asked = tokio::process::Command::new("git")
+        .args(["-C", dir, "remote", "get-url", "origin"])
+        .output()
+        .await
+        .ok()?;
+    if !asked.status.success() {
+        return None;
+    }
+    let url = String::from_utf8_lossy(&asked.stdout).trim().to_string();
+    // Both spellings git uses: git@github.com:owner/name.git and the https one.
+    let rest = url
+        .strip_prefix("git@github.com:")
+        .or_else(|| url.strip_prefix("https://github.com/"))
+        .or_else(|| url.strip_prefix("ssh://git@github.com/"))?;
+    let rest = rest.strip_suffix(".git").unwrap_or(rest);
+    let (owner, name) = rest.split_once('/')?;
+    (!owner.is_empty() && !name.is_empty()).then(|| format!("{owner}/{name}"))
+}
+
+/// Every repository this project touches: its own checkouts, plus any it has
+/// already cut a pull request against.
+async fn repos_for(
+    state: &State<'_, AppState>,
+    project_id: &str,
+    rows: &[PullRequestRow],
+) -> Vec<String> {
+    let mut found: std::collections::BTreeSet<String> =
+        rows.iter().map(|row| row.repo.clone()).collect();
+    let dirs = state
+        .tables
+        .project
+        .select(project_id.to_string())
+        .and_then(|row| serde_json::from_str::<Vec<String>>(&row.dirs).ok())
+        .unwrap_or_default();
+    for dir in dirs {
+        if let Some(repo) = repo_of(&dir).await {
+            found.insert(repo);
+        }
+    }
+    found.into_iter().collect()
+}
+
 /// One word for the pill, from the rollup's single state.
 ///
 /// Failure outranks pending outranks pass, because the pill exists to say the
@@ -201,12 +252,18 @@ pub fn refresh_project(app: AppHandle, project_id: String) {
             // nothing, which is what makes a short interval affordable.
             .filter(|row| !row.dismissed && row.state != "MERGED" && row.state != "CLOSED")
             .collect();
-        if rows.is_empty() {
+
+        /*
+         * Every repository this project touches, whether or not it has a row
+         * yet. That is what lets a pull request appear because it exists
+         * rather than because someone wrote its URL in a reply.
+         */
+        let repos = repos_for(&state, &project_id, &rows).await;
+        if repos.is_empty() {
             return;
         }
-
         let mut by_repo: std::collections::BTreeMap<String, Vec<PullRequestRow>> =
-            std::collections::BTreeMap::new();
+            repos.into_iter().map(|repo| (repo, Vec::new())).collect();
         for row in rows {
             by_repo.entry(row.repo.clone()).or_default().push(row);
         }
@@ -226,8 +283,10 @@ pub fn refresh_project(app: AppHandle, project_id: String) {
                 .collect::<Vec<_>>()
                 .join("\n");
             let query = format!(
-                "query($owner:String!, $name:String!) {{\n                   repository(owner:$owner, name:$name) {{\n{selections}\n  }}\n}}\n\
-                 fragment pr on PullRequest {{\n                   number state isDraft headRefName additions deletions reviewDecision\n                   commits(last:1) {{ nodes {{ commit {{ statusCheckRollup {{ state }} }} }} }}\n}}"
+                "query($owner:String!, $name:String!) {{\n  repository(owner:$owner, name:$name) {{\n\
+                     open: pullRequests(states: OPEN, first: 20, orderBy: {{field: UPDATED_AT, direction: DESC}}) {{ nodes {{ ...pr }} }}\n\
+                 {selections}\n  }}\n}}\n\
+                 fragment pr on PullRequest {{\n  number state isDraft headRefName additions deletions reviewDecision url\n  commits(last:1) {{ nodes {{ commit {{ statusCheckRollup {{ state }} }} }} }}\n}}"
             );
 
             let asked = tokio::process::Command::new("gh")
@@ -270,6 +329,63 @@ pub fn refresh_project(app: AppHandle, project_id: String) {
                 continue;
             };
             let found = body.get("data").and_then(|data| data.get("repository"));
+
+            /*
+             * Anything open with no row yet becomes one. This is the whole of
+             * "a pull request I opened shows up": the panel stops depending on
+             * an agent having written its URL into a reply.
+             */
+            if let Some(open) = found
+                .and_then(|repo| repo.pointer("/open/nodes"))
+                .and_then(serde_json::Value::as_array)
+            {
+                for node in open {
+                    let url = node
+                        .get("url")
+                        .and_then(serde_json::Value::as_str)
+                        .unwrap_or_default();
+                    let number = u32::try_from(
+                        node.get("number")
+                            .and_then(serde_json::Value::as_u64)
+                            .unwrap_or(0),
+                    )
+                    .unwrap_or(0);
+                    if url.is_empty() || number == 0 || prs.iter().any(|row| row.number == number) {
+                        continue;
+                    }
+                    let row = PullRequestRow {
+                        id: crate::projects::id("pr"),
+                        project_id: project_id.clone(),
+                        url: url.to_string(),
+                        repo: repo.clone(),
+                        number,
+                        branch: node
+                            .get("headRefName")
+                            .and_then(serde_json::Value::as_str)
+                            .unwrap_or_default()
+                            .to_string(),
+                        state: "OPEN".into(),
+                        additions: 0,
+                        deletions: 0,
+                        ci: ci_word(
+                            node.pointer("/commits/nodes/0/commit/statusCheckRollup/state")
+                                .and_then(serde_json::Value::as_str),
+                        ),
+                        dismissed: false,
+                        updated_at: crate::projects::now(),
+                    };
+                    match state.tables.pull_request.insert(row.clone()) {
+                        Ok(_) => {
+                            let _ = app.emit("pr:updated", PullRequestDto::from(row));
+                        }
+                        Err(error) => crate::log!(
+                            crate::log::Level::Error,
+                            "prs",
+                            "{project_id}: could not record {url}: {error}"
+                        ),
+                    }
+                }
+            }
 
             for pr in &prs {
                 let Some(facts) = found.and_then(|repo| repo.get(format!("pr{}", pr.number)))
