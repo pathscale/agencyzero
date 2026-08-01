@@ -5,6 +5,7 @@
 5. No em dashes.
 6. Track the work as items, in your reply, as it happens:
    `- [ ]` opens, `- [~]` plans, `- [/]` starts, `- [>] title (#35)` ships.
+   `- [?]` when you are stuck on an answer only the owner can give.
    Never `- [x]`: you cannot confirm your own fix works. The owner closes it.
    Quoted or fenced checklists are never read as items, so quote freely.
 7. To retire a row, or to write into another project, ask the host directly:

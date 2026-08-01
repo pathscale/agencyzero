@@ -1,5 +1,6 @@
 import { type JSX, Show } from "solid-js";
-import type { AgentState, TabStatus } from "~/types";
+import { Icon } from "~/components/Icon";
+import type { AgentState, ProjectStatus, TabStatus } from "~/types";
 
 /*
  * Four meanings, four colours:
@@ -73,16 +74,40 @@ export function AgentStateDot(props: { state: AgentState }): JSX.Element {
   );
 }
 
-/** The checkbox-ish marker on an item row: filled, hollow or ticked. */
-export function ItemMarker(props: { status: "pending" | "active" | "finished" }): JSX.Element {
+/*
+ * One appearance per status.
+ *
+ * There were two, filled for `active` and hollow for everything else, with the
+ * callers folding five statuses into those two on the way in. A row that was
+ * proposed, one being planned, one shipped and awaiting a verdict, and one left
+ * on the legacy `pending` all looked identical, so clicking the marker cycled a
+ * value the marker could not show. The control existed; it had nothing to say.
+ */
+const ITEM_DOT: Record<ProjectStatus, string> = {
+  new: "border-[1.5px] border-primary/30",
+  // Legacy, and deliberately the dimmest: it means nobody has classified this.
+  pending: "border-[1.5px] border-white/22",
+  planning: "border-[1.5px] border-dashed border-info",
+  active: "az-halo-primary bg-primary",
+  // Amber and haloed: the one state that is asking the reader for something.
+  questions: "az-halo-warning border-[1.5px] border-warning bg-warning/45",
+  // Amber solid, matching the "(PR #39)" beside it: a claim, not a result.
+  shipped: "bg-warning",
+  // Unused: `finished` is the tick.
+  finished: "",
+  canceled: "border-[1.5px] border-white/20 opacity-50",
+};
+
+/** The checkbox-ish marker on an item row, one look per status. */
+export function ItemMarker(props: { status: ProjectStatus }): JSX.Element {
   return (
     <Show
-      when={props.status !== "active"}
-      fallback={
-        <span class="az-halo-primary relative top-[3px] size-2 shrink-0 rounded-full bg-primary" />
-      }
+      when={props.status !== "finished"}
+      fallback={<Icon name="check" class="relative top-0.5 shrink-0 text-[12px] text-success" />}
     >
-      <span class="relative top-[3px] size-2 shrink-0 rounded-full border-[1.5px] border-primary/30" />
+      <span
+        class={`relative top-[3px] size-2 shrink-0 rounded-full ${ITEM_DOT[props.status] ?? ITEM_DOT.new}`}
+      />
     </Show>
   );
 }
