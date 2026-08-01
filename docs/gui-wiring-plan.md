@@ -148,14 +148,10 @@ being a list of user messages.
       `IMPLEMENTED` rather than faked, so the frontend keeps serving it from fixtures and
       greys it out instead of appearing to stop something it cannot.
 - [x] `clear_task_log(project_id)`.
-- [ ] **Items from the agent's reply — checkboxes only.** A finished turn's reply is
-      scanned for markdown checkboxes (`- [ ]` / `- [x]`, ordered forms included) and each
-      becomes a `ProjectItem`, appended and deduplicated by title so a restated plan does
-      not stack up or delete what the user added. Deliberately *not* bullets, numbered
-      lists or headings: a checkbox is unambiguously a task, a bullet is as often prose,
-      and inventing to-dos nobody proposed is worse than an empty panel. **Still open:**
-      an agent that writes its plan as prose contributes nothing, so the cheap second
-      call that the naming design uses (below) is the obvious next step.
+- [x] **One authored PS surface for items and pull requests.** Standalone
+      `@agency:items.*` and `@agency:pr.link` directives are the only mutations
+      read from an agent reply. Checkboxes, prose, quoted examples, fenced
+      examples, and bare PR URLs remain display text.
 - [ ] **Streaming needs a frontend pass too.** `TranscriptPane` renders finished messages
       only. Adding a `message:delta` event means either extending `AppEvents` or reusing
       `useStreamingBuffer` from `@pathscale/ui`. Decide which before emitting deltas.

@@ -17,85 +17,62 @@ collide with a real project.
 
 ## The output contract
 
-The reply has to become rows in WorkTable. Asking a model for prose and parsing
-it afterwards is how you get a to-do list that is subtly wrong. Asking for JSONL
-and refusing anything else is how you get one that is either right or visibly
-empty.
+The reply has to become rows in WorkTable. Home once asked for an
+`AZ-TASKS-BEGIN` JSONL block, while project tabs asked for checkboxes and PRs
+were found by scanning prose for URLs. That was three reverse-channel
+languages, two of which treated ordinary model output as executable.
 
-The user's own words go out unchanged, with `OUTPUT_CONTRACT` appended:
+Home now uses the same declared Prompt Syntax surface as every project tab:
 
 ```
-AZ-TASKS-BEGIN
-{"project": "<project name>", "item": "<one short task>", "status": "pending"}
-AZ-TASKS-END
+<ps @agency:items.add(project: "<project name or id>", ref: "t1", title: "<one short task>", status: "new")>
+<ps @agency:items.state(id: "<item id>", status: "active")>
+<ps @agency:items.retire(id: "<item id>")>
 ```
 
-The marked block is the authority. When `AZ-TASKS-BEGIN` appears, `harvest()`
-reads only the lines between the markers — a task the model merely *quotes* in
-its prose (an example, a README, a discussion of the format) cannot mutate
-anything. Lines carry exactly the three fields (`deny_unknown_fields`, the
-signature of JSON quoted from somewhere else), and one reply may mutate at
-most 100 tasks.
+The `<ps ...>` line is the authority. Prose, quoted material, fenced examples,
+and URLs outside one of those lines are inert. Each directive ends in a receipt
+on the next turn, including typed failures for an unknown or ambiguous id.
 
-Models still move, fence, or forget delimiters, so a reply with no marker at
-all falls back to scanning every line — but that lenient path is additive
-only: a `deleted` outside the markers is refused and counted, never applied.
-A stray quoted line can at worst add a row someone deletes; it can no longer
-destroy one. A line is taken when it parses as an object with a non-empty
-`project` and `item`.
+The Task Manager keeps one context-specific capability from the old contract.
+An explicit `items.add(project: ...)` that names no existing project creates a
+bare project, then adds the item. The project argument is mandatory on Home;
+omitting it is a surfaced `ENTITY_NOT_FOUND`, never an item hidden under the
+reserved `home-task-manager` id.
 
 ## Deleting, and why absence never deletes
 
-`status: "deleted"` removes the existing task whose project and item match,
-exactly. That is the only remove verb: a model asked to "delete X" will
-happily re-emit the whole list without X, and treating absence as deletion
-would wipe rows the user added by hand every time the model abbreviated. So
-the harvester appends and deletes only what is named, and the contract tells
-the model so.
+`items.retire(id: ...)` removes exactly one existing row. It is the only remove
+verb available to the agent. A model asked to "delete X" will happily re-emit
+the whole list without X, and treating absence as deletion would wipe rows the
+user added by hand every time the model abbreviated. Omission therefore changes
+nothing.
 
 To make bulk edits exact ("delete everything about cleaning junk"), every
-prompt carries a live snapshot of the current projects and tasks, built from
-the tables and bounded at ~6KB with an honest truncation marker. The model
-sees what exists; each deletion is an explicit, auditable line in the I/O
-panel.
+prompt carries a live snapshot of current project and item ids, built from the
+tables and bounded at about 6KB with an honest truncation marker. The model sees
+what exists; each deletion names the stable id that will be removed.
 
 The write path stays in the GUI on purpose. wt-tools is read-only by
 construction — that is what makes it safe to run beside the GUI on a
 single-writer store — so it will never grow a delete. wt-tools is the eyes;
-the harvest contract is the hands; the GUI is the only writer.
+the declared authoring surface is the hands; the GUI is the only writer.
 
-Three decisions worth keeping:
+## The project-session contract
 
-- **A line that looks like JSON and does not parse is counted, not hidden.** The
-  count goes to the Agent I/O panel as a `harvest` entry. A model that has
-  drifted off the format otherwise produces a short list and no error anywhere,
-  which looks exactly like the feature not working.
-- **An unrecognised `status` becomes `pending` rather than dropping the task.**
-  Losing work over a spelling is worse than a wrong column.
-- **Tasks are written as items on the task manager's own project**, carrying the
-  proposed project name in the title. Creating real projects from a model's
-  output unasked is not something it should do on its own initiative; promoting
-  a line to a project is a decision for a person.
+Ordinary project conversations use the same directives. The prompt supplies
+the current ids and the declared closed verb set:
 
-## The project-session contract: three checkboxes
+- `items.add` creates a row. Its `ref` is a temporary handle echoed beside the
+  real id in the next-turn receipt.
+- `items.state` moves an existing id through `new`, `planning`, `active`,
+  `questions`, or `shipped`.
+- `items.retire` removes exactly the named id.
+- `pr.link` records an authored GitHub PR URL and may attach its number to an
+  item. A URL in prose is display text only.
 
-Ordinary project conversations (everything that is not the Home task manager)
-speak a simpler, checklist-shaped contract, parsed from any reply:
-
-- `- [ ] <title>` **proposes** a new pending item. An existing title is left
-  alone — a proposal is not permission to clobber a row the user owns.
-- `- [x] <title>` **closes** the existing item with that exact title. What
-  closing means is the Settings choice (*Completed items*): mark resolved, or
-  delete the row. The run-this-item prompt teaches this line, so a run started
-  from an item can end by closing it.
-- `- [-] <title>` **removes** the existing item outright, whatever the
-  Settings say — an obsolete row is not a finished one. It never creates:
-  striking something that does not exist is already true.
-
-Titles match case-insensitively and exactly; a paraphrased title is a new
-proposal, which is the append-only safety working as intended. `[x]` and `[-]`
-landed in 0.1.6 and 0.1.10 respectively — an agent reading older sources will
-find an append-only path and wrongly conclude the list can only grow.
+`finished` and `canceled` are reserved to the owner on Home and project tabs.
+Checkboxes, prose, quoted examples, fenced examples, and bare PR URLs are inert.
 
 ## Can the agent read the WorkTable store?
 

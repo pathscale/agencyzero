@@ -304,6 +304,15 @@ fn agent_wire_name(agent: Agent) -> &'static str {
     }
 }
 
+/// Whether the next provider text event starts a new visible block.
+///
+/// Codex `exec --json` emits each completed commentary or final message as a
+/// whole `Event::Text`. Claude and Copilot may emit adjacent deltas of one
+/// message, so their consecutive text events must stay adjacent.
+fn needs_text_break(agent: Agent, streamed_any: bool, last_was_text: bool) -> bool {
+    streamed_any && (!last_was_text || agent == Agent::Codex)
+}
+
 pub(crate) fn id(prefix: &str) -> String {
     format!("{prefix}-{}", uuid::Uuid::new_v4())
 }
@@ -331,262 +340,6 @@ fn name_from_prompt(prompt: &str) -> String {
         Some((head, _)) if head.len() > MAX / 3 => format!("{head}…"),
         _ => format!("{clipped}…"),
     }
-}
-
-/// The most items one reply may contribute.
-///
-/// A bound rather than trust: a long plan should not turn the Items panel into
-/// a wall, and a malformed reply should not be able to write a thousand rows.
-const MAX_ITEMS_PER_REPLY: usize = 20;
-
-/// Work items found in the agent's reply.
-///
-/// **Markdown checkboxes only**: `- [ ] title` and `- [x] title`. Deliberately
-/// not bullets, numbered lists or headings: a checkbox is unambiguously a task,
-/// whereas a bulleted list is just as often prose. Reading structure into
-/// ordinary paragraphs would write items the agent never proposed, and an
-/// invented to-do in someone's workspace is worse than an empty panel.
-///
-/// Returns `(title, status)` in the order they appear, with `[x]` mapping onto
-/// the `finished` status the panel already renders struck through.
-/// One checkbox line, read.
-#[derive(Debug, PartialEq, Eq)]
-struct Checked {
-    /// The match key, and never carries the reference. See the `reference`
-    /// column on `ProjectItem` for why the two are kept apart.
-    title: String,
-    status: String,
-    /// A pull request or issue the line pointed at, without the `#`.
-    reference: Option<String>,
-    /// Where the enclosing directive routed this row, when it routed it
-    /// anywhere. A project name as a person would write it, or a `proj-` id.
-    /// Never read off the line itself: which project a row belongs to is
-    /// something the host was asked to do, not something the row says about
-    /// itself.
-    project: Option<String>,
-    /// Whether the line came from inside an authoring segment.
-    ///
-    /// A reply is model-generated text, so by default it is inert: it may
-    /// propose rows, and may not destroy them. Only text the agent deliberately
-    /// framed as a directive carries the destructive half of the vocabulary.
-    authored: bool,
-}
-
-/// The one host verb that opens an authoring segment.
-///
-/// Domain-qualified on purpose. `@project:ui` would name a *feature* of the
-/// app and read like a field; `@agency:items.inject` names the application, the
-/// surface, and the operation, so a reader can see it is the host being asked
-/// to act rather than a value being passed. Anything the app is asked to *do*
-/// is written this way, and the checkbox lines inside carry only what the row
-/// *is*.
-const INJECT_VERB: &str = "@agency:items.inject";
-
-/// What an authoring segment routes its lines to.
-#[derive(Debug, PartialEq, Eq)]
-struct Segment {
-    /// The project named in the directive's arguments, if any. Absent means
-    /// the session's own project, which is the overwhelmingly common case.
-    project: Option<String>,
-}
-
-/// Read one `key: value` out of a directive's argument list.
-///
-/// Quotes optional, since a project name is prose and a person writing one
-/// should not have to think about which half of the pair needs them.
-fn directive_arg<'a>(args: &'a str, key: &str) -> Option<&'a str> {
-    args.split(',').find_map(|pair| {
-        let (found, value) = pair.split_once(':')?;
-        (found.trim() == key).then(|| value.trim().trim_matches(|c| c == '"' || c == '\'').trim())
-    })
-}
-
-/// Recognize `<ps @agency:items.inject(project: "ui")>`.
-///
-/// The span is Prompt Syntax's own tag, and the verb inside it is what makes
-/// this segment ours: a `<ps>` carrying some other directive is not an item
-/// segment, and its contents stay inert. Naming the verb rather than trusting
-/// the tag is what keeps that true as the tag grows other uses.
-fn segment_open(line: &str) -> Option<Segment> {
-    let inner = line.trim().strip_prefix("<ps")?.strip_suffix('>')?.trim();
-    let (verb, args) = match inner.split_once('(') {
-        Some((verb, args)) => (verb.trim(), Some(args.strip_suffix(')')?)),
-        None => (inner, None),
-    };
-
-    /*
-     * Canonical is lowercase; a capitalized spelling is casual input that
-     * compiles to it. Folded as ASCII on purpose, and this is the one place
-     * that rule differs from how project names are matched: a name is prose
-     * and folds by Unicode, whereas a verb is an identifier with an ASCII
-     * canonical form. The difference is what makes a homoglyph inert. A verb
-     * written with a Cyrillic `а` is not this verb, does not open a segment,
-     * and cannot quietly become one.
-     */
-    if !verb.eq_ignore_ascii_case(INJECT_VERB) {
-        return None;
-    }
-    Some(Segment {
-        project: args
-            .and_then(|args| directive_arg(args, "project"))
-            .filter(|named| !named.is_empty())
-            .map(str::to_string),
-    })
-}
-
-/// Split a trailing `(#35)` off a checkbox line.
-///
-/// Written as a suffix because that is how a person writes it, and because the
-/// alternative is a second field in a format whose whole appeal is that it is
-/// one line of markdown. Only a trailing group of digits counts: a title that
-/// happens to contain `(#3)` mid-sentence keeps it.
-fn split_reference(line: &str) -> (&str, Option<&str>) {
-    let Some(open) = line.rfind("(#") else {
-        return (line, None);
-    };
-    let rest = &line[open + 2..];
-    let Some(digits) = rest.strip_suffix(')') else {
-        return (line, None);
-    };
-    if digits.is_empty() || !digits.chars().all(|c| c.is_ascii_digit()) {
-        return (line, None);
-    }
-    (line[..open].trim_end(), Some(digits))
-}
-
-/// Read one checkbox line, or nothing.
-fn checkbox(line: &str) -> Option<Checked> {
-    let line = line.trim_start();
-    // A list marker, then the box. `1.` and `1)` count: an agent writing
-    // an ordered checklist means the same thing.
-    let rest = line
-        .strip_prefix("- ")
-        .or_else(|| line.strip_prefix("* "))
-        .or_else(|| line.strip_prefix("+ "))
-        .or_else(|| {
-            let digits = line.trim_start_matches(|c: char| c.is_ascii_digit());
-            (digits.len() < line.len())
-                .then(|| {
-                    digits
-                        .strip_prefix(". ")
-                        .or_else(|| digits.strip_prefix(") "))
-                })
-                .flatten()
-        })?
-        .trim_start();
-
-    /*
-     * `[ ]` proposes, `[~]` plans, `[/]` starts, `[>]` ships, `[x]`
-     * closes, `[-]` removes.
-     *
-     * `[ ]` opens a row as `new`: proposed, and nobody has decided
-     * anything about it yet. `[~]` is the phase before work, where the
-     * shape of the thing is still being argued about, which a list that
-     * jumped from proposed to in-progress could not show at all.
-     *
-     * The last two are this contract's own. Markdown has no "strike
-     * this row" checkbox, and a project session needs one: an obsolete
-     * item is not a *finished* item, and before `[-]` existed an agent
-     * working a backlog could add rows but never retire one, so the
-     * list only grew. `[-]` never creates, since removing something
-     * that does not exist is already true.
-     *
-     * `[>]` is the answer to a fix that was reported as done and was
-     * not. An agent can say it shipped something; it cannot say the
-     * thing works, because it is not the one looking at the screen.
-     * So it moves a row to `shipped` naming the pull request, and the
-     * row waits there for the owner. A copy bug was called fixed three
-     * times in one evening, and under the old vocabulary the row would
-     * have been deleted after the first.
-     */
-    let (marker, title) = [
-        ("new", "[ ] "),
-        ("planning", "[~] "),
-        ("active", "[/] "),
-        /*
-         * `[?]` is started and stuck on something only the owner can answer.
-         *
-         * Without it the agent's only honest options were to leave the row
-         * `active`, which claims work is happening while nothing is, or to
-         * write the question into the transcript, where it scrolls away. The
-         * list could not answer "which of these are waiting on me", which is
-         * the question the owner asks it most.
-         */
-        ("questions", "[?] "),
-        ("shipped", "[>] "),
-        ("deleted", "[-] "),
-        ("finished", "[x] "),
-        ("finished", "[X] "),
-    ]
-    .into_iter()
-    .find_map(|(marker, checkbox)| rest.strip_prefix(checkbox).map(|title| (marker, title)))?;
-
-    let (title, reference) = split_reference(title.trim());
-    (!title.is_empty()).then(|| Checked {
-        title: truncate_on_char_boundary(title, 120),
-        status: marker.to_string(),
-        reference: reference.map(str::to_string),
-        // Both filled by the reader, from the directive around the line.
-        project: None,
-        authored: false,
-    })
-}
-
-/// Read a reply as a sequence of lines with a provenance for each.
-///
-/// Two rules, and they are the same rule twice. Fenced text is content: an
-/// agent quoting a file that happens to contain a checklist is reporting, not
-/// asking, and reading those lines as directives writes rows nobody proposed.
-/// Unfenced prose is content too, but weakly, because the checkbox vocabulary
-/// grew up there and an agent narrating its own work is genuinely proposing
-/// rows.
-///
-/// So an ordinary line may still open, plan, start and ship a row in the
-/// session's own project, and may not destroy one and may not reach another
-/// project. Both of those need `<ps @agency:items.inject(…)>`, which is the
-/// agent saying "this is a directive" rather than the app guessing.
-fn items_from_reply(reply: &str) -> Vec<Checked> {
-    let mut read = Vec::new();
-    let mut fenced = false;
-    let mut segment: Option<Segment> = None;
-
-    for line in reply.lines() {
-        let trimmed = line.trim();
-        if trimmed.starts_with("```") || trimmed.starts_with("~~~") {
-            fenced = !fenced;
-            continue;
-        }
-        if fenced {
-            continue;
-        }
-        if let Some(open) = segment_open(trimmed) {
-            segment = Some(open);
-            continue;
-        }
-        if trimmed == "</ps>" {
-            segment = None;
-            continue;
-        }
-        let Some(mut item) = checkbox(line) else {
-            continue;
-        };
-        match &segment {
-            Some(open) => {
-                item.project.clone_from(&open.project);
-                item.authored = true;
-            }
-            // The destructive half of the vocabulary needs a directive. A
-            // reply is model-generated text, and text can be quoted, echoed
-            // back or pasted from a file: none of that may remove a row.
-            None if item.status == "deleted" => continue,
-            None => {}
-        }
-        read.push(item);
-        if read.len() == MAX_ITEMS_PER_REPLY {
-            break;
-        }
-    }
-    read
 }
 
 /// What a task row reads as, built from the tool's own arguments.
@@ -626,12 +379,6 @@ fn tool_label(name: &str, input: &serde_json::Value) -> String {
     };
 
     truncate_on_char_boundary(&label.replace('\n', " "), 160)
-}
-
-/// Cut to `max` characters, never mid-character. See
-/// [`truncate_on_char_boundary`]; re-exported for `tasks.rs`.
-pub fn clip(text: &str, max: usize) -> String {
-    truncate_on_char_boundary(text, max)
 }
 
 /// Cut to `max` characters, never mid-character.
@@ -843,6 +590,35 @@ pub async fn set_item_status(
         );
         return Err(format!("not an item status: {status}"));
     }
+    let delete_completed = status == "finished"
+        && state
+            .tables
+            .kv_get(crate::settings::KEY)
+            .and_then(|raw| serde_json::from_str::<crate::settings::GlobalSettings>(&raw).ok())
+            .unwrap_or_default()
+            .completed_items
+            == "delete";
+    if delete_completed {
+        let mut row = state
+            .tables
+            .project_item
+            .select(id.clone())
+            .ok_or_else(|| format!("no item {id}"))?;
+        state
+            .tables
+            .project_item
+            .delete(id.clone())
+            .await
+            .map_err(|error| error.to_string())?;
+        let _ = app.emit(
+            "item:deleted",
+            serde_json::json!({ "id": id, "projectId": row.project_id }),
+        );
+        // Preserve the command's return shape for callers that await it even
+        // though the event removes the row from the live store.
+        row.status = status;
+        return Ok(ProjectItemDto::from(row));
+    }
     state
         .tables
         .project_item
@@ -1048,199 +824,6 @@ impl From<&TaskLogEntryDto> for TaskLogRow {
     }
 }
 
-/// Turn the task manager's JSONL block into item rows.
-///
-/// Separate from the checkbox scan the ordinary projects use: this reply is
-/// answering a contract rather than writing prose, so a line that does not
-/// parse is a broken contract worth reporting rather than a sentence to skip.
-///
-/// The count of rejected lines goes to the I/O panel. A model that has drifted
-/// off the format produces a short list and no error anywhere else, which is
-/// exactly the failure that looks like the feature not working.
-async fn write_tasks_from_reply(
-    app: &AppHandle,
-    io: &AgentIo,
-    tables: &crate::db::tables::Tables,
-    project_id: &str,
-    reply: &str,
-) {
-    let harvest = crate::tasks::harvest(reply);
-
-    note_io(
-        app,
-        io,
-        project_id,
-        "gui",
-        "harvest",
-        format!(
-            "{} task(s) parsed from the reply, {} line(s) rejected",
-            harvest.tasks.len(),
-            harvest.rejected
-        ),
-    );
-    crate::log!(
-        crate::log::Level::Info,
-        "tasks",
-        "{project_id}: harvested {} task(s), rejected {}",
-        harvest.tasks.len(),
-        harvest.rejected
-    );
-
-    if harvest.tasks.is_empty() {
-        return;
-    }
-
-    /*
-     * Harvested tasks land on real projects: the `project` value names one,
-     * matched case-insensitively against what exists, created bare when
-     * nothing matches. This replaces the first design — items parked on the
-     * task manager's own project with the name folded into the title — which
-     * asked the user to re-type every line the model had already structured.
-     *
-     * A created project is bare on purpose: a row and a tab, no first message
-     * and no agent run. The task manager organises; it does not start work.
-     */
-    let all_projects: Vec<ProjectRow> = tables.project.select_all().execute().unwrap_or_default();
-    let mut project_ids: std::collections::HashMap<String, String> = all_projects
-        .iter()
-        .map(|row| (row.name.trim().to_lowercase(), row.id.clone()))
-        .collect();
-    let mut order = u32::try_from(all_projects.len()).unwrap_or(0);
-    let mut created: Vec<String> = Vec::new();
-    let mut placed = 0usize;
-
-    let mut removed = 0usize;
-    for task in harvest.tasks {
-        let key = task.project.trim().to_lowercase();
-
-        /*
-         * The one destructive verb, and it only ever removes an exact match:
-         * a delete against a project or title that does not exist is a no-op,
-         * never a fuzzy guess. Absence from the output changes nothing — the
-         * contract says so to the model, and this code says it to the store.
-         */
-        if task.status == "deleted" {
-            let Some(target_id) = project_ids.get(&key).cloned() else {
-                continue;
-            };
-            let existing: Vec<ProjectItemRow> = tables
-                .project_item
-                .select_by_project_id(target_id)
-                .execute()
-                .unwrap_or_default();
-            for row in existing {
-                if row.title.to_lowercase() == task.item.to_lowercase() {
-                    match tables.project_item.delete(row.id.clone()).await {
-                        Ok(()) => {
-                            removed += 1;
-                            let _ = app.emit(
-                                "item:deleted",
-                                serde_json::json!({ "id": row.id, "projectId": row.project_id }),
-                            );
-                        }
-                        Err(error) => crate::log!(
-                            crate::log::Level::Error,
-                            "tasks",
-                            "{project_id}: could not delete a task: {error}"
-                        ),
-                    }
-                }
-            }
-            continue;
-        }
-
-        let target_id = match project_ids.get(&key) {
-            Some(found) => found.clone(),
-            None => {
-                let row = ProjectRow {
-                    id: id("proj"),
-                    name: task.project.trim().to_string(),
-                    status: "active".into(),
-                    position: order,
-                    dirs: "[]".into(),
-                    pinned: false,
-                    moderator_enabled: false,
-                    forked_from: String::new(),
-                    last_activity_at: now(),
-                };
-                if let Err(error) = tables.project.insert(row.clone()) {
-                    crate::log!(
-                        crate::log::Level::Error,
-                        "tasks",
-                        "could not create project {:?}: {error}",
-                        task.project
-                    );
-                    continue;
-                }
-                order += 1;
-                created.push(row.name.clone());
-                let dto = with_session(ProjectDto::from(row.clone()), tables);
-                let _ = app.emit("project:created", &dto);
-                project_ids.insert(key, row.id.clone());
-                row.id
-            }
-        };
-
-        // Appended after what is there, duplicates skipped: a later prompt
-        // restating the list must not stack the same line up or disturb rows
-        // the user added themselves.
-        let existing: Vec<ProjectItemRow> = tables
-            .project_item
-            .select_by_project_id(target_id.clone())
-            .execute()
-            .unwrap_or_default();
-        if existing
-            .iter()
-            .any(|row| row.title.to_lowercase() == task.item.to_lowercase())
-        {
-            continue;
-        }
-        let row = ProjectItemRow {
-            id: id("item"),
-            project_id: target_id,
-            title: task.item,
-            status: task.status,
-            position: u32::try_from(existing.len()).unwrap_or(0),
-            reference: String::new(),
-        };
-        match tables.project_item.insert(row.clone()) {
-            Ok(_) => {
-                placed += 1;
-                let _ = app.emit("item:created", ProjectItemDto::from(row));
-            }
-            Err(error) => crate::log!(
-                crate::log::Level::Error,
-                "tasks",
-                "{project_id}: could not write a task: {error}"
-            ),
-        }
-    }
-
-    // Said where the harvest count already lives, so "where did my tasks go"
-    // is answerable from the same panel that reported them parsed.
-    let mut summary = format!("{placed} item(s) placed");
-    if removed > 0 {
-        summary.push_str(&format!(", {removed} deleted"));
-    }
-    if !created.is_empty() {
-        summary.push_str(&format!("; created project(s): {}", created.join(", ")));
-    }
-    note_io(app, io, project_id, "gui", "harvest", summary);
-}
-
-/// Turn any checklist in the reply into item rows, appended after what is there.
-///
-/// Appends rather than replaces: the panel's items are the user's list too, and
-/// a later turn restating the plan must not delete the rows they added or the
-/// ones they already ticked off. Duplicate titles are skipped so an agent that
-/// repeats its checklist each turn does not stack the same line up.
-///
-/// A line lands on the session's own project unless a directive around it says
-/// otherwise. Every session can write anywhere for the same reason the task
-/// manager always could: the app owns the store, so which project a row belongs
-/// to is something the host can be asked to decide, not a consequence of which
-/// window the reply came from. Work spills across projects constantly, and the
-/// alternative is telling the user to go and re-type it somewhere else.
 /// What this project's list looks like right now, for the prompt.
 ///
 /// The agent was being asked to maintain a list it had never been shown. Every
@@ -1272,7 +855,9 @@ fn state_snapshot(
         .unwrap_or_default();
 
     let mut out = String::new();
-    if items.is_empty() {
+    if project_id == crate::tasks::TASK_MANAGER_ID {
+        out.push_str("Home Task Manager uses this same authoring surface for every mutation.");
+    } else if items.is_empty() {
         out.push_str("This project has no open items.");
     } else {
         out.push_str("Open items in this project. Answer with the id, never the title:\n");
@@ -1332,9 +917,11 @@ fn state_snapshot(
     out.push_str(
         "\nSay so with a directive on its own line, as it happens rather than at the end:\n\
          <ps @agency:items.state(id: \"<id>\", status: \"active\")>\n\
-         <ps @agency:items.state(id: \"<id>\", status: \"shipped\", pr: 66)>\n\
+         <ps @agency:items.state(id: \"<id>\", status: \"shipped\", pr: \"https://github.com/owner/repo/pull/66\")>\n\
          <ps @agency:items.add(ref: \"t1\", title: \"<one line>\", status: \"planning\")>\n\
-         <ps @agency:items.retire(id: \"<id>\")> removes a row that should not be there\n\
+         <ps @agency:items.add(project: \"<project id or exact name>\", ref: \"t2\", title: \"<one line>\")>\n\
+         <ps @agency:items.retire(id: \"<id>\")>\n\
+         <ps @agency:pr.link(url: \"https://github.com/owner/repo/pull/66\", item: \"<id>\")>\n\
 {declared}\n\
          Statuses you may set: new, planning, active, questions, shipped. `questions` \
          means you are stopped on something only the owner can answer. `finished` and \
@@ -1358,9 +945,15 @@ async fn apply_directive(
 ) -> crate::directives::Outcome {
     use crate::directives::{Directive, Outcome};
 
+    /*
+     * IDs are installation-wide, and the declared surface explicitly reaches
+     * any project in this store. Reading the whole id set is what makes the
+     * Task Manager able to speak the same state/retire/link verbs as a project
+     * tab instead of needing title-based JSONL mutations of its own.
+     */
     let rows: Vec<ProjectItemRow> = tables
         .project_item
-        .select_by_project_id(project_id.to_string())
+        .select_all()
         .execute()
         .unwrap_or_default();
 
@@ -1384,7 +977,27 @@ async fn apply_directive(
                     };
                 }
             };
-            if let Some(number) = pr.as_deref()
+            let target_project = rows
+                .iter()
+                .find(|row| row.id == resolved)
+                .map(|row| row.project_id.as_str())
+                .unwrap_or(project_id);
+            let pr_number = match pr.as_deref() {
+                Some(url) if url.starts_with("https://github.com/") => {
+                    match crate::prs::record_url(app, tables, target_project, url) {
+                        Ok(number) => Some(number.to_string()),
+                        Err(code) => {
+                            return Outcome::Refused {
+                                what: format!("items.state({resolved}) pull request"),
+                                code,
+                            };
+                        }
+                    }
+                }
+                Some(number) => Some(number.to_string()),
+                None => None,
+            };
+            if let Some(number) = pr_number.as_deref()
                 && let Err(error) = tables
                     .project_item
                     .update_reference_by_id(
@@ -1414,7 +1027,7 @@ async fn apply_directive(
                     if let Some(updated) = tables.project_item.select(resolved.clone()) {
                         let _ = app.emit("item:updated", ProjectItemDto::from(updated));
                     }
-                    let said = match pr {
+                    let said = match pr_number {
                         Some(number) => format!("{resolved} -> {status} (#{number})"),
                         None => format!("{resolved} -> {status}"),
                     };
@@ -1428,18 +1041,77 @@ async fn apply_directive(
         }
         Directive::ItemAdd {
             handle,
+            project,
             title,
             status,
         } => {
-            let status = if crate::directives::settable(&status) {
-                status
-            } else {
-                "new".to_string()
+            if !crate::directives::settable(&status) {
+                return Outcome::Refused {
+                    what: format!("items.add({title:?} -> {status})"),
+                    code: "STATUS_NOT_YOURS".into(),
+                };
+            }
+            let target_project = match project.as_deref() {
+                Some(named) => {
+                    let projects: Vec<ProjectRow> =
+                        tables.project.select_all().execute().unwrap_or_default();
+                    match resolve_project(&projects, named) {
+                        Some(found) => found,
+                        None if project_id == crate::tasks::TASK_MANAGER_ID => {
+                            /*
+                             * Home has always been able to turn a named task
+                             * group into a bare project. Keeping that ability
+                             * on the explicit `project:` argument preserves
+                             * the feature without treating prose as a command.
+                             */
+                            let row = ProjectRow {
+                                id: id("proj"),
+                                name: named.trim().to_string(),
+                                status: "active".into(),
+                                position: u32::try_from(projects.len()).unwrap_or(0),
+                                dirs: "[]".into(),
+                                pinned: false,
+                                moderator_enabled: false,
+                                forked_from: String::new(),
+                                last_activity_at: now(),
+                            };
+                            if let Err(error) = tables.project.insert(row.clone()) {
+                                return Outcome::Refused {
+                                    what: format!("items.add({title:?}) project"),
+                                    code: format!("WRITE_FAILED: {error}"),
+                                };
+                            }
+                            let _ = app.emit(
+                                "project:created",
+                                with_session(ProjectDto::from(row.clone()), tables),
+                            );
+                            row.id
+                        }
+                        None => {
+                            return Outcome::Refused {
+                                what: format!("items.add({title:?}) project {named:?}"),
+                                code: "ENTITY_NOT_FOUND".into(),
+                            };
+                        }
+                    }
+                }
+                None if project_id == crate::tasks::TASK_MANAGER_ID => {
+                    return Outcome::Refused {
+                        what: format!("items.add({title:?}) project"),
+                        code: "ENTITY_NOT_FOUND".into(),
+                    };
+                }
+                None => project_id.to_string(),
             };
+            let target_rows: Vec<&ProjectItemRow> = rows
+                .iter()
+                .filter(|row| row.project_id == target_project)
+                .collect();
+
             // The same title twice is the agent restating itself, not a second
             // item. It answers with the existing id so the next reference is
             // by id, which is how a restatement stops becoming a duplicate.
-            if let Some(existing) = rows
+            if let Some(existing) = target_rows
                 .iter()
                 .find(|row| row.title.eq_ignore_ascii_case(title.trim()))
             {
@@ -1450,10 +1122,10 @@ async fn apply_directive(
             }
             let row = ProjectItemRow {
                 id: id("item"),
-                project_id: project_id.to_string(),
+                project_id: target_project,
                 title: truncate_on_char_boundary(title.trim(), 120),
                 status,
-                position: u32::try_from(rows.len()).unwrap_or(0),
+                position: u32::try_from(target_rows.len()).unwrap_or(0),
                 reference: String::new(),
             };
             match tables.project_item.insert(row.clone()) {
@@ -1487,11 +1159,16 @@ async fn apply_directive(
                 .find(|row| row.id == resolved)
                 .map(|row| row.title.clone())
                 .unwrap_or_default();
+            let target_project = rows
+                .iter()
+                .find(|row| row.id == resolved)
+                .map(|row| row.project_id.clone())
+                .unwrap_or_else(|| project_id.to_string());
             match tables.project_item.delete(resolved.clone()).await {
                 Ok(()) => {
                     let _ = app.emit(
                         "item:deleted",
-                        serde_json::json!({ "id": resolved, "projectId": project_id }),
+                        serde_json::json!({ "id": resolved, "projectId": target_project }),
                     );
                     Outcome::Done(format!("{resolved} retired {title:?}"))
                 }
@@ -1501,16 +1178,56 @@ async fn apply_directive(
                 },
             }
         }
-        Directive::PrLink { number, item } => {
-            let known: Vec<&str> = rows.iter().map(|row| row.id.as_str()).collect();
-            let resolved = match crate::directives::resolve(&known, &item) {
-                Ok(found) => found.to_string(),
-                Err(code) => {
-                    return Outcome::Refused {
-                        what: format!("pr.link(item: {item})"),
-                        code,
+        Directive::PrLink { url, number, item } => {
+            let linked = match item.as_deref() {
+                Some(item) => {
+                    let known: Vec<&str> = rows.iter().map(|row| row.id.as_str()).collect();
+                    let resolved = match crate::directives::resolve(&known, item) {
+                        Ok(found) => found.to_string(),
+                        Err(code) => {
+                            return Outcome::Refused {
+                                what: format!("pr.link(item: {item})"),
+                                code,
+                            };
+                        }
                     };
+                    let target_project = rows
+                        .iter()
+                        .find(|row| row.id == resolved)
+                        .map(|row| row.project_id.clone())
+                        .unwrap_or_else(|| project_id.to_string());
+                    Some((resolved, target_project))
                 }
+                None => None,
+            };
+            let target_project = linked
+                .as_ref()
+                .map(|(_, project)| project.as_str())
+                .unwrap_or(project_id);
+            let tracked = match url.as_deref() {
+                Some(url) => match crate::prs::record_url(app, tables, target_project, url) {
+                    Ok(found) => Some(found.to_string()),
+                    Err(code) => {
+                        return Outcome::Refused {
+                            what: "pr.link(url)".into(),
+                            code,
+                        };
+                    }
+                },
+                None => None,
+            };
+            let number = tracked.or(number);
+            let Some((resolved, _)) = linked else {
+                return Outcome::Done(format!(
+                    "pull request #{} tracked",
+                    number.unwrap_or_else(|| "?".into())
+                ));
+            };
+            let Some(number) = number else {
+                return Outcome::Refused {
+                    what: format!("pr.link({resolved})"),
+                    code: "ENTITY_NOT_FOUND".into(),
+                };
             };
             match tables
                 .project_item
@@ -1537,82 +1254,52 @@ async fn apply_directive(
     }
 }
 
-/// Read every directive out of a stretch of reply text and carry them out.
+/// Return an authored PS line, preserving fence state across streamed chunks.
 ///
-/// Fenced text is skipped for the same reason the checkbox scan skips it: an
-/// agent quoting an example of the syntax is showing it, not issuing it.
-async fn apply_directives(
+/// The declared segment has to occupy its line. Markdown blockquotes, indented
+/// code, and fenced code are quoted content, so PS-shaped text inside them is
+/// inert. Keeping `fenced` outside this function is essential for streaming:
+/// an opening fence, its contents, and its closer usually arrive as separate
+/// calls.
+fn authored_directive_line<'a>(line: &'a str, fenced: &mut bool) -> Option<&'a str> {
+    let line = line.trim_end_matches(['\r', '\n']);
+    let trimmed = line.trim();
+    if trimmed.starts_with("```") || trimmed.starts_with("~~~") {
+        *fenced = !*fenced;
+        return None;
+    }
+    if *fenced || line.starts_with("    ") || line.starts_with('\t') || trimmed.starts_with('>') {
+        return None;
+    }
+    Some(trimmed)
+}
+
+/// Read every directive out of a stretch of reply text and carry it out.
+async fn apply_directives_with_state(
     app: &AppHandle,
     tables: &crate::db::tables::Tables,
     project_id: &str,
     text: &str,
+    fenced: &mut bool,
 ) -> Vec<crate::directives::Outcome> {
     let mut done = Vec::new();
-    let mut fenced = false;
     for line in text.lines() {
-        let trimmed = line.trim();
-        if trimmed.starts_with("```") || trimmed.starts_with("~~~") {
-            fenced = !fenced;
-            continue;
-        }
-        if fenced {
-            continue;
-        }
-        if let Some(directive) = crate::directives::parse(trimmed) {
+        if let Some(directive) =
+            authored_directive_line(line, fenced).and_then(crate::directives::parse)
+        {
             done.push(apply_directive(app, tables, project_id, directive).await);
         }
     }
     done
 }
 
-async fn write_items_from_reply(
+async fn apply_directives(
     app: &AppHandle,
     tables: &crate::db::tables::Tables,
     project_id: &str,
-    reply: &str,
-) {
-    let proposed = items_from_reply(reply);
-    if proposed.is_empty() {
-        return;
-    }
-
-    /*
-     * A line may say where it goes. Grouped rather than written one at a time
-     * so that each project is read once and its positions stay contiguous,
-     * and kept in the order the reply wrote them.
-     */
-    let mut targets: Vec<(String, Vec<Checked>)> = Vec::new();
-    let mut projects: Option<Vec<ProjectRow>> = None;
-    for item in proposed {
-        let target = match item.project.as_deref() {
-            None => project_id.to_string(),
-            Some(named) => {
-                let rows = projects.get_or_insert_with(|| {
-                    tables.project.select_all().execute().unwrap_or_default()
-                });
-                match resolve_project(rows, named) {
-                    Some(found) => found,
-                    None => {
-                        crate::log!(
-                            crate::log::Level::Error,
-                            "items",
-                            "{project_id}: no project matches {named:?}, so {:?} was not written",
-                            item.title
-                        );
-                        continue;
-                    }
-                }
-            }
-        };
-        match targets.iter_mut().find(|(id, _)| *id == target) {
-            Some((_, group)) => group.push(item),
-            None => targets.push((target, vec![item])),
-        }
-    }
-
-    for (target, group) in targets {
-        write_items_into(app, tables, &target, group).await;
-    }
+    text: &str,
+) -> Vec<crate::directives::Outcome> {
+    apply_directives_with_state(app, tables, project_id, text, &mut false).await
 }
 
 /// Find the project a line named, by id or by name, case-insensitively.
@@ -1634,171 +1321,6 @@ fn resolve_project(rows: &[ProjectRow], named: &str) -> Option<String> {
                 .find(|row| row.name.trim().to_lowercase() == folded)
         })
         .map(|row| row.id.clone())
-}
-
-/// Write one project's worth of checkbox lines.
-async fn write_items_into(
-    app: &AppHandle,
-    tables: &crate::db::tables::Tables,
-    project_id: &str,
-    proposed: Vec<Checked>,
-) {
-    let existing: Vec<ProjectItemRow> = tables
-        .project_item
-        .select_by_project_id(project_id.to_string())
-        .execute()
-        .unwrap_or_default();
-    let by_title: std::collections::HashMap<String, &ProjectItemRow> = existing
-        .iter()
-        .map(|row| (row.title.to_lowercase(), row))
-        .collect();
-    let mut next = u32::try_from(existing.len()).unwrap_or(0);
-
-    // Settings decide what "done" does to an existing row; read once per reply.
-    let delete_completed = tables
-        .kv_get(crate::settings::KEY)
-        .and_then(|raw| serde_json::from_str::<crate::settings::GlobalSettings>(&raw).ok())
-        .unwrap_or_default()
-        .completed_items
-        == "delete";
-
-    for Checked {
-        title,
-        status,
-        reference,
-        // Already spent: grouping the reply is what chose `project_id`.
-        project: _,
-        authored,
-    } in proposed
-    {
-        /*
-         * A checkbox line naming an item that already exists is a status
-         * report, not a proposal: `- [x] Fix the picker` from the session
-         * that just fixed it marks the row finished (or deletes it, per
-         * Settings). This is how a run closes out the item it was started
-         * from without any special verb.
-         */
-        if let Some(row) = by_title.get(&title.to_lowercase()) {
-            if row.status == status {
-                continue;
-            }
-            /*
-             * A proposal never moves a row that already exists.
-             *
-             * `- [ ]` means "this should be done", which is already true of
-             * every row on the list, so re-listing the backlog in a reply must
-             * not knock a row being worked on back to the start. The contract
-             * has always said a proposal leaves an existing title alone; the
-             * code updated it anyway, which was survivable while `[ ]` meant
-             * `pending` and is not now that it means `new`.
-             */
-            if status == "new" {
-                continue;
-            }
-            /*
-             * `[-]` removes outright, whatever Settings says about completed
-             * items: an obsolete row is not a finished one, and the setting
-             * governs what "done" means, not what "gone" means. `[x]` defers
-             * to the setting as before.
-             */
-            /*
-             * `[-]` cannot reach here from ordinary prose, the reader drops
-             * it. `[x]` can, and under "delete completed items" it destroys a
-             * row just as thoroughly, so outside a directive it is honoured as
-             * the status it names and nothing more. The setting still governs
-             * what "done" means; it does not lend that power to a quoted line.
-             */
-            if status == "deleted" || (status == "finished" && delete_completed && authored) {
-                let (row_id, row_project) = (row.id.clone(), row.project_id.clone());
-                match tables.project_item.delete(row_id.clone()).await {
-                    Ok(()) => {
-                        let _ = app.emit(
-                            "item:deleted",
-                            serde_json::json!({ "id": row_id, "projectId": row_project }),
-                        );
-                    }
-                    Err(error) => crate::log!(
-                        crate::log::Level::Error,
-                        "items",
-                        "{project_id}: could not delete the item: {error}"
-                    ),
-                }
-                continue;
-            }
-            let row_id = row.id.clone();
-            /*
-             * The reference is recorded before the status, so a row that
-             * reaches `shipped` always names where it went. A shipped row with
-             * no pull request on it is the state this whole verb exists to
-             * make impossible: it reads exactly like the "done" that was not.
-             */
-            if let Some(number) = reference.as_deref()
-                && row.reference != number
-                && let Err(error) = tables
-                    .project_item
-                    .update_reference_by_id(
-                        ItemReferenceByIdQuery {
-                            reference: number.to_string(),
-                        },
-                        row_id.clone(),
-                    )
-                    .await
-            {
-                crate::log!(
-                    crate::log::Level::Error,
-                    "items",
-                    "{project_id}: could not record the item's reference: {error}"
-                );
-            }
-            match tables
-                .project_item
-                .update_status_by_id(ItemStatusByIdQuery { status }, row_id.clone())
-                .await
-            {
-                Ok(()) => {
-                    if let Some(updated) = tables.project_item.select(row_id) {
-                        let _ = app.emit("item:updated", ProjectItemDto::from(updated));
-                    }
-                }
-                Err(error) => crate::log!(
-                    crate::log::Level::Error,
-                    "items",
-                    "{project_id}: could not update the item's status: {error}"
-                ),
-            }
-            continue;
-        }
-        // `[-]` for a title that does not exist is already true — removing
-        // nothing must not create something.
-        if status == "deleted" {
-            continue;
-        }
-        let row = ProjectItemRow {
-            id: id("item"),
-            project_id: project_id.to_string(),
-            title,
-            status,
-            position: next,
-            reference: reference.unwrap_or_default(),
-        };
-        match tables.project_item.insert(row.clone()) {
-            Ok(_) => {
-                next += 1;
-                let _ = app.emit("item:created", ProjectItemDto::from(row));
-            }
-            Err(error) => crate::log!(
-                crate::log::Level::Error,
-                "items",
-                "{project_id}: could not write an item: {error}"
-            ),
-        }
-    }
-    crate::log!(
-        crate::log::Level::Info,
-        "items",
-        "{project_id}: {} item(s) after the reply",
-        next
-    );
 }
 
 /// Milliseconds between two RFC 3339 stamps, or `None` if either will not parse.
@@ -2521,7 +2043,7 @@ fn page_task_log(
     }
 }
 
-/// The live project and task lists, for the task manager's eyes.
+/// The live project and item ids, for the task manager's eyes.
 ///
 /// Bounded: a store with hundreds of tasks must not turn every prompt into a
 /// novel, so the block is cut at a ceiling with an honest marker. The cut is
@@ -2536,11 +2058,11 @@ fn task_manager_snapshot(tables: &crate::db::tables::Tables) -> String {
     }
 
     let mut block = String::from(
-        "\n\n---\nCurrent projects and tasks, live from the store. To remove one, \
-         emit its line with status \"deleted\"; to add or restate, emit it normally.\n",
+        "\n\n---\nCurrent projects and open items, live from the store. Address an \
+         existing row by its item id, never by retyping its title.\n",
     );
     'outer: for project in &projects {
-        let header = format!("# {}\n", project.name);
+        let header = format!("# {} · {}\n", project.id, project.name);
         if block.len() + header.len() > CEILING {
             block.push_str("… (list truncated)\n");
             break;
@@ -2551,10 +2073,13 @@ fn task_manager_snapshot(tables: &crate::db::tables::Tables) -> String {
             .project_item
             .select_by_project_id(project.id.clone())
             .execute()
-            .unwrap_or_default();
+            .unwrap_or_default()
+            .into_iter()
+            .filter(|item| item.status != "finished" && item.status != "canceled")
+            .collect();
         items.sort_by_key(|row| row.position);
         for item in &items {
-            let line = format!("- [{}] {}\n", item.status, item.title);
+            let line = format!("  {} · {} · {}\n", item.id, item.status, item.title);
             if block.len() + line.len() > CEILING {
                 block.push_str("… (list truncated)\n");
                 break 'outer;
@@ -4465,6 +3990,13 @@ async fn drive_run(
         ),
     );
 
+    // The previous receipt has now been included in this request. Start a new
+    // one before streamed directives arrive so this turn cannot inherit old
+    // outcomes and so a live add keeps its newly assigned id in the receipt.
+    if let Ok(mut kept) = receipts.lock() {
+        kept.remove(&project_id);
+    }
+
     let mut run = match agent_abstraction::stream(&request) {
         Ok(run) => run,
         Err(error) => {
@@ -4508,7 +4040,7 @@ async fn drive_run(
      */
     let mut streamed_text = String::new();
     /*
-     * How much of `streamed_text` has been scanned for checkbox lines.
+     * How much of `streamed_text` has been scanned for PS directive lines.
      *
      * Items used to be written only from the finished reply, which made it
      * impossible to open one and then work on it in the same turn: the row did
@@ -4516,7 +4048,8 @@ async fn drive_run(
      * asked to follow the procedure could not follow it, and the list only ever
      * described work that was already over.
      */
-    let mut items_scanned_to = 0usize;
+    let mut directives_scanned_to = 0usize;
+    let mut directives_fenced = false;
 
     /*
      * The checkpoint clock. The reply is flushed to `kv` on the first delta
@@ -4735,7 +4268,16 @@ async fn drive_run(
                 );
             }
             Event::Text(delta) => {
-                let delta = if streamed_any && !last_was_text {
+                /*
+                 * Codex emits each completed commentary/final message as a
+                 * separate Text event, not as deltas of one message. Joining
+                 * two of them byte-for-byte glued a directive to the prose
+                 * before it (`sentence.<ps ...>`), turning a valid authored
+                 * segment into inert text. Other providers may genuinely
+                 * stream adjacent deltas, so only Codex gets a block break at
+                 * every Text boundary.
+                 */
+                let delta = if needs_text_break(agent, streamed_any, last_was_text) {
                     format!("\n\n{delta}")
                 } else {
                     delta
@@ -4748,50 +4290,49 @@ async fn drive_run(
                     serde_json::json!({ "projectId": project_id, "delta": delta }),
                 );
                 /*
-                 * Checkbox lines take effect as they are written.
+                 * Directives take effect as their complete line arrives.
                  *
                  * Only whole lines: the scan stops at the last newline seen, so
-                 * a title still being streamed is never read as a shorter one.
-                 * Without that, "Fix the copy bug" would land as "Fix the" and
-                 * the real title would arrive later as a second row.
+                 * a directive still being streamed is never read as a shorter
+                 * one.
                  *
-                 * The end-of-turn pass still runs and is the backstop for a
-                 * final line with no newline after it. It cannot double-apply:
-                 * a row already at the status the line asks for is skipped.
+                 * The end-of-turn pass handles only the unscanned tail, as a
+                 * backstop for a final line with no newline after it.
                  */
-                if !is_task_manager {
-                    while let Some(at) = streamed_text[items_scanned_to..].find('\n') {
-                        let end = items_scanned_to + at + 1;
-                        let line = streamed_text[items_scanned_to..end].to_string();
-                        items_scanned_to = end;
-                        if !items_from_reply(&line).is_empty() {
-                            /*
-                             * Applied as the line completes rather than at the
-                             * end of the turn. A state report is only useful
-                             * while the work is happening: a panel that
-                             * catches up when the run finishes has told you
-                             * nothing you could not see from the transcript.
-                             */
-                            let done = apply_directives(&app, &tables, &project_id, &line).await;
-                            if !done.is_empty() {
-                                note_io(
-                                    &app,
-                                    &io,
-                                    &project_id,
-                                    "received",
-                                    "directive",
-                                    done.iter()
-                                        .map(crate::directives::Outcome::line)
-                                        .collect::<Vec<_>>()
-                                        .join("; "),
-                                );
-                                if let Ok(mut kept) = receipts.lock() {
-                                    kept.entry(project_id.clone())
-                                        .or_default()
-                                        .extend(done.iter().map(crate::directives::Outcome::line));
-                                }
-                            }
-                            write_items_from_reply(&app, &tables, &project_id, &line).await;
+                while let Some(at) = streamed_text[directives_scanned_to..].find('\n') {
+                    let end = directives_scanned_to + at + 1;
+                    let line = streamed_text[directives_scanned_to..end].to_string();
+                    directives_scanned_to = end;
+                    /*
+                     * Never gate PS parsing on another grammar. The old code
+                     * called `apply_directives` only after a checkbox matched,
+                     * so a standalone `items.state` line was guaranteed to be
+                     * skipped until the turn ended.
+                     */
+                    let done = apply_directives_with_state(
+                        &app,
+                        &tables,
+                        &project_id,
+                        &line,
+                        &mut directives_fenced,
+                    )
+                    .await;
+                    if !done.is_empty() {
+                        note_io(
+                            &app,
+                            &io,
+                            &project_id,
+                            "received",
+                            "directive",
+                            done.iter()
+                                .map(crate::directives::Outcome::line)
+                                .collect::<Vec<_>>()
+                                .join("; "),
+                        );
+                        if let Ok(mut kept) = receipts.lock() {
+                            kept.entry(project_id.clone())
+                                .or_default()
+                                .extend(done.iter().map(crate::directives::Outcome::line));
                         }
                     }
                 }
@@ -5209,10 +4750,11 @@ async fn drive_run(
              * tool calls vanished the moment a run finished. The terminal
              * text remains the fallback for a run that never streamed.
              */
-            let body = if streamed_text.trim().is_empty() {
-                outcome.text.clone()
-            } else {
+            let used_streamed_body = !streamed_text.trim().is_empty();
+            let body = if used_streamed_body {
                 streamed_text
+            } else {
+                outcome.text.clone()
             };
             let stop = match &outcome.stop {
                 Stop::Completed => "completed".to_string(),
@@ -5394,37 +4936,48 @@ async fn drive_run(
                 }
             }
 
-            if is_task_manager {
-                // Parsed from the same body the transcript stores, so what the
-                // harvester saw and what the user reads can never disagree.
-                write_tasks_from_reply(&app, &io, &tables, &project_id, &body).await;
+            /*
+             * One reverse-channel parser for Home and project tabs. The
+             * mid-stream path has already applied every complete line.
+             * Only the unscanned tail is handled here, which catches a final
+             * directive without a newline while preserving the exact receipt
+             * from a live add instead of replaying it as "already open".
+             */
+            let tail_at = if used_streamed_body {
+                directives_scanned_to.min(body.len())
             } else {
-                /*
-                 * The receipt starts empty for this turn, so what the agent is
-                 * told next turn is what happened in the last one rather than
-                 * everything since launch. The mid-stream path has already
-                 * applied most of these; re-running them is free, because a
-                 * state already set is a no-op and an id that resolved once
-                 * resolves again.
-                 */
+                0
+            };
+            let done = if used_streamed_body {
+                apply_directives_with_state(
+                    &app,
+                    &tables,
+                    &project_id,
+                    &body[tail_at..],
+                    &mut directives_fenced,
+                )
+                .await
+            } else {
+                apply_directives(&app, &tables, &project_id, &body).await
+            };
+            if !done.is_empty() {
+                note_io(
+                    &app,
+                    &io,
+                    &project_id,
+                    "received",
+                    "directive",
+                    done.iter()
+                        .map(crate::directives::Outcome::line)
+                        .collect::<Vec<_>>()
+                        .join("; "),
+                );
                 if let Ok(mut kept) = receipts.lock() {
-                    kept.remove(&project_id);
+                    kept.entry(project_id.clone())
+                        .or_default()
+                        .extend(done.iter().map(crate::directives::Outcome::line));
                 }
-                let done = apply_directives(&app, &tables, &project_id, &body).await;
-                if let Ok(mut kept) = receipts.lock() {
-                    let lines: Vec<String> =
-                        done.iter().map(crate::directives::Outcome::line).collect();
-                    if lines.is_empty() {
-                        kept.remove(&project_id);
-                    } else {
-                        kept.insert(project_id.clone(), lines);
-                    }
-                }
-                write_items_from_reply(&app, &tables, &project_id, &body).await;
             }
-            // Any PR the reply mentions becomes a chip; `gh` fills it in
-            // off-path moments later.
-            crate::prs::harvest_prs(&app, &tables, &project_id, &body, item_id.as_deref());
             emit_run_stopped(
                 &app,
                 &project_id,
@@ -6099,97 +5652,6 @@ mod tests {
         assert_eq!(truncate_to_bytes("short", 8_000), "short");
     }
 
-    /// Checkboxes are tasks. Bullets and prose are not, and reading items out of
-    /// them would write to-dos the agent never proposed.
-    #[test]
-    fn only_checkboxes_become_items() {
-        let reply = "Here is the plan:\n\
-             - [ ] Port the model into az-core\n\
-             * [x] Decide the store\n\
-             1. [ ] Pick the id scheme\n\
-             - Just a bullet, not a task\n\
-             2. An ordinary numbered line\n\
-             Some prose about [x] brackets in a sentence.";
-
-        let read = items_from_reply(reply);
-        let seen: Vec<(&str, &str)> = read
-            .iter()
-            .map(|item| (item.title.as_str(), item.status.as_str()))
-            .collect();
-        assert_eq!(
-            seen,
-            vec![
-                ("Port the model into az-core", "new"),
-                ("Decide the store", "finished"),
-                ("Pick the id scheme", "new"),
-            ]
-        );
-    }
-
-    /*
-     * The state that only exists because "done" was not.
-     *
-     * An agent can say it shipped something; it cannot say the thing works,
-     * because it is not the one looking at the screen. A copy bug was reported
-     * fixed three times in one evening, and under the old vocabulary its row
-     * would have been deleted after the first.
-     */
-    #[test]
-    fn a_row_can_be_started_and_shipped_without_being_finished() {
-        let read = items_from_reply(
-            "- [/] Fix copy in the prompt area\n- [>] Add a shipped state (#35)\n",
-        );
-
-        assert_eq!(read[0].status, "active");
-        assert_eq!(read[0].reference, None);
-        assert_eq!(read[1].status, "shipped");
-        assert_eq!(read[1].reference.as_deref(), Some("35"));
-    }
-
-    /*
-     * The ladder a row climbs, and the two rungs that were missing.
-     *
-     * `new` is proposed and untriaged; `planning` is the phase before work,
-     * where the shape is still being argued about. A list that could only say
-     * proposed or in-progress had nowhere to put either.
-     */
-    #[test]
-    fn a_row_can_be_new_and_then_planned() {
-        let read = items_from_reply("- [ ] Decide the memory key\n- [~] Decide the memory key\n");
-
-        assert_eq!(read[0].status, "new");
-        assert_eq!(read[1].status, "planning");
-    }
-
-    /// The reference is its own field, so the title stays the match key: a row
-    /// shipped as `(#35)` still answers to the line that closes it.
-    #[test]
-    fn a_reference_never_becomes_part_of_the_title() {
-        let read = items_from_reply("- [>] Add a shipped state (#35)\n");
-        assert_eq!(read[0].title, "Add a shipped state");
-
-        let closing = items_from_reply("- [x] Add a shipped state\n");
-        assert_eq!(closing[0].title, read[0].title, "the same row is meant");
-    }
-
-    /// Only a trailing group of digits is a reference. A title that mentions
-    /// one mid-sentence keeps every character it was written with.
-    #[test]
-    fn only_a_trailing_number_reads_as_a_reference() {
-        assert_eq!(
-            split_reference("Fix the (#3) case in the parser"),
-            ("Fix the (#3) case in the parser", None)
-        );
-        assert_eq!(split_reference("Ship it (#12)"), ("Ship it", Some("12")));
-        assert_eq!(split_reference("Not a ref (#)"), ("Not a ref (#)", None));
-        assert_eq!(
-            split_reference("Not a ref (#abc)"),
-            ("Not a ref (#abc)", None)
-        );
-    }
-
-    /// Only the two fields resolution looks at matter here; the rest is what an
-    /// empty project is.
     fn project_row(id: &str, name: &str) -> ProjectRow {
         ProjectRow {
             id: id.into(),
@@ -6204,155 +5666,6 @@ mod tests {
         }
     }
 
-    /// The directive routes; the line stays a line. A title is data and must
-    /// not carry a word of the instruction that placed it.
-    #[test]
-    fn a_directive_routes_the_lines_it_encloses() {
-        let read = items_from_reply(
-            "<ps @agency:items.inject(project: \"Other project\")>\n\
-             - [ ] Audit the token counter\n\
-             - [>] Ship the parser (#39)\n\
-             </ps>\n",
-        );
-        assert_eq!(read.len(), 2);
-        assert_eq!(read[0].title, "Audit the token counter");
-        assert_eq!(read[0].project.as_deref(), Some("Other project"));
-        assert!(read[0].authored);
-        // The reference is a fact about the row, so it stays on the row.
-        assert_eq!(read[1].reference.as_deref(), Some("39"));
-        assert_eq!(read[1].project.as_deref(), Some("Other project"));
-
-        // Closed, so the next line is ordinary prose again and lands here.
-        let after = items_from_reply(
-            "<ps @agency:items.inject(project: \"ui\")>\n\
-             - [ ] There\n\
-             </ps>\n\
-             - [ ] Here\n",
-        );
-        assert_eq!(after[1].project, None);
-        assert!(!after[1].authored);
-    }
-
-    /// An id is accepted for the same reason a name is: a session that knows
-    /// where a row belongs may not know what that project is called. Quotes
-    /// are optional, because a project name is prose.
-    #[test]
-    fn a_directive_takes_an_id_or_a_bare_name() {
-        let by_id = items_from_reply(
-            "<ps @agency:items.inject(project: proj-846b5542-fe2d-4d60-a296-7c10e1119562)>\n\
-             - [ ] Audit\n\
-             </ps>\n",
-        );
-        assert_eq!(
-            by_id[0].project.as_deref(),
-            Some("proj-846b5542-fe2d-4d60-a296-7c10e1119562")
-        );
-
-        // No argument means here, which is the overwhelmingly common case and
-        // is still worth writing when the verbs need to be honoured.
-        let here = items_from_reply("<ps @agency:items.inject>\n- [-] Retire this\n</ps>\n");
-        assert_eq!(here[0].project, None);
-        assert_eq!(here[0].status, "deleted");
-    }
-
-    /// The verb is what makes the segment ours. A span carrying some other
-    /// directive is somebody else's, and its contents stay content.
-    #[test]
-    fn only_our_verb_opens_a_segment() {
-        assert_eq!(
-            segment_open("<ps @agency:items.inject(project: \"ui\")>"),
-            Some(Segment {
-                project: Some("ui".into())
-            })
-        );
-        assert_eq!(
-            segment_open("<ps @agency:items.inject>"),
-            Some(Segment { project: None })
-        );
-        assert_eq!(segment_open("<ps @file:glossary.md>"), None);
-        assert_eq!(
-            segment_open("<ps @agency:items.read(project: \"ui\")>"),
-            None
-        );
-        assert_eq!(
-            segment_open("Mention @agency:items.inject in a sentence"),
-            None
-        );
-    }
-
-    /// Lowercase is canonical, and a capitalized spelling is casual input that
-    /// compiles to it.
-    ///
-    /// The fold is ASCII, which is the security half of the same decision. The
-    /// second case is the canonical verb with a Cyrillic `а` in `agency`: a
-    /// confusable that bound silently would be how a directive gets past a
-    /// reader who can see no difference at all.
-    #[test]
-    fn a_capitalized_verb_is_an_alias_and_a_confusable_is_not() {
-        assert_eq!(
-            segment_open("<ps @Agency:Items.Inject(project: \"ui\")>"),
-            Some(Segment {
-                project: Some("ui".into())
-            })
-        );
-        assert_eq!(segment_open("<ps @аgency:items.inject>"), None);
-    }
-
-    /// The bug this whole shape exists to close. An agent quoting a file is
-    /// reporting, not instructing, and a checklist inside that quote must not
-    /// touch the store. Proved rather than asserted: this exact reply used to
-    /// delete a row and reach into another project.
-    #[test]
-    fn quoted_content_is_never_a_directive() {
-        let read = items_from_reply(
-            "Here is what the README says:\n\
-             \n\
-             ```markdown\n\
-             - [-] Ship the parser\n\
-             - [ ] Something nobody asked for\n\
-             ```\n\
-             \n\
-             That is the file, unchanged.\n",
-        );
-        assert!(read.is_empty(), "read {read:?} out of quoted content");
-
-        // A directive inside a fence is quoted too, and quoting a directive
-        // is not issuing one.
-        let fenced_directive = items_from_reply(
-            "An example of the syntax:\n\
-             \n\
-             ```\n\
-             <ps @agency:items.inject(project: \"ui\")>\n\
-             - [-] Delete everything\n\
-             </ps>\n\
-             ```\n",
-        );
-        assert!(
-            read.is_empty(),
-            "read {fenced_directive:?} out of a fenced example"
-        );
-    }
-
-    /// Unfenced prose keeps the vocabulary it grew up with, minus the half
-    /// that destroys. An agent narrating its own work is genuinely proposing
-    /// rows; it just cannot remove one without saying so deliberately.
-    #[test]
-    fn prose_may_proffer_a_row_but_never_remove_one() {
-        let read = items_from_reply(
-            "- [ ] Open one\n- [~] Plan one\n- [/] Start one\n- [>] Ship one (#1)\n- [-] Remove one\n",
-        );
-        assert_eq!(
-            read.iter()
-                .map(|item| item.status.as_str())
-                .collect::<Vec<_>>(),
-            ["new", "planning", "active", "shipped"],
-            "a bare `[-]` is not a directive"
-        );
-        assert!(read.iter().all(|item| !item.authored));
-    }
-
-    /// Resolution never guesses. An unknown name returns nothing, and the
-    /// caller reports it, rather than a project appearing out of a typo.
     #[test]
     fn a_project_resolves_by_id_or_by_name_and_never_by_guess() {
         let rows = vec![
@@ -6366,66 +5679,6 @@ mod tests {
         assert_eq!(resolve_project(&rows, "Agency"), None);
         assert_eq!(resolve_project(&rows, "proj-3"), None);
         assert_eq!(resolve_project(&[], "AgencyZero"), None);
-    }
-
-    #[test]
-    fn a_reply_with_no_checklist_writes_no_items() {
-        assert!(items_from_reply("I read the file and it looks fine.").is_empty());
-        assert!(items_from_reply("").is_empty());
-        // An empty title is not an item.
-        assert!(items_from_reply("- [ ] ").is_empty());
-    }
-
-    /// A malformed or enormous reply must not be able to fill the panel.
-    #[test]
-    fn the_item_count_from_one_reply_is_bounded() {
-        let many = (0..100)
-            .map(|n| format!("- [ ] item {n}"))
-            .collect::<Vec<_>>()
-            .join("\n");
-        assert_eq!(items_from_reply(&many).len(), MAX_ITEMS_PER_REPLY);
-    }
-
-    /// `[?]` is the state an agent needs when it is stuck on the owner.
-    ///
-    /// Without it the honest options were to leave the row `active`, which
-    /// claims work is happening while nothing is, or to put the question in the
-    /// transcript, where it scrolls away. Not destructive, so prose may say it:
-    /// an agent that stops mid-answer must be able to record that plainly.
-    #[test]
-    fn a_question_box_marks_a_row_as_waiting_on_the_owner() {
-        let read = items_from_reply("- [?] Which runner should macOS use\n");
-        assert_eq!(read[0].status, "questions");
-        assert_eq!(read[0].title, "Which runner should macOS use");
-        assert!(!read[0].authored);
-    }
-
-    /// The third box: `[-]` marks a row for removal, so an agent can retire an
-    /// obsolete item. The write path deletes on match and refuses to create
-    /// from it.
-    ///
-    /// It needs a directive around it. That is the one behaviour this shape
-    /// took away, and deliberately: `[-]` was the only verb in the vocabulary
-    /// that could destroy something, sitting in text that anything upstream
-    /// could have written.
-    #[test]
-    fn a_struck_box_parses_as_deleted_inside_a_directive() {
-        assert_eq!(
-            items_from_reply(
-                "<ps @agency:items.inject>\n\
-                 - [-] Verify release 0.1.4 upgrade path\n\
-                 </ps>"
-            )
-            .into_iter()
-            .map(|item| (item.title, item.status))
-            .collect::<Vec<_>>(),
-            vec![(
-                "Verify release 0.1.4 upgrade path".to_string(),
-                "deleted".to_string()
-            )]
-        );
-        // The box needs its title, same as the others.
-        assert!(items_from_reply("<ps @agency:items.inject>\n- [-] \n</ps>").is_empty());
     }
 
     /// `ok` is a tri-state the column cannot hold, and the distinction between
@@ -6594,6 +5847,44 @@ mod tests {
         assert!(BUSY_WITH_COMMAND.contains("a command is running"));
         assert!(BUSY_WITH_RUN.contains("already active"));
         assert!(BUSY_WITH_RUN_ALREADY.contains("already active"));
+    }
+
+    #[test]
+    fn codex_message_boundaries_cannot_glue_a_directive_to_prose() {
+        assert!(needs_text_break(Agent::Codex, true, true));
+        assert!(needs_text_break(Agent::Codex, true, false));
+        assert!(!needs_text_break(Agent::Codex, false, false));
+
+        // Adjacent events from the other providers may be deltas of one
+        // message. Tool or thinking events still establish a block break.
+        assert!(!needs_text_break(Agent::Claude, true, true));
+        assert!(needs_text_break(Agent::Claude, true, false));
+        assert!(!needs_text_break(Agent::Copilot, true, true));
+    }
+
+    #[test]
+    fn streamed_fences_and_markdown_quotes_keep_ps_inert() {
+        let directive = r#"<ps @agency:items.add(ref: "t1", title: "Do it")>"#;
+        let mut fenced = false;
+
+        assert_eq!(authored_directive_line("```text\n", &mut fenced), None);
+        assert!(fenced);
+        assert_eq!(authored_directive_line(directive, &mut fenced), None);
+        assert_eq!(authored_directive_line("```\n", &mut fenced), None);
+        assert!(!fenced);
+
+        assert_eq!(
+            authored_directive_line(&format!("> {directive}"), &mut fenced),
+            None
+        );
+        assert_eq!(
+            authored_directive_line(&format!("    {directive}"), &mut fenced),
+            None
+        );
+        assert_eq!(
+            authored_directive_line(directive, &mut fenced),
+            Some(directive)
+        );
     }
 
     /// An agent that reported nothing must not look like a free turn.

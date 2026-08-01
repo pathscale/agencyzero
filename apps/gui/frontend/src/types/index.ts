@@ -477,8 +477,8 @@ export interface GlobalSettings {
   forwardProxyVars: boolean;
   notifications: NotificationSettings;
   /**
-   * What a session's `- [x]` does to an existing item: `"resolve"` marks it
-   * finished and keeps the row, `"delete"` removes it outright.
+   * What the owner's finished action does to an existing item: `"resolve"`
+   * keeps the finished row, while `"delete"` removes it outright.
    */
   completedItems: "resolve" | "delete";
   /** How the workspace is coloured. See {@link ThemeSettings}. */
