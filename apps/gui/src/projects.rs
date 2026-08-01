@@ -1759,6 +1759,46 @@ pub fn list_agent_io(project_id: String, state: State<'_, AppState>) -> Vec<Agen
 /// task cannot outlive the process running it, so a persisted one would come
 /// back after a restart as a spinner for work that can never finish. What is
 /// worth keeping is the *finished* row, and that goes to `task_log`.
+/// The provider's last word on usage, per project.
+///
+/// In memory and not persisted, deliberately: it is a fact about an account
+/// right now, and a figure restored from disk after a day would be read as
+/// current when it is not. Kept for the life of the process so the window can
+/// hydrate on boot and so a prompt can carry it, both of which need an answer
+/// before the next run reports one.
+pub type RateLimits = std::sync::Mutex<std::collections::HashMap<String, RateLimitReport>>;
+
+/// One usage report, as the provider worded it.
+#[derive(Clone, Debug, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RateLimitReport {
+    pub project_id: String,
+    /// `<status> (<window>)`, the provider's own vocabulary.
+    pub message: String,
+    /// ISO 8601, or absent when the provider did not say.
+    pub resets_at: Option<String>,
+    /// Something was actually refused.
+    pub is_blocking: bool,
+    /// Nothing was refused, but the provider is flagging the window. This is
+    /// the state that had nowhere to go: it was emitted, dropped by the window
+    /// for not being blocking, and never reached the agent at all, so neither
+    /// the person nor the thing spending the quota could see it coming.
+    pub is_warning: bool,
+    /// When this arrived, so a stale report can be recognised as one.
+    pub at: String,
+}
+
+impl RateLimitReport {
+    /// One line for a prompt: what the provider said, and when it resets.
+    #[must_use]
+    pub fn sentence(&self) -> String {
+        match &self.resets_at {
+            Some(at) => format!("{} (resets {at})", self.message),
+            None => self.message.clone(),
+        }
+    }
+}
+
 pub type RunningTasks = std::sync::Mutex<std::collections::HashMap<String, Vec<RunningTaskDto>>>;
 
 /// One question a run is blocked on: the way to answer it, and what
@@ -3176,8 +3216,18 @@ pub async fn clear_task_log(project_id: String, state: State<'_, AppState>) -> R
 }
 
 #[tauri::command]
-pub fn list_rate_limits() -> Vec<serde_json::Value> {
-    Vec::new()
+pub fn list_rate_limits(state: State<'_, AppState>) -> Vec<RateLimitReport> {
+    /*
+     * Hydration, which this stub never did. A limit only ever arrived as an
+     * event during a run, so a window opened after one was reported showed
+     * nothing at all and the account looked healthy until the next run said
+     * otherwise.
+     */
+    state
+        .limits
+        .lock()
+        .map(|kept| kept.values().cloned().collect())
+        .unwrap_or_default()
 }
 
 // — mutations ——————————————————————————————————————————————————————
@@ -3477,6 +3527,7 @@ pub async fn send_message(
     let running = state.running.clone();
     let io = state.io.clone();
     let approvals = state.approvals.clone();
+    let limits = state.limits.clone();
     let project_id = input.project_id.clone();
     let effort = input.effort.clone();
 
@@ -3487,6 +3538,7 @@ pub async fn send_message(
             running,
             io,
             approvals,
+            limits,
             reservation,
             cancel,
             inject_rx,
@@ -3518,6 +3570,9 @@ async fn drive_run(
     running: std::sync::Arc<RunningTasks>,
     io: std::sync::Arc<AgentIo>,
     approvals: std::sync::Arc<PendingApprovals>,
+    // The provider's last word on usage, updated as the run reports it and
+    // read by the next run's prompt. See `RateLimits`.
+    limits: std::sync::Arc<RateLimits>,
     // Held for the whole run and dropped on any exit path, so the project's
     // run slot frees exactly when no agent can still be alive.
     _reservation: RunReservation,
@@ -3711,6 +3766,32 @@ async fn drive_run(
          there rather than in a memory keyed to the working directory.",
         memory_dir.display()
     ));
+
+    /*
+     * What the provider last said about usage, told to the agent.
+     *
+     * It knew nothing about this. A warning was emitted, dropped by the window
+     * for not being a refusal, and never reached the thing actually spending
+     * the quota, so an agent would happily open a fan-out of subagents on an
+     * account already flagged at seventy-five per cent. Read from memory here
+     * rather than persisted: it is a fact about an account right now, and one
+     * restored from disk a day later would be read as current.
+     */
+    if let Some(usage) = limits
+        .lock()
+        .ok()
+        .and_then(|kept| kept.get(&project_id).cloned())
+    {
+        if !system.is_empty() {
+            system.push_str("\n\n");
+        }
+        system.push_str(&format!(
+            "Account usage, as the provider last reported it: {}. This is not a \
+             refusal; it is a warning that the window is filling. Prefer fewer and \
+             cheaper turns, and say so if you are about to do something expensive.",
+            usage.sentence()
+        ));
+    }
 
     if !system.is_empty() {
         request = request.system(system);
@@ -4229,15 +4310,35 @@ async fn drive_run(
                  * run that was never restricted, and turned the tab dot amber
                  * for it.
                  */
-                let _ = app.emit(
-                    "run:rate_limit",
-                    serde_json::json!({
-                        "projectId": project_id,
-                        "message": message,
-                        "resetsAt": resets_at,
-                        "isBlocking": limit.is_blocking(),
-                    }),
-                );
+                /*
+                 * A warning is not a heartbeat and not a refusal, and it used
+                 * to have nowhere to go: emitted, dropped by the window for
+                 * not being blocking, and never reaching the agent at all. So
+                 * neither the person nor the thing spending the quota could
+                 * see it coming. The status word carries it, so it is read
+                 * once here rather than sniffed for in three places.
+                 */
+                let is_warning =
+                    !limit.is_blocking() && limit.status.to_ascii_lowercase().contains("warning");
+                let report = RateLimitReport {
+                    project_id: project_id.clone(),
+                    message: message.clone(),
+                    resets_at: resets_at.clone(),
+                    is_blocking: limit.is_blocking(),
+                    is_warning,
+                    at: now(),
+                };
+                if let Ok(mut kept) = limits.lock() {
+                    // Plain `allowed` is a heartbeat: it replaces nothing and
+                    // is not worth keeping, so a warning stays visible until
+                    // the provider says something else that matters.
+                    if report.is_blocking || report.is_warning {
+                        kept.insert(project_id.clone(), report.clone());
+                    } else {
+                        kept.remove(&project_id);
+                    }
+                }
+                let _ = app.emit("run:rate_limit", &report);
             }
             /*
              * What this install's agent can actually do, from its own init

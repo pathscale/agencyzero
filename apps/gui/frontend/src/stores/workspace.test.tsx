@@ -310,6 +310,7 @@ describe("isLimitLive", () => {
     // A real refusal. `isLimitLive` is only about expiry; whether a record
     // restricts anything is a separate question, asked at the call sites.
     isBlocking: true,
+    isWarning: false,
     message: "Rate limited",
     resetsAt,
   });

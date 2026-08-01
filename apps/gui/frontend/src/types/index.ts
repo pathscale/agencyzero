@@ -694,6 +694,14 @@ export interface RateLimit {
    * in the header of a healthy run and turned its tab dot amber.
    */
   isBlocking: boolean;
+  /**
+   * Nothing was refused, but the provider is flagging the window.
+   *
+   * The state that had nowhere to go: emitted, dropped by the header for not
+   * being blocking, and never shown to anyone. A warning is exactly the point
+   * at which a person, or an agent, can still do something about it.
+   */
+  isWarning: boolean;
   /** The provider's own wording. */
   message: string;
   /** ISO 8601, or null when the provider does not say. */
