@@ -724,6 +724,79 @@ fn ephemeral_location() -> location::DataLocation {
     }
 }
 
+/// Refresh the rolling pre-open snapshot of the store: `db.snapshot-1` is
+/// the last boot's state, `db.snapshot-2` the boot before that.
+///
+/// Taken while the exclusive lock is held and before any table opens, so the
+/// copy is of a store nothing is writing. Copied into a staging directory
+/// first and renamed into place after, so a crash mid-copy can never leave a
+/// half snapshot wearing the name a recovery would trust. Failure is a
+/// warning, not an error: the snapshot protects the next session, and
+/// refusing to start this one over it would protect nothing.
+fn snapshot_store(store: &std::path::Path) {
+    if !store.is_dir() {
+        return; // First launch: nothing to keep yet.
+    }
+    let named = |suffix: &str| {
+        let mut name = store.file_name().unwrap_or_default().to_os_string();
+        name.push(suffix);
+        store.with_file_name(name)
+    };
+    let newest = named(".snapshot-1");
+    let older = named(".snapshot-2");
+    let staging = named(".snapshot-staging");
+
+    let started = std::time::Instant::now();
+    let _ = std::fs::remove_dir_all(&staging);
+    if let Err(error) = copy_dir_all(store, &staging) {
+        let _ = std::fs::remove_dir_all(&staging);
+        crate::log!(
+            log::Level::Warn,
+            "boot",
+            "could not snapshot the store before opening it: {error}; booting without one"
+        );
+        return;
+    }
+    let _ = std::fs::remove_dir_all(&older);
+    if newest.is_dir() && std::fs::rename(&newest, &older).is_err() {
+        // An unrotatable old snapshot is stale, not sacred: the fresh copy
+        // in staging is strictly newer, so it takes the name.
+        let _ = std::fs::remove_dir_all(&newest);
+    }
+    match std::fs::rename(&staging, &newest) {
+        Ok(()) => crate::log!(
+            log::Level::Info,
+            "boot",
+            "store snapshot refreshed at {newest:?} in {}ms; restore with: rm -rf {store:?} && cp -R {newest:?} {store:?}",
+            started.elapsed().as_millis()
+        ),
+        Err(error) => {
+            let _ = std::fs::remove_dir_all(&staging);
+            crate::log!(
+                log::Level::Warn,
+                "boot",
+                "could not move the store snapshot into place: {error}; booting without one"
+            );
+        }
+    }
+}
+
+/// `std::fs::copy`, recursively. Symlinks are not followed because the store
+/// never contains one.
+fn copy_dir_all(from: &std::path::Path, to: &std::path::Path) -> std::io::Result<()> {
+    std::fs::create_dir_all(to)?;
+    for entry in std::fs::read_dir(from)? {
+        let entry = entry?;
+        let target = to.join(entry.file_name());
+        if entry.file_type()?.is_dir() {
+            copy_dir_all(&entry.path(), &target)?;
+        } else {
+            std::fs::copy(entry.path(), &target)?;
+        }
+    }
+    Ok(())
+}
+
 /// Carry a mismatched store forward without ever putting it at risk.
 ///
 /// The order is the whole design, learned from doing it the other way:
@@ -993,6 +1066,21 @@ fn main() {
                 crate::log!(log::Level::Error, "boot", "{message}");
                 message
             })?;
+
+            /*
+             * The rolling snapshot, taken the moment the lock is held and
+             * before any table opens. Boot is the one time the store is
+             * guaranteed whole and unheld: every corruption so far was
+             * written during a session and discovered at the next launch,
+             * which is exactly the window between two snapshots. Restoring
+             * is `rm -rf db && cp -R db.snapshot-1 db`, costs at most one
+             * session, and needs no tooling at all. A failed snapshot warns
+             * and boots anyway: a launch that fails because a backup could
+             * not be taken would invert the point.
+             */
+            if !no_persist {
+                snapshot_store(&location.path);
+            }
 
             /*
              * The fingerprint is read through the kv table alone, before any
