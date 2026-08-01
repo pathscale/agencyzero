@@ -89,13 +89,15 @@ jobs:
   release:
     needs: check
     if: needs.check.outputs.publish == 'true'
-    # The only job here that cannot use ubicloud-standard-*: Ubicloud offers
-    # Linux runners only, and a Tauri macOS bundle needs the macOS SDK and
-    # WebKit. This runner is arm64, so the build is native rather than cross.
+    # The only job in this repository that cannot use ubicloud-standard-*:
+    # Ubicloud offers Linux runners only, and a Tauri macOS bundle needs the
+    # macOS SDK, WebKit and Apple's signing tools. This runner is arm64, so
+    # the build is native rather than cross.
     #
-    # Tenki rather than GetMac (which replaced WarpBuild, which does not
-    # serve personal accounts and queued forever without saying so).
-    runs-on: tenki-macos-latest-mini
+    # Namespace, verified macOS on 2026-08-01: a trial of this profile on the
+    # frontend job reported `Operating System: macOS` and pulled
+    # bun-darwin-aarch64. Two runners in total now, this and ubicloud.
+    runs-on: namespace-profile-agency-tahoe
 
     steps:
       - name: Checkout
