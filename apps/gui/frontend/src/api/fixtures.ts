@@ -564,11 +564,12 @@ export const SETTINGS: GlobalSettings = {
  */
 export const RATE_LIMITS: Record<
   string,
-  { isBlocking: boolean; message: string; resetsAt: string }
+  { isBlocking: boolean; isWarning: boolean; message: string; resetsAt: string }
 > = {
   cafe: {
     // A real refusal, not the "allowed" heartbeat the provider also emits.
     isBlocking: true,
+    isWarning: false,
     message: "Rate limited",
     resetsAt: new Date(now + 34 * 60_000).toISOString(),
   },

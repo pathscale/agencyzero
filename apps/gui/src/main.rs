@@ -102,6 +102,10 @@ pub(crate) struct AppState {
     /// Approval questions waiting on the user, by project. The run is blocked
     /// mid-turn until `resolve_approval` answers, see [`projects::PendingApprovals`].
     approvals: Arc<projects::PendingApprovals>,
+    /// The provider's last word on usage, by project. In memory rather than
+    /// persisted: it is a fact about an account right now, see
+    /// [`projects::RateLimits`].
+    limits: Arc<projects::RateLimits>,
     /// The live run per project: at most one, and how to stop it, see
     /// [`projects::ActiveRuns`].
     active: Arc<projects::ActiveRuns>,
@@ -1218,6 +1222,7 @@ fn main() {
                 io: Arc::default(),
                 approvals: Arc::default(),
                 active: Arc::default(),
+                limits: Arc::default(),
                 settings_write: tokio::sync::Mutex::new(()),
                 config_dir,
                 data_dir,
