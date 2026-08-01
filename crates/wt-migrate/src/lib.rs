@@ -105,6 +105,31 @@ worktable!(
     },
 );
 
+// `task_log` restated for `rebuild_task_log`, column for column against
+// `apps/gui/src/db/schema/task_log.rs`; `the_task_log_matches_the_app` holds
+// the two together. Same shape, not a migration: the rebuild exists to launder
+// a table's internal page accounting, not its rows.
+worktable!(
+    name: TaskLog,
+    persist: true,
+    columns: {
+        id: String primary_key,
+        tool_call_id: String,
+        project_id: String,
+        item_id: String,
+        label: String,
+        tool: String,
+        ok: i64,
+        output: String,
+        duration_ms: i64,
+        exit_code: i64,
+        finished_at: String,
+    },
+    indexes: {
+        project_idx: project_id,
+    },
+);
+
 /// Nothing outside a row is needed to carry one forward, so far. A later
 /// migration that needs a key, a clock or a lookup puts it here.
 #[derive(Debug, Default)]
@@ -393,6 +418,65 @@ async fn scrub_items(target: &Path) -> eyre::Result<usize> {
     Ok(count)
 }
 
+/// Rebuild `task_log` row by row into a fresh table, discarding the old
+/// table's internal page accounting.
+///
+/// # Why a rebuild verb exists at all
+///
+/// An oversized insert (a row larger than a 16K page) does not fail cleanly:
+/// it leaves the table's free-page accounting inconsistent while every
+/// existing row still reads back fine. The damage is invisible until the next
+/// append lands on a poisoned page, and then the store dies of SIGBUS. A file
+/// copy of such a table copies the poison; twice this store was "repaired"
+/// that way and twice it died on the next session. Reading the rows out and
+/// inserting them into a brand-new table is the only copy that launders the
+/// accounting.
+///
+/// `target` must not already contain a `task_log` table: the point is a fresh
+/// one, and merging into damaged accounting would defeat it. Rows that do not
+/// look like task-log rows (id `log-*`, project `proj-*`) are dropped as
+/// debris and counted.
+///
+/// Returns (rebuilt, dropped-as-debris).
+///
+/// # Errors
+/// When the source cannot be opened or the target insert fails. Run against a
+/// copy of the source: the engine used to scan it is the ordinary read-write
+/// one.
+pub async fn rebuild_task_log(source: &Path, target: &Path) -> eyre::Result<(usize, usize)> {
+    let open = |dir: &Path| {
+        let config = worktable::prelude::DiskConfig::new_with_table_name(
+            dir.to_string_lossy().into_owned(),
+            TaskLogWorkTable::name_snake_case(),
+            TaskLogWorkTable::version(),
+        );
+        async move {
+            let engine = TaskLogPersistenceEngine::new(config).await?;
+            TaskLogWorkTable::load(engine).await
+        }
+    };
+
+    let mut rebuilt = 0usize;
+    let mut dropped = 0usize;
+    let rows = {
+        let table = open(source).await?;
+        table.select_all().execute()?
+    };
+    let target_table = open(target).await?;
+    for row in rows {
+        if row.id.starts_with("log-") && row.project_id.starts_with("proj-") {
+            target_table
+                .insert(row)
+                .map_err(|error| eyre::eyre!("{error}"))?;
+            rebuilt += 1;
+        } else {
+            dropped += 1;
+        }
+    }
+    target_table.wait_for_ops().await;
+    Ok((rebuilt, dropped))
+}
+
 /// Carry a store from `source` to `target`.
 ///
 /// `target` is created and only written to. `source` is only read.
@@ -646,12 +730,62 @@ mod tests {
         assert_eq!(theirs.status, "new");
         assert_eq!(theirs.reference, "36");
     }
+
+    /// Same drift check for the rebuild verb's restated `task_log`.
+    #[test]
+    fn the_task_log_matches_the_app() {
+        let TaskLogRow {
+            id,
+            tool_call_id,
+            project_id,
+            item_id,
+            label,
+            tool,
+            ok,
+            output,
+            duration_ms,
+            exit_code,
+            finished_at,
+        } = TaskLogRow {
+            id: "log-1".into(),
+            tool_call_id: String::new(),
+            project_id: "proj-1".into(),
+            item_id: String::new(),
+            label: "l".into(),
+            tool: "Bash".into(),
+            ok: 1,
+            output: "o".into(),
+            duration_ms: -1,
+            exit_code: 0,
+            finished_at: "2026-08-01T00:00:00Z".into(),
+        };
+        let theirs = app_task_log::TaskLogRow {
+            id,
+            tool_call_id,
+            project_id,
+            item_id,
+            label,
+            tool,
+            ok,
+            output,
+            duration_ms,
+            exit_code,
+            finished_at,
+        };
+        assert_eq!(theirs.tool, "Bash");
+        assert_eq!(theirs.ok, 1);
+    }
 }
 
 /// The app's own `project_item`, for the drift check above.
 #[cfg(test)]
 #[path = "../../../apps/gui/src/db/schema/project_item.rs"]
 mod app_project_item;
+
+/// The app's own `task_log`, for the drift check above.
+#[cfg(test)]
+#[path = "../../../apps/gui/src/db/schema/task_log.rs"]
+mod app_task_log;
 
 #[cfg(test)]
 mod scrub_tests {
