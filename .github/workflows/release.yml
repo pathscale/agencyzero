@@ -93,11 +93,9 @@ jobs:
     # Linux runners only, and a Tauri macOS bundle needs the macOS SDK and
     # WebKit. This runner is arm64, so the build is native rather than cross.
     #
-    # GetMac rather than WarpBuild: Warp does not serve GitHub personal
-    # accounts, only organisations, and this repository is on a personal one.
-    # There is no error for that. The job simply queues until something
-    # cancels it, which cost two releases before the cause was found.
-    runs-on: getmac
+    # Tenki rather than GetMac (which replaced WarpBuild, which does not
+    # serve personal accounts and queued forever without saying so).
+    runs-on: tenki-macos-latest-mini
 
     steps:
       - name: Checkout
