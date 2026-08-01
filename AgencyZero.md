@@ -12,3 +12,8 @@
    `<ps @agency:items.inject(project: "ui")>` … checkbox lines … `</ps>`.
    Project by name or by id, omit it to mean this one. Prose can open, plan,
    start and ship a row here; only a directive can delete or reach elsewhere.
+8. Ask before installing anything: a download, a global cache, a browser, a
+   toolchain. A repo doc recommending it is not permission.
+9. Persisted data goes in a WorkTable table. Not a JSON file beside the store,
+   not a directory of your own. A column or table change bumps
+   `SCHEMA_FINGERPRINT` in the same commit.
