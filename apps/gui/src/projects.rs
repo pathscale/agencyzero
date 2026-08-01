@@ -1171,6 +1171,277 @@ async fn write_tasks_from_reply(
 /// to is something the host can be asked to decide, not a consequence of which
 /// window the reply came from. Work spills across projects constantly, and the
 /// alternative is telling the user to go and re-type it somewhere else.
+/// What this project's list looks like right now, for the prompt.
+///
+/// The agent was being asked to maintain a list it had never been shown. Every
+/// reference it made was a guess at a title string, and a guess that missed by
+/// one word inserted a duplicate instead of updating the row. Sending the ids
+/// is what turns that into pointing at a row.
+///
+/// Finished rows are left out. They are the bulk of an old list and none of
+/// them is a thing the agent can act on, so they are cost without use.
+fn state_snapshot(
+    tables: &crate::db::tables::Tables,
+    project_id: &str,
+    focus: Option<&str>,
+) -> String {
+    let mut items: Vec<ProjectItemRow> = tables
+        .project_item
+        .select_by_project_id(project_id.to_string())
+        .execute()
+        .unwrap_or_default()
+        .into_iter()
+        .filter(|row| row.status != "finished" && row.status != "canceled")
+        .collect();
+    items.sort_by_key(|row| row.position);
+
+    let prs: Vec<crate::db::schema::pull_request::PullRequestRow> = tables
+        .pull_request
+        .select_by_project_id(project_id.to_string())
+        .execute()
+        .unwrap_or_default();
+
+    let mut out = String::new();
+    if items.is_empty() {
+        out.push_str("This project has no open items.");
+    } else {
+        out.push_str("Open items in this project. Answer with the id, never the title:\n");
+        for row in &items {
+            let reference = if row.reference.is_empty() {
+                String::new()
+            } else {
+                format!(" (#{})", row.reference)
+            };
+            out.push_str(&format!(
+                "  {} · {} · {}{}\n",
+                row.id, row.status, row.title, reference
+            ));
+        }
+    }
+    if !prs.is_empty() {
+        out.push_str("Pull requests: ");
+        out.push_str(
+            &prs.iter()
+                .map(|pr| format!("#{} {}", pr.number, pr.state.to_lowercase()))
+                .collect::<Vec<_>>()
+                .join(" · "),
+        );
+        out.push('\n');
+    }
+    /*
+     * The turn's subject, when the prompt came from a row. This is the only
+     * case where the app knows what the turn is about, so it is the only case
+     * where a missing report is a fact rather than a guess.
+     */
+    if let Some(item) = focus.filter(|id| !id.is_empty()) {
+        out.push_str(&format!(
+            "\nThis turn was started from item {item}. Report its state as it changes.\n"
+        ));
+    }
+    out.push_str(
+        "\nSay so with a directive on its own line, as it happens rather than at the end:\n\
+         <ps @agency:items.state(id: \"<id>\", status: \"active\")>\n\
+         <ps @agency:items.state(id: \"<id>\", status: \"shipped\", pr: 66)>\n\
+         <ps @agency:items.add(ref: \"t1\", title: \"<one line>\", status: \"planning\")>\n\
+         Statuses you may set: new, planning, active, questions, shipped. `questions` \
+         means you are stopped on something only the owner can answer. `finished` and \
+         `canceled` are refused: the owner closes a row. An id may be shortened to any \
+         unique prefix. Repeating a state you already reported is free.",
+    );
+    out
+}
+
+/// Carry out one directive, and say what became of it.
+///
+/// Every path here ends in an `Outcome`, including the refusals. That is the
+/// whole point: a directive that goes nowhere used to go nowhere silently, so
+/// the agent could not tell a write that landed from one that was dropped, and
+/// neither could the person reading the panel.
+async fn apply_directive(
+    app: &AppHandle,
+    tables: &crate::db::tables::Tables,
+    project_id: &str,
+    directive: crate::directives::Directive,
+) -> crate::directives::Outcome {
+    use crate::directives::{Directive, Outcome};
+
+    let rows: Vec<ProjectItemRow> = tables
+        .project_item
+        .select_by_project_id(project_id.to_string())
+        .execute()
+        .unwrap_or_default();
+
+    match directive {
+        Directive::ItemState { id, status, pr } => {
+            if !crate::directives::settable(&status) {
+                return Outcome::Refused {
+                    what: format!("items.state({id} -> {status})"),
+                    // The owner closes an item. Refusing here makes that a
+                    // property of the system rather than a rule to remember.
+                    code: "STATUS_NOT_YOURS".into(),
+                };
+            }
+            let known: Vec<&str> = rows.iter().map(|row| row.id.as_str()).collect();
+            let resolved = match crate::directives::resolve(&known, &id) {
+                Ok(found) => found.to_string(),
+                Err(code) => {
+                    return Outcome::Refused {
+                        what: format!("items.state({id})"),
+                        code,
+                    };
+                }
+            };
+            if let Some(number) = pr.as_deref()
+                && let Err(error) = tables
+                    .project_item
+                    .update_reference_by_id(
+                        ItemReferenceByIdQuery {
+                            reference: number.to_string(),
+                        },
+                        resolved.clone(),
+                    )
+                    .await
+            {
+                return Outcome::Refused {
+                    what: format!("items.state({resolved}) reference"),
+                    code: format!("WRITE_FAILED: {error}"),
+                };
+            }
+            match tables
+                .project_item
+                .update_status_by_id(
+                    ItemStatusByIdQuery {
+                        status: status.clone(),
+                    },
+                    resolved.clone(),
+                )
+                .await
+            {
+                Ok(()) => {
+                    if let Some(updated) = tables.project_item.select(resolved.clone()) {
+                        let _ = app.emit("item:updated", ProjectItemDto::from(updated));
+                    }
+                    let said = match pr {
+                        Some(number) => format!("{resolved} -> {status} (#{number})"),
+                        None => format!("{resolved} -> {status}"),
+                    };
+                    Outcome::Done(said)
+                }
+                Err(error) => Outcome::Refused {
+                    what: format!("items.state({resolved})"),
+                    code: format!("WRITE_FAILED: {error}"),
+                },
+            }
+        }
+        Directive::ItemAdd {
+            handle,
+            title,
+            status,
+        } => {
+            let status = if crate::directives::settable(&status) {
+                status
+            } else {
+                "new".to_string()
+            };
+            // The same title twice is the agent restating itself, not a second
+            // item. It answers with the existing id so the next reference is
+            // by id, which is how a restatement stops becoming a duplicate.
+            if let Some(existing) = rows
+                .iter()
+                .find(|row| row.title.eq_ignore_ascii_case(title.trim()))
+            {
+                return Outcome::Done(match handle {
+                    Some(handle) => format!("{handle} -> {} (already open)", existing.id),
+                    None => format!("{} already open", existing.id),
+                });
+            }
+            let row = ProjectItemRow {
+                id: id("item"),
+                project_id: project_id.to_string(),
+                title: truncate_on_char_boundary(title.trim(), 120),
+                status,
+                position: u32::try_from(rows.len()).unwrap_or(0),
+                reference: String::new(),
+            };
+            match tables.project_item.insert(row.clone()) {
+                Ok(_) => {
+                    let said = match handle {
+                        Some(handle) => format!("{handle} -> {} {:?}", row.id, row.title),
+                        None => format!("{} {:?}", row.id, row.title),
+                    };
+                    let _ = app.emit("item:created", ProjectItemDto::from(row));
+                    Outcome::Done(said)
+                }
+                Err(error) => Outcome::Refused {
+                    what: format!("items.add({title:?})"),
+                    code: format!("WRITE_FAILED: {error}"),
+                },
+            }
+        }
+        Directive::PrLink { number, item } => {
+            let known: Vec<&str> = rows.iter().map(|row| row.id.as_str()).collect();
+            let resolved = match crate::directives::resolve(&known, &item) {
+                Ok(found) => found.to_string(),
+                Err(code) => {
+                    return Outcome::Refused {
+                        what: format!("pr.link(item: {item})"),
+                        code,
+                    };
+                }
+            };
+            match tables
+                .project_item
+                .update_reference_by_id(
+                    ItemReferenceByIdQuery {
+                        reference: number.clone(),
+                    },
+                    resolved.clone(),
+                )
+                .await
+            {
+                Ok(()) => {
+                    if let Some(updated) = tables.project_item.select(resolved.clone()) {
+                        let _ = app.emit("item:updated", ProjectItemDto::from(updated));
+                    }
+                    Outcome::Done(format!("{resolved} <- #{number}"))
+                }
+                Err(error) => Outcome::Refused {
+                    what: format!("pr.link({resolved})"),
+                    code: format!("WRITE_FAILED: {error}"),
+                },
+            }
+        }
+    }
+}
+
+/// Read every directive out of a stretch of reply text and carry them out.
+///
+/// Fenced text is skipped for the same reason the checkbox scan skips it: an
+/// agent quoting an example of the syntax is showing it, not issuing it.
+async fn apply_directives(
+    app: &AppHandle,
+    tables: &crate::db::tables::Tables,
+    project_id: &str,
+    text: &str,
+) -> Vec<crate::directives::Outcome> {
+    let mut done = Vec::new();
+    let mut fenced = false;
+    for line in text.lines() {
+        let trimmed = line.trim();
+        if trimmed.starts_with("```") || trimmed.starts_with("~~~") {
+            fenced = !fenced;
+            continue;
+        }
+        if fenced {
+            continue;
+        }
+        if let Some(directive) = crate::directives::parse(trimmed) {
+            done.push(apply_directive(app, tables, project_id, directive).await);
+        }
+    }
+    done
+}
+
 async fn write_items_from_reply(
     app: &AppHandle,
     tables: &crate::db::tables::Tables,
@@ -1798,6 +2069,13 @@ impl RateLimitReport {
         }
     }
 }
+/// What became of the last turn's directives, per project.
+///
+/// Quoted back to the agent on the next turn, which is the half that makes the
+/// contract a loop rather than a hope: a write that was refused says so, by
+/// code, to the only party that can reissue it. In memory, because it describes
+/// the turn that just happened and is worthless a day later.
+pub type Receipts = std::sync::Mutex<std::collections::HashMap<String, Vec<String>>>;
 
 pub type RunningTasks = std::sync::Mutex<std::collections::HashMap<String, Vec<RunningTaskDto>>>;
 
@@ -3528,6 +3806,8 @@ pub async fn send_message(
     let io = state.io.clone();
     let approvals = state.approvals.clone();
     let limits = state.limits.clone();
+    let receipts = state.receipts.clone();
+    let item_id = input.item_id.clone();
     let project_id = input.project_id.clone();
     let effort = input.effort.clone();
 
@@ -3539,6 +3819,8 @@ pub async fn send_message(
             io,
             approvals,
             limits,
+            receipts,
+            item_id,
             reservation,
             cancel,
             inject_rx,
@@ -3573,6 +3855,12 @@ async fn drive_run(
     // The provider's last word on usage, updated as the run reports it and
     // read by the next run's prompt. See `RateLimits`.
     limits: std::sync::Arc<RateLimits>,
+    // What became of the last turn's directives, written at the end of this
+    // run and read by the next one's prompt. See `Receipts`.
+    receipts: std::sync::Arc<Receipts>,
+    // The item this turn was started from, when it was started from one. The
+    // only case where the app knows what the turn is about.
+    item_id: Option<String>,
     // Held for the whole run and dropped on any exit path, so the project's
     // run slot frees exactly when no agent can still be alive.
     _reservation: RunReservation,
@@ -3791,6 +4079,31 @@ async fn drive_run(
              cheaper turns, and say so if you are about to do something expensive.",
             usage.sentence()
         ));
+    }
+
+    /*
+     * The list, by id, and what became of the last turn's directives.
+     *
+     * Both go last, closest to the work. The snapshot is what makes a state
+     * report possible at all: the agent was previously asked to maintain a
+     * list it had never been shown. The receipt is what makes a failed report
+     * correctable, since a rejection reaches the only party that can reissue
+     * it. Without it a dropped write is indistinguishable from one that
+     * landed, which is the failure this path exists to remove.
+     */
+    if !system.is_empty() {
+        system.push_str("\n\n");
+    }
+    system.push_str(&state_snapshot(&tables, &project_id, item_id.as_deref()));
+
+    if let Some(said) = receipts
+        .lock()
+        .ok()
+        .and_then(|kept| kept.get(&project_id).cloned())
+        .filter(|lines| !lines.is_empty())
+    {
+        system.push_str("\n\nYour last turn's directives:\n  ");
+        system.push_str(&said.join("\n  "));
     }
 
     if !system.is_empty() {
@@ -4129,6 +4442,32 @@ async fn drive_run(
                         let line = streamed_text[items_scanned_to..end].to_string();
                         items_scanned_to = end;
                         if !items_from_reply(&line).is_empty() {
+                            /*
+                             * Applied as the line completes rather than at the
+                             * end of the turn. A state report is only useful
+                             * while the work is happening: a panel that
+                             * catches up when the run finishes has told you
+                             * nothing you could not see from the transcript.
+                             */
+                            let done = apply_directives(&app, &tables, &project_id, &line).await;
+                            if !done.is_empty() {
+                                note_io(
+                                    &app,
+                                    &io,
+                                    &project_id,
+                                    "received",
+                                    "directive",
+                                    done.iter()
+                                        .map(crate::directives::Outcome::line)
+                                        .collect::<Vec<_>>()
+                                        .join("; "),
+                                );
+                                if let Ok(mut kept) = receipts.lock() {
+                                    kept.entry(project_id.clone())
+                                        .or_default()
+                                        .extend(done.iter().map(crate::directives::Outcome::line));
+                                }
+                            }
                             write_items_from_reply(&app, &tables, &project_id, &line).await;
                         }
                     }
@@ -4736,6 +5075,27 @@ async fn drive_run(
                 // harvester saw and what the user reads can never disagree.
                 write_tasks_from_reply(&app, &io, &tables, &project_id, &body).await;
             } else {
+                /*
+                 * The receipt starts empty for this turn, so what the agent is
+                 * told next turn is what happened in the last one rather than
+                 * everything since launch. The mid-stream path has already
+                 * applied most of these; re-running them is free, because a
+                 * state already set is a no-op and an id that resolved once
+                 * resolves again.
+                 */
+                if let Ok(mut kept) = receipts.lock() {
+                    kept.remove(&project_id);
+                }
+                let done = apply_directives(&app, &tables, &project_id, &body).await;
+                if let Ok(mut kept) = receipts.lock() {
+                    let lines: Vec<String> =
+                        done.iter().map(crate::directives::Outcome::line).collect();
+                    if lines.is_empty() {
+                        kept.remove(&project_id);
+                    } else {
+                        kept.insert(project_id.clone(), lines);
+                    }
+                }
                 write_items_from_reply(&app, &tables, &project_id, &body).await;
             }
             // Any PR the reply mentions becomes a chip; `gh` fills it in
