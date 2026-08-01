@@ -82,18 +82,23 @@ export const STATUS_LABELS: Record<ProjectStatus, string> = {
  * What a rate-limit chip says, in words.
  *
  * The provider reports a status word and a window name, `allowed_warning
- * (seven_day)`, and neither is English. The chip answers one question, whether
- * to slow down, so it says that and drops the window: which of several rolling
- * windows raised the flag does not change the answer, and the reset time is one
- * more thing to read at a glance that nobody acts on.
+ * (seven_day)`, and neither is English. The window is kept because it says how
+ * long the flag lasts; the reset time is dropped, being one more thing to read
+ * at a glance that nobody acts on.
  *
  * An unrecognised status falls through unchanged rather than being swallowed. A
  * new status word from the provider should look odd on screen, not disappear.
  */
 export function rateLimitLabel(message: string): string {
   const lower = message.toLowerCase();
-  if (lower.includes("allowed_warning")) return "Allow Usage above 75%";
-  if (lower.includes("reject") || lower.includes("block")) return "Usage limit reached";
+  const window = /\(([^)]+)\)/.exec(message)?.[1]?.replace(/_/g, " ");
+  const suffix = window ? ` (${window})` : "";
+  // No percentage is claimed, because none is reported. `RateLimit` carries a
+  // status word, a window and a reset time; the threshold behind
+  // `allowed_warning` is the provider's and is not in the payload, so a figure
+  // on screen would be one this app invented.
+  if (lower.includes("allowed_warning")) return `Usage high${suffix}`;
+  if (lower.includes("reject") || lower.includes("block")) return `Usage limit reached${suffix}`;
   return message;
 }
 
