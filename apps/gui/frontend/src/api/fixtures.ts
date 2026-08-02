@@ -586,6 +586,7 @@ export const SETTINGS: GlobalSettings = {
   forwardProxyVars: false,
   completedItems: "resolve",
   theme: { accent: "", softness: 0, wash: 10, textBrightness: 0 },
+  studyAnalytics: { enabled: false, sessionId: "", enabledAt: "" },
   notifications: {
     onHold: true,
     onRunFinished: true,

@@ -446,6 +446,31 @@ export interface NotificationSettings {
   sound: boolean;
 }
 
+/** Explicit local consent and backend-owned interval for the PS study. */
+export interface StudyAnalyticsSettings {
+  enabled: boolean;
+  sessionId: string;
+  enabledAt: string;
+}
+
+/** Content-free study status shown in Settings. */
+export interface StudySummary {
+  enabled: boolean;
+  studyId: string | null;
+  enabledAt: string | null;
+  eventCount: number;
+  firstAt: string | null;
+  lastAt: string | null;
+}
+
+/** Content-free composer facts captured before controls and paths are compiled. */
+export interface StudyTurnMetadata {
+  authoredCharacterCount: number;
+  authoredLineCount: number;
+  attachmentCount: number;
+  userAuthoredPs: boolean;
+}
+
 /** One record, persisted. Every new tab starts from it. */
 export interface GlobalSettings {
   defaultAgent: Agent;
@@ -483,6 +508,8 @@ export interface GlobalSettings {
   completedItems: "resolve" | "delete";
   /** How the workspace is coloured. See {@link ThemeSettings}. */
   theme: ThemeSettings;
+  /** Off by default; events stay local until an explicit export. */
+  studyAnalytics: StudyAnalyticsSettings;
 }
 
 /**

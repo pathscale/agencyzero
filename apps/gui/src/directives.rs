@@ -130,6 +130,20 @@ pub enum Directive {
     ItemRetire { id: String },
 }
 
+impl Directive {
+    /// Stable, content-free labels for deployment-study records.
+    #[must_use]
+    pub fn operation(&self) -> &'static str {
+        match self {
+            Self::ItemState { .. } => "items.state",
+            Self::ItemAdd { .. } => "items.add",
+            Self::ItemRetire { .. } => "items.retire",
+            Self::PrLink { .. } => "pr.link",
+            Self::IssueLink { .. } => "issue.link",
+        }
+    }
+}
+
 /// What became of one directive, in the agent's own words back to it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Outcome {
@@ -159,6 +173,15 @@ impl Outcome {
         match self {
             Self::Done(said) => said.clone(),
             Self::Refused { what, code } => format!("rejected: {what} [{code}]"),
+        }
+    }
+
+    /// Terminal state and typed code for a content-free study row.
+    #[must_use]
+    pub fn study_result(&self) -> (&'static str, String) {
+        match self {
+            Self::Done(_) => ("applied", String::new()),
+            Self::Refused { code, .. } => ("refused", code.clone()),
         }
     }
 }

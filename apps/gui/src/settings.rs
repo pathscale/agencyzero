@@ -43,6 +43,21 @@ pub struct GlobalSettings {
     pub completed_items: String,
     /// How the workspace is coloured. See [`Theme`].
     pub theme: Theme,
+    /// Explicit local consent for the content-free PS deployment study.
+    pub study_analytics: StudyAnalytics,
+}
+
+/// The opt-in boundary for the PromptSyntax deployment study.
+///
+/// The session fields are assigned by the backend on an off-to-on transition.
+/// They are not user-editable labels: every recorded row carries the id so a
+/// stopped and later restarted study cannot be mistaken for one interval.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase", default)]
+pub struct StudyAnalytics {
+    pub enabled: bool,
+    pub session_id: String,
+    pub enabled_at: String,
 }
 
 /// The theme picker's two axes, as the webview applies them.
@@ -252,6 +267,7 @@ impl Default for GlobalSettings {
             notifications: Notifications::default(),
             completed_items: "resolve".into(),
             theme: Theme::default(),
+            study_analytics: StudyAnalytics::default(),
         }
     }
 }
@@ -333,6 +349,11 @@ mod tests {
         assert_eq!(back.task_manager.model, "gpt-5.6-luna");
         assert_eq!(back.task_manager.effort, "low");
         assert_eq!(back.task_manager.permission, "ask");
+        assert!(
+            !back.study_analytics.enabled,
+            "research collection is opt-in"
+        );
+        assert!(back.study_analytics.session_id.is_empty());
         assert!(json.contains("defaultAgent"), "must be camelCase: {json}");
     }
 
@@ -346,6 +367,7 @@ mod tests {
         assert_eq!(loaded.default_agent, "codex");
         assert_eq!(loaded.task_manager.agent, "codex");
         assert_eq!(loaded.task_manager.permission, "ask");
+        assert!(!loaded.study_analytics.enabled);
         assert_eq!(
             loaded.moderator.model, "haiku",
             "absent blocks use defaults"

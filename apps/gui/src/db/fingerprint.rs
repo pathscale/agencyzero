@@ -39,6 +39,7 @@ pub const SCHEMA_FINGERPRINT: &str = concat!(
     "usage_ledger(id,at,day,project_id,model,cost_micro,input_tokens,output_tokens);",
     "approval_rule(id,project_id,signature,created_at);",
     "pull_request(id,project_id,url,repo,number,branch,state,additions,deletions,ci,dismissed,updated_at);",
+    "study_event(id,study_id,at,project_id,turn_id,interaction_id,agent,pathway,operation,stage,outcome,code,target_kind,target_id,latency_ms,detail,app_version,parser_version,protocol_version);",
 );
 
 /// What opening the tables found, so the caller can say something useful.

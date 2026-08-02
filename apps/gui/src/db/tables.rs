@@ -20,6 +20,7 @@ use crate::db::schema::message::{MessagePersistenceEngine, MessageWorkTable};
 use crate::db::schema::project::{ProjectPersistenceEngine, ProjectWorkTable};
 use crate::db::schema::project_item::{ProjectItemPersistenceEngine, ProjectItemWorkTable};
 use crate::db::schema::pull_request::{PullRequestPersistenceEngine, PullRequestWorkTable};
+use crate::db::schema::study_event::{StudyEventPersistenceEngine, StudyEventWorkTable};
 use crate::db::schema::task_log::{TaskLogPersistenceEngine, TaskLogWorkTable};
 use crate::db::schema::usage_ledger::{UsageLedgerPersistenceEngine, UsageLedgerWorkTable};
 
@@ -47,6 +48,8 @@ pub struct Tables {
     pub approval_rule: Arc<ApprovalRuleWorkTable>,
     /// One row per PR cut during a run. See `schema/pull_request.rs`.
     pub pull_request: Arc<PullRequestWorkTable>,
+    /// Content-free records from an explicitly enabled deployment study.
+    pub study_event: Arc<StudyEventWorkTable>,
 }
 
 impl Tables {
@@ -87,6 +90,7 @@ impl Tables {
             usage_ledger: open!(UsageLedgerPersistenceEngine, UsageLedgerWorkTable),
             approval_rule: open!(ApprovalRulePersistenceEngine, ApprovalRuleWorkTable),
             pull_request: open!(PullRequestPersistenceEngine, PullRequestWorkTable),
+            study_event: open!(StudyEventPersistenceEngine, StudyEventWorkTable),
         })
     }
 }
@@ -232,6 +236,74 @@ mod tests {
             ],
             "project_item changed shape without the fingerprint changing, so every \
              row on disk would be read through the wrong layout"
+        );
+
+        let row = crate::db::schema::study_event::StudyEventRow {
+            id: String::new(),
+            study_id: String::new(),
+            at: String::new(),
+            project_id: String::new(),
+            turn_id: String::new(),
+            interaction_id: String::new(),
+            agent: String::new(),
+            pathway: String::new(),
+            operation: String::new(),
+            stage: String::new(),
+            outcome: String::new(),
+            code: String::new(),
+            target_kind: String::new(),
+            target_id: String::new(),
+            latency_ms: -1,
+            detail: String::new(),
+            app_version: String::new(),
+            parser_version: String::new(),
+            protocol_version: String::new(),
+        };
+        let crate::db::schema::study_event::StudyEventRow {
+            id: _,
+            study_id: _,
+            at: _,
+            project_id: _,
+            turn_id: _,
+            interaction_id: _,
+            agent: _,
+            pathway: _,
+            operation: _,
+            stage: _,
+            outcome: _,
+            code: _,
+            target_kind: _,
+            target_id: _,
+            latency_ms: _,
+            detail: _,
+            app_version: _,
+            parser_version: _,
+            protocol_version: _,
+        } = row;
+        assert_eq!(
+            columns_in_fingerprint("study_event"),
+            vec![
+                "id",
+                "study_id",
+                "at",
+                "project_id",
+                "turn_id",
+                "interaction_id",
+                "agent",
+                "pathway",
+                "operation",
+                "stage",
+                "outcome",
+                "code",
+                "target_kind",
+                "target_id",
+                "latency_ms",
+                "detail",
+                "app_version",
+                "parser_version",
+                "protocol_version",
+            ],
+            "study_event changed shape without the fingerprint changing"
         );
     }
 
@@ -500,5 +572,6 @@ impl Tables {
         self.usage_ledger.wait_for_ops().await;
         self.approval_rule.wait_for_ops().await;
         self.pull_request.wait_for_ops().await;
+        self.study_event.wait_for_ops().await;
     }
 }

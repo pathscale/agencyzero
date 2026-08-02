@@ -76,8 +76,31 @@ describe("Composer", () => {
 
     field.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
 
-    await waitFor(() => expect(onSend).toHaveBeenCalledWith("Review the upgrade"));
+    await waitFor(() =>
+      expect(onSend).toHaveBeenCalledWith("Review the upgrade", {
+        authoredCharacterCount: 18,
+        authoredLineCount: 1,
+        attachmentCount: 0,
+        userAuthoredPs: false,
+      }),
+    );
     await waitFor(() => expect(field.value).toBe(""));
+  });
+
+  it("detects authored PromptSyntax even when Advanced leaves the message unchanged", async () => {
+    const { field, onSend } = mount();
+    type(field, "@model:sonnet Review this");
+
+    field.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+
+    await waitFor(() =>
+      expect(onSend).toHaveBeenCalledWith("@model:sonnet Review this", {
+        authoredCharacterCount: 25,
+        authoredLineCount: 1,
+        attachmentCount: 0,
+        userAuthoredPs: true,
+      }),
+    );
   });
 
   /*
@@ -353,7 +376,14 @@ describe("the alert slot means failure", () => {
     expect(send.disabled).toBe(false);
 
     fireEvent.click(send);
-    await waitFor(() => expect(onSend).toHaveBeenCalledWith("and this should wait its turn"));
+    await waitFor(() =>
+      expect(onSend).toHaveBeenCalledWith("and this should wait its turn", {
+        authoredCharacterCount: 29,
+        authoredLineCount: 1,
+        attachmentCount: 0,
+        userAuthoredPs: false,
+      }),
+    );
   });
 
   it("says nothing when a compaction succeeds", async () => {
