@@ -31,6 +31,7 @@ import type {
   AgentState,
   AgentStatus,
   BuildInfo,
+  ClaudeUsage,
   CostSummary,
   EnvPolicy,
   Model,
@@ -749,6 +750,10 @@ export function SettingsTab(): JSX.Element {
                 </Row>
               </Section>
 
+              <Show when={isLive("claudeTokenStatus")}>
+                <ExperimentalSettings />
+              </Show>
+
               <p class="flex gap-2 text-[11.5px] text-az-muted leading-[1.5]">
                 <Icon name="info" class="relative top-0.5 shrink-0 text-[13px]" />
                 <span>
@@ -761,6 +766,174 @@ export function SettingsTab(): JSX.Element {
         </Show>
       </div>
     </div>
+  );
+}
+
+/** Secret-backed controls compiled and advertised only by the experimental profile. */
+function ExperimentalSettings(): JSX.Element {
+  const { actions } = useWorkspace();
+  const now = useNow();
+  const [configured, setConfigured] = createSignal(false);
+  const [token, setToken] = createSignal("");
+  const [usage, setUsage] = createSignal<ClaudeUsage | null>(null);
+  const [busy, setBusy] = createSignal(false);
+  const [note, setNote] = createSignal<string | null>(null);
+
+  const refresh = async (): Promise<void> => {
+    setBusy(true);
+    setNote(null);
+    try {
+      setUsage(await actions.claudeUsage());
+    } catch (cause) {
+      setNote(describeError(cause));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  onMount(() => {
+    void actions
+      .claudeTokenStatus()
+      .then((status) => {
+        setConfigured(status.configured);
+        if (status.configured) void refresh();
+      })
+      .catch((cause) => setNote(describeError(cause)));
+  });
+
+  const save = async (): Promise<void> => {
+    const value = token().trim();
+    if (!value) return;
+    setBusy(true);
+    setNote(null);
+    try {
+      const status = await actions.setClaudeToken(value);
+      setConfigured(status.configured);
+      setToken("");
+      await refresh();
+    } catch (cause) {
+      setNote(describeError(cause));
+      setBusy(false);
+    }
+  };
+
+  const remove = async (): Promise<void> => {
+    setBusy(true);
+    setNote(null);
+    try {
+      const status = await actions.removeClaudeToken();
+      setConfigured(status.configured);
+      setUsage(null);
+      setToken("");
+    } catch (cause) {
+      setNote(describeError(cause));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const windowValue = (value: { utilization: number; resetsAt: string | null } | null): string => {
+    if (!value) return "not reported";
+    const reset = value.resetsAt ? ` · resets in ${countdown(value.resetsAt, now())}` : "";
+    return `${value.utilization.toFixed(1)}%${reset}`;
+  };
+
+  return (
+    <Section
+      icon="sparkles"
+      title="Experimental"
+      hint="isolated capabilities in AgencyZero Experimental"
+    >
+      <Row
+        label="Claude token"
+        hint="stored in macOS Keychain; the saved value is never returned to this window"
+      >
+        <div class="flex max-w-[390px] flex-wrap items-center justify-end gap-2">
+          <input
+            type="password"
+            value={token()}
+            autocomplete="off"
+            spellcheck={false}
+            placeholder={configured() ? "Replace saved token" : "Paste OAuth access token"}
+            aria-label="Claude OAuth access token"
+            onInput={(event) => setToken(event.currentTarget.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") void save();
+            }}
+            class="w-[210px] rounded-md border border-az-hairline bg-az-inset px-2 py-1 font-mono text-[11px] text-az-body focus:border-primary/40 focus:outline-none"
+          />
+          <button
+            type="button"
+            disabled={busy() || token().trim() === ""}
+            onClick={() => void save()}
+            class="rounded-lg border border-primary/50 px-3 py-[5px] text-[12px] text-primary transition-colors hover:border-primary disabled:opacity-40"
+          >
+            {configured() ? "Replace" : "Save"}
+          </button>
+          <Show when={configured()}>
+            <button
+              type="button"
+              disabled={busy()}
+              onClick={() => void remove()}
+              class="rounded-lg border border-az-hairline-strong px-3 py-[5px] text-[12px] text-az-muted transition-colors hover:border-error hover:text-error disabled:opacity-40"
+            >
+              Remove
+            </button>
+          </Show>
+        </div>
+      </Row>
+      <Row label="Claude 5-hour usage">
+        <span class="font-mono text-[11.5px] text-az-body">
+          {windowValue(usage()?.fiveHour ?? null)}
+        </span>
+      </Row>
+      <Row label="Claude 7-day usage">
+        <span class="font-mono text-[11.5px] text-az-body">
+          {windowValue(usage()?.sevenDay ?? null)}
+        </span>
+      </Row>
+      <Show when={usage()?.sevenDaySonnet}>
+        {(value) => (
+          <Row label="Claude Sonnet 7-day usage">
+            <span class="font-mono text-[11.5px] text-az-body">{windowValue(value())}</span>
+          </Row>
+        )}
+      </Show>
+      <Show when={(usage()?.limits.length ?? 0) > 0}>
+        <For each={usage()?.limits ?? []}>
+          {(limit) => (
+            <Row label={`Claude ${limit.model ?? limit.kind}`}>
+              <span class="font-mono text-[11.5px] text-az-body">
+                {limit.percent.toFixed(1)}%
+                {limit.resetsAt ? ` · resets in ${countdown(limit.resetsAt, now())}` : ""}
+                {limit.severity ? ` · ${limit.severity}` : ""}
+              </span>
+            </Row>
+          )}
+        </For>
+      </Show>
+      <Row
+        label="Refresh usage"
+        hint={
+          usage() ? `checked ${relativeTime(usage()!.checkedAt, now())}` : (note() ?? undefined)
+        }
+        isLast
+      >
+        <div class="flex items-center gap-2">
+          <Show when={note()}>
+            {(message) => <span class="max-w-[230px] text-[11px] text-error">{message()}</span>}
+          </Show>
+          <button
+            type="button"
+            disabled={busy() || !configured()}
+            onClick={() => void refresh()}
+            class="rounded-lg border border-az-hairline-strong px-3 py-[5px] text-[12px] text-az-body transition-colors hover:border-primary hover:text-primary disabled:opacity-40"
+          >
+            {busy() ? "Refreshing…" : "Refresh"}
+          </button>
+        </div>
+      </Row>
+    </Section>
   );
 }
 

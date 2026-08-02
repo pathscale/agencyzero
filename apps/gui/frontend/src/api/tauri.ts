@@ -69,6 +69,10 @@ export function createTauriApi(): AgencyZeroApi {
 
     getSettings: () => call("get_settings"),
     setSettings: (patch) => call("set_settings", { patch }),
+    claudeTokenStatus: () => call("claude_token_status"),
+    setClaudeToken: (token) => call("set_claude_token", { token }),
+    removeClaudeToken: () => call("remove_claude_token"),
+    claudeUsage: () => call("claude_usage"),
     listAgentStatus: (recheck) => call("list_agent_status", { recheck }),
     listModels: (discover) => call("list_models", { discover }),
     listTableSizes: () => call("list_table_sizes"),

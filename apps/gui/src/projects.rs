@@ -4066,6 +4066,15 @@ async fn drive_run(
         request = request.system(system);
     }
 
+    let request = match crate::experimental::apply(request, agent, &model) {
+        Ok(request) => request,
+        Err(error) => {
+            crate::log!(crate::log::Level::Error, "run", "{project_id}: {error}");
+            emit_run_stopped(&app, &project_id, agent, &model, &permission, error, None);
+            return;
+        }
+    };
+
     crate::log!(
         crate::log::Level::Info,
         "run",
@@ -4109,7 +4118,7 @@ async fn drive_run(
         kept.remove(&project_id);
     }
 
-    let mut run = match agent_abstraction::stream(&request) {
+    let mut run = match agent_abstraction::stream(request.request()) {
         Ok(run) => run,
         Err(error) => {
             // The one failure the window used to swallow entirely: no run, no
@@ -5246,6 +5255,7 @@ async fn drive_run(
         &tables,
         &project_id,
         agent,
+        &model,
         &cwd,
         &turn_usage,
         checkpoint_dir.as_deref(),
@@ -5279,11 +5289,16 @@ async fn drive_run(
 /// A sample is a turn of its own and a session runs one at a time. The crossing
 /// is noticed from the finished turn's usage and sampled immediately after,
 /// while the run slot is still held so nothing else can start in between.
+#[expect(
+    clippy::too_many_arguments,
+    reason = "the checkpoint turn borrows one value from each run concern without owning them"
+)]
 async fn checkpoint_if_due(
     app: &AppHandle,
     tables: &std::sync::Arc<crate::db::tables::Tables>,
     project_id: &str,
     agent: Agent,
+    model: &str,
     cwd: &str,
     usage: &agent_abstraction::Usage,
     dir: Option<&std::path::Path>,
@@ -5353,8 +5368,19 @@ async fn checkpoint_if_due(
     let request = agent_abstraction::Request::new(agent, crate::notes::merge_prompt(&existing))
         .cwd(cwd)
         .resume(&session);
+    let request = match crate::experimental::apply(request, agent, model) {
+        Ok(request) => request,
+        Err(error) => {
+            crate::log!(
+                crate::log::Level::Warn,
+                "run",
+                "{project_id}: the {threshold} checkpoint could not prepare: {error}"
+            );
+            return;
+        }
+    };
 
-    let taken = match agent_abstraction::run(&request).await {
+    let taken = match agent_abstraction::run(request.request()).await {
         Ok(outcome) => crate::notes::clamp(&outcome.text),
         Err(error) => {
             crate::log!(

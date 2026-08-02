@@ -1,0 +1,181 @@
+name: Release Experimental
+
+on:
+  push:
+    branches:
+      - master
+  workflow_dispatch:
+    inputs:
+      force:
+        description: "Publish even if the experimental version has not changed"
+        type: boolean
+        default: false
+
+concurrency:
+  group: release-experimental
+  cancel-in-progress: false
+
+env:
+  CDN_DIR: agencyzero-experimental
+  CDN_BASE: https://24x.ai/agencyzero-experimental
+  BUNDLE_DIR: target/release/bundle/macos
+  TARBALL: target/release/bundle/macos/AgencyZeroExperimental.app.tar.gz
+
+jobs:
+  check:
+    runs-on: ubicloud-standard-2
+    outputs:
+      version: ${{ steps.decide.outputs.version }}
+      publish: ${{ steps.decide.outputs.publish }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Compare the committed version against the experimental channel
+        id: decide
+        run: |
+          VERSION=$(python3 -c "import tomllib;print(tomllib.load(open('Cargo.toml','rb'))['workspace']['package']['version'])")
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          LIVE=$(curl -fsS --max-time 30 "$CDN_BASE/latest.json" 2>/dev/null \
+            | python3 -c 'import json,sys; print(json.load(sys.stdin)["version"])' 2>/dev/null || echo "")
+
+          if [ "${{ inputs.force }}" = "true" ] || [ "$LIVE" != "$VERSION" ]; then
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  release:
+    needs: check
+    if: needs.check.outputs.publish == 'true'
+    runs-on: namespace-profile-agency-tahoe
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin
+
+      - name: Cache cargo build
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: agencyzero-macos-release
+          cache-targets: true
+
+      - name: Install frontend dependencies
+        run: bun install --frozen-lockfile
+        working-directory: apps/gui/frontend
+
+      - name: Build experimental bundle
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
+        run: bunx --yes @tauri-apps/cli@^2.11 build --features experimental --config tauri.experimental.conf.json
+        working-directory: apps/gui
+
+      - name: Normalize updater artifact name
+        run: |
+          mv "$BUNDLE_DIR/AgencyZero Experimental.app.tar.gz" "$TARBALL"
+          mv "$BUNDLE_DIR/AgencyZero Experimental.app.tar.gz.sig" "$TARBALL.sig"
+
+      - name: Verify experimental identity and signature
+        env:
+          VERSION: ${{ needs.check.outputs.version }}
+        run: |
+          APP="$BUNDLE_DIR/AgencyZero Experimental.app"
+          codesign --verify --deep --strict --verbose=2 "$APP"
+          IDENTIFIER=$(/usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$APP/Contents/Info.plist")
+          BUILT=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$APP/Contents/Info.plist")
+          test "$IDENTIFIER" = "com.pathscale.agencyzero.experimental"
+          test "$BUILT" = "$VERSION"
+          codesign -dv --verbose=4 "$APP" 2>&1 | grep -q "TeamIdentifier=not set"
+
+      - name: Build experimental latest.json
+        env:
+          VERSION: ${{ needs.check.outputs.version }}
+        run: |
+          test -f "$TARBALL"
+          test -f "$TARBALL.sig"
+          python3 - "$VERSION" "$TARBALL.sig" "$CDN_BASE" <<'PY'
+          import datetime, json, sys
+          version, sig_path, base = sys.argv[1], sys.argv[2], sys.argv[3]
+          with open(sig_path) as f:
+              signature = f.read().strip()
+          manifest = {
+              "version": version,
+              "pub_date": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+              "platforms": {
+                  "darwin-aarch64": {
+                      "signature": signature,
+                      "url": f"{base}/AgencyZeroExperimental.app.tar.gz?v={version}",
+                  }
+              },
+          }
+          with open("latest-experimental.json", "w") as f:
+              json.dump(manifest, f, indent=2)
+              f.write("\n")
+          PY
+
+      - name: Upload experimental tarball
+        env:
+          STORAGE_API_KEY: ${{ secrets.BUNNYCDN_STORAGE_API_KEY }}
+          STORAGE_NAME: ${{ secrets.BUNNYCDN_STORAGE_NAME }}
+        run: |
+          gunzip -t "$TARBALL"
+          curl -sS -X DELETE -H "AccessKey: $STORAGE_API_KEY" \
+            "https://storage.bunnycdn.com/$STORAGE_NAME/$CDN_DIR/AgencyZeroExperimental.app.tar.gz" || true
+          curl -sS --fail-with-body -X PUT -H "AccessKey: $STORAGE_API_KEY" \
+            -T "$TARBALL" \
+            "https://storage.bunnycdn.com/$STORAGE_NAME/$CDN_DIR/AgencyZeroExperimental.app.tar.gz"
+
+      - name: Purge and confirm the experimental tarball
+        env:
+          ZONE_API_KEY: ${{ secrets.BUNNYCDN_ZONE_API_KEY }}
+          ZONE_ID: ${{ secrets.BUNNYCDN_ZONE_ID }}
+        run: |
+          curl -sS --fail-with-body -X POST -H "AccessKey: $ZONE_API_KEY" \
+            "https://bunnycdn.com/api/pullzone/$ZONE_ID/purgeCache"
+          LOCAL=$(shasum -a 256 "$TARBALL" | cut -d' ' -f1)
+          for attempt in 1 2 3 4 5 6; do
+            curl -sS -L -o edge-experimental.tar.gz "$CDN_BASE/AgencyZeroExperimental.app.tar.gz" || true
+            REMOTE=$(shasum -a 256 edge-experimental.tar.gz | cut -d' ' -f1)
+            if [ "$LOCAL" = "$REMOTE" ] && gunzip -t edge-experimental.tar.gz; then
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "::error::experimental edge never served the new tarball"
+          exit 1
+
+      - name: Publish experimental latest.json
+        env:
+          VERSION: ${{ needs.check.outputs.version }}
+          STORAGE_API_KEY: ${{ secrets.BUNNYCDN_STORAGE_API_KEY }}
+          STORAGE_NAME: ${{ secrets.BUNNYCDN_STORAGE_NAME }}
+          ZONE_API_KEY: ${{ secrets.BUNNYCDN_ZONE_API_KEY }}
+          ZONE_ID: ${{ secrets.BUNNYCDN_ZONE_ID }}
+        run: |
+          curl -sS -X DELETE -H "AccessKey: $STORAGE_API_KEY" \
+            "https://storage.bunnycdn.com/$STORAGE_NAME/$CDN_DIR/latest.json" || true
+          curl -sS --fail-with-body -X PUT -H "AccessKey: $STORAGE_API_KEY" \
+            -T latest-experimental.json \
+            "https://storage.bunnycdn.com/$STORAGE_NAME/$CDN_DIR/latest.json"
+          curl -sS --fail-with-body -X POST -H "AccessKey: $ZONE_API_KEY" \
+            "https://bunnycdn.com/api/pullzone/$ZONE_ID/purgeCache"
+
+          for attempt in 1 2 3 4 5 6; do
+            LIVE=$(curl -sS -L "$CDN_BASE/latest.json" | python3 -c 'import json,sys; print(json.load(sys.stdin)["version"])' 2>/dev/null || echo "")
+            if [ "$LIVE" = "$VERSION" ]; then
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "::error::experimental latest.json did not become visible"
+          exit 1
