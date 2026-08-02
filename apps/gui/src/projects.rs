@@ -250,6 +250,18 @@ pub struct SendMessageInput {
     pub model: Option<String>,
     pub permission: Option<String>,
     pub effort: Option<String>,
+    /// Content-free facts computed before the composer compiles controls or
+    /// appends attachment paths. Absent callers fall back to the sent body.
+    pub study: Option<StudyTurnMetadata>,
+}
+
+#[derive(Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StudyTurnMetadata {
+    pub authored_character_count: usize,
+    pub authored_line_count: usize,
+    pub attachment_count: usize,
+    pub user_authored_ps: bool,
 }
 
 #[derive(Deserialize)]
@@ -261,6 +273,7 @@ pub struct CreateProjectInput {
     pub permission: Option<String>,
     /// Reasoning effort, as `Request::effort`. `None` means the CLI's default.
     pub effort: Option<String>,
+    pub study: Option<StudyTurnMetadata>,
 }
 
 #[derive(Serialize)]
@@ -549,6 +562,7 @@ pub fn create_item(
     title: String,
     state: State<'_, AppState>,
 ) -> Result<ProjectItemDto, String> {
+    let started = std::time::Instant::now();
     let title = title.trim().to_string();
     if title.is_empty() {
         return Err("an item needs a title".into());
@@ -576,6 +590,10 @@ pub fn create_item(
         .map_err(|error| error.to_string())?;
     let dto = ProjectItemDto::from(row);
     let _ = app.emit("item:created", dto.clone());
+    let mut study =
+        crate::study::Record::manual(dto.project_id.clone(), "items.add", "item", dto.id.clone());
+    study.latency = Some(started.elapsed());
+    crate::study::record(&state.tables, study);
     Ok(dto)
 }
 
@@ -591,6 +609,7 @@ pub async fn set_item_status(
     status: String,
     state: State<'_, AppState>,
 ) -> Result<ProjectItemDto, String> {
+    let started = std::time::Instant::now();
     /*
      * Every status the ladder can reach, including `questions` and `canceled`.
      *
@@ -645,6 +664,10 @@ pub async fn set_item_status(
             "item:deleted",
             serde_json::json!({ "id": id, "projectId": row.project_id }),
         );
+        let mut study =
+            crate::study::Record::manual(row.project_id.clone(), "items.state", "item", id.clone());
+        study.latency = Some(started.elapsed());
+        crate::study::record(&state.tables, study);
         // Preserve the command's return shape for callers that await it even
         // though the event removes the row from the live store.
         row.status = status;
@@ -663,6 +686,14 @@ pub async fn set_item_status(
         .ok_or_else(|| format!("no item {id}"))?;
     let dto = ProjectItemDto::from(row);
     let _ = app.emit("item:updated", dto.clone());
+    let mut study = crate::study::Record::manual(
+        dto.project_id.clone(),
+        "items.state",
+        "item",
+        dto.id.clone(),
+    );
+    study.latency = Some(started.elapsed());
+    crate::study::record(&state.tables, study);
     Ok(dto)
 }
 
@@ -677,6 +708,7 @@ pub async fn update_item(
     title: String,
     state: State<'_, AppState>,
 ) -> Result<ProjectItemDto, String> {
+    let started = std::time::Instant::now();
     let title = title.trim().to_string();
     if title.is_empty() {
         return Err("an item needs a title".into());
@@ -694,6 +726,14 @@ pub async fn update_item(
         .ok_or_else(|| format!("no item {id}"))?;
     let dto = ProjectItemDto::from(row);
     let _ = app.emit("item:updated", dto.clone());
+    let mut study = crate::study::Record::manual(
+        dto.project_id.clone(),
+        "items.update",
+        "item",
+        dto.id.clone(),
+    );
+    study.latency = Some(started.elapsed());
+    crate::study::record(&state.tables, study);
     Ok(dto)
 }
 
@@ -754,7 +794,12 @@ pub async fn set_item_issue(
     url: String,
     state: State<'_, AppState>,
 ) -> Result<ProjectItemDto, String> {
-    link_item_issue_inner(&app, &state.tables, &id, &url).await
+    let started = std::time::Instant::now();
+    let dto = link_item_issue_inner(&app, &state.tables, &id, &url).await?;
+    let mut study = crate::study::Record::manual(dto.project_id.clone(), "issue.link", "item", id);
+    study.latency = Some(started.elapsed());
+    crate::study::record(&state.tables, study);
+    Ok(dto)
 }
 
 /// Remove one item.
@@ -767,6 +812,7 @@ pub async fn delete_item(
     id: String,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
+    let started = std::time::Instant::now();
     let row = state
         .tables
         .project_item
@@ -782,6 +828,9 @@ pub async fn delete_item(
         "item:deleted",
         serde_json::json!({ "id": id, "projectId": row.project_id }),
     );
+    let mut study = crate::study::Record::manual(row.project_id, "items.retire", "item", id);
+    study.latency = Some(started.elapsed());
+    crate::study::record(&state.tables, study);
     Ok(())
 }
 
@@ -802,6 +851,8 @@ pub async fn reorder_items(
     ids: Vec<String>,
     state: State<'_, AppState>,
 ) -> Result<Vec<ProjectItemDto>, String> {
+    let started = std::time::Instant::now();
+    let moved = ids.len();
     for (index, item_id) in ids.iter().enumerate() {
         state
             .tables
@@ -815,10 +866,15 @@ pub async fn reorder_items(
             .await
             .map_err(|error| error.to_string())?;
     }
-    let items = list_items(project_id, state);
+    let items = list_items(project_id.clone(), state.clone());
     for item in &items {
         let _ = app.emit("item:updated", item.clone());
     }
+    let mut study =
+        crate::study::Record::manual(project_id.clone(), "items.reorder", "project", project_id);
+    study.latency = Some(started.elapsed());
+    study.detail = serde_json::json!({ "itemCount": moved });
+    crate::study::record(&state.tables, study);
     Ok(items)
 }
 
@@ -1475,11 +1531,94 @@ fn authored_directive_line<'a>(line: &'a str, fenced: &mut FenceState) -> Option
     Some(trimmed)
 }
 
+struct StudyTarget {
+    kind: &'static str,
+    id: String,
+    before_add: std::collections::HashSet<String>,
+}
+
+/// Resolve an authored prefix to the application id it actually changed.
+///
+/// The study table must not retain an arbitrary `id:` argument, and a prefix
+/// would not join to a later manual correction anyway. Adds have no id until
+/// execution, so their prior id set is kept and the one new row is resolved
+/// afterwards.
+fn study_target_before(
+    tables: &crate::db::tables::Tables,
+    directive: &crate::directives::Directive,
+) -> StudyTarget {
+    use crate::directives::Directive;
+
+    let rows: Vec<ProjectItemRow> = tables
+        .project_item
+        .select_all()
+        .execute()
+        .unwrap_or_default();
+    let known: Vec<&str> = rows.iter().map(|row| row.id.as_str()).collect();
+    let resolve = |named: &str| {
+        crate::directives::resolve(&known, named)
+            .map(str::to_string)
+            .unwrap_or_default()
+    };
+
+    match directive {
+        Directive::ItemState { id, .. } | Directive::ItemRetire { id } => StudyTarget {
+            kind: "item",
+            id: resolve(id),
+            before_add: std::collections::HashSet::new(),
+        },
+        Directive::ItemAdd { .. } => StudyTarget {
+            kind: "item",
+            id: String::new(),
+            before_add: rows.iter().map(|row| row.id.clone()).collect(),
+        },
+        Directive::PrLink { item, .. } => StudyTarget {
+            kind: if item.is_some() {
+                "item"
+            } else {
+                "pull_request"
+            },
+            id: item.as_deref().map(resolve).unwrap_or_default(),
+            before_add: std::collections::HashSet::new(),
+        },
+        Directive::IssueLink { item, .. } => StudyTarget {
+            kind: "item",
+            id: resolve(item),
+            before_add: std::collections::HashSet::new(),
+        },
+    }
+}
+
+fn study_target_after_add(
+    tables: &crate::db::tables::Tables,
+    target: &mut StudyTarget,
+    operation: &str,
+    applied: bool,
+) {
+    if operation != "items.add" || !applied {
+        return;
+    }
+    let added: Vec<String> = tables
+        .project_item
+        .select_all()
+        .execute()
+        .unwrap_or_default()
+        .into_iter()
+        .map(|row| row.id)
+        .filter(|id| !target.before_add.contains(id))
+        .collect();
+    if let [id] = added.as_slice() {
+        target.id.clone_from(id);
+    }
+}
+
 /// Read every directive out of a stretch of reply text and carry it out.
 async fn apply_directives_with_state(
     app: &AppHandle,
     tables: &crate::db::tables::Tables,
     project_id: &str,
+    turn_id: &str,
+    agent: &str,
     text: &str,
     fenced: &mut FenceState,
 ) -> Vec<crate::directives::Outcome> {
@@ -1487,9 +1626,92 @@ async fn apply_directives_with_state(
     for line in text.lines() {
         match authored_directive_line(line, fenced).and_then(crate::directives::parse_authored) {
             Some(crate::directives::Authored::Directive(directive)) => {
-                done.push(apply_directive(app, tables, project_id, directive).await);
+                let operation = directive.operation();
+                let mut target = study_target_before(tables, &directive);
+                let interaction_id = id("interaction");
+                crate::study::record(
+                    tables,
+                    crate::study::Record {
+                        project_id: project_id.into(),
+                        turn_id: turn_id.into(),
+                        interaction_id: interaction_id.clone(),
+                        agent: agent.into(),
+                        pathway: "ps",
+                        operation,
+                        stage: "parsed",
+                        outcome: "observed",
+                        code: String::new(),
+                        target_kind: target.kind,
+                        target_id: target.id.clone(),
+                        latency: None,
+                        detail: serde_json::json!({}),
+                    },
+                );
+                let started = std::time::Instant::now();
+                let outcome = apply_directive(app, tables, project_id, directive).await;
+                let (result, code) = outcome.study_result();
+                study_target_after_add(tables, &mut target, operation, result == "applied");
+                crate::study::record(
+                    tables,
+                    crate::study::Record {
+                        project_id: project_id.into(),
+                        turn_id: turn_id.into(),
+                        interaction_id,
+                        agent: agent.into(),
+                        pathway: "ps",
+                        operation,
+                        stage: "completed",
+                        outcome: result,
+                        code,
+                        target_kind: target.kind,
+                        target_id: target.id,
+                        latency: Some(started.elapsed()),
+                        detail: serde_json::json!({}),
+                    },
+                );
+                done.push(outcome);
             }
-            Some(crate::directives::Authored::Refused(outcome)) => done.push(outcome),
+            Some(crate::directives::Authored::Refused(outcome)) => {
+                let interaction_id = id("interaction");
+                crate::study::record(
+                    tables,
+                    crate::study::Record {
+                        project_id: project_id.into(),
+                        turn_id: turn_id.into(),
+                        interaction_id: interaction_id.clone(),
+                        agent: agent.into(),
+                        pathway: "ps",
+                        operation: "authoring.segment",
+                        stage: "parsed",
+                        outcome: "observed",
+                        code: String::new(),
+                        target_kind: "",
+                        target_id: String::new(),
+                        latency: None,
+                        detail: serde_json::json!({}),
+                    },
+                );
+                let (result, code) = outcome.study_result();
+                crate::study::record(
+                    tables,
+                    crate::study::Record {
+                        project_id: project_id.into(),
+                        turn_id: turn_id.into(),
+                        interaction_id,
+                        agent: agent.into(),
+                        pathway: "ps",
+                        operation: "authoring.segment",
+                        stage: "completed",
+                        outcome: result,
+                        code,
+                        target_kind: "",
+                        target_id: String::new(),
+                        latency: Some(std::time::Duration::ZERO),
+                        detail: serde_json::json!({}),
+                    },
+                );
+                done.push(outcome);
+            }
             None => {}
         }
     }
@@ -1500,9 +1722,76 @@ async fn apply_directives(
     app: &AppHandle,
     tables: &crate::db::tables::Tables,
     project_id: &str,
+    turn_id: &str,
+    agent: &str,
     text: &str,
 ) -> Vec<crate::directives::Outcome> {
-    apply_directives_with_state(app, tables, project_id, text, &mut FenceState::default()).await
+    apply_directives_with_state(
+        app,
+        tables,
+        project_id,
+        turn_id,
+        agent,
+        text,
+        &mut FenceState::default(),
+    )
+    .await
+}
+
+/// Whether a submitted turn itself contains a live AgencyZero authoring line.
+///
+/// This records one boolean, never the line. The same quote, indentation and
+/// fence rules as the reverse-channel parser keep an example in prose from
+/// being counted as direct syntax use.
+fn user_authored_ps(text: &str) -> bool {
+    let mut fenced = FenceState::default();
+    text.lines().any(|line| {
+        authored_directive_line(line, &mut fenced)
+            .and_then(crate::directives::parse_authored)
+            .is_some()
+    })
+}
+
+fn record_study_turn(
+    tables: &crate::db::tables::Tables,
+    project_id: &str,
+    turn_id: &str,
+    agent: &str,
+    body: &str,
+    authored: Option<&StudyTurnMetadata>,
+    followup: bool,
+) {
+    let fallback = StudyTurnMetadata {
+        authored_character_count: body.chars().count(),
+        authored_line_count: body.lines().count(),
+        attachment_count: 0,
+        user_authored_ps: user_authored_ps(body),
+    };
+    let authored = authored.unwrap_or(&fallback);
+    crate::study::record(
+        tables,
+        crate::study::Record {
+            project_id: project_id.into(),
+            turn_id: turn_id.into(),
+            interaction_id: String::new(),
+            agent: agent.into(),
+            pathway: "study",
+            operation: "turn.submit",
+            stage: "submitted",
+            outcome: "observed",
+            code: String::new(),
+            target_kind: "",
+            target_id: String::new(),
+            latency: None,
+            detail: serde_json::json!({
+                "characterCount": authored.authored_character_count,
+                "lineCount": authored.authored_line_count,
+                "attachmentCount": authored.attachment_count,
+                "followup": followup,
+                "userAuthoredPs": authored.user_authored_ps,
+            }),
+        },
+    );
 }
 
 /// Find the project a line named, by id or by name, case-insensitively.
@@ -2001,6 +2290,43 @@ impl RateLimitReport {
 /// the turn that just happened and is worthless a day later.
 pub type Receipts = std::sync::Mutex<std::collections::HashMap<String, Vec<String>>>;
 
+fn queue_directive_receipts(
+    receipts: &Receipts,
+    tables: &crate::db::tables::Tables,
+    project_id: &str,
+    turn_id: &str,
+    agent: &str,
+    outcomes: &[crate::directives::Outcome],
+) {
+    let (outcome, code) = match receipts.lock() {
+        Ok(mut kept) => {
+            kept.entry(project_id.to_string())
+                .or_default()
+                .extend(outcomes.iter().map(crate::directives::Outcome::line));
+            ("applied", String::new())
+        }
+        Err(_) => ("failed", "RECEIPT_LOCK_FAILED".into()),
+    };
+    crate::study::record(
+        tables,
+        crate::study::Record {
+            project_id: project_id.into(),
+            turn_id: turn_id.into(),
+            interaction_id: String::new(),
+            agent: agent.into(),
+            pathway: "ps",
+            operation: "receipt.queue",
+            stage: "queued",
+            outcome,
+            code,
+            target_kind: "",
+            target_id: String::new(),
+            latency: None,
+            detail: serde_json::json!({ "outcomeCount": outcomes.len() }),
+        },
+    );
+}
+
 pub type RunningTasks = std::sync::Mutex<std::collections::HashMap<String, Vec<RunningTaskDto>>>;
 
 /// One question a run is blocked on: the way to answer it, and what
@@ -2154,7 +2480,13 @@ pub struct ActiveRun {
     /// delivered into that turn would be read by nobody and would disappear
     /// with it, so the send is refused and the frontend holds them for the
     /// session that comes out the other side.
-    pub inject: Option<tokio::sync::mpsc::UnboundedSender<String>>,
+    pub inject: Option<tokio::sync::mpsc::UnboundedSender<InjectedMessage>>,
+}
+
+/// A live follow-up and the persisted user-message row that owns it.
+pub struct InjectedMessage {
+    body: String,
+    turn_id: String,
 }
 
 pub type ActiveRuns = std::sync::Mutex<std::collections::HashMap<String, ActiveRun>>;
@@ -3571,6 +3903,7 @@ pub async fn create_project(
             model: input.model,
             permission: input.permission,
             effort: input.effort,
+            study: input.study,
         },
         state,
     )
@@ -3668,6 +4001,15 @@ pub async fn send_message(
                 .insert(user_row.clone())
                 .map_err(|error| error.to_string())?;
             let user_message = MessageDto::from(user_row);
+            record_study_turn(
+                &state.tables,
+                &input.project_id,
+                &user_message.id,
+                agent_name,
+                &input.body,
+                input.study.as_ref(),
+                true,
+            );
             note_gui(
                 &app,
                 &state,
@@ -3681,7 +4023,13 @@ pub async fn send_message(
             // echo — the crate deliberately requests none.
             let _ = app.emit("message:appended", &user_message);
 
-            if inject.send(input.body.clone()).is_err() {
+            if inject
+                .send(InjectedMessage {
+                    body: input.body.clone(),
+                    turn_id: user_message.id.clone(),
+                })
+                .is_err()
+            {
                 // The run tore down in the race window. The row stands (the
                 // words were said); the refusal tells the frontend to queue
                 // the body for a fresh turn so the agent actually hears it.
@@ -3733,6 +4081,15 @@ pub async fn send_message(
         .map_err(|error| error.to_string())?;
 
     let user_message = MessageDto::from(user_row);
+    record_study_turn(
+        &state.tables,
+        &input.project_id,
+        &user_message.id,
+        agent_name,
+        &input.body,
+        input.study.as_ref(),
+        false,
+    );
     note_gui(
         &app,
         &state,
@@ -3868,6 +4225,7 @@ pub async fn send_message(
         }
     }
     let project_id = input.project_id.clone();
+    let turn_id = user_message.id.clone();
     let effort = input.effort.clone();
 
     tauri::async_runtime::spawn(async move {
@@ -3884,6 +4242,7 @@ pub async fn send_message(
             cancel,
             inject_rx,
             project_id,
+            turn_id,
             input.body,
             agent,
             model,
@@ -3926,8 +4285,11 @@ async fn drive_run(
     _reservation: RunReservation,
     mut cancel: tokio::sync::watch::Receiver<bool>,
     // Messages typed while this run is live, to deliver into the open turn.
-    mut inject_rx: tokio::sync::mpsc::UnboundedReceiver<String>,
+    mut inject_rx: tokio::sync::mpsc::UnboundedReceiver<InjectedMessage>,
     project_id: String,
+    // The user message that opened this run. PS outcomes emitted by the agent
+    // link back to it without retaining the message body in the study table.
+    turn_id: String,
     prompt: String,
     agent: Agent,
     model: String,
@@ -3943,6 +4305,7 @@ async fn drive_run(
     // or working directory. Told to the agent every turn; see below.
     memory_dir: std::path::PathBuf,
 ) {
+    let mut directive_turn_id = turn_id;
     /*
      * Home's conversation is the task manager, and its replies have to become
      * rows. The user's own words go out unchanged with the output contract
@@ -4301,7 +4664,7 @@ async fn drive_run(
     /// `run.send` cannot be called until that future is dropped.
     enum Wake {
         Event(Event),
-        Inject(String),
+        Inject(InjectedMessage),
     }
 
     loop {
@@ -4327,11 +4690,12 @@ async fn drive_run(
         };
         let event = match wake {
             Wake::Event(event) => event,
-            Wake::Inject(body) => {
+            Wake::Inject(injected) => {
                 // A correction typed mid-turn. The user row was persisted and
                 // broadcast by `send_message`; delivery and its failure modes
                 // live in the helper, shared with the approval-wait arm.
-                deliver_injection(&app, &io, &run, &project_id, body).await;
+                directive_turn_id = injected.turn_id;
+                deliver_injection(&app, &io, &run, &project_id, injected.body).await;
                 // A user message is a block boundary: the next streamed text
                 // starts a new paragraph rather than gluing to the old one.
                 last_was_text = false;
@@ -4445,8 +4809,16 @@ async fn drive_run(
                             break None;
                         }
                         injected = inject_rx.recv() => {
-                            if let Some(body) = injected {
-                                deliver_injection(&app, &io, &run, &project_id, body).await;
+                            if let Some(injected) = injected {
+                                directive_turn_id = injected.turn_id;
+                                deliver_injection(
+                                    &app,
+                                    &io,
+                                    &run,
+                                    &project_id,
+                                    injected.body,
+                                )
+                                .await;
                             }
                         }
                     }
@@ -4535,6 +4907,8 @@ async fn drive_run(
                         &app,
                         &tables,
                         &project_id,
+                        &directive_turn_id,
+                        agent_wire_name(agent),
                         &line,
                         &mut directives_fenced,
                     )
@@ -4551,11 +4925,14 @@ async fn drive_run(
                                 .collect::<Vec<_>>()
                                 .join("; "),
                         );
-                        if let Ok(mut kept) = receipts.lock() {
-                            kept.entry(project_id.clone())
-                                .or_default()
-                                .extend(done.iter().map(crate::directives::Outcome::line));
-                        }
+                        queue_directive_receipts(
+                            &receipts,
+                            &tables,
+                            &project_id,
+                            &directive_turn_id,
+                            agent_wire_name(agent),
+                            &done,
+                        );
                     }
                 }
 
@@ -5175,12 +5552,22 @@ async fn drive_run(
                     &app,
                     &tables,
                     &project_id,
+                    &directive_turn_id,
+                    agent_wire_name(agent),
                     &body[tail_at..],
                     &mut directives_fenced,
                 )
                 .await
             } else {
-                apply_directives(&app, &tables, &project_id, &body).await
+                apply_directives(
+                    &app,
+                    &tables,
+                    &project_id,
+                    &directive_turn_id,
+                    agent_wire_name(agent),
+                    &body,
+                )
+                .await
             };
             if !done.is_empty() {
                 note_io(
@@ -5194,11 +5581,14 @@ async fn drive_run(
                         .collect::<Vec<_>>()
                         .join("; "),
                 );
-                if let Ok(mut kept) = receipts.lock() {
-                    kept.entry(project_id.clone())
-                        .or_default()
-                        .extend(done.iter().map(crate::directives::Outcome::line));
-                }
+                queue_directive_receipts(
+                    &receipts,
+                    &tables,
+                    &project_id,
+                    &directive_turn_id,
+                    agent_wire_name(agent),
+                    &done,
+                );
             }
             emit_run_stopped(
                 &app,
@@ -6158,6 +6548,45 @@ mod tests {
             authored_directive_line(directive, &mut fenced),
             Some(directive)
         );
+    }
+
+    #[test]
+    fn direct_use_flag_obeys_the_same_inert_content_rules() {
+        let directive = r#"<ps @agency:items.state(id: "item-a3f9", status: "active")>"#;
+        assert!(user_authored_ps(directive));
+        assert!(!user_authored_ps(&format!("```text\n{directive}\n```")));
+        assert!(!user_authored_ps(&format!("> {directive}")));
+    }
+
+    #[tokio::test]
+    async fn study_targets_use_resolved_ids_instead_of_authored_prefixes() {
+        let dir = std::env::temp_dir().join(format!("az-study-target-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let tables = crate::db::tables::Tables::open(&dir)
+            .await
+            .expect("study target store opens");
+        tables
+            .project_item
+            .insert(ProjectItemRow {
+                id: "item-a3f9-canonical".into(),
+                project_id: "project-private".into(),
+                title: "not collected".into(),
+                status: "active".into(),
+                position: 0,
+                reference: String::new(),
+            })
+            .expect("item inserts");
+
+        let target = study_target_before(
+            &tables,
+            &crate::directives::Directive::ItemState {
+                id: "item-a3f9".into(),
+                status: "shipped".into(),
+                pr: None,
+            },
+        );
+        assert_eq!(target.id, "item-a3f9-canonical");
+        assert_eq!(target.kind, "item");
     }
 
     #[test]

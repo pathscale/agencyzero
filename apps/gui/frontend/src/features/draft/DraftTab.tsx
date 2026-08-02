@@ -50,7 +50,7 @@ export function DraftTab(props: { tab: Tab }): JSX.Element {
               effort,
             )
           }
-          onSend={(body) => actions.createProject(body, props.tab.key)}
+          onSend={(body, study) => actions.createProject(body, props.tab.key, study)}
         />
       </div>
     </Panel>

@@ -11,6 +11,7 @@ mod projects;
 mod prs;
 mod quota;
 mod settings;
+mod study;
 mod tasks;
 mod update;
 
@@ -84,6 +85,9 @@ const IMPLEMENTED: &[&str] = &[
     "send_message",
     "get_settings",
     "set_settings",
+    "get_study_summary",
+    "export_study_events",
+    "clear_study_events",
     "list_agent_status",
     "list_models",
     "log_frontend",
@@ -555,6 +559,9 @@ async fn set_settings(
         .and_then(|raw| serde_json::from_str(&raw).ok())
         .unwrap_or_else(|| serde_json::to_value(GlobalSettings::default()).unwrap_or_default());
 
+    let previous: GlobalSettings =
+        serde_json::from_value(current.clone()).unwrap_or_else(|_| GlobalSettings::default());
+
     let mut merged = current;
     settings::merge(&mut merged, &patch);
 
@@ -563,13 +570,25 @@ async fn set_settings(
     let mut parsed: GlobalSettings =
         serde_json::from_value(merged.clone()).map_err(|error| error.to_string())?;
     settings::normalize_task_manager(&mut parsed);
+    let boundary = study::normalize_setting(&previous.study_analytics, &mut parsed.study_analytics);
     let merged = serde_json::to_value(&parsed).map_err(|error| error.to_string())?;
 
-    state
-        .tables
-        .kv_put(settings::KEY, merged.to_string())
-        .await
-        .map_err(|error| error.to_string())?;
+    let boundary_id = boundary
+        .map(|boundary| study::record_boundary(&state.tables, &parsed.study_analytics, boundary))
+        .transpose()?;
+
+    if let Err(error) = state.tables.kv_put(settings::KEY, merged.to_string()).await {
+        if let Some(id) = boundary_id
+            && let Err(cleanup) = state.tables.study_event.delete(id).await
+        {
+            crate::log!(
+                log::Level::Error,
+                "study",
+                "settings failed and its boundary event could not be removed: {cleanup}"
+            );
+        }
+        return Err(error.to_string());
+    }
     Ok(parsed)
 }
 
@@ -1067,6 +1086,9 @@ fn main() {
             projects::create_project,
             projects::send_message,
             get_settings,
+            study::get_study_summary,
+            study::export_study_events,
+            study::clear_study_events,
             relaunch_app,
             set_settings,
             list_agent_status,

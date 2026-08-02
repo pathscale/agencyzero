@@ -309,7 +309,7 @@ export function ProjectTab(props: { tab: Tab; project: Project }): JSX.Element {
             onPermissionChange={(permission) =>
               actions.setTabModel(props.tab.key, props.tab.agent, props.tab.model, permission)
             }
-            onSend={(body) => actions.send(props.project.id, body)}
+            onSend={(body, study) => actions.send(props.project.id, body, study)}
           />
         </div>
       </Panel>

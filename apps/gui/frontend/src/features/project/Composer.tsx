@@ -7,7 +7,7 @@ import { compileAdvancedPrompt, type PromptModelOption } from "~/lib/promptEdito
 import { parseSlash } from "~/lib/slash";
 import { prefs, setPrefs } from "~/stores/prefs";
 import { useWorkspace } from "~/stores/workspace";
-import type { Agent, Permission } from "~/types";
+import type { Agent, Permission, StudyTurnMetadata } from "~/types";
 
 const PERMISSION_HINTS: Record<Permission, string> = {
   read_only: "Reads only. The crate default.",
@@ -75,7 +75,7 @@ export type ComposerProps = {
    * Resolves on success. The draft is held until then, so an IPC, database or
    * backend failure cannot swallow a prompt someone spent minutes writing.
    */
-  onSend: (body: string) => Promise<void>;
+  onSend: (body: string, study: StudyTurnMetadata) => Promise<void>;
   /** Shown on the right of the control row, e.g. "31.4k / 200k ctx · 16%". */
   usage?: string;
   /** A run is in flight: the send button becomes Stop. */
@@ -359,7 +359,15 @@ export function Composer(props: ComposerProps): JSX.Element {
         setErrorFor(key, "The prompt contains controls but no message to send.");
         return;
       }
-      await props.onSend(body);
+      const authored = draft();
+      const parsedAuthored = advancedPrompt ?? compileAdvancedPrompt(authored, props.modelOptions);
+      await props.onSend(body, {
+        authoredCharacterCount: [...authored].length,
+        authoredLineCount:
+          authored.length === 0 ? 0 : authored.replaceAll("\r\n", "\n").split("\n").length,
+        attachmentCount: attachments().length,
+        userAuthoredPs: parsedAuthored.segments.some((segment) => segment.type === "directive"),
+      });
       remember("");
       setAttachments([]);
       resize();

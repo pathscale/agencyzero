@@ -199,6 +199,25 @@ describe("settings", () => {
     const after = await api.listAgentStatus(true);
     expect(Date.parse(after[0].checkedAt)).toBeGreaterThanOrEqual(Date.parse(before[0].checkedAt));
   });
+
+  it("keeps study collection off until an explicit transition", async () => {
+    const before = await api.getStudySummary();
+    expect(before).toMatchObject({ enabled: false, eventCount: 0, studyId: null });
+
+    const settings = await api.setSettings({ studyAnalytics: { enabled: true } });
+    const started = await api.getStudySummary();
+
+    expect(settings.studyAnalytics.sessionId).toMatch(/^study-/);
+    expect(started).toMatchObject({ enabled: true, eventCount: 1 });
+  });
+
+  it("deletes study rows without silently changing consent", async () => {
+    await api.setSettings({ studyAnalytics: { enabled: true } });
+    await api.setSettings({ studyAnalytics: { enabled: false } });
+    await api.clearStudyEvents();
+
+    expect(await api.getStudySummary()).toMatchObject({ enabled: false, eventCount: 0 });
+  });
 });
 
 describe("rate limits", () => {

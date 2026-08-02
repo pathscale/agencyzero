@@ -11,6 +11,7 @@ import type {
   ProjectStatus,
   QuotaReport,
   RunningTask,
+  StudySummary,
   TaskLogEntry,
 } from "~/types";
 import {
@@ -83,6 +84,7 @@ export function createMockApi(): AgencyZeroApi {
   const agentStatus = clone(fixtures.AGENT_STATUS);
   const models = clone(fixtures.MODEL_CATALOGUE);
   let settings = clone(fixtures.SETTINGS);
+  let studyEventCount = 0;
   const pullRequests = clone(fixtures.PULL_REQUESTS);
   /*
    * What a project's agent kept across a compaction, per project.
@@ -394,8 +396,37 @@ export function createMockApi(): AgencyZeroApi {
     getSettings: () => settle(settings),
 
     async setSettings(patch): Promise<GlobalSettings> {
+      const wasEnabled = settings.studyAnalytics.enabled;
       settings = deepMerge(settings, patch);
+      if (!wasEnabled && settings.studyAnalytics.enabled) {
+        settings.studyAnalytics.sessionId = nextId("study");
+        settings.studyAnalytics.enabledAt = new Date().toISOString();
+        studyEventCount += 1;
+      } else if (wasEnabled && !settings.studyAnalytics.enabled) {
+        studyEventCount += 1;
+      }
       return settle(settings);
+    },
+
+    getStudySummary: () =>
+      settle({
+        enabled: settings.studyAnalytics.enabled,
+        studyId: settings.studyAnalytics.sessionId || null,
+        enabledAt: settings.studyAnalytics.enabledAt || null,
+        eventCount: studyEventCount,
+        firstAt: settings.studyAnalytics.enabledAt || null,
+        lastAt: settings.studyAnalytics.enabledAt || null,
+      } satisfies StudySummary),
+
+    // The fixture has no filesystem or durable study table. Cancelling is the
+    // honest save result rather than inventing a file that does not exist.
+    exportStudyEvents: () => settle(null),
+    clearStudyEvents: () => {
+      if (settings.studyAnalytics.enabled) {
+        return Promise.reject(new Error("stop study collection before deleting its stored events"));
+      }
+      studyEventCount = 0;
+      return settle(undefined);
     },
 
     claudeUsage: () =>

@@ -9,6 +9,7 @@ import { AgentIoList } from "~/features/project/ProjectPanel";
 import { relativeTime } from "~/lib/format";
 import { AGENT_LABELS, nextStatus, statusSuffix } from "~/lib/labels";
 import { describeError, log } from "~/lib/log";
+import { compileAdvancedPrompt } from "~/lib/promptEditor";
 import { prefs, setPrefs, togglePanelSection } from "~/stores/prefs";
 import { TASK_MANAGER_ID, useWorkspace } from "~/stores/workspace";
 import type { Project, ProjectItem } from "~/types";
@@ -265,9 +266,10 @@ function TaskManagerComposer(): JSX.Element {
   const waitsForRun = () => isRunning() && !canFollowUp();
 
   const submit = async (): Promise<void> => {
+    const authored = draft();
     // The pills become prose on the way out; a file alone is a sendable
     // prompt ("eat this").
-    const body = [draft().trim(), attachments().join("\n")]
+    const body = [authored.trim(), attachments().join("\n")]
       .filter((part) => part.length > 0)
       .join("\n\n");
     if (!body || isSending() || waitsForRun()) return;
@@ -275,7 +277,14 @@ function TaskManagerComposer(): JSX.Element {
     setError(null);
     setIsSending(true);
     try {
-      await actions.sendTaskPrompt(body);
+      const parsedAuthored = compileAdvancedPrompt(authored, []);
+      await actions.sendTaskPrompt(body, {
+        authoredCharacterCount: [...authored].length,
+        authoredLineCount:
+          authored.length === 0 ? 0 : authored.replaceAll("\r\n", "\n").split("\n").length,
+        attachmentCount: attachments().length,
+        userAuthoredPs: parsedAuthored.segments.some((segment) => segment.type === "directive"),
+      });
       setDraft("");
       setAttachments([]);
     } catch (cause) {

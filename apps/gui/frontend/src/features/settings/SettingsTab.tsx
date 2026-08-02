@@ -37,6 +37,7 @@ import type {
   ModelSelection,
   ModelSource,
   Permission,
+  StudySummary,
   TableSize,
   TaskManagerSettings,
 } from "~/types";
@@ -600,6 +601,8 @@ export function SettingsTab(): JSX.Element {
                 </Show>
               </Section>
 
+              <StudySettings />
+
               <Section
                 icon="shield"
                 title="Moderator"
@@ -765,6 +768,157 @@ export function SettingsTab(): JSX.Element {
         </Show>
       </div>
     </div>
+  );
+}
+
+/**
+ * Explicit local consent and lifecycle controls for the PS deployment study.
+ *
+ * This lives beside Data because the important fact is custody: rows stay in
+ * this WorkTable store until the owner exports or deletes them. It is not a
+ * generic analytics switch and no network destination exists.
+ */
+function StudySettings(): JSX.Element {
+  const { state, actions, isLive } = useWorkspace();
+  const [summary, setSummary] = createSignal<StudySummary | null>(null);
+  const [busy, setBusy] = createSignal(false);
+  const [confirmingDelete, setConfirmingDelete] = createSignal(false);
+  const [note, setNote] = createSignal<string | null>(null);
+  const available = () => state.backend === "mock" || isLive("getStudySummary");
+
+  const refresh = async (): Promise<void> => {
+    if (!available()) return;
+    setSummary(await actions.getStudySummary());
+  };
+
+  onMount(() => {
+    void refresh().catch((cause) => {
+      setNote(`Study status unavailable: ${describeError(cause)}`);
+    });
+  });
+
+  const toggle = async (enabled: boolean): Promise<void> => {
+    setBusy(true);
+    setNote(null);
+    try {
+      await actions.saveSettings({ studyAnalytics: { enabled } });
+      await refresh();
+      setNote(enabled ? "Collection started locally." : "Collection stopped.");
+    } catch (cause) {
+      setNote(`Could not change collection: ${describeError(cause)}`);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const exportEvents = async (): Promise<void> => {
+    setBusy(true);
+    setNote(null);
+    try {
+      const path = await actions.exportStudyEvents();
+      setNote(path ? "De-identified JSONL exported." : "Export canceled.");
+    } catch (cause) {
+      setNote(`Could not export: ${describeError(cause)}`);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const clearEvents = async (): Promise<void> => {
+    if (!confirmingDelete()) {
+      setConfirmingDelete(true);
+      setNote("Choose Confirm delete to remove every stored study event.");
+      return;
+    }
+    setBusy(true);
+    try {
+      await actions.clearStudyEvents();
+      setConfirmingDelete(false);
+      await refresh();
+      setNote("Stored study events deleted. The collection setting was not changed.");
+    } catch (cause) {
+      setNote(`Could not delete study data: ${describeError(cause)}`);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const enabled = () => state.settings?.studyAnalytics.enabled ?? false;
+
+  return (
+    <Section
+      icon="gauge"
+      title="Research"
+      hint="local, opt-in PromptSyntax deployment study"
+      pending={available() ? undefined : "needs the study event backend"}
+    >
+      <div class="border-az-hairline-soft border-b px-3.5 py-3 text-[11.5px] text-az-muted leading-[1.55]">
+        Records timestamps, prompt character and line counts, attachment counts, whether you used
+        PromptSyntax, operation types, providers, opaque links, timing and explicit outcomes. It
+        does not copy prompt text, agent prose, task titles, paths, URLs, tool calls, tool output or
+        attachment contents. Nothing is uploaded.
+      </div>
+      <Row
+        label="PS deployment study"
+        hint="off by default; disabling stops new rows but keeps existing data"
+      >
+        <SettingToggle
+          label="PS deployment study"
+          checked={enabled()}
+          disabled={!available() || busy()}
+          onChange={(checked) => void toggle(checked)}
+        />
+      </Row>
+      <Row
+        label="Stored events"
+        hint={
+          summary()?.enabledAt
+            ? `${enabled() ? "current" : "last"} interval started ${relativeTime(
+                summary()!.enabledAt!,
+                Date.now(),
+              )}`
+            : "no study interval has been started"
+        }
+      >
+        <span class="font-mono text-[12px] text-az-strong tabular-nums">
+          {summary()?.eventCount ?? 0}
+        </span>
+      </Row>
+      <Row
+        label="Study data"
+        hint={
+          note() ??
+          (enabled()
+            ? "export is available now; stop collection before deleting stored events"
+            : "export is de-identified JSONL; deletion is local and permanent")
+        }
+        isLast
+      >
+        <div class="flex items-center gap-2">
+          <button
+            type="button"
+            disabled={busy()}
+            onClick={() => void exportEvents()}
+            class="rounded-lg border border-az-hairline-strong px-3 py-[5px] text-[12px] text-az-body transition-colors hover:border-primary hover:text-primary disabled:opacity-40"
+          >
+            Export JSONL
+          </button>
+          <button
+            type="button"
+            disabled={busy() || enabled() || (summary()?.eventCount ?? 0) === 0}
+            onClick={() => void clearEvents()}
+            onBlur={() => setConfirmingDelete(false)}
+            class={`rounded-lg border px-3 py-[5px] text-[12px] transition-colors disabled:opacity-40 ${
+              confirmingDelete()
+                ? "border-error/60 text-error hover:border-error"
+                : "border-az-hairline-strong text-az-muted hover:border-error/50 hover:text-error"
+            }`}
+          >
+            {confirmingDelete() ? "Confirm delete" : "Delete data"}
+          </button>
+        </div>
+      </Row>
+    </Section>
   );
 }
 
@@ -1343,12 +1497,14 @@ function Row(props: {
 function SettingToggle(props: {
   label: string;
   checked: boolean;
+  disabled?: boolean;
   onChange: (checked: boolean) => void;
 }): JSX.Element {
   return (
     <Toggle
       aria-label={props.label}
       checked={props.checked}
+      disabled={props.disabled}
       color="accent"
       class="shrink-0"
       onChange={(event) => props.onChange(event.currentTarget.checked)}

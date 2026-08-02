@@ -54,7 +54,10 @@ export function compileAdvancedPrompt(
   options: PromptModelOption[],
 ): CompiledAdvancedPrompt {
   const entityNames = options.flatMap((option) => [option.model, option.label]);
-  const parsed = new PromptSyntaxParser({ entities: entityNames }).parse(source);
+  const parsed = new PromptSyntaxParser({
+    entities: entityNames,
+    authoringNamespaces: ["agency"],
+  }).parse(source);
   const errors = parsed.diagnostics.map((diagnostic) => diagnostic.message);
   const selected: PromptModelOption[] = [];
 

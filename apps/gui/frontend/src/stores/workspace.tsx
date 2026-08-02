@@ -35,6 +35,7 @@ import type {
   QuotaReport,
   RateLimit,
   RunningTask,
+  StudyTurnMetadata,
   Tab,
   TabStatus,
   TaskLogEntry,
@@ -207,7 +208,11 @@ export type RunStatus = {
 export type QueueReason = "busy" | "compacting";
 
 /** A prompt held back, and what it is held back for. */
-export type QueuedPrompt = { body: string; reason: QueueReason };
+export type QueuedPrompt = {
+  body: string;
+  reason: QueueReason;
+  study?: StudyTurnMetadata;
+};
 
 /** What the chip above the composer says while a prompt waits. */
 export const QUEUE_REASONS: Record<QueueReason, string> = {
@@ -1393,7 +1398,11 @@ function createWorkspace() {
   // Each of these fires a command and lets the resulting event update the
   // store, so a change made by the agent and one made here land the same way.
 
-  async function createProject(firstMessage: string, tabKey: string): Promise<void> {
+  async function createProject(
+    firstMessage: string,
+    tabKey: string,
+    study?: StudyTurnMetadata,
+  ): Promise<void> {
     const tab = state.tabs.find((candidate) => candidate.key === tabKey);
     const created = await client().createProject({
       firstMessage,
@@ -1401,6 +1410,7 @@ function createWorkspace() {
       model: tab?.model,
       permission: tab?.permission,
       effort: tab?.effort,
+      study,
     });
     batch(() => {
       /*
@@ -1496,7 +1506,11 @@ function createWorkspace() {
    * No optimistic `runStatus` here: the backend's `run:accepted` starts the
    * status line, so a backend that fakes no run (the mock) shows no run.
    */
-  const dispatch = async (projectId: string, body: string): Promise<void> => {
+  const dispatch = async (
+    projectId: string,
+    body: string,
+    study?: StudyTurnMetadata,
+  ): Promise<void> => {
     const tab = state.tabs.find((candidate) => candidate.projectId === projectId);
     await client().sendMessage({
       projectId,
@@ -1507,15 +1521,25 @@ function createWorkspace() {
       // The tab's effort, which was being dropped here: every run reached the
       // agent with `effort=<none>` while the composer showed a level selected.
       effort: tab?.effort,
+      study,
     });
   };
 
   /** Hold a prompt, and say what it is waiting for. */
-  function enqueue(projectId: string, body: string, reason: QueueReason): void {
-    setState("queued", projectId, (waiting = []) => [...waiting, { body, reason }]);
+  function enqueue(
+    projectId: string,
+    body: string,
+    reason: QueueReason,
+    study?: StudyTurnMetadata,
+  ): void {
+    setState("queued", projectId, (waiting = []) => [...waiting, { body, reason, study }]);
   }
 
-  const send = async (projectId: string, body: string): Promise<void> => {
+  const send = async (
+    projectId: string,
+    body: string,
+    study?: StudyTurnMetadata,
+  ): Promise<void> => {
     /*
      * A compaction is the one busy state worth checking *before* dispatching.
      * It is not a turn that can be interrupted — the words would go into a run
@@ -1523,7 +1547,7 @@ function createWorkspace() {
      * that a message vanishing into it looks like the app dropping it.
      */
     if (state.compacting[projectId]) {
-      enqueue(projectId, body, "compacting");
+      enqueue(projectId, body, "compacting", study);
       return;
     }
 
@@ -1533,7 +1557,7 @@ function createWorkspace() {
       runningAgent !== undefined &&
       !capabilitiesFor(runningAgent)?.liveFollowUp
     ) {
-      enqueue(projectId, body, "busy");
+      enqueue(projectId, body, "busy", study);
       return;
     }
 
@@ -1546,11 +1570,11 @@ function createWorkspace() {
      * back.
      */
     try {
-      await dispatch(projectId, body);
+      await dispatch(projectId, body, study);
     } catch (cause) {
       const reason = queueReason(cause);
       if (reason) {
-        enqueue(projectId, body, reason);
+        enqueue(projectId, body, reason, study);
         return;
       }
       throw cause;
@@ -1571,7 +1595,7 @@ function createWorkspace() {
     if (isBusy(projectId)) return; // a newer run took the slot; its stop will re-cue
     setState("queued", projectId, waiting.slice(1));
     try {
-      await dispatch(projectId, next.body);
+      await dispatch(projectId, next.body, next.study);
     } catch (cause) {
       setState("queued", projectId, (rest = []) => [next, ...rest]);
       if (attempt < 4) {
@@ -1593,7 +1617,7 @@ function createWorkspace() {
    * Its conversation is separate from project tabs, including one native
    * session per provider.
    */
-  const sendTaskPrompt = async (body: string): Promise<void> => {
+  const sendTaskPrompt = async (body: string, study?: StudyTurnMetadata): Promise<void> => {
     const taskManager = state.settings?.taskManager;
     await client().sendMessage({
       projectId: TASK_MANAGER_ID,
@@ -1602,6 +1626,7 @@ function createWorkspace() {
       model: taskManager?.model,
       permission: taskManager?.permission,
       effort: taskManager?.effort,
+      study,
     });
   };
 
@@ -1713,6 +1738,9 @@ function createWorkspace() {
       // rejected or clamped theme shows as the value that was actually stored.
       applyTheme(next.theme);
     },
+    getStudySummary: () => client().getStudySummary(),
+    exportStudyEvents: () => client().exportStudyEvents(),
+    clearStudyEvents: () => client().clearStudyEvents(),
     async recheckAgents() {
       setState("agents", reconcile(await client().listAgentStatus(true)));
     },

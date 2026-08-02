@@ -20,6 +20,8 @@ import type {
   QuotaReport,
   RateLimit,
   RunningTask,
+  StudySummary,
+  StudyTurnMetadata,
   TableSize,
   TaskLogEntry,
   TaskManagerState,
@@ -58,6 +60,7 @@ export interface AgencyZeroApi {
     permission?: Permission;
     /** Reasoning effort, as `Request::effort`. Absent means the CLI's default. */
     effort?: string;
+    study?: StudyTurnMetadata;
   }): Promise<CreatedProject>;
   deleteProject(id: string): Promise<void>;
   /** Stage 3 of the naming design: a manual rename outranks both derived stages. */
@@ -103,6 +106,7 @@ export interface AgencyZeroApi {
     permission?: Permission;
     /** Reasoning effort, as `Request::effort`. Absent means the CLI's default. */
     effort?: string;
+    study?: StudyTurnMetadata;
   }): Promise<Message>;
   /** Approve once / Deny on a moderator hold. */
   resolveModeration(messageId: string, approve: boolean): Promise<Message>;
@@ -110,6 +114,10 @@ export interface AgencyZeroApi {
   // — Settings ————————————————————————————————————————————————
   getSettings(): Promise<GlobalSettings>;
   setSettings(patch: DeepPartial<GlobalSettings>): Promise<GlobalSettings>;
+  getStudySummary(): Promise<StudySummary>;
+  /** Native save picker; `null` means it was cancelled. */
+  exportStudyEvents(): Promise<string | null>;
+  clearStudyEvents(): Promise<void>;
   /** Experimental profile only. Fetches usage through Claude Code's managed login. */
   claudeUsage(): Promise<ClaudeUsage>;
   /** Probes the installed CLIs. `recheck` forces a fresh probe. */
