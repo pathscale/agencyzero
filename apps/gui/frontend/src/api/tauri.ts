@@ -70,6 +70,9 @@ export function createTauriApi(): AgencyZeroApi {
 
     getSettings: () => call("get_settings"),
     setSettings: (patch) => call("set_settings", { patch }),
+    getStudySummary: () => call("get_study_summary"),
+    exportStudyEvents: () => call("export_study_events"),
+    clearStudyEvents: () => call("clear_study_events"),
     claudeUsage: () => call("claude_usage"),
     listAgentStatus: (recheck) => call("list_agent_status", { recheck }),
     listModels: (discover) => call("list_models", { discover }),

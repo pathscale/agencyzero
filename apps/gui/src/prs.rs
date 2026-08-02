@@ -507,14 +507,19 @@ pub async fn dismiss_pull_request(
     id: String,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
+    let started = std::time::Instant::now();
     state
         .tables
         .pull_request
         .update_pr_dismissed_by_id(PrDismissedByIdQuery { dismissed: true }, id.clone())
         .await
         .map_err(|error| error.to_string())?;
-    if let Some(row) = state.tables.pull_request.select(id) {
+    if let Some(row) = state.tables.pull_request.select(id.clone()) {
+        let project_id = row.project_id.clone();
         let _ = app.emit("pr:updated", PullRequestDto::from(row));
+        let mut study = crate::study::Record::manual(project_id, "pr.dismiss", "pull_request", id);
+        study.latency = Some(started.elapsed());
+        crate::study::record(&state.tables, study);
     }
     Ok(())
 }
@@ -524,13 +529,31 @@ pub async fn dismiss_pull_request(
 pub fn refresh_pull_request(app: AppHandle, id: String) {
     // Asked about one, answered for its whole project: the query costs the
     // same either way, and a chip nobody clicked is no less stale.
-    let project = app
-        .state::<AppState>()
+    let state = app.state::<AppState>();
+    let project = state
         .tables
         .pull_request
-        .select(id)
+        .select(id.clone())
         .map(|row| row.project_id);
     if let Some(project) = project {
+        crate::study::record(
+            &state.tables,
+            crate::study::Record {
+                project_id: project.clone(),
+                turn_id: String::new(),
+                interaction_id: String::new(),
+                agent: String::new(),
+                pathway: "manual",
+                operation: "pr.refresh",
+                stage: "submitted",
+                outcome: "observed",
+                code: String::new(),
+                target_kind: "pull_request",
+                target_id: id,
+                latency: None,
+                detail: serde_json::json!({}),
+            },
+        );
         refresh_project(app, project);
     }
 }
