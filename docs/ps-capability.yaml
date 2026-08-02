@@ -19,6 +19,7 @@ standing_promotion:
     - agency:items.add
     - agency:items.retire
     - agency:pr.link
+    - agency:issue.link
 
   # 13.2.2 Verbs and values reserved to principals above the agent. An agent may
   # report that it shipped something; it cannot report that the thing works.
@@ -40,6 +41,7 @@ standing_promotion:
     agency:items.add: [project, ref, title, status]
     agency:items.retire: [id]
     agency:pr.link: [url, number, item]
+    agency:issue.link: [url, item]
 
   semantics:
     pr_urls_in_prose: inert

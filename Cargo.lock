@@ -23,9 +23,9 @@ checksum = "320119579fcad9c21884f5c4861d16174d0e06250625266f50fe6898340abefa"
 
 [[package]]
 name = "agent-abstraction"
-version = "0.4.5"
+version = "0.4.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2b7ac55a3ddbf3470033f034c2e6ea14d15a107bc4fc205c8ea380b97f250106"
+checksum = "7e63f12e036c673c2189b86fe6176e10d75505de7a570444c9d77e6ae706ccae"
 dependencies = [
  "libc",
  "serde",
@@ -38,7 +38,7 @@ dependencies = [
 [[package]]
 name = "agent-experimental"
 version = "0.1.0"
-source = "git+https://gitlab.com/anonymous-28282828282/agent-experimental.git?rev=df144f229d8ccd510deb17a866c9724337294e42#df144f229d8ccd510deb17a866c9724337294e42"
+source = "git+https://gitlab.com/anonymous-28282828282/agent-experimental.git?rev=4d7b738c5bf481798313751de5cc507469c9d2c2#4d7b738c5bf481798313751de5cc507469c9d2c2"
 dependencies = [
  "anyhow",
  "reqwest",
@@ -46,6 +46,7 @@ dependencies = [
  "serde",
  "serde_json",
  "tempfile",
+ "tokio",
 ]
 
 [[package]]
@@ -182,8 +183,8 @@ dependencies = [
  "derive_more 2.1.1",
  "eyre",
  "futures",
+ "promptsyntax",
  "rkyv 0.8.17",
- "security-framework",
  "serde",
  "serde_json",
  "tauri",
@@ -1054,7 +1055,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
- "windows-sys 0.59.0",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -1901,7 +1902,7 @@ checksum = "3640c1c38b8e4e43584d8df18be5fc6b0aa314ce6ebf51b53313d4306cca8e46"
 dependencies = [
  "hermit-abi",
  "libc",
- "windows-sys 0.59.0",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -2823,6 +2824,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "promptsyntax"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d65d44b1448a1cdc9c8398f9089ef1af49db3a564dcfd9f503ab15017a8f8c1d"
+dependencies = [
+ "serde",
+ "unicode-ident",
+ "unicode-normalization",
+]
+
+[[package]]
 name = "psc-nanoid"
 version = "3.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3213,7 +3225,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys",
- "windows-sys 0.59.0",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -3269,7 +3281,7 @@ dependencies = [
  "security-framework",
  "security-framework-sys",
  "webpki-root-certs",
- "windows-sys 0.59.0",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -4232,10 +4244,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "32497e9a4c7b38532efcdebeef879707aa9f794296a4f0244f6f69e9bc8574bd"
 dependencies = [
  "fastrand",
- "getrandom 0.4.3",
+ "getrandom 0.3.4",
  "once_cell",
  "rustix",
- "windows-sys 0.59.0",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -4688,6 +4700,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e6e4313cd5fcd3dad5cafa179702e2b244f760991f45397d14d4ebf38247da75"
 
 [[package]]
+name = "unicode-normalization"
+version = "0.1.25"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5fd4f6878c9cb28d874b009da9e8d183b5abc80117c40bbd187a1fde336be6e8"
+dependencies = [
+ "tinyvec",
+]
+
+[[package]]
 name = "unicode-segmentation"
 version = "1.13.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5021,7 +5042,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.59.0",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]

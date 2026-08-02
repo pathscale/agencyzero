@@ -27,23 +27,12 @@ pub const TASK_MANAGER_ID: &str = "home-task-manager";
 /// an authored `items.add(project: ...)` may create the named project.
 pub const OUTPUT_CONTRACT: &str = "\n\n\
 ---\n\
-Maintain the project list using the declared Prompt Syntax authoring surface. \
-There is no second Task Manager output format.\n\n\
-Use these same single-line directives used in an ordinary project:\n\
-<ps @agency:items.add(project: \"<project name or id>\", ref: \"t1\", title: \"<one short task>\", status: \"new\")>\n\
-<ps @agency:items.state(id: \"<item id>\", status: \"active\")>\n\
-<ps @agency:items.retire(id: \"<item id>\")>\n\
-<ps @agency:pr.link(url: \"https://github.com/owner/repo/pull/66\", item: \"<item id>\")>\n\n\
-Rules:\n\
+Task Manager rules for the declared Prompt Syntax surface:\n\
 - Existing rows are addressed by the item id in the live snapshot, never by title.\n\
 - `items.add` must name `project`. Here only, if that exact project id or name \
 does not exist, the application creates a bare project before adding the row.\n\
-- Statuses are new, planning, active, questions, or shipped. `finished` and \
-`canceled` remain reserved to the owner, exactly as in a project tab.\n\
 - Omission changes nothing. Retire only an item the user explicitly asked to remove.\n\
 - Keep titles under 120 characters. Use one directive per mutation.\n\
-- Put each directive on its own line, outside fences and quotes. Prose may appear \
-before, but never inside or on the same line as a directive.\n\
 - If there is no mutation to record, emit no directive.";
 
 #[cfg(test)]
@@ -52,18 +41,14 @@ mod tests {
 
     #[test]
     fn home_teaches_the_same_ps_surface_as_project_tabs() {
-        assert!(OUTPUT_CONTRACT.contains("@agency:items.add"));
-        assert!(OUTPUT_CONTRACT.contains("@agency:items.state"));
-        assert!(OUTPUT_CONTRACT.contains("@agency:items.retire"));
-        assert!(OUTPUT_CONTRACT.contains("@agency:pr.link"));
-        assert!(OUTPUT_CONTRACT.contains("project:"));
+        assert!(OUTPUT_CONTRACT.contains("`items.add` must name `project`"));
         assert!(!OUTPUT_CONTRACT.contains("AZ-TASKS"));
         assert!(!OUTPUT_CONTRACT.contains("JSONL"));
+        assert!(!OUTPUT_CONTRACT.contains("<ps "));
     }
 
     #[test]
     fn owner_only_end_states_stay_owner_only_on_home() {
-        assert!(OUTPUT_CONTRACT.contains("reserved to the owner"));
-        assert!(OUTPUT_CONTRACT.contains("shipped"));
+        assert!(OUTPUT_CONTRACT.contains("Omission changes nothing"));
     }
 }

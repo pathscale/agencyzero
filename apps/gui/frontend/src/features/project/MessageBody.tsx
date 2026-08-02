@@ -1,3 +1,4 @@
+import { PromptSyntaxParser } from "promptsyntax";
 import { createSignal, For, type JSX, Show } from "solid-js";
 import { Icon } from "~/components/Icon";
 import { describeError, log } from "~/lib/log";
@@ -72,13 +73,23 @@ type Block =
   | { kind: "directive"; text: string }
   | { kind: "prose"; text: string };
 
+const promptSyntax = new PromptSyntaxParser({ authoringNamespaces: ["agency"] });
+
 /** The same explicit authoring-line boundary Rust promotes. */
 export function isPromptSyntaxDirectiveLine(line: string): boolean {
   if (line.startsWith("    ") || line.startsWith("\t")) return false;
   const trimmed = line.trim();
   if (trimmed.startsWith(">")) return false;
-  const afterTag = trimmed.slice(3);
-  return trimmed.startsWith("<ps") && /^\s/.test(afterTag) && trimmed.endsWith(">");
+  const parsed = promptSyntax.parse(trimmed);
+  if (parsed.segments.length !== 1) return false;
+  const [segment] = parsed.segments;
+  return (
+    segment?.type === "directive" &&
+    segment.span.start === 0 &&
+    segment.span.end === trimmed.length &&
+    (segment.directive.kind === "authoring_segment" ||
+      segment.directive.kind === "invalid_authoring_segment")
+  );
 }
 
 /**

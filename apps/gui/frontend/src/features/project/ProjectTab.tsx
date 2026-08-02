@@ -7,7 +7,14 @@ import { ProjectPanel } from "~/features/project/ProjectPanel";
 import { TranscriptPane } from "~/features/project/TranscriptPane";
 import { AGENT_LABELS, rateLimitLabel } from "~/lib/labels";
 import { describeError, log } from "~/lib/log";
-import { compactCount, contextUsed, costLabel, usageTotals, withLiveContext } from "~/lib/stats";
+import {
+  cacheBreak,
+  compactCount,
+  contextUsed,
+  costLabel,
+  usageTotals,
+  withLiveContext,
+} from "~/lib/stats";
 import { QUEUE_REASONS, useWorkspace } from "~/stores/workspace";
 import type { Project, PullRequest, Tab } from "~/types";
 
@@ -73,6 +80,7 @@ export function ProjectTab(props: { tab: Tab; project: Project }): JSX.Element {
    * em dash rather than as zero.
    */
   const totals = createMemo(() => usageTotals(messages()));
+  const likelyCacheBreak = createMemo(() => cacheBreak(messages()));
 
   /** Why the cost reads as it does, for the hover on the header figure. */
   const costTitle = () => {
@@ -155,6 +163,15 @@ export function ProjectTab(props: { tab: Tab; project: Project }): JSX.Element {
               </Show>
             </Show>
           </span>
+
+          <Show when={likelyCacheBreak()}>
+            <span
+              title="The latest comparable turn reported zero cache reads after a substantial cached turn. This can increase usage, but the provider does not expose the cause."
+              class="shrink-0 rounded-full border border-warning/30 bg-warning/10 px-2.5 py-0.5 text-[11px] text-warning"
+            >
+              cache miss?
+            </span>
+          </Show>
 
           <SessionChip
             sessionId={

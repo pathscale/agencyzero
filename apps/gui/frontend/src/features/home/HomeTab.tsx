@@ -510,7 +510,7 @@ function TaskManagerStatus(): JSX.Element {
             <For each={tasks()}>
               {(task) => (
                 <div class="flex items-baseline gap-2.5 px-1 py-1">
-                  <ItemMarker status={task.status === "active" ? "active" : "pending"} />
+                  <ItemMarker status={task.status} />
                   <span class="min-w-0 flex-1 truncate text-[12px] text-az-body">{task.title}</span>
                   <span class={`shrink-0 text-[11px] ${STATUS_TONE[task.status]}`}>
                     {statusSuffix(task.status)}
@@ -539,7 +539,7 @@ function GroupItemRow(props: {
   item: ProjectItem;
   onFold: () => void;
   onOpen: () => void;
-  /** Cycles pending → active → finished → pending, from the marker. */
+  /** Cycles through every owner-visible status, from the marker. */
   onAdvance: () => void;
 }): JSX.Element {
   const { actions } = useWorkspace();
@@ -598,14 +598,9 @@ function GroupItemRow(props: {
           }}
           aria-label={`Change the status of ${props.item.title}`}
           title={`${props.item.status} — click to change`}
-          class="shrink-0 rounded-md p-0.5 transition-colors hover:bg-primary/12"
+          class="flex size-7 shrink-0 items-center justify-center rounded-full transition-colors hover:bg-primary/12 focus-visible:bg-primary/12"
         >
-          <Show
-            when={props.item.status === "finished"}
-            fallback={<ItemMarker status={props.item.status === "active" ? "active" : "pending"} />}
-          >
-            <Icon name="check" class="relative top-0.5 shrink-0 text-[13px] text-success" />
-          </Show>
+          <ItemMarker status={props.item.status} />
         </button>
         <button
           type="button"

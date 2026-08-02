@@ -152,7 +152,7 @@ pub struct UsageDto {
     /// The model's context window, where the agent reports one. Claude alone
     /// does, so a share of the limit is only shown when it is there.
     pub context_window: Option<u64>,
-    /// Also cumulative rather than additive. Same reason.
+    /// Tokens served from cache during this turn. Additive across turns.
     pub cache_reads: Option<u64>,
     pub reasoning_tokens: Option<u64>,
     pub cost_usd: Option<f64>,
@@ -697,6 +697,66 @@ pub async fn update_item(
     Ok(dto)
 }
 
+fn github_issue_url(authored: &str) -> Option<String> {
+    const HOST: &str = "https://github.com/";
+    let path = authored.trim().strip_prefix(HOST)?.trim_end_matches('/');
+    let mut parts = path.split('/');
+    let (Some(owner), Some(repo), Some("issues"), Some(number)) =
+        (parts.next(), parts.next(), parts.next(), parts.next())
+    else {
+        return None;
+    };
+    if owner.is_empty()
+        || repo.is_empty()
+        || number.parse::<u32>().is_err()
+        || parts.next().is_some()
+    {
+        return None;
+    }
+    Some(format!("{HOST}{owner}/{repo}/issues/{number}"))
+}
+
+async fn link_item_issue_inner(
+    app: &AppHandle,
+    tables: &crate::db::tables::Tables,
+    id: &str,
+    authored_url: &str,
+) -> Result<ProjectItemDto, String> {
+    let url = github_issue_url(authored_url)
+        .ok_or_else(|| "ENTITY_NOT_FOUND: not a GitHub issue URL".to_string())?;
+    tables
+        .project_item
+        .update_reference_by_id(
+            ItemReferenceByIdQuery {
+                reference: format!("issue:{url}"),
+            },
+            id.to_string(),
+        )
+        .await
+        .map_err(|error| error.to_string())?;
+    let row = tables
+        .project_item
+        .select(id.to_string())
+        .ok_or_else(|| format!("no item {id}"))?;
+    let dto = ProjectItemDto::from(row);
+    let _ = app.emit("item:updated", dto.clone());
+    Ok(dto)
+}
+
+/// Associate an item with a validated GitHub issue URL.
+///
+/// # Errors
+/// Returns a validation message, a missing item error, or a store failure.
+#[tauri::command]
+pub async fn set_item_issue(
+    app: AppHandle,
+    id: String,
+    url: String,
+    state: State<'_, AppState>,
+) -> Result<ProjectItemDto, String> {
+    link_item_issue_inner(&app, &state.tables, &id, &url).await
+}
+
 /// Remove one item.
 ///
 /// # Errors
@@ -883,7 +943,12 @@ fn state_snapshot(
         .pull_request
         .select_by_project_id(project_id.to_string())
         .execute()
-        .unwrap_or_default();
+        .unwrap_or_default()
+        .into_iter()
+        // Closed and merged rows remain in the project store and UI history,
+        // but they are not routing context for the next turn.
+        .filter(|row| !matches!(row.state.to_ascii_lowercase().as_str(), "closed" | "merged"))
+        .collect();
 
     let mut out = String::new();
     if project_id == crate::tasks::TASK_MANAGER_ID {
@@ -892,9 +957,11 @@ fn state_snapshot(
         out.push_str("This project has no open items.");
     } else {
         out.push_str("Open items in this project. Answer with the id, never the title:\n");
-        for row in &items {
+        for row in items.iter().take(40) {
             let reference = if row.reference.is_empty() {
                 String::new()
+            } else if let Some(url) = row.reference.strip_prefix("issue:") {
+                format!(" (issue {url})")
             } else {
                 format!(" (#{})", row.reference)
             };
@@ -903,15 +970,25 @@ fn state_snapshot(
                 row.id, row.status, row.title, reference
             ));
         }
+        if items.len() > 40 {
+            out.push_str(&format!(
+                "  ... {} more open items omitted\n",
+                items.len() - 40
+            ));
+        }
     }
     if !prs.is_empty() {
         out.push_str("Pull requests: ");
         out.push_str(
             &prs.iter()
+                .take(20)
                 .map(|pr| format!("#{} {}", pr.number, pr.state.to_lowercase()))
                 .collect::<Vec<_>>()
                 .join(" · "),
         );
+        if prs.len() > 20 {
+            out.push_str(&format!(" ({} more omitted)", prs.len() - 20));
+        }
         out.push('\n');
     }
     /*
@@ -953,6 +1030,7 @@ fn state_snapshot(
          <ps @agency:items.add(project: \"<project id or exact name>\", ref: \"t2\", title: \"<one line>\")>\n\
          <ps @agency:items.retire(id: \"<id>\")>\n\
          <ps @agency:pr.link(url: \"https://github.com/owner/repo/pull/66\", item: \"<id>\")>\n\
+         <ps @agency:issue.link(url: \"https://github.com/owner/repo/issues/42\", item: \"<id>\")>\n\
          Statuses you may set: new, planning, active, questions, shipped. `questions` \
          means you are stopped on something only the owner can answer. `finished` and \
          `canceled` are refused: the owner closes a row. An id may be shortened to any \
@@ -1327,6 +1405,31 @@ async fn apply_directive(
                 Err(error) => Outcome::Refused {
                     what: format!("pr.link({resolved})"),
                     code: format!("WRITE_FAILED: {error}"),
+                },
+            }
+        }
+        Directive::IssueLink { url, item } => {
+            let known: Vec<&str> = rows.iter().map(|row| row.id.as_str()).collect();
+            let resolved = match crate::directives::resolve(&known, &item) {
+                Ok(found) => found.to_string(),
+                Err(code) => {
+                    return Outcome::Refused {
+                        what: format!("issue.link(item: {item})"),
+                        code,
+                    };
+                }
+            };
+            match link_item_issue_inner(app, tables, &resolved, &url).await {
+                Ok(dto) => Outcome::Done(format!(
+                    "{} <- {}",
+                    dto.id,
+                    dto.reference
+                        .unwrap_or_default()
+                        .trim_start_matches("issue:")
+                )),
+                Err(code) => Outcome::Refused {
+                    what: format!("issue.link({resolved})"),
+                    code,
                 },
             }
         }
@@ -5503,6 +5606,18 @@ async fn checkpoint_if_due(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn github_issues_are_canonical_and_pull_requests_are_refused() {
+        assert_eq!(
+            github_issue_url("https://github.com/pathscale/agencyzero/issues/42/"),
+            Some("https://github.com/pathscale/agencyzero/issues/42".into())
+        );
+        assert_eq!(
+            github_issue_url("https://github.com/pathscale/agencyzero/pull/42"),
+            None
+        );
+    }
 
     #[test]
     fn partial_reply_checkpoints_keep_provider_identity_within_the_blob_limit() {

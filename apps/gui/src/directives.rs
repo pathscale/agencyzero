@@ -24,6 +24,8 @@
 //! caller is responsible for that (see `apply_directives`), which is why this
 //! module reads one line at a time and knows nothing about fences.
 
+use promptsyntax::{Argument, Directive as ParsedDirective, Parser, Reference, Scalar};
+
 /// The authoring surface this application declares, per Prompt Syntax 13.2.
 ///
 /// A standing promotion: model-generated text is inert by default, and an
@@ -58,7 +60,13 @@ pub struct Surface {
 pub const SURFACE: Surface = Surface {
     delimiter: "<ps …> on its own line, outside fenced or quoted content",
     namespace: "agency",
-    verbs: &["items.state", "items.add", "items.retire", "pr.link"],
+    verbs: &[
+        "items.state",
+        "items.add",
+        "items.retire",
+        "pr.link",
+        "issue.link",
+    ],
     reserved: &["status:finished", "status:canceled"],
     bound: "any project in this installation's store, named by id or by name; \
             Home Task Manager may create a named project inside that store through \
@@ -110,6 +118,8 @@ pub enum Directive {
         number: Option<String>,
         item: Option<String>,
     },
+    /// Associate one item with a GitHub issue URL.
+    IssueLink { url: String, item: String },
     /// Remove a row, by id.
     ///
     /// The cleanup verb, and the reason it exists is that the old one deleted
@@ -153,48 +163,95 @@ impl Outcome {
     }
 }
 
-/// Read one `key: value` out of a directive's arguments.
-///
-/// Quotes optional: a title is prose and whoever writes one should not have to
-/// think about which half of the pair needs them. Values may contain commas
-/// inside quotes, which a title routinely does.
-fn arg<'a>(args: &'a str, key: &str) -> Option<&'a str> {
-    let mut rest = args;
-    while !rest.trim().is_empty() {
-        let (pair, tail) = split_pair(rest);
-        rest = tail;
-        let Some((found, value)) = pair.split_once(':') else {
-            continue;
-        };
-        if found.trim().eq_ignore_ascii_case(key) {
-            let value = value.trim();
-            let unquoted = value
-                .strip_prefix('"')
-                .and_then(|inner| inner.strip_suffix('"'))
-                .or_else(|| {
-                    value
-                        .strip_prefix('\'')
-                        .and_then(|inner| inner.strip_suffix('\''))
-                })
-                .unwrap_or(value);
-            return Some(unquoted.trim());
+fn scalar_text(value: &Scalar) -> Option<String> {
+    match value {
+        Scalar::String(value) | Scalar::Number(value) | Scalar::Bare(value) => {
+            Some(value.trim().to_string())
         }
+        Scalar::Boolean(value) => Some(value.to_string()),
+        Scalar::Null => None,
     }
-    None
 }
 
-/// Split off the first `key: value`, respecting quotes around the value.
-fn split_pair(args: &str) -> (&str, &str) {
-    let mut quote: Option<char> = None;
-    for (at, ch) in args.char_indices() {
-        match (quote, ch) {
-            (Some(open), c) if c == open => quote = None,
-            (None, '"' | '\'') => quote = Some(ch),
-            (None, ',') => return (&args[..at], &args[at + 1..]),
-            _ => {}
-        }
+fn arg(arguments: &[Argument], key: &str) -> Option<String> {
+    arguments
+        .iter()
+        .find(|argument| argument.key.eq_ignore_ascii_case(key))
+        .and_then(|argument| scalar_text(&argument.value))
+}
+
+fn authored_reference(line: &str) -> Option<Result<Reference, String>> {
+    let trimmed = line.trim();
+    let header = trimmed.strip_prefix("<ps")?;
+    if !header.chars().next().is_some_and(char::is_whitespace) {
+        return None;
     }
-    (args, "")
+    let namespace = header.trim_start().strip_prefix('@')?.split_once(':')?.0;
+    if !namespace.eq_ignore_ascii_case(SURFACE.namespace) {
+        return None;
+    }
+    let parsed = Parser::new().authoring_namespace(namespace).parse(trimmed);
+    let segment = parsed.segments.as_slice().first()?;
+    if parsed.segments.len() != 1
+        || segment.span().start != 0
+        || segment.span().end != trimmed.len()
+    {
+        return None;
+    }
+    let promptsyntax::Segment::Directive(segment) = segment else {
+        return None;
+    };
+    match &segment.directive {
+        ParsedDirective::AuthoringSegment { reference } => Some(Ok(reference.clone())),
+        ParsedDirective::InvalidAuthoringSegment { header } => Some(Err(header.clone())),
+        _ => None,
+    }
+}
+
+fn from_reference(reference: &Reference) -> Option<Directive> {
+    let verb = reference.name.as_str();
+    let args = &reference.arguments;
+    if verb.eq_ignore_ascii_case("items.state") {
+        let id = arg(args, "id")?;
+        let status = arg(args, "status")?;
+        return (!id.is_empty() && !status.is_empty()).then(|| Directive::ItemState {
+            id,
+            status: status.to_ascii_lowercase(),
+            pr: arg(args, "pr")
+                .map(|number| number.trim_start_matches('#').to_string())
+                .filter(|number| !number.is_empty()),
+        });
+    }
+    if verb.eq_ignore_ascii_case("items.add") {
+        let title = arg(args, "title")?;
+        return (!title.is_empty()).then(|| Directive::ItemAdd {
+            handle: arg(args, "ref").filter(|handle| !handle.is_empty()),
+            project: arg(args, "project").filter(|project| !project.is_empty()),
+            title,
+            status: arg(args, "status")
+                .unwrap_or_else(|| "new".to_string())
+                .to_ascii_lowercase(),
+        });
+    }
+    if verb.eq_ignore_ascii_case("items.retire") {
+        let id = arg(args, "id")?;
+        return (!id.is_empty()).then_some(Directive::ItemRetire { id });
+    }
+    if verb.eq_ignore_ascii_case("pr.link") {
+        let url = arg(args, "url").filter(|url| !url.is_empty());
+        let number = arg(args, "number")
+            .map(|number| number.trim_start_matches('#').to_string())
+            .filter(|number| !number.is_empty());
+        let item = arg(args, "item").filter(|item| !item.is_empty());
+        return (url.is_some() || (number.is_some() && item.is_some()))
+            .then_some(Directive::PrLink { url, number, item });
+    }
+    if verb.eq_ignore_ascii_case("issue.link") {
+        let url = arg(args, "url")?;
+        let item = arg(args, "item")?;
+        return (!url.is_empty() && !item.is_empty()).then_some(Directive::IssueLink { url, item });
+    }
+    None
 }
 
 /// Recognize one directive on one line, or nothing.
@@ -204,71 +261,12 @@ fn split_pair(args: &str) -> (&str, &str) {
 /// `agency`) folds to nothing and stays inert, which is the point of doing it
 /// this way rather than with a Unicode fold.
 #[must_use]
+#[cfg(test)]
 pub fn parse(line: &str) -> Option<Directive> {
-    // Prompt Syntax requires bidi controls inside an island to be rejected or
-    // neutralized. Rejection is the safer fit for a reverse-channel mutation:
-    // what the person sees must be the same ordering the parser acts on.
-    if line.chars().any(|char| {
-        matches!(
-            char,
-            '\u{061c}' | '\u{200e}' | '\u{200f}' | '\u{202a}'..='\u{202e}' | '\u{2066}'..='\u{2069}'
-        )
-    }) {
-        return None;
-    }
-    let inner = line.trim().strip_prefix("<ps")?.strip_suffix('>')?.trim();
-    let (verb, args) = match inner.split_once('(') {
-        Some((verb, args)) => (verb.trim(), args.strip_suffix(')')?),
-        None => (inner, ""),
-    };
-
-    if verb.eq_ignore_ascii_case("@agency:items.state") {
-        let id = arg(args, "id")?;
-        let status = arg(args, "status")?;
-        return (!id.is_empty() && !status.is_empty()).then(|| Directive::ItemState {
-            id: id.to_string(),
-            status: status.to_ascii_lowercase(),
-            pr: arg(args, "pr")
-                .map(|number| number.trim_start_matches('#').to_string())
-                .filter(|number| !number.is_empty()),
-        });
-    }
-    if verb.eq_ignore_ascii_case("@agency:items.add") {
-        let title = arg(args, "title")?;
-        return (!title.is_empty()).then(|| Directive::ItemAdd {
-            handle: arg(args, "ref")
-                .map(str::to_string)
-                .filter(|handle| !handle.is_empty()),
-            project: arg(args, "project")
-                .map(str::to_string)
-                .filter(|project| !project.is_empty()),
-            title: title.to_string(),
-            status: arg(args, "status")
-                .unwrap_or("new")
-                .to_ascii_lowercase()
-                .to_string(),
-        });
-    }
-    if verb.eq_ignore_ascii_case("@agency:items.retire") {
-        let id = arg(args, "id")?;
-        return (!id.is_empty()).then(|| Directive::ItemRetire { id: id.to_string() });
-    }
-    if verb.eq_ignore_ascii_case("@agency:pr.link") {
-        let url = arg(args, "url")
-            .map(str::to_string)
-            .filter(|url| !url.is_empty());
-        let number = arg(args, "number")
-            .map(|number| number.trim_start_matches('#').to_string())
-            .filter(|number| !number.is_empty());
-        let item = arg(args, "item")
-            .map(str::to_string)
-            .filter(|item| !item.is_empty());
-        // A URL can be tracked without an item. A number alone cannot: it has
-        // no repository and therefore cannot identify a pull request row.
-        return (url.is_some() || (number.is_some() && item.is_some()))
-            .then_some(Directive::PrLink { url, number, item });
-    }
-    None
+    authored_reference(line)
+        .and_then(Result::ok)
+        .as_ref()
+        .and_then(from_reference)
 }
 
 /// Resolve one explicit authoring segment, including its failure path.
@@ -279,35 +277,39 @@ pub fn parse(line: &str) -> Option<Directive> {
 /// fails syntax validation. Both are receipts rather than silent raw text.
 #[must_use]
 pub fn parse_authored(line: &str) -> Option<Authored> {
-    let trimmed = line.trim();
-    let after_tag = trimmed.strip_prefix("<ps")?;
-    if !after_tag.chars().next().is_some_and(char::is_whitespace) {
-        return None;
-    }
-    if let Some(directive) = parse(trimmed) {
+    let parsed = authored_reference(line)?;
+    let (named, known, directive) = match parsed {
+        Ok(reference) => {
+            let named = format!("@{}:{}", SURFACE.namespace, reference.name);
+            let known = SURFACE
+                .verbs
+                .iter()
+                .any(|candidate| reference.name.eq_ignore_ascii_case(candidate));
+            let directive = from_reference(&reference);
+            (named, known, directive)
+        }
+        Err(header) => {
+            let verb = header
+                .split_once('(')
+                .map_or(header.as_str(), |(verb, _)| verb)
+                .trim();
+            let named = if verb.is_empty() {
+                "authored Prompt Syntax segment".to_string()
+            } else {
+                verb.chars().take(96).collect()
+            };
+            let known = SURFACE.verbs.iter().any(|candidate| {
+                verb.eq_ignore_ascii_case(&format!("@{}:{candidate}", SURFACE.namespace))
+            });
+            (named, known, None)
+        }
+    };
+    if let Some(directive) = directive {
         return Some(Authored::Directive(directive));
     }
-
-    let has_bidi = trimmed.chars().any(|char| {
-        matches!(
-            char,
-            '\u{061c}' | '\u{200e}' | '\u{200f}' | '\u{202a}'..='\u{202e}' | '\u{2066}'..='\u{2069}'
-        )
-    });
-    let inner = after_tag.strip_suffix('>').unwrap_or(after_tag).trim();
-    let verb = inner.split_once('(').map_or(inner, |(verb, _)| verb).trim();
-    let named = if verb.is_empty() {
-        "authored Prompt Syntax segment".to_string()
-    } else {
-        verb.chars().take(96).collect()
-    };
-    let known = SURFACE
-        .verbs
-        .iter()
-        .any(|candidate| verb.eq_ignore_ascii_case(&format!("@{}:{candidate}", SURFACE.namespace)));
     Some(Authored::Refused(Outcome::Refused {
         what: named,
-        code: if has_bidi || known {
+        code: if known {
             "SYNTAX_INVALID".into()
         } else {
             "ENTITY_NOT_FOUND".into()
@@ -409,6 +411,20 @@ mod tests {
             })
         );
         assert!(parse(r#"<ps @agency:pr.link(number: 76)>"#).is_none());
+    }
+
+    #[test]
+    fn a_github_issue_may_be_attached_to_an_item() {
+        let url = "https://github.com/pathscale/agencyzero/issues/42";
+        assert_eq!(
+            parse(&format!(
+                r#"<ps @agency:issue.link(url: "{url}", item: "item-a3f9")>"#
+            )),
+            Some(Directive::IssueLink {
+                url: url.into(),
+                item: "item-a3f9".into(),
+            })
+        );
     }
 
     /// Casual capitalisation compiles to the canonical verb; a confusable does

@@ -6,20 +6,6 @@
 
 use agent_abstraction::{Agent, Request};
 
-#[cfg(all(feature = "experimental", target_os = "macos"))]
-const CLAUDE_TOKEN_SERVICE: &str = "com.pathscale.agencyzero.experimental.claude-usage";
-#[cfg(all(feature = "experimental", target_os = "macos"))]
-const CLAUDE_TOKEN_ACCOUNT: &str = "oauth-access-token";
-#[cfg(all(feature = "experimental", target_os = "macos"))]
-const ERR_SEC_ITEM_NOT_FOUND: i32 = -25_300;
-
-/// Whether the experimental profile has a Claude token in the OS secret store.
-#[derive(serde::Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ClaudeTokenStatus {
-    pub configured: bool,
-}
-
 /// One provider-defined Claude usage window.
 #[derive(serde::Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -114,93 +100,6 @@ pub const fn profile_name() -> &'static str {
 }
 
 #[cfg(all(feature = "experimental", target_os = "macos"))]
-async fn read_claude_token() -> Result<Option<String>, String> {
-    tokio::task::spawn_blocking(|| {
-        match security_framework::passwords::get_generic_password(
-            CLAUDE_TOKEN_SERVICE,
-            CLAUDE_TOKEN_ACCOUNT,
-        ) {
-            Ok(bytes) => String::from_utf8(bytes)
-                .map(Some)
-                .map_err(|_| "the Claude token in Keychain is not valid UTF-8".to_string()),
-            Err(error) if error.code() == ERR_SEC_ITEM_NOT_FOUND => Ok(None),
-            Err(error) => Err(format!(
-                "could not read the Claude token from Keychain: {error}"
-            )),
-        }
-    })
-    .await
-    .map_err(|error| format!("the Keychain read task failed: {error}"))?
-}
-
-/// Report token presence without ever returning the secret to the webview.
-#[tauri::command]
-pub async fn claude_token_status() -> Result<ClaudeTokenStatus, String> {
-    #[cfg(all(feature = "experimental", target_os = "macos"))]
-    {
-        Ok(ClaudeTokenStatus {
-            configured: read_claude_token().await?.is_some(),
-        })
-    }
-
-    #[cfg(not(all(feature = "experimental", target_os = "macos")))]
-    Err("Claude usage is available only in the macOS experimental profile".to_string())
-}
-
-/// Validate and store a Claude OAuth token in the user's macOS Keychain.
-#[tauri::command]
-pub async fn set_claude_token(token: String) -> Result<ClaudeTokenStatus, String> {
-    #[cfg(all(feature = "experimental", target_os = "macos"))]
-    {
-        agent_experimental::claude_usage::ClaudeAccessToken::new(token.clone())
-            .map_err(|error| error.to_string())?;
-        tokio::task::spawn_blocking(move || {
-            security_framework::passwords::set_generic_password(
-                CLAUDE_TOKEN_SERVICE,
-                CLAUDE_TOKEN_ACCOUNT,
-                token.as_bytes(),
-            )
-            .map_err(|error| format!("could not save the Claude token in Keychain: {error}"))
-        })
-        .await
-        .map_err(|error| format!("the Keychain write task failed: {error}"))??;
-        Ok(ClaudeTokenStatus { configured: true })
-    }
-
-    #[cfg(not(all(feature = "experimental", target_os = "macos")))]
-    {
-        let _ = token;
-        Err("Claude usage is available only in the macOS experimental profile".to_string())
-    }
-}
-
-/// Remove the experimental Claude token from the user's macOS Keychain.
-#[tauri::command]
-pub async fn remove_claude_token() -> Result<ClaudeTokenStatus, String> {
-    #[cfg(all(feature = "experimental", target_os = "macos"))]
-    {
-        tokio::task::spawn_blocking(
-            || match security_framework::passwords::delete_generic_password(
-                CLAUDE_TOKEN_SERVICE,
-                CLAUDE_TOKEN_ACCOUNT,
-            ) {
-                Ok(()) => Ok(()),
-                Err(error) if error.code() == ERR_SEC_ITEM_NOT_FOUND => Ok(()),
-                Err(error) => Err(format!(
-                    "could not remove the Claude token from Keychain: {error}"
-                )),
-            },
-        )
-        .await
-        .map_err(|error| format!("the Keychain delete task failed: {error}"))??;
-        Ok(ClaudeTokenStatus { configured: false })
-    }
-
-    #[cfg(not(all(feature = "experimental", target_os = "macos")))]
-    Err("Claude usage is available only in the macOS experimental profile".to_string())
-}
-
-#[cfg(all(feature = "experimental", target_os = "macos"))]
 fn usage_window(
     window: agent_experimental::claude_usage::ClaudeUsageWindow,
 ) -> ClaudeUsageWindowDto {
@@ -210,22 +109,14 @@ fn usage_window(
     }
 }
 
-/// Fetch current Claude subscription usage with the token held in Keychain.
+/// Fetch current Claude subscription usage through Claude Code's managed login.
 #[tauri::command]
 pub async fn claude_usage() -> Result<ClaudeUsageDto, String> {
     #[cfg(all(feature = "experimental", target_os = "macos"))]
     {
-        let raw = read_claude_token()
-            .await?
-            .ok_or_else(|| "save a Claude token before refreshing usage".to_string())?;
-        let token = agent_experimental::claude_usage::ClaudeAccessToken::new(raw)
+        let client = agent_experimental::claude_usage::ClaudeManagedUsageClient::new()
             .map_err(|error| error.to_string())?;
-        let client = agent_experimental::claude_usage::ClaudeUsageClient::new()
-            .map_err(|error| error.to_string())?;
-        let usage = client
-            .fetch(&token)
-            .await
-            .map_err(|error| error.to_string())?;
+        let usage = client.fetch().await.map_err(|error| error.to_string())?;
 
         Ok(ClaudeUsageDto {
             five_hour: usage.five_hour.map(usage_window),

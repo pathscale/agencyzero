@@ -21,6 +21,17 @@ az-core = { path = "crates/core" }
 # Heavy deps are declared per-crate on purpose: only apps/gui pulls in the
 # Tauri stack, so agent/proxy builds never trigger a webview toolchain build.
 
+[profile.dev]
+# GUI diagnostics come from logs and backtraces. Generating full symbol tables
+# for WebKit and Tauri dependencies dominated clean local check time.
+debug = 0
+incremental = true
+
+[profile.test]
+# Tests need assertions and line-bearing panic output, not debugger symbols.
+debug = 0
+incremental = true
+
 [profile.release]
 strip = true
 # Release runners retain `target` through rust-cache. Incremental artifacts make

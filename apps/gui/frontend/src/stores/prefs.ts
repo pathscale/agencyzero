@@ -29,6 +29,8 @@ const DEFAULTS: UiPrefs = {
   lastTabKey: "home",
   openTabKeys: [],
   collapsedGroups: [],
+  expandedItemProjects: [],
+  advancedComposerKeys: [],
   taskPlacement: "panel",
   seenSections: [],
   composerDrafts: {},

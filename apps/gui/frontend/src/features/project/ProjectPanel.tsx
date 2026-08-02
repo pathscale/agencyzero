@@ -7,7 +7,7 @@ import { ItemMarker } from "~/components/StatusDot";
 import { clockTime, elapsed, taskMeta } from "~/lib/format";
 import { nextStatus, STATUS_LABELS, statusSuffix } from "~/lib/labels";
 import { describeError, log } from "~/lib/log";
-import { prefs, togglePanelSection } from "~/stores/prefs";
+import { prefs, setPrefs, togglePanelSection } from "~/stores/prefs";
 import { useNow, useWorkspace } from "~/stores/workspace";
 import type { Project, ProjectItem } from "~/types";
 
@@ -506,7 +506,14 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
    * sections keep the column, fully expanded on demand — a harvest that lands
    * a dozen items should be readable without a 300px porthole.
    */
-  const [tall, setTall] = createSignal(false);
+  const tall = () => prefs.expandedItemProjects.includes(props.projectId);
+  const toggleTall = (): void => {
+    setPrefs("expandedItemProjects", (projects) =>
+      projects.includes(props.projectId)
+        ? projects.filter((project) => project !== props.projectId)
+        : [...projects, props.projectId],
+    );
+  };
   /**
    * The pull request a shipped row names, when this project has one by that
    * number. The item stores the number alone, deliberately: it is the match
@@ -515,6 +522,9 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
    */
   const prUrl = (reference: string) =>
     (state.pullRequests[props.projectId] ?? []).find((pr) => String(pr.number) === reference)?.url;
+  const issueUrl = (reference: string) =>
+    reference.startsWith("issue:") ? reference.slice("issue:".length) : null;
+  const issueNumber = (url: string) => url.split("/").at(-1) ?? "?";
   /**
    * Narrows the list as you type. Substring, case-insensitive — the same rule
    * `wt-tools search-items` uses, so what you find here and what a query finds
@@ -558,10 +568,9 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
    * The ladder lives in `lib/labels` now, because Home had its own and the
    * same click on the same row did different things on the two screens.
    *
-   * `shipped` is in the cycle because bouncing a fix that did not work is the
-   * move this list most needs to make easy: one click takes it back to `new`,
-   * where the next attempt begins. `finished` wraps rather than sticking, so a
-   * row that turns out not to be done can be reopened.
+   * Every stored state is in the cycle, including the two owner-only end
+   * states. Agent directives cannot set those states, but this button belongs
+   * to the owner and must be able to correct every row manually.
    */
   function advance(item: ProjectItem): void {
     void actions.setItemStatus(item.id, nextStatus(item.status));
@@ -681,7 +690,7 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
                   onClick={() => advance(item)}
                   aria-label={`Change the status of ${item.title}`}
                   title={`${statusSuffix(item.status)} — click for ${STATUS_LABELS[nextStatus(item.status)]}`}
-                  class="ml-2.5 shrink-0 cursor-pointer rounded-md p-0.5 transition-colors hover:bg-primary/12"
+                  class="ml-1.5 flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-full transition-colors hover:bg-primary/12 focus-visible:bg-primary/12"
                 >
                   <ItemMarker status={item.status} />
                 </button>
@@ -721,15 +730,31 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
                     this state exists to prevent.
                   */}
                     <Show when={item.reference} fallback={statusSuffix(item.status)}>
-                      {(number) => (
-                        /*
+                      {(reference) => (
+                        <Show
+                          when={issueUrl(reference())}
+                          fallback={
+                            /*
                         And it opens. The number is there to be checked, so
                         reading it and then going to find the pull request by
                         hand is the one thing it should not cost. Plain text
                         when the project has no pull request by that number,
                         rather than a link that goes nowhere.
                       */
-                        <Show when={prUrl(number())} fallback={<>(PR #{number()})</>}>
+                            <Show when={prUrl(reference())} fallback={<>(PR #{reference()})</>}>
+                              {(url) => (
+                                <button
+                                  type="button"
+                                  onClick={() => void actions.openExternal(url())}
+                                  title={`Open ${url()}`}
+                                  class="cursor-pointer underline decoration-dotted underline-offset-2 hover:text-primary"
+                                >
+                                  (PR #{reference()})
+                                </button>
+                              )}
+                            </Show>
+                          }
+                        >
                           {(url) => (
                             <button
                               type="button"
@@ -737,7 +762,7 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
                               title={`Open ${url()}`}
                               class="cursor-pointer underline decoration-dotted underline-offset-2 hover:text-primary"
                             >
-                              (PR #{number()})
+                              (issue #{issueNumber(url())})
                             </button>
                           )}
                         </Show>
@@ -771,6 +796,24 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
                 </Show>
                 {/* Revealed on hover: the controls all the time would be louder
                 than the titles they act on. */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    const current = issueUrl(item.reference ?? "") ?? "";
+                    const url = window.prompt("GitHub issue URL", current)?.trim();
+                    if (!url) return;
+                    void actions
+                      .setItemIssue(item.id, url)
+                      .catch((cause) =>
+                        log.error(`could not link the issue: ${describeError(cause)}`),
+                      );
+                  }}
+                  aria-label={`Link a GitHub issue to ${item.title}`}
+                  title="Link a GitHub issue"
+                  class="shrink-0 rounded-md p-1 text-az-faint opacity-0 transition-[color,opacity] hover:text-primary group-hover:opacity-100"
+                >
+                  <Icon name="git-pull-request" class="text-[11px]" />
+                </button>
                 <button
                   type="button"
                   onClick={() => {
@@ -830,7 +873,7 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
       <Show when={props.items.length > 6}>
         <button
           type="button"
-          onClick={() => setTall((open) => !open)}
+          onClick={toggleTall}
           class="mt-0.5 rounded-md border border-az-hairline px-2 py-1 text-[10.5px] text-az-muted transition-colors hover:border-az-hairline-strong hover:text-base-content"
         >
           {tall() ? "Shrink the list" : `Show all ${props.items.length}`}

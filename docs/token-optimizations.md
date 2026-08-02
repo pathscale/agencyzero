@@ -27,6 +27,9 @@ information that the agent later has to rediscover.
 | AgencyZero | Provider-reported fresh, cache-read, cache-write, output, context, and cost accounting | Implemented in the normalized agent usage surface | Implemented | Foundation |
 | AgencyZero | Knowledge checkpoints at 300k, 600k, and 900k context tokens | Implemented as measurements before compaction | Implemented, experimental evidence still needed | Foundation |
 | AgencyZero | Pre-compaction learning retained outside the compactable conversation | Implemented for manual Claude compaction | Implemented for Claude; provider-neutral path needed | High |
+| AgencyZero | Bound live project snapshots and omit closed or merged PR history | Deterministic host-side filtering, with explicit omitted-row counts | Implemented | High |
+| AgencyZero | Keep Task Manager-only instructions separate from the shared Prompt Syntax declaration | Removes repeated syntax examples and status rules from every Task Manager turn | Implemented | High |
+| AgencyZero | Conservative cache-break feedback for comparable consecutive turns | Requires the same provider and model, a prior substantial cache read, explicit zero cache reads, and no compaction-sized context drop | Implemented | Medium |
 | Agent Experimental | Larger reported Sol 5.6 context and later auto-compaction | Changes client-side Codex catalog policy; upstream acceptance remains route-dependent | Experimental profile in progress | Capacity, not savings |
 | ORG2 | Clear old large tool results after the prompt-cache lifetime | Concrete Rust implementation and unit tests; no published end-to-end savings benchmark found | Research candidate | High |
 | ORG2 | Retain only recent screenshots and replace older images with breadcrumbs | Concrete Rust implementation, fixed cap of three recent tool images | Research candidate | High for browser-heavy sessions |
@@ -142,8 +145,8 @@ repositories, grade correctness and security, and include total tool calls and r
 1. **Telemetry baseline.** Persist per-turn fresh input, cache read/write, output, context
    occupancy, cost, duration, model, and tool count in a form that can be exported without prompt
    content.
-2. **Cache-break detector.** Flag a turn where a previously cached stable prefix unexpectedly has
-   zero cache reads or a large cache rewrite.
+2. **Cache-break detector.** The zero-read case is implemented as conservative UI feedback. Extend
+   it to cache rewrites when providers expose cache-write telemetry consistently.
 3. **RTK A/B.** Run a fixed suite of Git, Rust, TypeScript, and browser-debug tasks with raw shell
    output and RTK-filtered output. Use actual provider usage rather than `bytes / 4` estimates.
 4. **Large-result recovery.** Return a compact semantic result plus an addressable local artifact
