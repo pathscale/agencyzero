@@ -45,7 +45,7 @@ export function CloseConfirm(props: CloseConfirmProps): JSX.Element {
             <div class="flex items-baseline gap-2.5">
               <Icon name="info" class="relative top-0.5 text-[15px] text-primary" />
               <h2 id="close-confirm-title" class="font-semibold text-[14.5px] text-az-title">
-                Quit AgencyZero?
+                Work is still in progress
               </h2>
             </div>
 
@@ -77,7 +77,7 @@ export function CloseConfirm(props: CloseConfirmProps): JSX.Element {
                 onClick={props.onCancel}
                 class="rounded-lg border border-az-hairline-strong px-3.5 py-1.5 text-[12.5px] text-az-body transition-colors hover:border-primary/30 hover:text-az-title"
               >
-                Cancel
+                Wait for completion
               </button>
               <button
                 type="button"
@@ -85,7 +85,7 @@ export function CloseConfirm(props: CloseConfirmProps): JSX.Element {
                 onClick={props.onConfirm}
                 class="rounded-lg bg-primary px-3.5 py-1.5 font-semibold text-[12.5px] text-primary-content transition-colors hover:bg-az-primary-hover"
               >
-                Quit
+                Exit now
               </button>
             </div>
           </div>

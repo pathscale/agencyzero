@@ -22,6 +22,7 @@ import type {
   AgentModels,
   AgentStatus,
   AvailableUpdate,
+  ClaudeUsage,
   DataLocationView,
   GlobalSettings,
   Message,
@@ -81,6 +82,8 @@ type WorkspaceState = {
    * `supported: false` is the honest answer, not a missing one.
    */
   quota: QuotaReport | null;
+  /** Claude subscription usage, available only in the experimental profile. */
+  claudeUsage: ClaudeUsage | null;
   /**
    * A newer published version, when the boot-time check found one. Null is
    * both "up to date" and "check failed" — the Settings row distinguishes,
@@ -296,6 +299,7 @@ function createWorkspace() {
     dataLocation: null,
     workspaceRoot: null,
     quota: null,
+    claudeUsage: null,
     availableUpdate: null,
     streaming: {},
     runStatus: {},
@@ -711,6 +715,15 @@ function createWorkspace() {
       setState("quota", await client().listQuota());
     } catch (cause) {
       log.warn(`could not refresh the quota: ${describeError(cause)}`);
+    }
+  }
+
+  async function refreshClaudeUsage(): Promise<void> {
+    try {
+      setState("claudeUsage", await client().claudeUsage());
+    } catch (cause) {
+      log.warn(`could not refresh Claude usage: ${describeError(cause)}`);
+      throw cause;
     }
   }
 
@@ -1616,6 +1629,7 @@ function createWorkspace() {
     setIoPersist: (projectId: string, enabled: boolean) =>
       client().setIoPersist(projectId, enabled),
     refreshQuota,
+    refreshClaudeUsage,
     purgeProject,
     setProjectStatus: (id: string, status: ProjectStatus) => client().setProjectStatus(id, status),
     setProjectPinned: (id: string, pinned: boolean) => client().setProjectPinned(id, pinned),
@@ -1627,6 +1641,7 @@ function createWorkspace() {
     reorderItems: (projectId: string, ids: string[]) => client().reorderItems(projectId, ids),
     setItemStatus: (id: string, status: ProjectStatus) => client().setItemStatus(id, status),
     updateItem: (id: string, title: string) => client().updateItem(id, title),
+    setItemIssue: (id: string, url: string) => client().setItemIssue(id, url),
     deleteItem: (id: string) => client().deleteItem(id),
     chooseAttachments: () => client().chooseAttachments(),
     dismissPullRequest: (id: string) => client().dismissPullRequest(id),
@@ -1644,10 +1659,6 @@ function createWorkspace() {
     listApprovalRules: (projectId: string) => client().listApprovalRules(projectId),
     clearApprovalRules: (projectId: string) => client().clearApprovalRules(projectId),
     getCostSummary: () => client().getCostSummary(),
-    claudeTokenStatus: () => client().claudeTokenStatus(),
-    setClaudeToken: (token: string) => client().setClaudeToken(token),
-    removeClaudeToken: () => client().removeClaudeToken(),
-    claudeUsage: () => client().claudeUsage(),
     getBuildInfo: () => client().getBuildInfo(),
     checkForUpdate,
     installUpdate: () => client().installUpdate(),

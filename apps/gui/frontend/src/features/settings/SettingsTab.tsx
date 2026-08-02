@@ -31,7 +31,6 @@ import type {
   AgentState,
   AgentStatus,
   BuildInfo,
-  ClaudeUsage,
   CostSummary,
   EnvPolicy,
   Model,
@@ -750,7 +749,7 @@ export function SettingsTab(): JSX.Element {
                 </Row>
               </Section>
 
-              <Show when={isLive("claudeTokenStatus")}>
+              <Show when={isLive("claudeUsage")}>
                 <ExperimentalSettings />
               </Show>
 
@@ -769,13 +768,10 @@ export function SettingsTab(): JSX.Element {
   );
 }
 
-/** Secret-backed controls compiled and advertised only by the experimental profile. */
+/** Claude usage controls compiled and advertised only by the experimental profile. */
 function ExperimentalSettings(): JSX.Element {
-  const { actions } = useWorkspace();
+  const { state, actions } = useWorkspace();
   const now = useNow();
-  const [configured, setConfigured] = createSignal(false);
-  const [token, setToken] = createSignal("");
-  const [usage, setUsage] = createSignal<ClaudeUsage | null>(null);
   const [busy, setBusy] = createSignal(false);
   const [note, setNote] = createSignal<string | null>(null);
 
@@ -783,7 +779,7 @@ function ExperimentalSettings(): JSX.Element {
     setBusy(true);
     setNote(null);
     try {
-      setUsage(await actions.claudeUsage());
+      await actions.refreshClaudeUsage();
     } catch (cause) {
       setNote(describeError(cause));
     } finally {
@@ -791,52 +787,16 @@ function ExperimentalSettings(): JSX.Element {
     }
   };
 
-  onMount(() => {
-    void actions
-      .claudeTokenStatus()
-      .then((status) => {
-        setConfigured(status.configured);
-        if (status.configured) void refresh();
-      })
-      .catch((cause) => setNote(describeError(cause)));
-  });
-
-  const save = async (): Promise<void> => {
-    const value = token().trim();
-    if (!value) return;
-    setBusy(true);
-    setNote(null);
-    try {
-      const status = await actions.setClaudeToken(value);
-      setConfigured(status.configured);
-      setToken("");
-      await refresh();
-    } catch (cause) {
-      setNote(describeError(cause));
-      setBusy(false);
-    }
-  };
-
-  const remove = async (): Promise<void> => {
-    setBusy(true);
-    setNote(null);
-    try {
-      const status = await actions.removeClaudeToken();
-      setConfigured(status.configured);
-      setUsage(null);
-      setToken("");
-    } catch (cause) {
-      setNote(describeError(cause));
-    } finally {
-      setBusy(false);
-    }
-  };
+  onMount(() => void refresh());
 
   const windowValue = (value: { utilization: number; resetsAt: string | null } | null): string => {
     if (!value) return "not reported";
     const reset = value.resetsAt ? ` · resets in ${countdown(value.resetsAt, now())}` : "";
-    return `${value.utilization.toFixed(1)}%${reset}`;
+    const percent = Math.min(100, Math.max(0, value.utilization));
+    return `${percent.toFixed(1)}%${reset}`;
   };
+
+  const usage = () => state.claudeUsage;
 
   return (
     <Section
@@ -845,42 +805,10 @@ function ExperimentalSettings(): JSX.Element {
       hint="isolated capabilities in AgencyZero Experimental"
     >
       <Row
-        label="Claude token"
-        hint="stored in macOS Keychain; the saved value is never returned to this window"
+        label="Claude login"
+        hint="managed by Claude Code; an expired credential is refreshed through its own /usage command"
       >
-        <div class="flex max-w-[390px] flex-wrap items-center justify-end gap-2">
-          <input
-            type="password"
-            value={token()}
-            autocomplete="off"
-            spellcheck={false}
-            placeholder={configured() ? "Replace saved token" : "Paste OAuth access token"}
-            aria-label="Claude OAuth access token"
-            onInput={(event) => setToken(event.currentTarget.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Enter") void save();
-            }}
-            class="w-[210px] rounded-md border border-az-hairline bg-az-inset px-2 py-1 font-mono text-[11px] text-az-body focus:border-primary/40 focus:outline-none"
-          />
-          <button
-            type="button"
-            disabled={busy() || token().trim() === ""}
-            onClick={() => void save()}
-            class="rounded-lg border border-primary/50 px-3 py-[5px] text-[12px] text-primary transition-colors hover:border-primary disabled:opacity-40"
-          >
-            {configured() ? "Replace" : "Save"}
-          </button>
-          <Show when={configured()}>
-            <button
-              type="button"
-              disabled={busy()}
-              onClick={() => void remove()}
-              class="rounded-lg border border-az-hairline-strong px-3 py-[5px] text-[12px] text-az-muted transition-colors hover:border-error hover:text-error disabled:opacity-40"
-            >
-              Remove
-            </button>
-          </Show>
-        </div>
+        <span class="font-mono text-[11.5px] text-az-body">Claude Code</span>
       </Row>
       <Row label="Claude 5-hour usage">
         <span class="font-mono text-[11.5px] text-az-body">
@@ -925,7 +853,7 @@ function ExperimentalSettings(): JSX.Element {
           </Show>
           <button
             type="button"
-            disabled={busy() || !configured()}
+            disabled={busy()}
             onClick={() => void refresh()}
             class="rounded-lg border border-az-hairline-strong px-3 py-[5px] text-[12px] text-az-body transition-colors hover:border-primary hover:text-primary disabled:opacity-40"
           >
@@ -1252,9 +1180,8 @@ function CostSection(): JSX.Element {
    * When each window turns over, and how long that is from now.
    *
    * A figure labelled "Today" raises the question immediately: today by whose
-   * clock, and how much of it is left. The answer is the machine's own
-   * midnight, because `get_cost_summary` matches on a local `%Y-%m-%d`, and
-   * the month on a local `%Y-%m`. The countdown is worth more than the time:
+   * clock, and how much of it is left. The ledger records UTC days, so these
+   * reset at UTC midnight. The countdown is worth more than the time:
    * "$4.10 today" reads very differently at 23:50 than at 00:10.
    *
    * On the app's coarse clock, so these tick without a timer of their own.
@@ -1262,24 +1189,28 @@ function CostSection(): JSX.Element {
   const now = useNow();
   const nextMidnight = (from: number): Date => {
     const at = new Date(from);
-    at.setHours(24, 0, 0, 0);
+    at.setUTCHours(24, 0, 0, 0);
     return at;
   };
   const nextMonth = (from: number): Date => {
     const at = new Date(from);
-    at.setHours(0, 0, 0, 0);
-    at.setDate(1);
-    at.setMonth(at.getMonth() + 1);
+    at.setUTCHours(0, 0, 0, 0);
+    at.setUTCDate(1);
+    at.setUTCMonth(at.getUTCMonth() + 1);
     return at;
   };
   const untilMidnight = () => countdown(nextMidnight(now()).toISOString(), now());
   const untilMonth = () => countdown(nextMonth(now()).toISOString(), now());
   const monthLabel = () =>
-    nextMonth(now()).toLocaleDateString(undefined, { day: "numeric", month: "long" });
+    nextMonth(now()).toLocaleDateString(undefined, {
+      day: "numeric",
+      month: "long",
+      timeZone: "UTC",
+    });
 
   return (
     <Section icon="gauge" title="Cost" hint="all sessions · summed from the usage ledger">
-      <Row label="Today" hint={`resets at midnight local · in ${untilMidnight()}`}>
+      <Row label="Today" hint={`resets at midnight UTC · in ${untilMidnight()}`}>
         {figure(summary()?.todayUsd)}
       </Row>
       {/*

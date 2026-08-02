@@ -168,7 +168,7 @@ export interface ProjectItem {
   title: string;
   status: ProjectStatus;
   order: number;
-  /** The pull request this shipped as, without the `#`. Null until one exists. */
+  /** A legacy PR number, or `issue:<canonical GitHub URL>`. */
   reference: string | null;
 }
 
@@ -636,6 +636,10 @@ export interface UiPrefs {
   openTabKeys: string[];
   /** Home project groups folded to their header, by project id. */
   collapsedGroups: string[];
+  /** Project item lists the user expanded past their compact height. */
+  expandedItemProjects: string[];
+  /** Composer drafts currently using the Prompt Syntax aware editor. */
+  advancedComposerKeys: string[];
   taskPlacement: TaskPlacement;
   /**
    * Panel sections whose shipped default has already been applied once.
@@ -701,11 +705,6 @@ export interface QuotaReport {
   checkedAt: string;
 }
 
-/** Presence only. The stored Claude token never crosses back into the webview. */
-export interface ClaudeTokenStatus {
-  configured: boolean;
-}
-
 export interface ClaudeUsageWindow {
   /** Provider percentage in the range 0..100. */
   utilization: number;
@@ -723,7 +722,7 @@ export interface ClaudeUsageLimit {
   model: string | null;
 }
 
-/** Experimental subscription usage fetched from Anthropic with a Keychain token. */
+/** Experimental subscription usage fetched through Claude Code's managed login. */
 export interface ClaudeUsage {
   fiveHour: ClaudeUsageWindow | null;
   sevenDay: ClaudeUsageWindow | null;

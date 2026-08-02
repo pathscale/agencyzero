@@ -47,6 +47,7 @@ const IMPLEMENTED: &[&str] = &[
     "create_item",
     "set_item_status",
     "update_item",
+    "set_item_issue",
     "delete_item",
     "reorder_items",
     "choose_attachments",
@@ -138,15 +139,7 @@ pub(crate) struct AppState {
 fn list_capabilities() -> Vec<String> {
     let mut implemented: Vec<String> = IMPLEMENTED.iter().map(|name| (*name).to_string()).collect();
     if cfg!(all(feature = "experimental", target_os = "macos")) {
-        implemented.extend(
-            [
-                "claude_token_status",
-                "set_claude_token",
-                "remove_claude_token",
-                "claude_usage",
-            ]
-            .map(str::to_string),
-        );
+        implemented.push("claude_usage".to_string());
     }
     implemented
 }
@@ -518,7 +511,7 @@ async fn relaunch_app(app: AppHandle, state: State<'_, AppState>) -> Result<(), 
 /// disk rather than overwritten, so it is still there to look at.
 #[tauri::command]
 fn get_settings(state: State<'_, AppState>) -> GlobalSettings {
-    state
+    let mut settings = state
         .tables
         .kv_get(settings::KEY)
         .and_then(|raw| match serde_json::from_str(&raw) {
@@ -532,7 +525,9 @@ fn get_settings(state: State<'_, AppState>) -> GlobalSettings {
                 None
             }
         })
-        .unwrap_or_default()
+        .unwrap_or_default();
+    settings::normalize_task_manager(&mut settings);
+    settings
 }
 
 /// Merge a partial patch into the stored record and return the whole thing.
@@ -565,8 +560,10 @@ async fn set_settings(
 
     // Parse before writing. A patch that produces something unreadable should
     // fail here rather than land on disk and break the next launch.
-    let parsed: GlobalSettings =
+    let mut parsed: GlobalSettings =
         serde_json::from_value(merged.clone()).map_err(|error| error.to_string())?;
+    settings::normalize_task_manager(&mut parsed);
+    let merged = serde_json::to_value(&parsed).map_err(|error| error.to_string())?;
 
     state
         .tables
@@ -1034,6 +1031,7 @@ fn main() {
             projects::create_item,
             projects::set_item_status,
             projects::update_item,
+            projects::set_item_issue,
             projects::delete_item,
             projects::reorder_items,
             choose_attachments,
@@ -1065,9 +1063,6 @@ fn main() {
             projects::get_io_persist,
             projects::set_io_persist,
             quota::list_quota,
-            experimental::claude_token_status,
-            experimental::set_claude_token,
-            experimental::remove_claude_token,
             experimental::claude_usage,
             projects::create_project,
             projects::send_message,

@@ -76,6 +76,14 @@ describe("MessageBody", () => {
     expect(container.querySelector("[data-ps-directive]")).toBeNull();
     expect(container.textContent).toContain(directive);
   });
+
+  it("leaves undeclared Prompt Syntax namespaces inert", () => {
+    const directive = "<ps @file:glossary.md>";
+    const { container } = render(() => <MessageBody body={directive} />);
+
+    expect(container.querySelector("[data-ps-directive]")).toBeNull();
+    expect(container.textContent).toContain(directive);
+  });
 });
 
 /*

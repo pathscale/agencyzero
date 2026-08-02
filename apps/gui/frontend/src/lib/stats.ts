@@ -107,6 +107,39 @@ export function usageTotals(messages: readonly Message[]): UsageTotals {
 }
 
 /**
+ * Detect a likely prompt-cache miss between two comparable finished turns.
+ *
+ * This is intentionally conservative. It requires the same provider and model,
+ * a substantial previous cache read, an explicit zero on the newest turn, and
+ * no large context drop that would indicate a compaction or fresh session.
+ */
+export function cacheBreak(messages: readonly Message[]): boolean {
+  const turns = messages.filter(
+    (message) =>
+      message.author === "agent" &&
+      message.usage &&
+      isNumber(message.usage.cacheReads) &&
+      isNumber(message.usage.contextTokens),
+  );
+  const previous = turns.at(-2);
+  const current = turns.at(-1);
+  if (!previous?.usage || !current?.usage) return false;
+  if (previous.agent !== current.agent || previous.model !== current.model) return false;
+  const previousReads = previous.usage.cacheReads;
+  const currentReads = current.usage.cacheReads;
+  const previousContext = previous.usage.contextTokens;
+  const currentContext = current.usage.contextTokens;
+  return (
+    isNumber(previousReads) &&
+    previousReads >= 8_192 &&
+    currentReads === 0 &&
+    isNumber(previousContext) &&
+    isNumber(currentContext) &&
+    currentContext >= previousContext * 0.75
+  );
+}
+
+/**
  * The session's totals, with the context figures brought up to date by a turn
  * in flight.
  *
@@ -146,7 +179,7 @@ export function withLiveContext(
 export function contextUsed(totals: UsageTotals): number | null {
   if (!isNumber(totals.contextTokens) || !isNumber(totals.contextWindow)) return null;
   if (totals.contextWindow <= 0) return null;
-  return totals.contextTokens / totals.contextWindow;
+  return Math.min(1, Math.max(0, totals.contextTokens / totals.contextWindow));
 }
 
 /** Every project's messages, flattened, for the window-wide totals. */

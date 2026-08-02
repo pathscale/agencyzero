@@ -193,10 +193,10 @@ pub struct TaskManager {
 impl Default for TaskManager {
     fn default() -> Self {
         TaskManager {
-            agent: "claude".into(),
+            agent: "codex".into(),
             // Cheap and fast: this is a list keeper, not a reasoner.
-            model: "haiku".into(),
-            effort: "medium".into(),
+            model: "gpt-5.6-luna".into(),
+            effort: "low".into(),
             permission: "ask".into(),
             dirs: Vec::new(),
         }
@@ -236,7 +236,10 @@ impl Default for GlobalSettings {
                 ),
                 (
                     "codex".to_string(),
-                    sel(&["gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.5"], "gpt-5.6-sol"),
+                    sel(
+                        &["gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna", "gpt-5.5"],
+                        "gpt-5.6-sol",
+                    ),
                 ),
                 ("copilot".to_string(), sel(&["auto"], "auto")),
             ]),
@@ -250,6 +253,50 @@ impl Default for GlobalSettings {
             completed_items: "resolve".into(),
             theme: Theme::default(),
         }
+    }
+}
+
+/// Keep the task manager on a selected, economical model.
+///
+/// Existing installs may still name Haiku after it was removed from their
+/// selected models. Luna is preferred when selected, then another selected
+/// Codex model, then Sonnet, then the configured provider default.
+pub fn normalize_task_manager(settings: &mut GlobalSettings) {
+    let selected = |agent: &str, model: &str| {
+        settings
+            .models
+            .get(agent)
+            .is_some_and(|selection| selection.enabled.iter().any(|id| id == model))
+    };
+    let current_selected = selected(&settings.task_manager.agent, &settings.task_manager.model);
+    if current_selected {
+        return;
+    }
+
+    let priorities = [
+        ("codex", "gpt-5.6-luna", "low"),
+        ("codex", "gpt-5.6-terra", "low"),
+        ("codex", "gpt-5.6-sol", "low"),
+        ("claude", "sonnet", "medium"),
+    ];
+    if let Some((agent, model, effort)) = priorities
+        .into_iter()
+        .find(|(agent, model, _)| selected(agent, model))
+    {
+        settings.task_manager.agent = agent.into();
+        settings.task_manager.model = model.into();
+        settings.task_manager.effort = effort.into();
+        return;
+    }
+
+    if let Some((agent, selection)) = settings
+        .models
+        .iter()
+        .find(|(_, selection)| selection.enabled.iter().any(|id| id == &selection.default))
+    {
+        settings.task_manager.agent.clone_from(agent);
+        settings.task_manager.model.clone_from(&selection.default);
+        settings.task_manager.effort = if agent == "codex" { "low" } else { "medium" }.into();
     }
 }
 
@@ -282,7 +329,9 @@ mod tests {
         let json = serde_json::to_string(&GlobalSettings::default()).expect("should serialize");
         let back: GlobalSettings = serde_json::from_str(&json).expect("should deserialize");
         assert_eq!(back.models["claude"].default, "sonnet");
-        assert_eq!(back.task_manager.agent, "claude");
+        assert_eq!(back.task_manager.agent, "codex");
+        assert_eq!(back.task_manager.model, "gpt-5.6-luna");
+        assert_eq!(back.task_manager.effort, "low");
         assert_eq!(back.task_manager.permission, "ask");
         assert!(json.contains("defaultAgent"), "must be camelCase: {json}");
     }
@@ -295,7 +344,7 @@ mod tests {
         let old = r#"{"defaultAgent":"codex","taskManager":{"model":"haiku","effort":"medium","dirs":[]}}"#;
         let loaded: GlobalSettings = serde_json::from_str(old).expect("should tolerate absence");
         assert_eq!(loaded.default_agent, "codex");
-        assert_eq!(loaded.task_manager.agent, "claude");
+        assert_eq!(loaded.task_manager.agent, "codex");
         assert_eq!(loaded.task_manager.permission, "ask");
         assert_eq!(
             loaded.moderator.model, "haiku",
@@ -334,5 +383,20 @@ mod tests {
             "codex should be untouched"
         );
         assert_eq!(merged.env_policy, "minimal", "unrelated fields survive");
+    }
+
+    #[test]
+    fn a_removed_task_manager_model_moves_to_selected_luna() {
+        let mut settings = GlobalSettings::default();
+        settings.task_manager.agent = "claude".into();
+        settings.task_manager.model = "haiku".into();
+        settings.task_manager.effort = "medium".into();
+        settings.models.get_mut("claude").unwrap().enabled = vec!["sonnet".into()];
+
+        normalize_task_manager(&mut settings);
+
+        assert_eq!(settings.task_manager.agent, "codex");
+        assert_eq!(settings.task_manager.model, "gpt-5.6-luna");
+        assert_eq!(settings.task_manager.effort, "low");
     }
 }

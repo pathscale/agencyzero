@@ -3,7 +3,8 @@ import { Icon, type IconProps } from "~/components/Icon";
 import { StatusDot } from "~/components/StatusDot";
 import { createTabReorder } from "~/features/tabs/reorder";
 import { useTabShortcuts } from "~/features/tabs/shortcuts";
-import { useWorkspace } from "~/stores/workspace";
+import { countdown } from "~/lib/format";
+import { useNow, useWorkspace } from "~/stores/workspace";
 import type { Tab } from "~/types";
 
 const PILL = "flex h-8 shrink-0 items-center rounded-full transition-colors";
@@ -26,7 +27,8 @@ const TAB_ICON: Record<Tab["kind"], IconProps["name"] | null> = {
  * working in a different one.
  */
 export function TabStrip(): JSX.Element {
-  const { state, actions } = useWorkspace();
+  const { state, actions, isLive } = useWorkspace();
+  const now = useNow();
   useTabShortcuts();
 
   let strip!: HTMLDivElement;
@@ -63,6 +65,30 @@ export function TabStrip(): JSX.Element {
     observer.observe(strip);
     onCleanup(() => observer.disconnect());
   });
+
+  onMount(() => {
+    const refresh = () => {
+      void actions.refreshQuota();
+      if (isLive("claudeUsage")) void actions.refreshClaudeUsage().catch(() => undefined);
+    };
+    refresh();
+    const interval = window.setInterval(refresh, 60_000);
+    onCleanup(() => window.clearInterval(interval));
+  });
+
+  const codexWeek = () => {
+    const windows = state.quota?.agents.find((agent) => agent.agent === "codex")?.windows ?? [];
+    return windows.reduce<(typeof windows)[number] | null>(
+      (longest, window) =>
+        (window.windowMinutes ?? 0) > (longest?.windowMinutes ?? 0) ? window : longest,
+      null,
+    );
+  };
+
+  const fractionLabel = (fraction: number | null): string => {
+    if (fraction === null || !Number.isFinite(fraction)) return "not reported";
+    return `${Math.round(Math.min(1, Math.max(0, fraction)) * 100)}%`;
+  };
 
   /**
    * Keeps the active tab visible.
@@ -132,9 +158,27 @@ export function TabStrip(): JSX.Element {
         <ScrollArrow direction={1} isDisabled={!overflow().right} onScroll={() => nudge(1)} />
       </Show>
 
-      {/* Account usage moved to the project panel, where it has room to say
-          everything on its own lines instead of a strip of pills. */}
       <div class="flex flex-none items-center gap-1.5">
+        <Show when={codexWeek()}>
+          {(window) => (
+            <span
+              title={window().resetsAt ? `Resets in ${countdown(window().resetsAt, now())}` : ""}
+              class="rounded-full border border-az-hairline bg-az-inset px-2.5 py-1 font-mono text-[10.5px] text-az-muted"
+            >
+              Codex 7d {fractionLabel(window().usedFraction)}
+            </span>
+          )}
+        </Show>
+        <Show when={state.claudeUsage?.sevenDay}>
+          {(window) => (
+            <span
+              title={window().resetsAt ? `Resets in ${countdown(window().resetsAt, now())}` : ""}
+              class="rounded-full border border-az-hairline bg-az-inset px-2.5 py-1 font-mono text-[10.5px] text-az-muted"
+            >
+              Claude 7d {Math.min(100, Math.max(0, window().utilization)).toFixed(0)}%
+            </span>
+          )}
+        </Show>
         <button
           type="button"
           onClick={() => actions.openSettings()}

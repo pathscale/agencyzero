@@ -115,24 +115,24 @@ export function statusSuffix(status: ProjectStatus): string {
  * active to finished, so the same click on the same item did different things
  * depending on which screen you were looking at.
  *
- * `pending` and `canceled` are deliberately not on it. `pending` is the legacy
- * value every old row carries and the ladder's job is to get rows off it;
- * `canceled` is an ending, and cycling into it by clicking past `finished`
- * would retire work by accident.
+ * Every stored state is reachable manually. The marker is a deliberate button,
+ * so the user can correct any agent-authored state without a hidden exception.
  */
 export const ITEM_LADDER: ProjectStatus[] = [
   "new",
+  "pending",
   "planning",
   "active",
   "questions",
   "shipped",
   "finished",
+  "canceled",
 ];
 
 /** The next status a click on the marker means. */
 export function nextStatus(status: ProjectStatus): ProjectStatus {
   const at = ITEM_LADDER.indexOf(status);
-  // Off the ladder, including `pending`: the first rung is where it belongs.
+  // An unknown future value starts at the first known rung.
   return at === -1 ? "new" : (ITEM_LADDER[(at + 1) % ITEM_LADDER.length] ?? "new");
 }
 

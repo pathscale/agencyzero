@@ -25,11 +25,24 @@ export function useAppShell(): {
 
   const cancelClose = () => setIsClosing(false);
 
+  const hasLiveWork = () =>
+    Object.keys(state.runStatus).length > 0 ||
+    Object.values(state.streaming).some((text) => text.length > 0) ||
+    Object.values(state.running).some((tasks) => tasks.length > 0) ||
+    Object.values(state.messages).some((messages) =>
+      messages.some((message) => message.moderation?.needsApproval),
+    );
+
   const confirmClose = () => {
     setIsClosing(false);
     // destroy(), not close(): close() re-enters the same close-requested
     // handler that opened this dialog, and the window never actually goes.
     void getCurrentWindow().destroy();
+  };
+
+  const requestClose = () => {
+    if (hasLiveWork()) setIsClosing(true);
+    else confirmClose();
   };
 
   onMount(() => {
@@ -50,7 +63,7 @@ export function useAppShell(): {
     track(listen("menu:close-tab", () => actions.closeTab(state.activeKey)));
     track(listen("menu:prev-tab", () => actions.cycleTab(-1)));
     track(listen("menu:next-tab", () => actions.cycleTab(1)));
-    track(listen("menu:quit", () => setIsClosing(true)));
+    track(listen("menu:quit", requestClose));
     // Same drain-then-exec as the Settings button; the menu is just nearer.
     track(listen("menu:restart", () => void actions.relaunchApp()));
 
@@ -58,7 +71,7 @@ export function useAppShell(): {
     track(
       getCurrentWindow().onCloseRequested((event) => {
         event.preventDefault();
-        setIsClosing(true);
+        requestClose();
       }),
     );
 

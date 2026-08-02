@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  cacheBreak,
   claudeWindowKind,
   compactCount,
   contextUsed,
@@ -187,6 +188,13 @@ describe("the accumulation rule", () => {
     ]);
     expect(contextUsed(totals)).toBeNull();
   });
+
+  it("bounds inconsistent provider figures instead of displaying over 100 percent", () => {
+    const totals = usageTotals([
+      turn("agent", usage({ tokens: 1, contextTokens: 220_000, contextWindow: 200_000 })),
+    ]);
+    expect(contextUsed(totals)).toBe(1);
+  });
 });
 
 /*
@@ -256,5 +264,31 @@ describe("claudeWindowKind", () => {
 
   it("declines to guess when the wording names no window", () => {
     expect(claudeWindowKind("Rate limited")).toBeNull();
+  });
+});
+
+describe("cacheBreak", () => {
+  it("flags an explicit zero after a substantial comparable cache read", () => {
+    expect(
+      cacheBreak([
+        turn("agent", usage({ cacheReads: 40_000, contextTokens: 60_000 })),
+        turn("agent", usage({ cacheReads: 0, contextTokens: 62_000 })),
+      ]),
+    ).toBe(true);
+  });
+
+  it("does not flag a compaction or a provider that omitted cache usage", () => {
+    expect(
+      cacheBreak([
+        turn("agent", usage({ cacheReads: 40_000, contextTokens: 60_000 })),
+        turn("agent", usage({ cacheReads: 0, contextTokens: 10_000 })),
+      ]),
+    ).toBe(false);
+    expect(
+      cacheBreak([
+        turn("agent", usage({ cacheReads: 40_000, contextTokens: 60_000 })),
+        turn("agent", usage({ cacheReads: null, contextTokens: 62_000 })),
+      ]),
+    ).toBe(false);
   });
 });

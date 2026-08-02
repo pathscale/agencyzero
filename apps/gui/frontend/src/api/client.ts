@@ -5,7 +5,6 @@ import type {
   AgentStatus,
   AvailableUpdate,
   BuildInfo,
-  ClaudeTokenStatus,
   ClaudeUsage,
   CostSummary,
   CreatedProject,
@@ -81,6 +80,8 @@ export interface AgencyZeroApi {
   setItemStatus(id: string, status: ProjectStatus): Promise<ProjectItem>;
   /** Rewrite one item's title, for the panel's inline edit. */
   updateItem(id: string, title: string): Promise<ProjectItem>;
+  /** Associate the item with a validated GitHub issue URL. */
+  setItemIssue(id: string, url: string): Promise<ProjectItem>;
   reorderItems(projectId: string, ids: string[]): Promise<ProjectItem[]>;
 
   // — Pull requests ————————————————————————————————————————————
@@ -109,13 +110,7 @@ export interface AgencyZeroApi {
   // — Settings ————————————————————————————————————————————————
   getSettings(): Promise<GlobalSettings>;
   setSettings(patch: DeepPartial<GlobalSettings>): Promise<GlobalSettings>;
-  /** Experimental profile only. Reports presence without returning the token. */
-  claudeTokenStatus(): Promise<ClaudeTokenStatus>;
-  /** Experimental profile only. Saves the token directly into macOS Keychain. */
-  setClaudeToken(token: string): Promise<ClaudeTokenStatus>;
-  /** Experimental profile only. Removes the token from macOS Keychain. */
-  removeClaudeToken(): Promise<ClaudeTokenStatus>;
-  /** Experimental profile only. Fetches current Claude subscription usage. */
+  /** Experimental profile only. Fetches usage through Claude Code's managed login. */
   claudeUsage(): Promise<ClaudeUsage>;
   /** Probes the installed CLIs. `recheck` forces a fresh probe. */
   listAgentStatus(recheck: boolean): Promise<AgentStatus[]>;

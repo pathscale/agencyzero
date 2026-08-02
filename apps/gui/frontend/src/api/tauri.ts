@@ -57,6 +57,7 @@ export function createTauriApi(): AgencyZeroApi {
     deleteItem: (id) => call("delete_item", { id }),
     setItemStatus: (id, status) => call("set_item_status", { id, status }),
     updateItem: (id, title) => call("update_item", { id, title }),
+    setItemIssue: (id, url) => call("set_item_issue", { id, url }),
     reorderItems: (projectId, ids) => call("reorder_items", { projectId, ids }),
 
     listPullRequests: (projectId) => call("list_pull_requests", { projectId }),
@@ -69,9 +70,6 @@ export function createTauriApi(): AgencyZeroApi {
 
     getSettings: () => call("get_settings"),
     setSettings: (patch) => call("set_settings", { patch }),
-    claudeTokenStatus: () => call("claude_token_status"),
-    setClaudeToken: (token) => call("set_claude_token", { token }),
-    removeClaudeToken: () => call("remove_claude_token"),
     claudeUsage: () => call("claude_usage"),
     listAgentStatus: (recheck) => call("list_agent_status", { recheck }),
     listModels: (discover) => call("list_models", { discover }),

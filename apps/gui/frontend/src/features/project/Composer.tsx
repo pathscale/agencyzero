@@ -1,8 +1,9 @@
-import { createSignal, For, type JSX, onMount, Show } from "solid-js";
+import { createMemo, createSignal, For, type JSX, onMount, Show } from "solid-js";
 import { Icon } from "~/components/Icon";
 import { PillMenu } from "~/components/PillMenu";
 import { PERMISSION_LABELS, PERMISSION_ORDER } from "~/lib/labels";
 import { describeError, log } from "~/lib/log";
+import { compileAdvancedPrompt, type PromptModelOption } from "~/lib/promptEditor";
 import { parseSlash } from "~/lib/slash";
 import { prefs, setPrefs } from "~/stores/prefs";
 import { useWorkspace } from "~/stores/workspace";
@@ -36,7 +37,7 @@ export type ComposerProps = {
    * component: it renders the model it is given and reports changes, and has no
    * opinion on which models exist.
    */
-  modelOptions: { value: string; label: string; agent: Agent; model: string }[];
+  modelOptions: PromptModelOption[];
   /**
    * Reasoning levels the selected model accepts, in the vendor's order.
    *
@@ -182,6 +183,19 @@ export function Composer(props: ComposerProps): JSX.Element {
    */
   const UNKEYED = "\u0000unkeyed";
   const bucket = () => props.draftKey ?? UNKEYED;
+  const advanced = () => prefs.advancedComposerKeys.includes(bucket());
+  const compiled = createMemo(() =>
+    advanced() ? compileAdvancedPrompt(draft(), props.modelOptions) : null,
+  );
+  const toggleAdvanced = () => {
+    const key = bucket();
+    setPrefs(
+      "advancedComposerKeys",
+      advanced()
+        ? prefs.advancedComposerKeys.filter((candidate) => candidate !== key)
+        : [...prefs.advancedComposerKeys, key],
+    );
+  };
   const [errors, setErrors] = createSignal<Record<string, string | null>>({});
   const [staged, setStaged] = createSignal<Record<string, string[]>>({});
   const [sending, setSending] = createSignal<Record<string, boolean>>({});
@@ -328,11 +342,23 @@ export function Composer(props: ComposerProps): JSX.Element {
     const key = bucket();
     setSendingFor(key, true);
     try {
+      const advancedPrompt = compiled();
+      if (advancedPrompt && advancedPrompt.errors.length > 0) {
+        setErrorFor(key, advancedPrompt.errors.join(" "));
+        return;
+      }
+      if (advancedPrompt?.model) {
+        props.onModelChange(advancedPrompt.model.agent, advancedPrompt.model.model);
+      }
       // The pills become prose here: the paths ride at the end of the body,
       // where the model reads them.
-      const body = [draft().trim(), attachments().join("\n")]
+      const body = [advancedPrompt?.dataPlane ?? draft().trim(), attachments().join("\n")]
         .filter((part) => part.length > 0)
         .join("\n\n");
+      if (body.length === 0) {
+        setErrorFor(key, "The prompt contains controls but no message to send.");
+        return;
+      }
       await props.onSend(body);
       remember("");
       setAttachments([]);
@@ -400,6 +426,32 @@ export function Composer(props: ComposerProps): JSX.Element {
           }`}
         />
 
+        <Show when={advanced()}>
+          <div class="rounded-lg border border-az-hairline bg-base-300/45 px-3 py-2">
+            <div class="mb-1 font-semibold text-[10px] text-az-faint uppercase tracking-[0.08em]">
+              Prompt Syntax preview
+            </div>
+            <div class="whitespace-pre-wrap text-[12px] text-az-body leading-relaxed">
+              <For each={compiled()?.segments ?? []}>
+                {(segment) =>
+                  segment.type === "directive" ? (
+                    <mark class="rounded border border-primary/30 bg-primary/15 px-0.5 text-primary">
+                      {segment.source}
+                    </mark>
+                  ) : (
+                    segment.text
+                  )
+                }
+              </For>
+            </div>
+            <Show when={(compiled()?.errors.length ?? 0) > 0}>
+              <ul class="mt-1.5 list-disc space-y-0.5 pl-4 text-[11px] text-error">
+                <For each={compiled()?.errors}>{(message) => <li>{message}</li>}</For>
+              </ul>
+            </Show>
+          </div>
+        </Show>
+
         {/*
           Whatever is written here is the whole line. It used to be prefixed
           with "Could not send — your message is still here", which is true of a
@@ -421,6 +473,20 @@ export function Composer(props: ComposerProps): JSX.Element {
           model pill on the left after Attach; recorded in the frontend README.
         */}
         <div class="flex items-center gap-2.5">
+          <button
+            type="button"
+            onClick={toggleAdvanced}
+            aria-pressed={advanced()}
+            title="Parse Prompt Syntax controls before sending"
+            class={`rounded-full border px-2.5 py-1 font-medium text-[11px] transition-colors ${
+              advanced()
+                ? "border-primary/35 bg-primary/15 text-primary"
+                : "border-az-hairline-strong text-az-muted hover:text-base-content"
+            }`}
+          >
+            Advanced
+          </button>
+
           <PillMenu
             label="Permission"
             icon="lock"
