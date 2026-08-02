@@ -23,3 +23,6 @@ az-core = { path = "crates/core" }
 
 [profile.release]
 strip = true
+# Release runners retain `target` through rust-cache. Incremental artifacts make
+# the next standard or experimental bundle reuse unchanged Tauri dependencies.
+incremental = true

@@ -115,6 +115,9 @@ jobs:
 
       - name: Cache cargo build
         uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: agencyzero-macos-release
+          cache-targets: true
 
       - name: Install frontend dependencies
         run: bun install --frozen-lockfile
