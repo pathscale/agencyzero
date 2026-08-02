@@ -41,6 +41,12 @@ jobs:
   rust:
     name: Rust
     runs-on: ubicloud-standard-4
+    env:
+      # CI needs diagnostics, not debugger symbol tables. This substantially
+      # shrinks compile and link work without changing which tests execute.
+      CARGO_PROFILE_DEV_DEBUG: 0
+      CARGO_PROFILE_TEST_DEBUG: 0
+      CARGO_INCREMENTAL: 1
     steps:
       - uses: actions/checkout@v4
 
@@ -77,6 +83,5 @@ jobs:
           bun run build
 
       - run: cargo fmt --all --check
-      - run: cargo clippy --workspace --all-targets -- -D warnings
-      - run: cargo test --workspace
-      - run: cargo build --workspace
+      - run: cargo clippy --workspace --all-targets --all-features -- -D warnings
+      - run: cargo test --workspace --all-features
