@@ -1,0 +1,29 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "AgencyZero Experimental",
+  "identifier": "com.pathscale.agencyzero.experimental",
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "visible": false,
+        "title": "AgencyZero Experimental",
+        "width": 1344,
+        "height": 900,
+        "minWidth": 960,
+        "minHeight": 640,
+        "resizable": true,
+        "titleBarStyle": "Overlay",
+        "hiddenTitle": true,
+        "backgroundColor": "#0a0b0d"
+      }
+    ]
+  },
+  "plugins": {
+    "updater": {
+      "endpoints": [
+        "https://24x.ai/agencyzero-experimental/latest.json"
+      ]
+    }
+  }
+}

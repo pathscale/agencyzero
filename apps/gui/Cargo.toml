@@ -5,6 +5,10 @@ version.workspace = true
 edition.workspace = true
 publish.workspace = true
 
+[features]
+default = []
+experimental = ["dep:agent-experimental", "dep:security-framework"]
+
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 
@@ -12,6 +16,7 @@ tauri-build = { version = "2", features = [] }
 # Carries the store forward when a column changes; see crates/wt-migrate.
 wt-migrate = { path = "../../crates/wt-migrate" }
 agent-abstraction = "0.4.5"
+agent-experimental = { git = "https://gitlab.com/anonymous-28282828282/agent-experimental.git", rev = "df144f229d8ccd510deb17a866c9724337294e42", default-features = false, optional = true }
 az-core.workspace = true
 worktable = "0.9"
 # The `worktable!` macro emits code that names these by bare path rather than
@@ -30,6 +35,9 @@ tauri-plugin-updater = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tauri-plugin-dialog = "2"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+security-framework = { version = "3.7", optional = true }
 
 [dev-dependencies]
 tokio = { version = "1", features = ["macros", "rt"] }

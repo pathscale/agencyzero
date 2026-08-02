@@ -5,6 +5,8 @@ import type {
   AgentStatus,
   AvailableUpdate,
   BuildInfo,
+  ClaudeTokenStatus,
+  ClaudeUsage,
   CostSummary,
   CreatedProject,
   DataLocationView,
@@ -107,6 +109,14 @@ export interface AgencyZeroApi {
   // — Settings ————————————————————————————————————————————————
   getSettings(): Promise<GlobalSettings>;
   setSettings(patch: DeepPartial<GlobalSettings>): Promise<GlobalSettings>;
+  /** Experimental profile only. Reports presence without returning the token. */
+  claudeTokenStatus(): Promise<ClaudeTokenStatus>;
+  /** Experimental profile only. Saves the token directly into macOS Keychain. */
+  setClaudeToken(token: string): Promise<ClaudeTokenStatus>;
+  /** Experimental profile only. Removes the token from macOS Keychain. */
+  removeClaudeToken(): Promise<ClaudeTokenStatus>;
+  /** Experimental profile only. Fetches current Claude subscription usage. */
+  claudeUsage(): Promise<ClaudeUsage>;
   /** Probes the installed CLIs. `recheck` forces a fresh probe. */
   listAgentStatus(recheck: boolean): Promise<AgentStatus[]>;
   /**

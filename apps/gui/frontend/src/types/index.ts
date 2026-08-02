@@ -701,6 +701,38 @@ export interface QuotaReport {
   checkedAt: string;
 }
 
+/** Presence only. The stored Claude token never crosses back into the webview. */
+export interface ClaudeTokenStatus {
+  configured: boolean;
+}
+
+export interface ClaudeUsageWindow {
+  /** Provider percentage in the range 0..100. */
+  utilization: number;
+  /** ISO 8601. */
+  resetsAt: string | null;
+}
+
+export interface ClaudeUsageLimit {
+  kind: string;
+  /** Provider percentage in the range 0..100. */
+  percent: number;
+  severity: string | null;
+  /** ISO 8601. */
+  resetsAt: string | null;
+  model: string | null;
+}
+
+/** Experimental subscription usage fetched from Anthropic with a Keychain token. */
+export interface ClaudeUsage {
+  fiveHour: ClaudeUsageWindow | null;
+  sevenDay: ClaudeUsageWindow | null;
+  sevenDaySonnet: ClaudeUsageWindow | null;
+  limits: ClaudeUsageLimit[];
+  /** ISO 8601, so a stale answer is visibly stale. */
+  checkedAt: string;
+}
+
 /** `Event::RateLimit` — the crate reports rather than retries. */
 export interface RateLimit {
   projectId: string;

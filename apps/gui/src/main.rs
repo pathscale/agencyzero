@@ -3,6 +3,7 @@
 mod agents;
 mod db;
 mod directives;
+mod experimental;
 mod log;
 mod models;
 mod notes;
@@ -135,7 +136,19 @@ pub(crate) struct AppState {
 /// Which commands Rust answers. See [`IMPLEMENTED`].
 #[tauri::command]
 fn list_capabilities() -> Vec<String> {
-    IMPLEMENTED.iter().map(|name| (*name).to_string()).collect()
+    let mut implemented: Vec<String> = IMPLEMENTED.iter().map(|name| (*name).to_string()).collect();
+    if cfg!(all(feature = "experimental", target_os = "macos")) {
+        implemented.extend(
+            [
+                "claude_token_status",
+                "set_claude_token",
+                "remove_claude_token",
+                "claude_usage",
+            ]
+            .map(str::to_string),
+        );
+    }
+    implemented
 }
 
 /// Exactly which build this process is.
@@ -1052,6 +1065,10 @@ fn main() {
             projects::get_io_persist,
             projects::set_io_persist,
             quota::list_quota,
+            experimental::claude_token_status,
+            experimental::set_claude_token,
+            experimental::remove_claude_token,
+            experimental::claude_usage,
             projects::create_project,
             projects::send_message,
             get_settings,
@@ -1094,7 +1111,13 @@ fn main() {
                 "az-gui {} · {} · built {}",
                 BUILD.version,
                 BUILD.git_sha,
-                BUILD.built_at
+                BUILD.built_at,
+            );
+            crate::log!(
+                log::Level::Info,
+                "boot",
+                "profile={}",
+                experimental::profile_name()
             );
 
             /*

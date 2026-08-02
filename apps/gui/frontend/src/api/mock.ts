@@ -83,6 +83,7 @@ export function createMockApi(): AgencyZeroApi {
   const agentStatus = clone(fixtures.AGENT_STATUS);
   const models = clone(fixtures.MODEL_CATALOGUE);
   let settings = clone(fixtures.SETTINGS);
+  let claudeTokenConfigured = false;
   const pullRequests = clone(fixtures.PULL_REQUESTS);
   /*
    * What a project's agent kept across a compaction, per project.
@@ -390,6 +391,33 @@ export function createMockApi(): AgencyZeroApi {
       settings = deepMerge(settings, patch);
       return settle(settings);
     },
+
+    claudeTokenStatus: () => settle({ configured: claudeTokenConfigured }),
+
+    setClaudeToken: (_token) => {
+      claudeTokenConfigured = true;
+      return settle({ configured: true });
+    },
+
+    removeClaudeToken: () => {
+      claudeTokenConfigured = false;
+      return settle({ configured: false });
+    },
+
+    claudeUsage: () =>
+      settle({
+        fiveHour: {
+          utilization: 31.5,
+          resetsAt: new Date(Date.now() + 2 * 3_600_000).toISOString(),
+        },
+        sevenDay: {
+          utilization: 42,
+          resetsAt: new Date(Date.now() + 4 * 86_400_000).toISOString(),
+        },
+        sevenDaySonnet: null,
+        limits: [],
+        checkedAt: new Date().toISOString(),
+      }),
 
     listAgentStatus(recheck): Promise<AgentStatus[]> {
       if (recheck) {
