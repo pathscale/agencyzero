@@ -28,7 +28,7 @@ use worktable::prelude::*;
 
 use crate::AppState;
 use crate::db::schema::message::MessageRow;
-use crate::db::schema::project::{NameByIdQuery, PinnedByIdQuery, ProjectRow};
+use crate::db::schema::project::{DirsByIdQuery, NameByIdQuery, PinnedByIdQuery, ProjectRow};
 use crate::db::schema::project_item::{
     PositionByIdQuery as ItemPositionByIdQuery, ProjectItemRow,
     ReferenceByIdQuery as ItemReferenceByIdQuery, StatusByIdQuery as ItemStatusByIdQuery,
@@ -2480,6 +2480,12 @@ pub struct ActiveRun {
     /// Provider owning the live session. A tab may switch providers while it
     /// runs, but its next message must not be injected into the old provider.
     pub agent: Agent,
+    /// Exact roots fixed into the live Codex app-server turn.
+    ///
+    /// A directory added in Settings cannot widen that already-open sandbox.
+    /// `send_message` compares this snapshot with the durable project row and
+    /// queues the next message for a fresh resumed invocation when they differ.
+    pub workspace_roots: Vec<String>,
     /// `None` when the run has no conversation to interrupt.
     ///
     /// A command turn — `/compact` — rewrites the session instead of answering
@@ -3120,6 +3126,7 @@ pub async fn compact_project(
             ActiveRun {
                 cancel: cancel_tx,
                 agent,
+                workspace_roots: Vec::new(),
                 // Nothing to say into: see `ActiveRun::inject`.
                 inject: None,
             },
@@ -3437,6 +3444,99 @@ pub async fn reset_task_manager(app: AppHandle, state: State<'_, AppState>) -> R
         );
     }
     Ok(())
+}
+
+/// Store one project's complete ordered directory list and return the durable row.
+///
+/// `Project.dirs` is already a persisted JSON column. Keeping the mutation here
+/// means the project panel, a restarted app, and the next agent invocation all
+/// read the same value instead of the live UI quietly falling back to fixtures.
+async fn write_project_dirs(
+    tables: &Tables,
+    id: &str,
+    dirs: Vec<String>,
+) -> Result<ProjectDto, String> {
+    let encoded = serde_json::to_string(&dirs).map_err(|error| error.to_string())?;
+    tables
+        .project
+        .update_dirs_by_id(DirsByIdQuery { dirs: encoded }, id.to_string())
+        .await
+        .map_err(|error| error.to_string())?;
+    let row = tables
+        .project
+        .select(id.to_string())
+        .ok_or_else(|| format!("no project {id}"))?;
+    Ok(with_session(ProjectDto::from(row), tables))
+}
+
+/// Attach an exact working directory to a project.
+///
+/// Paths are trimmed but otherwise preserved. In particular, AgencyZero does
+/// not replace the selected root with a parent directory or a broad home/code
+/// grant. Duplicate selections are idempotent.
+///
+/// # Errors
+/// Returns a message for an empty path, missing project, or store failure.
+#[tauri::command]
+pub async fn add_dir(
+    app: AppHandle,
+    project_id: String,
+    path: String,
+    state: State<'_, AppState>,
+) -> Result<ProjectDto, String> {
+    let path = path.trim().to_string();
+    if path.is_empty() {
+        return Err("a working directory needs a path".into());
+    }
+    let row = state
+        .tables
+        .project
+        .select(project_id.clone())
+        .ok_or_else(|| format!("no project {project_id}"))?;
+    let mut dirs = serde_json::from_str::<Vec<String>>(&row.dirs).unwrap_or_default();
+    let project = if dirs.iter().any(|dir| dir == &path) {
+        with_session(ProjectDto::from(row), &state.tables)
+    } else {
+        dirs.push(path.clone());
+        write_project_dirs(&state.tables, &project_id, dirs).await?
+    };
+    note_gui(
+        &app,
+        &state,
+        &project_id,
+        format!("attached working directory {path}"),
+    );
+    let _ = app.emit("project:updated", &project);
+    Ok(project)
+}
+
+/// Remove one exact attached directory from a project.
+///
+/// # Errors
+/// Returns a message for a missing project or store failure.
+#[tauri::command]
+pub async fn remove_dir(
+    app: AppHandle,
+    project_id: String,
+    path: String,
+    state: State<'_, AppState>,
+) -> Result<ProjectDto, String> {
+    let row = state
+        .tables
+        .project
+        .select(project_id.clone())
+        .ok_or_else(|| format!("no project {project_id}"))?;
+    let mut dirs = serde_json::from_str::<Vec<String>>(&row.dirs).unwrap_or_default();
+    dirs.retain(|dir| dir != &path);
+    let project = write_project_dirs(&state.tables, &project_id, dirs).await?;
+    note_gui(
+        &app,
+        &state,
+        &project_id,
+        format!("removed working directory {path}"),
+    );
+    let _ = app.emit("project:updated", &project);
+    Ok(project)
 }
 
 /// Rename a project.
@@ -3923,6 +4023,99 @@ pub async fn create_project(
     })
 }
 
+/// Filesystem scope resolved afresh for one provider invocation.
+///
+/// The stored session id is intentionally beside the roots: resuming changes
+/// conversation history, not the sandbox declaration. Rebuilding this value on
+/// every send is what lets a directory attached after session creation take
+/// effect on the very next invocation.
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct InvocationScope {
+    cwd: String,
+    extra_dirs: Vec<String>,
+    resume: Option<String>,
+    memory_dir: std::path::PathBuf,
+}
+
+impl InvocationScope {
+    fn workspace_roots(&self) -> Vec<String> {
+        let mut roots = vec![self.cwd.clone()];
+        for dir in &self.extra_dirs {
+            if !roots.contains(dir) {
+                roots.push(dir.clone());
+            }
+        }
+        roots
+    }
+}
+
+/// Resolve the current project row into one invocation's exact filesystem scope.
+///
+/// Claude keeps the established first-directory-as-cwd behavior. Codex keeps
+/// the AgencyZero-managed project directory as cwd and receives every attached
+/// directory plus only this project's durable-memory directory as typed
+/// additional roots. The provider adapter maps those roots to `--add-dir` or
+/// the app-server workspace-write request as appropriate.
+fn invocation_scope(
+    tables: &Tables,
+    project_id: &str,
+    agent: Agent,
+    managed_cwd: String,
+    data_dir: &std::path::Path,
+) -> InvocationScope {
+    let mut dirs = if project_id == crate::tasks::TASK_MANAGER_ID {
+        tables
+            .kv_get(crate::settings::KEY)
+            .and_then(|raw| serde_json::from_str::<crate::settings::GlobalSettings>(&raw).ok())
+            .unwrap_or_default()
+            .task_manager
+            .dirs
+    } else {
+        tables
+            .project
+            .select(project_id.to_string())
+            .and_then(|row| serde_json::from_str::<Vec<String>>(&row.dirs).ok())
+            .unwrap_or_default()
+    };
+    dirs = dirs
+        .into_iter()
+        .map(|dir| dir.trim().to_string())
+        .filter(|dir| !dir.is_empty())
+        .fold(Vec::new(), |mut exact, dir| {
+            if !exact.contains(&dir) {
+                exact.push(dir);
+            }
+            exact
+        });
+
+    let memory_dir = data_dir.join("memory").join(project_id);
+    let (cwd, mut extra_dirs) =
+        if agent == Agent::Codex && project_id != crate::tasks::TASK_MANAGER_ID {
+            // Attached repositories never replace the managed project directory.
+            // They widen Codex's scoped workspace instead.
+            (managed_cwd, dirs)
+        } else if dirs.is_empty() {
+            (managed_cwd, Vec::new())
+        } else {
+            let cwd = dirs.remove(0);
+            (cwd, dirs)
+        };
+
+    if agent == Agent::Codex {
+        let memory = memory_dir.to_string_lossy().into_owned();
+        if memory != cwd && !extra_dirs.contains(&memory) {
+            extra_dirs.push(memory);
+        }
+    }
+
+    InvocationScope {
+        cwd,
+        extra_dirs,
+        resume: tables.kv_get(&agent_session_key(project_id, agent)),
+        memory_dir,
+    }
+}
+
 /// Persist the user's message, then run the agent in the background.
 ///
 /// Returns as soon as the user's message is stored, rather than when the run
@@ -3954,6 +4147,20 @@ pub async fn send_message(
         ));
     }
 
+    // Read the durable row before deciding whether this message can ride an
+    // already-open Codex turn. A turn's app-server sandbox cannot be widened in
+    // place: if Settings changed its roots, the frontend queues this message
+    // until the current run settles, then a fresh invocation resumes the same
+    // session with the new scope.
+    let scope = invocation_scope(
+        &state.tables,
+        &input.project_id,
+        agent,
+        crate::workspace_root_path(&app, &state),
+        &state.location.path,
+    );
+    let workspace_roots = scope.workspace_roots();
+
     /*
      * One run per project, enforced here rather than in the composer. A second
      * concurrent run would resume the same session and share one approval
@@ -3972,6 +4179,10 @@ pub async fn send_message(
             .map_err(|_| "the run registry is unavailable".to_string())?;
         if let Some(running) = active.get(&input.project_id) {
             if !can_inject(running.agent, agent) {
+                drop(active);
+                return Err(BUSY_WITH_RUN.into());
+            }
+            if agent == Agent::Codex && running.workspace_roots != workspace_roots {
                 drop(active);
                 return Err(BUSY_WITH_RUN.into());
             }
@@ -4052,6 +4263,7 @@ pub async fn send_message(
             ActiveRun {
                 cancel: cancel_tx,
                 agent,
+                workspace_roots,
                 // Kept for the receiver's lifetime. The capability check above
                 // exposes live injection only when the active provider allows it.
                 inject: Some(inject_tx),
@@ -4119,46 +4331,6 @@ pub async fn send_message(
         }),
     );
 
-    // The working directories: the project's own if it has any, else the
-    // workspace root. An agent with no cwd inherits the app's, which for a
-    // bundled .app is `/`.
-    //
-    // The task manager is the special case: it has no project row to carry
-    // directories. Its provider applies the chosen permission posture within
-    // the directories stored in Settings.
-    //
-    // The first directory becomes the cwd; every further one is another typed
-    // working root, so a project spanning two repos is in scope for both.
-    let mut dirs = if input.project_id == crate::tasks::TASK_MANAGER_ID {
-        state
-            .tables
-            .kv_get(crate::settings::KEY)
-            .and_then(|raw| serde_json::from_str::<crate::settings::GlobalSettings>(&raw).ok())
-            .unwrap_or_default()
-            .task_manager
-            .dirs
-    } else {
-        state
-            .tables
-            .project
-            .select(input.project_id.clone())
-            .and_then(|row| serde_json::from_str::<Vec<String>>(&row.dirs).ok())
-            .unwrap_or_default()
-    };
-    dirs.retain(|dir| !dir.trim().is_empty());
-    let cwd = if dirs.is_empty() {
-        crate::workspace_root_path(&app, &state)
-    } else {
-        dirs.remove(0)
-    };
-    let extra_dirs = dirs;
-
-    // The agent's own session id for this project, when a turn has produced
-    // one. Without it every turn starts a fresh conversation.
-    let resume = state
-        .tables
-        .kv_get(&agent_session_key(&input.project_id, agent));
-
     /*
      * Where this project's knowledge checkpoints go, or `None` for the projects
      * that do not take them — which is all of them until someone asks.
@@ -4185,8 +4357,6 @@ pub async fn send_message(
      * The project id is the only key that survives a re-clone, a moved checkout
      * and a new session.
      */
-    let memory_dir = state.location.path.join("memory").join(&input.project_id);
-
     let tables = state.tables.clone();
     let running = state.running.clone();
     let io = state.io.clone();
@@ -4258,16 +4428,56 @@ pub async fn send_message(
             permission,
             effort,
             extra_thinking,
-            cwd,
-            extra_dirs,
-            resume,
+            scope,
             checkpoint_dir,
-            memory_dir,
         )
         .await;
     });
 
     Ok(user_message)
+}
+
+/// Build the provider request whose filesystem and resume policy were resolved
+/// for this invocation.
+///
+/// This function is deliberately provider-neutral. AgencyZero supplies typed
+/// roots on every call; agent-abstraction owns whether those become CLI flags
+/// or Codex app-server workspace-write fields.
+fn build_turn_request(
+    agent: Agent,
+    prompt: String,
+    permission: &str,
+    model: &str,
+    effort: Option<&str>,
+    extra_thinking: Option<bool>,
+    scope: &InvocationScope,
+) -> Request {
+    let mut request = Request::new(agent, prompt)
+        .permission(parse_permission(Some(permission)))
+        .cwd(&scope.cwd);
+    for dir in &scope.extra_dirs {
+        request = request.add_dir(dir);
+    }
+    let asks = should_route_approvals(agent, permission);
+    if asks && agent.caps().approvals {
+        request = request.approvals();
+    }
+    if agent.caps().live_follow_up {
+        request = request.interactive();
+    }
+    if !model.is_empty() {
+        request = request.model(model);
+    }
+    if let Some(effort) = effort.filter(|value| !value.is_empty()) {
+        request = request.effort(effort);
+    }
+    if extra_thinking == Some(false) {
+        request = request.thinking(false);
+    }
+    if let Some(session) = scope.resume.as_deref().filter(|id| !id.is_empty()) {
+        request = request.resume(session);
+    }
+    request
 }
 
 /// Stream one turn: events out as they arrive, one row in at the end.
@@ -4308,16 +4518,15 @@ async fn drive_run(
     // Whether the model may spend reasoning tokens. `Some(false)` disables it;
     // see `SendMessageInput::extra_thinking`.
     extra_thinking: Option<bool>,
-    cwd: String,
-    extra_dirs: Vec<String>,
-    resume: Option<String>,
+    scope: InvocationScope,
     // Where to write knowledge checkpoints, or `None` when this project does
     // not take them. See `checkpoint_if_due`.
     checkpoint_dir: Option<std::path::PathBuf>,
-    // This project's durable memory, keyed by project id rather than by session
-    // or working directory. Told to the agent every turn; see below.
-    memory_dir: std::path::PathBuf,
 ) {
+    let cwd = scope.cwd.clone();
+    let extra_dirs = scope.extra_dirs.clone();
+    let resume = scope.resume.clone();
+    let memory_dir = scope.memory_dir.clone();
     let mut directive_turn_id = turn_id;
     /*
      * Home's conversation is the task manager, and its replies have to become
@@ -4348,51 +4557,15 @@ async fn drive_run(
     let prompt_echo = prompt.clone();
     let effort_echo = effort.clone().filter(|value| !value.is_empty());
 
-    let mut request = Request::new(agent, prompt)
-        .permission(parse_permission(Some(&permission)))
-        .cwd(&cwd);
-    // The library maps these typed roots to each provider and, for interactive
-    // Codex, to both app-server runtime roots and workspace-write roots.
-    for dir in &extra_dirs {
-        request = request.add_dir(dir);
-    }
-    // `ask`: every gated call — a write, a command, a read outside the working
-    // tree — arrives as an approval question instead of a silent pre-decision.
-    let asks = should_route_approvals(agent, &permission);
-    if asks && agent.caps().approvals {
-        request = request.approvals();
-    }
-    // Always, not only under `ask` (approvals implies it anyway): the open
-    // control channel is what lets a message typed mid-turn reach the model at
-    // its next step boundary instead of waiting out the whole turn.
-    if agent.caps().live_follow_up {
-        request = request.interactive();
-    }
-    if !model.is_empty() {
-        request = request.model(&model);
-    }
-    if let Some(effort) = effort.filter(|value| !value.is_empty()) {
-        request = request.effort(effort);
-    }
-    // "Extra Thinking" off: turn the model's reasoning off for this run. Only
-    // Claude has a lever (delivered as `MAX_THINKING_TOKENS=0`); the crate
-    // no-ops it for the other agents, so this needs no per-agent guard here.
-    if extra_thinking == Some(false) {
-        request = request.thinking(false);
-    }
-
-    /*
-     * Continue the conversation rather than starting a new one.
-     *
-     * Without this every turn was a fresh session: the agent had no memory of
-     * anything said before, the context never grew past a single exchange, and
-     * the session id recorded on the project named a conversation nothing ever
-     * went back to. `resume` takes the native id, which is exactly what
-     * `Event::Started` gave us and what `kv` has been holding.
-     */
-    if let Some(session) = resume.as_deref().filter(|id| !id.is_empty()) {
-        request = request.resume(session);
-    }
+    let mut request = build_turn_request(
+        agent,
+        prompt,
+        &permission,
+        &model,
+        effort.as_deref(),
+        extra_thinking,
+        &scope,
+    );
 
     /*
      * What the last compaction taught, carried on every turn since.
@@ -6186,6 +6359,189 @@ mod tests {
             agent_session_key("proj-1", Agent::Claude),
             agent_session_key("proj-1", Agent::Codex)
         );
+    }
+
+    #[tokio::test]
+    async fn codex_request_contains_primary_attached_and_project_memory_roots() {
+        let store = std::env::temp_dir().join(format!(
+            "az-codex-roots-{}-{}",
+            std::process::id(),
+            uuid::Uuid::new_v4()
+        ));
+        let tables = Tables::open(&store).await.expect("scope store opens");
+        let mut row = project_row("proj-roots", "Roots");
+        row.dirs = serde_json::to_string(&vec!["/repo-a", "/repo-b"]).unwrap();
+        tables.project.insert(row).expect("project inserts");
+
+        let scope = invocation_scope(
+            &tables,
+            "proj-roots",
+            Agent::Codex,
+            "/managed/project".into(),
+            &store,
+        );
+        let memory = store
+            .join("memory/proj-roots")
+            .to_string_lossy()
+            .into_owned();
+        assert_eq!(scope.cwd, "/managed/project");
+        assert_eq!(scope.extra_dirs, vec!["/repo-a", "/repo-b", &memory]);
+        assert_eq!(
+            scope.workspace_roots(),
+            vec!["/managed/project", "/repo-a", "/repo-b", &memory]
+        );
+        assert!(
+            !scope
+                .workspace_roots()
+                .contains(&store.to_string_lossy().into_owned()),
+            "the database parent is not a root"
+        );
+        assert!(
+            !scope
+                .workspace_roots()
+                .contains(&"/Users/revenge/code".into())
+        );
+        assert!(!scope.workspace_roots().contains(&"/Users/revenge".into()));
+
+        let request = build_turn_request(
+            Agent::Codex,
+            "probe".into(),
+            "auto",
+            "gpt-5.6-sol",
+            Some("high"),
+            None,
+            &scope,
+        );
+        let described = format!("{request:?}");
+        for root in ["/managed/project", "/repo-a", "/repo-b", &memory] {
+            assert!(
+                described.contains(root),
+                "request omitted {root}: {described}"
+            );
+        }
+
+        tables.shutdown().await;
+        let _ = std::fs::remove_dir_all(&store);
+    }
+
+    /// Exact regression for 0.1.62: the session id already exists, then the
+    /// project gains another directory. The following request must resume that
+    /// same Codex thread with the newly persisted root.
+    #[tokio::test]
+    async fn resumed_codex_session_applies_directory_added_after_session_creation() {
+        let store = std::env::temp_dir().join(format!(
+            "az-codex-resume-roots-{}-{}",
+            std::process::id(),
+            uuid::Uuid::new_v4()
+        ));
+        let tables = Tables::open(&store).await.expect("scope store opens");
+        let mut row = project_row("proj-resume", "Resume roots");
+        row.dirs = serde_json::to_string(&vec!["/repo-a"]).unwrap();
+        tables.project.insert(row).expect("project inserts");
+        tables
+            .kv_put(
+                &agent_session_key("proj-resume", Agent::Codex),
+                "thread-existing".into(),
+            )
+            .await
+            .expect("session persists");
+
+        let before = invocation_scope(
+            &tables,
+            "proj-resume",
+            Agent::Codex,
+            "/managed/project".into(),
+            &store,
+        );
+        assert!(!before.workspace_roots().contains(&"/repo-b".into()));
+
+        write_project_dirs(
+            &tables,
+            "proj-resume",
+            vec!["/repo-a".into(), "/repo-b".into()],
+        )
+        .await
+        .expect("new root persists");
+        tables.shutdown().await;
+
+        let reopened = Tables::open(&store)
+            .await
+            .expect("persisted project reopens");
+        let after = invocation_scope(
+            &reopened,
+            "proj-resume",
+            Agent::Codex,
+            "/managed/project".into(),
+            &store,
+        );
+        assert_eq!(after.resume.as_deref(), Some("thread-existing"));
+        assert!(after.workspace_roots().contains(&"/repo-a".into()));
+        assert!(after.workspace_roots().contains(&"/repo-b".into()));
+
+        let request = build_turn_request(
+            Agent::Codex,
+            "continue".into(),
+            "auto",
+            "gpt-5.6-sol",
+            None,
+            None,
+            &after,
+        );
+        let described = format!("{request:?}");
+        assert!(described.contains("Resume(\"thread-existing\")"));
+        assert!(described.contains("/repo-b"));
+
+        reopened.shutdown().await;
+        let _ = std::fs::remove_dir_all(&store);
+    }
+
+    #[tokio::test]
+    async fn claude_directory_scope_is_unchanged_and_excludes_agency_memory() {
+        let store = std::env::temp_dir().join(format!(
+            "az-claude-roots-{}-{}",
+            std::process::id(),
+            uuid::Uuid::new_v4()
+        ));
+        let tables = Tables::open(&store).await.expect("scope store opens");
+        let mut row = project_row("proj-claude", "Claude roots");
+        row.dirs = serde_json::to_string(&vec!["/repo-a", "/repo-b"]).unwrap();
+        tables.project.insert(row).expect("project inserts");
+
+        let scope = invocation_scope(
+            &tables,
+            "proj-claude",
+            Agent::Claude,
+            "/managed/project".into(),
+            &store,
+        );
+        assert_eq!(scope.cwd, "/repo-a");
+        assert_eq!(scope.extra_dirs, vec!["/repo-b"]);
+        assert!(
+            !scope
+                .workspace_roots()
+                .contains(&scope.memory_dir.to_string_lossy().into_owned())
+        );
+
+        let argv = build_turn_request(
+            Agent::Claude,
+            "continue".into(),
+            "edit",
+            "sonnet",
+            None,
+            None,
+            &scope,
+        )
+        .argv()
+        .expect("Claude request is valid");
+        let add_dirs: Vec<_> = argv
+            .windows(2)
+            .filter(|pair| pair[0] == "--add-dir")
+            .map(|pair| pair[1].as_str())
+            .collect();
+        assert_eq!(add_dirs, ["/repo-b"]);
+
+        tables.shutdown().await;
+        let _ = std::fs::remove_dir_all(&store);
     }
 
     #[test]

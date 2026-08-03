@@ -26,6 +26,8 @@ const IMPLEMENTED = [
   "list_task_log",
   "clear_task_log",
   "list_rate_limits",
+  "add_dir",
+  "remove_dir",
   "create_project",
   "send_message",
   "get_settings",
@@ -100,6 +102,8 @@ describe("selectApi", () => {
 
     expect(backend).toBe("hybrid");
     expect(live.has("listProjects")).toBe(true);
+    expect(live.has("addDir")).toBe(true);
+    expect(live.has("removeDir")).toBe(true);
     // Not in IMPLEMENTED, so it stays on the mock and the UI greys it out.
     expect(live.has("createItem")).toBe(false);
   });
