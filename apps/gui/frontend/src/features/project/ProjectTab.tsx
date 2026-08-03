@@ -5,8 +5,8 @@ import { Panel } from "~/components/Panel";
 import { Composer } from "~/features/project/Composer";
 import { ProjectPanel } from "~/features/project/ProjectPanel";
 import { TranscriptPane } from "~/features/project/TranscriptPane";
-import { AGENT_LABELS, rateLimitLabel } from "~/lib/labels";
 import { countdown } from "~/lib/format";
+import { AGENT_LABELS, rateLimitLabel } from "~/lib/labels";
 import { describeError, log } from "~/lib/log";
 import {
   cacheBreak,
