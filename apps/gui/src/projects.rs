@@ -250,6 +250,11 @@ pub struct SendMessageInput {
     pub model: Option<String>,
     pub permission: Option<String>,
     pub effort: Option<String>,
+    /// Whether the model may spend reasoning tokens ("Extra Thinking" in the
+    /// composer). `Some(false)` disables it, as `Request::thinking(false)`;
+    /// `Some(true)` and `None` both leave the agent's default. Only Claude has a
+    /// lever; the crate no-ops it for the others.
+    pub extra_thinking: Option<bool>,
     /// Content-free facts computed before the composer compiles controls or
     /// appends attachment paths. Absent callers fall back to the sent body.
     pub study: Option<StudyTurnMetadata>,
@@ -273,6 +278,8 @@ pub struct CreateProjectInput {
     pub permission: Option<String>,
     /// Reasoning effort, as `Request::effort`. `None` means the CLI's default.
     pub effort: Option<String>,
+    /// See [`SendMessageInput::extra_thinking`].
+    pub extra_thinking: Option<bool>,
     pub study: Option<StudyTurnMetadata>,
 }
 
@@ -3903,6 +3910,7 @@ pub async fn create_project(
             model: input.model,
             permission: input.permission,
             effort: input.effort,
+            extra_thinking: input.extra_thinking,
             study: input.study,
         },
         state,
@@ -4227,6 +4235,7 @@ pub async fn send_message(
     let project_id = input.project_id.clone();
     let turn_id = user_message.id.clone();
     let effort = input.effort.clone();
+    let extra_thinking = input.extra_thinking;
 
     tauri::async_runtime::spawn(async move {
         drive_run(
@@ -4248,6 +4257,7 @@ pub async fn send_message(
             model,
             permission,
             effort,
+            extra_thinking,
             cwd,
             extra_dirs,
             resume,
@@ -4295,6 +4305,9 @@ async fn drive_run(
     model: String,
     permission: String,
     effort: Option<String>,
+    // Whether the model may spend reasoning tokens. `Some(false)` disables it;
+    // see `SendMessageInput::extra_thinking`.
+    extra_thinking: Option<bool>,
     cwd: String,
     extra_dirs: Vec<String>,
     resume: Option<String>,
@@ -4360,6 +4373,12 @@ async fn drive_run(
     }
     if let Some(effort) = effort.filter(|value| !value.is_empty()) {
         request = request.effort(effort);
+    }
+    // "Extra Thinking" off: turn the model's reasoning off for this run. Only
+    // Claude has a lever (delivered as `MAX_THINKING_TOKENS=0`); the crate
+    // no-ops it for the other agents, so this needs no per-agent guard here.
+    if extra_thinking == Some(false) {
+        request = request.thinking(false);
     }
 
     /*
@@ -4561,7 +4580,7 @@ async fn drive_run(
         "sent",
         "request",
         format!(
-            "{} model={} permission={permission} effort={} cwd={cwd}{}\n\n{prompt_echo}",
+            "{} model={} permission={permission} effort={}{} cwd={cwd}{}\n\n{prompt_echo}",
             agent_wire_name(agent),
             if model.is_empty() {
                 "<default>"
@@ -4569,6 +4588,13 @@ async fn drive_run(
                 &model
             },
             effort_echo.as_deref().unwrap_or("<none>"),
+            // Only when turned off: the default leaves the agent's own thinking
+            // in place and does not belong on every request line.
+            if extra_thinking == Some(false) {
+                " thinking=off"
+            } else {
+                ""
+            },
             if extra_dirs.is_empty() {
                 String::new()
             } else {

@@ -50,6 +50,8 @@ export function DraftTab(props: { tab: Tab }): JSX.Element {
               effort,
             )
           }
+          extraThinking={props.tab.extraThinking}
+          onExtraThinkingChange={(enabled) => actions.setTabExtraThinking(props.tab.key, enabled)}
           onSend={(body, study) => actions.createProject(body, props.tab.key, study)}
         />
       </div>

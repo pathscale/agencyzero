@@ -60,6 +60,8 @@ export interface AgencyZeroApi {
     permission?: Permission;
     /** Reasoning effort, as `Request::effort`. Absent means the CLI's default. */
     effort?: string;
+    /** "Extra Thinking": `false` disables the model's reasoning (Claude only). */
+    extraThinking?: boolean;
     study?: StudyTurnMetadata;
   }): Promise<CreatedProject>;
   deleteProject(id: string): Promise<void>;
@@ -106,6 +108,8 @@ export interface AgencyZeroApi {
     permission?: Permission;
     /** Reasoning effort, as `Request::effort`. Absent means the CLI's default. */
     effort?: string;
+    /** "Extra Thinking": `false` disables the model's reasoning (Claude only). */
+    extraThinking?: boolean;
     study?: StudyTurnMetadata;
   }): Promise<Message>;
   /** Approve once / Deny on a moderator hold. */

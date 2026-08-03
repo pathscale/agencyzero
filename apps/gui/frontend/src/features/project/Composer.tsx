@@ -48,6 +48,13 @@ export type ComposerProps = {
   efforts: string[];
   effort: string;
   onEffortChange?: (effort: string) => void;
+  /**
+   * "Extra Thinking": whether the model may reason before answering. Only Claude
+   * acts on it, so the control is shown always but disabled for other agents
+   * rather than hidden, the same way a greyed pill elsewhere means "not here".
+   */
+  extraThinking: boolean;
+  onExtraThinkingChange?: (enabled: boolean) => void;
   permission: Permission;
   /** Postures this provider can execute without silently degrading them. */
   permissions?: Permission[];
@@ -527,6 +534,33 @@ export function Composer(props: ComposerProps): JSX.Element {
           <Show when={props.usage}>
             <span class="font-mono text-[11.5px] text-az-faint">{props.usage}</span>
           </Show>
+
+          {/*
+            Extra Thinking, next to the model it qualifies. Only Claude has a
+            lever, so for any other agent the control is disabled rather than
+            gone: hiding it would make the row jump as you switch models and
+            leave no hint the option exists. Off sends `thinking(false)`, which
+            the backend maps to Claude's disable switch.
+          */}
+          <button
+            type="button"
+            onClick={() => props.onExtraThinkingChange?.(!props.extraThinking)}
+            disabled={props.agent !== "claude"}
+            aria-pressed={props.agent === "claude" && props.extraThinking}
+            title={
+              props.agent === "claude"
+                ? "Extra Thinking: let the model reason before it answers. Off disables thinking for this tab's runs."
+                : "Extra Thinking applies to Claude only."
+            }
+            class={`flex items-center gap-1.5 rounded-full border px-2.5 py-1 font-medium text-[11px] transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
+              props.agent === "claude" && props.extraThinking
+                ? "border-primary/35 bg-primary/15 text-primary"
+                : "border-az-hairline-strong text-az-muted hover:text-base-content"
+            }`}
+          >
+            <Icon name="sparkles" class="text-[11px]" />
+            Extra Thinking
+          </button>
 
           <PillMenu
             label="Model"

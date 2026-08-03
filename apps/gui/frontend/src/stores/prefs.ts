@@ -7,6 +7,7 @@ const STORAGE_KEY = "agencyzero:ui-prefs";
 const DEFAULTS: UiPrefs = {
   lastModel: "sonnet",
   lastPermission: "read_only",
+  lastExtraThinking: true,
   // Settings starts collapsed: working directories are set once and then left
   // alone, while the other three change while you watch.
   // `io` open by default: it is the panel you want the moment something looks

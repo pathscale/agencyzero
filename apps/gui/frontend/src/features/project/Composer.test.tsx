@@ -27,6 +27,7 @@ function mount(overrides: Partial<Parameters<typeof Composer>[0]> = {}) {
         ]}
         efforts={[]}
         effort=""
+        extraThinking={true}
         permission="read_only"
         onModelChange={() => {}}
         onPermissionChange={() => {}}
@@ -275,6 +276,7 @@ describe("a draft belongs to its own tab", () => {
           ]}
           efforts={[]}
           effort=""
+          extraThinking={true}
           permission="read_only"
           onModelChange={() => {}}
           onPermissionChange={() => {}}
@@ -321,6 +323,7 @@ describe("what the composer holds is per tab", () => {
           ]}
           efforts={[]}
           effort=""
+          extraThinking={true}
           permission="read_only"
           onModelChange={() => {}}
           onPermissionChange={() => {}}
@@ -427,5 +430,39 @@ describe("the alert slot means failure", () => {
     expect(alert.textContent).toContain("the backend is unreachable");
     // And the words are where the alert says they are.
     expect(field.value).toBe("a real prompt");
+  });
+});
+
+describe("Extra Thinking", () => {
+  it("is on for Claude and reports the flip", async () => {
+    const onExtraThinkingChange = vi.fn();
+    const { booted, getByRole } = mount({ onExtraThinkingChange });
+    await booted();
+
+    const button = getByRole("button", { name: "Extra Thinking" });
+    expect(button).not.toBeDisabled();
+    expect(button).toHaveAttribute("aria-pressed", "true");
+
+    fireEvent.click(button);
+    expect(onExtraThinkingChange).toHaveBeenCalledWith(false);
+  });
+
+  it("is disabled for a non-Claude agent and cannot be flipped", async () => {
+    const onExtraThinkingChange = vi.fn();
+    const { booted, getByRole } = mount({
+      agent: "codex",
+      extraThinking: true,
+      onExtraThinkingChange,
+    });
+    await booted();
+
+    const button = getByRole("button", { name: "Extra Thinking" });
+    expect(button).toBeDisabled();
+    // Not pressed either: the control reads as off for an agent it does not
+    // apply to, rather than showing a state nothing acts on.
+    expect(button).toHaveAttribute("aria-pressed", "false");
+
+    fireEvent.click(button);
+    expect(onExtraThinkingChange).not.toHaveBeenCalled();
   });
 });
