@@ -1228,12 +1228,13 @@ async fn apply_directive(
                         tables.project.select_all().execute().unwrap_or_default();
                     match resolve_project(&projects, named) {
                         Some(found) => found,
-                        None if project_id == crate::tasks::TASK_MANAGER_ID => {
+                        None => {
                             /*
-                             * Home has always been able to turn a named task
-                             * group into a bare project. Keeping that ability
-                             * on the explicit `project:` argument preserves
-                             * the feature without treating prose as a command.
+                             * The explicit `project:` argument is the authority
+                             * to create this named row. Prose never reaches this
+                             * path, so a missing name cannot silently become a
+                             * project unless the agent used the declared
+                             * authoring surface to ask for exactly that.
                              */
                             let row = ProjectRow {
                                 id: id("proj"),
@@ -1257,12 +1258,6 @@ async fn apply_directive(
                                 with_session(ProjectDto::from(row.clone()), tables),
                             );
                             row.id
-                        }
-                        None => {
-                            return Outcome::Refused {
-                                what: format!("items.add({title:?}) project {named:?}"),
-                                code: "ENTITY_NOT_FOUND".into(),
-                            };
                         }
                     }
                 }
@@ -1803,11 +1798,9 @@ fn record_study_turn(
 
 /// Find the project a line named, by id or by name, case-insensitively.
 ///
-/// Never creates one. The task manager creates a project it cannot find,
-/// because organising is the entire job there. An ordinary session that names
-/// something missing has far more likely mistyped it, and a silently created
-/// near-duplicate project is much harder to notice than an item that never
-/// appeared.
+/// Never creates one. Creation belongs to the caller after it has established
+/// that an explicit `project:` argument was authored; keeping lookup pure makes
+/// the exact-name rule independently testable.
 fn resolve_project(rows: &[ProjectRow], named: &str) -> Option<String> {
     let named = named.trim();
     // Folded the same way the task manager folds its names, so the two ways

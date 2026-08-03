@@ -29,12 +29,12 @@ standing_promotion:
 
   # 13.2.3 The capability bound. `items.add(project: ...)` can write outside
   # the project a turn came from, and item ids resolve installation-wide.
-  # Home's Task Manager may also create a bare project when an explicit add
-  # names one that does not exist. Declared here rather than left implicit.
+  # An explicit add may also create a bare project when it names one that does
+  # not exist. Declared here rather than left implicit.
   bound: >-
     any project in this installation's store, named by id or by name;
-    Home Task Manager may create a named project inside that store through
-    items.add; no reach outside it, and no other namespace is live
+    items.add may create an explicitly named project inside that store;
+    no reach outside it, and no other namespace is live
 
   arguments:
     agency:items.state: [id, status, pr]

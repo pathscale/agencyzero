@@ -69,8 +69,8 @@ pub const SURFACE: Surface = Surface {
     ],
     reserved: &["status:finished", "status:canceled"],
     bound: "any project in this installation's store, named by id or by name; \
-            Home Task Manager may create a named project inside that store through \
-            items.add; no reach outside it, and no other namespace is live",
+            items.add may create an explicitly named project inside that store; \
+            no reach outside it, and no other namespace is live",
 };
 
 /// The statuses an agent may set.
