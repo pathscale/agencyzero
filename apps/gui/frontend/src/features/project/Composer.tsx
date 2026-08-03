@@ -487,7 +487,7 @@ export function Composer(props: ComposerProps): JSX.Element {
           reference. This departs from design/workspace.html, which puts the
           model pill on the left after Attach; recorded in the frontend README.
         */}
-        <div class="flex items-center gap-2.5">
+        <div data-composer-controls class="flex flex-wrap items-center gap-2.5">
           <button
             type="button"
             onClick={toggleAdvanced}
@@ -528,7 +528,7 @@ export function Composer(props: ComposerProps): JSX.Element {
             <Icon name="plus" class="text-[16px]" />
           </button>
 
-          <div class="flex-1" />
+          <div class="min-w-4 flex-1" />
 
           {/* Text only, by request: the numbers already say how full it is. */}
           <Show when={props.usage}>

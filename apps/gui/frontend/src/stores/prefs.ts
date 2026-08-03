@@ -4,9 +4,16 @@ import type { UiPrefs } from "~/types";
 
 const STORAGE_KEY = "agencyzero:ui-prefs";
 
+export const UI_SCALES: Record<UiPrefs["uiSize"], number> = {
+  normal: 1,
+  large: 1.08,
+  "extra-large": 1.16,
+};
+
 const DEFAULTS: UiPrefs = {
   lastModel: "sonnet",
   lastPermission: "read_only",
+  uiSize: "large",
   lastExtraThinking: true,
   // Settings starts collapsed: working directories are set once and then left
   // alone, while the other three change while you watch.
@@ -67,6 +74,7 @@ function load(): UiPrefs {
     return {
       ...DEFAULTS,
       ...stored,
+      uiSize: stored.uiSize && stored.uiSize in UI_SCALES ? stored.uiSize : DEFAULTS.uiSize,
       panelSections: sections,
       seenSections: [...new Set([...seen, ...RESET_ONCE])],
     };
@@ -92,6 +100,13 @@ createEffect(() => {
   } catch {
     // Storage full or blocked — the app still works, it just forgets.
   }
+});
+
+createEffect(() => {
+  if (typeof document === "undefined") return;
+  const scale = UI_SCALES[prefs.uiSize];
+  document.documentElement.style.setProperty("--az-ui-scale", String(scale));
+  document.documentElement.style.setProperty("--az-ui-inverse-scale", String(1 / scale));
 });
 
 export { prefs, setPrefs };

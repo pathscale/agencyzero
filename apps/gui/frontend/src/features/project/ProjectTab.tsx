@@ -6,6 +6,7 @@ import { Composer } from "~/features/project/Composer";
 import { ProjectPanel } from "~/features/project/ProjectPanel";
 import { TranscriptPane } from "~/features/project/TranscriptPane";
 import { AGENT_LABELS, rateLimitLabel } from "~/lib/labels";
+import { countdown } from "~/lib/format";
 import { describeError, log } from "~/lib/log";
 import {
   cacheBreak,
@@ -15,7 +16,7 @@ import {
   usageTotals,
   withLiveContext,
 } from "~/lib/stats";
-import { QUEUE_REASONS, useWorkspace } from "~/stores/workspace";
+import { QUEUE_REASONS, useNow, useWorkspace } from "~/stores/workspace";
 import type { Project, PullRequest, Tab } from "~/types";
 
 /**
@@ -33,6 +34,7 @@ function isCount(value: number | null): value is number {
 export function ProjectTab(props: { tab: Tab; project: Project }): JSX.Element {
   const { state, actions, promptModels, effortsFor, permissionsFor, capabilitiesFor, isLive } =
     useWorkspace();
+  const now = useNow();
 
   const messages = () => state.messages[props.project.id] ?? [];
 
@@ -119,6 +121,37 @@ export function ProjectTab(props: { tab: Tab; project: Project }): JSX.Element {
     return `${compactCount(it.contextTokens ?? 0)} / ${compactCount(it.contextWindow ?? 0)} ctx · ${Math.round(share * 100)}%`;
   });
 
+  /** The active tab's provider only, beside the turn count it constrains. */
+  const providerUsage = createMemo<{ label: string; title: string } | null>(() => {
+    if (props.tab.agent === "claude") {
+      const window = state.claudeUsage?.sevenDay;
+      if (!window) return null;
+      const used = Math.min(100, Math.max(0, window.utilization)).toFixed(0);
+      const reset = window.resetsAt ? countdown(window.resetsAt, now()) : "";
+      return {
+        label: `Claude 7d ${used}%`,
+        title: reset ? `Resets in ${reset}` : "",
+      };
+    }
+
+    const windows = state.quota?.agents.find((entry) => entry.agent === "codex")?.windows ?? [];
+    const window = windows.reduce<(typeof windows)[number] | null>(
+      (longest, candidate) =>
+        (candidate.windowMinutes ?? 0) > (longest?.windowMinutes ?? 0) ? candidate : longest,
+      null,
+    );
+    if (!window) return null;
+    const used =
+      window.usedFraction === null || !Number.isFinite(window.usedFraction)
+        ? "not reported"
+        : `${Math.round(Math.min(1, Math.max(0, window.usedFraction)) * 100)}%`;
+    const reset = window.resetsAt ? countdown(window.resetsAt, now()) : "";
+    return {
+      label: `Codex 7d ${used}`,
+      title: reset ? `Resets in ${reset}` : "",
+    };
+  });
+
   return (
     <div class="flex min-h-0 min-w-0 flex-1 gap-3">
       <Panel class="relative flex min-w-0 flex-1 flex-col">
@@ -161,6 +194,14 @@ export function ProjectTab(props: { tab: Tab; project: Project }): JSX.Element {
                   (partial)
                 </span>
               </Show>
+            </Show>
+            <Show when={providerUsage()}>
+              {(usage) => (
+                <>
+                  <span class="text-az-faint">·</span>
+                  <span title={usage().title}>{usage().label}</span>
+                </>
+              )}
             </Show>
           </span>
 

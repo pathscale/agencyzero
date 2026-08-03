@@ -71,6 +71,25 @@ describe("Composer", () => {
     expect(document.activeElement).not.toBe(field);
   });
 
+  it("wraps controls so a long model label cannot push Send outside", async () => {
+    const { container, getByLabelText, booted } = mount({
+      model: "opus[1m]",
+      modelOptions: [
+        {
+          value: "claude:opus[1m]",
+          label: "Claude · Opus (1M context)",
+          agent: "claude",
+          model: "opus[1m]",
+        },
+      ],
+    });
+
+    const controls = container.querySelector("[data-composer-controls]");
+    expect(controls).toHaveClass("flex-wrap");
+    expect(controls).toContainElement(getByLabelText("Send"));
+    await booted();
+  });
+
   it("clears the prompt only after the send resolves", async () => {
     const { field, onSend } = mount();
     type(field, "Review the upgrade");

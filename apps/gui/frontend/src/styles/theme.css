@@ -304,6 +304,18 @@
     height: 100%;
   }
 
+  /*
+   * The interface uses an explicit pixel type ladder, so changing the root font
+   * size would leave nearly every label untouched. Zoom keeps that ladder and
+   * its control geometry together. The inverse dimensions preserve the usable
+   * viewport instead of scaling the root past the window edges.
+   */
+  #root {
+    width: calc(100% * var(--az-ui-inverse-scale, 0.9259259));
+    height: calc(100% * var(--az-ui-inverse-scale, 0.9259259));
+    zoom: var(--az-ui-scale, 1.08);
+  }
+
   body {
     margin: 0;
     overflow: hidden;

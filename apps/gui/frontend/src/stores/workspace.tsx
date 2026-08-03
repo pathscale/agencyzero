@@ -422,6 +422,11 @@ function createWorkspace() {
    * four call sites remembering to keep it in step.
    */
   function tabStatus(projectId: string): TabStatus {
+    // A tool approval is a live question only the owner can answer. It must
+    // outrank "running" so a background tab calls for attention in red while
+    // the agent is blocked mid-turn.
+    if (state.pendingApprovals[projectId]) return "blocked";
+
     const held = (state.messages[projectId] ?? []).some(
       (message) => message.moderation?.needsApproval === true,
     );

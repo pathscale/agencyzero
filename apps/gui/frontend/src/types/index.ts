@@ -637,6 +637,8 @@ export interface Tab {
 export interface UiPrefs {
   lastModel: string;
   lastPermission: Permission;
+  /** Local interface scale. Large is the designed default for this desktop UI. */
+  uiSize: "normal" | "large" | "extra-large";
   /**
    * The last "Extra Thinking" choice, so a new tab starts where the last one
    * was left. On by default, like the composer control it seeds.

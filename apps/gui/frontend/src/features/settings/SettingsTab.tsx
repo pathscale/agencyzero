@@ -24,6 +24,7 @@ import {
 } from "~/lib/labels";
 import { describeError, log } from "~/lib/log";
 import { DEFAULT_WASH } from "~/lib/theme";
+import { prefs, setPrefs } from "~/stores/prefs";
 import { useNow, useWorkspace } from "~/stores/workspace";
 import type {
   Agent,
@@ -467,8 +468,35 @@ export function SettingsTab(): JSX.Element {
               <Section
                 icon="sparkles"
                 title="Appearance"
-                hint="the accent, and how far the surfaces lift off black"
+                hint="interface size, accent, and how far the surfaces lift off black"
               >
+                <Row label="Interface size" hint="scales text and controls together">
+                  <div class="flex items-center gap-1 rounded-full border border-az-hairline bg-az-inset p-1">
+                    <For
+                      each={[
+                        { value: "normal" as const, label: "N", name: "Normal" },
+                        { value: "large" as const, label: "L", name: "Large" },
+                        { value: "extra-large" as const, label: "XL", name: "Extra large" },
+                      ]}
+                    >
+                      {(option) => (
+                        <button
+                          type="button"
+                          aria-label={`${option.name} interface size`}
+                          aria-pressed={prefs.uiSize === option.value}
+                          onClick={() => setPrefs("uiSize", option.value)}
+                          class={`flex size-7 items-center justify-center rounded-full font-semibold text-[10.5px] transition-colors ${
+                            prefs.uiSize === option.value
+                              ? "bg-primary text-primary-content"
+                              : "text-az-muted hover:bg-az-hover hover:text-az-title"
+                          }`}
+                        >
+                          {option.label}
+                        </button>
+                      )}
+                    </For>
+                  </div>
+                </Row>
                 <ThemePicker
                   theme={current().theme}
                   onAccent={(accent) => void actions.saveSettings({ theme: { accent } })}
@@ -922,7 +950,7 @@ function StudySettings(): JSX.Element {
   );
 }
 
-/** Claude usage controls compiled and advertised only by the experimental profile. */
+/** Provider usage controls compiled and advertised only by the experimental profile. */
 function ExperimentalSettings(): JSX.Element {
   const { state, actions } = useWorkspace();
   const now = useNow();
@@ -933,7 +961,7 @@ function ExperimentalSettings(): JSX.Element {
     setBusy(true);
     setNote(null);
     try {
-      await actions.refreshClaudeUsage();
+      await Promise.all([actions.refreshQuota(), actions.refreshClaudeUsage()]);
     } catch (cause) {
       setNote(describeError(cause));
     } finally {
@@ -951,6 +979,14 @@ function ExperimentalSettings(): JSX.Element {
   };
 
   const usage = () => state.claudeUsage;
+  const codexWindow = () => {
+    const windows = state.quota?.agents.find((agent) => agent.agent === "codex")?.windows ?? [];
+    return windows.reduce<(typeof windows)[number] | null>(
+      (longest, candidate) =>
+        (candidate.windowMinutes ?? 0) > (longest?.windowMinutes ?? 0) ? candidate : longest,
+      null,
+    );
+  };
 
   return (
     <Section
@@ -958,6 +994,20 @@ function ExperimentalSettings(): JSX.Element {
       title="Experimental"
       hint="isolated capabilities in AgencyZero Experimental"
     >
+      <Row
+        label="Codex 7-day usage"
+        hint="managed by Codex; refreshed through its local app-server"
+      >
+        <span class="font-mono text-[11.5px] text-az-body">
+          {codexWindow()?.usedFraction === null || codexWindow()?.usedFraction === undefined
+            ? "not reported"
+            : `${Math.round(Math.min(1, Math.max(0, codexWindow()!.usedFraction!)) * 100)}%${
+                codexWindow()?.resetsAt
+                  ? ` · resets in ${countdown(codexWindow()!.resetsAt!, now())}`
+                  : ""
+              }`}
+        </span>
+      </Row>
       <Row
         label="Claude login"
         hint="managed by Claude Code; an expired credential is refreshed through its own /usage command"
