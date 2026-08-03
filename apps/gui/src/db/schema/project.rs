@@ -54,6 +54,7 @@ worktable!(
     queries: {
         update: {
             NameById(name) by id,
+            DirsById(dirs) by id,
             StatusById(status) by id,
             PinnedById(pinned) by id,
             PositionById(position) by id,
