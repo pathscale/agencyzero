@@ -35,6 +35,36 @@ impl From<Model> for ModelDto {
     }
 }
 
+/// AgencyZero's one verified supplement to the crate's Claude catalogue.
+///
+/// `agent-abstraction` records that Claude 2.1.212 resolves the moving `opus`
+/// alias to this exact id, but its pinned list starts at Opus 5. Keeping the
+/// explicit id here lets a project stay on 4.8 even after the alias moves.
+fn model_dtos(agent: Agent, models: Vec<Model>) -> Vec<ModelDto> {
+    let mut models: Vec<ModelDto> = models.into_iter().map(ModelDto::from).collect();
+    if agent == Agent::Claude && !models.iter().any(|model| model.id == "claude-opus-4-8") {
+        let at = models
+            .iter()
+            .position(|model| model.id == "claude-opus-5")
+            .unwrap_or(models.len());
+        models.insert(
+            at,
+            ModelDto {
+                id: "claude-opus-4-8".into(),
+                name: "Claude Opus 4.8".into(),
+                note: "Pinned Claude Opus 4.8, independent of the moving Opus alias".into(),
+                kind: agent_abstraction::Kind::Pinned,
+                efforts: ["low", "medium", "high", "xhigh", "max"]
+                    .into_iter()
+                    .map(str::to_string)
+                    .collect(),
+                is_default: false,
+            },
+        );
+    }
+    models
+}
+
 /// One agent's catalogue, flattened so the webview does not have to reach
 /// through a nested `verified` object to render a single provenance line.
 #[derive(Serialize)]
@@ -80,11 +110,7 @@ pub async fn list_models(discover: bool) -> Vec<AgentModelsDto> {
         let has_discovered = discovered.is_some();
         catalogues.push(AgentModelsDto {
             agent,
-            models: discovered
-                .unwrap_or_else(|| agent.models())
-                .into_iter()
-                .map(ModelDto::from)
-                .collect(),
+            models: model_dtos(agent, discovered.unwrap_or_else(|| agent.models())),
             source: verified.source,
             checked: verified.checked.to_string(),
             against: verified.against.to_string(),
@@ -145,5 +171,22 @@ mod tests {
             let defaults = catalogue.models.iter().filter(|m| m.is_default).count();
             assert_eq!(defaults, 1, "{:?} should mark one default", catalogue.agent);
         }
+    }
+
+    #[tokio::test]
+    async fn claude_opus_4_8_is_independently_selectable() {
+        let catalogues = list_models(false).await;
+        let claude = catalogues
+            .iter()
+            .find(|catalogue| catalogue.agent == Agent::Claude)
+            .expect("Claude catalogue");
+        let opus = claude
+            .models
+            .iter()
+            .find(|model| model.id == "claude-opus-4-8")
+            .expect("pinned Opus 4.8");
+
+        assert_eq!(opus.name, "Claude Opus 4.8");
+        assert_eq!(opus.kind, agent_abstraction::Kind::Pinned);
     }
 }

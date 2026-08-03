@@ -5,7 +5,8 @@ import { useWorkspace, type Workspace, WorkspaceProvider } from "~/stores/worksp
 
 /**
  * Mounts the provider against the mock, which serves the same catalogues the
- * crate compiles in: nine Claude aliases plus four pinned ids, six Codex models,
+ * crate compiles in: nine Claude aliases plus AgencyZero's pinned 4.8 supplement
+ * and four crate pinned ids, six Codex models,
  * and Copilot's `auto` plus twenty-three pinned ids.
  */
 async function mountWorkspace(): Promise<Workspace> {
@@ -61,6 +62,16 @@ describe("the catalogue", () => {
 
     expect(sol?.efforts).toContain("ultra");
     expect(older?.efforts).not.toContain("ultra");
+  });
+
+  it("offers Claude Opus 4.8 as an exact pinned model", async () => {
+    const workspace = await mountWorkspace();
+    const model = workspace.state.models
+      .find((entry) => entry.agent === "claude")
+      ?.models.find((entry) => entry.id === "claude-opus-4-8");
+
+    expect(model?.name).toBe("Claude Opus 4.8");
+    expect(model?.kind).toBe("pinned");
   });
 });
 

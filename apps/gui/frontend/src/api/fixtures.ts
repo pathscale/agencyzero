@@ -444,6 +444,11 @@ export const MODEL_CATALOGUE: AgentModels[] = [
       alias("opusplan", "Opus, then Sonnet", "Opus while planning, Sonnet to execute (a mode)"),
       alias("opus[1m]", "Opus (1M context)", "Opus with a 1M token window (a variant)"),
       alias("sonnet[1m]", "Sonnet (1M context)", "Sonnet with a 1M token window (a variant)"),
+      pinned(
+        "claude-opus-4-8",
+        "Claude Opus 4.8",
+        "Pinned Claude Opus 4.8, independent of the moving Opus alias",
+      ),
       pinned("claude-opus-5", "Claude Opus 5", "For complex agentic coding and enterprise work"),
       pinned(
         "claude-sonnet-5",
