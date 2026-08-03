@@ -68,10 +68,7 @@ export async function copyText(text: string): Promise<boolean> {
  * the difference: everything outside one is wrapped prose, and everything inside
  * one is text whose line breaks are the content.
  */
-type Block =
-  | { kind: "code"; text: string; lang: string }
-  | { kind: "directive"; text: string }
-  | { kind: "prose"; text: string };
+type Block = { kind: "code"; text: string; lang: string } | { kind: "prose"; text: string };
 
 const promptSyntax = new PromptSyntaxParser({ authoringNamespaces: ["agency"] });
 
@@ -87,8 +84,7 @@ export function isPromptSyntaxDirectiveLine(line: string): boolean {
     segment?.type === "directive" &&
     segment.span.start === 0 &&
     segment.span.end === trimmed.length &&
-    (segment.directive.kind === "authoring_segment" ||
-      segment.directive.kind === "invalid_authoring_segment")
+    segment.directive.kind === "authoring_segment"
   );
 }
 
@@ -141,7 +137,6 @@ export function splitBlocks(body: string): Block[] {
         code.push(deindent(line));
       } else if (isPromptSyntaxDirectiveLine(line)) {
         flushProse();
-        blocks.push({ kind: "directive", text: line.trim() });
       } else {
         prose.push(line);
       }
@@ -184,8 +179,6 @@ export function MessageBody(props: { body: string; class?: string }): JSX.Elemen
         {(block) =>
           block.kind === "code" ? (
             <CodeBlock text={block.text} lang={block.lang} />
-          ) : block.kind === "directive" ? (
-            <PromptSyntaxDirective text={block.text} />
           ) : (
             <For
               each={block.text
@@ -201,21 +194,6 @@ export function MessageBody(props: { body: string; class?: string }): JSX.Elemen
           )
         }
       </For>
-    </div>
-  );
-}
-
-/** A promoted reverse-channel action, visibly distinct from ordinary prose. */
-function PromptSyntaxDirective(props: { text: string }): JSX.Element {
-  return (
-    <div
-      data-ps-directive
-      class="flex min-w-0 items-center gap-2 overflow-x-auto rounded-lg border border-primary/25 bg-primary/6 px-2.5 py-2"
-    >
-      <span class="shrink-0 rounded bg-primary/12 px-1.5 py-0.5 font-semibold text-[10px] text-primary uppercase tracking-[.05em]">
-        Prompt Syntax
-      </span>
-      <code class="whitespace-pre font-mono text-[11.5px] text-az-body">{props.text}</code>
     </div>
   );
 }

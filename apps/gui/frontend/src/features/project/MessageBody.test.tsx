@@ -57,15 +57,14 @@ describe("MessageBody", () => {
     expect(container.querySelector("[data-selectable]")).toBeTruthy();
   });
 
-  it("visually marks a standalone Prompt Syntax authoring directive", () => {
+  it("does not render a standalone Prompt Syntax authoring directive", () => {
     const directive = '<ps @agency:items.state(id: "item-869382d3", status: "active")>';
     const { container } = render(() => (
       <MessageBody body={`Working on it.\n${directive}\nContinuing.`} />
     ));
 
-    const marked = container.querySelector("[data-ps-directive]");
-    expect(marked).toHaveTextContent("Prompt Syntax");
-    expect(marked).toHaveTextContent(directive);
+    expect(container.textContent).toBe("Working on it.Continuing.");
+    expect(container.textContent).not.toContain(directive);
   });
 
   it("leaves misframed and quoted Prompt Syntax inert", () => {
@@ -73,7 +72,6 @@ describe("MessageBody", () => {
     const body = `Attached to prose: ${directive}\n\n> ${directive}\n\n    ${directive}`;
     const { container } = render(() => <MessageBody body={body} />);
 
-    expect(container.querySelector("[data-ps-directive]")).toBeNull();
     expect(container.textContent).toContain(directive);
   });
 
@@ -81,8 +79,14 @@ describe("MessageBody", () => {
     const directive = "<ps @file:glossary.md>";
     const { container } = render(() => <MessageBody body={directive} />);
 
-    expect(container.querySelector("[data-ps-directive]")).toBeNull();
     expect(container.textContent).toContain(directive);
+  });
+
+  it("keeps malformed AgencyZero authoring visible", () => {
+    const malformed = "<ps @agency:items.state(>";
+    const { container } = render(() => <MessageBody body={malformed} />);
+
+    expect(container.textContent).toContain(malformed);
   });
 });
 
