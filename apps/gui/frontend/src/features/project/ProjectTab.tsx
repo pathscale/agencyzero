@@ -275,6 +275,8 @@ export function ProjectTab(props: { tab: Tab; project: Project }): JSX.Element {
                 effort,
               )
             }
+            extraThinking={props.tab.extraThinking}
+            onExtraThinkingChange={(enabled) => actions.setTabExtraThinking(props.tab.key, enabled)}
             permission={props.tab.permission}
             permissions={permissionsFor(props.tab.agent)}
             usage={contextLabel()}

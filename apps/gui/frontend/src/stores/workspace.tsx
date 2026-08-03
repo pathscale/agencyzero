@@ -267,6 +267,7 @@ const HOME_TAB: Tab = {
   agent: "claude",
   model: "sonnet",
   effort: FALLBACK_EFFORT,
+  extraThinking: true,
   permission: "read_only",
   status: "quiet",
 };
@@ -812,6 +813,7 @@ function createWorkspace() {
       agent: selection.agent,
       model: selection.model,
       effort: defaultEffort(),
+      extraThinking: prefs.lastExtraThinking,
       permission: selection.permission,
       status: "quiet",
     };
@@ -1263,6 +1265,7 @@ function createWorkspace() {
         agent,
         model: defaultModel(),
         effort: defaultEffort(),
+        extraThinking: prefs.lastExtraThinking,
         permission: compatiblePermission(
           state.agents,
           agent,
@@ -1393,6 +1396,18 @@ function createWorkspace() {
     );
   }
 
+  /**
+   * Flip this tab's "Extra Thinking". Per tab like the model, and the choice is
+   * remembered so the next new tab starts the same way. Only Claude acts on it;
+   * the composer greys the control out for the other agents.
+   */
+  function setTabExtraThinking(key: string, enabled: boolean): void {
+    const index = state.tabs.findIndex((tab) => tab.key === key);
+    if (index < 0) return;
+    setState("tabs", index, { extraThinking: enabled });
+    setPrefs("lastExtraThinking", enabled);
+  }
+
   // — mutations ————————————————————————————————————————————————————
   //
   // Each of these fires a command and lets the resulting event update the
@@ -1410,6 +1425,7 @@ function createWorkspace() {
       model: tab?.model,
       permission: tab?.permission,
       effort: tab?.effort,
+      extraThinking: tab?.extraThinking,
       study,
     });
     batch(() => {
@@ -1521,6 +1537,7 @@ function createWorkspace() {
       // The tab's effort, which was being dropped here: every run reached the
       // agent with `effort=<none>` while the composer showed a level selected.
       effort: tab?.effort,
+      extraThinking: tab?.extraThinking,
       study,
     });
   };
@@ -1641,6 +1658,7 @@ function createWorkspace() {
     openDraft,
     closeTab,
     setTabModel,
+    setTabExtraThinking,
     createProject,
     send,
     sendTaskPrompt,

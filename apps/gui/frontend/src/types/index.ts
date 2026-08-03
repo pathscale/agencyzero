@@ -622,6 +622,12 @@ export interface Tab {
    * establish a ladder. Empty is "not established", not "no effort setting".
    */
   effort: string;
+  /**
+   * Whether the model may spend reasoning tokens ("Extra Thinking"). On by
+   * default; only meaningful for Claude, where off sends `thinking(false)`. Off
+   * is a no-op for the other agents. Per tab, like the model and effort pills.
+   */
+  extraThinking: boolean;
   /** The tab's posture for the whole session. Lives only in the composer pill. */
   permission: Permission;
   status: TabStatus;
@@ -631,6 +637,11 @@ export interface Tab {
 export interface UiPrefs {
   lastModel: string;
   lastPermission: Permission;
+  /**
+   * The last "Extra Thinking" choice, so a new tab starts where the last one
+   * was left. On by default, like the composer control it seeds.
+   */
+  lastExtraThinking: boolean;
   /** Which accordion sections are expanded — per install, not per project. */
   panelSections: {
     /** The Claude quota lines at the top of the project column. */

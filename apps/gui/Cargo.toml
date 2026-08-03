@@ -15,7 +15,10 @@ tauri-build = { version = "2", features = [] }
 [dependencies]
 # Carries the store forward when a column changes; see crates/wt-migrate.
 wt-migrate = { path = "../../crates/wt-migrate" }
-agent-abstraction = "0.4.6"
+# Temporary: the `.thinking()` builder ships in 0.4.7. Track the branch until it
+# merges to master and auto-publishes, then flip this back to `= "0.4.7"`.
+# https://github.com/pathscale/RustAgentAbstraction/pull/23
+agent-abstraction = { version = "0.4.7", git = "https://github.com/pathscale/RustAgentAbstraction.git", branch = "feat/disable-thinking" }
 agent-experimental = { git = "https://gitlab.com/anonymous-28282828282/agent-experimental.git", rev = "4d7b738c5bf481798313751de5cc507469c9d2c2", default-features = false, optional = true }
 promptsyntax = "0.1.0"
 az-core.workspace = true
