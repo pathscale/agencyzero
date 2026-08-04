@@ -67,6 +67,13 @@ pub struct TaskLogRecoveryReport {
     pub projects: usize,
 }
 
+/// Result of rebuilding a transcript through its surviving primary index.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct MessageRecoveryReport {
+    pub rows: usize,
+    pub projects: usize,
+}
+
 /// `project_item` as it shipped before `reference` was added.
 ///
 /// `worktable_version!` rather than `worktable!`: a historical shape exists to
@@ -704,9 +711,99 @@ pub async fn recover_task_log_index(
     })
 }
 
+/// Recover a transcript whose string secondary index is unreadable.
+///
+/// The primary index remains the authoritative map from message ids to row
+/// links. Each linked row is read directly from the data file, validated, and
+/// inserted into a brand-new table that rebuilds both indexes. The source is
+/// never opened as a WorkTable and is not modified.
+pub async fn recover_message_index(
+    source: &Path,
+    target: &Path,
+) -> eyre::Result<MessageRecoveryReport> {
+    use app_schema::message::{MessagePersistenceEngine, MessageRow, MessageWorkTable};
+    use std::collections::HashSet;
+    use tokio::io::AsyncReadExt;
+
+    type StoredMessage = <MessageRow as StorableRow>::WrappedRow;
+
+    let table_path = source.join("message");
+    let mut primary = <SpaceIndexUnsized<String, { INNER_PAGE_SIZE as u32 }> as SpaceIndexOps<
+        String,
+    >>::primary_from_table_files_path(
+        table_path.to_string_lossy().into_owned(),
+        MessageWorkTable::version(),
+    )
+    .await?;
+    let primary_index = primary.parse_indexset().await?;
+    let mut data_file = tokio::fs::File::open(table_path.join(".wt.data")).await?;
+    let mut rows = BTreeMap::new();
+    for (id, link) in primary_index.iter() {
+        worktable::data_bucket::seek_by_link(&mut data_file, *link).await?;
+        let mut bytes = vec![0u8; link.length as usize];
+        data_file.read_exact(&mut bytes).await?;
+        let stored = rkyv::from_bytes::<StoredMessage, rkyv::rancor::Error>(&bytes)
+            .map_err(|error| eyre::eyre!("message {id} failed row validation: {error}"))?;
+        if stored.is_deleted() || stored.is_ghosted() || stored.is_vacuumed() {
+            return Err(eyre::eyre!(
+                "message {id} points to a deleted, ghosted, or vacuumed row"
+            ));
+        }
+        let row = stored.get_inner();
+        if row.id != *id {
+            return Err(eyre::eyre!("primary key {id} points to row {}", row.id));
+        }
+        rows.insert(id.clone(), row);
+    }
+    drop(primary);
+
+    let open = |dir: &Path| {
+        let config = DiskConfig::new_with_table_name(
+            dir.to_string_lossy().into_owned(),
+            MessageWorkTable::name_snake_case(),
+            MessageWorkTable::version(),
+        );
+        async move {
+            let engine = MessagePersistenceEngine::new(config).await?;
+            MessageWorkTable::load(engine).await
+        }
+    };
+
+    let fresh = open(target).await?;
+    for row in rows.values().cloned() {
+        fresh
+            .insert(row)
+            .map_err(|error| eyre::eyre!("message: {error}"))?;
+    }
+    fresh
+        .wait_for_ops()
+        .await
+        .map_err(|error| eyre::eyre!("message persistence failed: {error}"))?;
+
+    let recovered = fresh.select_all().execute()?.len();
+    if recovered != rows.len() {
+        return Err(eyre::eyre!(
+            "verification counted {recovered} row(s), but recovery read {}",
+            rows.len()
+        ));
+    }
+    fresh
+        .close()
+        .await
+        .map_err(|error| eyre::eyre!("could not close rebuilt message: {error}"))?;
+
+    let project_ids: HashSet<&str> = rows.values().map(|row| row.project_id.as_str()).collect();
+
+    Ok(MessageRecoveryReport {
+        rows: recovered,
+        projects: project_ids.len(),
+    })
+}
+
 #[cfg(test)]
 mod recovery_tests {
     use super::*;
+    use app_schema::message::{MessagePersistenceEngine, MessageRow, MessageWorkTable};
 
     fn task(id: &str, project_id: &str) -> TaskLogRow {
         TaskLogRow {
@@ -721,6 +818,24 @@ mod recovery_tests {
             duration_ms: 1,
             exit_code: 0,
             finished_at: "2026-08-04T00:00:00Z".into(),
+        }
+    }
+
+    fn message(id: &str, project_id: &str) -> MessageRow {
+        MessageRow {
+            id: id.into(),
+            project_id: project_id.into(),
+            item_id: String::new(),
+            author: "user".into(),
+            agent: "codex".into(),
+            moderation: String::new(),
+            model: "gpt-5".into(),
+            permission: "workspace-write".into(),
+            usage: String::new(),
+            stop: "end_turn".into(),
+            exit_code: 0,
+            body: format!("body for {id}"),
+            created_at: "2026-08-04T00:00:00Z".into(),
         }
     }
 
@@ -773,6 +888,68 @@ mod recovery_tests {
             .collect();
         ids.sort();
         assert_eq!(ids, vec!["log-1", "log-2", "log-3"]);
+        rebuilt.close().await.expect("rebuilt table closes");
+    }
+
+    #[tokio::test]
+    async fn an_intact_primary_recovers_every_message_from_a_torn_secondary() {
+        let root = tempfile::tempdir().expect("temporary recovery store");
+        let source = root.path().join("source");
+        let target = root.path().join("target");
+        let config = DiskConfig::new_with_table_name(
+            source.to_string_lossy().into_owned(),
+            MessageWorkTable::name_snake_case(),
+            MessageWorkTable::version(),
+        );
+        let engine = MessagePersistenceEngine::new(config).await.expect("engine");
+        let table = MessageWorkTable::load(engine).await.expect("table");
+        table.insert(message("msg-1", "proj-1")).expect("first row");
+        table
+            .insert(message("msg-2", "proj-1"))
+            .expect("second row");
+        table.insert(message("msg-3", "proj-2")).expect("third row");
+        table.close().await.expect("source closes cleanly");
+
+        std::fs::write(source.join("message/project_idx.wt.idx"), b"torn secondary")
+            .expect("secondary index is made unreadable");
+
+        let report = recover_message_index(&source, &target)
+            .await
+            .expect("primary-index recovery succeeds");
+        assert_eq!(
+            report,
+            MessageRecoveryReport {
+                rows: 3,
+                projects: 2,
+            }
+        );
+
+        let config = DiskConfig::new_with_table_name(
+            target.to_string_lossy().into_owned(),
+            MessageWorkTable::name_snake_case(),
+            MessageWorkTable::version(),
+        );
+        let engine = MessagePersistenceEngine::new(config)
+            .await
+            .expect("rebuilt engine");
+        let rebuilt = MessageWorkTable::load(engine).await.expect("rebuilt table");
+        let mut ids: Vec<String> = rebuilt
+            .select_all()
+            .execute()
+            .expect("rebuilt rows")
+            .into_iter()
+            .map(|row| row.id)
+            .collect();
+        ids.sort();
+        assert_eq!(ids, vec!["msg-1", "msg-2", "msg-3"]);
+        assert_eq!(
+            rebuilt
+                .select_by_project_id("proj-1".into())
+                .execute()
+                .expect("rebuilt secondary index")
+                .len(),
+            2
+        );
         rebuilt.close().await.expect("rebuilt table closes");
     }
 }
