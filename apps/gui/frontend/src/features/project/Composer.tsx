@@ -410,183 +410,183 @@ export function Composer(props: ComposerProps): JSX.Element {
   }
 
   return (
-    <div
-      class={`az-ring az-ring-composer relative rounded-[17px] ${props.size === "lg" ? "az-ring-strong rounded-[19px]" : ""}`}
-    >
-      {/* Context readout: a chip in the top-right corner of the prompt area,
-          where how-full-the-window-is sits next to what you are typing rather
-          than crowding the control row below or hiding up in the header. */}
+    <div class="flex flex-col gap-1.5">
+      {/* Context readout: its own row above the prompt box, right-aligned, so a
+          long sentence being typed never runs under it. Above rather than
+          inside the box for exactly that reason — an in-box chip overlapped the
+          text. */}
       <Show when={props.usage}>
-        <span class="pointer-events-none absolute top-2 right-3 z-10 rounded-full bg-base-300/80 px-2 py-0.5 font-mono text-[10.5px] text-az-faint backdrop-blur-sm">
-          {props.usage}
-        </span>
+        <span class="self-end px-1 font-mono text-[10.5px] text-az-faint">{props.usage}</span>
       </Show>
       <div
-        class={`flex flex-col gap-3 bg-az-inset ${props.size === "lg" ? "rounded-[18px] p-[18px] pb-3.5" : "rounded-2xl p-[15px] pb-3"}`}
+        class={`az-ring az-ring-composer rounded-[17px] ${props.size === "lg" ? "az-ring-strong rounded-[19px]" : ""}`}
       >
-        <AttachmentPills
-          paths={attachments()}
-          onRemove={(path) =>
-            setAttachments((current) => current.filter((existing) => existing !== path))
-          }
-        />
-        <textarea
-          ref={field}
-          rows={1}
-          value={draft()}
-          placeholder={props.placeholder}
-          aria-label={props.placeholder}
-          onInput={(event) => {
-            remember(event.currentTarget.value);
-            resize();
-          }}
-          onKeyDown={(event) => {
-            // Enter sends; Shift+Enter is a newline. Standard for a chat box,
-            // and the reason this is a textarea rather than an input.
-            if (event.key !== "Enter" || event.shiftKey) return;
-            event.preventDefault();
-            void submit();
-          }}
-          class={`az-scroll w-full resize-none overflow-x-hidden bg-transparent text-base-content leading-[1.45] placeholder:text-az-faint focus:outline-none ${
-            props.size === "lg" ? "text-[15px]" : "text-[14.5px]"
-          }`}
-        />
+        <div
+          class={`flex flex-col gap-3 bg-az-inset ${props.size === "lg" ? "rounded-[18px] p-[18px] pb-3.5" : "rounded-2xl p-[15px] pb-3"}`}
+        >
+          <AttachmentPills
+            paths={attachments()}
+            onRemove={(path) =>
+              setAttachments((current) => current.filter((existing) => existing !== path))
+            }
+          />
+          <textarea
+            ref={field}
+            rows={1}
+            value={draft()}
+            placeholder={props.placeholder}
+            aria-label={props.placeholder}
+            onInput={(event) => {
+              remember(event.currentTarget.value);
+              resize();
+            }}
+            onKeyDown={(event) => {
+              // Enter sends; Shift+Enter is a newline. Standard for a chat box,
+              // and the reason this is a textarea rather than an input.
+              if (event.key !== "Enter" || event.shiftKey) return;
+              event.preventDefault();
+              void submit();
+            }}
+            class={`az-scroll w-full resize-none overflow-x-hidden bg-transparent text-base-content leading-[1.45] placeholder:text-az-faint focus:outline-none ${
+              props.size === "lg" ? "text-[15px]" : "text-[14.5px]"
+            }`}
+          />
 
-        <Show when={advanced()}>
-          <div class="rounded-lg border border-az-hairline bg-base-300/45 px-3 py-2">
-            <div class="mb-1 font-semibold text-[10px] text-az-faint uppercase tracking-[0.08em]">
-              {tx("Prompt Syntax preview")}
+          <Show when={advanced()}>
+            <div class="rounded-lg border border-az-hairline bg-base-300/45 px-3 py-2">
+              <div class="mb-1 font-semibold text-[10px] text-az-faint uppercase tracking-[0.08em]">
+                {tx("Prompt Syntax preview")}
+              </div>
+              <div class="whitespace-pre-wrap text-[12px] text-az-body leading-relaxed">
+                <For each={compiled()?.segments ?? []}>
+                  {(segment) =>
+                    segment.type === "directive" ? (
+                      <mark class="rounded border border-primary/30 bg-primary/15 px-0.5 text-primary">
+                        {segment.source}
+                      </mark>
+                    ) : (
+                      segment.text
+                    )
+                  }
+                </For>
+              </div>
+              <Show when={(compiled()?.errors.length ?? 0) > 0}>
+                <ul class="mt-1.5 list-disc space-y-0.5 pl-4 text-[11px] text-error">
+                  <For each={compiled()?.errors}>{(message) => <li>{message}</li>}</For>
+                </ul>
+              </Show>
             </div>
-            <div class="whitespace-pre-wrap text-[12px] text-az-body leading-relaxed">
-              <For each={compiled()?.segments ?? []}>
-                {(segment) =>
-                  segment.type === "directive" ? (
-                    <mark class="rounded border border-primary/30 bg-primary/15 px-0.5 text-primary">
-                      {segment.source}
-                    </mark>
-                  ) : (
-                    segment.text
-                  )
-                }
-              </For>
-            </div>
-            <Show when={(compiled()?.errors.length ?? 0) > 0}>
-              <ul class="mt-1.5 list-disc space-y-0.5 pl-4 text-[11px] text-error">
-                <For each={compiled()?.errors}>{(message) => <li>{message}</li>}</For>
-              </ul>
-            </Show>
-          </div>
-        </Show>
+          </Show>
 
-        {/*
+          {/*
           Whatever is written here is the whole line. It used to be prefixed
           with "Could not send — your message is still here", which is true of a
           failed send and of nothing else: a successful compaction reported
           through this slot read as a failure, in red, directly under the box.
           The prefix now belongs to the send path that earns it.
         */}
-        <Show when={error()}>
-          {(message) => (
-            <p role="alert" class="text-[12px] text-error">
-              {message()}
-            </p>
-          )}
-        </Show>
+          <Show when={error()}>
+            {(message) => (
+              <p role="alert" class="text-[12px] text-error">
+                {message()}
+              </p>
+            )}
+          </Show>
 
-        {/*
+          {/*
           Posture and input controls left, model and effort right, per the newer
           reference. This departs from design/workspace.html, which puts the
           model pill on the left after Attach; recorded in the frontend README.
         */}
-        <div data-composer-controls class="flex flex-wrap items-center gap-2.5">
-          <div data-composer-primary-controls class="flex shrink-0 items-center gap-2.5">
-            <button
-              type="button"
-              onClick={toggleAdvanced}
-              aria-pressed={advanced()}
-              title={tx("Parse Prompt Syntax controls before sending")}
-              class={`rounded-full border px-2.5 py-1 font-medium text-[11px] transition-colors ${
-                advanced()
-                  ? "border-primary/35 bg-primary/15 text-primary"
-                  : "border-az-hairline-strong text-az-muted hover:text-base-content"
-              }`}
+          <div data-composer-controls class="flex flex-wrap items-center gap-2.5">
+            <div data-composer-primary-controls class="flex shrink-0 items-center gap-2.5">
+              <button
+                type="button"
+                onClick={toggleAdvanced}
+                aria-pressed={advanced()}
+                title={tx("Parse Prompt Syntax controls before sending")}
+                class={`rounded-full border px-2.5 py-1 font-medium text-[11px] transition-colors ${
+                  advanced()
+                    ? "border-primary/35 bg-primary/15 text-primary"
+                    : "border-az-hairline-strong text-az-muted hover:text-base-content"
+                }`}
+              >
+                {tx("Advanced")}
+              </button>
+
+              <PillMenu
+                label={tx("Permission")}
+                value={props.permission}
+                options={(props.permissions ?? PERMISSION_ORDER).map((permission) => ({
+                  value: permission,
+                  label: permissionLabel(permission),
+                  hint: permissionHint(permission),
+                }))}
+                onChange={props.onPermissionChange}
+              />
+
+              <button
+                type="button"
+                onClick={() => void attach()}
+                // Greyed on a build whose backend lacks the picker, per the house
+                // convention — a button that silently does nothing is the bug this
+                // replaces.
+                disabled={!isLive("chooseAttachments")}
+                title={tx("Attach files — their paths go into the prompt")}
+                aria-label={tx("Attach files")}
+                class="flex size-[30px] items-center justify-center rounded-full border border-az-hairline-strong text-az-body transition-colors hover:border-primary/30 hover:text-az-title disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                <Icon name="plus" class="text-[16px]" />
+              </button>
+            </div>
+
+            <div
+              data-composer-secondary-controls
+              class="ml-auto flex min-w-0 max-w-full flex-wrap items-center justify-end gap-2.5"
             >
-              {tx("Advanced")}
-            </button>
-
-            <PillMenu
-              label={tx("Permission")}
-              value={props.permission}
-              options={(props.permissions ?? PERMISSION_ORDER).map((permission) => ({
-                value: permission,
-                label: permissionLabel(permission),
-                hint: permissionHint(permission),
-              }))}
-              onChange={props.onPermissionChange}
-            />
-
-            <button
-              type="button"
-              onClick={() => void attach()}
-              // Greyed on a build whose backend lacks the picker, per the house
-              // convention — a button that silently does nothing is the bug this
-              // replaces.
-              disabled={!isLive("chooseAttachments")}
-              title={tx("Attach files — their paths go into the prompt")}
-              aria-label={tx("Attach files")}
-              class="flex size-[30px] items-center justify-center rounded-full border border-az-hairline-strong text-az-body transition-colors hover:border-primary/30 hover:text-az-title disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              <Icon name="plus" class="text-[16px]" />
-            </button>
-          </div>
-
-          <div
-            data-composer-secondary-controls
-            class="ml-auto flex min-w-0 max-w-full flex-wrap items-center justify-end gap-2.5"
-          >
-            {/*
+              {/*
             Extra Thinking, next to the model it qualifies. Only Claude has a
             lever, so for any other agent the control is disabled rather than
             gone: hiding it would make the row jump as you switch models and
             leave no hint the option exists. Off sends `thinking(false)`, which
             the backend maps to Claude's disable switch.
           */}
-            <button
-              type="button"
-              onClick={() => props.onExtraThinkingChange?.(!props.extraThinking)}
-              disabled={props.agent !== "claude"}
-              aria-pressed={props.agent === "claude" && props.extraThinking}
-              title={
-                props.agent === "claude"
-                  ? tx(
-                      "Extra Thinking: let the model reason before it answers. Off disables thinking for this tab's runs.",
-                    )
-                  : tx("Extra Thinking applies to Claude only.")
-              }
-              class={`flex items-center gap-1.5 rounded-full border px-2.5 py-1 font-medium text-[11px] transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
-                props.agent === "claude" && props.extraThinking
-                  ? "border-primary/35 bg-primary/15 text-primary"
-                  : "border-az-hairline-strong text-az-muted hover:text-base-content"
-              }`}
-            >
-              <Icon name="sparkles" class="text-[11px]" />
-              {tx("Extra Thinking")}
-            </button>
+              <button
+                type="button"
+                onClick={() => props.onExtraThinkingChange?.(!props.extraThinking)}
+                disabled={props.agent !== "claude"}
+                aria-pressed={props.agent === "claude" && props.extraThinking}
+                title={
+                  props.agent === "claude"
+                    ? tx(
+                        "Extra Thinking: let the model reason before it answers. Off disables thinking for this tab's runs.",
+                      )
+                    : tx("Extra Thinking applies to Claude only.")
+                }
+                class={`flex items-center gap-1.5 rounded-full border px-2.5 py-1 font-medium text-[11px] transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
+                  props.agent === "claude" && props.extraThinking
+                    ? "border-primary/35 bg-primary/15 text-primary"
+                    : "border-az-hairline-strong text-az-muted hover:text-base-content"
+                }`}
+              >
+                <Icon name="sparkles" class="text-[11px]" />
+                {tx("Extra Thinking")}
+              </button>
 
-            <PillMenu
-              label={tx("Model")}
-              icon="sparkles"
-              iconClass="text-primary"
-              variant="outline"
-              value={`${props.agent}:${props.model}`}
-              options={props.modelOptions}
-              onChange={(value) => {
-                const option = props.modelOptions.find((candidate) => candidate.value === value);
-                if (option) props.onModelChange(option.agent, option.model);
-              }}
-            />
+              <PillMenu
+                label={tx("Model")}
+                icon="sparkles"
+                iconClass="text-primary"
+                variant="outline"
+                value={`${props.agent}:${props.model}`}
+                options={props.modelOptions}
+                onChange={(value) => {
+                  const option = props.modelOptions.find((candidate) => candidate.value === value);
+                  if (option) props.onModelChange(option.agent, option.model);
+                }}
+              />
 
-            {/*
+              {/*
             Effort is per model, not per agent, so the ladder comes from the
             catalogue entry rather than a shared list. A model whose ladder the
             crate has not established reports none, and the control is hidden
@@ -594,53 +594,54 @@ export function Composer(props: ComposerProps): JSX.Element {
             `efforts` empty on purpose, and inventing levels here would put a
             list in the UI that nothing verified.
           */}
-            <Show when={props.efforts.length > 0}>
-              <PillMenu
-                label={tx("Effort")}
-                variant="outline"
-                value={props.effort}
-                options={props.efforts.map((effort) => ({ value: effort, label: effort }))}
-                onChange={(effort) => props.onEffortChange?.(effort)}
-              />
-            </Show>
+              <Show when={props.efforts.length > 0}>
+                <PillMenu
+                  label={tx("Effort")}
+                  variant="outline"
+                  value={props.effort}
+                  options={props.efforts.map((effort) => ({ value: effort, label: effort }))}
+                  onChange={(effort) => props.onEffortChange?.(effort)}
+                />
+              </Show>
 
-            {/* While a run is live, the provider capability decides whether this
+              {/* While a run is live, the provider capability decides whether this
               interrupts the open turn or queues for the next one. */}
-            <button
-              type="button"
-              onClick={() => void submit()}
-              disabled={!canSend()}
-              aria-label={
-                props.isRunning
-                  ? props.canFollowUp
-                    ? tx("Send into the running turn")
-                    : tx("Queue after the running turn")
-                  : tx("Send")
-              }
-              title={
-                props.isRunning
-                  ? props.canFollowUp
-                    ? tx("Delivered into the running turn; the agent takes it at its next step")
-                    : tx("Queued until the running turn finishes")
-                  : undefined
-              }
-              class="flex size-8 items-center justify-center rounded-full bg-primary text-primary-content transition-colors hover:bg-az-primary-hover disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              <Icon name="arrow-up" class="text-[17px]" />
-            </button>
-            <Show when={props.isRunning}>
               <button
                 type="button"
-                onClick={() => props.onStop?.()}
-                // No handler means the backend cannot stop this run; a Stop
-                // that only pretended would be worse than a disabled one.
-                disabled={!props.onStop}
-                aria-label={tx("Stop the run")}
-                class="flex size-8 items-center justify-center rounded-full border border-primary/40 bg-base-300 transition-colors hover:border-primary disabled:cursor-not-allowed disabled:opacity-40"
+                onClick={() => void submit()}
+                disabled={!canSend()}
+                aria-label={
+                  props.isRunning
+                    ? props.canFollowUp
+                      ? tx("Send into the running turn")
+                      : tx("Queue after the running turn")
+                    : tx("Send")
+                }
+                title={
+                  props.isRunning
+                    ? props.canFollowUp
+                      ? tx("Delivered into the running turn; the agent takes it at its next step")
+                      : tx("Queued until the running turn finishes")
+                    : undefined
+                }
+                class="flex size-8 items-center justify-center rounded-full bg-primary text-primary-content transition-colors hover:bg-az-primary-hover disabled:cursor-not-allowed disabled:opacity-40"
               >
-                <span class="size-[11px] rounded-[3px] bg-primary" />
+                <Icon name="arrow-up" class="text-[17px]" />
               </button>
-            </Show>
+              <Show when={props.isRunning}>
+                <button
+                  type="button"
+                  onClick={() => props.onStop?.()}
+                  // No handler means the backend cannot stop this run; a Stop
+                  // that only pretended would be worse than a disabled one.
+                  disabled={!props.onStop}
+                  aria-label={tx("Stop the run")}
+                  class="flex size-8 items-center justify-center rounded-full border border-primary/40 bg-base-300 transition-colors hover:border-primary disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  <span class="size-[11px] rounded-[3px] bg-primary" />
+                </button>
+              </Show>
+            </div>
           </div>
         </div>
       </div>
