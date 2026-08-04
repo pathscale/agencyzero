@@ -65,6 +65,7 @@ pub const SURFACE: Surface = Surface {
         "items.add",
         "items.retire",
         "pr.link",
+        "pr.retire",
         "issue.link",
     ],
     reserved: &["status:finished", "status:canceled"],
@@ -118,6 +119,8 @@ pub enum Directive {
         number: Option<String>,
         item: Option<String>,
     },
+    /// Remove one tracked pull-request association by its AgencyZero id.
+    PrRetire { id: String },
     /// Associate one item with a GitHub issue URL.
     IssueLink { url: String, item: String },
     /// Remove a row, by id.
@@ -139,6 +142,7 @@ impl Directive {
             Self::ItemAdd { .. } => "items.add",
             Self::ItemRetire { .. } => "items.retire",
             Self::PrLink { .. } => "pr.link",
+            Self::PrRetire { .. } => "pr.retire",
             Self::IssueLink { .. } => "issue.link",
         }
     }
@@ -268,6 +272,10 @@ fn from_reference(reference: &Reference) -> Option<Directive> {
         let item = arg(args, "item").filter(|item| !item.is_empty());
         return (url.is_some() || (number.is_some() && item.is_some()))
             .then_some(Directive::PrLink { url, number, item });
+    }
+    if verb.eq_ignore_ascii_case("pr.retire") {
+        let id = arg(args, "id")?;
+        return (!id.is_empty()).then_some(Directive::PrRetire { id });
     }
     if verb.eq_ignore_ascii_case("issue.link") {
         let url = arg(args, "url")?;
@@ -434,6 +442,18 @@ mod tests {
             })
         );
         assert!(parse(r#"<ps @agency:pr.link(number: 76)>"#).is_none());
+    }
+
+    #[test]
+    fn a_tracked_pr_association_may_be_retired_by_id() {
+        assert_eq!(
+            parse(r#"<ps @agency:pr.retire(id: "pr-a3f9")>"#),
+            Some(Directive::PrRetire {
+                id: "pr-a3f9".into()
+            })
+        );
+        assert!(parse(r#"<ps @agency:pr.retire(number: 46)>"#).is_none());
+        assert!(parse(r#"<ps @agency:pr.retire(id: "")>"#).is_none());
     }
 
     #[test]

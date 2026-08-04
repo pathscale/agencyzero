@@ -18,7 +18,12 @@ import type { PendingApproval } from "~/types";
  */
 export function ApprovalCard(props: { projectId: string; approval: PendingApproval }): JSX.Element {
   const { actions } = useWorkspace();
-  const isPermissionGrant = () => props.approval.tool.toLowerCase() === "permissions";
+  // A Codex escalation can arrive with fields missing; an unguarded
+  // `.toLowerCase()` on an absent `tool` threw mid-render, and the crash both
+  // hid the card and froze the transcript, so the question nobody could see
+  // also stopped everything else from updating.
+  const tool = () => props.approval.tool ?? "";
+  const isPermissionGrant = () => tool().toLowerCase() === "permissions";
 
   const answer = (allow: boolean, remember = false): void => {
     void actions
@@ -56,7 +61,7 @@ export function ApprovalCard(props: { projectId: string; approval: PendingApprov
       <div class="flex min-w-0 flex-1 flex-col gap-[7px]">
         <div class="flex items-baseline gap-2">
           <span class="font-semibold text-[12px] text-warning">{tx("Approval needed")}</span>
-          <span class="font-mono text-[11.5px] text-az-muted">{props.approval.tool}</span>
+          <span class="font-mono text-[11.5px] text-az-muted">{tool()}</span>
         </div>
 
         <Show when={headline()}>

@@ -19,6 +19,7 @@ standing_promotion:
     - agency:items.add
     - agency:items.retire
     - agency:pr.link
+    - agency:pr.retire
     - agency:issue.link
 
   # 13.2.2 Verbs and values reserved to principals above the agent. An agent may
@@ -41,6 +42,7 @@ standing_promotion:
     agency:items.add: [project, ref, title, status]
     agency:items.retire: [id]
     agency:pr.link: [url, number, item]
+    agency:pr.retire: [id]
     agency:issue.link: [url, item]
 
   semantics:

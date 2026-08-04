@@ -1006,16 +1006,16 @@ fn state_snapshot(
         .collect();
     items.sort_by_key(|row| row.position);
 
-    let prs: Vec<crate::db::schema::pull_request::PullRequestRow> = tables
-        .pull_request
-        .select_by_project_id(project_id.to_string())
-        .execute()
-        .unwrap_or_default()
-        .into_iter()
-        // Closed and merged rows remain in the project store and UI history,
-        // but they are not routing context for the next turn.
-        .filter(|row| !matches!(row.state.to_ascii_lowercase().as_str(), "closed" | "merged"))
-        .collect();
+    let prs: Vec<crate::db::schema::pull_request::PullRequestRow> = crate::prs::canonical_rows(
+        tables
+            .pull_request
+            .select_by_project_id(project_id.to_string())
+            .execute()
+            .unwrap_or_default(),
+    )
+    .into_iter()
+    .filter(|row| !row.dismissed)
+    .collect();
 
     let mut out = String::new();
     if project_id == crate::tasks::TASK_MANAGER_ID {
@@ -1045,18 +1045,22 @@ fn state_snapshot(
         }
     }
     if !prs.is_empty() {
-        out.push_str("Pull requests: ");
-        out.push_str(
-            &prs.iter()
-                .take(20)
-                .map(|pr| format!("#{} {}", pr.number, pr.state.to_lowercase()))
-                .collect::<Vec<_>>()
-                .join(" · "),
-        );
-        if prs.len() > 20 {
-            out.push_str(&format!(" ({} more omitted)", prs.len() - 20));
+        out.push_str("Tracked pull requests. Retire an association by id, never by PR number:\n");
+        for pr in prs.iter().take(20) {
+            out.push_str(&format!(
+                "  {} · {}#{} · {}\n",
+                pr.id,
+                pr.repo,
+                pr.number,
+                pr.state.to_lowercase()
+            ));
         }
-        out.push('\n');
+        if prs.len() > 20 {
+            out.push_str(&format!(
+                "  ... {} more associations omitted\n",
+                prs.len() - 20
+            ));
+        }
     }
     /*
      * The turn's subject, when the prompt came from a row. This is the only
@@ -1097,6 +1101,7 @@ fn state_snapshot(
          <ps @agency:items.add(project: \"<project id or exact name>\", ref: \"t2\", title: \"<one line>\")>\n\
          <ps @agency:items.retire(id: \"<id>\")>\n\
          <ps @agency:pr.link(url: \"https://github.com/owner/repo/pull/66\", item: \"<id>\")>\n\
+         <ps @agency:pr.retire(id: \"<pr association id>\")>\n\
          <ps @agency:issue.link(url: \"https://github.com/owner/repo/issues/42\", item: \"<id>\")>\n\
          Statuses you may set: new, planning, active, questions, shipped. `questions` \
          means you are stopped on something only the owner can answer. `finished` and \
@@ -1391,6 +1396,41 @@ async fn apply_directive(
                 },
             }
         }
+        Directive::PrRetire { id } => {
+            let tracked = crate::prs::canonical_rows(
+                tables
+                    .pull_request
+                    .select_by_project_id(project_id.to_string())
+                    .execute()
+                    .unwrap_or_default(),
+            );
+            let known: Vec<&str> = tracked.iter().map(|row| row.id.as_str()).collect();
+            let resolved = match crate::directives::resolve(&known, &id) {
+                Ok(found) => found.to_string(),
+                Err(code) => {
+                    return Outcome::Refused {
+                        what: format!("pr.retire({id})"),
+                        code,
+                    };
+                }
+            };
+            let label = tracked
+                .iter()
+                .find(|row| row.id == resolved)
+                .map(|row| format!("{}#{}", row.repo, row.number))
+                .unwrap_or_default();
+            match crate::prs::dismiss_association(app, tables, &resolved).await {
+                Ok((_, ids)) => Outcome::Done(format!(
+                    "{resolved} retired {label} ({} association{})",
+                    ids.len(),
+                    if ids.len() == 1 { "" } else { "s" }
+                )),
+                Err(code) => Outcome::Refused {
+                    what: format!("pr.retire({resolved})"),
+                    code,
+                },
+            }
+        }
         Directive::PrLink { url, number, item } => {
             let linked = match item.as_deref() {
                 Some(item) => {
@@ -1587,6 +1627,23 @@ fn study_target_before(
             id: item.as_deref().map(resolve).unwrap_or_default(),
             before_add: std::collections::HashSet::new(),
         },
+        Directive::PrRetire { id } => {
+            let prs = crate::prs::canonical_rows(
+                tables
+                    .pull_request
+                    .select_all()
+                    .execute()
+                    .unwrap_or_default(),
+            );
+            let known: Vec<&str> = prs.iter().map(|row| row.id.as_str()).collect();
+            StudyTarget {
+                kind: "pull_request",
+                id: crate::directives::resolve(&known, id)
+                    .map(str::to_string)
+                    .unwrap_or_default(),
+                before_add: std::collections::HashSet::new(),
+            }
+        }
         Directive::IssueLink { item, .. } => StudyTarget {
             kind: "item",
             id: resolve(item),
@@ -5025,6 +5082,18 @@ async fn drive_run(
                     continue;
                 }
 
+                // Log every question that reaches a human, not just the ones a
+                // remembered rule answers. A Codex escalation
+                // (`require_escalated`) that surfaced but was never seen used to
+                // sit on the full APPROVAL_TIMEOUT with nothing in the log to
+                // say a decision was even being waited on: the run read as
+                // hung when it was in fact blocked on the owner.
+                crate::log!(
+                    crate::log::Level::Info,
+                    "run",
+                    "{project_id}: waiting for the owner to answer [{signature}]"
+                );
+
                 let _ = app.emit(
                     "run:approval",
                     serde_json::json!({
@@ -7112,6 +7181,58 @@ mod tests {
         );
         assert_eq!(target.id, "item-a3f9-canonical");
         assert_eq!(target.kind, "item");
+    }
+
+    #[tokio::test]
+    async fn state_snapshot_exposes_one_canonical_pr_association_with_retire_guidance() {
+        let dir = std::env::temp_dir().join(format!(
+            "az-pr-state-{}-{}",
+            std::process::id(),
+            chrono::Utc::now().timestamp_nanos_opt().unwrap_or_default()
+        ));
+        let tables = crate::db::tables::Tables::open(&dir)
+            .await
+            .expect("PR state store opens");
+
+        for row in [
+            crate::db::schema::pull_request::PullRequestRow {
+                id: "pr-stale".into(),
+                project_id: "project-private".into(),
+                url: "https://github.com/pathscale/WorkTable/pull/46".into(),
+                repo: "pathscale/WorkTable".into(),
+                number: 46,
+                branch: "feature".into(),
+                state: "OPEN".into(),
+                additions: 1,
+                deletions: 0,
+                ci: "pending".into(),
+                dismissed: false,
+                updated_at: "2026-08-03T00:00:00Z".into(),
+            },
+            crate::db::schema::pull_request::PullRequestRow {
+                id: "pr-current".into(),
+                project_id: "project-private".into(),
+                url: "https://github.com/pathscale/worktable/pull/46/".into(),
+                repo: "pathscale/worktable".into(),
+                number: 46,
+                branch: "feature".into(),
+                state: "CLOSED".into(),
+                additions: 1,
+                deletions: 0,
+                ci: "none".into(),
+                dismissed: false,
+                updated_at: "2026-08-04T00:00:00Z".into(),
+            },
+        ] {
+            tables.pull_request.insert(row).expect("PR row inserts");
+        }
+
+        let snapshot = state_snapshot(&tables, "project-private", None);
+        assert!(snapshot.contains("pr-current · pathscale/worktable#46 · closed"));
+        assert!(!snapshot.contains("pr-stale"));
+        assert!(snapshot.contains("@agency:pr.retire(id: \"<pr association id>\")"));
+
+        let _ = std::fs::remove_dir_all(dir);
     }
 
     #[test]

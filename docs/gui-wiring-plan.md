@@ -149,7 +149,7 @@ being a list of user messages.
       greys it out instead of appearing to stop something it cannot.
 - [x] `clear_task_log(project_id)`.
 - [x] **One authored PS surface for items and pull requests.** Standalone
-      `@agency:items.*` and `@agency:pr.link` directives are the only mutations
+      `@agency:items.*`, `@agency:pr.link`, and `@agency:pr.retire` directives are the only mutations
       read from an agent reply. Checkboxes, prose, quoted examples, fenced
       examples, and bare PR URLs remain display text.
 - [ ] **Streaming needs a frontend pass too.** `TranscriptPane` renders finished messages
