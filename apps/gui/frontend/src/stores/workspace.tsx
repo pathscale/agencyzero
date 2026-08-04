@@ -211,6 +211,8 @@ export type QueueReason = "busy" | "compacting";
 export type QueuedPrompt = {
   body: string;
   reason: QueueReason;
+  /** Reuse this visible transcript row instead of appending the words twice. */
+  messageId?: string;
   study?: StudyTurnMetadata;
 };
 
@@ -988,11 +990,13 @@ function createWorkspace() {
       touchRunStatus(projectId, "waiting for the agent…", { agent, model, permission });
     });
 
-    await bind("run:inject_failed", ({ projectId, body }) => {
+    await bind("run:inject_failed", ({ projectId, messageId, body }) => {
       // The turn settled before the interruption reached it. The transcript
-      // already shows the words; queue them so a fresh turn actually hears
-      // them once the slot frees.
-      enqueue(projectId, body, "busy");
+      // already shows the words; queue that exact row so a fresh turn hears it
+      // without appending the same user message a second time.
+      if (!(state.queued[projectId] ?? []).some((prompt) => prompt.messageId === messageId)) {
+        enqueue(projectId, body, "busy", undefined, messageId);
+      }
     });
 
     /*
@@ -1531,11 +1535,13 @@ function createWorkspace() {
     projectId: string,
     body: string,
     study?: StudyTurnMetadata,
+    retryMessageId?: string,
   ): Promise<void> => {
     const tab = state.tabs.find((candidate) => candidate.projectId === projectId);
     await client().sendMessage({
       projectId,
       body,
+      retryMessageId,
       agent: tab?.agent,
       model: tab?.model,
       permission: tab?.permission,
@@ -1553,8 +1559,12 @@ function createWorkspace() {
     body: string,
     reason: QueueReason,
     study?: StudyTurnMetadata,
+    messageId?: string,
   ): void {
-    setState("queued", projectId, (waiting = []) => [...waiting, { body, reason, study }]);
+    setState("queued", projectId, (waiting = []) => [
+      ...waiting,
+      { body, reason, study, messageId },
+    ]);
   }
 
   const send = async (
@@ -1617,7 +1627,7 @@ function createWorkspace() {
     if (isBusy(projectId)) return; // a newer run took the slot; its stop will re-cue
     setState("queued", projectId, waiting.slice(1));
     try {
-      await dispatch(projectId, next.body, next.study);
+      await dispatch(projectId, next.body, next.study, next.messageId);
     } catch (cause) {
       setState("queued", projectId, (rest = []) => [next, ...rest]);
       if (attempt < 4) {

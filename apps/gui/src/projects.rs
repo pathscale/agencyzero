@@ -245,6 +245,10 @@ impl From<MessageRow> for MessageDto {
 pub struct SendMessageInput {
     pub project_id: String,
     pub body: String,
+    /// An already-rendered user row whose failed live delivery is being
+    /// retried in a fresh resumed turn. Reusing it keeps recovery from drawing
+    /// the same words twice in the transcript.
+    pub retry_message_id: Option<String>,
     pub item_id: Option<String>,
     pub agent: Option<String>,
     pub model: Option<String>,
@@ -1944,6 +1948,7 @@ async fn deliver_injection(
     io: &std::sync::Arc<AgentIo>,
     run: &agent_abstraction::Run,
     project_id: &str,
+    message_id: &str,
     body: String,
 ) {
     match run.send(&body).await {
@@ -1966,10 +1971,105 @@ async fn deliver_injection(
             note_io(app, io, project_id, "received", "error", why);
             let _ = app.emit(
                 "run:inject_failed",
-                serde_json::json!({ "projectId": project_id, "body": body }),
+                serde_json::json!({
+                    "projectId": project_id,
+                    "messageId": message_id,
+                    "body": body,
+                }),
             );
         }
     }
+}
+
+/// Persist a new user message, or recover the exact row whose live steer was
+/// rejected after it had already been rendered.
+///
+/// The retry id is deliberately checked against both project and body. It is
+/// an IPC input, not authority to make an unrelated transcript row stand in
+/// for new words. A successful retry returns the existing row without another
+/// study event, GUI note, or `message:appended` echo.
+fn user_message_for_send(
+    app: &AppHandle,
+    state: &AppState,
+    input: &SendMessageInput,
+    agent: &str,
+    model: &str,
+    permission: &str,
+    followup: bool,
+) -> Result<MessageDto, String> {
+    if let Some(message) = retry_user_message(&state.tables, input)? {
+        return Ok(message);
+    }
+
+    let row = MessageRow {
+        id: id("msg"),
+        project_id: input.project_id.clone(),
+        item_id: input.item_id.clone().unwrap_or_default(),
+        author: "user".into(),
+        agent: agent.into(),
+        moderation: String::new(),
+        model: model.into(),
+        permission: permission.into(),
+        usage: String::new(),
+        stop: "completed".into(),
+        exit_code: -1,
+        body: capped_body(input.body.clone()),
+        created_at: now(),
+    };
+    state
+        .tables
+        .message
+        .insert(row.clone())
+        .map_err(|error| error.to_string())?;
+
+    let message = MessageDto::from(row);
+    record_study_turn(
+        &state.tables,
+        &input.project_id,
+        &message.id,
+        agent,
+        &input.body,
+        input.study.as_ref(),
+        followup,
+    );
+    note_gui(
+        app,
+        state,
+        &input.project_id,
+        if followup {
+            format!(
+                "you sent a message into the running turn ({} chars)",
+                input.body.len()
+            )
+        } else {
+            format!("you sent a message ({} chars)", input.body.len())
+        },
+    );
+    let _ = app.emit("message:appended", &message);
+    Ok(message)
+}
+
+/// Resolve a retry without changing the transcript. Kept independent of the
+/// Tauri handle so the identity and validation rule have direct regression
+/// coverage against a real persisted message table.
+fn retry_user_message(
+    tables: &crate::db::tables::Tables,
+    input: &SendMessageInput,
+) -> Result<Option<MessageDto>, String> {
+    let Some(message_id) = input.retry_message_id.as_deref() else {
+        return Ok(None);
+    };
+    let row = tables
+        .message
+        .select(message_id.to_string())
+        .ok_or_else(|| "the queued user message no longer exists".to_string())?;
+    if row.project_id != input.project_id
+        || row.author != "user"
+        || row.body != capped_body(input.body.clone())
+    {
+        return Err("the queued user message does not match this retry".into());
+    }
+    Ok(Some(MessageDto::from(row)))
 }
 
 fn emit_run_stopped(
@@ -3998,6 +4098,7 @@ pub async fn create_project(
         SendMessageInput {
             project_id,
             body: input.first_message,
+            retry_message_id: None,
             item_id: None,
             agent: input.agent,
             model: input.model,
@@ -4192,48 +4293,8 @@ pub async fn send_message(
             };
             drop(active);
 
-            let user_row = MessageRow {
-                id: id("msg"),
-                project_id: input.project_id.clone(),
-                item_id: input.item_id.clone().unwrap_or_default(),
-                author: "user".into(),
-                agent: agent_name.into(),
-                moderation: String::new(),
-                model: model.clone(),
-                permission: permission.clone(),
-                usage: String::new(),
-                stop: "completed".into(),
-                exit_code: -1,
-                body: capped_body(input.body.clone()),
-                created_at: now(),
-            };
-            state
-                .tables
-                .message
-                .insert(user_row.clone())
-                .map_err(|error| error.to_string())?;
-            let user_message = MessageDto::from(user_row);
-            record_study_turn(
-                &state.tables,
-                &input.project_id,
-                &user_message.id,
-                agent_name,
-                &input.body,
-                input.study.as_ref(),
-                true,
-            );
-            note_gui(
-                &app,
-                &state,
-                &input.project_id,
-                format!(
-                    "you sent a message into the running turn ({} chars)",
-                    input.body.len()
-                ),
-            );
-            // The 0.3.6 rendering rule: append immediately, never wait for an
-            // echo — the crate deliberately requests none.
-            let _ = app.emit("message:appended", &user_message);
+            let user_message =
+                user_message_for_send(&app, &state, &input, agent_name, &model, &permission, true)?;
 
             if inject
                 .send(InjectedMessage {
@@ -4242,10 +4303,17 @@ pub async fn send_message(
                 })
                 .is_err()
             {
-                // The run tore down in the race window. The row stands (the
-                // words were said); the refusal tells the frontend to queue
-                // the body for a fresh turn so the agent actually hears it.
-                return Err(BUSY_WITH_RUN.into());
+                // The run tore down after the row became visible. Hand that
+                // same row to the retry queue and report this send as accepted;
+                // returning the busy error as well would enqueue it twice.
+                let _ = app.emit(
+                    "run:inject_failed",
+                    serde_json::json!({
+                        "projectId": input.project_id,
+                        "messageId": user_message.id,
+                        "body": input.body,
+                    }),
+                );
             }
             return Ok(user_message);
         }
@@ -4272,44 +4340,8 @@ pub async fn send_message(
         )
     };
 
-    let user_row = MessageRow {
-        id: id("msg"),
-        project_id: input.project_id.clone(),
-        item_id: input.item_id.clone().unwrap_or_default(),
-        author: "user".into(),
-        agent: agent_name.into(),
-        moderation: String::new(),
-        model: model.clone(),
-        permission: permission.clone(),
-        usage: String::new(),
-        stop: "completed".into(),
-        exit_code: -1,
-        body: capped_body(input.body.clone()),
-        created_at: now(),
-    };
-    state
-        .tables
-        .message
-        .insert(user_row.clone())
-        .map_err(|error| error.to_string())?;
-
-    let user_message = MessageDto::from(user_row);
-    record_study_turn(
-        &state.tables,
-        &input.project_id,
-        &user_message.id,
-        agent_name,
-        &input.body,
-        input.study.as_ref(),
-        false,
-    );
-    note_gui(
-        &app,
-        &state,
-        &input.project_id,
-        format!("you sent a message ({} chars)", input.body.len()),
-    );
-    let _ = app.emit("message:appended", &user_message);
+    let user_message =
+        user_message_for_send(&app, &state, &input, agent_name, &model, &permission, false)?;
     // The run exists from this moment: the slot is claimed and the spawn below
     // cannot be refused. This is what starts the transcript's status line —
     // event-driven rather than assumed by the sender, so a backend that fakes
@@ -4887,7 +4919,15 @@ async fn drive_run(
                 // broadcast by `send_message`; delivery and its failure modes
                 // live in the helper, shared with the approval-wait arm.
                 directive_turn_id = injected.turn_id;
-                deliver_injection(&app, &io, &run, &project_id, injected.body).await;
+                deliver_injection(
+                    &app,
+                    &io,
+                    &run,
+                    &project_id,
+                    &directive_turn_id,
+                    injected.body,
+                )
+                .await;
                 // A user message is a block boundary: the next streamed text
                 // starts a new paragraph rather than gluing to the old one.
                 last_was_text = false;
@@ -5008,6 +5048,7 @@ async fn drive_run(
                                     &io,
                                     &run,
                                     &project_id,
+                                    &directive_turn_id,
                                     injected.body,
                                 )
                                 .await;
@@ -6694,6 +6735,70 @@ mod tests {
         let head: String = cut.chars().take(10).collect();
         assert_eq!(head, "字".repeat(10), "no character was split");
         assert_eq!(truncate_to_bytes("short", 8_000), "short");
+    }
+
+    #[tokio::test]
+    async fn a_rejected_live_steer_retries_the_same_transcript_row() {
+        let store = std::env::temp_dir().join(format!(
+            "az-codex-steer-retry-{}-{}",
+            std::process::id(),
+            uuid::Uuid::new_v4()
+        ));
+        let tables = crate::db::tables::Tables::open(&store)
+            .await
+            .expect("message store opens");
+        let row = MessageRow {
+            id: "msg-visible".into(),
+            project_id: "proj-steer".into(),
+            item_id: String::new(),
+            author: "user".into(),
+            agent: "codex".into(),
+            moderation: String::new(),
+            model: "gpt-5.6-sol".into(),
+            permission: "auto".into(),
+            usage: String::new(),
+            stop: "completed".into(),
+            exit_code: -1,
+            body: "change course".into(),
+            created_at: now(),
+        };
+        tables.message.insert(row).expect("visible row inserts");
+        let input = SendMessageInput {
+            project_id: "proj-steer".into(),
+            body: "change course".into(),
+            retry_message_id: Some("msg-visible".into()),
+            item_id: None,
+            agent: Some("codex".into()),
+            model: Some("gpt-5.6-sol".into()),
+            permission: Some("auto".into()),
+            effort: None,
+            extra_thinking: None,
+            study: None,
+        };
+
+        let retried = retry_user_message(&tables, &input)
+            .expect("retry validates")
+            .expect("retry resolves");
+        assert_eq!(retried.id, "msg-visible");
+        assert_eq!(
+            tables
+                .message
+                .select_by_project_id("proj-steer".into())
+                .execute()
+                .expect("messages read")
+                .len(),
+            1,
+            "recovery must not append the same user words twice"
+        );
+
+        let mismatched = SendMessageInput {
+            body: "different words".into(),
+            ..input
+        };
+        assert!(retry_user_message(&tables, &mismatched).is_err());
+
+        tables.shutdown().await;
+        let _ = std::fs::remove_dir_all(store);
     }
 
     fn project_row(id: &str, name: &str) -> ProjectRow {

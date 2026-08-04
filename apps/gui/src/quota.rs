@@ -170,13 +170,14 @@ mod tests {
         assert!(Agent::Codex.reports_account_usage());
     }
 
-    /// The crate reports 0..100; the bar draws 0..1. Getting this backwards
-    /// would render a 16%-used window as a full one.
+    /// The crate's field is explicitly amount used, 0..100. Keep it in that
+    /// direction while converting only its scale for the webview. Inverting it
+    /// would make Codex disagree with Claude and turn 45% used into 55% used.
     #[test]
     fn a_percentage_becomes_a_fraction() {
         // `UsageWindow` is `#[non_exhaustive]`, so the mapping is exercised on
         // the values rather than through a struct literal the crate forbids.
-        let used_percent = Some(16.0_f64);
+        let used_percent = Some(45.0_f64);
         let dto = QuotaWindowDto {
             window: "primary".into(),
             used_fraction: used_percent.map(|percent| percent / 100.0),
@@ -184,7 +185,7 @@ mod tests {
             resets_at: epoch_to_iso(1_800_000_000),
         };
 
-        assert_eq!(dto.used_fraction, Some(0.16));
+        assert_eq!(dto.used_fraction, Some(0.45));
         assert_eq!(dto.window_minutes, Some(10_080));
         assert!(dto.resets_at.is_some(), "epoch seconds become ISO 8601");
     }
