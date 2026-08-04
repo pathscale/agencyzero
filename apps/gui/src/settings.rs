@@ -45,6 +45,21 @@ pub struct GlobalSettings {
     pub theme: Theme,
     /// Explicit local consent for the content-free PS deployment study.
     pub study_analytics: StudyAnalytics,
+    /// Inject the AgencyZero + Prompt Syntax operating instructions into every
+    /// turn's system prompt, for the extended features (items, questions, PR
+    /// tracking) they enable. On by default: the app's own directives only work
+    /// if the agent is told the surface. A user file `AgencyZeroPerTurn.md` in
+    /// the config directory overrides the built-in text; absent, the embedded
+    /// default is used, so this is never silently empty. See
+    /// [`crate::per_turn`].
+    #[serde(default = "default_true")]
+    pub per_turn_injection: bool,
+}
+
+/// `#[serde(default)]` for a bool field that should default to `true` rather
+/// than `false` — an absent flag on an older settings row must read as on.
+fn default_true() -> bool {
+    true
 }
 
 /// The opt-in boundary for the PromptSyntax deployment study.
@@ -268,6 +283,7 @@ impl Default for GlobalSettings {
             completed_items: "resolve".into(),
             theme: Theme::default(),
             study_analytics: StudyAnalytics::default(),
+            per_turn_injection: true,
         }
     }
 }

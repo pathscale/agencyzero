@@ -43,6 +43,9 @@ const zh = {
   "Default effort": "默认推理强度",
   "Completed items": "已完成事项",
   "what marking an item finished does to the row": "将事项标为完成后如何处理该行",
+  "Inject AgencyZero and Prompt Syntax per turn": "每轮注入 AgencyZero 与 Prompt Syntax",
+  "extended features (items, questions, PR tracking); override with AgencyZeroPerTurn.md":
+    "扩展功能（事项、提问、PR 跟踪）；可用 AgencyZeroPerTurn.md 覆盖",
   "Permission posture": "权限模式",
   "read_only is the crate default; widen deliberately": "read_only 是默认值；请谨慎扩大权限",
   "Default permission": "默认权限",

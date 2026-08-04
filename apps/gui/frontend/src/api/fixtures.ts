@@ -607,6 +607,7 @@ export const SETTINGS: GlobalSettings = {
   completedItems: "resolve",
   theme: { accent: "", softness: 0, wash: 10, textBrightness: 0 },
   studyAnalytics: { enabled: false, sessionId: "", enabledAt: "" },
+  perTurnInjection: true,
   notifications: {
     onHold: true,
     onRunFinished: true,
