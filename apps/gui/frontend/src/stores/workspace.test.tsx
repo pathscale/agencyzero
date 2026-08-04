@@ -225,6 +225,23 @@ describe("tabStatus", () => {
     // `worktable` is `active`, so with nothing running it is waiting for input.
     await waitFor(() => expect(workspace.tabStatus("worktable")).toBe("ready"));
   });
+
+  /*
+   * An item moved to `questions` is the run stopping on something only the
+   * owner can answer. The tab must go red like a tool hold rather than staying
+   * green, so a background tab with an unanswered question calls for attention.
+   * `questions` is an item status, set by `items.state`, not the project's.
+   */
+  it("reports a project with an item on questions as blocked", async () => {
+    const workspace = await mountWorkspace();
+    await workspace.actions.cancelRun("worktable");
+    await waitFor(() => expect(workspace.tabStatus("worktable")).toBe("ready"));
+
+    const item = workspace.state.items.worktable[0];
+    await workspace.actions.setItemStatus(item.id, "questions");
+
+    await waitFor(() => expect(workspace.tabStatus("worktable")).toBe("blocked"));
+  });
 });
 
 describe("openItemCount", () => {
