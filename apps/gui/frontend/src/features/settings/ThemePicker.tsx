@@ -7,6 +7,8 @@ import {
   toColorValue,
   WASH_STOPS,
 } from "~/lib/theme";
+import { t } from "~/stores/i18n";
+import { prefs } from "~/stores/prefs";
 import type { ThemeSettings } from "~/types";
 
 /**
@@ -42,8 +44,12 @@ export function ThemePicker(props: {
   const softnessStops = () => Array.from({ length: 5 }, (_, i) => (i * MAX_SOFTNESS) / 4);
 
   /** The desk as currently configured — what every swatch sits on. */
+  const deskAnchor = (softness: number) =>
+    prefs.colorMode === "light"
+      ? `oklch(calc(93% - ${softness}%) 0.004 240)`
+      : `oklch(calc(10.5% + ${softness}%) 0.004 240)`;
   const deskPreview = (theme: ThemeSettings) =>
-    `color-mix(in oklab, ${theme.accent || DEFAULT_ACCENT} ${theme.wash * 1.1}%, oklch(calc(10.5% + ${theme.softness}%) 0.004 240))`;
+    `color-mix(in oklab, ${theme.accent || DEFAULT_ACCENT} ${theme.wash * 1.1}%, ${deskAnchor(theme.softness)})`;
 
   return (
     <div class="flex items-start gap-4 px-3.5 py-3">
@@ -72,25 +78,25 @@ export function ThemePicker(props: {
          * accent moves — which is a legitimate choice, just not the default.
          */}
         <Axis
-          label="Colour strength"
-          hint="how far the picked colour reaches into the surfaces"
+          label={t("appearance.colourStrength")}
+          hint={t("appearance.colourStrengthHint")}
           stops={[...WASH_STOPS]}
           value={props.theme.wash}
           onPick={props.onWash}
           preview={(stop) =>
-            `color-mix(in oklab, ${props.theme.accent || DEFAULT_ACCENT} ${stop * 1.1}%, oklch(calc(10.5% + ${props.theme.softness}%) 0.004 240))`
+            `color-mix(in oklab, ${props.theme.accent || DEFAULT_ACCENT} ${stop * 1.1}%, ${deskAnchor(props.theme.softness)})`
           }
           format={(stop) => `${stop}%`}
         />
 
         <Axis
-          label="Softness"
-          hint="how far the surfaces lift off black"
+          label={t("appearance.softness")}
+          hint={t("appearance.softnessHint")}
           stops={softnessStops()}
           value={props.theme.softness}
           onPick={props.onSoftness}
           preview={(stop) =>
-            `color-mix(in oklab, ${props.theme.accent || DEFAULT_ACCENT} ${props.theme.wash * 1.1}%, oklch(calc(10.5% + ${stop}%) 0.004 240))`
+            `color-mix(in oklab, ${props.theme.accent || DEFAULT_ACCENT} ${props.theme.wash * 1.1}%, ${deskAnchor(stop)})`
           }
           format={(stop) => `${Math.round((stop / MAX_SOFTNESS) * 100)}%`}
         />
@@ -102,13 +108,17 @@ export function ThemePicker(props: {
          * letters at different weights is the actual question being asked.
          */}
         <Axis
-          label="Text brightness"
-          hint="how far the text rises off the surface"
+          label={t("appearance.textBrightness")}
+          hint={t("appearance.textBrightnessHint")}
           stops={[...BRIGHTNESS_STOPS]}
           value={props.theme.textBrightness}
           onPick={props.onBrightness}
           preview={() => deskPreview(props.theme)}
-          ink={(stop) => `oklch(calc(75% - ${props.theme.softness * 0.45 - stop}%) 0.009 245)`}
+          ink={(stop) =>
+            prefs.colorMode === "light"
+              ? `oklch(calc(28% + ${props.theme.softness * 0.45 - stop}%) 0.009 245)`
+              : `oklch(calc(75% - ${props.theme.softness * 0.45 - stop}%) 0.009 245)`
+          }
           format={(_stop, index) => `${Math.round((index / (BRIGHTNESS_STOPS.length - 1)) * 100)}%`}
         />
       </div>

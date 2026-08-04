@@ -12,6 +12,7 @@ import {
   useContext,
 } from "solid-js";
 import { Icon, type IconProps } from "~/components/Icon";
+import { LanguageSwitcher } from "~/components/LanguageSwitcher";
 import { Panel } from "~/components/Panel";
 import { PillMenu } from "~/components/PillMenu";
 import { AgentStateDot } from "~/components/StatusDot";
@@ -24,6 +25,7 @@ import {
 } from "~/lib/labels";
 import { describeError, log } from "~/lib/log";
 import { DEFAULT_WASH } from "~/lib/theme";
+import { t } from "~/stores/i18n";
 import { prefs, setPrefs } from "~/stores/prefs";
 import { useNow, useWorkspace } from "~/stores/workspace";
 import type {
@@ -465,24 +467,52 @@ export function SettingsTab(): JSX.Element {
                 </Row>
               </Section>
 
-              <Section
-                icon="sparkles"
-                title="Appearance"
-                hint="interface size, accent, and how far the surfaces lift off black"
-              >
-                <Row label="Interface size" hint="scales text and controls together">
+              <Section icon="sparkles" title={t("appearance.title")} hint={t("appearance.hint")}>
+                <Row label={t("language.label")} hint={t("language.hint")}>
+                  <LanguageSwitcher align="end" />
+                </Row>
+                <Row label={t("appearance.mode")} hint={t("appearance.modeHint")}>
                   <div class="flex items-center gap-1 rounded-full border border-az-hairline bg-az-inset p-1">
                     <For
                       each={[
-                        { value: "normal" as const, label: "N", name: "Normal" },
-                        { value: "large" as const, label: "L", name: "Large" },
-                        { value: "extra-large" as const, label: "XL", name: "Extra large" },
+                        { value: "dark" as const, label: t("appearance.dark") },
+                        { value: "light" as const, label: t("appearance.light") },
                       ]}
                     >
                       {(option) => (
                         <button
                           type="button"
-                          aria-label={`${option.name} interface size`}
+                          aria-pressed={prefs.colorMode === option.value}
+                          onClick={() => setPrefs("colorMode", option.value)}
+                          class={`rounded-full px-3 py-1 font-semibold text-[11px] transition-colors ${
+                            prefs.colorMode === option.value
+                              ? "bg-primary text-primary-content"
+                              : "text-az-muted hover:bg-az-hover hover:text-az-title"
+                          }`}
+                        >
+                          {option.label}
+                        </button>
+                      )}
+                    </For>
+                  </div>
+                </Row>
+                <Row label={t("appearance.size")} hint={t("appearance.sizeHint")}>
+                  <div class="flex items-center gap-1 rounded-full border border-az-hairline bg-az-inset p-1">
+                    <For
+                      each={[
+                        { value: "normal" as const, label: "N", name: t("appearance.normal") },
+                        { value: "large" as const, label: "L", name: t("appearance.large") },
+                        {
+                          value: "extra-large" as const,
+                          label: "XL",
+                          name: t("appearance.extraLarge"),
+                        },
+                      ]}
+                    >
+                      {(option) => (
+                        <button
+                          type="button"
+                          aria-label={`${option.name} ${t("appearance.size")}`}
                           aria-pressed={prefs.uiSize === option.value}
                           onClick={() => setPrefs("uiSize", option.value)}
                           class={`flex size-7 items-center justify-center rounded-full font-semibold text-[10.5px] transition-colors ${
@@ -506,11 +536,7 @@ export function SettingsTab(): JSX.Element {
                     void actions.saveSettings({ theme: { textBrightness } })
                   }
                 />
-                <Row
-                  label="Reset"
-                  hint="back to the designed palette — the yellow accent on the dark desk"
-                  isLast
-                >
+                <Row label={t("appearance.reset")} hint={t("appearance.resetHint")} isLast>
                   <button
                     type="button"
                     disabled={
@@ -525,7 +551,7 @@ export function SettingsTab(): JSX.Element {
                     }
                     class="rounded-lg border border-az-hairline-strong px-3 py-[5px] text-[12px] text-az-muted transition-colors hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-40"
                   >
-                    Use the default
+                    {t("appearance.resetButton")}
                   </button>
                 </Row>
               </Section>

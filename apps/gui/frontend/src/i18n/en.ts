@@ -1,0 +1,34 @@
+const en = {
+  language: {
+    selector: "Language selector",
+    current: "Current language",
+    options: "Language options",
+    loading: "Loading language",
+    label: "Language",
+    hint: "changes interface labels on this installation",
+  },
+  appearance: {
+    title: "Appearance",
+    hint: "mode, interface size, accent, and surface depth",
+    mode: "Mode",
+    modeHint: "switches the complete interface palette",
+    dark: "Dark",
+    light: "Light",
+    size: "Interface size",
+    sizeHint: "scales text and controls together",
+    normal: "Normal",
+    large: "Large",
+    extraLarge: "Extra large",
+    colourStrength: "Colour strength",
+    colourStrengthHint: "how far the picked colour reaches into the surfaces",
+    softness: "Softness",
+    softnessHint: "how far the surfaces move from the palette edge",
+    textBrightness: "Text brightness",
+    textBrightnessHint: "how far the text rises off the surface",
+    reset: "Reset",
+    resetHint: "back to the designed yellow accent and default surface settings",
+    resetButton: "Use the default",
+  },
+} as const;
+
+export default en;

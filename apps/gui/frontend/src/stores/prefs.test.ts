@@ -15,3 +15,16 @@ describe("interface size", () => {
     expect(document.documentElement.style.getPropertyValue("--az-ui-inverse-scale")).toBe("");
   });
 });
+
+describe("colour mode", () => {
+  it("persists the selected palette on the document root", async () => {
+    setPrefs("colorMode", "light");
+    await Promise.resolve();
+
+    expect(prefs.colorMode).toBe("light");
+    expect(document.documentElement.dataset.colorMode).toBe("light");
+    expect(document.documentElement.style.colorScheme).toBe("light");
+
+    setPrefs("colorMode", "dark");
+  });
+});

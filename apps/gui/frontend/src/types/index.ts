@@ -639,6 +639,8 @@ export interface UiPrefs {
   lastPermission: Permission;
   /** Local interface scale. Large is the designed default for this desktop UI. */
   uiSize: "normal" | "large" | "extra-large";
+  /** Local palette mode. Independent of the persisted accent axes. */
+  colorMode: "dark" | "light";
   /**
    * The last "Extra Thinking" choice, so a new tab starts where the last one
    * was left. On by default, like the composer control it seeds.

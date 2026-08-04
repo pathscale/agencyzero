@@ -502,9 +502,10 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
   const [adding, setAdding] = createSignal(false);
   const [title, setTitle] = createSignal("");
   /*
-   * Two heights, same contract as Agent I/O: capped by default so the other
-   * sections keep the column, fully expanded on demand — a harvest that lands
-   * a dozen items should be readable without a 300px porthole.
+   * Long lists are capped by default so the other sections keep the column,
+   * then fully expanded on demand. Six or fewer render in full: the old code
+   * capped every list but offered "Show all" only above six, so five wrapped
+   * XL rows were clipped with no way to expand them.
    */
   const tall = () => prefs.expandedItemProjects.includes(props.projectId);
   const toggleTall = (): void => {
@@ -615,7 +616,9 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
 
   return (
     <div
-      class={`az-scroll flex flex-col gap-0.5 px-2 pt-1.5 pb-2.5 ${tall() ? "" : "max-h-[300px]"}`}
+      class={`az-scroll flex flex-col gap-0.5 px-2 pt-1.5 pb-2.5 ${
+        tall() || props.items.length <= 6 ? "" : "max-h-[300px]"
+      }`}
     >
       <Show when={props.items.length > 3}>
         <div class="flex items-center gap-2 rounded-[9px] border border-az-hairline bg-az-inset px-2.5 py-1.5">

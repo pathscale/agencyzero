@@ -1,0 +1,34 @@
+const zh = {
+  language: {
+    selector: "语言选择器",
+    current: "当前语言",
+    options: "语言选项",
+    loading: "正在加载语言",
+    label: "语言",
+    hint: "更改此安装中的界面标签",
+  },
+  appearance: {
+    title: "外观",
+    hint: "模式、界面大小、强调色和表面层次",
+    mode: "模式",
+    modeHint: "切换整个界面的配色",
+    dark: "深色",
+    light: "浅色",
+    size: "界面大小",
+    sizeHint: "同时缩放文字和控件",
+    normal: "标准",
+    large: "大",
+    extraLarge: "特大",
+    colourStrength: "色彩强度",
+    colourStrengthHint: "所选颜色融入界面的程度",
+    softness: "柔和度",
+    softnessHint: "表面偏离配色边缘的程度",
+    textBrightness: "文字亮度",
+    textBrightnessHint: "文字与表面的对比程度",
+    reset: "重置",
+    resetHint: "恢复黄色强调色和默认表面设置",
+    resetButton: "使用默认值",
+  },
+} as const;
+
+export default zh;

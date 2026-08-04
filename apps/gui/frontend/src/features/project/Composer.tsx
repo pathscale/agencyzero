@@ -436,7 +436,7 @@ export function Composer(props: ComposerProps): JSX.Element {
             event.preventDefault();
             void submit();
           }}
-          class={`az-scroll w-full resize-none bg-transparent text-base-content leading-[1.45] placeholder:text-az-faint focus:outline-none ${
+          class={`az-scroll w-full resize-none overflow-x-hidden bg-transparent text-base-content leading-[1.45] placeholder:text-az-faint focus:outline-none ${
             props.size === "lg" ? "text-[15px]" : "text-[14.5px]"
           }`}
         />

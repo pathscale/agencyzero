@@ -196,3 +196,35 @@ describe("the theme axes", () => {
     expect(CSS.match(/rgb\(from var\(--color-primary\)/g)?.length).toBeGreaterThanOrEqual(8);
   });
 });
+
+describe("light mode", () => {
+  it("overrides the complete surface and text ladder under the root mode selector", () => {
+    const rule = [
+      ...CSS.matchAll(/\[data-theme="agencyzero"\]\[data-color-mode="light"\]\s*\{([\s\S]*?)\n\}/g),
+    ]
+      .map((match) => match[1])
+      .join("\n");
+
+    expect(rule).not.toBe("");
+    for (const token of [
+      "--color-base-100:",
+      "--color-base-200:",
+      "--color-base-300:",
+      "--color-base-content:",
+      "--color-az-desk:",
+      "--color-az-inset:",
+      "--color-az-title:",
+      "--color-az-muted:",
+      "--color-az-bubble:",
+      "--color-az-bubble-text:",
+    ]) {
+      expect(rule, `${token} must have a light-mode value`).toContain(token);
+    }
+  });
+
+  it("changes neutral sheen with the mode instead of baking white into chrome", () => {
+    expect(CSS).toContain("--az-sheen: 255 255 255;");
+    expect(CSS).toContain("--az-sheen: 17 24 39;");
+    expect(CSS).not.toMatch(/rgb\(255 255 255 \/ 0\.1[25]\)/);
+  });
+});

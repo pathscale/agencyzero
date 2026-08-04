@@ -52,6 +52,7 @@
     --az-hue-text: 245;
     --az-damp: 0%;
     --az-wash: 0%;
+    --az-sheen: 255 255 255;
 
     /* Panels: the floating cards the workspace is built from. */
     --color-base-100: color-mix(
@@ -108,6 +109,49 @@
     --border: 1px;
     --depth: 0;
     --noise: 0;
+  }
+
+  /*
+   * Light is the same semantic ladder turned over, not a second component
+   * theme. Accent, wash and comfort axes still apply; surfaces subtract lift
+   * while text adds damp so both modes soften toward the middle.
+   */
+  [data-theme="agencyzero"][data-color-mode="light"] {
+    color-scheme: only light;
+    --az-sheen: 17 24 39;
+
+    --color-base-100: color-mix(
+      in oklab,
+      var(--color-primary) var(--az-wash),
+      oklch(calc(98% - var(--az-lift)) calc(0.005 * var(--az-tint)) var(--az-hue))
+    );
+    --color-base-200: color-mix(
+      in oklab,
+      var(--color-primary) calc(var(--az-wash) * 1.1),
+      oklch(calc(93% - var(--az-lift)) calc(0.004 * var(--az-tint)) var(--az-hue))
+    );
+    --color-base-300: color-mix(
+      in oklab,
+      var(--color-primary) calc(var(--az-wash) * 1.2),
+      oklch(calc(89% - var(--az-lift)) calc(0.008 * var(--az-tint)) var(--az-hue))
+    );
+    --color-base-content: color-mix(
+      in oklab,
+      var(--color-primary) calc(var(--az-wash) * 0.18),
+      oklch(calc(20% + var(--az-damp)) calc(0.008 * var(--az-tint)) var(--az-hue-text))
+    );
+
+    --color-neutral: oklch(89% 0.008 240);
+    --color-neutral-content: oklch(20% 0.008 245);
+    --color-info: oklch(52% 0.16 260);
+    --color-info-content: #ffffff;
+    --color-success: oklch(48% 0.15 148);
+    --color-success-content: #ffffff;
+    --color-warning: oklch(52% 0.15 55);
+    --color-warning-content: #111111;
+    --color-error: oklch(52% 0.17 22);
+    --color-error-content: #ffffff;
+
   }
 }
 
@@ -423,8 +467,8 @@
     background-image: linear-gradient(
       120deg,
       rgb(from var(--color-primary) r g b / 34%),
-      rgb(255 255 255 / 7%) 42%,
-      rgb(255 255 255 / 5%)
+      rgb(var(--az-sheen) / 7%) 42%,
+      rgb(var(--az-sheen) / 5%)
     );
   }
 
@@ -432,8 +476,8 @@
     background-image: linear-gradient(
       120deg,
       rgb(from var(--color-primary) r g b / 40%),
-      rgb(255 255 255 / 8%) 45%,
-      rgb(255 255 255 / 5%)
+      rgb(var(--az-sheen) / 8%) 45%,
+      rgb(var(--az-sheen) / 5%)
     );
   }
 
@@ -491,4 +535,79 @@
   .az-scroll-x::-webkit-scrollbar {
     display: none;
   }
+}
+
+/*
+ * `@theme` emits the app-specific variables outside the DaisyUI theme layer.
+ * Keep their light counterparts outside that layer too, or the unlayered dark
+ * values win the cascade even when the root carries `data-color-mode=light`.
+ */
+[data-theme="agencyzero"][data-color-mode="light"] {
+  /* Tailwind's `white/N` utilities are translucent chrome in this app. */
+  --color-white: #111827;
+
+  --color-az-title: color-mix(
+    in oklab,
+    var(--color-primary) calc(var(--az-wash) * 0.18),
+    oklch(calc(15% + var(--az-damp)) calc(0.008 * var(--az-tint)) var(--az-hue-text))
+  );
+  --color-az-strong: color-mix(
+    in oklab,
+    var(--color-primary) calc(var(--az-wash) * 0.18),
+    oklch(calc(22% + var(--az-damp)) calc(0.008 * var(--az-tint)) var(--az-hue-text))
+  );
+  --color-az-body: color-mix(
+    in oklab,
+    var(--color-primary) calc(var(--az-wash) * 0.18),
+    oklch(calc(28% + var(--az-damp)) calc(0.009 * var(--az-tint)) var(--az-hue-text))
+  );
+  --color-az-muted: color-mix(
+    in oklab,
+    var(--color-primary) calc(var(--az-wash) * 0.2),
+    oklch(calc(40% + var(--az-damp)) calc(0.01 * var(--az-tint)) var(--az-hue-text))
+  );
+  --color-az-faint: color-mix(
+    in oklab,
+    var(--color-primary) calc(var(--az-wash) * 0.2),
+    oklch(calc(46% + var(--az-damp)) calc(0.01 * var(--az-tint)) var(--az-hue-text))
+  );
+  --color-az-dim: oklch(calc(54% + var(--az-damp)) 0.01 var(--az-hue-text));
+  --color-az-ghost: oklch(calc(62% + var(--az-damp)) 0.01 var(--az-hue-text));
+
+  --color-az-void: color-mix(
+    in oklab,
+    var(--color-primary) calc(var(--az-wash) * 1.2),
+    oklch(calc(88% - var(--az-lift)) 0.003 var(--az-hue))
+  );
+  --color-az-desk: color-mix(
+    in oklab,
+    var(--color-primary) calc(var(--az-wash) * 1.1),
+    oklch(calc(93% - var(--az-lift)) 0.004 var(--az-hue))
+  );
+  --color-az-inset: color-mix(
+    in oklab,
+    var(--color-primary) calc(var(--az-wash) * 1.05),
+    oklch(calc(96% - var(--az-lift)) 0.005 var(--az-hue))
+  );
+  --color-az-tab: oklch(calc(96% - var(--az-lift)) 0.006 var(--az-hue));
+  --color-az-sunken: oklch(calc(94% - var(--az-lift)) 0.004 var(--az-hue));
+  --color-az-hover: oklch(calc(91% - var(--az-lift)) 0.006 var(--az-hue));
+  --color-az-badge: oklch(calc(85% - var(--az-lift)) 0.01 var(--az-hue));
+
+  --color-az-bubble: color-mix(
+    in oklab,
+    var(--color-primary) calc(var(--az-wash) * 1.2),
+    oklch(calc(91% - var(--az-lift)) 0.008 var(--az-hue))
+  );
+  --color-az-bubble-edge: oklch(calc(82% - var(--az-lift)) 0.008 var(--az-hue));
+  --color-az-bubble-text: oklch(calc(18% + var(--az-damp)) 0.008 var(--az-hue-text));
+
+  --color-az-hairline: rgb(17 24 39 / 14%);
+  --color-az-hairline-soft: rgb(17 24 39 / 9%);
+  --color-az-hairline-strong: rgb(17 24 39 / 22%);
+  --color-az-link: #1d4ed8;
+  --color-az-highlight: #0e7490;
+  --color-az-active: #b45309;
+  --color-az-pr: #5b4bb7;
+  --color-az-pr-strong: #49359f;
 }

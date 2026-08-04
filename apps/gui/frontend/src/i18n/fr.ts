@@ -1,0 +1,34 @@
+const fr = {
+  language: {
+    selector: "Sélecteur de langue",
+    current: "Langue actuelle",
+    options: "Options de langue",
+    loading: "Chargement de la langue",
+    label: "Langue",
+    hint: "modifie les libellés de l’interface sur cette installation",
+  },
+  appearance: {
+    title: "Apparence",
+    hint: "mode, taille de l’interface, couleur d’accent et profondeur",
+    mode: "Mode",
+    modeHint: "change toute la palette de l’interface",
+    dark: "Sombre",
+    light: "Clair",
+    size: "Taille de l’interface",
+    sizeHint: "redimensionne ensemble le texte et les contrôles",
+    normal: "Normale",
+    large: "Grande",
+    extraLarge: "Très grande",
+    colourStrength: "Intensité de la couleur",
+    colourStrengthHint: "jusqu’où la couleur choisie atteint les surfaces",
+    softness: "Douceur",
+    softnessHint: "écart des surfaces par rapport au bord de la palette",
+    textBrightness: "Luminosité du texte",
+    textBrightnessHint: "contraste du texte avec la surface",
+    reset: "Réinitialiser",
+    resetHint: "revient à l’accent jaune et aux surfaces par défaut",
+    resetButton: "Utiliser les valeurs par défaut",
+  },
+} as const;
+
+export default fr;

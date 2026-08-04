@@ -14,6 +14,7 @@ const DEFAULTS: UiPrefs = {
   lastModel: "sonnet",
   lastPermission: "read_only",
   uiSize: "large",
+  colorMode: "dark",
   lastExtraThinking: true,
   // Settings starts collapsed: working directories are set once and then left
   // alone, while the other three change while you watch.
@@ -75,6 +76,10 @@ function load(): UiPrefs {
       ...DEFAULTS,
       ...stored,
       uiSize: stored.uiSize && stored.uiSize in UI_SCALES ? stored.uiSize : DEFAULTS.uiSize,
+      colorMode:
+        stored.colorMode === "light" || stored.colorMode === "dark"
+          ? stored.colorMode
+          : DEFAULTS.colorMode,
       panelSections: sections,
       seenSections: [...new Set([...seen, ...RESET_ONCE])],
     };
@@ -106,6 +111,12 @@ createEffect(() => {
   if (typeof document === "undefined") return;
   const scale = UI_SCALES[prefs.uiSize];
   document.documentElement.style.setProperty("--az-ui-scale", String(scale));
+});
+
+createEffect(() => {
+  if (typeof document === "undefined") return;
+  document.documentElement.dataset.colorMode = prefs.colorMode;
+  document.documentElement.style.colorScheme = prefs.colorMode;
 });
 
 export { prefs, setPrefs };

@@ -1,0 +1,34 @@
+const pt = {
+  language: {
+    selector: "Seletor de idioma",
+    current: "Idioma atual",
+    options: "Opções de idioma",
+    loading: "Carregando idioma",
+    label: "Idioma",
+    hint: "altera os rótulos da interface nesta instalação",
+  },
+  appearance: {
+    title: "Aparência",
+    hint: "modo, tamanho da interface, cor de destaque e profundidade",
+    mode: "Modo",
+    modeHint: "alterna a paleta completa da interface",
+    dark: "Escuro",
+    light: "Claro",
+    size: "Tamanho da interface",
+    sizeHint: "dimensiona texto e controles juntos",
+    normal: "Normal",
+    large: "Grande",
+    extraLarge: "Muito grande",
+    colourStrength: "Intensidade da cor",
+    colourStrengthHint: "até onde a cor escolhida alcança as superfícies",
+    softness: "Suavidade",
+    softnessHint: "quanto as superfícies se afastam da borda da paleta",
+    textBrightness: "Brilho do texto",
+    textBrightnessHint: "quanto o texto se destaca da superfície",
+    reset: "Redefinir",
+    resetHint: "volta ao destaque amarelo e às superfícies padrão",
+    resetButton: "Usar o padrão",
+  },
+} as const;
+
+export default pt;

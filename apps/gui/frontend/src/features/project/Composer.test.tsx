@@ -111,6 +111,12 @@ describe("Composer", () => {
     await waitFor(() => expect(field.value).toBe(""));
   });
 
+  it("never shows a horizontal scrollbar in the prompt field", async () => {
+    const { field, booted } = mount();
+    expect(field).toHaveClass("overflow-x-hidden");
+    await booted();
+  });
+
   it("detects authored PromptSyntax even when Advanced leaves the message unchanged", async () => {
     const { field, onSend } = mount();
     type(field, "@model:sonnet Review this");
