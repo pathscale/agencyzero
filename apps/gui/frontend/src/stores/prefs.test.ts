@@ -6,14 +6,12 @@ describe("interface size", () => {
     expect(UI_SCALES).toEqual({ normal: 1, large: 1.08, "extra-large": 1.16 });
   });
 
-  it("applies a picked scale and its viewport-preserving inverse", async () => {
+  it("applies a picked scale without shrinking the viewport twice", async () => {
     setPrefs("uiSize", "extra-large");
     await Promise.resolve();
 
     expect(prefs.uiSize).toBe("extra-large");
     expect(document.documentElement.style.getPropertyValue("--az-ui-scale")).toBe("1.16");
-    expect(Number(document.documentElement.style.getPropertyValue("--az-ui-inverse-scale"))).toBe(
-      1 / 1.16,
-    );
+    expect(document.documentElement.style.getPropertyValue("--az-ui-inverse-scale")).toBe("");
   });
 });
