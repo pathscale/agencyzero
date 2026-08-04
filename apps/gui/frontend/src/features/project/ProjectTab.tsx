@@ -540,7 +540,9 @@ function QuestionChip(props: { question: Question }): JSX.Element {
   const tone = () => TONE[props.question.urgency] ?? TONE.blocking;
 
   return (
-    <div class={`flex items-start gap-2.5 rounded-[11px] border px-3 py-2 text-[12px] ${tone().border}`}>
+    <div
+      class={`flex items-start gap-2.5 rounded-[11px] border px-3 py-2 text-[12px] ${tone().border}`}
+    >
       <Icon name="messages-square" class={`relative top-0.5 shrink-0 text-[14px] ${tone().icon}`} />
       <div class="flex min-w-0 flex-1 flex-col gap-1">
         <div class="flex items-baseline gap-2">
