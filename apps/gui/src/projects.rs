@@ -1093,8 +1093,16 @@ fn state_snapshot(
         crate::directives::SURFACE.bound
     );
     out.push_str(&declared);
+    /*
+     * The directive templates, next to the live ids they act on. The surface is
+     * explained in the per-turn operating instructions (`crate::per_turn`); what
+     * belongs here is the shape to copy, beside the actual rows above. Kept even
+     * when that injection is toggled off, so a scaffold is always at hand — but
+     * not re-explained, which is what duplicated into two layers that drifted.
+     */
     out.push_str(
-        "\nSay so with a directive on its own line, as it happens rather than at the end:\n\
+        "\nAuthor these on their own line, as it happens rather than at the end. \
+         Statuses you may set: new, planning, active, questions, shipped.\n\
          <ps @agency:items.state(id: \"<id>\", status: \"active\")>\n\
          <ps @agency:items.state(id: \"<id>\", status: \"shipped\", pr: \"https://github.com/owner/repo/pull/66\")>\n\
          <ps @agency:items.add(ref: \"t1\", title: \"<one line>\", status: \"planning\")>\n\
@@ -1103,18 +1111,7 @@ fn state_snapshot(
          <ps @agency:ask(text: \"<your question>\", urgency: \"blocking\")>\n\
          <ps @agency:pr.link(url: \"https://github.com/owner/repo/pull/66\", item: \"<id>\")>\n\
          <ps @agency:pr.retire(id: \"<pr association id>\")>\n\
-         <ps @agency:issue.link(url: \"https://github.com/owner/repo/issues/42\", item: \"<id>\")>\n\
-         Statuses you may set: new, planning, active, questions, shipped. `questions` \
-         means you are stopped on something only the owner can answer. `finished` and \
-         `canceled` are refused: the owner closes a row. An id may be shortened to any \
-         unique prefix. Repeating a state you already reported is free.\n\
-         When you open a pull request, report it with `pr.link` in that same turn, so \
-         it appears here rather than only on GitHub. A PR you opened and did not link \
-         is one the owner cannot see. Same for one you merged that was never linked.\n\
-         Ask the owner a question with `ask`: `text` is the question, `urgency` is \
-         critical (answer now), blocking (you cannot proceed until answered), or \
-         passive (answer when free, you keep working). Add `reference` with an issue \
-         URL or item id when the question is about one.",
+         <ps @agency:issue.link(url: \"https://github.com/owner/repo/issues/42\", item: \"<id>\")>",
     );
     out
 }
@@ -4748,6 +4745,33 @@ async fn drive_run(
              precedence over your own defaults wherever the two disagree:\n\n",
         );
         system.push_str(rules.trim());
+    }
+
+    /*
+     * The app's own per-turn operating instructions: how to use the Prompt
+     * Syntax surface and the obligations that come with it. Unlike `AgencyZero.md`
+     * above, which is read from the run's cwd and so is present only for a
+     * project whose checkout ships one, these reach every project — the surface
+     * is the app's, and an agent told nothing about it cannot author it. Carried
+     * here, in the system prompt, so a compaction cannot lose them.
+     *
+     * On by default, and a user file overrides the built-in text without a
+     * rebuild; the toggle is the deliberate off. See `crate::per_turn`.
+     */
+    let inject_per_turn = tables
+        .kv_get(crate::settings::KEY)
+        .and_then(|raw| serde_json::from_str::<crate::settings::GlobalSettings>(&raw).ok())
+        .unwrap_or_default()
+        .per_turn_injection;
+    if inject_per_turn {
+        let config_dir = app.state::<crate::AppState>().config_dir.clone();
+        let instructions = crate::per_turn::instructions(&config_dir);
+        if !instructions.trim().is_empty() {
+            if !system.is_empty() {
+                system.push_str("\n\n");
+            }
+            system.push_str(instructions.trim());
+        }
     }
 
     if !notes.trim().is_empty() {

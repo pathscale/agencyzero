@@ -334,6 +334,18 @@ export function SettingsTab(): JSX.Element {
                   />
                 </Row>
                 <Row
+                  label={tx("Inject AgencyZero and Prompt Syntax per turn")}
+                  hint={tx(
+                    "extended features (items, questions, PR tracking); override with AgencyZeroPerTurn.md",
+                  )}
+                >
+                  <SettingToggle
+                    label={tx("Inject AgencyZero and Prompt Syntax per turn")}
+                    checked={current().perTurnInjection}
+                    onChange={(perTurnInjection) => void actions.saveSettings({ perTurnInjection })}
+                  />
+                </Row>
+                <Row
                   label={tx("Permission posture")}
                   hint={tx("read_only is the crate default; widen deliberately")}
                   isLast

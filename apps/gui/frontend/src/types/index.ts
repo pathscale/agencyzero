@@ -510,6 +510,13 @@ export interface GlobalSettings {
   theme: ThemeSettings;
   /** Off by default; events stay local until an explicit export. */
   studyAnalytics: StudyAnalyticsSettings;
+  /**
+   * Inject the AgencyZero + Prompt Syntax operating instructions into every
+   * turn. On by default: the app's items, questions, and PR tracking only work
+   * if the agent is told the surface. A user file `AgencyZeroPerTurn.md` in the
+   * config directory overrides the built-in text.
+   */
+  perTurnInjection: boolean;
 }
 
 /**

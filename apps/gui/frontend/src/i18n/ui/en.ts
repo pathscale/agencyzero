@@ -44,6 +44,9 @@ const en = {
   "Default effort": "Default effort",
   "Completed items": "Completed items",
   "what marking an item finished does to the row": "what marking an item finished does to the row",
+  "Inject AgencyZero and Prompt Syntax per turn": "Inject AgencyZero and Prompt Syntax per turn",
+  "extended features (items, questions, PR tracking); override with AgencyZeroPerTurn.md":
+    "extended features (items, questions, PR tracking); override with AgencyZeroPerTurn.md",
   "Permission posture": "Permission posture",
   "read_only is the crate default; widen deliberately":
     "read_only is the crate default; widen deliberately",
