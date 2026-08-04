@@ -23,9 +23,9 @@ checksum = "320119579fcad9c21884f5c4861d16174d0e06250625266f50fe6898340abefa"
 
 [[package]]
 name = "agent-abstraction"
-version = "0.4.8"
+version = "0.4.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "023cf8995dddf61c3f86bff7425ef2b76b4d8e338821871f9c65e21297800a9b"
+checksum = "f7f08ef1def4d601e352a12b54c5e23aab4cdbbf36ccc90810dd7b0cd2724e2d"
 dependencies = [
  "libc",
  "serde",
@@ -173,25 +173,25 @@ checksum = "f2032f911046de80f0a198e0901378627c33f59ea0ac00e363d481118bd70a53"
 
 [[package]]
 name = "az-agent"
-version = "0.1.74"
+version = "0.1.75"
 dependencies = [
  "az-core",
 ]
 
 [[package]]
 name = "az-agent-proxy"
-version = "0.1.74"
+version = "0.1.75"
 dependencies = [
  "az-core",
 ]
 
 [[package]]
 name = "az-core"
-version = "0.1.74"
+version = "0.1.75"
 
 [[package]]
 name = "az-gui"
-version = "0.1.74"
+version = "0.1.75"
 dependencies = [
  "agent-abstraction",
  "agent-experimental",
@@ -216,7 +216,7 @@ dependencies = [
 
 [[package]]
 name = "az-mcp-proxy"
-version = "0.1.74"
+version = "0.1.75"
 dependencies = [
  "az-core",
 ]
@@ -902,7 +902,7 @@ dependencies = [
  "libc",
  "option-ext",
  "redox_users 0.5.2",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -1078,7 +1078,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -1944,7 +1944,7 @@ checksum = "3640c1c38b8e4e43584d8df18be5fc6b0aa314ce6ebf51b53313d4306cca8e46"
 dependencies = [
  "hermit-abi",
  "libc",
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -2262,7 +2262,7 @@ dependencies = [
  "png 0.18.1",
  "serde",
  "thiserror 2.0.19",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -3297,7 +3297,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys",
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -3353,7 +3353,7 @@ dependencies = [
  "security-framework",
  "security-framework-sys",
  "webpki-root-certs",
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -3496,7 +3496,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5b55fb86dfd3a2f5f76ea78310a88f96c4ea21a3031f8d212443d56123fd0521"
 dependencies = [
  "libc",
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -3771,7 +3771,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c3d1e2c7f27f8d4cb10542a02c49005dbd6e93095799d6f3be745fae9f8fedd4"
 dependencies = [
  "libc",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -4326,10 +4326,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "32497e9a4c7b38532efcdebeef879707aa9f794296a4f0244f6f69e9bc8574bd"
 dependencies = [
  "fastrand",
- "getrandom 0.3.4",
+ "getrandom 0.4.3",
  "once_cell",
  "rustix",
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -4713,7 +4713,7 @@ dependencies = [
  "png 0.18.1",
  "serde",
  "thiserror 2.0.19",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -5124,7 +5124,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -5671,7 +5671,7 @@ dependencies = [
 
 [[package]]
 name = "wt-migrate"
-version = "0.1.74"
+version = "0.1.75"
 dependencies = [
  "derive_more 2.1.1",
  "eyre",
@@ -5686,7 +5686,7 @@ dependencies = [
 
 [[package]]
 name = "wt-tools"
-version = "0.1.74"
+version = "0.1.75"
 dependencies = [
  "derive_more 2.1.1",
  "dirs",
