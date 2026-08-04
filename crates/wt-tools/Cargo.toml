@@ -6,7 +6,7 @@ edition.workspace = true
 publish.workspace = true
 
 [dependencies]
-worktable = { git = "https://github.com/pathscale/WorkTable", rev = "31ade5f060c6ebe68670c8697ce78b28deca4731" }
+worktable = { git = "https://github.com/pathscale/WorkTable", rev = "37cf28822cf7910d01ba738669b6a23fceeba1fb" }
 # The `worktable!` macro emits code that names these by bare path rather than
 # through a re-export, so a consumer of the macro has to declare them too.
 # Versions match worktable 1.0 beta's own, since a mismatch produces errors that name
