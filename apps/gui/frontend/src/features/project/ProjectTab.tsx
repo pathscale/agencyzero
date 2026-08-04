@@ -18,7 +18,7 @@ import {
 } from "~/lib/stats";
 import { tx } from "~/stores/i18n";
 import { QUEUE_REASONS, useNow, useWorkspace } from "~/stores/workspace";
-import type { Project, PullRequest, Tab } from "~/types";
+import type { Project, PullRequest, Question, Tab } from "~/types";
 
 /**
  * A project tab: the conversation on the left, the accordion on the right.
@@ -254,6 +254,21 @@ export function ProjectTab(props: { tab: Tab; project: Project }): JSX.Element {
         />
 
         <div class="flex flex-none flex-col gap-2.5 px-4 pt-2 pb-4">
+          {/* Questions an agent raised, above the PR chips because a question
+              waiting is the owner's to answer before anything else here. */}
+          <Show
+            when={(state.questions[props.project.id] ?? []).some((question) => !question.answered)}
+          >
+            <div class="flex flex-col gap-1">
+              <For
+                each={(state.questions[props.project.id] ?? []).filter(
+                  (question) => !question.answered,
+                )}
+              >
+                {(question) => <QuestionChip question={question} />}
+              </For>
+            </div>
+          </Show>
           {/* PRs this project's runs have cut, tracked like Claude Desktop's
               chips: state, diff stats, CI — with a way to wave each away. */}
           <Show when={(state.pullRequests[props.project.id] ?? []).some((pr) => !pr.dismissed)}>
@@ -489,6 +504,63 @@ function PrChip(props: { pr: PullRequest }): JSX.Element {
         class="shrink-0 text-az-faint transition-colors hover:text-base-content"
       >
         <Icon name="x" class="text-[13px]" />
+      </button>
+    </div>
+  );
+}
+
+/**
+ * A question an agent raised, held over the composer until the owner answers.
+ *
+ * Urgency picks the tone: `critical` is red and loud (answer now), `blocking`
+ * is amber-warning (the run is stopped until answered), `passive` is muted
+ * (answer when free, the agent keeps working). "Answer" marks it resolved and
+ * clears the chip; the row stays in the store as history.
+ */
+function QuestionChip(props: { question: Question }): JSX.Element {
+  const { actions } = useWorkspace();
+
+  const TONE: Record<Question["urgency"], { border: string; icon: string; label: string }> = {
+    critical: {
+      border: "border-error/45 bg-error/10",
+      icon: "text-error",
+      label: tx("Critical"),
+    },
+    blocking: {
+      border: "border-warning/40 bg-warning/9",
+      icon: "text-warning",
+      label: tx("Blocking"),
+    },
+    passive: {
+      border: "border-az-hairline bg-az-inset",
+      icon: "text-az-muted",
+      label: tx("When free"),
+    },
+  };
+  const tone = () => TONE[props.question.urgency] ?? TONE.blocking;
+
+  return (
+    <div class={`flex items-start gap-2.5 rounded-[11px] border px-3 py-2 text-[12px] ${tone().border}`}>
+      <Icon name="messages-square" class={`relative top-0.5 shrink-0 text-[14px] ${tone().icon}`} />
+      <div class="flex min-w-0 flex-1 flex-col gap-1">
+        <div class="flex items-baseline gap-2">
+          <span class={`shrink-0 font-semibold text-[11px] ${tone().icon}`}>{tone().label}</span>
+          <Show when={props.question.issueUrl}>
+            <span class="shrink-0 truncate text-[11px] text-az-muted">
+              {props.question.issueUrl}
+            </span>
+          </Show>
+        </div>
+        <span data-selectable class="whitespace-pre-wrap break-words text-az-strong">
+          {props.question.text}
+        </span>
+      </div>
+      <button
+        type="button"
+        onClick={() => void actions.answerQuestion(props.question.id, true)}
+        class="shrink-0 rounded-lg bg-primary px-[11px] py-[4px] font-semibold text-[11.5px] text-primary-content transition-colors hover:bg-az-primary-hover"
+      >
+        {tx("Answer")}
       </button>
     </div>
   );

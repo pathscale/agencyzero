@@ -32,6 +32,7 @@ import type {
   ProjectItem,
   ProjectStatus,
   PullRequest,
+  Question,
   QuotaReport,
   RateLimit,
   RunningTask,
@@ -57,6 +58,8 @@ type WorkspaceState = {
   taskLog: Record<string, TaskLogEntry[]>;
   /** PRs cut during runs, per project, dismissed rows included. */
   pullRequests: Record<string, PullRequest[]>;
+  /** Questions an agent raised, per project, answered ones included. */
+  questions: Record<string, Question[]>;
   logTotals: Record<string, number>;
   /** The raw exchange with the agent, per project. Diagnostic, not persisted. */
   agentIo: Record<string, AgentIoEntry[]>;
@@ -296,6 +299,7 @@ function createWorkspace() {
     running: {},
     taskLog: {},
     pullRequests: {},
+    questions: {},
     logTotals: {},
     agentIo: {},
     rateLimits: {},
@@ -440,6 +444,19 @@ function createWorkspace() {
         ? "error"
         : "blocked";
     }
+
+    /*
+     * An `@agency:ask` the owner has not answered. `critical` is the run
+     * shouting for help now and reads as an error; `blocking` is the run
+     * stopped until answered and reads as blocked. Both outrank a live tool
+     * call — a question waiting is more urgent than work in flight — but not a
+     * moderation hold above, which has already stopped the run for safety.
+     * `passive` is "answer when free, I keep working", so it does not gate the
+     * dot and falls through to the running/ready state below.
+     */
+    const open = (state.questions[projectId] ?? []).filter((question) => !question.answered);
+    if (open.some((question) => question.urgency === "critical")) return "error";
+    if (open.some((question) => question.urgency === "blocking")) return "blocked";
     /*
      * Only a limit that actually refused something counts as blocked. The
      * provider also emits an "allowed" heartbeat mid-run, and treating that as a
@@ -466,16 +483,6 @@ function createWorkspace() {
      * status is what tells them apart: `active` is waiting on you, anything else
      * is done or not started.
      */
-    // `questions` is the run stopping on something only the owner can answer,
-    // signalled by `items.state(... questions)` — an item status, not the
-    // project's. A background tab with an unanswered question is a stalled run,
-    // so it calls for attention in red like a tool hold rather than sitting
-    // quiet. Checked here, not on `project.status`, because that is set by a
-    // different command and an agent stops by moving an item, not the project.
-    if ((state.items[projectId] ?? []).some((item) => item.status === "questions")) {
-      return "blocked";
-    }
-
     const project = state.projects.find((candidate) => candidate.id === projectId);
     return project?.status === "active" ? "ready" : "quiet";
   }
@@ -552,13 +559,14 @@ function createWorkspace() {
 
   async function loadProject(projectId: string): Promise<void> {
     const backend = client();
-    const [items, messages, running, log, io, prs] = await Promise.all([
+    const [items, messages, running, log, io, prs, questions] = await Promise.all([
       backend.listItems(projectId),
       backend.listMessages(projectId),
       backend.listRunningTasks(projectId),
       backend.listTaskLog(projectId, TASK_LOG_PAGE),
       backend.listAgentIo(projectId),
       backend.listPullRequests(projectId),
+      backend.listQuestions(projectId),
     ]);
     const project = state.projects.find((candidate) => candidate.id === projectId);
     const hydratedTab = project ? projectTab(project, messages) : null;
@@ -570,6 +578,7 @@ function createWorkspace() {
       setState("logTotals", projectId, log.total);
       setState("agentIo", projectId, reconcile(io));
       setState("pullRequests", projectId, reconcile(prs));
+      setState("questions", projectId, reconcile(questions));
       if (hydratedTab) {
         const tabIndex = state.tabs.findIndex((tab) => tab.key === projectId);
         if (tabIndex >= 0) {
@@ -899,6 +908,16 @@ function createWorkspace() {
         if (index < 0) return [...list, pr];
         const next = [...list];
         next[index] = pr;
+        return next;
+      });
+    });
+
+    await bind("question:updated", (question) => {
+      setState("questions", question.projectId, (list = []) => {
+        const index = list.findIndex((existing) => existing.id === question.id);
+        if (index < 0) return [...list, question];
+        const next = [...list];
+        next[index] = question;
         return next;
       });
     });
@@ -1725,6 +1744,7 @@ function createWorkspace() {
     chooseAttachments: () => client().chooseAttachments(),
     dismissPullRequest: (id: string) => client().dismissPullRequest(id),
     refreshPullRequest: (id: string) => client().refreshPullRequest(id),
+    answerQuestion: (id: string, answered = true) => client().answerQuestion(id, answered),
     /** Drop one queued prompt — second thoughts are allowed while it waits. */
     removeQueued(projectId: string, index: number) {
       setState("queued", projectId, (waiting = []) =>

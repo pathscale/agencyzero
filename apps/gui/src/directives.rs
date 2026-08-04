@@ -64,6 +64,7 @@ pub const SURFACE: Surface = Surface {
         "items.state",
         "items.add",
         "items.retire",
+        "ask",
         "pr.link",
         "pr.retire",
         "issue.link",
@@ -119,6 +120,17 @@ pub enum Directive {
         number: Option<String>,
         item: Option<String>,
     },
+    /// Raise a question for the owner, tracked as a chip over the composer.
+    ///
+    /// `text` is the question itself. `urgency` is how badly it is needed:
+    /// `critical`, `blocking`, or `passive`; a missing or unknown value defaults
+    /// to `blocking`, the safe middle. `reference` is optional context for the
+    /// IDE: a GitHub issue URL (an `https://` prefix) or a bare item id.
+    Ask {
+        text: String,
+        urgency: String,
+        reference: Option<String>,
+    },
     /// Remove one tracked pull-request association by its AgencyZero id.
     PrRetire { id: String },
     /// Associate one item with a GitHub issue URL.
@@ -141,6 +153,7 @@ impl Directive {
             Self::ItemState { .. } => "items.state",
             Self::ItemAdd { .. } => "items.add",
             Self::ItemRetire { .. } => "items.retire",
+            Self::Ask { .. } => "ask",
             Self::PrLink { .. } => "pr.link",
             Self::PrRetire { .. } => "pr.retire",
             Self::IssueLink { .. } => "issue.link",
@@ -263,6 +276,25 @@ fn from_reference(reference: &Reference) -> Option<Directive> {
     if verb.eq_ignore_ascii_case("items.retire") {
         let id = arg(args, "id")?;
         return (!id.is_empty()).then_some(Directive::ItemRetire { id });
+    }
+    if verb.eq_ignore_ascii_case("ask") {
+        let text = arg(args, "text")?;
+        return (!text.is_empty()).then(|| Directive::Ask {
+            text,
+            // Normalized to one of the three levels; anything else, including a
+            // missing value, becomes `blocking` — a question that does not say
+            // how urgent it is should not be silently treated as ignorable.
+            urgency: match arg(args, "urgency")
+                .unwrap_or_default()
+                .to_ascii_lowercase()
+                .as_str()
+            {
+                "critical" => "critical".to_string(),
+                "passive" => "passive".to_string(),
+                _ => "blocking".to_string(),
+            },
+            reference: arg(args, "reference").filter(|reference| !reference.is_empty()),
+        });
     }
     if verb.eq_ignore_ascii_case("pr.link") {
         let url = arg(args, "url").filter(|url| !url.is_empty());
@@ -570,6 +602,46 @@ mod tests {
         );
         assert!(parse(r#"<ps @agency:items.retire(title: "Some row")>"#).is_none());
         assert!(parse(r#"<ps @agency:items.retire(id: "")>"#).is_none());
+    }
+
+    #[test]
+    fn ask_carries_text_a_normalized_urgency_and_an_optional_reference() {
+        assert_eq!(
+            parse(r#"<ps @agency:ask(text: "Fork codex?", urgency: "critical")>"#),
+            Some(Directive::Ask {
+                text: "Fork codex?".into(),
+                urgency: "critical".into(),
+                reference: None,
+            })
+        );
+        // A missing or unknown urgency is not silently ignorable: it becomes
+        // blocking, the safe middle.
+        assert_eq!(
+            parse(r#"<ps @agency:ask(text: "What now?")>"#),
+            Some(Directive::Ask {
+                text: "What now?".into(),
+                urgency: "blocking".into(),
+                reference: None,
+            })
+        );
+        assert_eq!(
+            parse(r#"<ps @agency:ask(text: "x", urgency: "whenever")>"#)
+                .map(|d| matches!(d, Directive::Ask { urgency, .. } if urgency == "blocking")),
+            Some(true)
+        );
+        // A reference rides along, URL or bare id, untouched at parse time.
+        assert_eq!(
+            parse(
+                r#"<ps @agency:ask(text: "About #42?", urgency: "passive", reference: "https://github.com/o/r/issues/42")>"#
+            ),
+            Some(Directive::Ask {
+                text: "About #42?".into(),
+                urgency: "passive".into(),
+                reference: Some("https://github.com/o/r/issues/42".into()),
+            })
+        );
+        // No text is no question.
+        assert!(parse(r#"<ps @agency:ask(urgency: "critical")>"#).is_none());
     }
 
     #[test]

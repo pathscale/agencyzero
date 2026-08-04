@@ -20,6 +20,7 @@ use crate::db::schema::message::{MessagePersistenceEngine, MessageWorkTable};
 use crate::db::schema::project::{ProjectPersistenceEngine, ProjectWorkTable};
 use crate::db::schema::project_item::{ProjectItemPersistenceEngine, ProjectItemWorkTable};
 use crate::db::schema::pull_request::{PullRequestPersistenceEngine, PullRequestWorkTable};
+use crate::db::schema::question::{QuestionPersistenceEngine, QuestionWorkTable};
 use crate::db::schema::study_event::{StudyEventPersistenceEngine, StudyEventWorkTable};
 use crate::db::schema::task_log::{TaskLogPersistenceEngine, TaskLogWorkTable};
 use crate::db::schema::usage_ledger::{UsageLedgerPersistenceEngine, UsageLedgerWorkTable};
@@ -48,6 +49,8 @@ pub struct Tables {
     pub approval_rule: Arc<ApprovalRuleWorkTable>,
     /// One row per PR cut during a run. See `schema/pull_request.rs`.
     pub pull_request: Arc<PullRequestWorkTable>,
+    /// One row per question an agent raised. See `schema/question.rs`.
+    pub question: Arc<QuestionWorkTable>,
     /// Content-free records from an explicitly enabled deployment study.
     pub study_event: Arc<StudyEventWorkTable>,
 }
@@ -90,6 +93,7 @@ impl Tables {
             usage_ledger: open!(UsageLedgerPersistenceEngine, UsageLedgerWorkTable),
             approval_rule: open!(ApprovalRulePersistenceEngine, ApprovalRuleWorkTable),
             pull_request: open!(PullRequestPersistenceEngine, PullRequestWorkTable),
+            question: open!(QuestionPersistenceEngine, QuestionWorkTable),
             study_event: open!(StudyEventPersistenceEngine, StudyEventWorkTable),
         })
     }
