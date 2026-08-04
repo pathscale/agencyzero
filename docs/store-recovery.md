@@ -6,18 +6,21 @@ migration plus a second writer turned every launch into a silent bus error.
 
 ## The engine bug at the bottom of it
 
-Four corruptions in two days, and the fourth finally named the disease:
-**WorkTable cannot grow a loaded table's primary index file. When the index
-is at capacity, the next append writes past the mapping instead of refusing
-— SIGBUS, torn table.** The evidence is a signature: a table dies with its
-`primary.wt.idx` frozen at the size it was loaded with while `.wt.data`
-kept growing (task_log died at exactly 229376, message at exactly 65536),
-and the same rows rebuilt into a fresh table get a larger index with
-headroom and work again. Tables built up from empty in one process grow
-their indexes fine; tables *loaded* from disk cannot. The fix belongs
-upstream in worktable. Until it lands, every table in this store is a
-countdown to its own index capacity, and the tooling below is how time is
-bought and data is kept.
+The August 4 message failure isolated a second loaded-index defect:
+**WorkTable forgot the physical fragmentation in a variable-width index page
+when reconstructing its in-memory node after restart.** The message project
+index had 174 live entries and 2,664 bytes left by deleted entries. After a
+restart, 20 new entries were admitted using only the compact live size. The
+growing slot directory then overlapped the values stored at the page tail by
+64 bytes. The store continued to work from its intact in-memory index and
+failed validation only on the next launch.
+
+The upstream fix counts slot metadata when deciding to split and compacts a
+fragmented page before its slot directory can reach the tail values. The
+regression reproduces the exact 211 inserts, 37 deletes, restart, and 20
+inserts sequence. This is independent from the earlier loaded-primary growth
+bug and requires the same rule: repair indexes by rebuilding rows into a
+fresh table, never by copying the damaged index file.
 
 ## The rules, before anything else
 
@@ -111,7 +114,11 @@ prevented at the insert, and repaired by rebuild, never by copy.
 read-only and locked, target must be new, report printed.
 `wt-migrate rebuild-task-log <source> <target>` reads every task-log row out
 of a damaged-but-readable store and inserts them into a brand-new table in
-the target — the only form of copy that sheds poisoned page accounting.
+the target. `wt-migrate recover-task-log-index <source> <target>` rebuilds a
+task log when its primary index is damaged but its project index survives.
+`wt-migrate recover-message-index <source> <target>` rebuilds messages when
+their project index is damaged but the authoritative primary index survives.
+These commands validate every recovered row and never modify the source.
 `wt-tools` reads any store read-only for inspection (`AZ_DATA_DIR=<dir>
 wt-tools list-messages`). None will ever write into a store the GUI has
 open; the lock sees to it.
@@ -132,11 +139,11 @@ booted fine, and died on the first append of the next session — the caps
 shipped that morning were working, and the mine was already in the ground.
 The rebuild verbs exist so that repair is never done by copy again.
 
-The fourth corruption named the mine. With every cap in place, a clean
-session appended one 1K message row and the store died: `message`'s
-`primary.wt.idx` had been sitting at exactly 65536 bytes — loaded capacity
-— while its data file grew, the same frozen-index signature `task_log`
-showed at its own death (229376). The oversized-insert refusals were never
-the killer; index growth on a loaded table is. That is the engine bug at
-the top of this file, and until it is fixed upstream the whole-store
-rebuild is the periodic cure.
+The fourth corruption exposed loaded-primary growth: `message`'s
+`primary.wt.idx` stayed at exactly 65536 bytes while its data file grew, the
+same frozen-index signature `task_log` showed at 229376 bytes. The next
+incident had a different signature. Its message primary index and every row
+link validated, while `project_idx.wt.idx` had physically overlapping
+metadata and tail values. Raw bytes, a field-by-field validator, and the
+deterministic fragmentation regression identified the restart accounting bug
+described at the top of this file.
