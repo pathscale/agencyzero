@@ -63,6 +63,7 @@ export function createTauriApi(): AgencyZeroApi {
     listPullRequests: (projectId) => call("list_pull_requests", { projectId }),
     dismissPullRequest: (id) => call("dismiss_pull_request", { id }),
     refreshPullRequest: (id) => call("refresh_pull_request", { id }),
+    discoverPullRequests: (projectId) => call("discover_pull_requests", { projectId }),
 
     listMessages: (projectId) => call("list_messages", { projectId }),
     sendMessage: (input) => call("send_message", { input }),

@@ -615,6 +615,19 @@ pub async fn dismiss_pull_request(
     Ok(())
 }
 
+/// Discover a project's open pull requests, whether or not a row exists yet.
+///
+/// `refresh_pull_request` needs a row id, so it can only re-ask about a PR the
+/// panel already knows. A project opened fresh has no rows, so nothing asked
+/// `gh` about the branches it has already pushed, and a PR appeared only after
+/// an authored `pr.link` named it. This asks by project: `refresh_project`
+/// reads the project's git remotes and inserts any open PR it finds, so a chip
+/// shows up because the PR exists, not because someone pasted its URL.
+#[tauri::command]
+pub fn discover_pull_requests(app: AppHandle, project_id: String) {
+    refresh_project(app, project_id);
+}
+
 /// Ask `gh` again, for the refresh affordance on the chip.
 #[tauri::command]
 pub fn refresh_pull_request(app: AppHandle, id: String) {

@@ -467,6 +467,11 @@ function createWorkspace() {
      * is done or not started.
      */
     const project = state.projects.find((candidate) => candidate.id === projectId);
+    // `questions` is the run stopping on something only the owner can answer.
+    // It is red like a tool hold, not a quiet idle state: a project waiting on
+    // you must call for attention from a background tab, the same way an
+    // approval does — an unseen question is a stalled run.
+    if (project?.status === "questions") return "blocked";
     return project?.status === "active" ? "ready" : "quiet";
   }
 
@@ -575,7 +580,15 @@ function createWorkspace() {
      * Ask about this project's open pull requests now rather than at the next
      * tick. Opening a tab is exactly when the rows are read, and a stored row
      * is only as current as the last time anyone asked.
+     *
+     * `refreshOpenPullRequests` only re-asks about rows that already exist, so a
+     * project opened with none discovered nothing and a freshly-pushed PR showed
+     * up only after an authored `pr.link`. `discoverPullRequests` asks by
+     * project — the backend reads its git remotes and inserts any open PR it
+     * finds — so a chip appears because the PR exists, not because its URL was
+     * pasted.
      */
+    if (isLive("discoverPullRequests")) void client().discoverPullRequests(projectId);
     refreshOpenPullRequests(projectId);
   }
 
