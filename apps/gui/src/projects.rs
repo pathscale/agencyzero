@@ -1108,6 +1108,9 @@ fn state_snapshot(
          means you are stopped on something only the owner can answer. `finished` and \
          `canceled` are refused: the owner closes a row. An id may be shortened to any \
          unique prefix. Repeating a state you already reported is free.\n\
+         When you open a pull request, report it with `pr.link` in that same turn, so \
+         it appears here rather than only on GitHub. A PR you opened and did not link \
+         is one the owner cannot see. Same for one you merged that was never linked.\n\
          Ask the owner a question with `ask`: `text` is the question, `urgency` is \
          critical (answer now), blocking (you cannot proceed until answered), or \
          passive (answer when free, you keep working). Add `reference` with an issue \
