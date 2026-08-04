@@ -4686,7 +4686,42 @@ async fn drive_run(
             crate::tasks::OUTPUT_CONTRACT
         )
     } else {
-        prompt
+        /*
+         * The item/PR list and the last turn's directive receipts ride the user
+         * turn, not the system prompt.
+         *
+         * They change every turn, and a system prompt that changes every turn
+         * never caches: on a long conversation Claude then re-bills the whole
+         * history at full input price instead of the cache read it should be,
+         * which the "cache miss?" chip has been flagging. Regenerated fresh from
+         * the store each turn, this needs no compaction survival — so it belongs
+         * where changing content is cheap, leaving the system prompt stable and
+         * cacheable.
+         */
+        let snapshot = state_snapshot(&tables, &project_id, item_id.as_deref());
+        let receipts_line = receipts
+            .lock()
+            .ok()
+            .and_then(|kept| kept.get(&project_id).cloned())
+            .filter(|lines| !lines.is_empty())
+            .map(|said| format!("\n\nYour last turn's directives:\n  {}", said.join("\n  ")))
+            .unwrap_or_default();
+        // The account-usage warning, which climbs every turn: also a per-turn
+        // fact, so it rides here rather than in the cached system prompt.
+        let usage_line = limits
+            .lock()
+            .ok()
+            .and_then(|kept| kept.get(&(project_id.clone(), agent)).cloned())
+            .map(|usage| {
+                format!(
+                    "\n\nAccount usage, as the provider last reported it: {}. This is not a \
+                     refusal; it is a warning that the window is filling. Prefer fewer and \
+                     cheaper turns, and say so if you are about to do something expensive.",
+                    usage.sentence()
+                )
+            })
+            .unwrap_or_default();
+        format!("{prompt}\n\n{snapshot}{receipts_line}{usage_line}")
     };
 
     // Kept for the I/O panel before the builder consumes them, so the "sent"
@@ -4843,47 +4878,17 @@ async fn drive_run(
      * rather than persisted: it is a fact about an account right now, and one
      * restored from disk a day later would be read as current.
      */
-    if let Some(usage) = limits
-        .lock()
-        .ok()
-        .and_then(|kept| kept.get(&(project_id.clone(), agent)).cloned())
-    {
-        if !system.is_empty() {
-            system.push_str("\n\n");
-        }
-        system.push_str(&format!(
-            "Account usage, as the provider last reported it: {}. This is not a \
-             refusal; it is a warning that the window is filling. Prefer fewer and \
-             cheaper turns, and say so if you are about to do something expensive.",
-            usage.sentence()
-        ));
-    }
-
     /*
-     * The list, by id, and what became of the last turn's directives.
+     * The account-usage sentence also changes every turn (the figures climb),
+     * so it too rides the user turn now (built above with `prompt`) rather than
+     * busting the system-prompt cache here.
      *
-     * Both go last, closest to the work. The snapshot is what makes a state
-     * report possible at all: the agent was previously asked to maintain a
-     * list it had never been shown. The receipt is what makes a failed report
-     * correctable, since a rejection reaches the only party that can reissue
-     * it. Without it a dropped write is indistinguishable from one that
-     * landed, which is the failure this path exists to remove.
+     * The item/PR list and last turn's receipts used to be appended here, but
+     * they change every turn and a system prompt that changes every turn never
+     * caches. They now ride the user turn (built above with `prompt`), leaving
+     * this system prompt static across a conversation and so cacheable: the
+     * history is then read from cache rather than re-billed in full each turn.
      */
-    if !system.is_empty() {
-        system.push_str("\n\n");
-    }
-    system.push_str(&state_snapshot(&tables, &project_id, item_id.as_deref()));
-
-    if let Some(said) = receipts
-        .lock()
-        .ok()
-        .and_then(|kept| kept.get(&project_id).cloned())
-        .filter(|lines| !lines.is_empty())
-    {
-        system.push_str("\n\nYour last turn's directives:\n  ");
-        system.push_str(&said.join("\n  "));
-    }
-
     if !system.is_empty() {
         request = request.system(system);
     }
