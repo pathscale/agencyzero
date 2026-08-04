@@ -227,4 +227,12 @@ describe("light mode", () => {
     expect(CSS).toContain("--az-sheen: 17 24 39;");
     expect(CSS).not.toMatch(/rgb\(255 255 255 \/ 0\.1[25]\)/);
   });
+
+  it("animates the composer edge slowly and respects the selected accent", () => {
+    const rule = CSS.match(/\.az-ring-composer\s*\{([\s\S]*?)\n {2}\}/)?.[1] ?? "";
+
+    expect(rule).toContain("var(--color-primary)");
+    expect(rule).toContain("12s ease-in-out");
+    expect(CSS).toContain("@keyframes az-composer-ring-drift");
+  });
 });

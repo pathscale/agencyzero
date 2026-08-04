@@ -1,5 +1,6 @@
 import { createMemo, type JSX, Show } from "solid-js";
 import { Icon } from "~/components/Icon";
+import { tx } from "~/stores/i18n";
 import { useWorkspace } from "~/stores/workspace";
 
 export type CloseConfirmProps = {
@@ -45,29 +46,38 @@ export function CloseConfirm(props: CloseConfirmProps): JSX.Element {
             <div class="flex items-baseline gap-2.5">
               <Icon name="info" class="relative top-0.5 text-[15px] text-primary" />
               <h2 id="close-confirm-title" class="font-semibold text-[14.5px] text-az-title">
-                Work is still in progress
+                {tx("Work is still in progress")}
               </h2>
             </div>
 
             <p class="text-[12.5px] text-az-body leading-[1.55]">
               <Show
                 when={runningCount() > 0 || heldCount() > 0}
-                fallback="Nothing is running. Your projects and their items are saved."
+                fallback={tx("Nothing is running. Your projects and their items are saved.")}
               >
                 <Show when={runningCount() > 0}>
                   <span class="text-primary">
-                    {runningCount()} {runningCount() === 1 ? "task is" : "tasks are"} still running
+                    {tx(
+                      runningCount() === 1
+                        ? "{count} task is still running"
+                        : "{count} tasks are still running",
+                      { count: runningCount() },
+                    )}
                   </span>
                   {heldCount() > 0 ? ", and " : ". "}
                 </Show>
                 <Show when={heldCount() > 0}>
                   <span class="text-warning">
-                    {heldCount()} {heldCount() === 1 ? "project is" : "projects are"} holding on
-                    your approval
+                    {tx(
+                      heldCount() === 1
+                        ? "{count} project is holding on your approval"
+                        : "{count} projects are holding on your approval",
+                      { count: heldCount() },
+                    )}
                   </span>
                   {". "}
                 </Show>
-                Quitting cancels every run and its whole process group.
+                {tx("Quitting cancels every run and its whole process group.")}
               </Show>
             </p>
 
@@ -77,7 +87,7 @@ export function CloseConfirm(props: CloseConfirmProps): JSX.Element {
                 onClick={props.onCancel}
                 class="rounded-lg border border-az-hairline-strong px-3.5 py-1.5 text-[12.5px] text-az-body transition-colors hover:border-primary/30 hover:text-az-title"
               >
-                Wait for completion
+                {tx("Wait for completion")}
               </button>
               <button
                 type="button"
@@ -85,7 +95,7 @@ export function CloseConfirm(props: CloseConfirmProps): JSX.Element {
                 onClick={props.onConfirm}
                 class="rounded-lg bg-primary px-3.5 py-1.5 font-semibold text-[12.5px] text-primary-content transition-colors hover:bg-az-primary-hover"
               >
-                Exit now
+                {tx("Exit now")}
               </button>
             </div>
           </div>

@@ -2,6 +2,7 @@ import { PromptSyntaxParser } from "promptsyntax";
 import { createSignal, For, type JSX, Show } from "solid-js";
 import { Icon } from "~/components/Icon";
 import { describeError, log } from "~/lib/log";
+import { tx } from "~/stores/i18n";
 
 /**
  * Put text on the clipboard, by whichever route works here.
@@ -232,12 +233,12 @@ function CodeBlock(props: { text: string; lang: string }): JSX.Element {
       <button
         type="button"
         onClick={() => void copy()}
-        aria-label={`Copy this ${props.lang || "code"} block`}
-        title="Copy"
+        aria-label={tx("Copy this {language} block", { language: props.lang || tx("code") })}
+        title={tx("Copy")}
         class="absolute top-1.5 right-1.5 flex items-center gap-1 rounded-md border border-az-hairline-strong bg-base-200 px-1.5 py-[3px] text-[10.5px] text-az-faint transition-colors hover:text-base-content"
       >
         <Icon name={copied() ? "check" : "copy"} class="text-[11px]" />
-        {copied() ? "Copied" : "Copy"}
+        {copied() ? tx("Copied") : tx("Copy")}
       </button>
     </div>
   );
@@ -257,8 +258,8 @@ export function CopyMessageButton(props: { body: string }): JSX.Element {
           window.setTimeout(() => setCopied(false), 1_400);
         });
       }}
-      aria-label="Copy this message"
-      title="Copy the whole message"
+      aria-label={tx("Copy this message")}
+      title={tx("Copy the whole message")}
       class="shrink-0 text-az-faint transition-colors hover:text-base-content"
     >
       <Show when={copied()} fallback={<Icon name="copy" class="text-[12px]" />}>

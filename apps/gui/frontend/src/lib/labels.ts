@@ -1,3 +1,4 @@
+import { tx, type UiMessage } from "~/stores/i18n";
 import type {
   Agent,
   AgentState,
@@ -26,6 +27,9 @@ export const PERMISSION_LABELS: Record<Permission, string> = {
   bypass: "Bypass",
 };
 
+export const permissionLabel = (permission: Permission): string =>
+  tx(PERMISSION_LABELS[permission] as UiMessage);
+
 /** Ordered least to most permissive — the order the composer offers them in. */
 export const PERMISSION_ORDER: Permission[] = [
   "read_only",
@@ -49,10 +53,16 @@ export const AGENT_STATE_LABELS: Record<AgentState, string> = {
   missing: "not installed",
 };
 
+export const agentStateLabel = (state: AgentState): string =>
+  tx(AGENT_STATE_LABELS[state] as UiMessage);
+
 export const ENV_POLICY_LABELS: Record<EnvPolicy, string> = {
   minimal: "Minimal",
   inherit: "Inherit",
 };
+
+export const envPolicyLabel = (policy: EnvPolicy): string =>
+  tx(ENV_POLICY_LABELS[policy] as UiMessage);
 
 export const TASK_PLACEMENT_LABELS: Record<TaskPlacement, string> = {
   panel: "Right panel",
@@ -77,6 +87,9 @@ export const STATUS_LABELS: Record<ProjectStatus, string> = {
   finished: "Finished",
   canceled: "Canceled",
 };
+
+export const statusLabel = (status: ProjectStatus): string =>
+  tx(STATUS_LABELS[status] as UiMessage);
 
 /**
  * What a rate-limit chip says, in words.
@@ -104,7 +117,7 @@ export function rateLimitLabel(message: string): string {
 
 /** The "(…)" suffix on a project or item row. */
 export function statusSuffix(status: ProjectStatus): string {
-  return `(${STATUS_LABELS[status] ?? status})`;
+  return `(${statusLabel(status)})`;
 }
 
 /**

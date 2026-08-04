@@ -480,6 +480,33 @@
     );
   }
 
+  /*
+   * A quiet traveling accent on the composer edge. It borrows the motion cue
+   * from 24x.ai without importing its silver MetalBorder treatment: this stays
+   * in AgencyZero's selected accent and works against either neutral sheen.
+   */
+  .az-ring-composer {
+    background-image: linear-gradient(
+      112deg,
+      rgb(var(--az-sheen) / 5%) 0%,
+      rgb(from var(--color-primary) r g b / 16%) 24%,
+      rgb(var(--az-sheen) / 7%) 43%,
+      rgb(from var(--color-primary) r g b / 38%) 52%,
+      rgb(var(--az-sheen) / 7%) 61%,
+      rgb(from var(--color-primary) r g b / 16%) 78%,
+      rgb(var(--az-sheen) / 5%) 100%
+    );
+    background-position: 100% 50%;
+    background-size: 240% 100%;
+    animation: az-composer-ring-drift 12s ease-in-out infinite alternate;
+  }
+
+  @keyframes az-composer-ring-drift {
+    to {
+      background-position: -100% 50%;
+    }
+  }
+
   /* Status dots carry a soft halo when the state is live rather than historic. */
   .az-halo-primary {
     box-shadow: 0 0 0 3px rgb(from var(--color-primary) r g b / 18%);

@@ -17,15 +17,10 @@ import { Panel } from "~/components/Panel";
 import { PillMenu } from "~/components/PillMenu";
 import { AgentStateDot } from "~/components/StatusDot";
 import { countdown, formatBytes, relativeTime } from "~/lib/format";
-import {
-  AGENT_LABELS,
-  AGENT_STATE_LABELS,
-  ENV_POLICY_LABELS,
-  PERMISSION_LABELS,
-} from "~/lib/labels";
+import { AGENT_LABELS, agentStateLabel, envPolicyLabel, permissionLabel } from "~/lib/labels";
 import { describeError, log } from "~/lib/log";
 import { DEFAULT_WASH } from "~/lib/theme";
-import { t } from "~/stores/i18n";
+import { t, tx, type UiMessage } from "~/stores/i18n";
 import { prefs, setPrefs } from "~/stores/prefs";
 import { useNow, useWorkspace } from "~/stores/workspace";
 import type {
@@ -54,11 +49,11 @@ const STATE_TONE: Record<AgentState, string> = {
 };
 
 /** Weakest evidence behind a catalogue, phrased for someone deciding whether to trust it. */
-const SOURCE_LABELS: Record<ModelSource, string> = {
+const SOURCE_LABELS = {
   cli: "reported by the CLI",
   picker: "read from the interactive picker",
   docs: "from vendor documentation",
-};
+} satisfies Record<ModelSource, UiMessage>;
 
 /**
  * What each agent's selection is currently wired to.
@@ -66,11 +61,11 @@ const SOURCE_LABELS: Record<ModelSource, string> = {
  * The two project providers can also own the Home task manager. Copilot stays
  * collected for the later project integration.
  */
-const AGENT_USE: Record<Agent, string> = {
+const AGENT_USE = {
   claude: "available to projects and Task Manager",
   codex: "available to projects and Task Manager",
   copilot: "ready for later project support",
-};
+} satisfies Record<Agent, UiMessage>;
 
 /**
  * What the search box at the top holds.
@@ -226,9 +221,11 @@ export function SettingsTab(): JSX.Element {
     <div class="az-scroll flex min-w-0 flex-1 justify-center rounded-panel border border-az-hairline bg-az-sunken">
       <div class="flex w-full max-w-[720px] flex-col gap-3 px-6 pt-5.5 pb-7">
         <div class="flex items-baseline gap-2.5 pb-0.5">
-          <h1 class="font-semibold text-[18px] text-az-title tracking-[-.01em]">Settings</h1>
+          <h1 class="font-semibold text-[18px] text-az-title tracking-[-.01em]">
+            {tx("Settings")}
+          </h1>
           <span class="text-[11.5px] text-az-muted">
-            defaults for every new tab · each project can override
+            {tx("defaults for every new tab · each project can override")}
           </span>
         </div>
 
@@ -242,10 +239,18 @@ export function SettingsTab(): JSX.Element {
             type="search"
             value={settingsQuery()}
             onInput={(event) => setSettingsQuery(event.currentTarget.value)}
-            placeholder="Search settings…"
-            aria-label="Search settings"
+            placeholder={tx("Search settings…")}
+            aria-label={tx("Search settings")}
             class="min-w-0 flex-1 bg-transparent text-[12.5px] text-base-content placeholder:text-az-muted focus:outline-none"
           />
+        </div>
+
+        <div class="flex items-center justify-between gap-4 rounded-[11px] border border-az-hairline bg-base-100 px-3.5 py-3">
+          <div class="min-w-0">
+            <div class="font-medium text-[12.5px] text-az-strong">{t("language.label")}</div>
+            <div class="mt-0.5 text-[11px] text-az-muted">{t("language.hint")}</div>
+          </div>
+          <LanguageSwitcher align="end" />
         </div>
 
         <Show when={settings()}>
@@ -253,8 +258,8 @@ export function SettingsTab(): JSX.Element {
             <>
               <Section
                 icon="shield"
-                title="Agents"
-                hint="detected from the installed CLIs, not from configuration"
+                title={tx("Agents")}
+                hint={tx("detected from the installed CLIs, not from configuration")}
               >
                 <For each={state.agents}>{(agent) => <AgentRow status={agent} />}</For>
                 <div class="flex items-center gap-2.5 px-3.5 pt-0 pb-3">
@@ -263,22 +268,26 @@ export function SettingsTab(): JSX.Element {
                     onClick={() => void actions.recheckAgents()}
                     class="rounded-lg border border-az-hairline-strong px-3 py-[5px] text-[12px] text-az-body transition-colors hover:border-primary hover:text-primary"
                   >
-                    Re-check
+                    {tx("Re-check")}
                   </button>
                   <Show when={state.agents[0]}>
                     {(first) => (
                       <span class="text-[11.5px] text-az-muted">
-                        last checked {relativeTime(first().checkedAt)}
+                        {tx("last checked")} {relativeTime(first().checkedAt)}
                       </span>
                     )}
                   </Show>
                 </div>
               </Section>
 
-              <Section icon="sparkles" title="Agent defaults" hint="what a new tab starts with">
-                <Row label="Agent">
+              <Section
+                icon="sparkles"
+                title={tx("Agent defaults")}
+                hint={tx("what a new tab starts with")}
+              >
+                <Row label={tx("Agent")}>
                   <PillMenu<Agent>
-                    label="Default agent"
+                    label={tx("Default agent")}
                     icon="sparkles"
                     value={current().defaultAgent}
                     options={state.agents
@@ -287,9 +296,9 @@ export function SettingsTab(): JSX.Element {
                     onChange={selectDefaultAgent}
                   />
                 </Row>
-                <Row label="Model" hint="chosen from what Models below has enabled">
+                <Row label={tx("Model")} hint={tx("chosen from what Models below has enabled")}>
                   <PillMenu
-                    label="Default model"
+                    label={tx("Default model")}
                     value={current().models[current().defaultAgent].default}
                     options={enabledModels(current().defaultAgent).map((model) => ({
                       value: model.id,
@@ -298,21 +307,24 @@ export function SettingsTab(): JSX.Element {
                     onChange={(id) => void actions.setDefaultModel(current().defaultAgent, id)}
                   />
                 </Row>
-                <Row label="Effort" hint="reasoning level a new tab starts on">
+                <Row label={tx("Effort")} hint={tx("reasoning level a new tab starts on")}>
                   <PillMenu
-                    label="Default effort"
+                    label={tx("Default effort")}
                     value={current().defaultEffort}
                     options={effortOptions().map((effort) => ({ value: effort, label: effort }))}
                     onChange={(defaultEffort) => void actions.saveSettings({ defaultEffort })}
                   />
                 </Row>
-                <Row label="Completed items" hint="what marking an item finished does to the row">
+                <Row
+                  label={tx("Completed items")}
+                  hint={tx("what marking an item finished does to the row")}
+                >
                   <PillMenu
-                    label="Completed items"
+                    label={tx("Completed items")}
                     value={current().completedItems}
                     options={[
-                      { value: "resolve", label: "Mark resolved" },
-                      { value: "delete", label: "Delete" },
+                      { value: "resolve", label: tx("Mark resolved") },
+                      { value: "delete", label: tx("Delete") },
                     ]}
                     onChange={(completedItems) =>
                       void actions.saveSettings({
@@ -322,17 +334,17 @@ export function SettingsTab(): JSX.Element {
                   />
                 </Row>
                 <Row
-                  label="Permission posture"
-                  hint="read_only is the crate default; widen deliberately"
+                  label={tx("Permission posture")}
+                  hint={tx("read_only is the crate default; widen deliberately")}
                   isLast
                 >
                   <PillMenu<Permission>
-                    label="Default permission"
+                    label={tx("Default permission")}
                     icon="lock"
                     value={current().defaultPermission}
                     options={permissionsFor(current().defaultAgent).map((permission) => ({
                       value: permission,
-                      label: PERMISSION_LABELS[permission],
+                      label: permissionLabel(permission),
                     }))}
                     onChange={(defaultPermission) =>
                       void actions.saveSettings({ defaultPermission })
@@ -341,7 +353,11 @@ export function SettingsTab(): JSX.Element {
                 </Row>
               </Section>
 
-              <Section icon="sliders-horizontal" title="Models" hint="what each picker offers">
+              <Section
+                icon="sliders-horizontal"
+                title={tx("Models")}
+                hint={tx("what each picker offers")}
+              >
                 <For each={state.models}>
                   {(catalogue) => (
                     <AgentModelList
@@ -356,22 +372,22 @@ export function SettingsTab(): JSX.Element {
                     onClick={() => void actions.refreshModels()}
                     class="rounded-lg border border-az-hairline-strong px-3 py-[5px] text-[12px] text-az-body transition-colors hover:border-primary hover:text-primary"
                   >
-                    Re-read from the CLIs
+                    {tx("Re-read from the CLIs")}
                   </button>
                   <span class="text-[11.5px] text-az-muted">
-                    only Codex can enumerate; the other two stay on the compiled list
+                    {tx("only Codex can enumerate; the other two stay on the compiled list")}
                   </span>
                 </div>
               </Section>
 
               <Section
                 icon="list-checks"
-                title="Task Manager"
-                hint="the Home conversation that keeps the lists in order"
+                title={tx("Task Manager")}
+                hint={tx("the Home conversation that keeps the lists in order")}
               >
-                <Row label="Agent">
+                <Row label={tx("Agent")}>
                   <PillMenu<Agent>
-                    label="Task manager agent"
+                    label={tx("Task manager agent")}
                     icon="sparkles"
                     value={current().taskManager.agent}
                     options={state.agents
@@ -384,11 +400,13 @@ export function SettingsTab(): JSX.Element {
                   />
                 </Row>
                 <Row
-                  label="Model"
-                  hint="its own, deliberately — a list keeper running unattended should not bill at the prompt's rates"
+                  label={tx("Model")}
+                  hint={tx(
+                    "its own, deliberately — a list keeper running unattended should not bill at the prompt's rates",
+                  )}
                 >
                   <PillMenu
-                    label="Task manager model"
+                    label={tx("Task manager model")}
                     value={current().taskManager.model}
                     options={enabledModels(current().taskManager.agent).map((model) => ({
                       value: model.id,
@@ -397,9 +415,9 @@ export function SettingsTab(): JSX.Element {
                     onChange={selectTaskManagerModel}
                   />
                 </Row>
-                <Row label="Effort">
+                <Row label={tx("Effort")}>
                   <PillMenu
-                    label="Task manager effort"
+                    label={tx("Task manager effort")}
                     value={current().taskManager.effort}
                     options={taskManagerEfforts().map((effort) => ({
                       value: effort,
@@ -412,14 +430,14 @@ export function SettingsTab(): JSX.Element {
                     }
                   />
                 </Row>
-                <Row label="Permission posture">
+                <Row label={tx("Permission posture")}>
                   <PillMenu<Permission>
-                    label="Task manager permission"
+                    label={tx("Task manager permission")}
                     icon="lock"
                     value={current().taskManager.permission}
                     options={permissionsFor(current().taskManager.agent).map((permission) => ({
                       value: permission,
-                      label: PERMISSION_LABELS[permission],
+                      label: permissionLabel(permission),
                     }))}
                     onChange={(permission) =>
                       void actions.saveSettings({
@@ -429,14 +447,16 @@ export function SettingsTab(): JSX.Element {
                   />
                 </Row>
                 <Row
-                  label="Working directories"
-                  hint="the first is the working directory; empty means the workspace root"
+                  label={tx("Working directories")}
+                  hint={tx("the first is the working directory; empty means the workspace root")}
                 >
                   <TaskManagerDirs taskManager={current().taskManager} />
                 </Row>
                 <Row
-                  label="Conversation"
-                  hint="reset starts the next prompt fresh; the transcript and collected tasks stay"
+                  label={tx("Conversation")}
+                  hint={tx(
+                    "reset starts the next prompt fresh; the transcript and collected tasks stay",
+                  )}
                   isLast
                 >
                   <ResetTaskManagerButton />
@@ -445,22 +465,28 @@ export function SettingsTab(): JSX.Element {
 
               <CostSection />
 
-              <Section icon="settings" title="Application" hint="the running instance">
+              <Section icon="settings" title={tx("Application")} hint={tx("the running instance")}>
                 <Row
-                  label="Build"
-                  hint="version · commit · compiled — a * after the commit means uncommitted edits"
+                  label={tx("Build")}
+                  hint={tx(
+                    "version · commit · compiled — a * after the commit means uncommitted edits",
+                  )}
                 >
                   <BuildStamp />
                 </Row>
                 <Row
-                  label="Update"
-                  hint="checked at launch against the published manifest; installing refuses while runs are active"
+                  label={tx("Update")}
+                  hint={tx(
+                    "checked at launch against the published manifest; installing refuses while runs are active",
+                  )}
                 >
                   <UpdateControl />
                 </Row>
                 <Row
-                  label="Restart"
-                  hint="drains the store, then reopens into the build currently on disk — the second half of a rebuild"
+                  label={tx("Restart")}
+                  hint={tx(
+                    "drains the store, then reopens into the build currently on disk — the second half of a rebuild",
+                  )}
                   isLast
                 >
                   <RelaunchButton />
@@ -468,9 +494,6 @@ export function SettingsTab(): JSX.Element {
               </Section>
 
               <Section icon="sparkles" title={t("appearance.title")} hint={t("appearance.hint")}>
-                <Row label={t("language.label")} hint={t("language.hint")}>
-                  <LanguageSwitcher align="end" />
-                </Row>
                 <Row label={t("appearance.mode")} hint={t("appearance.modeHint")}>
                   <div class="flex items-center gap-1 rounded-full border border-az-hairline bg-az-inset p-1">
                     <For
@@ -558,15 +581,17 @@ export function SettingsTab(): JSX.Element {
 
               <Section
                 icon="folder"
-                title="Data"
-                hint="where projects, items and messages are stored"
+                title={tx("Data")}
+                hint={tx("where projects, items and messages are stored")}
               >
                 <Show when={state.workspaceRoot}>
                   {(root) => (
                     <Row
-                      label="Workspace"
+                      label={tx("Workspace")}
                       hint={
-                        root().exists ? "new projects run here" : "recommended, and not created yet"
+                        root().exists
+                          ? tx("new projects run here")
+                          : tx("recommended, and not created yet")
                       }
                     >
                       <div class="flex items-center gap-2">
@@ -579,7 +604,7 @@ export function SettingsTab(): JSX.Element {
                             onClick={() => void actions.createWorkspaceRoot()}
                             class="shrink-0 rounded-lg border border-primary/50 px-2.5 py-[4px] text-[11.5px] text-primary transition-colors hover:border-primary"
                           >
-                            Create it
+                            {tx("Create it")}
                           </button>
                         </Show>
                       </div>
@@ -591,11 +616,11 @@ export function SettingsTab(): JSX.Element {
                   {(location) => (
                     <>
                       <Row
-                        label="Location"
+                        label={tx("Location")}
                         hint={
                           location().source === "env"
-                            ? "set by AZ_DATA_DIR, which a saved path cannot override"
-                            : "a change takes effect on the next launch; nothing is moved"
+                            ? tx("set by AZ_DATA_DIR, which a saved path cannot override")
+                            : tx("a change takes effect on the next launch; nothing is moved")
                         }
                       >
                         <span class="max-w-[340px] truncate font-mono text-[11.5px] text-az-body">
@@ -610,7 +635,7 @@ export function SettingsTab(): JSX.Element {
                        */}
                       <Show when={location().pending}>
                         {(pending) => (
-                          <Row label="Next launch" hint="relaunch to open here">
+                          <Row label={tx("Next launch")} hint={tx("relaunch to open here")}>
                             <span class="max-w-[340px] truncate font-mono text-[11.5px] text-primary">
                               {pending().path}
                             </span>
@@ -618,12 +643,12 @@ export function SettingsTab(): JSX.Element {
                         )}
                       </Show>
                       <Row
-                        label="Tables"
-                        hint="how much disk each one holds — the logs outgrow the transcript"
+                        label={tx("Tables")}
+                        hint={tx("how much disk each one holds — the logs outgrow the transcript")}
                       >
                         <TableSizes />
                       </Row>
-                      <Row label="Change it" isLast>
+                      <Row label={tx("Change it")} isLast>
                         <div class="flex items-center gap-2">
                           <button
                             type="button"
@@ -631,7 +656,7 @@ export function SettingsTab(): JSX.Element {
                             onClick={() => void actions.chooseDataLocation()}
                             class="rounded-lg border border-az-hairline-strong px-3 py-[5px] text-[12px] text-az-body transition-colors hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-40"
                           >
-                            Choose…
+                            {tx("Choose…")}
                           </button>
                           <button
                             type="button"
@@ -646,7 +671,7 @@ export function SettingsTab(): JSX.Element {
                             onClick={() => void actions.setDataLocation(null)}
                             class="rounded-lg border border-az-hairline-strong px-3 py-[5px] text-[12px] text-az-muted transition-colors hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-40"
                           >
-                            Use the default
+                            {tx("Use the default")}
                           </button>
                         </div>
                       </Row>
@@ -659,23 +684,23 @@ export function SettingsTab(): JSX.Element {
 
               <Section
                 icon="shield"
-                title="Moderator"
-                hint="a second agent watching the stream — costs tokens"
+                title={tx("Moderator")}
+                hint={tx("a second agent watching the stream — costs tokens")}
                 pending={moderatorPending()}
               >
                 <Row
-                  label="Enabled by default"
-                  hint="each session can turn it off in its Settings section"
+                  label={tx("Enabled by default")}
+                  hint={tx("each session can turn it off in its Settings section")}
                 >
                   <SettingToggle
-                    label="Moderator enabled by default"
+                    label={tx("Moderator enabled by default")}
                     checked={current().moderator.enabled}
                     onChange={(enabled) => void actions.saveSettings({ moderator: { enabled } })}
                   />
                 </Row>
-                <Row label="Moderator model">
+                <Row label={tx("Moderator model")}>
                   <PillMenu
-                    label="Moderator model"
+                    label={tx("Moderator model")}
                     value={current().moderator.model}
                     options={enabledModels("claude").map((model) => ({
                       value: model.id,
@@ -684,9 +709,9 @@ export function SettingsTab(): JSX.Element {
                     onChange={(model) => void actions.saveSettings({ moderator: { model } })}
                   />
                 </Row>
-                <Row label="Confine tool calls to the working directories">
+                <Row label={tx("Confine tool calls to the working directories")}>
                   <SettingToggle
-                    label="Confine tool calls to the working directories"
+                    label={tx("Confine tool calls to the working directories")}
                     checked={current().moderator.confineToDirs}
                     onChange={(confineToDirs) =>
                       void actions.saveSettings({ moderator: { confineToDirs } })
@@ -696,13 +721,15 @@ export function SettingsTab(): JSX.Element {
 
                 <div class="flex flex-col gap-2.5 px-3.5 py-3">
                   <span class="font-semibold text-[11.5px] text-az-muted uppercase tracking-[.04em]">
-                    On a hold
+                    {tx("On a hold")}
                   </span>
 
                   <HoldRow
                     severity="CHECK"
                     tone="warning"
-                    description="The step waits on you; everything else keeps running. Tab dot goes amber."
+                    description={tx(
+                      "The step waits on you; everything else keeps running. Tab dot goes red.",
+                    )}
                     checked={current().moderator.onCheck === "hold_step"}
                     onChange={(hold) =>
                       void actions.saveSettings({
@@ -713,7 +740,9 @@ export function SettingsTab(): JSX.Element {
                   <HoldRow
                     severity="CRITICAL"
                     tone="error"
-                    description="Cancel the run and its whole process group, then wait. Tab dot goes red."
+                    description={tx(
+                      "Cancel the run and its whole process group, then wait. Tab dot goes red.",
+                    )}
                     checked={current().moderator.onCritical === "cancel_run"}
                     onChange={(cancel) =>
                       void actions.saveSettings({
@@ -726,47 +755,47 @@ export function SettingsTab(): JSX.Element {
 
               <Section
                 icon="info"
-                title="Notifications"
-                hint="while you are in another window"
+                title={tx("Notifications")}
+                hint={tx("while you are in another window")}
                 pending={runPathPending()}
               >
-                <Row label="A hold needs your approval">
+                <Row label={tx("A hold needs your approval")}>
                   <SettingToggle
-                    label="Notify on a hold"
+                    label={tx("Notify on a hold")}
                     checked={current().notifications.onHold}
                     onChange={(onHold) => void actions.saveSettings({ notifications: { onHold } })}
                   />
                 </Row>
-                <Row label="A run finishes">
+                <Row label={tx("A run finishes")}>
                   <SettingToggle
-                    label="Notify when a run finishes"
+                    label={tx("Notify when a run finishes")}
                     checked={current().notifications.onRunFinished}
                     onChange={(onRunFinished) =>
                       void actions.saveSettings({ notifications: { onRunFinished } })
                     }
                   />
                 </Row>
-                <Row label="A task fails">
+                <Row label={tx("A task fails")}>
                   <SettingToggle
-                    label="Notify when a task fails"
+                    label={tx("Notify when a task fails")}
                     checked={current().notifications.onTaskFailed}
                     onChange={(onTaskFailed) =>
                       void actions.saveSettings({ notifications: { onTaskFailed } })
                     }
                   />
                 </Row>
-                <Row label="Rate limited by the provider">
+                <Row label={tx("Rate limited by the provider")}>
                   <SettingToggle
-                    label="Notify when rate limited"
+                    label={tx("Notify when rate limited")}
                     checked={current().notifications.onRateLimited}
                     onChange={(onRateLimited) =>
                       void actions.saveSettings({ notifications: { onRateLimited } })
                     }
                   />
                 </Row>
-                <Row label="Play a sound" isLast>
+                <Row label={tx("Play a sound")} isLast>
                   <SettingToggle
-                    label="Play a sound"
+                    label={tx("Play a sound")}
                     checked={current().notifications.sound}
                     onChange={(sound) => void actions.saveSettings({ notifications: { sound } })}
                   />
@@ -775,31 +804,33 @@ export function SettingsTab(): JSX.Element {
 
               <Section
                 icon="lock"
-                title="Environment"
+                title={tx("Environment")}
                 pending={runPathPending()}
-                hint="what the agent process inherits from this machine"
+                hint={tx("what the agent process inherits from this machine")}
               >
                 <Row
-                  label="Environment policy"
-                  hint="Minimal passes only PATH, HOME and USER — the verified floor for all three CLIs"
+                  label={tx("Environment policy")}
+                  hint={tx(
+                    "Minimal passes only PATH, HOME and USER — the verified floor for all three CLIs",
+                  )}
                 >
                   <PillMenu<EnvPolicy>
-                    label="Environment policy"
+                    label={tx("Environment policy")}
                     value={current().envPolicy}
                     options={(["minimal", "inherit"] as const).map((policy) => ({
                       value: policy,
-                      label: ENV_POLICY_LABELS[policy],
+                      label: envPolicyLabel(policy),
                     }))}
                     onChange={(envPolicy) => void actions.saveSettings({ envPolicy })}
                   />
                 </Row>
                 <Row
-                  label="Forward proxy and custom-CA variables"
-                  hint="off by default: HTTPS_PROXY often embeds credentials"
+                  label={tx("Forward proxy and custom-CA variables")}
+                  hint={tx("off by default: HTTPS_PROXY often embeds credentials")}
                   isLast
                 >
                   <SettingToggle
-                    label="Forward proxy and custom-CA variables"
+                    label={tx("Forward proxy and custom-CA variables")}
                     checked={current().forwardProxyVars}
                     onChange={(forwardProxyVars) => void actions.saveSettings({ forwardProxyVars })}
                   />
@@ -813,8 +844,8 @@ export function SettingsTab(): JSX.Element {
               <p class="flex gap-2 text-[11.5px] text-az-muted leading-[1.5]">
                 <Icon name="info" class="relative top-0.5 shrink-0 text-[13px]" />
                 <span>
-                  Sessions are stored per project by agent-abstraction at{" "}
-                  <code class="font-mono">&lt;dir&gt;/&lt;project-slug&gt;/&lt;name&gt;.json</code>.
+                  {tx("Sessions are stored per project by agent-abstraction at")}{" "}
+                  <code class="font-mono">{tx("<dir>/<project-slug>/<name>.json")}</code>.
                 </span>
               </p>
             </>
@@ -902,36 +933,35 @@ function StudySettings(): JSX.Element {
   return (
     <Section
       icon="gauge"
-      title="Research"
-      hint="local, opt-in PromptSyntax deployment study"
-      pending={available() ? undefined : "needs the study event backend"}
+      title={tx("Research")}
+      hint={tx("local, opt-in PromptSyntax deployment study")}
+      pending={available() ? undefined : tx("needs the study event backend")}
     >
       <div class="border-az-hairline-soft border-b px-3.5 py-3 text-[11.5px] text-az-muted leading-[1.55]">
-        Records timestamps, prompt character and line counts, attachment counts, whether you used
-        PromptSyntax, operation types, providers, opaque links, timing and explicit outcomes. It
-        does not copy prompt text, agent prose, task titles, paths, URLs, tool calls, tool output or
-        attachment contents. Nothing is uploaded.
+        {tx(
+          "Records timestamps, prompt character and line counts, attachment counts, whether you used PromptSyntax, operation types, providers, opaque links, timing and explicit outcomes. It does not copy prompt text, agent prose, task titles, paths, URLs, tool calls, tool output or attachment contents. Nothing is uploaded.",
+        )}
       </div>
       <Row
-        label="PS deployment study"
-        hint="off by default; disabling stops new rows but keeps existing data"
+        label={tx("PS deployment study")}
+        hint={tx("off by default; disabling stops new rows but keeps existing data")}
       >
         <SettingToggle
-          label="PS deployment study"
+          label={tx("PS deployment study")}
           checked={enabled()}
           disabled={!available() || busy()}
           onChange={(checked) => void toggle(checked)}
         />
       </Row>
       <Row
-        label="Stored events"
+        label={tx("Stored events")}
         hint={
           summary()?.enabledAt
-            ? `${enabled() ? "current" : "last"} interval started ${relativeTime(
-                summary()!.enabledAt!,
-                Date.now(),
-              )}`
-            : "no study interval has been started"
+            ? tx("{kind} interval started {time}", {
+                kind: enabled() ? tx("current") : tx("last"),
+                time: relativeTime(summary()!.enabledAt!, Date.now()),
+              })
+            : tx("no study interval has been started")
         }
       >
         <span class="font-mono text-[12px] text-az-strong tabular-nums">
@@ -939,12 +969,12 @@ function StudySettings(): JSX.Element {
         </span>
       </Row>
       <Row
-        label="Study data"
+        label={tx("Study data")}
         hint={
           note() ??
           (enabled()
-            ? "export is available now; stop collection before deleting stored events"
-            : "export is de-identified JSONL; deletion is local and permanent")
+            ? tx("export is available now; stop collection before deleting stored events")
+            : tx("export is de-identified JSONL; deletion is local and permanent"))
         }
         isLast
       >
@@ -955,7 +985,7 @@ function StudySettings(): JSX.Element {
             onClick={() => void exportEvents()}
             class="rounded-lg border border-az-hairline-strong px-3 py-[5px] text-[12px] text-az-body transition-colors hover:border-primary hover:text-primary disabled:opacity-40"
           >
-            Export JSONL
+            {tx("Export JSONL")}
           </button>
           <button
             type="button"
@@ -968,7 +998,7 @@ function StudySettings(): JSX.Element {
                 : "border-az-hairline-strong text-az-muted hover:border-error/50 hover:text-error"
             }`}
           >
-            {confirmingDelete() ? "Confirm delete" : "Delete data"}
+            {confirmingDelete() ? tx("Confirm delete") : tx("Delete data")}
           </button>
         </div>
       </Row>
@@ -998,8 +1028,10 @@ function ExperimentalSettings(): JSX.Element {
   onMount(() => void refresh());
 
   const windowValue = (value: { utilization: number; resetsAt: string | null } | null): string => {
-    if (!value) return "not reported";
-    const reset = value.resetsAt ? ` · resets in ${countdown(value.resetsAt, now())}` : "";
+    if (!value) return tx("not reported");
+    const reset = value.resetsAt
+      ? ` ${tx("· resets in {time}", { time: countdown(value.resetsAt, now()) })}`
+      : "";
     const percent = Math.min(100, Math.max(0, value.utilization));
     return `${percent.toFixed(1)}%${reset}`;
   };
@@ -1017,42 +1049,46 @@ function ExperimentalSettings(): JSX.Element {
   return (
     <Section
       icon="sparkles"
-      title="Experimental"
-      hint="isolated capabilities in AgencyZero Experimental"
+      title={tx("Experimental")}
+      hint={tx("isolated capabilities in AgencyZero Experimental")}
     >
       <Row
-        label="Codex 7-day usage"
-        hint="managed by Codex; refreshed through its local app-server"
+        label={tx("Codex 7-day usage")}
+        hint={tx("managed by Codex; refreshed through its local app-server")}
       >
         <span class="font-mono text-[11.5px] text-az-body">
           {codexWindow()?.usedFraction === null || codexWindow()?.usedFraction === undefined
-            ? "not reported"
+            ? tx("not reported")
             : `${Math.round(Math.min(1, Math.max(0, codexWindow()!.usedFraction!)) * 100)}% used${
                 codexWindow()?.resetsAt
-                  ? ` · resets in ${countdown(codexWindow()!.resetsAt!, now())}`
+                  ? ` ${tx("· resets in {time}", {
+                      time: countdown(codexWindow()!.resetsAt!, now()),
+                    })}`
                   : ""
               }`}
         </span>
       </Row>
       <Row
-        label="Claude login"
-        hint="managed by Claude Code; an expired credential is refreshed through its own /usage command"
+        label={tx("Claude login")}
+        hint={tx(
+          "managed by Claude Code; an expired credential is refreshed through its own /usage command",
+        )}
       >
-        <span class="font-mono text-[11.5px] text-az-body">Claude Code</span>
+        <span class="font-mono text-[11.5px] text-az-body">{tx("Claude Code")}</span>
       </Row>
-      <Row label="Claude 5-hour usage">
+      <Row label={tx("Claude 5-hour usage")}>
         <span class="font-mono text-[11.5px] text-az-body">
           {windowValue(usage()?.fiveHour ?? null)}
         </span>
       </Row>
-      <Row label="Claude 7-day usage">
+      <Row label={tx("Claude 7-day usage")}>
         <span class="font-mono text-[11.5px] text-az-body">
           {windowValue(usage()?.sevenDay ?? null)}
         </span>
       </Row>
       <Show when={usage()?.sevenDaySonnet}>
         {(value) => (
-          <Row label="Claude Sonnet 7-day usage">
+          <Row label={tx("Claude Sonnet 7-day usage")}>
             <span class="font-mono text-[11.5px] text-az-body">{windowValue(value())}</span>
           </Row>
         )}
@@ -1063,7 +1099,9 @@ function ExperimentalSettings(): JSX.Element {
             <Row label={`Claude ${limit.model ?? limit.kind}`}>
               <span class="font-mono text-[11.5px] text-az-body">
                 {limit.percent.toFixed(1)}%
-                {limit.resetsAt ? ` · resets in ${countdown(limit.resetsAt, now())}` : ""}
+                {limit.resetsAt
+                  ? ` ${tx("· resets in {time}", { time: countdown(limit.resetsAt, now()) })}`
+                  : ""}
                 {limit.severity ? ` · ${limit.severity}` : ""}
               </span>
             </Row>
@@ -1071,7 +1109,7 @@ function ExperimentalSettings(): JSX.Element {
         </For>
       </Show>
       <Row
-        label="Refresh usage"
+        label={tx("Refresh usage")}
         hint={
           usage() ? `checked ${relativeTime(usage()!.checkedAt, now())}` : (note() ?? undefined)
         }
@@ -1087,7 +1125,7 @@ function ExperimentalSettings(): JSX.Element {
             onClick={() => void refresh()}
             class="rounded-lg border border-az-hairline-strong px-3 py-[5px] text-[12px] text-az-body transition-colors hover:border-primary hover:text-primary disabled:opacity-40"
           >
-            {busy() ? "Refreshing…" : "Refresh"}
+            {busy() ? tx("Refreshing…") : tx("Refresh")}
           </button>
         </div>
       </Row>
@@ -1130,7 +1168,9 @@ function TableSizes(): JSX.Element {
     <Show
       when={sizes()}
       fallback={
-        <span class="text-[11.5px] text-az-muted">{failed() ? "unavailable" : "measuring…"}</span>
+        <span class="text-[11.5px] text-az-muted">
+          {failed() ? tx("unavailable") : tx("measuring…")}
+        </span>
       }
     >
       {(tables) => (
@@ -1147,14 +1187,14 @@ function TableSizes(): JSX.Element {
           </For>
           <div class="mt-0.5 flex items-baseline justify-between gap-3 border-az-hairline border-t pt-1">
             <span class="font-semibold text-[11px] text-az-muted uppercase tracking-[.04em]">
-              total
+              {tx("total")}
             </span>
             <span class="shrink-0 font-mono text-[11px] text-az-strong">
               {formatBytes(total())}
             </span>
           </div>
           <Show when={state.backend === "mock"}>
-            <span class="text-[10.5px] text-az-faint">fixtures — no store to measure</span>
+            <span class="text-[10.5px] text-az-faint">{tx("fixtures — no store to measure")}</span>
           </Show>
         </div>
       )}
@@ -1196,8 +1236,8 @@ function TaskManagerDirs(props: { taskManager: TaskManagerSettings }): JSX.Eleme
       </For>
       <input
         value={path()}
-        placeholder="~/code/…"
-        aria-label="Add a task manager directory"
+        placeholder={tx("~/code/…")}
+        aria-label={tx("Add a task manager directory")}
         onInput={(event) => setPath(event.currentTarget.value)}
         onKeyDown={(event) => {
           if (event.key === "Enter") add();
@@ -1232,7 +1272,9 @@ function ResetTaskManagerButton(): JSX.Element {
     <div class="flex min-w-0 items-center gap-2.5">
       <Show
         when={state.taskManagerSession}
-        fallback={<span class="font-mono text-[11px] text-az-faint">no conversation yet</span>}
+        fallback={
+          <span class="font-mono text-[11px] text-az-faint">{tx("no conversation yet")}</span>
+        }
       >
         {(session) => (
           <span class="max-w-[180px] truncate font-mono text-[11px] text-az-faint">
@@ -1246,7 +1288,7 @@ function ResetTaskManagerButton(): JSX.Element {
         disabled={busy() || !state.taskManagerSession || !isLive("resetTaskManager")}
         class="shrink-0 rounded-lg border border-az-hairline-strong px-3 py-[5px] text-[12px] text-az-body transition-colors hover:border-warning hover:text-warning disabled:opacity-40"
       >
-        {busy() ? "Resetting…" : "Reset"}
+        {busy() ? tx("Resetting…") : tx("Reset")}
       </button>
     </div>
   );
@@ -1281,7 +1323,7 @@ function BuildStamp(): JSX.Element {
     <Show when={build()} fallback={<span class="text-[12px] text-az-faint">—</span>}>
       {(info) => (
         <span class="font-mono text-[11.5px] text-az-body">
-          {info().version} · {info().gitSha} · built {info().builtAt}
+          {info().version} · {info().gitSha} {tx("· built")} {info().builtAt}
         </span>
       )}
     </Show>
@@ -1305,7 +1347,7 @@ function UpdateControl(): JSX.Element {
     setNote(null);
     void actions
       .checkForUpdate()
-      .then((found) => setNote(found ? null : "up to date"))
+      .then((found) => setNote(found ? null : tx("up to date")))
       .catch((cause) => setNote(describeError(cause)))
       .finally(() => setBusy(false));
   };
@@ -1315,7 +1357,7 @@ function UpdateControl(): JSX.Element {
   // lands in the note.
   const install = (): void => {
     setBusy(true);
-    setNote("downloading…");
+    setNote(tx("downloading…"));
     void actions.installUpdate().catch((cause) => {
       setNote(describeError(cause));
       setBusy(false);
@@ -1336,14 +1378,14 @@ function UpdateControl(): JSX.Element {
             disabled={busy() || !isLive("checkForUpdate")}
             class="shrink-0 rounded-lg border border-az-hairline-strong px-3 py-[5px] text-[12px] text-az-body transition-colors hover:border-primary hover:text-primary disabled:opacity-40"
           >
-            {busy() ? "Checking…" : "Check for update"}
+            {busy() ? tx("Checking…") : tx("Check for update")}
           </button>
         }
       >
         {(update) => (
           <>
             <span class="shrink-0 font-mono text-[11.5px] text-primary">
-              {update().version} available
+              {update().version} {tx("available")}
             </span>
             <button
               type="button"
@@ -1351,7 +1393,7 @@ function UpdateControl(): JSX.Element {
               disabled={busy() || !isLive("installUpdate")}
               class="shrink-0 rounded-lg border border-primary/50 px-3 py-[5px] font-semibold text-[12px] text-primary transition-colors hover:border-primary hover:bg-primary/10 disabled:opacity-40"
             >
-              {busy() ? "Installing…" : "Install & Restart"}
+              {busy() ? tx("Installing…") : tx("Install & Restart")}
             </button>
           </>
         )}
@@ -1374,7 +1416,7 @@ function RelaunchButton(): JSX.Element {
       }}
       class="shrink-0 rounded-lg border border-az-hairline-strong px-3 py-[5px] text-[12px] text-az-body transition-colors hover:border-warning hover:text-warning disabled:opacity-40"
     >
-      {busy() ? "Restarting…" : "Restart"}
+      {busy() ? tx("Restarting…") : tx("Restart")}
     </button>
   );
 }
@@ -1439,8 +1481,15 @@ function CostSection(): JSX.Element {
     });
 
   return (
-    <Section icon="gauge" title="Cost" hint="all sessions · summed from the usage ledger">
-      <Row label="Today" hint={`resets at midnight UTC · in ${untilMidnight()}`}>
+    <Section
+      icon="gauge"
+      title={tx("Cost")}
+      hint={tx("all sessions · summed from the usage ledger")}
+    >
+      <Row
+        label={tx("Today")}
+        hint={tx("resets at midnight UTC · in {time}", { time: untilMidnight() })}
+      >
         {figure(summary()?.todayUsd)}
       </Row>
       {/*
@@ -1450,17 +1499,25 @@ function CostSection(): JSX.Element {
        * midnight is that the oldest of the seven days falls off the back.
        */}
       <Row
-        label="This week"
-        hint="the trailing seven days, so a Monday reset cannot hide Sunday · the oldest day drops at midnight"
+        label={tx("This week")}
+        hint={tx(
+          "the trailing seven days, so a Monday reset cannot hide Sunday · the oldest day drops at midnight",
+        )}
       >
         {figure(summary()?.weekUsd)}
       </Row>
-      <Row label="This month" hint={`resets ${monthLabel()} · in ${untilMonth()}`}>
+      <Row
+        label={tx("This month")}
+        hint={tx("resets {date} · in {time}", { date: monthLabel(), time: untilMonth() })}
+      >
         {figure(summary()?.monthUsd)}
       </Row>
       <Row
-        label="All time"
-        hint={`${summary()?.turns ?? 0} priced turn(s) · priced by the agent at API list rates — consumption, not a bill`}
+        label={tx("All time")}
+        hint={tx(
+          "{count} priced turn(s) · priced by the agent at API list rates — consumption, not a bill",
+          { count: summary()?.turns ?? 0 },
+        )}
         isLast
       >
         {figure(summary()?.totalUsd)}
@@ -1516,7 +1573,7 @@ function Section(props: {
           <Show when={props.pending}>
             {(reason) => (
               <span class="ml-auto shrink-0 rounded border border-az-hairline px-1.5 py-px text-[10px] text-az-muted">
-                not wired · {reason()}
+                {tx("not wired ·")} {reason()}
               </span>
             )}
           </Show>
@@ -1591,9 +1648,9 @@ function SettingToggle(props: {
 function AgentRow(props: { status: AgentStatus }): JSX.Element {
   const detail = () => {
     if (props.status.state === "outdated") {
-      return `${AGENT_STATE_LABELS.outdated} · needs ${props.status.minVersion}+`;
+      return `${agentStateLabel("outdated")} · needs ${props.status.minVersion}+`;
     }
-    return AGENT_STATE_LABELS[props.status.state];
+    return agentStateLabel(props.status.state);
   };
 
   return (
@@ -1666,14 +1723,16 @@ function AgentModelList(props: { catalogue: AgentModels; selection: ModelSelecti
     <div class="flex flex-col border-az-hairline border-b last:border-b-0">
       <div class="flex flex-wrap items-baseline gap-x-2.5 gap-y-0.5 px-3.5 pt-3 pb-1">
         <span class="font-semibold text-[13px] text-az-title">{AGENT_LABELS[agent()]}</span>
-        <span class="text-[11.5px] text-az-muted">{AGENT_USE[agent()]}</span>
+        <span class="text-[11.5px] text-az-muted">{tx(AGENT_USE[agent()])}</span>
         <span class="ml-auto text-[11px] text-az-muted tabular-nums">
-          {props.selection.enabled.length} of {props.catalogue.models.length}
+          {props.selection.enabled.length} {tx("of")} {props.catalogue.models.length}
         </span>
       </div>
       <p class="px-3.5 pb-2 text-[11px] text-az-muted">
-        {props.catalogue.discovered ? "asked just now" : SOURCE_LABELS[props.catalogue.source]} ·
-        checked {props.catalogue.checked} against {props.catalogue.against}
+        {props.catalogue.discovered
+          ? tx("asked just now")
+          : tx(SOURCE_LABELS[props.catalogue.source])}{" "}
+        {tx("· checked")} {props.catalogue.checked} {tx("against")} {props.catalogue.against}
       </p>
       <div class="az-scroll flex max-h-[236px] flex-col pb-1.5">
         <For each={props.catalogue.models}>
@@ -1724,14 +1783,14 @@ function ModelRow(props: {
       */}
       <label
         class="shrink-0 cursor-pointer"
-        title={props.isLastEnabled ? "The last enabled model cannot be removed" : undefined}
+        title={props.isLastEnabled ? tx("The last enabled model cannot be removed") : undefined}
       >
         <input
           type="checkbox"
           class="peer sr-only"
           checked={props.isEnabled}
           disabled={props.isLastEnabled}
-          aria-label={`Offer ${props.model.name}`}
+          aria-label={tx("Offer {name}", { name: props.model.name })}
           onChange={(event) =>
             void actions.toggleModel(props.agent, props.model.id, event.currentTarget.checked)
           }
@@ -1756,7 +1815,7 @@ function ModelRow(props: {
           <span class="truncate font-mono text-[10.5px] text-az-muted">{props.model.id}</span>
           <Show when={props.model.kind === "alias"}>
             <span class="shrink-0 rounded border border-az-hairline px-1 text-[9.5px] text-az-muted uppercase tracking-[.04em]">
-              alias
+              {tx("alias")}
             </span>
           </Show>
         </span>
@@ -1769,17 +1828,17 @@ function ModelRow(props: {
         when={!props.isDefault}
         fallback={
           <span class="shrink-0 rounded border border-primary px-1.5 py-px text-[10px] text-primary">
-            default
+            {tx("default")}
           </span>
         }
       >
         <button
           type="button"
           onClick={() => void actions.setDefaultModel(props.agent, props.model.id)}
-          aria-label={`Make ${props.model.name} the default`}
+          aria-label={tx("Make {name} the default", { name: props.model.name })}
           class="shrink-0 rounded border border-az-hairline-strong px-1.5 py-px text-[10px] text-az-muted opacity-0 transition-opacity hover:text-primary focus-visible:opacity-100 group-hover:opacity-100"
         >
-          make default
+          {tx("make default")}
         </button>
       </Show>
     </div>

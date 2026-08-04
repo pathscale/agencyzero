@@ -1,6 +1,7 @@
 import { createSignal, type JSX, Show } from "solid-js";
 import { Icon } from "~/components/Icon";
 import { describeError, log } from "~/lib/log";
+import { tx } from "~/stores/i18n";
 
 /**
  * A name you can correct in place.
@@ -80,7 +81,7 @@ export function EditableTitle(props: {
               start();
             }}
             disabled={busy()}
-            aria-label={props.label ?? `Rename ${props.value}`}
+            aria-label={props.label ?? tx("Rename {name}", { name: props.value })}
             // Always visible. Hover-to-reveal hides the only clue that a name
             // can be changed at all, from the one person who wants to change it.
             class="flex size-[18px] shrink-0 items-center justify-center rounded text-az-faint transition-colors hover:bg-white/8 hover:text-az-body"
@@ -95,7 +96,7 @@ export function EditableTitle(props: {
         // completing the action rather than stealing focus on load.
         autofocus
         value={draft()}
-        aria-label={props.label ?? "Project name"}
+        aria-label={props.label ?? tx("Project name")}
         /*
          * The row behind this field opens a project on double click, so
          * selecting a word to retype it navigated away and dropped the edit.

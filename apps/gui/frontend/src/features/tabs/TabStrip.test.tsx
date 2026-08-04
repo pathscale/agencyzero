@@ -29,6 +29,14 @@ beforeEach(() => {
 });
 
 describe("TabStrip", () => {
+  it("keeps the active tab treatment inside the horizontal scroller", async () => {
+    const { getByRole } = await mountStrip();
+    const pill = getByRole("button", { name: "Home" }).closest("[data-tab-key]");
+
+    expect(pill?.className).toContain("inset_0_1px");
+    expect(pill?.className).not.toContain("rgba(0,0,0,.35)");
+  });
+
   /*
    * Queried by accessible name rather than text: the label is rendered twice,
    * once as the invisible sizing ghost, and the ghost is aria-hidden so only
