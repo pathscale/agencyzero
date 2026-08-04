@@ -1942,7 +1942,9 @@ const PARTIAL_FLUSH_EVERY: std::time::Duration = std::time::Duration::from_milli
 /// "stopped"). A turn that settled first (`is_cancelled`) hands them back via
 /// `run:inject_failed`, and the frontend queues them for a fresh run resuming
 /// the session — the crate notes' prescribed recovery, automated. Any other
-/// failure takes the same road, with its own reason in the I/O panel.
+/// failure takes the same road, with its own reason in the I/O panel. `false`
+/// tells the run owner to reap the transport: a queued retry cannot start while
+/// the stale run still owns the project's only slot.
 async fn deliver_injection(
     app: &AppHandle,
     io: &std::sync::Arc<AgentIo>,
@@ -1950,7 +1952,7 @@ async fn deliver_injection(
     project_id: &str,
     message_id: &str,
     body: String,
-) {
+) -> bool {
     match control.send(&body).await {
         Ok(()) => {
             note_io(
@@ -1961,6 +1963,7 @@ async fn deliver_injection(
                 "message",
                 "(into the running turn)",
             );
+            true
         }
         Err(error) => {
             let why = if error.is_cancelled() {
@@ -1977,6 +1980,7 @@ async fn deliver_injection(
                     "body": body,
                 }),
             );
+            false
         }
     }
 }
@@ -4843,13 +4847,15 @@ async fn drive_run(
      */
     let (injection_delivery_tx, mut injection_delivery_rx) =
         tokio::sync::mpsc::unbounded_channel::<InjectedMessage>();
+    let (injection_failure_tx, mut injection_failure_rx) =
+        tokio::sync::mpsc::unbounded_channel::<()>();
     let injection_app = app.clone();
     let injection_io = io.clone();
     let injection_project_id = project_id.clone();
     let injection_control = run.control();
     let injection_delivery = tokio::spawn(async move {
         while let Some(injected) = injection_delivery_rx.recv().await {
-            deliver_injection(
+            let delivered = deliver_injection(
                 &injection_app,
                 &injection_io,
                 &injection_control,
@@ -4858,6 +4864,9 @@ async fn drive_run(
                 injected.body,
             )
             .await;
+            if !delivered {
+                let _ = injection_failure_tx.send(());
+            }
         }
     });
 
@@ -4911,6 +4920,7 @@ async fn drive_run(
     // Set by the cancel signal, wherever the loop happens to be waiting when
     // it lands. The loop exits, and the tail below tears the agent down.
     let mut cancelled = false;
+    let mut stalled_injection = false;
 
     /// What woke the loop: an agent event, or a message to queue for the
     /// independent delivery worker. Keeping receipt waits off this task is
@@ -4932,6 +4942,14 @@ async fn drive_run(
              */
             _ = cancel.changed() => {
                 cancelled = true;
+                break;
+            }
+            Some(()) = injection_failure_rx.recv() => {
+                // The visible message is already queued for retry. Free the
+                // one-run-per-project slot so that retry can resume the same
+                // session instead of waiting behind a dead app-server forever.
+                cancelled = true;
+                stalled_injection = true;
                 break;
             }
             injected = inject_rx.recv() => match injected {
@@ -5059,6 +5077,11 @@ async fn drive_run(
                         // tool call is denied and the loop tail tears down.
                         _ = cancel.changed() => {
                             cancelled = true;
+                            break None;
+                        }
+                        Some(()) = injection_failure_rx.recv() => {
+                            cancelled = true;
+                            stalled_injection = true;
                             break None;
                         }
                         injected = inject_rx.recv() => {
@@ -5557,7 +5580,11 @@ async fn drive_run(
             &project_id,
             "sent",
             "cancel",
-            "stop requested — tearing the agent down and waiting for it to exit",
+            if stalled_injection {
+                "interactive delivery stalled — restarting the run so the queued message can resume the session"
+            } else {
+                "stop requested — tearing the agent down and waiting for it to exit"
+            },
         );
         // Cooperative and awaited: when this returns, the process group is
         // actually gone, not merely asked to leave.
