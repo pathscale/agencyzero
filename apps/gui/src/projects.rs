@@ -4602,6 +4602,22 @@ fn build_turn_request(
     if agent.caps().live_follow_up {
         request = request.interactive();
     }
+    /*
+     * Ask for the one-hour prompt cache, not the five-minute default.
+     *
+     * The whole conversation is re-sent every turn; a cache read is a tenth of
+     * the input price, so keeping the prefix warm across replies is where the
+     * saving is. On a subscription the CLI already requests 1h and this is a
+     * no-op; on an API key it defaults to 5m, and in a long conversation with
+     * minutes between turns the 5m cache dies between turns and every turn pays
+     * full price for the entire history. The CLI exposes no per-request TTL
+     * flag — this env var is the only lever, and it is Claude's. Cache reads
+     * refresh the window for free, so an active session rarely pays the higher
+     * 1h write more than once.
+     */
+    if agent == Agent::Claude {
+        request = request.env("ENABLE_PROMPT_CACHING_1H", "1");
+    }
     if !model.is_empty() {
         request = request.model(model);
     }
