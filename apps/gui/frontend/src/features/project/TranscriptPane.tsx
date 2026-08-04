@@ -69,7 +69,7 @@ export function TranscriptPane(props: {
       ref={scroller}
       onScroll={trackScroll}
       data-selectable
-      class="az-scroll flex min-h-0 flex-1 flex-col gap-4 px-6 pt-5 pb-2 leading-relaxed"
+      class="az-scroll flex min-h-0 flex-1 flex-col gap-4 overflow-x-hidden px-6 pt-5 pb-2 leading-relaxed"
     >
       <Show
         when={props.messages.length > 0}

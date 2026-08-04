@@ -488,94 +488,98 @@ export function Composer(props: ComposerProps): JSX.Element {
           model pill on the left after Attach; recorded in the frontend README.
         */}
         <div data-composer-controls class="flex flex-wrap items-center gap-2.5">
-          <button
-            type="button"
-            onClick={toggleAdvanced}
-            aria-pressed={advanced()}
-            title="Parse Prompt Syntax controls before sending"
-            class={`rounded-full border px-2.5 py-1 font-medium text-[11px] transition-colors ${
-              advanced()
-                ? "border-primary/35 bg-primary/15 text-primary"
-                : "border-az-hairline-strong text-az-muted hover:text-base-content"
-            }`}
+          <div data-composer-primary-controls class="flex shrink-0 items-center gap-2.5">
+            <button
+              type="button"
+              onClick={toggleAdvanced}
+              aria-pressed={advanced()}
+              title="Parse Prompt Syntax controls before sending"
+              class={`rounded-full border px-2.5 py-1 font-medium text-[11px] transition-colors ${
+                advanced()
+                  ? "border-primary/35 bg-primary/15 text-primary"
+                  : "border-az-hairline-strong text-az-muted hover:text-base-content"
+              }`}
+            >
+              Advanced
+            </button>
+
+            <PillMenu
+              label="Permission"
+              icon="lock"
+              value={props.permission}
+              options={(props.permissions ?? PERMISSION_ORDER).map((permission) => ({
+                value: permission,
+                label: PERMISSION_LABELS[permission],
+                hint: PERMISSION_HINTS[permission],
+              }))}
+              onChange={props.onPermissionChange}
+            />
+
+            <button
+              type="button"
+              onClick={() => void attach()}
+              // Greyed on a build whose backend lacks the picker, per the house
+              // convention — a button that silently does nothing is the bug this
+              // replaces.
+              disabled={!isLive("chooseAttachments")}
+              title="Attach files — their paths go into the prompt"
+              aria-label="Attach files"
+              class="flex size-[30px] items-center justify-center rounded-full border border-az-hairline-strong text-az-body transition-colors hover:border-primary/30 hover:text-az-title disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              <Icon name="plus" class="text-[16px]" />
+            </button>
+          </div>
+
+          <div
+            data-composer-secondary-controls
+            class="ml-auto flex min-w-0 max-w-full flex-wrap items-center justify-end gap-2.5"
           >
-            Advanced
-          </button>
+            {/* Text only, by request: the numbers already say how full it is. */}
+            <Show when={props.usage}>
+              <span class="font-mono text-[11.5px] text-az-faint">{props.usage}</span>
+            </Show>
 
-          <PillMenu
-            label="Permission"
-            icon="lock"
-            value={props.permission}
-            options={(props.permissions ?? PERMISSION_ORDER).map((permission) => ({
-              value: permission,
-              label: PERMISSION_LABELS[permission],
-              hint: PERMISSION_HINTS[permission],
-            }))}
-            onChange={props.onPermissionChange}
-          />
-
-          <button
-            type="button"
-            onClick={() => void attach()}
-            // Greyed on a build whose backend lacks the picker, per the house
-            // convention — a button that silently does nothing is the bug this
-            // replaces.
-            disabled={!isLive("chooseAttachments")}
-            title="Attach files — their paths go into the prompt"
-            aria-label="Attach files"
-            class="flex size-[30px] items-center justify-center rounded-full border border-az-hairline-strong text-az-body transition-colors hover:border-primary/30 hover:text-az-title disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            <Icon name="plus" class="text-[16px]" />
-          </button>
-
-          <div class="min-w-4 flex-1" />
-
-          {/* Text only, by request: the numbers already say how full it is. */}
-          <Show when={props.usage}>
-            <span class="font-mono text-[11.5px] text-az-faint">{props.usage}</span>
-          </Show>
-
-          {/*
+            {/*
             Extra Thinking, next to the model it qualifies. Only Claude has a
             lever, so for any other agent the control is disabled rather than
             gone: hiding it would make the row jump as you switch models and
             leave no hint the option exists. Off sends `thinking(false)`, which
             the backend maps to Claude's disable switch.
           */}
-          <button
-            type="button"
-            onClick={() => props.onExtraThinkingChange?.(!props.extraThinking)}
-            disabled={props.agent !== "claude"}
-            aria-pressed={props.agent === "claude" && props.extraThinking}
-            title={
-              props.agent === "claude"
-                ? "Extra Thinking: let the model reason before it answers. Off disables thinking for this tab's runs."
-                : "Extra Thinking applies to Claude only."
-            }
-            class={`flex items-center gap-1.5 rounded-full border px-2.5 py-1 font-medium text-[11px] transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
-              props.agent === "claude" && props.extraThinking
-                ? "border-primary/35 bg-primary/15 text-primary"
-                : "border-az-hairline-strong text-az-muted hover:text-base-content"
-            }`}
-          >
-            <Icon name="sparkles" class="text-[11px]" />
-            Extra Thinking
-          </button>
+            <button
+              type="button"
+              onClick={() => props.onExtraThinkingChange?.(!props.extraThinking)}
+              disabled={props.agent !== "claude"}
+              aria-pressed={props.agent === "claude" && props.extraThinking}
+              title={
+                props.agent === "claude"
+                  ? "Extra Thinking: let the model reason before it answers. Off disables thinking for this tab's runs."
+                  : "Extra Thinking applies to Claude only."
+              }
+              class={`flex items-center gap-1.5 rounded-full border px-2.5 py-1 font-medium text-[11px] transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
+                props.agent === "claude" && props.extraThinking
+                  ? "border-primary/35 bg-primary/15 text-primary"
+                  : "border-az-hairline-strong text-az-muted hover:text-base-content"
+              }`}
+            >
+              <Icon name="sparkles" class="text-[11px]" />
+              Extra Thinking
+            </button>
 
-          <PillMenu
-            label="Model"
-            icon="sparkles"
-            iconClass="text-primary"
-            variant="outline"
-            value={`${props.agent}:${props.model}`}
-            options={props.modelOptions}
-            onChange={(value) => {
-              const option = props.modelOptions.find((candidate) => candidate.value === value);
-              if (option) props.onModelChange(option.agent, option.model);
-            }}
-          />
+            <PillMenu
+              label="Model"
+              icon="sparkles"
+              iconClass="text-primary"
+              variant="outline"
+              value={`${props.agent}:${props.model}`}
+              options={props.modelOptions}
+              onChange={(value) => {
+                const option = props.modelOptions.find((candidate) => candidate.value === value);
+                if (option) props.onModelChange(option.agent, option.model);
+              }}
+            />
 
-          {/*
+            {/*
             Effort is per model, not per agent, so the ladder comes from the
             catalogue entry rather than a shared list. A model whose ladder the
             crate has not established reports none, and the control is hidden
@@ -583,53 +587,54 @@ export function Composer(props: ComposerProps): JSX.Element {
             `efforts` empty on purpose, and inventing levels here would put a
             list in the UI that nothing verified.
           */}
-          <Show when={props.efforts.length > 0}>
-            <PillMenu
-              label="Effort"
-              variant="outline"
-              value={props.effort}
-              options={props.efforts.map((effort) => ({ value: effort, label: effort }))}
-              onChange={(effort) => props.onEffortChange?.(effort)}
-            />
-          </Show>
+            <Show when={props.efforts.length > 0}>
+              <PillMenu
+                label="Effort"
+                variant="outline"
+                value={props.effort}
+                options={props.efforts.map((effort) => ({ value: effort, label: effort }))}
+                onChange={(effort) => props.onEffortChange?.(effort)}
+              />
+            </Show>
 
-          {/* While a run is live, the provider capability decides whether this
+            {/* While a run is live, the provider capability decides whether this
               interrupts the open turn or queues for the next one. */}
-          <button
-            type="button"
-            onClick={() => void submit()}
-            disabled={!canSend()}
-            aria-label={
-              props.isRunning
-                ? props.canFollowUp
-                  ? "Send into the running turn"
-                  : "Queue after the running turn"
-                : "Send"
-            }
-            title={
-              props.isRunning
-                ? props.canFollowUp
-                  ? "Delivered into the running turn; the agent takes it at its next step"
-                  : "Queued until the running turn finishes"
-                : undefined
-            }
-            class="flex size-8 items-center justify-center rounded-full bg-primary text-primary-content transition-colors hover:bg-az-primary-hover disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            <Icon name="arrow-up" class="text-[17px]" />
-          </button>
-          <Show when={props.isRunning}>
             <button
               type="button"
-              onClick={() => props.onStop?.()}
-              // No handler means the backend cannot stop this run; a Stop
-              // that only pretended would be worse than a disabled one.
-              disabled={!props.onStop}
-              aria-label="Stop the run"
-              class="flex size-8 items-center justify-center rounded-full border border-primary/40 bg-base-300 transition-colors hover:border-primary disabled:cursor-not-allowed disabled:opacity-40"
+              onClick={() => void submit()}
+              disabled={!canSend()}
+              aria-label={
+                props.isRunning
+                  ? props.canFollowUp
+                    ? "Send into the running turn"
+                    : "Queue after the running turn"
+                  : "Send"
+              }
+              title={
+                props.isRunning
+                  ? props.canFollowUp
+                    ? "Delivered into the running turn; the agent takes it at its next step"
+                    : "Queued until the running turn finishes"
+                  : undefined
+              }
+              class="flex size-8 items-center justify-center rounded-full bg-primary text-primary-content transition-colors hover:bg-az-primary-hover disabled:cursor-not-allowed disabled:opacity-40"
             >
-              <span class="size-[11px] rounded-[3px] bg-primary" />
+              <Icon name="arrow-up" class="text-[17px]" />
             </button>
-          </Show>
+            <Show when={props.isRunning}>
+              <button
+                type="button"
+                onClick={() => props.onStop?.()}
+                // No handler means the backend cannot stop this run; a Stop
+                // that only pretended would be worse than a disabled one.
+                disabled={!props.onStop}
+                aria-label="Stop the run"
+                class="flex size-8 items-center justify-center rounded-full border border-primary/40 bg-base-300 transition-colors hover:border-primary disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                <span class="size-[11px] rounded-[3px] bg-primary" />
+              </button>
+            </Show>
+          </div>
         </div>
       </div>
     </div>

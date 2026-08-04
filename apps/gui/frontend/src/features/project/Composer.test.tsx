@@ -71,7 +71,7 @@ describe("Composer", () => {
     expect(document.activeElement).not.toBe(field);
   });
 
-  it("wraps controls so a long model label cannot push Send outside", async () => {
+  it("wraps controls in two groups so a long model label cannot push Send outside", async () => {
     const { container, getByLabelText, booted } = mount({
       model: "opus[1m]",
       modelOptions: [
@@ -85,8 +85,12 @@ describe("Composer", () => {
     });
 
     const controls = container.querySelector("[data-composer-controls]");
+    const primary = container.querySelector("[data-composer-primary-controls]");
+    const secondary = container.querySelector("[data-composer-secondary-controls]");
     expect(controls).toHaveClass("flex-wrap");
-    expect(controls).toContainElement(getByLabelText("Send"));
+    expect(primary).toContainElement(getByLabelText("Permission"));
+    expect(secondary).toHaveClass("ml-auto", "justify-end");
+    expect(secondary).toContainElement(getByLabelText("Send"));
     await booted();
   });
 
