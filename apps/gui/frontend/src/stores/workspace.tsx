@@ -971,7 +971,10 @@ function createWorkspace() {
 
     await bind("run:approval", ({ projectId, approvalId, tool, input }) => {
       batch(() => {
-        setState("pendingApprovals", projectId, { approvalId, tool, input });
+        // Normalize a possibly-missing tool at the boundary: a Codex escalation
+        // can omit it, and a bare `undefined` reaching the card crashed the
+        // render, hiding the very question the run is blocked on.
+        setState("pendingApprovals", projectId, { approvalId, tool: tool ?? "", input });
         touchRunStatus(projectId, "waiting for your approval");
       });
     });
