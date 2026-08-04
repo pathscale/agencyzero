@@ -15,7 +15,7 @@ tauri-build = { version = "2", features = [] }
 [dependencies]
 # Carries the store forward when a column changes; see crates/wt-migrate.
 wt-migrate = { path = "../../crates/wt-migrate" }
-agent-abstraction = "0.4.8"
+agent-abstraction = "0.4.9"
 agent-experimental = { git = "https://gitlab.com/anonymous-28282828282/agent-experimental.git", rev = "f04ee035d9f243eb0c2dadb03829f827bb87d918", default-features = false, optional = true }
 promptsyntax = "0.1.0"
 az-core.workspace = true

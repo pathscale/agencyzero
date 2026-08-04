@@ -1946,12 +1946,12 @@ const PARTIAL_FLUSH_EVERY: std::time::Duration = std::time::Duration::from_milli
 async fn deliver_injection(
     app: &AppHandle,
     io: &std::sync::Arc<AgentIo>,
-    run: &agent_abstraction::Run,
+    control: &agent_abstraction::RunControl,
     project_id: &str,
     message_id: &str,
     body: String,
 ) {
-    match run.send(&body).await {
+    match control.send(&body).await {
         Ok(()) => {
             note_io(
                 app,
@@ -4832,6 +4832,36 @@ async fn drive_run(
     };
 
     /*
+     * Delivery receipts must never share the task that drains agent events.
+     *
+     * Codex can acknowledge `turn/steer` only after emitting a burst of
+     * events. The abstraction's event channel is deliberately bounded, so
+     * awaiting that acknowledgement here would stop `run.recv`, fill the
+     * channel, and leave both sides waiting forever. A cloneable control handle
+     * lets this ordered worker wait for receipts while the loop below keeps
+     * making room for every event.
+     */
+    let (injection_delivery_tx, mut injection_delivery_rx) =
+        tokio::sync::mpsc::unbounded_channel::<InjectedMessage>();
+    let injection_app = app.clone();
+    let injection_io = io.clone();
+    let injection_project_id = project_id.clone();
+    let injection_control = run.control();
+    let injection_delivery = tokio::spawn(async move {
+        while let Some(injected) = injection_delivery_rx.recv().await {
+            deliver_injection(
+                &injection_app,
+                &injection_io,
+                &injection_control,
+                &injection_project_id,
+                &injected.turn_id,
+                injected.body,
+            )
+            .await;
+        }
+    });
+
+    /*
      * Paragraph breaks between text blocks, keyed on structure rather than
      * timing. "I'll check whether that exists." → tool call → "Yes — it's
      * there." streams as two blocks, and appending the second delta straight
@@ -4882,10 +4912,9 @@ async fn drive_run(
     // it lands. The loop exits, and the tail below tears the agent down.
     let mut cancelled = false;
 
-    /// What woke the loop: an agent event, or a message to deliver into the
-    /// turn. Two variants rather than handling inject inside the select arm,
-    /// because `recv` borrows the run mutably for the whole select and
-    /// `run.send` cannot be called until that future is dropped.
+    /// What woke the loop: an agent event, or a message to queue for the
+    /// independent delivery worker. Keeping receipt waits off this task is
+    /// what guarantees the event stream continues to drain.
     enum Wake {
         Event(Event),
         Inject(InjectedMessage),
@@ -4916,18 +4945,10 @@ async fn drive_run(
             Wake::Event(event) => event,
             Wake::Inject(injected) => {
                 // A correction typed mid-turn. The user row was persisted and
-                // broadcast by `send_message`; delivery and its failure modes
-                // live in the helper, shared with the approval-wait arm.
-                directive_turn_id = injected.turn_id;
-                deliver_injection(
-                    &app,
-                    &io,
-                    &run,
-                    &project_id,
-                    &directive_turn_id,
-                    injected.body,
-                )
-                .await;
+                // broadcast by `send_message`. Queue it without waiting for
+                // Codex's receipt so this task can immediately drain events.
+                directive_turn_id.clone_from(&injected.turn_id);
+                let _ = injection_delivery_tx.send(injected);
                 // A user message is a block boundary: the next streamed text
                 // starts a new paragraph rather than gluing to the old one.
                 last_was_text = false;
@@ -5024,9 +5045,9 @@ async fn drive_run(
                  * question stands must be delivered *now* — "the moment the
                  * user hits enter" is the 0.3.6 contract, and an approval
                  * dialog on screen is exactly when someone types "deny that
-                 * and do X instead". `run.send` takes `&self`, so delivering
-                 * here needs no truce with the event loop; the deadline is
-                 * absolute so servicing a message cannot extend the timeout.
+                 * and do X instead". Delivery is queued to the independent
+                 * worker; the deadline is absolute so servicing a message
+                 * cannot extend the timeout.
                  */
                 let deadline = tokio::time::Instant::now() + APPROVAL_TIMEOUT;
                 let mut answer_rx = answer_rx;
@@ -5042,16 +5063,8 @@ async fn drive_run(
                         }
                         injected = inject_rx.recv() => {
                             if let Some(injected) = injected {
-                                directive_turn_id = injected.turn_id;
-                                deliver_injection(
-                                    &app,
-                                    &io,
-                                    &run,
-                                    &project_id,
-                                    &directive_turn_id,
-                                    injected.body,
-                                )
-                                .await;
+                                directive_turn_id.clone_from(&injected.turn_id);
+                                let _ = injection_delivery_tx.send(injected);
                             }
                         }
                     }
@@ -5526,6 +5539,16 @@ async fn drive_run(
         waiting.retain(|(project, _), _| project != &project_id);
     }
 
+    /*
+     * Close both input stages before teardown or persistence. The run slot is
+     * still held, so a new `send_message` can otherwise enqueue into a receiver
+     * this function no longer polls and report success even though the words
+     * are lost. Once the receiver is gone, the caller takes the existing
+     * `run:inject_failed` recovery path and starts a fresh resumed turn.
+     */
+    drop(inject_rx);
+    drop(injection_delivery_tx);
+
     // One write, now that there is something final to write.
     let result = if cancelled {
         note_io(
@@ -5542,6 +5565,17 @@ async fn drive_run(
     } else {
         run.finish().await
     };
+
+    // Finishing or cancelling the run closes every outstanding receipt. Let
+    // the ordered worker report any rejected messages before the run slot is
+    // released and a resumed turn begins.
+    if let Err(error) = injection_delivery.await {
+        crate::log!(
+            crate::log::Level::Error,
+            "run",
+            "{project_id}: injection delivery worker failed: {error}"
+        );
+    }
 
     /*
      * The tombstone check. `delete_project` cancels the run and waits for
@@ -5960,22 +5994,6 @@ async fn drive_run(
         }
     }
 
-    /*
-     * Closed before the checkpoint, and this is load-bearing rather than tidy.
-     *
-     * The run slot is still held here — the reservation lives until this
-     * function returns — so a message sent now is delivered into `inject`. The
-     * turn that was reading it has ended, so with the receiver still alive the
-     * words would go into a channel nobody drains and be lost without a trace.
-     * Dropping it makes the send fail instead, which is the case
-     * `run:inject_failed` already exists for: the message is queued and goes out
-     * for real once the slot frees.
-     *
-     * A checkpoint is a whole extra turn, so it widens that window from
-     * milliseconds to a minute. The race was survivable by accident before; it
-     * would not be now.
-     */
-    drop(inject_rx);
     checkpoint_if_due(
         &app,
         &tables,
