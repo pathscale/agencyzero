@@ -16,6 +16,7 @@ import {
   usageTotals,
   withLiveContext,
 } from "~/lib/stats";
+import { tx } from "~/stores/i18n";
 import { QUEUE_REASONS, useNow, useWorkspace } from "~/stores/workspace";
 import type { Project, PullRequest, Tab } from "~/types";
 
@@ -165,7 +166,7 @@ export function ProjectTab(props: { tab: Tab; project: Project }): JSX.Element {
           <EditableTitle
             value={props.project.name}
             onRename={(name) => actions.renameProject(props.project.id, name)}
-            label="Rename project"
+            label={tx("Rename project")}
             class="min-w-0 flex-1 font-semibold text-[14.5px] text-az-title"
             inputClass="font-semibold text-[14.5px]"
           />
@@ -176,22 +177,24 @@ export function ProjectTab(props: { tab: Tab; project: Project }): JSX.Element {
             on the next message.
           */}
           <span class="flex shrink-0 items-center gap-2 rounded-full border border-az-hairline bg-base-300 px-2.5 py-0.5 font-mono text-[11px] text-az-muted">
-            conversation · {AGENT_LABELS[agent()]}
+            {tx("conversation")} · {AGENT_LABELS[agent()]}
             <Show when={totals().turns > 0}>
               <span class="text-az-faint">·</span>
               <span>
-                {totals().turns} turn{totals().turns === 1 ? "" : "s"}
+                {totals().turns} {tx("turn")}
               </span>
               <span class="text-az-faint">·</span>
               {/* The session's summed consumption — where the tokens went. The
                   context readout under the composer answers a different
                   question (how full the window is), so both exist. */}
-              <span title={costTitle()}>{compactCount(totals().tokens)} tok</span>
+              <span title={costTitle()}>
+                {compactCount(totals().tokens)} {tx("tok")}
+              </span>
               <span class="text-az-faint">·</span>
               <span title={costTitle()}>{costLabel(totals().costUsd)}</span>
               <Show when={totals().reported < totals().turns}>
-                <span class="text-az-faint" title="Some turns reported no usage">
-                  (partial)
+                <span class="text-az-faint" title={tx("Some turns reported no usage")}>
+                  {tx("(partial)")}
                 </span>
               </Show>
             </Show>
@@ -207,10 +210,12 @@ export function ProjectTab(props: { tab: Tab; project: Project }): JSX.Element {
 
           <Show when={likelyCacheBreak()}>
             <span
-              title="The latest comparable turn reported zero cache reads after a substantial cached turn. This can increase usage, but the provider does not expose the cause."
+              title={tx(
+                "The latest comparable turn reported zero cache reads after a substantial cached turn. This can increase usage, but the provider does not expose the cause.",
+              )}
               class="shrink-0 rounded-full border border-warning/30 bg-warning/10 px-2.5 py-0.5 text-[11px] text-warning"
             >
-              cache miss?
+              {tx("cache miss?")}
             </span>
           </Show>
 
@@ -277,7 +282,7 @@ export function ProjectTab(props: { tab: Tab; project: Project }): JSX.Element {
                     <button
                       type="button"
                       onClick={() => actions.removeQueued(props.project.id, index())}
-                      aria-label="Drop this queued message"
+                      aria-label={tx("Drop this queued message")}
                       class="shrink-0 text-az-faint transition-colors hover:text-error"
                     >
                       <Icon name="x" class="text-[12px]" />
@@ -296,7 +301,7 @@ export function ProjectTab(props: { tab: Tab; project: Project }): JSX.Element {
             }
             available={state.commands[props.project.id]?.[props.tab.agent]}
             autofocus
-            placeholder="Ask, or type / for commands…"
+            placeholder={tx("Ask, or type / for commands…")}
             agent={props.tab.agent}
             model={props.tab.model}
             modelOptions={promptModels()}
@@ -422,7 +427,7 @@ function PrChip(props: { pr: PullRequest }): JSX.Element {
           <span class="min-w-0 truncate font-mono text-[11px] text-az-body">{props.pr.branch}</span>
         </Show>
         <Show when={copied()}>
-          <span class="shrink-0 text-[10.5px] text-success">copied</span>
+          <span class="shrink-0 text-[10.5px] text-success">{tx("copied")}</span>
         </Show>
       </div>
       {/* Coloured and underlined, because it leaves the app. */}
@@ -433,10 +438,10 @@ function PrChip(props: { pr: PullRequest }): JSX.Element {
             .openExternal(props.pr.url)
             .catch((cause) => log.warn(`could not open the PR: ${describeError(cause)}`))
         }
-        title={`Open ${props.pr.url}`}
+        title={tx("Open {url}", { url: props.pr.url })}
         class="shrink-0 cursor-pointer text-primary underline decoration-dotted underline-offset-2 transition-opacity hover:opacity-75"
       >
-        GitHub ›
+        {tx("GitHub ›")}
       </button>
       <Show
         when={merged()}
@@ -454,25 +459,25 @@ function PrChip(props: { pr: PullRequest }): JSX.Element {
                 onClick={() =>
                   isLive("refreshPullRequest") && actions.refreshPullRequest(props.pr.id)
                 }
-                title="CI rollup — click to re-check"
+                title={tx("CI rollup — click to re-check")}
                 class={`shrink-0 rounded-md px-[7px] py-px font-semibold text-[10.5px] ${CI_TONE[props.pr.ci] ?? "bg-base-300 text-az-muted"}`}
               >
-                CI {props.pr.ci}
+                {tx("CI")} {props.pr.ci}
               </button>
             </Show>
             <Show when={closed()}>
-              <span class="shrink-0 font-semibold text-[11px] text-az-muted">Closed</span>
+              <span class="shrink-0 font-semibold text-[11px] text-az-muted">{tx("Closed")}</span>
             </Show>
           </>
         }
       >
-        <span class="shrink-0 font-semibold text-[11.5px] text-az-pr-strong">Merged</span>
+        <span class="shrink-0 font-semibold text-[11.5px] text-az-pr-strong">{tx("Merged")}</span>
       </Show>
       <button
         type="button"
         onClick={() => void copy()}
-        aria-label={`Copy the link to PR ${props.pr.number}`}
-        title={copied() ? "Copied" : "Copy the link"}
+        aria-label={tx("Copy the link to PR {number}", { number: props.pr.number })}
+        title={copied() ? tx("Copied") : tx("Copy the link")}
         class="shrink-0 rounded-md p-1 text-az-faint transition-colors hover:text-az-body"
       >
         <Icon name={copied() ? "check" : "copy"} class="text-[12px]" />
@@ -480,7 +485,7 @@ function PrChip(props: { pr: PullRequest }): JSX.Element {
       <button
         type="button"
         onClick={() => void actions.dismissPullRequest(props.pr.id)}
-        aria-label={`Dismiss PR ${props.pr.number}`}
+        aria-label={tx("Dismiss PR {number}", { number: props.pr.number })}
         class="shrink-0 text-az-faint transition-colors hover:text-base-content"
       >
         <Icon name="x" class="text-[13px]" />
@@ -528,7 +533,9 @@ function SessionChip(props: { sessionId: string | null }): JSX.Element {
     <Show
       when={props.sessionId}
       fallback={
-        <span class="shrink-0 font-mono text-[10.5px] text-az-faint">session · none yet</span>
+        <span class="shrink-0 font-mono text-[10.5px] text-az-faint">
+          {tx("session · none yet")}
+        </span>
       }
     >
       {(id) => (
@@ -536,12 +543,12 @@ function SessionChip(props: { sessionId: string | null }): JSX.Element {
           title={id()}
           class="flex shrink-0 items-center gap-1 font-mono text-[10.5px] text-az-faint"
         >
-          <span class="text-az-faint">session ·</span>
+          <span class="text-az-faint">{tx("session ·")}</span>
           {id().slice(0, 8)}
           <button
             type="button"
             onClick={() => void copy(id())}
-            aria-label="Copy session id"
+            aria-label={tx("Copy session id")}
             class="flex size-[18px] items-center justify-center rounded transition-colors hover:bg-white/8 hover:text-az-body"
           >
             <Icon name={copied() ? "check" : "copy"} class="text-[10px]" />

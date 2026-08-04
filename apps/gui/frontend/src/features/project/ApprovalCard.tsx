@@ -1,6 +1,7 @@
 import { type JSX, Show } from "solid-js";
 import { Icon } from "~/components/Icon";
 import { describeError, log } from "~/lib/log";
+import { tx } from "~/stores/i18n";
 import { useWorkspace } from "~/stores/workspace";
 import type { PendingApproval } from "~/types";
 
@@ -54,7 +55,7 @@ export function ApprovalCard(props: { projectId: string; approval: PendingApprov
       <Icon name="lock" class="relative top-0.5 shrink-0 text-[15px] text-warning" />
       <div class="flex min-w-0 flex-1 flex-col gap-[7px]">
         <div class="flex items-baseline gap-2">
-          <span class="font-semibold text-[12px] text-warning">Approval needed</span>
+          <span class="font-semibold text-[12px] text-warning">{tx("Approval needed")}</span>
           <span class="font-mono text-[11.5px] text-az-muted">{props.approval.tool}</span>
         </div>
 
@@ -84,7 +85,7 @@ export function ApprovalCard(props: { projectId: string; approval: PendingApprov
             onClick={() => answer(true)}
             class="rounded-lg bg-primary px-[13px] py-[5px] font-semibold text-[12px] text-primary-content transition-colors hover:bg-az-primary-hover"
           >
-            {isPermissionGrant() ? "Allow for session" : "Allow once"}
+            {isPermissionGrant() ? tx("Allow for session") : tx("Allow once")}
           </button>
           <button
             type="button"
@@ -97,25 +98,33 @@ export function ApprovalCard(props: { projectId: string; approval: PendingApprov
              */
             title={
               isPermissionGrant()
-                ? "Remembers this exact set of writable paths for this project and allows it automatically on later runs"
-                : "Remembers this kind of call for this project — the same command family or the same directory — and allows it automatically from now on"
+                ? tx(
+                    "Remembers this exact set of writable paths for this project and allows it automatically on later runs",
+                  )
+                : tx(
+                    "Remembers this kind of call for this project — the same command family or the same directory — and allows it automatically from now on",
+                  )
             }
             class="rounded-lg border border-primary/50 px-3 py-[5px] font-semibold text-[12px] text-primary transition-colors hover:border-primary hover:bg-primary/10"
           >
-            {isPermissionGrant() ? "Always allow these paths" : "Always allow similar"}
+            {isPermissionGrant() ? tx("Always allow these paths") : tx("Always allow similar")}
           </button>
           <button
             type="button"
             onClick={() => answer(false)}
             class="rounded-lg border border-primary/18 px-3 py-[5px] text-[12px] text-az-body transition-colors hover:border-error hover:text-error"
           >
-            Deny
+            {tx("Deny")}
           </button>
-          <span class="text-[11.5px] text-az-muted">· the run is paused until you decide</span>
+          <span class="text-[11.5px] text-az-muted">
+            {tx("· the run is paused until you decide")}
+          </span>
         </div>
         <Show when={isPermissionGrant()}>
           <p class="text-[11px] text-az-muted leading-[1.45]">
-            Add a folder to Working directories in Settings to make it writable from the start.
+            {tx(
+              "Add a folder to Working directories in Settings to make it writable from the start.",
+            )}
           </p>
         </Show>
       </div>

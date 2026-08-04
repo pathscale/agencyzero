@@ -112,31 +112,40 @@ pub fn record_url(
         .execute()
         .unwrap_or_default();
 
-    if !existing.iter().any(|row| row.url == url) {
-        let row = PullRequestRow {
-            id: crate::projects::id("pr"),
-            project_id: project_id.to_string(),
-            url: url.clone(),
-            repo,
-            number,
-            branch: String::new(),
-            state: "unknown".into(),
-            additions: 0,
-            deletions: 0,
-            ci: "unknown".into(),
-            dismissed: false,
-            updated_at: crate::projects::now(),
-        };
-        tables.pull_request.insert(row.clone()).map_err(|error| {
-            crate::log!(
-                crate::log::Level::Error,
-                "prs",
-                "{project_id}: could not record {url}: {error}"
-            );
-            format!("WRITE_FAILED: {error}")
-        })?;
-        let _ = app.emit("pr:updated", PullRequestDto::from(row));
-    }
+    // The chip the caller wants on screen: the row we just made, or the one a
+    // prior link already made. Emitting it in both cases is what makes a link
+    // land immediately rather than only after the next `loadProject` or poll —
+    // the single insert-only emit left a re-linked (or missed) chip stranded
+    // until a reload, which read as "the PR isn't here".
+    let chip = match existing.iter().find(|row| row.url == url) {
+        Some(row) => row.clone(),
+        None => {
+            let row = PullRequestRow {
+                id: crate::projects::id("pr"),
+                project_id: project_id.to_string(),
+                url: url.clone(),
+                repo,
+                number,
+                branch: String::new(),
+                state: "unknown".into(),
+                additions: 0,
+                deletions: 0,
+                ci: "unknown".into(),
+                dismissed: false,
+                updated_at: crate::projects::now(),
+            };
+            tables.pull_request.insert(row.clone()).map_err(|error| {
+                crate::log!(
+                    crate::log::Level::Error,
+                    "prs",
+                    "{project_id}: could not record {url}: {error}"
+                );
+                format!("WRITE_FAILED: {error}")
+            })?;
+            row
+        }
+    };
+    let _ = app.emit("pr:updated", PullRequestDto::from(chip));
 
     // A known PR is still news: it may have merged since the last refresh.
     refresh_project(app.clone(), project_id.to_string());

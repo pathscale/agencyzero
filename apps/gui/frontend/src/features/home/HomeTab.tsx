@@ -10,6 +10,7 @@ import { relativeTime } from "~/lib/format";
 import { AGENT_LABELS, nextStatus, statusSuffix } from "~/lib/labels";
 import { describeError, log } from "~/lib/log";
 import { compileAdvancedPrompt } from "~/lib/promptEditor";
+import { tx } from "~/stores/i18n";
 import { prefs, setPrefs, togglePanelSection } from "~/stores/prefs";
 import { TASK_MANAGER_ID, useWorkspace } from "~/stores/workspace";
 import type { Project, ProjectItem } from "~/types";
@@ -67,9 +68,9 @@ export function HomeTab(): JSX.Element {
       <Panel class="flex min-w-0 flex-1 flex-col">
         <div class="flex flex-col gap-[11px] px-4 pt-4 pb-3">
           <div class="flex items-baseline gap-2.5 px-0.5">
-            <span class="font-semibold text-[15px] text-base-content">Projects</span>
+            <span class="font-semibold text-[15px] text-base-content">{tx("Projects")}</span>
             <span class="text-[11.5px] text-az-faint">
-              and their items · click a project to open its tab
+              {tx("and their items · click a project to open its tab")}
             </span>
           </div>
 
@@ -88,8 +89,8 @@ export function HomeTab(): JSX.Element {
                 type="search"
                 value={query()}
                 onInput={(event) => setQuery(event.currentTarget.value)}
-                placeholder="Search projects and items…"
-                aria-label="Search projects and items"
+                placeholder={tx("Search projects and items…")}
+                aria-label={tx("Search projects and items")}
                 class="min-w-0 flex-1 bg-transparent text-[12.5px] text-base-content placeholder:text-az-muted focus:outline-none"
               />
               <kbd class="shrink-0 rounded-md border border-primary/25 bg-primary/8 px-[7px] py-0.5 font-mono text-[10.5px] text-primary/70">
@@ -105,7 +106,7 @@ export function HomeTab(): JSX.Element {
           <For each={matches()}>{(project) => <ProjectGroup project={project} />}</For>
           <Show when={matches().length === 0}>
             <p class="px-2 py-6 text-center text-[12.5px] text-az-muted">
-              Nothing matches “{query()}”.
+              {tx("Nothing matches “{query}”", { query: query() })}
             </p>
           </Show>
         </div>
@@ -118,13 +119,13 @@ export function HomeTab(): JSX.Element {
           class="flex items-center justify-center gap-2.5 rounded-panel bg-primary py-3.5 font-semibold text-[13.5px] text-primary-content shadow-[0_6px_20px_rgb(from_var(--color-primary)_r_g_b/.12)] transition-colors hover:bg-az-primary-hover"
         >
           <Icon name="plus" class="text-[17px]" />
-          New Project
+          {tx("New Project")}
         </button>
 
         <Show when={pinned().length > 0}>
           <SectionPanel
             icon="pin"
-            title="Pinned"
+            title={tx("Pinned")}
             count={pinned().length}
             isOpen={prefs.panelSections.pinned}
             onToggle={() => togglePanelSection("pinned")}
@@ -144,7 +145,7 @@ export function HomeTab(): JSX.Element {
                     </span>
                     <span class="shrink-0 text-[11px] text-az-muted">
                       {itemsFor(project.id).filter((item) => item.status !== "finished").length}{" "}
-                      open
+                      {tx("open")}
                     </span>
                   </button>
                 )}
@@ -155,7 +156,7 @@ export function HomeTab(): JSX.Element {
 
         <SectionPanel
           icon="history"
-          title="Recent"
+          title={tx("Recent")}
           count={recent().length}
           isOpen={prefs.panelSections.recent}
           onToggle={() => togglePanelSection("recent")}
@@ -175,12 +176,12 @@ export function HomeTab(): JSX.Element {
                       {project.name}
                     </span>
                     <span class="truncate font-mono text-[11px] text-az-muted">
-                      {project.dirs[0] ?? "no working directory"}
+                      {project.dirs[0] ?? tx("no working directory")}
                     </span>
                   </div>
                   <span class="ml-auto shrink-0 text-[11px] text-az-faint">
                     {state.running[project.id]?.length
-                      ? "running now"
+                      ? tx("running now")
                       : relativeTime(project.lastActivityAt)}
                   </span>
                 </button>
@@ -198,7 +199,7 @@ export function HomeTab(): JSX.Element {
         <Show when={(state.agentIo[TASK_MANAGER_ID] ?? []).length > 0}>
           <SectionPanel
             icon="terminal"
-            title="Task Manager I/O"
+            title={tx("Task Manager I/O")}
             count={(state.agentIo[TASK_MANAGER_ID] ?? []).length}
             isOpen={prefs.panelSections.homeIo}
             onToggle={() => togglePanelSection("homeIo")}
@@ -298,8 +299,11 @@ function TaskManagerComposer(): JSX.Element {
     const label = AGENT_LABELS[state.settings?.taskManager.agent ?? "claude"];
     if (waitsForRun()) return `${label} task manager is finishing its current turn…`;
     return state.taskManagerSession
-      ? `Tell ${label} task manager… · ${state.taskManagerSession}`
-      : `Tell ${label} task manager…`;
+      ? tx("Tell {agent} task manager… · {session}", {
+          agent: label,
+          session: state.taskManagerSession,
+        })
+      : tx("Tell {agent} task manager…", { agent: label });
   };
 
   return (
@@ -329,7 +333,7 @@ function TaskManagerComposer(): JSX.Element {
                * moment you type, and it stops costing the line it used to sit on.
                */
               placeholder={placeholder()}
-              aria-label="Task manager prompt"
+              aria-label={tx("Task manager prompt")}
               disabled={isSending() || waitsForRun()}
               class="min-w-0 flex-1 bg-transparent text-[12.5px] text-base-content placeholder:text-az-muted focus:outline-none disabled:opacity-60"
             />
@@ -348,7 +352,7 @@ function TaskManagerComposer(): JSX.Element {
               void submit();
             }}
             placeholder={placeholder()}
-            aria-label="Task manager prompt"
+            aria-label={tx("Task manager prompt")}
             disabled={isSending() || waitsForRun()}
             class="az-scroll min-w-0 flex-1 resize-none bg-transparent text-[12.5px] text-base-content leading-[1.5] placeholder:text-az-muted focus:outline-none disabled:opacity-60"
           />
@@ -357,8 +361,8 @@ function TaskManagerComposer(): JSX.Element {
           type="button"
           onClick={() => void attach()}
           disabled={!isLive("chooseAttachments")}
-          title="Attach files — their paths go into the prompt for the task manager to read"
-          aria-label="Attach files for the task manager"
+          title={tx("Attach files — their paths go into the prompt for the task manager to read")}
+          aria-label={tx("Attach files for the task manager")}
           class="shrink-0 text-az-faint transition-colors hover:text-az-body disabled:cursor-not-allowed disabled:opacity-40"
         >
           <Icon name="plus" class="text-[14px]" />
@@ -367,8 +371,8 @@ function TaskManagerComposer(): JSX.Element {
           type="button"
           onClick={() => setTall((open) => !open)}
           aria-pressed={tall()}
-          title={tall() ? "Back to one line" : "Expand the prompt area"}
-          aria-label={tall() ? "Shrink the prompt area" : "Expand the prompt area"}
+          title={tall() ? tx("Back to one line") : tx("Expand the prompt area")}
+          aria-label={tall() ? tx("Shrink the prompt area") : tx("Expand the prompt area")}
           class="shrink-0 text-az-faint transition-colors hover:text-az-body"
         >
           <Icon name={tall() ? "chevron-up" : "chevron-down"} class="text-[14px]" />
@@ -392,7 +396,7 @@ function TaskManagerComposer(): JSX.Element {
           type="button"
           onClick={() => togglePanelSection("tmDebug")}
           aria-pressed={prefs.panelSections.tmDebug}
-          title="Show the task manager's reply and collected list"
+          title={tx("Show the task manager's reply and collected list")}
           class={`shrink-0 transition-colors ${
             prefs.panelSections.tmDebug ? "text-primary" : "text-az-faint hover:text-az-body"
           }`}
@@ -413,7 +417,7 @@ function TaskManagerComposer(): JSX.Element {
       <Show when={error()}>
         {(message) => (
           <p role="alert" class="px-1 pt-1 text-[11px] text-error">
-            Could not send — your prompt is still here. {message()}
+            {tx("Could not send — your prompt is still here.")} {message()}
           </p>
         )}
       </Show>
@@ -484,7 +488,7 @@ function TaskManagerStatus(): JSX.Element {
         {(current) => (
           <div class="flex flex-col gap-1 rounded-[11px] border border-az-hairline-soft bg-az-inset px-3 py-2">
             <span class="text-[10.5px] text-az-faint">
-              {current().isWriting ? "Task Manager · writing…" : "Task Manager"}
+              {current().isWriting ? tx("Task Manager · writing…") : tx("Task Manager")}
             </span>
             <p
               data-selectable
@@ -504,7 +508,9 @@ function TaskManagerStatus(): JSX.Element {
         */}
         <div class="flex flex-col gap-0.5 rounded-[11px] border border-az-hairline-soft bg-az-inset px-2.5 py-2">
           <div class="flex items-center gap-2 px-1 pb-1">
-            <span class="text-[10.5px] text-az-faint">collected · {tasks().length}</span>
+            <span class="text-[10.5px] text-az-faint">
+              {tx("collected ·")} {tasks().length}
+            </span>
             <button
               type="button"
               onClick={() => {
@@ -512,7 +518,7 @@ function TaskManagerStatus(): JSX.Element {
               }}
               class="ml-auto rounded-md border border-az-hairline px-2 py-0.5 text-[10.5px] text-az-muted transition-colors hover:border-error hover:text-error"
             >
-              Clear
+              {tx("Clear")}
             </button>
           </div>
           <div class="az-scroll flex max-h-[150px] flex-col gap-0.5 overflow-y-auto">
@@ -573,7 +579,7 @@ function GroupItemRow(props: {
         <input
           autofocus
           value={title()}
-          aria-label={`Edit ${props.item.title}`}
+          aria-label={tx("Edit {name}", { name: props.item.title })}
           /*
            * Selecting text inside a field must not reach the row behind it.
            * Home's group header and item rows open a project on double click,
@@ -605,8 +611,8 @@ function GroupItemRow(props: {
             event.stopPropagation();
             props.onAdvance();
           }}
-          aria-label={`Change the status of ${props.item.title}`}
-          title={`${props.item.status} — click to change`}
+          aria-label={tx("Change the status of {name}", { name: props.item.title })}
+          title={tx("{status} — click to change", { status: statusSuffix(props.item.status) })}
           class="flex size-7 shrink-0 items-center justify-center rounded-full transition-colors hover:bg-primary/12 focus-visible:bg-primary/12"
         >
           <ItemMarker status={props.item.status} />
@@ -635,8 +641,8 @@ function GroupItemRow(props: {
             setTitle(props.item.title);
             setEditing(true);
           }}
-          aria-label={`Edit ${props.item.title}`}
-          title="Edit this item"
+          aria-label={tx("Edit {name}", { name: props.item.title })}
+          title={tx("Edit this item")}
           class="shrink-0 rounded-md p-0.5 text-az-faint opacity-0 transition-[color,opacity] hover:text-az-body group-hover:opacity-100"
         >
           <Icon name="pencil" class="text-[11px]" />
@@ -648,8 +654,8 @@ function GroupItemRow(props: {
               .deleteItem(props.item.id)
               .catch((cause) => log.error(`could not delete the item: ${describeError(cause)}`))
           }
-          aria-label={`Delete ${props.item.title}`}
-          title="Delete this item"
+          aria-label={tx("Delete {name}", { name: props.item.title })}
+          title={tx("Delete this item")}
           class="shrink-0 rounded-md p-0.5 text-az-faint opacity-0 transition-[color,opacity] hover:text-error group-hover:opacity-100"
         >
           <Icon name="x" class="text-[12px]" />
@@ -781,7 +787,7 @@ function ProjectGroup(props: { project: Project }): JSX.Element {
             void actions.setProjectPinned(props.project.id, !props.project.pinned);
           }}
           aria-pressed={props.project.pinned}
-          aria-label={props.project.pinned ? "Unpin project" : "Pin project"}
+          aria-label={props.project.pinned ? tx("Unpin project") : tx("Pin project")}
           class={`shrink-0 transition-colors ${props.project.pinned ? "text-primary" : "text-az-ghost hover:text-az-strong"}`}
         >
           <Icon name="pin" class="text-[14px]" />
@@ -803,7 +809,7 @@ function ProjectGroup(props: { project: Project }): JSX.Element {
                 event.stopPropagation();
                 setConfirming(true);
               }}
-              aria-label={`Delete ${props.project.name}`}
+              aria-label={tx("Delete {name}", { name: props.project.name })}
               class="shrink-0 text-az-ghost transition-colors hover:text-error"
             >
               <Icon name="x" class="text-[14px]" />
@@ -811,21 +817,21 @@ function ProjectGroup(props: { project: Project }): JSX.Element {
           }
         >
           <div class="flex shrink-0 items-center gap-1.5">
-            <span class="text-[11px] text-az-muted">Delete?</span>
+            <span class="text-[11px] text-az-muted">{tx("Delete?")}</span>
             <button
               type="button"
               onClick={() => void remove()}
               disabled={isDeleting()}
               class="rounded-md border border-error/40 bg-error/15 px-2 py-0.5 font-semibold text-[11px] text-error transition-colors hover:bg-error/25 disabled:opacity-50"
             >
-              {isDeleting() ? "Deleting…" : "Delete"}
+              {isDeleting() ? tx("Deleting…") : tx("Delete")}
             </button>
             <button
               type="button"
               onClick={() => setConfirming(false)}
               class="rounded-md px-2 py-0.5 text-[11px] text-az-muted transition-colors hover:text-base-content"
             >
-              Cancel
+              {tx("Cancel")}
             </button>
           </div>
         </Show>

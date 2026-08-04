@@ -1,6 +1,7 @@
 import type { JSX } from "solid-js";
 import { Panel } from "~/components/Panel";
 import { Composer } from "~/features/project/Composer";
+import { tx } from "~/stores/i18n";
 import { useWorkspace } from "~/stores/workspace";
 import type { Tab } from "~/types";
 
@@ -25,7 +26,7 @@ export function DraftTab(props: { tab: Tab }): JSX.Element {
           draftKey={props.tab.key}
           size="lg"
           autofocus
-          placeholder="Type to start your new project…"
+          placeholder={tx("Type to start your new project…")}
           agent={props.tab.agent}
           model={props.tab.model}
           modelOptions={promptModels()}

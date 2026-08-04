@@ -1,5 +1,6 @@
 import { type JSX, Show, splitProps } from "solid-js";
 import { Icon, type IconProps } from "~/components/Icon";
+import { tx } from "~/stores/i18n";
 
 export type PanelProps = JSX.HTMLAttributes<HTMLDivElement> & {
   children: JSX.Element;
@@ -89,7 +90,9 @@ export function SectionPanel(props: SectionPanelProps): JSX.Element {
         <button
           type="button"
           onClick={props.onToggle}
-          aria-label={`${props.isOpen ? "Collapse" : "Expand"} ${props.title}`}
+          aria-label={tx(props.isOpen ? "Collapse {name}" : "Expand {name}", {
+            name: props.title,
+          })}
           class="shrink-0 text-az-muted"
         >
           <Icon

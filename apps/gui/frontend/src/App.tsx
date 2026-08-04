@@ -9,6 +9,7 @@ import { CloseConfirm } from "~/features/shell/CloseConfirm";
 import { useAppShell } from "~/features/shell/useAppShell";
 import { TabStrip } from "~/features/tabs/TabStrip";
 import { installSelectionCopy } from "~/lib/clipboard";
+import { tx } from "~/stores/i18n";
 import { useWorkspace, WorkspaceProvider } from "~/stores/workspace";
 
 /**
@@ -59,10 +60,11 @@ function Workspace(): JSX.Element {
             */}
             <Match when={activeTab().kind === "project"}>
               <div class="flex min-w-0 flex-1 flex-col items-center justify-center gap-2 rounded-panel border border-az-hairline bg-az-sunken">
-                <p class="text-[13.5px] text-az-title">This project could not be loaded</p>
+                <p class="text-[13.5px] text-az-title">{tx("This project could not be loaded")}</p>
                 <p class="max-w-[420px] text-center text-[11.5px] text-az-muted">
-                  The tab is open but its record is missing from the workspace. Reopening the window
-                  will re-read it from the database.
+                  {tx(
+                    "The tab is open but its record is missing from the workspace. Reopening the window will re-read it from the database.",
+                  )}
                 </p>
               </div>
             </Match>
@@ -86,7 +88,7 @@ function Workspace(): JSX.Element {
 function Booting(): JSX.Element {
   return (
     <div class="flex flex-1 items-center justify-center text-[12.5px] text-az-muted">
-      Loading workspace…
+      {tx("Loading workspace…")}
     </div>
   );
 }
@@ -104,7 +106,9 @@ function BootFailed(props: { message: string; onRetry: () => void }): JSX.Elemen
         <Icon name="shield" class="text-[24px] text-error" />
       </div>
       <div class="flex flex-col items-center gap-1.5">
-        <p class="font-semibold text-[15px] text-base-content">Could not load the workspace</p>
+        <p class="font-semibold text-[15px] text-base-content">
+          {tx("Could not load the workspace")}
+        </p>
         <p
           data-selectable
           class="max-w-[460px] text-center font-mono text-[11.5px] text-az-muted leading-[1.55]"
@@ -117,7 +121,7 @@ function BootFailed(props: { message: string; onRetry: () => void }): JSX.Elemen
         onClick={props.onRetry}
         class="rounded-lg bg-primary px-3.5 py-1.5 font-semibold text-[12.5px] text-primary-content transition-colors hover:bg-az-primary-hover"
       >
-        Try again
+        {tx("Try again")}
       </button>
     </div>
   );
@@ -134,7 +138,7 @@ function MockBanner(): JSX.Element {
   return (
     <div class="flex flex-none items-center justify-center gap-2 border-az-hairline-soft border-t px-3 py-1.5 text-[10.5px] text-az-faint">
       <span class="size-1.5 rounded-full bg-warning" />
-      Design fixtures — the Rust commands are not implemented yet
+      {tx("Design fixtures — the Rust commands are not implemented yet")}
     </div>
   );
 }

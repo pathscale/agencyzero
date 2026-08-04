@@ -1,22 +1,25 @@
 import { createMemo, createSignal, For, type JSX, onMount, Show } from "solid-js";
 import { Icon } from "~/components/Icon";
 import { PillMenu } from "~/components/PillMenu";
-import { PERMISSION_LABELS, PERMISSION_ORDER } from "~/lib/labels";
+import { PERMISSION_ORDER, permissionLabel } from "~/lib/labels";
 import { describeError, log } from "~/lib/log";
 import { compileAdvancedPrompt, type PromptModelOption } from "~/lib/promptEditor";
 import { parseSlash } from "~/lib/slash";
+import { tx, type UiMessage } from "~/stores/i18n";
 import { prefs, setPrefs } from "~/stores/prefs";
 import { useWorkspace } from "~/stores/workspace";
 import type { Agent, Permission, StudyTurnMetadata } from "~/types";
 
-const PERMISSION_HINTS: Record<Permission, string> = {
+const PERMISSION_HINTS = {
   read_only: "Reads only. The crate default.",
   plan: "Proposes a plan, changes nothing.",
   ask: "Each gated call asks you first, mid-run.",
   edit: "Edits inside the working directories.",
   auto: "Runs tools without asking each time.",
   bypass: "No prompts. The moderator is the only check.",
-};
+} satisfies Record<Permission, UiMessage>;
+
+const permissionHint = (permission: Permission): string => tx(PERMISSION_HINTS[permission]);
 
 export type ComposerProps = {
   /**
@@ -122,7 +125,7 @@ export function AttachmentPills(props: {
               <button
                 type="button"
                 onClick={() => props.onRemove(path)}
-                aria-label={`Remove ${path.split("/").pop() || path}`}
+                aria-label={tx("Remove {name}", { name: path.split("/").pop() || path })}
                 class="flex size-[16px] shrink-0 items-center justify-center rounded-full text-az-faint transition-colors hover:bg-white/10 hover:text-base-content"
               >
                 <Icon name="x" class="text-[11px]" />
@@ -408,7 +411,7 @@ export function Composer(props: ComposerProps): JSX.Element {
 
   return (
     <div
-      class={`az-ring rounded-[17px] ${props.size === "lg" ? "az-ring-strong rounded-[19px]" : ""}`}
+      class={`az-ring az-ring-composer rounded-[17px] ${props.size === "lg" ? "az-ring-strong rounded-[19px]" : ""}`}
     >
       <div
         class={`flex flex-col gap-3 bg-az-inset ${props.size === "lg" ? "rounded-[18px] p-[18px] pb-3.5" : "rounded-2xl p-[15px] pb-3"}`}
@@ -444,7 +447,7 @@ export function Composer(props: ComposerProps): JSX.Element {
         <Show when={advanced()}>
           <div class="rounded-lg border border-az-hairline bg-base-300/45 px-3 py-2">
             <div class="mb-1 font-semibold text-[10px] text-az-faint uppercase tracking-[0.08em]">
-              Prompt Syntax preview
+              {tx("Prompt Syntax preview")}
             </div>
             <div class="whitespace-pre-wrap text-[12px] text-az-body leading-relaxed">
               <For each={compiled()?.segments ?? []}>
@@ -493,24 +496,24 @@ export function Composer(props: ComposerProps): JSX.Element {
               type="button"
               onClick={toggleAdvanced}
               aria-pressed={advanced()}
-              title="Parse Prompt Syntax controls before sending"
+              title={tx("Parse Prompt Syntax controls before sending")}
               class={`rounded-full border px-2.5 py-1 font-medium text-[11px] transition-colors ${
                 advanced()
                   ? "border-primary/35 bg-primary/15 text-primary"
                   : "border-az-hairline-strong text-az-muted hover:text-base-content"
               }`}
             >
-              Advanced
+              {tx("Advanced")}
             </button>
 
             <PillMenu
-              label="Permission"
+              label={tx("Permission")}
               icon="lock"
               value={props.permission}
               options={(props.permissions ?? PERMISSION_ORDER).map((permission) => ({
                 value: permission,
-                label: PERMISSION_LABELS[permission],
-                hint: PERMISSION_HINTS[permission],
+                label: permissionLabel(permission),
+                hint: permissionHint(permission),
               }))}
               onChange={props.onPermissionChange}
             />
@@ -522,8 +525,8 @@ export function Composer(props: ComposerProps): JSX.Element {
               // convention — a button that silently does nothing is the bug this
               // replaces.
               disabled={!isLive("chooseAttachments")}
-              title="Attach files — their paths go into the prompt"
-              aria-label="Attach files"
+              title={tx("Attach files — their paths go into the prompt")}
+              aria-label={tx("Attach files")}
               class="flex size-[30px] items-center justify-center rounded-full border border-az-hairline-strong text-az-body transition-colors hover:border-primary/30 hover:text-az-title disabled:cursor-not-allowed disabled:opacity-40"
             >
               <Icon name="plus" class="text-[16px]" />
@@ -553,8 +556,10 @@ export function Composer(props: ComposerProps): JSX.Element {
               aria-pressed={props.agent === "claude" && props.extraThinking}
               title={
                 props.agent === "claude"
-                  ? "Extra Thinking: let the model reason before it answers. Off disables thinking for this tab's runs."
-                  : "Extra Thinking applies to Claude only."
+                  ? tx(
+                      "Extra Thinking: let the model reason before it answers. Off disables thinking for this tab's runs.",
+                    )
+                  : tx("Extra Thinking applies to Claude only.")
               }
               class={`flex items-center gap-1.5 rounded-full border px-2.5 py-1 font-medium text-[11px] transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
                 props.agent === "claude" && props.extraThinking
@@ -563,11 +568,11 @@ export function Composer(props: ComposerProps): JSX.Element {
               }`}
             >
               <Icon name="sparkles" class="text-[11px]" />
-              Extra Thinking
+              {tx("Extra Thinking")}
             </button>
 
             <PillMenu
-              label="Model"
+              label={tx("Model")}
               icon="sparkles"
               iconClass="text-primary"
               variant="outline"
@@ -589,7 +594,7 @@ export function Composer(props: ComposerProps): JSX.Element {
           */}
             <Show when={props.efforts.length > 0}>
               <PillMenu
-                label="Effort"
+                label={tx("Effort")}
                 variant="outline"
                 value={props.effort}
                 options={props.efforts.map((effort) => ({ value: effort, label: effort }))}
@@ -606,15 +611,15 @@ export function Composer(props: ComposerProps): JSX.Element {
               aria-label={
                 props.isRunning
                   ? props.canFollowUp
-                    ? "Send into the running turn"
-                    : "Queue after the running turn"
-                  : "Send"
+                    ? tx("Send into the running turn")
+                    : tx("Queue after the running turn")
+                  : tx("Send")
               }
               title={
                 props.isRunning
                   ? props.canFollowUp
-                    ? "Delivered into the running turn; the agent takes it at its next step"
-                    : "Queued until the running turn finishes"
+                    ? tx("Delivered into the running turn; the agent takes it at its next step")
+                    : tx("Queued until the running turn finishes")
                   : undefined
               }
               class="flex size-8 items-center justify-center rounded-full bg-primary text-primary-content transition-colors hover:bg-az-primary-hover disabled:cursor-not-allowed disabled:opacity-40"
@@ -628,7 +633,7 @@ export function Composer(props: ComposerProps): JSX.Element {
                 // No handler means the backend cannot stop this run; a Stop
                 // that only pretended would be worse than a disabled one.
                 disabled={!props.onStop}
-                aria-label="Stop the run"
+                aria-label={tx("Stop the run")}
                 class="flex size-8 items-center justify-center rounded-full border border-primary/40 bg-base-300 transition-colors hover:border-primary disabled:cursor-not-allowed disabled:opacity-40"
               >
                 <span class="size-[11px] rounded-[3px] bg-primary" />

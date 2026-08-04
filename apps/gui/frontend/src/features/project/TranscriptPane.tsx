@@ -6,10 +6,15 @@ import { CopyMessageButton, InlineText, MessageBody } from "~/features/project/M
 import { isTransientStop, relativeTime } from "~/lib/format";
 import { AGENT_LABELS } from "~/lib/labels";
 import { compactCount } from "~/lib/stats";
+import { tx } from "~/stores/i18n";
 import { type RunStatus, useNow, useWorkspace } from "~/stores/workspace";
 import type { Message, Project } from "~/types";
 
-const STARTERS = ["Review the GUI crate", "Wire the Solid frontend", "Audit the proxies"];
+const STARTERS = () => [
+  tx("Review the GUI crate"),
+  tx("Wire the Solid frontend"),
+  tx("Audit the proxies"),
+];
 
 /**
  * The conversation. Three voices, three shapes:
@@ -136,7 +141,7 @@ export function TranscriptPane(props: {
             // appear, disappear and reappear as the run lands.
             <div class={`${AGENT_BUBBLE}`}>
               <span class="text-[11px] text-az-muted">
-                {AGENT_LABELS[streamingAgent()]} · writing…
+                {AGENT_LABELS[streamingAgent()]} {tx("· writing…")}
               </span>
               <MessageBody body={text()} class={AGENT_TEXT} />
             </div>
@@ -222,8 +227,10 @@ export function RunStatusLine(props: {
               <span
                 title={
                   props.status.liveTokens === null
-                    ? "Estimated from the characters streamed so far"
-                    : "Tokens this turn has processed, cache included. The reply's own output joins it in the header when the run finishes."
+                    ? tx("Estimated from the characters streamed so far")
+                    : tx(
+                        "Tokens this turn has processed, cache included. The reply's own output joins it in the header when the run finishes.",
+                      )
                 }
               >
                 {usage()}
@@ -240,11 +247,11 @@ export function RunStatusLine(props: {
       <Show when={props.streamedChars > 0}>
         <span
           role="img"
-          aria-label={isSynced() ? "streamed text saved" : "recent text not yet saved"}
+          aria-label={isSynced() ? tx("streamed text saved") : tx("recent text not yet saved")}
           title={
             isSynced()
-              ? "Everything streamed so far is saved to the store"
-              : "The store checkpoint runs every 200ms — the newest text is not saved yet"
+              ? tx("Everything streamed so far is saved to the store")
+              : tx("The store checkpoint runs every 200ms — the newest text is not saved yet")
           }
           class={`size-[7px] shrink-0 rounded-full ${isSynced() ? "bg-success" : "bg-warning"}`}
         />
@@ -255,7 +262,7 @@ export function RunStatusLine(props: {
           onClick={() => void actions.cancelRun(props.projectId)}
           class="rounded-md border border-primary/16 px-2 py-px text-[11.5px] text-az-body transition-colors hover:border-error hover:text-error"
         >
-          Cancel
+          {tx("Cancel")}
         </button>
       </Show>
     </div>
@@ -322,7 +329,7 @@ function AgentBubble(props: { message: Message; onRetry?: () => void }): JSX.Ele
               transient() ? "bg-warning/18 text-warning" : "bg-error/18 text-error"
             }`}
           >
-            {transient() ? "provider outage · temporary" : props.message.stop}
+            {transient() ? tx("provider outage · temporary") : props.message.stop}
           </span>
         </Show>
         <div class="flex-1" />
@@ -337,11 +344,11 @@ function AgentBubble(props: { message: Message; onRetry?: () => void }): JSX.Ele
               onClick={() => retry()()}
               class="rounded-lg border border-primary/18 px-3 py-[5px] text-[12px] text-az-body transition-colors hover:border-primary hover:text-primary"
             >
-              Retry
+              {tx("Retry")}
             </button>
             <Show when={transient()}>
               <span class="text-[11.5px] text-az-muted">
-                the server was overloaded — your prompt is safe to resend
+                {tx("the server was overloaded — your prompt is safe to resend")}
               </span>
             </Show>
           </div>
@@ -464,9 +471,11 @@ function ModeratorNote(props: { message: Message }): JSX.Element {
       <div class="flex min-w-0 flex-1 flex-col gap-[7px]">
         <div class="flex items-baseline gap-2">
           <span class={`font-semibold text-[12px] ${isCritical() ? "text-error" : "text-warning"}`}>
-            Moderator
+            {tx("Moderator")}
           </span>
-          <span class="text-[11.5px] text-az-muted">supervising · {props.message.model}</span>
+          <span class="text-[11.5px] text-az-muted">
+            {tx("supervising")} · {props.message.model}
+          </span>
         </div>
 
         <p data-selectable class="text-[12.5px] text-az-body leading-[1.55]">
@@ -479,7 +488,7 @@ function ModeratorNote(props: { message: Message }): JSX.Element {
                     : "bg-warning/20 text-warning"
                 }`}
               >
-                {severity() === "critical" ? "CRITICAL" : "CHECK"}
+                {severity() === "critical" ? tx("CRITICAL") : tx("CHECK")}
               </span>
             )}
           </Show>
@@ -493,16 +502,16 @@ function ModeratorNote(props: { message: Message }): JSX.Element {
               onClick={() => void actions.resolveModeration(props.message.id, true)}
               class="rounded-lg bg-primary px-[13px] py-[5px] font-semibold text-[12px] text-primary-content transition-colors hover:bg-az-primary-hover"
             >
-              Approve once
+              {tx("Approve once")}
             </button>
             <button
               type="button"
               onClick={() => void actions.resolveModeration(props.message.id, false)}
               class="rounded-lg border border-primary/18 px-3 py-[5px] text-[12px] text-az-body transition-colors hover:border-error hover:text-error"
             >
-              Deny
+              {tx("Deny")}
             </button>
-            <span class="text-[11.5px] text-az-muted">· agent is paused</span>
+            <span class="text-[11.5px] text-az-muted">{tx("· agent is paused")}</span>
           </div>
         </Show>
       </div>
@@ -527,14 +536,15 @@ function EmptyTranscript(props: {
           </div>
         </EmptyState.Icon>
         <EmptyState.Title class="font-semibold text-[15px] text-base-content">
-          Nothing open
+          {tx("Nothing open")}
         </EmptyState.Title>
         <EmptyState.Description class="max-w-[360px] text-center text-[12.5px] text-az-muted leading-[1.55]">
-          This project is connected and idle. Start the conversation, or pick an item from the panel
-          on the right.
+          {tx(
+            "This project is connected and idle. Start the conversation, or pick an item from the panel on the right.",
+          )}
         </EmptyState.Description>
         <EmptyState.Actions class="flex max-w-[430px] flex-wrap justify-center gap-2">
-          <For each={STARTERS}>
+          <For each={STARTERS()}>
             {(starter) => (
               <button
                 type="button"

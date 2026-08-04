@@ -3,11 +3,12 @@ import { Icon, type IconProps } from "~/components/Icon";
 import { StatusDot } from "~/components/StatusDot";
 import { createTabReorder } from "~/features/tabs/reorder";
 import { useTabShortcuts } from "~/features/tabs/shortcuts";
+import { tx } from "~/stores/i18n";
 import { useWorkspace } from "~/stores/workspace";
 import type { Tab } from "~/types";
 
 const PILL = "flex h-8 shrink-0 items-center rounded-full transition-colors";
-const ACTIVE = "bg-az-tab shadow-[0_2px_10px_rgba(0,0,0,.35)]";
+const ACTIVE = "bg-az-tab shadow-[inset_0_1px_0_rgb(var(--az-sheen)/14%)]";
 const IDLE = "border border-transparent text-az-muted hover:bg-white/5 hover:text-base-content";
 
 const TAB_ICON: Record<Tab["kind"], IconProps["name"] | null> = {
@@ -130,8 +131,8 @@ export function TabStrip(): JSX.Element {
         <button
           type="button"
           onClick={() => actions.openDraft()}
-          title="New project"
-          aria-label="New project"
+          title={tx("New project")}
+          aria-label={tx("New project")}
           class="flex h-8 shrink-0 items-center justify-center rounded-full border border-primary/22 border-dashed px-3 text-az-muted transition-colors hover:border-primary hover:bg-primary/8 hover:text-primary"
         >
           <Icon name="plus" class="text-[15px]" />
@@ -148,10 +149,12 @@ export function TabStrip(): JSX.Element {
           onClick={() => actions.openSettings()}
           title={
             state.availableUpdate
-              ? `Update available: ${state.availableUpdate.version} — install from Settings`
-              : "Settings"
+              ? tx("Update available: {version} — install from Settings", {
+                  version: state.availableUpdate.version,
+                })
+              : tx("Settings")
           }
-          aria-label="Settings"
+          aria-label={tx("Settings")}
           class={`relative flex size-[30px] items-center justify-center rounded-full transition-colors hover:bg-white/6 ${
             state.activeKey === "settings"
               ? "text-primary"
@@ -191,7 +194,7 @@ function ScrollArrow(props: {
       type="button"
       onClick={props.onScroll}
       disabled={props.isDisabled}
-      aria-label={props.direction === -1 ? "Scroll tabs left" : "Scroll tabs right"}
+      aria-label={props.direction === -1 ? tx("Scroll tabs left") : tx("Scroll tabs right")}
       class="flex size-6 shrink-0 items-center justify-center rounded-full text-az-muted transition-colors hover:bg-white/6 hover:text-base-content disabled:pointer-events-none disabled:opacity-25"
     >
       <Icon
@@ -313,7 +316,7 @@ function TabPill(props: {
           type="button"
           data-no-drag
           onClick={() => actions.closeTab(props.tab.key)}
-          aria-label={`Close ${props.tab.label}`}
+          aria-label={tx("Close {name}", { name: props.tab.label })}
           class={`mr-1.5 flex size-[18px] shrink-0 items-center justify-center rounded-full text-az-faint transition-[color,background-color,opacity] hover:bg-white/10 hover:text-base-content focus-visible:opacity-100 ${
             isActive() ? "opacity-100" : "opacity-0 group-hover:opacity-100"
           }`}

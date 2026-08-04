@@ -3,8 +3,10 @@ import en from "~/i18n/en";
 import es from "~/i18n/es";
 import fr from "~/i18n/fr";
 import pt from "~/i18n/pt";
+import uiEn from "~/i18n/ui/en";
+import uiZh from "~/i18n/ui/zh";
 import zh from "~/i18n/zh";
-import { i18n, SUPPORTED_LANGUAGES } from "~/stores/i18n";
+import { i18n, SUPPORTED_LANGUAGES, tx } from "~/stores/i18n";
 
 function keysOf(value: unknown, prefix = ""): string[] {
   if (!value || typeof value !== "object") return [prefix];
@@ -22,6 +24,10 @@ describe("interface languages", () => {
     }
   });
 
+  it("keeps the complete Chinese UI catalogue aligned with its English source", () => {
+    expect(Object.keys(uiZh).sort()).toEqual(Object.keys(uiEn).sort());
+  });
+
   it("switches translations and persists the selected language", async () => {
     await i18n.setLocale("es");
 
@@ -34,5 +40,14 @@ describe("interface languages", () => {
 
   it("publishes the five languages used by the settings picker", () => {
     expect(i18n.supportedCodes).toEqual([...SUPPORTED_LANGUAGES]);
+  });
+
+  it("renders project chrome from the complete Chinese UI catalogue", async () => {
+    await i18n.setLocale("zh");
+
+    expect(tx("Task log")).toBe("任务日志");
+    expect(tx("{count} tasks are still running", { count: 3 })).toBe("仍有 3 个任务在运行");
+
+    await i18n.setLocale("en");
   });
 });
