@@ -4764,10 +4764,7 @@ async fn drive_run(
         .unwrap_or_default()
         .per_turn_injection;
     if inject_per_turn {
-        let config_dir = app
-            .state::<crate::AppState>()
-            .config_dir
-            .clone();
+        let config_dir = app.state::<crate::AppState>().config_dir.clone();
         let instructions = crate::per_turn::instructions(&config_dir);
         if !instructions.trim().is_empty() {
             if !system.is_empty() {
