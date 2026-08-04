@@ -6,10 +6,10 @@ edition.workspace = true
 publish.workspace = true
 
 [dependencies]
-worktable = "0.9"
+worktable = { git = "https://github.com/pathscale/WorkTable", rev = "4f1e4d2392377e6f195592b220babd28e5ef3629" }
 # The `worktable!` macro emits code that names these by bare path rather than
 # through a re-export, so a consumer of the macro has to declare them too.
-# Versions match worktable 0.9's own, since a mismatch produces errors that name
+# Versions match worktable 1.0 beta's own, since a mismatch produces errors that name
 # the wrong crate. Kept identical to the block in apps/gui/Cargo.toml — the
 # schema files compiled here are the gui's own (see src/lib.rs).
 eyre = "0.6"

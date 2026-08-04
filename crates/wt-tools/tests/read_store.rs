@@ -58,7 +58,7 @@ async fn write_projects(dir: &Path, rows: Vec<ProjectRow>) {
     for row in rows {
         table.insert(row).unwrap();
     }
-    table.wait_for_ops().await;
+    table.wait_for_ops().await.expect("project rows persist");
 }
 
 async fn write_items(dir: &Path, rows: Vec<ProjectItemRow>) {
@@ -72,7 +72,10 @@ async fn write_items(dir: &Path, rows: Vec<ProjectItemRow>) {
     for row in rows {
         table.insert(row).unwrap();
     }
-    table.wait_for_ops().await;
+    table
+        .wait_for_ops()
+        .await
+        .expect("project item rows persist");
 }
 
 /// Every byte of every file under `dir`, so a read can be proven writeless.
@@ -179,7 +182,7 @@ async fn reads_while_a_writer_holds_the_store() {
     let engine = ProjectPersistenceEngine::new(config).await.unwrap();
     let writer = ProjectWorkTable::load(engine).await.unwrap();
     writer.insert(project("proj-live", "Live", 1)).unwrap();
-    writer.wait_for_ops().await;
+    writer.wait_for_ops().await.expect("project rows persist");
 
     // Writer still open, exactly like a running GUI.
     let reader = wt_tools::open_projects(&dir).await.unwrap();

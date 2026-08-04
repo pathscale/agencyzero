@@ -19,10 +19,10 @@ agent-abstraction = "0.4.8"
 agent-experimental = { git = "https://gitlab.com/anonymous-28282828282/agent-experimental.git", rev = "f04ee035d9f243eb0c2dadb03829f827bb87d918", default-features = false, optional = true }
 promptsyntax = "0.1.0"
 az-core.workspace = true
-worktable = "0.9"
+worktable = { git = "https://github.com/pathscale/WorkTable", rev = "4f1e4d2392377e6f195592b220babd28e5ef3629" }
 # The `worktable!` macro emits code that names these by bare path rather than
 # through a re-export, so a consumer of the macro has to declare them too.
-# Versions match worktable 0.9's own, since a mismatch produces errors that name
+# Versions match worktable 1.0 beta's own, since a mismatch produces errors that name
 # the wrong crate.
 eyre = "0.6"
 rkyv = { version = "0.8.9", features = ["uuid-1"] }

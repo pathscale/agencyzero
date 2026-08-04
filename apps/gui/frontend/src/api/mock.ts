@@ -660,6 +660,9 @@ export function createMockApi(): AgencyZeroApi {
       settle({ version: "0.2.0", notes: "Fixture release notes.", date: "2026-07-30" }),
     installUpdate: () => settle(undefined),
 
+    // A browser preview has no native process to quit.
+    quitApp: () => settle(undefined),
+
     // A browser tab cannot exec itself; the button is greyed off-Tauri anyway.
     relaunchApp: () => settle(undefined),
 

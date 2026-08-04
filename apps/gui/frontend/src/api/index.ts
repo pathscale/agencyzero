@@ -75,6 +75,7 @@ const COMMAND_FOR: Partial<Record<keyof AgencyZeroApi, string>> = {
   getBuildInfo: "get_build_info",
   checkForUpdate: "check_for_update",
   installUpdate: "install_update",
+  quitApp: "quit_app",
   relaunchApp: "relaunch_app",
   getTaskManager: "get_task_manager",
   resetTaskManager: "reset_task_manager",

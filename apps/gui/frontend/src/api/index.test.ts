@@ -31,6 +31,7 @@ const IMPLEMENTED = [
   "create_project",
   "send_message",
   "get_settings",
+  "quit_app",
 ];
 
 describe("selectApi", () => {
@@ -104,6 +105,7 @@ describe("selectApi", () => {
     expect(live.has("listProjects")).toBe(true);
     expect(live.has("addDir")).toBe(true);
     expect(live.has("removeDir")).toBe(true);
+    expect(live.has("quitApp")).toBe(true);
     // Not in IMPLEMENTED, so it stays on the mock and the UI greys it out.
     expect(live.has("createItem")).toBe(false);
   });

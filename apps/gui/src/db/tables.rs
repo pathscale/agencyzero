@@ -430,7 +430,7 @@ mod restart_tests {
                 .kv_put("settings", "{\"models\":\"chosen\"}".into())
                 .await
                 .expect("should write");
-            tables.shutdown().await;
+            tables.shutdown().await.expect("tables drain");
         }
 
         let reopened = Tables::open(&dir).await.expect("should reopen");
@@ -536,7 +536,7 @@ mod restart_tests {
             tables.task_log.insert(row.clone()).expect("should insert");
             // Without the drain the process can end mid-write, which is how a
             // page ends up half written rather than merely stale.
-            tables.shutdown().await;
+            tables.shutdown().await.expect("tables drain");
         }
 
         let reopened = Tables::open(&dir).await.expect("should reopen");
@@ -562,16 +562,55 @@ impl Tables {
     /// process that ends while an operation is still in flight can leave a page
     /// half written, and a half-written page is how a table becomes unreadable
     /// rather than merely stale. `wait_for_ops` is the drain.
-    pub async fn shutdown(&self) {
-        self.kv.wait_for_ops().await;
-        self.project.wait_for_ops().await;
-        self.project_item.wait_for_ops().await;
-        self.message.wait_for_ops().await;
-        self.task_log.wait_for_ops().await;
-        self.agent_io.wait_for_ops().await;
-        self.usage_ledger.wait_for_ops().await;
-        self.approval_rule.wait_for_ops().await;
-        self.pull_request.wait_for_ops().await;
-        self.study_event.wait_for_ops().await;
+    pub async fn shutdown(&self) -> Result<(), String> {
+        async fn drain(
+            name: &'static str,
+            pending: impl std::future::Future<Output = worktable::prelude::PersistenceResult>,
+        ) -> Result<(), String> {
+            let started = std::time::Instant::now();
+            let result = tokio::time::timeout(std::time::Duration::from_secs(5), pending).await;
+            let elapsed = started.elapsed().as_millis();
+            match result {
+                Ok(Ok(())) => {
+                    crate::log!(
+                        crate::log::Level::Debug,
+                        "boot",
+                        "drained {name} in {elapsed}ms"
+                    );
+                    Ok(())
+                }
+                Ok(Err(error)) => Err(format!("{name} persistence failed: {error}")),
+                Err(_) => Err(format!("{name} did not drain within 5s")),
+            }
+        }
+
+        // Independent tables must not make quit ten serial waits. WorkTable
+        // 1.0 reports a terminal persistence failure immediately; the local
+        // timeout is the last boundary if a future engine regresses to a
+        // parked worker. Each result keeps the table name that needs repair.
+        let results = tokio::join!(
+            drain("kv", self.kv.wait_for_ops()),
+            drain("project", self.project.wait_for_ops()),
+            drain("project_item", self.project_item.wait_for_ops()),
+            drain("message", self.message.wait_for_ops()),
+            drain("task_log", self.task_log.wait_for_ops()),
+            drain("agent_io_row", self.agent_io.wait_for_ops()),
+            drain("usage_ledger", self.usage_ledger.wait_for_ops()),
+            drain("approval_rule", self.approval_rule.wait_for_ops()),
+            drain("pull_request", self.pull_request.wait_for_ops()),
+            drain("study_event", self.study_event.wait_for_ops()),
+        );
+        let errors: Vec<String> = [
+            results.0, results.1, results.2, results.3, results.4, results.5, results.6, results.7,
+            results.8, results.9,
+        ]
+        .into_iter()
+        .filter_map(Result::err)
+        .collect();
+        if errors.is_empty() {
+            Ok(())
+        } else {
+            Err(errors.join("; "))
+        }
     }
 }

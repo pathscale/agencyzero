@@ -1720,6 +1720,7 @@ function createWorkspace() {
     getBuildInfo: () => client().getBuildInfo(),
     checkForUpdate,
     installUpdate: () => client().installUpdate(),
+    quitApp: () => client().quitApp(),
     relaunchApp: () => client().relaunchApp(),
     cancelTask: (toolCallId: string) => client().cancelTask(toolCallId),
     cancelRun: (projectId: string) => client().cancelRun(projectId),
