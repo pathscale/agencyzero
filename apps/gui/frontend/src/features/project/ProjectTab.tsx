@@ -147,7 +147,7 @@ export function ProjectTab(props: { tab: Tab; project: Project }): JSX.Element {
         : `${Math.round(Math.min(1, Math.max(0, window.usedFraction)) * 100)}%`;
     const reset = window.resetsAt ? countdown(window.resetsAt, now()) : "";
     return {
-      label: `Codex 7d ${used}`,
+      label: `Codex 7d ${used}${used === "not reported" ? "" : " used"}`,
       title: reset ? `Resets in ${reset}` : "",
     };
   });

@@ -1001,7 +1001,7 @@ function ExperimentalSettings(): JSX.Element {
         <span class="font-mono text-[11.5px] text-az-body">
           {codexWindow()?.usedFraction === null || codexWindow()?.usedFraction === undefined
             ? "not reported"
-            : `${Math.round(Math.min(1, Math.max(0, codexWindow()!.usedFraction!)) * 100)}%${
+            : `${Math.round(Math.min(1, Math.max(0, codexWindow()!.usedFraction!)) * 100)}% used${
                 codexWindow()?.resetsAt
                   ? ` · resets in ${countdown(codexWindow()!.resetsAt!, now())}`
                   : ""

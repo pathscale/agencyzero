@@ -23,10 +23,10 @@ export function windowTitle(agent: string, window: QuotaWindow): string {
   return parts.join(" · ");
 }
 
-/** "62% · resets in 2h 14m", the Settings placeholder's row value. */
+/** "62% used · resets in 2h 14m", the Settings placeholder's row value. */
 export function windowValue(window: QuotaWindow, now: number): string {
   const used =
-    window.usedFraction !== null ? `${Math.round(window.usedFraction * 100)}%` : "no figure";
+    window.usedFraction !== null ? `${Math.round(window.usedFraction * 100)}% used` : "no figure";
   const left = countdown(window.resetsAt, now);
   return left ? `${used} · resets in ${left}` : used;
 }
