@@ -50,6 +50,21 @@ const AGENT_IO_LIMIT = 500;
 
 const FALLBACK_EFFORT = "high";
 
+/**
+ * A compact model name for the composer pill.
+ *
+ * The catalogue name reads well in a menu ("Opus (1M context)") but is too long
+ * beside a permission pill and a reasoning pill in XL font. Pull the window size
+ * out of the parenthetical and append it bare — "Opus (1M context)" becomes
+ * "Opus 1M" — and leave a name with no parenthetical untouched.
+ */
+export function shortModelName(name: string): string {
+  const windowed = /^(.*?)\s*\(([\d.]+[mMkK])\b[^)]*\)\s*$/.exec(name);
+  if (windowed) return `${windowed[1].trim()} ${windowed[2].toUpperCase()}`;
+  // Any other parenthetical is a qualifier the pill does not need.
+  return name.replace(/\s*\([^)]*\)\s*$/, "").trim();
+}
+
 type WorkspaceState = {
   projects: Project[];
   items: Record<string, ProjectItem[]>;
@@ -498,6 +513,10 @@ function createWorkspace() {
         .map((model) => ({
           value: `${agent}:${model.id}`,
           label: `${provider} · ${model.name}`,
+          // A compact name for the composer pill, where the full
+          // "Claude · Opus (1M context)" crowds the XL-font control row: drop
+          // the provider and squeeze "(1M context)" to "1M".
+          triggerLabel: shortModelName(model.name),
           agent,
           model: model.id,
         }));

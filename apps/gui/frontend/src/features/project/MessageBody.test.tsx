@@ -1,6 +1,6 @@
 import { render } from "@solidjs/testing-library";
 import { describe, expect, it } from "vitest";
-import { InlineText, MessageBody } from "~/features/project/MessageBody";
+import { InlineText, MessageBody, splitBlocks } from "~/features/project/MessageBody";
 
 describe("MessageBody", () => {
   it("splits on blank lines into paragraphs", () => {
@@ -183,6 +183,83 @@ describe("fenced blocks", () => {
       `${directive}\n\`\`\``,
       directive,
     ]);
+  });
+});
+
+/*
+ * A markdown table the agent emits for benchmark numbers used to render as raw
+ * pipes jammed into a paragraph. It is a table only when a delimiter row sits
+ * under the header — a lone pipe line is prose, not a one-column table.
+ */
+describe("GFM tables", () => {
+  const TABLE = [
+    "| op | worktable | lmdb |",
+    "|---|---|---|",
+    "| insert | 1.94M | 1.32M |",
+    "| range_scan | 13.5M | 23.6M |",
+  ].join("\n");
+
+  it("splits a table into a table block with header, rows and alignment", () => {
+    const blocks = splitBlocks(TABLE);
+    expect(blocks).toHaveLength(1);
+    const [block] = blocks;
+    expect(block.kind).toBe("table");
+    if (block.kind !== "table") return;
+    expect(block.header).toEqual(["op", "worktable", "lmdb"]);
+    expect(block.rows).toEqual([
+      ["insert", "1.94M", "1.32M"],
+      ["range_scan", "13.5M", "23.6M"],
+    ]);
+    expect(block.align).toEqual([null, null, null]);
+  });
+
+  it("parses per-column alignment from the delimiter row", () => {
+    const body = ["| a | b | c |", "| :--- | :--: | ---: |", "| 1 | 2 | 3 |"].join("\n");
+    const [block] = splitBlocks(body);
+    expect(block.kind).toBe("table");
+    if (block.kind !== "table") return;
+    expect(block.align).toEqual(["left", "center", "right"]);
+  });
+
+  it("separates surrounding prose from the table", () => {
+    const body = `Before.\n\n${TABLE}\n\nAfter.`;
+    const blocks = splitBlocks(body);
+    expect(blocks.map((b) => b.kind)).toEqual(["prose", "table", "prose"]);
+    // Prose text is untrimmed here — the render pass is what trims the blank
+    // line that abutted the table — so match on the trimmed content.
+    expect(blocks[0].kind).toBe("prose");
+    expect(blocks[2].kind).toBe("prose");
+    if (blocks[0].kind !== "prose" || blocks[2].kind !== "prose") return;
+    expect(blocks[0].text.trim()).toBe("Before.");
+    expect(blocks[2].text.trim()).toBe("After.");
+  });
+
+  it("leaves a single pipe line with no delimiter row as prose", () => {
+    const blocks = splitBlocks("| op | worktable | lmdb |");
+    expect(blocks).toHaveLength(1);
+    expect(blocks[0].kind).toBe("prose");
+  });
+
+  it("leaves a pipe line inside a code fence as code", () => {
+    const body = "```\n| op | worktable |\n|---|---|\n| insert | 1.94M |\n```";
+    const blocks = splitBlocks(body);
+    expect(blocks).toHaveLength(1);
+    expect(blocks[0].kind).toBe("code");
+    if (blocks[0].kind !== "code") return;
+    expect(blocks[0].text).toContain("| insert | 1.94M |");
+  });
+
+  it("renders a table block as a real <table> with inline marks in cells", () => {
+    const body = ["| metric | note |", "|---|---|", "| **p99** | see `--flag` |"].join("\n");
+    const { container } = render(() => <MessageBody body={body} />);
+    const table = container.querySelector("table");
+    expect(table).toBeTruthy();
+    expect([...container.querySelectorAll("th")].map((th) => th.textContent)).toEqual([
+      "metric",
+      "note",
+    ]);
+    expect(container.querySelector("td strong")).toHaveTextContent("p99");
+    expect(container.querySelector("td code")).toHaveTextContent("--flag");
   });
 });
 

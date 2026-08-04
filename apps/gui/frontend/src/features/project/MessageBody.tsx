@@ -69,7 +69,15 @@ export async function copyText(text: string): Promise<boolean> {
  * the difference: everything outside one is wrapped prose, and everything inside
  * one is text whose line breaks are the content.
  */
-type Block = { kind: "code"; text: string; lang: string } | { kind: "prose"; text: string };
+type Block =
+  | { kind: "code"; text: string; lang: string }
+  | { kind: "prose"; text: string }
+  | {
+      kind: "table";
+      header: string[];
+      rows: string[][];
+      align: ("left" | "center" | "right" | null)[];
+    };
 
 const promptSyntax = new PromptSyntaxParser({ authoringNamespaces: ["agency"] });
 
@@ -87,6 +95,94 @@ export function isPromptSyntaxDirectiveLine(line: string): boolean {
     segment.span.end === trimmed.length &&
     segment.directive.kind === "authoring_segment"
   );
+}
+
+/**
+ * Split a `| a | b |` row into its cells.
+ *
+ * The pipe that separates cells is a bare `|`; a `\|` is a literal pipe inside a
+ * cell, so it does not split. The `| a | b |` style wraps the row in leading and
+ * trailing pipes — those produce empty edge cells that are not columns, so they
+ * are dropped.
+ */
+function splitTableRow(line: string): string[] {
+  const cells: string[] = [];
+  let cell = "";
+  for (let i = 0; i < line.length; i += 1) {
+    const ch = line[i];
+    if (ch === "\\" && line[i + 1] === "|") {
+      cell += "|";
+      i += 1;
+    } else if (ch === "|") {
+      cells.push(cell.trim());
+      cell = "";
+    } else {
+      cell += ch;
+    }
+  }
+  cells.push(cell.trim());
+  if (cells[0] === "") cells.shift();
+  if (cells.length > 0 && cells[cells.length - 1] === "") cells.pop();
+  return cells;
+}
+
+/** A row that is only pipes and dashes with optional `:` markers is a delimiter. */
+function tableAlignments(cells: string[]): ("left" | "center" | "right" | null)[] | null {
+  if (cells.length === 0) return null;
+  const align: ("left" | "center" | "right" | null)[] = [];
+  for (const cell of cells) {
+    if (!/^:?-{1,}:?$/.test(cell)) return null;
+    const left = cell.startsWith(":");
+    const right = cell.endsWith(":");
+    align.push(left && right ? "center" : right ? "right" : left ? "left" : null);
+  }
+  return align;
+}
+
+/**
+ * Pull GFM tables out of a run of prose, in order, as their own blocks.
+ *
+ * A table is a header row of `| ... |` cells immediately followed by a
+ * delimiter row (`|---|:--:|`); the delimiter is what tells a table apart from a
+ * lone line that happens to hold a pipe, so a header with no delimiter under it
+ * stays prose. Everything that is not a table falls back to a prose block, which
+ * keeps the paragraph-splitting downstream exactly as it was.
+ */
+function extractTables(text: string): Block[] {
+  const lines = text.split("\n");
+  const blocks: Block[] = [];
+  let prose: string[] = [];
+
+  const flush = () => {
+    const joined = prose.join("\n");
+    if (joined.trim().length > 0) blocks.push({ kind: "prose", text: joined });
+    prose = [];
+  };
+
+  for (let i = 0; i < lines.length; i += 1) {
+    const line = lines[i];
+    const next = lines[i + 1];
+    if (line.includes("|") && next?.includes("|")) {
+      const align = tableAlignments(splitTableRow(next));
+      if (align) {
+        const header = splitTableRow(line);
+        const rows: string[][] = [];
+        let j = i + 2;
+        while (j < lines.length && lines[j].includes("|") && lines[j].trim().length > 0) {
+          rows.push(splitTableRow(lines[j]));
+          j += 1;
+        }
+        flush();
+        blocks.push({ kind: "table", header, rows, align });
+        i = j - 1;
+        continue;
+      }
+    }
+    prose.push(line);
+  }
+
+  flush();
+  return blocks;
 }
 
 /**
@@ -113,7 +209,8 @@ export function splitBlocks(body: string): Block[] {
 
   const flushProse = () => {
     const text = prose.join("\n");
-    if (text.trim().length > 0) blocks.push({ kind: "prose", text });
+    // Tables live only outside fences, so this prose path is where they surface.
+    if (text.trim().length > 0) blocks.push(...extractTables(text));
     prose = [];
   };
 
@@ -180,6 +277,8 @@ export function MessageBody(props: { body: string; class?: string }): JSX.Elemen
         {(block) =>
           block.kind === "code" ? (
             <CodeBlock text={block.text} lang={block.lang} />
+          ) : block.kind === "table" ? (
+            <TableBlock header={block.header} rows={block.rows} align={block.align} />
           ) : (
             <For
               each={block.text
@@ -240,6 +339,58 @@ function CodeBlock(props: { text: string; lang: string }): JSX.Element {
         <Icon name={copied() ? "check" : "copy"} class="text-[11px]" />
         {copied() ? tx("Copied") : tx("Copy")}
       </button>
+    </div>
+  );
+}
+
+/**
+ * A GFM table: the pipe grid the agent emits for benchmark numbers, rendered as
+ * a real table rather than the raw pipes jammed into a paragraph. Wide ones
+ * scroll sideways the way a fenced block does, so a many-column table never
+ * squeezes the column past legibility.
+ */
+function TableBlock(props: {
+  header: string[];
+  rows: string[][];
+  align: ("left" | "center" | "right" | null)[];
+}): JSX.Element {
+  const alignClass = (col: number): string => {
+    const at = props.align[col];
+    return at === "center" ? "text-center" : at === "right" ? "text-right" : "text-left";
+  };
+
+  return (
+    <div data-selectable class="az-scroll overflow-x-auto rounded-lg border border-az-hairline">
+      <table class="w-full border-collapse text-[12px] text-az-body">
+        <thead>
+          <tr>
+            <For each={props.header}>
+              {(cell, col) => (
+                <th
+                  class={`border-az-hairline border-b bg-base-300 px-3 py-1.5 font-semibold text-az-strong ${alignClass(col())}`}
+                >
+                  {renderInline(cell)}
+                </th>
+              )}
+            </For>
+          </tr>
+        </thead>
+        <tbody>
+          <For each={props.rows}>
+            {(row) => (
+              <tr>
+                <For each={props.header}>
+                  {(_, col) => (
+                    <td class={`border-az-hairline border-b px-3 py-1.5 ${alignClass(col())}`}>
+                      {renderInline(row[col()] ?? "")}
+                    </td>
+                  )}
+                </For>
+              </tr>
+            )}
+          </For>
+        </tbody>
+      </table>
     </div>
   );
 }

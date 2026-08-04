@@ -206,6 +206,13 @@ export function ProjectTab(props: { tab: Tab; project: Project }): JSX.Element {
                 </>
               )}
             </Show>
+            {/* The context readout moved up here from under the composer: how
+                full the window is belongs with the other whole-conversation
+                figures, and it clears the crowded XL-font control row below. */}
+            <Show when={contextLabel() !== "—"}>
+              <span class="text-az-faint">·</span>
+              <span>{contextLabel()}</span>
+            </Show>
           </span>
 
           <Show when={likelyCacheBreak()}>
@@ -340,7 +347,6 @@ export function ProjectTab(props: { tab: Tab; project: Project }): JSX.Element {
             onExtraThinkingChange={(enabled) => actions.setTabExtraThinking(props.tab.key, enabled)}
             permission={props.tab.permission}
             permissions={permissionsFor(props.tab.agent)}
-            usage={contextLabel()}
             /*
              * The full turn, not just its visible parts: `runStatus` exists
              * from the accepted send to `run:stopped`, covering the quiet
