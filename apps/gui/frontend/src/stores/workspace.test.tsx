@@ -227,20 +227,31 @@ describe("tabStatus", () => {
   });
 
   /*
-   * An item moved to `questions` is the run stopping on something only the
-   * owner can answer. The tab must go red like a tool hold rather than staying
-   * green, so a background tab with an unanswered question calls for attention.
-   * `questions` is an item status, set by `items.state`, not the project's.
+   * An unanswered `@agency:ask` calls for attention by urgency: `blocking`
+   * reads as blocked (red). `cafe` carries one blocking question in the
+   * fixtures; with its moderation hold resolved, that question is what keeps
+   * the tab red. A question is its own entity, beside the PR chips.
    */
-  it("reports a project with an item on questions as blocked", async () => {
+  it("keeps a project with a blocking question blocked after the hold clears", async () => {
     const workspace = await mountWorkspace();
-    await workspace.actions.cancelRun("worktable");
-    await waitFor(() => expect(workspace.tabStatus("worktable")).toBe("ready"));
+    // Opening the tab loads its questions into the store.
+    await workspace.actions.focus("cafe");
+    await waitFor(() => expect((workspace.state.questions.cafe ?? []).length).toBeGreaterThan(0));
 
-    const item = workspace.state.items.worktable[0];
-    await workspace.actions.setItemStatus(item.id, "questions");
+    // Resolve every moderation hold so nothing but the question can hold the
+    // dot: this proves the question is what keeps it red, not a lingering hold.
+    for (const held of workspace.state.messages.cafe.filter(
+      (message) => message.moderation?.needsApproval,
+    )) {
+      await workspace.actions.resolveModeration(held.id, true);
+    }
+    await waitFor(() =>
+      expect(
+        workspace.state.messages.cafe.some((message) => message.moderation?.needsApproval),
+      ).toBe(false),
+    );
 
-    await waitFor(() => expect(workspace.tabStatus("worktable")).toBe("blocked"));
+    expect(workspace.tabStatus("cafe")).toBe("blocked");
   });
 });
 

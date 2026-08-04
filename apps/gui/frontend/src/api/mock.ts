@@ -9,6 +9,7 @@ import type {
   Project,
   ProjectItem,
   ProjectStatus,
+  Question,
   QuotaReport,
   RunningTask,
   StudySummary,
@@ -86,6 +87,7 @@ export function createMockApi(): AgencyZeroApi {
   let settings = clone(fixtures.SETTINGS);
   let studyEventCount = 0;
   const pullRequests = clone(fixtures.PULL_REQUESTS);
+  const questions: Question[] = clone(fixtures.QUESTIONS);
   /*
    * What a project's agent kept across a compaction, per project.
    *
@@ -291,6 +293,17 @@ export function createMockApi(): AgencyZeroApi {
       for (const pr of pullRequests.filter((candidate) => candidate.projectId === projectId)) {
         emit("pr:updated", pr);
       }
+      return settle(undefined);
+    },
+
+    listQuestions: (projectId) =>
+      settle(questions.filter((question) => question.projectId === projectId)),
+
+    async answerQuestion(id, answered) {
+      const question = questions.find((candidate) => candidate.id === id);
+      if (!question) return settle(undefined);
+      question.answered = answered;
+      emit("question:updated", question);
       return settle(undefined);
     },
 

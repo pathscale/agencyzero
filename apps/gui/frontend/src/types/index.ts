@@ -826,3 +826,18 @@ export interface PullRequest {
   ci: "pass" | "fail" | "pending" | "none" | "unknown";
   dismissed: boolean;
 }
+
+/** A question an agent raised for the owner, a chip beside the PR chips. */
+export interface Question {
+  id: string;
+  projectId: string;
+  text: string;
+  /** How loudly it calls: answer now, blocked until answered, or when free. */
+  urgency: "critical" | "blocking" | "passive";
+  /** The item it is about, when one was named. */
+  itemId?: string;
+  /** The GitHub issue it is about, when one was named. */
+  issueUrl?: string;
+  answered: boolean;
+  createdAt: string;
+}

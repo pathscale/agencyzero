@@ -9,6 +9,7 @@ mod models;
 mod notes;
 mod projects;
 mod prs;
+mod questions;
 mod quota;
 mod settings;
 mod study;
@@ -56,6 +57,8 @@ const IMPLEMENTED: &[&str] = &[
     "dismiss_pull_request",
     "refresh_pull_request",
     "discover_pull_requests",
+    "list_questions",
+    "answer_question",
     "list_messages",
     "list_running_tasks",
     "list_task_log",
@@ -1097,6 +1100,8 @@ fn main() {
             prs::dismiss_pull_request,
             prs::refresh_pull_request,
             prs::discover_pull_requests,
+            questions::list_questions,
+            questions::answer_question,
             projects::list_messages,
             projects::list_running_tasks,
             projects::list_task_log,

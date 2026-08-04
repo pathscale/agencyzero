@@ -1100,13 +1100,18 @@ fn state_snapshot(
          <ps @agency:items.add(ref: \"t1\", title: \"<one line>\", status: \"planning\")>\n\
          <ps @agency:items.add(project: \"<project id or exact name>\", ref: \"t2\", title: \"<one line>\")>\n\
          <ps @agency:items.retire(id: \"<id>\")>\n\
+         <ps @agency:ask(text: \"<your question>\", urgency: \"blocking\")>\n\
          <ps @agency:pr.link(url: \"https://github.com/owner/repo/pull/66\", item: \"<id>\")>\n\
          <ps @agency:pr.retire(id: \"<pr association id>\")>\n\
          <ps @agency:issue.link(url: \"https://github.com/owner/repo/issues/42\", item: \"<id>\")>\n\
          Statuses you may set: new, planning, active, questions, shipped. `questions` \
          means you are stopped on something only the owner can answer. `finished` and \
          `canceled` are refused: the owner closes a row. An id may be shortened to any \
-         unique prefix. Repeating a state you already reported is free.",
+         unique prefix. Repeating a state you already reported is free.\n\
+         Ask the owner a question with `ask`: `text` is the question, `urgency` is \
+         critical (answer now), blocking (you cannot proceed until answered), or \
+         passive (answer when free, you keep working). Add `reference` with an issue \
+         URL or item id when the question is about one.",
     );
     out
 }
@@ -1535,6 +1540,45 @@ async fn apply_directive(
                 },
             }
         }
+        Directive::Ask {
+            text,
+            urgency,
+            reference,
+        } => {
+            // A bare-id reference must name a real item; a URL reference is an
+            // issue and is taken as given. An unknown id is refused like every
+            // other reference, rather than recording a question that points
+            // nowhere.
+            let reference = match reference.as_deref() {
+                Some(reference) if !reference.starts_with("https://") => {
+                    let known: Vec<&str> = rows.iter().map(|row| row.id.as_str()).collect();
+                    match crate::directives::resolve(&known, reference) {
+                        Ok(found) => Some(found.to_string()),
+                        Err(code) => {
+                            return Outcome::Refused {
+                                what: format!("ask(reference: {reference})"),
+                                code,
+                            };
+                        }
+                    }
+                }
+                other => other.map(str::to_string),
+            };
+            match crate::questions::record(
+                app,
+                tables,
+                project_id,
+                &text,
+                &urgency,
+                reference.as_deref(),
+            ) {
+                Ok(id) => Outcome::Done(format!("{id} asked ({urgency})")),
+                Err(code) => Outcome::Refused {
+                    what: "ask".to_string(),
+                    code,
+                },
+            }
+        }
     }
 }
 
@@ -1647,6 +1691,13 @@ fn study_target_before(
         Directive::IssueLink { item, .. } => StudyTarget {
             kind: "item",
             id: resolve(item),
+            before_add: std::collections::HashSet::new(),
+        },
+        Directive::Ask { .. } => StudyTarget {
+            // The question's own id is minted on apply, so there is nothing to
+            // point at beforehand — a fresh row, like items.add.
+            kind: "question",
+            id: String::new(),
             before_add: std::collections::HashSet::new(),
         },
     }

@@ -8,6 +8,7 @@ import type {
   Project,
   ProjectItem,
   PullRequest,
+  Question,
   RunningTask,
   TaskLogEntry,
 } from "~/types";
@@ -551,6 +552,20 @@ export const PULL_REQUESTS: PullRequest[] = [
     deletions: 44,
     ci: "pass",
     dismissed: false,
+  },
+];
+
+export const QUESTIONS: Question[] = [
+  // On `cafe`, whose moderation hold the tab-status tests resolve first: with
+  // the hold cleared, this blocking question is what keeps the tab red, and
+  // answering it is what finally lets it go quiet.
+  {
+    id: "q-block",
+    projectId: "cafe",
+    text: "Fork codex, or keep patching the integration?",
+    urgency: "blocking",
+    answered: false,
+    createdAt: "2026-08-05T00:00:00Z",
   },
 ];
 

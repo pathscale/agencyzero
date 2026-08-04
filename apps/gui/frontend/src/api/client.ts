@@ -17,6 +17,7 @@ import type {
   ProjectItem,
   ProjectStatus,
   PullRequest,
+  Question,
   QuotaReport,
   RateLimit,
   RunningTask,
@@ -98,6 +99,12 @@ export interface AgencyZeroApi {
   refreshPullRequest(id: string): Promise<void>;
   /** Discover a project's open PRs from its git remotes, even with no rows yet. */
   discoverPullRequests(projectId: string): Promise<void>;
+
+  // — Questions ————————————————————————————————————————————————
+  /** This project's questions, answered ones included; callers filter. */
+  listQuestions(projectId: string): Promise<Question[]>;
+  /** Mark a question answered, or reopen it. */
+  answerQuestion(id: string, answered: boolean): Promise<void>;
 
   // — Conversation ————————————————————————————————————————————
   listMessages(projectId: string): Promise<Message[]>;
@@ -311,6 +318,8 @@ export interface AppEvents {
   "item:deleted": { id: string; projectId: string };
   /** A tracked PR was recorded, refreshed, or dismissed. Upsert by id. */
   "pr:updated": PullRequest;
+  /** A question was asked or answered. Upsert by id. */
+  "question:updated": Question;
   /** author: user | agent | moderator. */
   "message:appended": Message;
   /** The tab dot goes blocked until this one is resolved. */
