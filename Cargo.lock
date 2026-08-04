@@ -4,9 +4,9 @@ version = 4
 
 [[package]]
 name = "WorkTablesIndex"
-version = "0.0.1"
+version = "0.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e21d8723f8419261fedc4088fbe6707a16957fa18aae3cb2197b2b0f724bf75b"
+checksum = "98feebdb055f47663b9fffc3802f63cf6dfdf2c7cf4d072e1164794aa68d85ee"
 dependencies = [
  "crossbeam-skiplist",
  "crossbeam-utils",
@@ -109,6 +109,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "arbitrary-int"
+version = "2.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "993a810118f8f37e9c4411c86f1c4c940a09a7ab34b7bf2d88d06f50c553fab7"
+
+[[package]]
+name = "arctic-wt"
+version = "0.1.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "525ddffcc39496cf25429bfa2e5b1476e2e71b792c686cbe2080ac5a6d751a3d"
+dependencies = [
+ "fearless_simd",
+ "ribbit",
+ "seize",
+]
+
+[[package]]
 name = "async-trait"
 version = "0.1.91"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -156,25 +173,25 @@ checksum = "f2032f911046de80f0a198e0901378627c33f59ea0ac00e363d481118bd70a53"
 
 [[package]]
 name = "az-agent"
-version = "0.1.67"
+version = "0.1.68"
 dependencies = [
  "az-core",
 ]
 
 [[package]]
 name = "az-agent-proxy"
-version = "0.1.67"
+version = "0.1.68"
 dependencies = [
  "az-core",
 ]
 
 [[package]]
 name = "az-core"
-version = "0.1.67"
+version = "0.1.68"
 
 [[package]]
 name = "az-gui"
-version = "0.1.67"
+version = "0.1.68"
 dependencies = [
  "agent-abstraction",
  "agent-experimental",
@@ -199,7 +216,7 @@ dependencies = [
 
 [[package]]
 name = "az-mcp-proxy"
-version = "0.1.67"
+version = "0.1.68"
 dependencies = [
  "az-core",
 ]
@@ -512,6 +529,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "congee-wt"
+version = "0.4.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "341f16608dbae8a05601aaaac7ff990e8ef89006e8762ffe3516915e9e3c9598"
+dependencies = [
+ "crossbeam-epoch",
+]
+
+[[package]]
 name = "convert_case"
 version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -737,9 +763,9 @@ dependencies = [
 
 [[package]]
 name = "data_bucket"
-version = "0.4.1"
+version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "603b9f2db8a87208bf23e7c77a14c46846b22c02845074e8160a74d2425b2126"
+checksum = "96a5e9c4f3e515a01f695d405da6162cb0b3a9c33ee0bb8e7c61bae3e1a5cb49"
 dependencies = [
  "WorkTablesIndex",
  "data_bucket_derive",
@@ -754,15 +780,12 @@ dependencies = [
 
 [[package]]
 name = "data_bucket_derive"
-version = "0.3.16"
+version = "0.3.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4b1150d0750949ff18a8cbcec7ec5423120769ab8ceac994fcba4073c9736e5c"
+checksum = "a0d3c7588405cb34492204f7d06f3e1caaabddc5a6e74f1c6bac5980bc06934e"
 dependencies = [
- "convert_case 0.6.0",
  "proc-macro2",
  "quote",
- "regex",
- "rkyv 0.7.46",
  "syn 2.0.119",
 ]
 
@@ -879,7 +902,7 @@ dependencies = [
  "libc",
  "option-ext",
  "redox_users 0.5.2",
- "windows-sys 0.59.0",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -1055,7 +1078,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
- "windows-sys 0.59.0",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -1082,6 +1105,12 @@ checksum = "1e6853b52649d4ac5c0bd02320cddc5ba956bdb407c4b75a2c6b75bf51500f8c"
 dependencies = [
  "simd-adler32",
 ]
+
+[[package]]
+name = "fearless_simd"
+version = "0.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e0f5f895dac0865bc235f1364793899569a7db538137f1024dccea56bf41c78d"
 
 [[package]]
 name = "field-offset"
@@ -1880,6 +1909,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "indexset"
+version = "0.15.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6e99c68f516b6576e7a79e673708cfbc31b651b573005ae3e97fad33c64ccc93"
+dependencies = [
+ "crossbeam-skiplist",
+ "crossbeam-utils",
+ "fastrand",
+ "ftree",
+ "parking_lot",
+]
+
+[[package]]
 name = "infer"
 version = "0.19.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1902,7 +1944,7 @@ checksum = "3640c1c38b8e4e43584d8df18be5fc6b0aa314ce6ebf51b53313d4306cca8e46"
 dependencies = [
  "hermit-abi",
  "libc",
- "windows-sys 0.59.0",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -2220,7 +2262,7 @@ dependencies = [
  "png 0.18.1",
  "serde",
  "thiserror 2.0.19",
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -2718,6 +2760,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "portable-atomic"
+version = "1.14.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3d20d5497ef88037a52ff98267d066e7f11fcc5e99bbfbd58a42336193aacec3"
+
+[[package]]
 name = "potential_utf"
 version = "0.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3128,6 +3176,30 @@ dependencies = [
 ]
 
 [[package]]
+name = "ribbit"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0c6bd7c1583c5a85d8ef74722c21d0a3235de7d8209678c971e387a2820ceb78"
+dependencies = [
+ "arbitrary-int",
+ "portable-atomic",
+ "ribbit-derive",
+]
+
+[[package]]
+name = "ribbit-derive"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "978adcce653b091439d17ca4d4e51f1442b170a6c5612789b328f311dbb2a3c0"
+dependencies = [
+ "darling",
+ "heck 0.5.0",
+ "proc-macro2",
+ "quote",
+ "syn 2.0.119",
+]
+
+[[package]]
 name = "ring"
 version = "0.17.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3225,7 +3297,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys",
- "windows-sys 0.59.0",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -3281,7 +3353,7 @@ dependencies = [
  "security-framework",
  "security-framework-sys",
  "webpki-root-certs",
- "windows-sys 0.59.0",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -3415,6 +3487,16 @@ checksum = "6ce2691df843ecc5d231c0b14ece2acc3efb62c0a398c7e1d875f3983ce020e3"
 dependencies = [
  "core-foundation-sys",
  "libc",
+]
+
+[[package]]
+name = "seize"
+version = "0.5.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5b55fb86dfd3a2f5f76ea78310a88f96c4ea21a3031f8d212443d56123fd0521"
+dependencies = [
+ "libc",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -3689,7 +3771,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c3d1e2c7f27f8d4cb10542a02c49005dbd6e93095799d6f3be745fae9f8fedd4"
 dependencies = [
  "libc",
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -4244,10 +4326,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "32497e9a4c7b38532efcdebeef879707aa9f794296a4f0244f6f69e9bc8574bd"
 dependencies = [
  "fastrand",
- "getrandom 0.4.3",
+ "getrandom 0.3.4",
  "once_cell",
  "rustix",
- "windows-sys 0.59.0",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -4631,7 +4713,7 @@ dependencies = [
  "png 0.18.1",
  "serde",
  "thiserror 2.0.19",
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -5042,7 +5124,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.59.0",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -5496,18 +5578,21 @@ checksum = "1ebf944e87a7c253233ad6766e082e3cd714b5d03812acc24c318f549614536e"
 
 [[package]]
 name = "worktable"
-version = "0.9.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "068af4d9349ba073e931242cd9a9579a6417734df5f1c8fbe12ee427a1803a7c"
+version = "1.0.0-beta.2"
+source = "git+https://github.com/pathscale/WorkTable?rev=4f1e4d2392377e6f195592b220babd28e5ef3629#4f1e4d2392377e6f195592b220babd28e5ef3629"
 dependencies = [
  "WorkTablesIndex",
+ "arctic-wt",
  "async-trait",
+ "congee-wt",
  "convert_case 0.6.0",
+ "crc32fast",
  "data_bucket",
  "derive_more 2.1.1",
  "eyre",
  "fastrand",
  "futures",
+ "indexset",
  "log",
  "ordered-float",
  "parking_lot",
@@ -5523,9 +5608,8 @@ dependencies = [
 
 [[package]]
 name = "worktable_codegen"
-version = "0.9.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "79c8b942a2698ce1a4dba8c8ec9387309e851f2f41b2c490d0068c5b2038bade"
+version = "1.0.0-beta.2"
+source = "git+https://github.com/pathscale/WorkTable?rev=4f1e4d2392377e6f195592b220babd28e5ef3629#4f1e4d2392377e6f195592b220babd28e5ef3629"
 dependencies = [
  "convert_case 0.6.0",
  "indexmap 2.14.0",
@@ -5587,13 +5671,14 @@ dependencies = [
 
 [[package]]
 name = "wt-migrate"
-version = "0.1.67"
+version = "0.1.68"
 dependencies = [
  "derive_more 2.1.1",
  "eyre",
  "futures",
  "libc",
  "rkyv 0.8.17",
+ "tempfile",
  "tokio",
  "uuid",
  "worktable",
@@ -5601,7 +5686,7 @@ dependencies = [
 
 [[package]]
 name = "wt-tools"
-version = "0.1.67"
+version = "0.1.68"
 dependencies = [
  "derive_more 2.1.1",
  "dirs",

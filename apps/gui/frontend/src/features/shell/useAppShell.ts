@@ -35,9 +35,10 @@ export function useAppShell(): {
 
   const confirmClose = () => {
     setIsClosing(false);
-    // destroy(), not close(): close() re-enters the same close-requested
-    // handler that opened this dialog, and the window never actually goes.
-    void getCurrentWindow().destroy();
+    // Rust drains persistence away from Tauri's synchronous exit callback, so
+    // macOS keeps receiving events instead of showing a beachball. Destroy is
+    // only the fallback for a backend too old to expose the command.
+    void actions.quitApp().catch(() => getCurrentWindow().destroy());
   };
 
   const requestClose = () => {

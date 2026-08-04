@@ -105,6 +105,7 @@ export function createTauriApi(): AgencyZeroApi {
     getBuildInfo: () => call("get_build_info"),
     checkForUpdate: () => call("check_for_update"),
     installUpdate: () => call("install_update"),
+    quitApp: () => call("quit_app"),
     relaunchApp: () => call("relaunch_app"),
     getTaskManager: () => call("get_task_manager"),
     resetTaskManager: () => call("reset_task_manager"),

@@ -18,6 +18,68 @@ fn main() -> ExitCode {
     let mut args: Vec<String> = std::env::args().skip(1).collect();
 
     /*
+     * recover-task-log-index <source> <target>: recover rows when the task
+     * log's string primary index is torn but its project index and data pages
+     * still read. The source is copied to scratch before any index is opened
+     * for writing, and the target receives a brand-new task_log only.
+     */
+    if args.first().map(String::as_str) == Some("recover-task-log-index") {
+        args.remove(0);
+        let [source, target] = args.as_slice() else {
+            eprintln!("usage: wt-migrate recover-task-log-index <source-store> <new-target-store>");
+            return ExitCode::from(2);
+        };
+        let source = PathBuf::from(source);
+        let target = PathBuf::from(target);
+        if !source.join("task_log/.wt.data").is_file()
+            || !source.join("task_log/project_idx.wt.idx").is_file()
+        {
+            eprintln!(
+                "{} does not contain task_log data plus project_idx.wt.idx; nothing was touched",
+                source.display()
+            );
+            return ExitCode::from(2);
+        }
+        if target.exists() {
+            eprintln!(
+                "{} already exists; recover into a new directory",
+                target.display()
+            );
+            return ExitCode::from(2);
+        }
+        let _source_lock = match wt_migrate::lock_store(&source) {
+            Ok(lock) => lock,
+            Err(message) => {
+                eprintln!("{message}");
+                return ExitCode::FAILURE;
+            }
+        };
+        let runtime = tokio::runtime::Builder::new_multi_thread()
+            .worker_threads(2)
+            .enable_io()
+            .enable_time()
+            .build()
+            .expect("runtime");
+        return match runtime.block_on(wt_migrate::recover_task_log_index(&source, &target)) {
+            Ok(report) => {
+                println!(
+                    "recovered {} task-log row(s) across {} project key(s) into {}",
+                    report.rows,
+                    report.projects,
+                    target.display()
+                );
+                ExitCode::SUCCESS
+            }
+            Err(error) => {
+                eprintln!(
+                    "task-log recovery failed: {error:#}. The source was not modified; the target may be partial."
+                );
+                ExitCode::FAILURE
+            }
+        };
+    }
+
+    /*
      * salvage-items <source> <existing-target>: read a mixed-shape
      * project_item through both schema generations, keep every row that reads
      * sane in either, and insert the ones the target does not already have.

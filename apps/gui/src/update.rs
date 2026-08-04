@@ -81,6 +81,6 @@ pub(crate) async fn install_update(
         .map_err(|e| e.to_string())?;
 
     // Same drain as the quit path, for the same reason.
-    state.tables.shutdown().await;
+    state.drain_tables_once().await?;
     app.restart();
 }

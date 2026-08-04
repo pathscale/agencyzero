@@ -60,6 +60,13 @@ use worktable::migration::Migration;
 use worktable::prelude::*;
 use worktable::{migration_engine, worktable};
 
+/// Result of rebuilding a task log through its surviving project index.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct TaskLogRecoveryReport {
+    pub rows: usize,
+    pub projects: usize,
+}
+
 /// `project_item` as it shipped before `reference` was added.
 ///
 /// `worktable_version!` rather than `worktable!`: a historical shape exists to
@@ -375,7 +382,10 @@ pub async fn salvage_items(source: &Path, target: &Path) -> eyre::Result<(usize,
             .map_err(|error| eyre::eyre!("{error}"))?;
         salvaged += 1;
     }
-    target_table.wait_for_ops().await;
+    target_table
+        .wait_for_ops()
+        .await
+        .map_err(|error| eyre::eyre!("project_item persistence failed: {error}"))?;
     Ok((salvaged, skipped, unreadable))
 }
 
@@ -414,7 +424,10 @@ async fn scrub_items(target: &Path) -> eyre::Result<usize> {
             .await
             .map_err(|error| eyre::eyre!("{error}"))?;
     }
-    table.wait_for_ops().await;
+    table
+        .wait_for_ops()
+        .await
+        .map_err(|error| eyre::eyre!("project_item persistence failed: {error}"))?;
     Ok(count)
 }
 
@@ -485,7 +498,12 @@ pub async fn rebuild_store(source: &Path, target: &Path) -> eyre::Result<Vec<(St
                     )
                 })?;
             }
-            fresh.wait_for_ops().await;
+            fresh.wait_for_ops().await.map_err(|error| {
+                eyre::eyre!(
+                    "{} persistence failed: {error}",
+                    app_schema::$module::$table::name_snake_case()
+                )
+            })?;
             (
                 app_schema::$module::$table::name_snake_case().to_string(),
                 count,
@@ -577,8 +595,186 @@ pub async fn rebuild_task_log(source: &Path, target: &Path) -> eyre::Result<(usi
             dropped += 1;
         }
     }
-    target_table.wait_for_ops().await;
+    target_table
+        .wait_for_ops()
+        .await
+        .map_err(|error| eyre::eyre!("task_log persistence failed: {error}"))?;
     Ok((rebuilt, dropped))
+}
+
+/// Recover a task log whose string primary index is unreadable.
+///
+/// The non-unique `project_idx` remains an independent map from project ids to
+/// row links. Recovery copies only `task_log` into private scratch space,
+/// replaces the scratch primary index with an empty one, then asks the intact
+/// project index for every row. Rows are inserted into a fresh target table,
+/// which reconstructs both indexes and data-page accounting.
+///
+/// `source` is never opened for writing and is never modified. `target` must
+/// not exist. A caller can validate the result before swapping only the
+/// repaired table into a store.
+pub async fn recover_task_log_index(
+    source: &Path,
+    target: &Path,
+) -> eyre::Result<TaskLogRecoveryReport> {
+    use std::collections::{BTreeMap, BTreeSet};
+
+    let scratch = tempfile::tempdir()?;
+    let scratch_store = scratch.path().join("store");
+    let scratch_table = scratch_store.join("task_log");
+    copy_dir(&source.join("task_log"), &scratch_table).await?;
+
+    // Read the surviving secondary index directly to discover every key,
+    // including projects that may since have been deleted from the project
+    // table. This handle writes nothing because no events are applied.
+    let mut project_index =
+        <SpaceIndexUnsized<String, { INNER_PAGE_SIZE as u32 }> as SpaceIndexOps<String>>::secondary_from_table_files_path(
+            scratch_table.to_string_lossy().into_owned(),
+            "project_idx",
+            TaskLogWorkTable::version(),
+        )
+        .await?;
+    let project_ids: BTreeSet<String> = project_index
+        .parse_indexset()
+        .await?
+        .iter()
+        .map(|(project_id, _)| project_id.clone())
+        .collect();
+    drop(project_index);
+
+    // Preserve the bad file inside the disposable scratch directory. With no
+    // primary file present, WorkTable bootstraps an empty one while retaining
+    // the independent project index that can still resolve every row link.
+    tokio::fs::rename(
+        scratch_table.join("primary.wt.idx"),
+        scratch_table.join("primary.wt.idx.corrupt"),
+    )
+    .await?;
+
+    let open = |dir: &Path| {
+        let config = worktable::prelude::DiskConfig::new_with_table_name(
+            dir.to_string_lossy().into_owned(),
+            TaskLogWorkTable::name_snake_case(),
+            TaskLogWorkTable::version(),
+        );
+        async move {
+            let engine = TaskLogPersistenceEngine::new(config).await?;
+            TaskLogWorkTable::load(engine).await
+        }
+    };
+
+    let damaged = open(&scratch_store).await?;
+    let mut rows = BTreeMap::new();
+    for project_id in &project_ids {
+        for row in damaged.select_by_project_id(project_id.clone()).execute()? {
+            rows.insert(row.id.clone(), row);
+        }
+    }
+
+    let fresh = open(target).await?;
+    for row in rows.values().cloned() {
+        fresh
+            .insert(row)
+            .map_err(|error| eyre::eyre!("task_log: {error}"))?;
+    }
+    fresh
+        .wait_for_ops()
+        .await
+        .map_err(|error| eyre::eyre!("task_log persistence failed: {error}"))?;
+
+    let recovered = fresh.select_all().execute()?.len();
+    if recovered != rows.len() {
+        return Err(eyre::eyre!(
+            "verification counted {recovered} row(s), but recovery read {}",
+            rows.len()
+        ));
+    }
+    fresh
+        .close()
+        .await
+        .map_err(|error| eyre::eyre!("could not close rebuilt task_log: {error}"))?;
+    damaged
+        .close()
+        .await
+        .map_err(|error| eyre::eyre!("could not close scratch task_log: {error}"))?;
+
+    Ok(TaskLogRecoveryReport {
+        rows: recovered,
+        projects: project_ids.len(),
+    })
+}
+
+#[cfg(test)]
+mod recovery_tests {
+    use super::*;
+
+    fn task(id: &str, project_id: &str) -> TaskLogRow {
+        TaskLogRow {
+            id: id.into(),
+            tool_call_id: String::new(),
+            project_id: project_id.into(),
+            item_id: String::new(),
+            label: "probe".into(),
+            tool: "Bash".into(),
+            ok: 1,
+            output: "ok".into(),
+            duration_ms: 1,
+            exit_code: 0,
+            finished_at: "2026-08-04T00:00:00Z".into(),
+        }
+    }
+
+    #[tokio::test]
+    async fn an_intact_secondary_index_recovers_every_row_from_a_torn_primary() {
+        let root = tempfile::tempdir().expect("temporary recovery store");
+        let source = root.path().join("source");
+        let target = root.path().join("target");
+        let config = DiskConfig::new_with_table_name(
+            source.to_string_lossy().into_owned(),
+            TaskLogWorkTable::name_snake_case(),
+            TaskLogWorkTable::version(),
+        );
+        let engine = TaskLogPersistenceEngine::new(config).await.expect("engine");
+        let table = TaskLogWorkTable::load(engine).await.expect("table");
+        table.insert(task("log-1", "proj-1")).expect("first row");
+        table.insert(task("log-2", "proj-1")).expect("second row");
+        table.insert(task("log-3", "proj-2")).expect("third row");
+        table.close().await.expect("source closes cleanly");
+
+        std::fs::write(source.join("task_log/primary.wt.idx"), b"torn primary")
+            .expect("primary index is made unreadable");
+
+        let report = recover_task_log_index(&source, &target)
+            .await
+            .expect("secondary-index recovery succeeds");
+        assert_eq!(
+            report,
+            TaskLogRecoveryReport {
+                rows: 3,
+                projects: 2,
+            }
+        );
+
+        let config = DiskConfig::new_with_table_name(
+            target.to_string_lossy().into_owned(),
+            TaskLogWorkTable::name_snake_case(),
+            TaskLogWorkTable::version(),
+        );
+        let engine = TaskLogPersistenceEngine::new(config)
+            .await
+            .expect("rebuilt engine");
+        let rebuilt = TaskLogWorkTable::load(engine).await.expect("rebuilt table");
+        let mut ids: Vec<String> = rebuilt
+            .select_all()
+            .execute()
+            .expect("rebuilt rows")
+            .into_iter()
+            .map(|row| row.id)
+            .collect();
+        ids.sort();
+        assert_eq!(ids, vec!["log-1", "log-2", "log-3"]);
+        rebuilt.close().await.expect("rebuilt table closes");
+    }
 }
 
 /// Carry a store from `source` to `target`.
@@ -934,7 +1130,7 @@ mod scrub_tests {
             table
                 .insert(item("ment)", "item-03fd09c6"))
                 .expect("worse row");
-            table.wait_for_ops().await;
+            table.wait_for_ops().await.expect("items persist");
         }
 
         let dropped = scrub_items(&dir).await.expect("scrub");

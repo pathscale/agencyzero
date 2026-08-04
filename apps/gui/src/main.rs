@@ -77,6 +77,7 @@ const IMPLEMENTED: &[&str] = &[
     "set_project_notes",
     "get_cost_summary",
     "get_build_info",
+    "quit_app",
     "relaunch_app",
     "list_agent_io",
     "get_io_persist",
@@ -127,6 +128,10 @@ pub(crate) struct AppState {
     /// both read the same prior record and the slower write would silently
     /// drop the faster one's field on disk.
     settings_write: tokio::sync::Mutex<()>,
+    /// Makes every quit, restart, updater, and signal share one drain. The
+    /// normal UI path drains asynchronously before asking Tauri to exit; the
+    /// native exit callback is only a fallback for exits that bypass IPC.
+    exit_drain_started: std::sync::atomic::AtomicBool,
     /// Kept so `set_data_location` can write the pointer beside the settings.
     config_dir: std::path::PathBuf,
     /// Kept so `get_data_location` can re-resolve the pointer against the same
@@ -138,6 +143,18 @@ pub(crate) struct AppState {
     /// The store's exclusive flock, held for the life of the process — the
     /// single-writer rule made mechanical. See `lock_store`.
     _store_lock: std::fs::File,
+}
+
+impl AppState {
+    async fn drain_tables_once(&self) -> Result<(), String> {
+        if self
+            .exit_drain_started
+            .swap(true, std::sync::atomic::Ordering::AcqRel)
+        {
+            return Ok(());
+        }
+        self.tables.shutdown().await
+    }
 }
 
 /// Which commands Rust answers. See [`IMPLEMENTED`].
@@ -505,8 +522,27 @@ async fn relaunch_app(app: AppHandle, state: State<'_, AppState>) -> Result<(), 
     );
     // The same drain the quit path does: a half-written page is how a table
     // becomes unreadable rather than merely stale.
-    state.tables.shutdown().await;
+    state.drain_tables_once().await?;
     app.restart();
+}
+
+/// Drain off the native event loop, then let Tauri finish the process.
+///
+/// `RunEvent::Exit` is synchronous. Doing the first and potentially slow drain
+/// there makes macOS show the app as unresponsive. The webview routes ordinary
+/// close requests here so it stays responsive while each table reports its
+/// own completion or failure.
+#[tauri::command]
+async fn quit_app(app: AppHandle, state: State<'_, AppState>) -> Result<(), String> {
+    if let Err(error) = state.drain_tables_once().await {
+        crate::log!(
+            log::Level::Error,
+            "boot",
+            "quit drain reported a persistence failure: {error}"
+        );
+    }
+    app.exit(0);
+    Ok(())
 }
 
 /// The persisted settings record, or the defaults on a first run.
@@ -1094,6 +1130,7 @@ fn main() {
             study::export_study_events,
             study::clear_study_events,
             relaunch_app,
+            quit_app,
             set_settings,
             list_agent_status,
             models::list_models,
@@ -1305,6 +1342,7 @@ fn main() {
                 limits: Arc::default(),
                 receipts: Arc::default(),
                 settings_write: tokio::sync::Mutex::new(()),
+                exit_drain_started: std::sync::atomic::AtomicBool::new(false),
                 config_dir,
                 data_dir,
                 location,
@@ -1347,6 +1385,15 @@ fn main() {
                     "boot",
                     "{which} received; draining the tables and exiting"
                 );
+                if let Some(state) = signal_handle.try_state::<AppState>()
+                    && let Err(error) = state.drain_tables_once().await
+                {
+                    crate::log!(
+                        log::Level::Error,
+                        "boot",
+                        "{which} drain reported a persistence failure: {error}"
+                    );
+                }
                 signal_handle.exit(0);
             });
 
@@ -1405,29 +1452,19 @@ fn main() {
         .build(tauri::generate_context!())
         .expect("failed to build AgencyZero GUI")
         .run(|app, event| {
-            // `Exit` fires once, after the last window is gone and before the
-            // process ends, which is the only point where nothing else can
-            // still be writing. Bounded like the cafe's drain: fifteen
-            // seconds is more than any real queue needs, and a wedged drain
-            // must not turn "quit" into "hang until force-killed", because
-            // the force-kill is the one exit that loses data.
+            // Ordinary GUI close, restart, update, and Unix signals drain
+            // asynchronously before reaching this callback. Keep a fallback
+            // for an exit path that bypasses all of them, but `Tables` bounds
+            // its concurrent per-table drains and names any table that fails.
             if matches!(event, tauri::RunEvent::Exit)
                 && let Some(state) = app.try_state::<AppState>()
+                && let Err(error) = tauri::async_runtime::block_on(state.drain_tables_once())
             {
-                let drained = tauri::async_runtime::block_on(async {
-                    tokio::time::timeout(
-                        std::time::Duration::from_secs(15),
-                        state.tables.shutdown(),
-                    )
-                    .await
-                });
-                if drained.is_err() {
-                    crate::log!(
-                        log::Level::Error,
-                        "boot",
-                        "the exit drain did not finish within 15s; exiting with ops possibly in flight"
-                    );
-                }
+                crate::log!(
+                    log::Level::Error,
+                    "boot",
+                    "the fallback exit drain failed: {error}"
+                );
             }
         });
 }

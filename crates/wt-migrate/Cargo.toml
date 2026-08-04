@@ -7,7 +7,7 @@ publish.workspace = true
 
 [dependencies]
 libc = "0.2"
-worktable = "0.9"
+worktable = { git = "https://github.com/pathscale/WorkTable", rev = "4f1e4d2392377e6f195592b220babd28e5ef3629" }
 # The `worktable!` and `worktable_version!` macros emit code that names these by
 # bare path rather than through a re-export, so a consumer of the macros has to
 # declare them too. Kept identical to the block in wt-tools and apps/gui: the
@@ -18,6 +18,7 @@ derive_more = { version = "2.0.1", features = ["from", "error", "display", "debu
 futures = "0.3"
 uuid = "1"
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "fs", "time"] }
+tempfile = "3"
 
 [[bin]]
 name = "wt-migrate"

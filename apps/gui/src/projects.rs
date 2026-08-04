@@ -6454,7 +6454,7 @@ mod tests {
             );
         }
 
-        tables.shutdown().await;
+        tables.shutdown().await.expect("tables drain");
         let _ = std::fs::remove_dir_all(&store);
     }
 
@@ -6496,7 +6496,7 @@ mod tests {
         )
         .await
         .expect("new root persists");
-        tables.shutdown().await;
+        tables.shutdown().await.expect("tables drain");
 
         let reopened = Tables::open(&store)
             .await
@@ -6525,7 +6525,7 @@ mod tests {
         assert!(described.contains("Resume(\"thread-existing\")"));
         assert!(described.contains("/repo-b"));
 
-        reopened.shutdown().await;
+        reopened.shutdown().await.expect("tables drain");
         let _ = std::fs::remove_dir_all(&store);
     }
 
@@ -6574,7 +6574,7 @@ mod tests {
             .collect();
         assert_eq!(add_dirs, ["/repo-b"]);
 
-        tables.shutdown().await;
+        tables.shutdown().await.expect("tables drain");
         let _ = std::fs::remove_dir_all(&store);
     }
 
@@ -6797,7 +6797,7 @@ mod tests {
         };
         assert!(retry_user_message(&tables, &mismatched).is_err());
 
-        tables.shutdown().await;
+        tables.shutdown().await.expect("tables drain");
         let _ = std::fs::remove_dir_all(store);
     }
 
