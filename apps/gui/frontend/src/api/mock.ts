@@ -286,6 +286,14 @@ export function createMockApi(): AgencyZeroApi {
       return settle(undefined);
     },
 
+    // No git remotes to discover from in the mock; re-announce the project's rows.
+    async discoverPullRequests(projectId) {
+      for (const pr of pullRequests.filter((candidate) => candidate.projectId === projectId)) {
+        emit("pr:updated", pr);
+      }
+      return settle(undefined);
+    },
+
     listItems: (projectId) =>
       settle(
         items.filter((item) => item.projectId === projectId).sort((a, b) => a.order - b.order),

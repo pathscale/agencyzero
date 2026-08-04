@@ -28,6 +28,7 @@ Home now uses the same declared Prompt Syntax surface as every project tab:
 <ps @agency:items.add(project: "<project name or id>", ref: "t1", title: "<one short task>", status: "new")>
 <ps @agency:items.state(id: "<item id>", status: "active")>
 <ps @agency:items.retire(id: "<item id>")>
+<ps @agency:pr.retire(id: "<pull-request association id>")>
 ```
 
 The `<ps ...>` line is the authority and is visually marked in the transcript.
@@ -45,8 +46,10 @@ reserved `home-task-manager` id.
 
 ## Deleting, and why absence never deletes
 
-`items.retire(id: ...)` removes exactly one existing row. It is the only remove
-verb available to the agent. A model asked to "delete X" will happily re-emit
+`items.retire(id: ...)` removes exactly one existing item row. `pr.retire(id: ...)`
+dismisses the named pull-request association and any legacy duplicates with the
+same repository and PR number. These are the only remove verbs available to the
+agent. A model asked to "delete X" will happily re-emit
 the whole list without X, and treating absence as deletion would wipe rows the
 user added by hand every time the model abbreviated. Omission therefore changes
 nothing.
@@ -75,6 +78,8 @@ the current ids and the declared closed verb set:
 - `items.retire` removes exactly the named id.
 - `pr.link` records an authored GitHub PR URL and may attach its number to an
   item. A URL in prose is display text only.
+- `pr.retire` dismisses a tracked PR association by the stable id shown in the
+  prompt. Legacy duplicate rows for that same GitHub PR are dismissed together.
 
 `finished` and `canceled` are reserved to the owner on Home and project tabs.
 Checkboxes, prose, quoted examples, fenced examples, and bare PR URLs are inert.

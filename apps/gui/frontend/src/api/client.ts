@@ -96,6 +96,8 @@ export interface AgencyZeroApi {
   dismissPullRequest(id: string): Promise<void>;
   /** Ask gh again — state, diff stats, CI — for the chip's refresh. */
   refreshPullRequest(id: string): Promise<void>;
+  /** Discover a project's open PRs from its git remotes, even with no rows yet. */
+  discoverPullRequests(projectId: string): Promise<void>;
 
   // — Conversation ————————————————————————————————————————————
   listMessages(projectId: string): Promise<Message[]>;

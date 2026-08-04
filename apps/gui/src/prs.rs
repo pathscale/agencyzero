@@ -87,6 +87,52 @@ fn pr_urls(text: &str) -> Vec<(String, String, u32)> {
     found
 }
 
+/** GitHub identity, independent of URL spelling and repository case. */
+fn same_pr_identity(
+    left_repo: &str,
+    left_number: u32,
+    right_repo: &str,
+    right_number: u32,
+) -> bool {
+    left_number == right_number && left_repo.eq_ignore_ascii_case(right_repo)
+}
+
+fn row_rank(row: &PullRequestRow) -> (bool, u8) {
+    let state = match row.state.to_ascii_uppercase().as_str() {
+        "MERGED" => 4,
+        "CLOSED" => 3,
+        "OPEN" => 2,
+        _ => 1,
+    };
+    (!row.dismissed, state)
+}
+
+/// One canonical row per GitHub repository and PR number.
+///
+/// Old stores may contain repeated associations created before canonical URL
+/// matching existed. Collapse them at the backend boundary so every consumer
+/// — prompts, the API and refresh — receives the same list. A visible row wins
+/// over a dismissed duplicate; within that, terminal GitHub facts win over a
+/// stale open/unknown copy.
+pub fn canonical_rows(rows: Vec<PullRequestRow>) -> Vec<PullRequestRow> {
+    let mut canonical: Vec<PullRequestRow> = Vec::new();
+    let mut positions = std::collections::HashMap::<(String, u32), usize>::new();
+
+    for row in rows {
+        let key = (row.repo.to_ascii_lowercase(), row.number);
+        match positions.get(&key).copied() {
+            Some(index) if row_rank(&row) > row_rank(&canonical[index]) => canonical[index] = row,
+            Some(_) => {}
+            None => {
+                positions.insert(key, canonical.len());
+                canonical.push(row);
+            }
+        }
+    }
+
+    canonical
+}
+
 /// Record the one GitHub PR URL an authored directive names.
 ///
 /// URLs in prose are inert. The old completion hook scanned every reply and
@@ -117,7 +163,10 @@ pub fn record_url(
     // land immediately rather than only after the next `loadProject` or poll —
     // the single insert-only emit left a re-linked (or missed) chip stranded
     // until a reload, which read as "the PR isn't here".
-    let chip = match existing.iter().find(|row| row.url == url) {
+    let chip = match existing
+        .iter()
+        .find(|row| same_pr_identity(&row.repo, row.number, &repo, number))
+    {
         Some(row) => row.clone(),
         None => {
             let row = PullRequestRow {
@@ -230,12 +279,14 @@ fn ci_word(state: Option<&str>) -> String {
 pub fn refresh_project(app: AppHandle, project_id: String) {
     tauri::async_runtime::spawn(async move {
         let state = app.state::<AppState>();
-        let known: Vec<PullRequestRow> = state
-            .tables
-            .pull_request
-            .select_by_project_id(project_id.clone())
-            .execute()
-            .unwrap_or_default();
+        let known = canonical_rows(
+            state
+                .tables
+                .pull_request
+                .select_by_project_id(project_id.clone())
+                .execute()
+                .unwrap_or_default(),
+        );
         let rows: Vec<PullRequestRow> = known
             .clone()
             .into_iter()
@@ -496,13 +547,53 @@ pub fn list_pull_requests(project_id: String, state: State<'_, AppState>) -> Vec
 }
 
 fn list_rows(table: &PullRequestWorkTable, project_id: &str) -> Vec<PullRequestDto> {
-    table
-        .select_by_project_id(project_id.to_string())
+    canonical_rows(
+        table
+            .select_by_project_id(project_id.to_string())
+            .execute()
+            .unwrap_or_default(),
+    )
+    .into_iter()
+    .map(PullRequestDto::from)
+    .collect()
+}
+
+/// Dismiss every legacy association with the selected row's GitHub identity.
+pub async fn dismiss_association(
+    app: &AppHandle,
+    tables: &Tables,
+    id: &str,
+) -> Result<(String, Vec<String>), String> {
+    let anchor = tables
+        .pull_request
+        .select(id.to_string())
+        .ok_or_else(|| "ENTITY_NOT_FOUND: pull request association".to_string())?;
+    let duplicates: Vec<PullRequestRow> = tables
+        .pull_request
+        .select_by_project_id(anchor.project_id.clone())
         .execute()
         .unwrap_or_default()
         .into_iter()
-        .map(PullRequestDto::from)
-        .collect()
+        .filter(|row| same_pr_identity(&row.repo, row.number, &anchor.repo, anchor.number))
+        .collect();
+    let mut dismissed = Vec::with_capacity(duplicates.len());
+
+    for duplicate in duplicates {
+        tables
+            .pull_request
+            .update_pr_dismissed_by_id(
+                PrDismissedByIdQuery { dismissed: true },
+                duplicate.id.clone(),
+            )
+            .await
+            .map_err(|error| error.to_string())?;
+        if let Some(row) = tables.pull_request.select(duplicate.id.clone()) {
+            let _ = app.emit("pr:updated", PullRequestDto::from(row));
+        }
+        dismissed.push(duplicate.id);
+    }
+
+    Ok((anchor.project_id, dismissed))
 }
 
 /// Wave one chip away. The row stays: dismissed is a view state, not a fact
@@ -517,20 +608,24 @@ pub async fn dismiss_pull_request(
     state: State<'_, AppState>,
 ) -> Result<(), String> {
     let started = std::time::Instant::now();
-    state
-        .tables
-        .pull_request
-        .update_pr_dismissed_by_id(PrDismissedByIdQuery { dismissed: true }, id.clone())
-        .await
-        .map_err(|error| error.to_string())?;
-    if let Some(row) = state.tables.pull_request.select(id.clone()) {
-        let project_id = row.project_id.clone();
-        let _ = app.emit("pr:updated", PullRequestDto::from(row));
-        let mut study = crate::study::Record::manual(project_id, "pr.dismiss", "pull_request", id);
-        study.latency = Some(started.elapsed());
-        crate::study::record(&state.tables, study);
-    }
+    let (project_id, _) = dismiss_association(&app, &state.tables, &id).await?;
+    let mut study = crate::study::Record::manual(project_id, "pr.dismiss", "pull_request", id);
+    study.latency = Some(started.elapsed());
+    crate::study::record(&state.tables, study);
     Ok(())
+}
+
+/// Discover a project's open pull requests, whether or not a row exists yet.
+///
+/// `refresh_pull_request` needs a row id, so it can only re-ask about a PR the
+/// panel already knows. A project opened fresh has no rows, so nothing asked
+/// `gh` about the branches it has already pushed, and a PR appeared only after
+/// an authored `pr.link` named it. This asks by project: `refresh_project`
+/// reads the project's git remotes and inserts any open PR it finds, so a chip
+/// shows up because the PR exists, not because someone pasted its URL.
+#[tauri::command]
+pub fn discover_pull_requests(app: AppHandle, project_id: String) {
+    refresh_project(app, project_id);
 }
 
 /// Ask `gh` again, for the refresh affordance on the chip.
@@ -569,7 +664,25 @@ pub fn refresh_pull_request(app: AppHandle, id: String) {
 
 #[cfg(test)]
 mod tests {
-    use super::pr_urls;
+    use super::{canonical_rows, pr_urls, same_pr_identity};
+    use crate::db::schema::pull_request::PullRequestRow;
+
+    fn row(id: &str, state: &str, dismissed: bool) -> PullRequestRow {
+        PullRequestRow {
+            id: id.into(),
+            project_id: "project".into(),
+            url: "https://github.com/pathscale/WorkTable/pull/46".into(),
+            repo: "pathscale/WorkTable".into(),
+            number: 46,
+            branch: "fix/v1-blockers-consolidated".into(),
+            state: state.into(),
+            additions: 335,
+            deletions: 431,
+            ci: "fail".into(),
+            dismissed,
+            updated_at: String::new(),
+        }
+    }
 
     #[test]
     fn authored_values_may_contain_markdown_link_syntax() {
@@ -599,5 +712,42 @@ mod tests {
                     https://github.com/pathscale/agencyzero/pull/16 again: \
                     https://github.com/pathscale/agencyzero/pull/16";
         assert_eq!(pr_urls(text).len(), 1);
+    }
+
+    #[test]
+    fn pull_request_identity_ignores_url_case_but_not_number() {
+        assert!(same_pr_identity(
+            "pathscale/WorkTable",
+            46,
+            "PATHSCALE/worktable",
+            46
+        ));
+        assert!(!same_pr_identity(
+            "pathscale/WorkTable",
+            46,
+            "pathscale/WorkTable",
+            45
+        ));
+    }
+
+    #[test]
+    fn canonical_rows_collapse_duplicates_before_they_reach_consumers() {
+        let mut stale = row("stale", "OPEN", false);
+        stale.repo = "PATHSCALE/worktable".into();
+        let canonical = canonical_rows(vec![stale, row("current", "CLOSED", false)]);
+
+        assert_eq!(canonical.len(), 1);
+        assert_eq!(canonical[0].id, "current");
+    }
+
+    #[test]
+    fn a_visible_association_wins_over_a_dismissed_terminal_duplicate() {
+        let canonical = canonical_rows(vec![
+            row("hidden", "CLOSED", true),
+            row("visible", "OPEN", false),
+        ]);
+
+        assert_eq!(canonical.len(), 1);
+        assert_eq!(canonical[0].id, "visible");
     }
 }
