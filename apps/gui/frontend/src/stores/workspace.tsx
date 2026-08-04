@@ -466,12 +466,17 @@ function createWorkspace() {
      * status is what tells them apart: `active` is waiting on you, anything else
      * is done or not started.
      */
+    // `questions` is the run stopping on something only the owner can answer,
+    // signalled by `items.state(... questions)` — an item status, not the
+    // project's. A background tab with an unanswered question is a stalled run,
+    // so it calls for attention in red like a tool hold rather than sitting
+    // quiet. Checked here, not on `project.status`, because that is set by a
+    // different command and an agent stops by moving an item, not the project.
+    if ((state.items[projectId] ?? []).some((item) => item.status === "questions")) {
+      return "blocked";
+    }
+
     const project = state.projects.find((candidate) => candidate.id === projectId);
-    // `questions` is the run stopping on something only the owner can answer.
-    // It is red like a tool hold, not a quiet idle state: a project waiting on
-    // you must call for attention from a background tab, the same way an
-    // approval does — an unseen question is a stalled run.
-    if (project?.status === "questions") return "blocked";
     return project?.status === "active" ? "ready" : "quiet";
   }
 
