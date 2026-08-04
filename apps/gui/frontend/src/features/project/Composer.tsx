@@ -86,8 +86,6 @@ export type ComposerProps = {
    * backend failure cannot swallow a prompt someone spent minutes writing.
    */
   onSend: (body: string, study: StudyTurnMetadata) => Promise<void>;
-  /** Shown on the right of the control row, e.g. "31.4k / 200k ctx · 16%". */
-  usage?: string;
   /** A run is in flight: the send button becomes Stop. */
   isRunning?: boolean;
   /** Whether a send during that run enters it instead of waiting for the slot. */
@@ -508,7 +506,6 @@ export function Composer(props: ComposerProps): JSX.Element {
 
             <PillMenu
               label={tx("Permission")}
-              icon="lock"
               value={props.permission}
               options={(props.permissions ?? PERMISSION_ORDER).map((permission) => ({
                 value: permission,
@@ -537,11 +534,6 @@ export function Composer(props: ComposerProps): JSX.Element {
             data-composer-secondary-controls
             class="ml-auto flex min-w-0 max-w-full flex-wrap items-center justify-end gap-2.5"
           >
-            {/* Text only, by request: the numbers already say how full it is. */}
-            <Show when={props.usage}>
-              <span class="font-mono text-[11.5px] text-az-faint">{props.usage}</span>
-            </Show>
-
             {/*
             Extra Thinking, next to the model it qualifies. Only Claude has a
             lever, so for any other agent the control is disabled rather than

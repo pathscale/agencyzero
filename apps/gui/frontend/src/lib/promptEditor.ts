@@ -4,6 +4,8 @@ import type { Agent } from "~/types";
 export interface PromptModelOption {
   value: string;
   label: string;
+  /** Compact label for the composer pill; the menu still shows `label`. */
+  triggerLabel?: string;
   agent: Agent;
   model: string;
 }

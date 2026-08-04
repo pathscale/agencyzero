@@ -5,6 +5,9 @@ import { Icon, type IconProps } from "~/components/Icon";
 export type PillOption<T extends string> = {
   value: T;
   label: string;
+  /** Shown on the trigger when selected, if the full label is too long for the
+   * pill. The menu still shows `label`. */
+  triggerLabel?: string;
   /** Secondary line in the menu — what the option actually does. */
   hint?: string;
 };
@@ -56,7 +59,7 @@ export function PillMenu<T extends string>(props: PillMenuProps<T>): JSX.Element
           <span class="font-semibold text-base-content">{props.prefix}</span>
         </Show>
         <span class={props.prefix ? "text-az-muted" : "text-az-strong"}>
-          {current()?.label ?? props.value}
+          {current()?.triggerLabel ?? current()?.label ?? props.value}
         </span>
         <Icon name="chevron-down" class="text-[12px] text-az-faint" />
       </Dropdown.Trigger>

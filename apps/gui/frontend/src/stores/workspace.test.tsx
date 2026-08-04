@@ -4,6 +4,7 @@ import { setPrefs } from "~/stores/prefs";
 import {
   isLimitLive,
   queueReason,
+  shortModelName,
   useWorkspace,
   type Workspace,
   WorkspaceProvider,
@@ -334,6 +335,21 @@ describe("task correlation", () => {
       expect(after).toHaveLength(1);
       expect(after[0].toolCallId).toBe("tc-wt-rg");
     });
+  });
+});
+
+describe("shortModelName", () => {
+  it("squeezes a windowed name to its size", () => {
+    expect(shortModelName("Opus (1M context)")).toBe("Opus 1M");
+    expect(shortModelName("Sonnet (200k context)")).toBe("Sonnet 200K");
+  });
+
+  it("drops a non-window parenthetical", () => {
+    expect(shortModelName("GPT-5.6 (sol)")).toBe("GPT-5.6");
+  });
+
+  it("leaves a plain name untouched", () => {
+    expect(shortModelName("Haiku")).toBe("Haiku");
   });
 });
 
