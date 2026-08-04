@@ -254,6 +254,23 @@ describe("tabStatus", () => {
 
     expect(workspace.tabStatus("cafe")).toBe("blocked");
   });
+
+  /*
+   * The older attention signal: an item moved to `questions` by
+   * `items.state`, distinct from an `@agency:ask` row. Any tab that needs a
+   * human turns red, so this gates the dot too. `worktable` is active; parking
+   * an item on `questions` must make it blocked rather than leave it ready.
+   */
+  it("reports a project with an item on questions as blocked", async () => {
+    const workspace = await mountWorkspace();
+    await workspace.actions.cancelRun("worktable");
+    await waitFor(() => expect(workspace.tabStatus("worktable")).toBe("ready"));
+
+    const item = workspace.state.items.worktable[0];
+    await workspace.actions.setItemStatus(item.id, "questions");
+
+    await waitFor(() => expect(workspace.tabStatus("worktable")).toBe("blocked"));
+  });
 });
 
 describe("openItemCount", () => {

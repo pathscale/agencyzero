@@ -86,6 +86,8 @@ export type ComposerProps = {
    * backend failure cannot swallow a prompt someone spent minutes writing.
    */
   onSend: (body: string, study: StudyTurnMetadata) => Promise<void>;
+  /** Context readout, shown as a chip in the composer's top-right corner. */
+  usage?: string;
   /** A run is in flight: the send button becomes Stop. */
   isRunning?: boolean;
   /** Whether a send during that run enters it instead of waiting for the slot. */
@@ -409,8 +411,16 @@ export function Composer(props: ComposerProps): JSX.Element {
 
   return (
     <div
-      class={`az-ring az-ring-composer rounded-[17px] ${props.size === "lg" ? "az-ring-strong rounded-[19px]" : ""}`}
+      class={`az-ring az-ring-composer relative rounded-[17px] ${props.size === "lg" ? "az-ring-strong rounded-[19px]" : ""}`}
     >
+      {/* Context readout: a chip in the top-right corner of the prompt area,
+          where how-full-the-window-is sits next to what you are typing rather
+          than crowding the control row below or hiding up in the header. */}
+      <Show when={props.usage}>
+        <span class="pointer-events-none absolute top-2 right-3 z-10 rounded-full bg-base-300/80 px-2 py-0.5 font-mono text-[10.5px] text-az-faint backdrop-blur-sm">
+          {props.usage}
+        </span>
+      </Show>
       <div
         class={`flex flex-col gap-3 bg-az-inset ${props.size === "lg" ? "rounded-[18px] p-[18px] pb-3.5" : "rounded-2xl p-[15px] pb-3"}`}
       >
