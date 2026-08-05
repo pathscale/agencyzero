@@ -610,6 +610,7 @@ export function createMockApi(): AgencyZeroApi {
     },
 
     resetProjectSession: (_projectId, _agent) => settle(undefined),
+    adoptSession: (_projectId, _agent, _sessionId) => settle(undefined),
 
     getProjectNotes: (projectId) => settle(notes.get(projectId) ?? ""),
     setProjectNotes: (projectId, text) => {

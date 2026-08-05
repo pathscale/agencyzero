@@ -348,6 +348,7 @@ export function SettingsTab(): JSX.Element {
                 <Row
                   label={tx("PR review prompt")}
                   hint={tx("what a PR review asks; empty uses the built-in prompt")}
+                  stack
                 >
                   <textarea
                     rows={3}
@@ -1625,6 +1626,12 @@ function Row(props: {
   label: string;
   hint?: string;
   isLast?: boolean;
+  /**
+   * Stack the control under the label instead of beside it. A wide control
+   * (a full-width textarea) beside a `flex-1` label squeezes the label to
+   * min-content, which wraps it one word per line; those rows stack instead.
+   */
+  stack?: boolean;
   children: JSX.Element;
 }): JSX.Element {
   const scope = useContext(SearchScope);
@@ -1640,9 +1647,11 @@ function Row(props: {
   return (
     <div
       classList={{ hidden: !visible() }}
-      class={`flex items-center gap-3 px-3.5 py-2.5 ${props.isLast ? "" : "border-az-hairline-soft border-b"}`}
+      class={`px-3.5 py-2.5 ${props.isLast ? "" : "border-az-hairline-soft border-b"} ${
+        props.stack ? "flex flex-col gap-2" : "flex items-center gap-3"
+      }`}
     >
-      <span class="min-w-0 flex-1 text-[12.5px] text-az-body">
+      <span class={`text-[12.5px] text-az-body ${props.stack ? "" : "min-w-0 flex-1"}`}>
         {props.label}
         <Show when={props.hint}>
           <span class="mt-0.5 block text-[11.5px] text-az-muted">{props.hint}</span>

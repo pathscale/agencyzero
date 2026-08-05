@@ -17,6 +17,27 @@ const STARTERS = () => [
 ];
 
 /**
+ * Hold back a directive that is still streaming, so a `<ps @agency:...>` span
+ * does not flash on screen and then vanish when the backend strips it from the
+ * settled message.
+ *
+ * Applied to the LIVE stream only. If the tail of the text so far contains a
+ * `<ps` that has not yet reached its closing `>`, everything from that `<ps`
+ * onward is withheld until the delta that completes the tag arrives (at which
+ * point the backend has the whole directive and the settled message will carry
+ * whatever it left behind). A `<ps` that never closes just stays hidden, which
+ * is the right outcome for a directive: the user never authored it to read.
+ */
+function holdBackPartialDirective(text: string): string {
+  const open = text.lastIndexOf("<ps");
+  if (open === -1) return text;
+  // A closing `>` after the last `<ps` means the directive is complete; nothing
+  // to withhold. Only an unterminated trailing `<ps...` is held.
+  const closed = text.indexOf(">", open);
+  return closed === -1 ? text.slice(0, open) : text;
+}
+
+/**
  * The conversation. Three voices, three shapes:
  * you (a right-aligned bubble), the agent (plain prose), and the moderator
  * (an amber-ruled note that can be holding the run).
@@ -130,12 +151,13 @@ export function TranscriptPane(props: {
             </Switch>
           )}
         </For>
-        {/* Agent questions belong in the conversation, where they remain
-            visible until answered. They used to float over the composer and
+        {/* Agent questions belong in the conversation, and they stay there
+            after they are answered too: a question that vanishes on reply
+            erases the exchange the reply was part of. Answered ones render
+            resolved (dimmed, no button); open ones keep their urgency colour
+            and the Answer control. They used to float over the composer and
             looked like transient input chrome rather than part of the turn. */}
-        <For
-          each={(state.questions[props.project.id] ?? []).filter((question) => !question.answered)}
-        >
+        <For each={state.questions[props.project.id] ?? []}>
           {(question) => <QuestionCard question={question} />}
         </For>
         {/* The run is blocked on this question; it renders where you read. */}
@@ -155,7 +177,7 @@ export function TranscriptPane(props: {
               <span class="text-[11px] text-az-muted">
                 {AGENT_LABELS[streamingAgent()]} {tx("· writing…")}
               </span>
-              <MessageBody body={text()} class={AGENT_TEXT} />
+              <MessageBody body={holdBackPartialDirective(text())} class={AGENT_TEXT} />
             </div>
           )}
         </Show>
@@ -198,15 +220,28 @@ function QuestionCard(props: { question: Question }): JSX.Element {
     },
   };
   const tone = () => tones[props.question.urgency] ?? tones.blocking;
+  const answered = () => props.question.answered;
 
   return (
     <div
-      class={`flex items-start gap-3 rounded-[13px] border px-4 py-3 text-[12px] ${tone().border}`}
+      class={`flex items-start gap-3 rounded-[13px] border px-4 py-3 text-[12px] transition-opacity ${
+        // Answered stays on screen as a record of the exchange, just quieted:
+        // a neutral border and dimmed, so it reads as resolved rather than
+        // still waiting on you.
+        answered() ? "border-az-hairline bg-az-inset opacity-60" : tone().border
+      }`}
     >
-      <Icon name="messages-square" class={`relative top-0.5 shrink-0 text-[15px] ${tone().icon}`} />
+      <Icon
+        name={answered() ? "check" : "messages-square"}
+        class={`relative top-0.5 shrink-0 text-[15px] ${answered() ? "text-success" : tone().icon}`}
+      />
       <div class="flex min-w-0 flex-1 flex-col gap-1.5">
         <div class="flex items-baseline gap-2">
-          <span class={`shrink-0 font-semibold text-[11px] ${tone().icon}`}>{tone().label}</span>
+          <span
+            class={`shrink-0 font-semibold text-[11px] ${answered() ? "text-success" : tone().icon}`}
+          >
+            {answered() ? tx("Answered") : tone().label}
+          </span>
           <Show when={props.question.issueUrl}>
             <span class="min-w-0 truncate text-[11px] text-az-muted">
               {props.question.issueUrl}
@@ -217,13 +252,19 @@ function QuestionCard(props: { question: Question }): JSX.Element {
           {props.question.text}
         </span>
       </div>
-      <button
-        type="button"
-        onClick={() => void actions.answerQuestion(props.question.id, true)}
-        class="shrink-0 rounded-lg bg-primary px-3 py-1.5 font-semibold text-[11.5px] text-primary-content transition-colors hover:bg-az-primary-hover"
-      >
-        {tx("Answer")}
-      </button>
+      {/* The button is only on an open question. Answering it just marks it
+          resolved; the reply itself is the message you send in the composer,
+          which is why the card stays put rather than swapping to an input. */}
+      <Show when={!answered()}>
+        <button
+          type="button"
+          onClick={() => void actions.answerQuestion(props.question.id, true)}
+          title={tx("Mark this question answered. It stays in the conversation.")}
+          class="shrink-0 rounded-lg bg-primary px-3 py-1.5 font-semibold text-[11.5px] text-primary-content transition-colors hover:bg-az-primary-hover"
+        >
+          {tx("Mark answered")}
+        </button>
+      </Show>
     </div>
   );
 }

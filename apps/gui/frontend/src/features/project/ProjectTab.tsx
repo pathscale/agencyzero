@@ -83,8 +83,16 @@ export function ProjectTab(props: { tab: Tab; project: Project }): JSX.Element {
    * is what the agent charged for its own turns, and an absent one renders as an
    * em dash rather than as zero.
    */
-  const totals = createMemo(() => usageTotals(messages()));
-  const likelyCacheBreak = createMemo(() => cacheBreak(messages()));
+  // Per tab, not per project: a tab is one agent's conversation on this
+  // project, so the header cost and token count are that agent's own turns,
+  // filtered by the message's agent. A project run with both Claude and Codex
+  // used to pool their spend into one figure, which is exactly the fine-grained
+  // number this hid. The whole-project total is still available in Analytics.
+  const tabMessages = createMemo(() =>
+    messages().filter((message) => message.author !== "agent" || message.agent === props.tab.agent),
+  );
+  const totals = createMemo(() => usageTotals(tabMessages()));
+  const likelyCacheBreak = createMemo(() => cacheBreak(tabMessages()));
 
   /** Why the cost reads as it does, for the hover on the header figure. */
   const costTitle = () => {

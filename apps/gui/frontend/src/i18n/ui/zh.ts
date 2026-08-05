@@ -436,6 +436,10 @@ const zh = {
   Critical: "紧急",
   Blocking: "阻塞",
   "When free": "有空时",
+  Answered: "已回答",
+  "Mark answered": "标记为已回答",
+  "Mark this question answered. It stays in the conversation.":
+    "将此问题标记为已回答。它会保留在对话中。",
   Answer: "回答",
   "session · none yet": "会话 · 尚无",
   "session ·": "会话 ·",
@@ -478,6 +482,12 @@ const zh = {
   "Every open item with title and reference": "每个未完成条目含标题和引用",
   "Item ids and status only, no titles": "仅条目 id 和状态，无标题",
   "Just a count and where to fetch the list": "仅数量和获取列表的位置",
+  "Resume a session by id": "按 id 恢复会话",
+  "Attach a session recovered by its id so the next message continues it":
+    "按 id 附加已恢复的会话，下一条消息将继续它",
+  Resume: "恢复",
+  "session id, e.g. 019fc95e-…": "会话 id，例如 019fc95e-…",
+  Attach: "附加",
   "Reset session": "重置会话",
   "Start the next message fresh — the recovery path for a wedged conversation":
     "下一条消息重新开始 — 卡住会话的恢复方式",

@@ -453,6 +453,12 @@ function SettingsSection(props: { project: Project }): JSX.Element {
 
         <ResetSession project={props.project} running={isRunning()} />
 
+        <div class="my-0.5 h-px bg-az-hairline-soft" />
+
+        {/* Codex is the agent whose sessions wedge and get recovered by id, so
+            it is the default here; the id field takes any provider's session. */}
+        <ResumeSession projectId={props.project.id} agent="codex" running={isRunning()} />
+
         <div class="flex gap-[7px] pt-0.5 text-[11px] text-az-faint leading-[1.5]">
           <Icon name="info" class="relative top-0.5 shrink-0 text-[12px]" />
           {tx(
@@ -659,6 +665,82 @@ function ResetSession(props: { project: Project; running: boolean }): JSX.Elemen
         </Show>
       </div>
     </Show>
+  );
+}
+
+/**
+ * Adopt an existing session by id, so the next message on this project resumes
+ * it. The way back to a wedged conversation that lives on disk but the project
+ * lost track of — e.g. a Codex thread recovered by its id with `codex resume`.
+ *
+ * Always available (unlike Reset, which needs a current session): the whole
+ * point is to attach a session when the project has none, or a different one.
+ * Disabled while a run is live, which the backend also refuses.
+ */
+function ResumeSession(props: { projectId: string; agent: string; running: boolean }): JSX.Element {
+  const { actions } = useWorkspace();
+  const [open, setOpen] = createSignal(false);
+  const [id, setId] = createSignal("");
+  const [busy, setBusy] = createSignal(false);
+
+  const adopt = async (): Promise<void> => {
+    const sessionId = id().trim();
+    if (!sessionId) return;
+    setBusy(true);
+    try {
+      await actions.adoptSession(props.projectId, props.agent, sessionId);
+      setOpen(false);
+      setId("");
+    } catch (cause) {
+      log.error(`could not adopt the session: ${describeError(cause)}`);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div class="flex flex-col gap-1.5">
+      <div class="flex items-center gap-2.5">
+        <Icon name="history" class="shrink-0 text-[14px] text-primary/75" />
+        <span class="min-w-0 flex-1 text-[12px] text-az-body">
+          {tx("Resume a session by id")}
+          <span class="mt-px block text-[11px] text-az-muted">
+            {tx("Attach a session recovered by its id so the next message continues it")}
+          </span>
+        </span>
+        <button
+          type="button"
+          class="btn btn-xs border-az-hairline bg-base-100 text-[11px]"
+          disabled={props.running}
+          title={props.running ? tx("Cancel the active run first") : undefined}
+          onClick={() => setOpen((value) => !value)}
+        >
+          {tx("Resume")}
+        </button>
+      </div>
+      <Show when={open()}>
+        <div class="flex items-center gap-1.5 pl-[26px]">
+          <input
+            value={id()}
+            placeholder={tx("session id, e.g. 019fc95e-…")}
+            onInput={(event) => setId(event.currentTarget.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") void adopt();
+              if (event.key === "Escape") setOpen(false);
+            }}
+            class="min-w-0 flex-1 rounded-md border border-az-hairline bg-base-300 px-2 py-1 font-mono text-[11px] text-az-body focus:outline-none"
+          />
+          <button
+            type="button"
+            class="btn btn-xs btn-primary text-[11px]"
+            disabled={busy() || props.running || !id().trim()}
+            onClick={() => void adopt()}
+          >
+            {tx("Attach")}
+          </button>
+        </div>
+      </Show>
+    </div>
   );
 }
 

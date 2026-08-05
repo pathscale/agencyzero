@@ -452,6 +452,10 @@ const en = {
   Critical: "Critical",
   Blocking: "Blocking",
   "When free": "When free",
+  Answered: "Answered",
+  "Mark answered": "Mark answered",
+  "Mark this question answered. It stays in the conversation.":
+    "Mark this question answered. It stays in the conversation.",
   Answer: "Answer",
   "session · none yet": "session · none yet",
   "session ·": "session ·",
@@ -494,6 +498,12 @@ const en = {
   "Every open item with title and reference": "Every open item with title and reference",
   "Item ids and status only, no titles": "Item ids and status only, no titles",
   "Just a count and where to fetch the list": "Just a count and where to fetch the list",
+  "Resume a session by id": "Resume a session by id",
+  "Attach a session recovered by its id so the next message continues it":
+    "Attach a session recovered by its id so the next message continues it",
+  Resume: "Resume",
+  "session id, e.g. 019fc95e-…": "session id, e.g. 019fc95e-…",
+  Attach: "Attach",
   "Reset session": "Reset session",
   "Start the next message fresh — the recovery path for a wedged conversation":
     "Start the next message fresh — the recovery path for a wedged conversation",

@@ -240,6 +240,9 @@ export interface AgencyZeroApi {
    *  resuming — the recovery path for a wedged conversation. Keeps the
    *  transcript; only clears the resume pointer. Rejects while a run is live. */
   resetProjectSession(projectId: string, agent: string): Promise<void>;
+  /** Point this project's agent at an existing session id so the next message
+   *  resumes it — recovering a wedged session recovered by its id. */
+  adoptSession(projectId: string, agent: string, sessionId: string): Promise<void>;
 
   getProjectNotes(projectId: string): Promise<string>;
   /** Returns the text as stored — clamped to the budget, so the editor shows

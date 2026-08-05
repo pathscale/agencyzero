@@ -4240,6 +4240,86 @@ pub async fn reset_project_session(
     Ok(())
 }
 
+/// Point a project's agent at an existing session id, so the next message
+/// resumes that conversation.
+///
+/// The counterpart to [`reset_project_session`]: instead of forgetting the
+/// pointer, this sets it. It is how a wedged session that lives on disk (a Codex
+/// thread the app lost track of, recovered by its id) is brought back into a
+/// project so the next prompt continues it rather than starting fresh. The id is
+/// stored verbatim; whether it resumes cleanly is the provider's to decide, the
+/// same as any resume.
+///
+/// Refuses while a run is live, since the running turn owns the slot this would
+/// overwrite. Cancel first.
+///
+/// # Errors
+/// When a run is active, the agent name does not parse, the id is empty, or the
+/// store write fails.
+#[tauri::command]
+pub async fn adopt_session(
+    app: AppHandle,
+    project_id: String,
+    agent: Option<String>,
+    session_id: String,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let agent = parse_agent(agent.as_deref())?;
+    let session_id = session_id.trim().to_string();
+    if session_id.is_empty() {
+        return Err("a session id is required to resume".into());
+    }
+
+    {
+        let active = state
+            .active
+            .lock()
+            .map_err(|_| "the run registry is unavailable".to_string())?;
+        if active.contains_key(&project_id) {
+            return Err(
+                "a run is active on this project — cancel it before adopting a session".into(),
+            );
+        }
+    }
+
+    state
+        .tables
+        .kv_put(&agent_session_key(&project_id, agent), session_id.clone())
+        .await
+        .map_err(|error| error.to_string())?;
+    // The partial-reply checkpoint belonged to whatever session was here before;
+    // clear it so the adopted session's next turn does not splice an old tail on.
+    state
+        .tables
+        .kv_put(&partial_reply_key(&project_id), String::new())
+        .await
+        .map_err(|error| error.to_string())?;
+
+    crate::log!(
+        crate::log::Level::Info,
+        "projects",
+        "{project_id}: adopted {} session {session_id}; next prompt resumes it",
+        agent_wire_name(agent)
+    );
+    note_gui(
+        &app,
+        &state,
+        &project_id,
+        format!(
+            "{} session {session_id} adopted; the next prompt resumes it",
+            agent_wire_name(agent)
+        ),
+    );
+
+    if let Some(row) = state.tables.project.select(project_id.clone()) {
+        let _ = app.emit(
+            "project:updated",
+            with_session(ProjectDto::from(row), &state.tables),
+        );
+    }
+    Ok(())
+}
+
 /// Store one project's complete ordered directory list and return the durable row.
 ///
 /// `Project.dirs` is already a persisted JSON column. Keeping the mutation here
@@ -5239,7 +5319,60 @@ pub async fn review_pull_request(
         &state.location.path,
     );
 
-    let prompt = format!("{instruction}\n\nThe pull request: {url}");
+    // Fetch the diff ourselves rather than trust the reviewer to go get it.
+    // The old prompt handed the agent a bare URL in a read-only sandbox: with
+    // no tool able to run `gh pr diff`, it either refused or invented a review
+    // of code it never saw. `gh pr diff <url>` returns the unified diff on
+    // stdout; we paste it in so the review is of the actual change. A failure
+    // here (gh missing, not logged in, no access) is surfaced as the review
+    // body instead of a silent empty run.
+    let diff = match tokio::process::Command::new("gh")
+        .args(["pr", "diff", &url])
+        .output()
+        .await
+    {
+        Ok(output) if output.status.success() => {
+            String::from_utf8_lossy(&output.stdout).to_string()
+        }
+        Ok(output) => {
+            let detail = String::from_utf8_lossy(&output.stderr);
+            let detail = detail.trim();
+            return Err(format!(
+                "could not fetch the pull request diff with `gh pr diff {url}`: {}. \
+                 Check that the GitHub CLI is installed and logged in (`gh auth status`) \
+                 and that this account can see the pull request.",
+                if detail.is_empty() {
+                    "gh reported no detail"
+                } else {
+                    detail
+                }
+            ));
+        }
+        Err(error) => {
+            return Err(format!(
+                "could not run the GitHub CLI to fetch the diff: {error}. Install `gh` and \
+                 run `gh auth login`, then try the review again."
+            ));
+        }
+    };
+
+    // A diff can be large; a review does not need every line of a huge one, and
+    // an unbounded paste risks blowing the reviewer's context. Cap it and say
+    // so, rather than truncate silently.
+    const DIFF_CAP: usize = 200_000;
+    let diff = if diff.len() > DIFF_CAP {
+        let kept = split_boundary(&diff, DIFF_CAP);
+        format!(
+            "{}\n\n[diff truncated at {DIFF_CAP} bytes of {} total; review what is shown]",
+            &diff[..kept],
+            diff.len()
+        )
+    } else {
+        diff
+    };
+
+    let prompt =
+        format!("{instruction}\n\nThe pull request: {url}\n\nThe diff:\n\n```diff\n{diff}\n```");
     let mut request = agent_abstraction::Request::new(agent, prompt).cwd(&scope.cwd);
     for dir in &scope.extra_dirs {
         request = request.add_dir(dir);
