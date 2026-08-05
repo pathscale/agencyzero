@@ -609,6 +609,8 @@ export function createMockApi(): AgencyZeroApi {
       return settle(undefined);
     },
 
+    resetProjectSession: (_projectId, _agent) => settle(undefined),
+
     getProjectNotes: (projectId) => settle(notes.get(projectId) ?? ""),
     setProjectNotes: (projectId, text) => {
       // Clamped as the backend clamps, so the editor's budget behaviour is the

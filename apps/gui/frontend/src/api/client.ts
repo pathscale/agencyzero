@@ -236,6 +236,11 @@ export interface AgencyZeroApi {
   getProjectVerbosity(projectId: string): Promise<string>;
   setProjectVerbosity(projectId: string, verbosity: string): Promise<void>;
 
+  /** Forget the stored session so the next message starts fresh instead of
+   *  resuming — the recovery path for a wedged conversation. Keeps the
+   *  transcript; only clears the resume pointer. Rejects while a run is live. */
+  resetProjectSession(projectId: string, agent: string): Promise<void>;
+
   getProjectNotes(projectId: string): Promise<string>;
   /** Returns the text as stored — clamped to the budget, so the editor shows
    *  what the agent will actually be told rather than what was typed. */

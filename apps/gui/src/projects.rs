@@ -4161,6 +4161,85 @@ pub async fn reset_task_manager(app: AppHandle, state: State<'_, AppState>) -> R
     Ok(())
 }
 
+/// Forget a project's stored session for one agent, so the next message starts
+/// a fresh conversation instead of resuming.
+///
+/// The recovery path for a wedged session. When a run is killed for going idle
+/// (see [`RUN_IDLE_TIMEOUT`]) the session id survives so the next turn resumes —
+/// which is right when the stall was transient, but wrong when the session
+/// itself is the problem: a Codex thread whose last act was a command the CLI
+/// killed can re-enter the same wait on resume and wedge again. This is the way
+/// out that is not "delete the project": the transcript and everything collected
+/// stay; only the resume pointer is cleared, so the next prompt is a clean start
+/// on the same project.
+///
+/// Refuses while a run is live — a reset mid-run would clear the id the running
+/// turn still owns. Cancel first, then reset.
+///
+/// # Errors
+/// When a run is active, the agent name does not parse, or the store write fails.
+#[tauri::command]
+pub async fn reset_project_session(
+    app: AppHandle,
+    project_id: String,
+    agent: Option<String>,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let agent = parse_agent(agent.as_deref())?;
+
+    // A live run owns the session id it is resuming; clearing it underneath the
+    // run would strand the turn. The owner cancels first, then resets.
+    {
+        let active = state
+            .active
+            .lock()
+            .map_err(|_| "the run registry is unavailable".to_string())?;
+        if active.contains_key(&project_id) {
+            return Err(
+                "a run is active on this project — cancel it before resetting the session".into(),
+            );
+        }
+    }
+
+    state
+        .tables
+        .kv_put(&agent_session_key(&project_id, agent), String::new())
+        .await
+        .map_err(|error| error.to_string())?;
+    // The partial-reply checkpoint belongs to the session just cleared; leaving
+    // it would splice the old turn's tail onto the fresh conversation.
+    state
+        .tables
+        .kv_put(&partial_reply_key(&project_id), String::new())
+        .await
+        .map_err(|error| error.to_string())?;
+
+    crate::log!(
+        crate::log::Level::Info,
+        "projects",
+        "{}: {} session reset; next prompt starts fresh",
+        project_id,
+        agent_wire_name(agent)
+    );
+    note_gui(
+        &app,
+        &state,
+        &project_id,
+        format!(
+            "{} session reset; the next prompt starts a fresh conversation on this project",
+            agent_wire_name(agent)
+        ),
+    );
+
+    if let Some(row) = state.tables.project.select(project_id.clone()) {
+        let _ = app.emit(
+            "project:updated",
+            with_session(ProjectDto::from(row), &state.tables),
+        );
+    }
+    Ok(())
+}
+
 /// Store one project's complete ordered directory list and return the durable row.
 ///
 /// `Project.dirs` is already a persisted JSON column. Keeping the mutation here

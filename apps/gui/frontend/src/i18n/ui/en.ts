@@ -489,6 +489,11 @@ const en = {
   "Per-turn context detail for this project": "Per-turn context detail for this project",
   Full: "Full",
   Compact: "Compact",
+  "Reset session": "Reset session",
+  "Start the next message fresh — the recovery path for a wedged conversation":
+    "Start the next message fresh — the recovery path for a wedged conversation",
+  "Confirm reset": "Confirm reset",
+  "Cancel the active run first": "Cancel the active run first",
   "Icon sprite": "Icon sprite",
   Analytics: "Analytics",
   "token usage, summed from the usage ledger": "token usage, summed from the usage ledger",
