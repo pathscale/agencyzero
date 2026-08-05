@@ -598,6 +598,13 @@ function ResetSession(props: { project: Project; running: boolean }): JSX.Elemen
   const { actions } = useWorkspace();
   const [confirming, setConfirming] = createSignal(false);
   const [busy, setBusy] = createSignal(false);
+  /**
+   * The last reset failure, shown inline. It used to go only to the log: a
+   * reset refused because a wedged run still held the project's run slot looked
+   * exactly like a button that did nothing, and "reset does not work" had no
+   * visible cause. If the slot is stuck, the message says to force-cancel.
+   */
+  const [error, setError] = createSignal("");
 
   const agents = (): string[] =>
     Object.entries(props.project.sessions ?? {})
@@ -606,15 +613,22 @@ function ResetSession(props: { project: Project; running: boolean }): JSX.Elemen
 
   const reset = async (): Promise<void> => {
     setBusy(true);
+    setError("");
     try {
       // Every agent that has a session on this project, so a project that ran
-      // both providers is fully reset rather than half.
+      // both providers is fully reset rather than half. `force` when a run
+      // still appears active: a wedged run holds the slot with no live process
+      // to cancel, and reset is exactly the way out of that.
       await Promise.all(
-        agents().map((agent) => actions.resetProjectSession(props.project.id, agent)),
+        agents().map((agent) =>
+          actions.resetProjectSession(props.project.id, agent, props.running),
+        ),
       );
       setConfirming(false);
     } catch (cause) {
-      log.error(`could not reset the session: ${describeError(cause)}`);
+      const detail = describeError(cause);
+      log.error(`could not reset the session: ${detail}`);
+      setError(detail);
     } finally {
       setBusy(false);
     }
@@ -622,46 +636,61 @@ function ResetSession(props: { project: Project; running: boolean }): JSX.Elemen
 
   return (
     <Show when={agents().length > 0}>
-      <div class="flex items-center gap-2.5">
-        <Icon name="history" class="shrink-0 text-[14px] text-primary/75" />
-        <span class="min-w-0 flex-1 text-[12px] text-az-body">
-          {tx("Reset session")}
-          <span class="mt-px block text-[11px] text-az-muted">
-            {tx("Start the next message fresh — the recovery path for a wedged conversation")}
+      <div class="flex flex-col gap-1.5">
+        <div class="flex items-center gap-2.5">
+          <Icon name="history" class="shrink-0 text-[14px] text-primary/75" />
+          <span class="min-w-0 flex-1 text-[12px] text-az-body">
+            {tx("Reset session")}
+            <span class="mt-px block text-[11px] text-az-muted">
+              {props.running
+                ? tx(
+                    "A run is stuck — force-reset clears the slot and starts the next message fresh",
+                  )
+                : tx("Start the next message fresh — the recovery path for a wedged conversation")}
+            </span>
           </span>
-        </span>
-        <Show
-          when={confirming()}
-          fallback={
-            <button
-              type="button"
-              class="btn btn-xs border-az-hairline bg-base-100 text-[11px]"
-              disabled={props.running}
-              title={props.running ? tx("Cancel the active run first") : undefined}
-              onClick={() => setConfirming(true)}
-            >
-              {tx("Reset")}
-            </button>
-          }
-        >
-          <div class="flex items-center gap-1.5">
-            <button
-              type="button"
-              class="btn btn-xs btn-error text-[11px]"
-              disabled={busy() || props.running}
-              onClick={() => void reset()}
-            >
-              {tx("Confirm reset")}
-            </button>
-            <button
-              type="button"
-              class="btn btn-xs btn-ghost text-[11px]"
-              disabled={busy()}
-              onClick={() => setConfirming(false)}
-            >
-              {tx("Cancel")}
-            </button>
-          </div>
+          {/*
+            Never disabled while running. A wedged run is the whole reason to
+            reset: it holds the project's run slot with no live process to
+            cancel, so a greyed Reset was a dead end that read as "reset does not
+            work". Running turns the button into an explicit Force reset instead.
+          */}
+          <Show
+            when={confirming()}
+            fallback={
+              <button
+                type="button"
+                class={`btn btn-xs text-[11px] ${props.running ? "btn-error" : "border-az-hairline bg-base-100"}`}
+                onClick={() => setConfirming(true)}
+              >
+                {props.running ? tx("Force reset") : tx("Reset")}
+              </button>
+            }
+          >
+            <div class="flex items-center gap-1.5">
+              <button
+                type="button"
+                class="btn btn-xs btn-error text-[11px]"
+                disabled={busy()}
+                onClick={() => void reset()}
+              >
+                {props.running ? tx("Confirm force reset") : tx("Confirm reset")}
+              </button>
+              <button
+                type="button"
+                class="btn btn-xs btn-ghost text-[11px]"
+                disabled={busy()}
+                onClick={() => setConfirming(false)}
+              >
+                {tx("Cancel")}
+              </button>
+            </div>
+          </Show>
+        </div>
+        <Show when={error()}>
+          <p role="alert" class="pl-[26px] text-[11px] text-error">
+            {tx("Could not reset:")} {error()}
+          </p>
         </Show>
       </div>
     </Show>
@@ -953,12 +982,14 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
           >
             <div
               /*
-               * A column, not a row. The controls sat beside the title and
-               * took a third of the width from it, so a title of any length
-               * wrapped into a four-word column while the buttons kept their
-               * space whether or not anyone was reaching for them.
+               * The row is `relative` and the action cluster below is absolute,
+               * so the buttons take ZERO layout width. They used to be a normal
+               * flex sibling: even at opacity-0 they held ~120px of a 322px
+               * column, so every title wrapped into a four-word ribbon. Now the
+               * title owns the whole width and the controls float over its right
+               * end only on hover.
                */
-              class={`group flex items-center rounded-[9px] transition-colors ${
+              class={`group relative flex items-center rounded-[9px] transition-colors ${
                 item.status === "active"
                   ? "bg-base-300 shadow-[inset_2px_0_0_var(--color-primary)]"
                   : // Zebra striping so a long list reads row by row; the hover
@@ -991,10 +1022,11 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
                 </button>
                 <div
                   data-selectable
-                  class="flex min-w-0 flex-1 items-baseline gap-2.5 px-2.5 py-1.5 text-left"
+                  class="flex min-w-0 flex-1 items-baseline gap-2 px-2.5 py-1 text-left"
                 >
                   <span
-                    class={`min-w-0 flex-1 text-[12.5px] ${
+                    title={item.title}
+                    class={`line-clamp-2 min-w-0 flex-1 text-[12.5px] leading-[1.35] ${
                       item.status === "active" || item.status === "planning"
                         ? "text-base-content"
                         : item.status === "finished"
@@ -1077,12 +1109,13 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
                 </div>
               </div>
               {/*
-               * Inline on the right of the row, only ink when hovered or busy.
-               * These act on the row; they are not part of reading it. Inline
-               * rather than a second line below the title: the extra line was
-               * dead vertical space and made the bottom of the list look off.
+               * Absolutely positioned over the row's right end, only ink when
+               * hovered or busy. Out of the layout flow entirely so the title
+               * gets the full column width; a translucent gradient underlay
+               * keeps the icons legible where they overlap a long title. These
+               * act on the row, they are not part of reading it.
                */}
-              <div class="flex shrink-0 items-center justify-end gap-1 pr-2 opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100">
+              <div class="absolute inset-y-0 right-0 flex items-center justify-end gap-1 rounded-r-[9px] bg-gradient-to-l from-60% from-base-300 to-transparent pr-2 pl-6 opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100">
                 <Show when={item.status !== "finished"}>
                   <button
                     type="button"

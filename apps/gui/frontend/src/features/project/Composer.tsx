@@ -523,7 +523,7 @@ export function Composer(props: ComposerProps): JSX.Element {
                 onClick={toggleAdvanced}
                 aria-pressed={advanced()}
                 title={tx("Parse Prompt Syntax controls before sending")}
-                class={`flex h-[26px] items-center rounded-full border px-2.5 font-medium text-[11px] transition-colors ${
+                class={`flex h-[24px] items-center rounded-full border px-2.5 font-medium text-[11px] transition-colors ${
                   advanced()
                     ? "border-primary/35 bg-primary/15 text-primary"
                     : "border-az-hairline-strong text-az-muted hover:text-base-content"
@@ -552,7 +552,7 @@ export function Composer(props: ComposerProps): JSX.Element {
                 disabled={!isLive("chooseAttachments")}
                 title={tx("Attach files — their paths go into the prompt")}
                 aria-label={tx("Attach files")}
-                class="flex size-[26px] items-center justify-center rounded-full border border-az-hairline-strong text-az-body transition-colors hover:border-primary/30 hover:text-az-title disabled:cursor-not-allowed disabled:opacity-40"
+                class="flex size-[24px] items-center justify-center rounded-full border border-az-hairline-strong text-az-body transition-colors hover:border-primary/30 hover:text-az-title disabled:cursor-not-allowed disabled:opacity-40"
               >
                 <Icon name="plus" class="text-[16px]" />
               </button>
@@ -563,7 +563,7 @@ export function Composer(props: ComposerProps): JSX.Element {
                 aria-pressed={expanded()}
                 aria-label={tx(expanded() ? "Restore the prompt size" : "Expand the prompt")}
                 title={tx(expanded() ? "Restore the prompt size" : "Expand the prompt")}
-                class={`flex size-[26px] items-center justify-center rounded-full border transition-colors ${
+                class={`flex size-[24px] items-center justify-center rounded-full border transition-colors ${
                   expanded()
                     ? "border-primary/35 bg-primary/15 text-primary"
                     : "border-az-hairline-strong text-az-body hover:border-primary/30 hover:text-az-title"
@@ -596,7 +596,7 @@ export function Composer(props: ComposerProps): JSX.Element {
                       )
                     : tx("Extra Thinking applies to Claude only.")
                 }
-                class={`flex h-[26px] items-center gap-1.5 rounded-full border px-2.5 font-medium text-[11px] transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
+                class={`flex h-[24px] items-center gap-1.5 rounded-full border px-2.5 font-medium text-[11px] transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
                   props.agent === "claude" && props.extraThinking
                     ? "border-primary/35 bg-primary/15 text-primary"
                     : "border-az-hairline-strong text-az-muted hover:text-base-content"
@@ -657,7 +657,7 @@ export function Composer(props: ComposerProps): JSX.Element {
                       : tx("Queued until the running turn finishes")
                     : undefined
                 }
-                class="flex size-[26px] items-center justify-center rounded-full bg-primary text-primary-content transition-colors hover:bg-az-primary-hover disabled:cursor-not-allowed disabled:opacity-40"
+                class="flex size-[24px] items-center justify-center rounded-full bg-primary text-primary-content transition-colors hover:bg-az-primary-hover disabled:cursor-not-allowed disabled:opacity-40"
               >
                 <Icon name="arrow-up" class="text-[17px]" />
               </button>
@@ -676,7 +676,7 @@ export function Composer(props: ComposerProps): JSX.Element {
                 disabled={!props.onStop}
                 aria-label={tx("Stop the run")}
                 tabindex={props.isRunning ? undefined : -1}
-                class={`flex size-[26px] items-center justify-center rounded-full border border-primary/40 bg-base-300 transition-colors hover:border-primary disabled:cursor-not-allowed disabled:opacity-40 ${
+                class={`flex size-[24px] items-center justify-center rounded-full border border-primary/40 bg-base-300 transition-colors hover:border-primary disabled:cursor-not-allowed disabled:opacity-40 ${
                   props.isRunning ? "" : "invisible"
                 }`}
               >

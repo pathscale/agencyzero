@@ -508,6 +508,11 @@ const en = {
   "Start the next message fresh — the recovery path for a wedged conversation":
     "Start the next message fresh — the recovery path for a wedged conversation",
   "Confirm reset": "Confirm reset",
+  "Force reset": "Force reset",
+  "Confirm force reset": "Confirm force reset",
+  "Could not reset:": "Could not reset:",
+  "A run is stuck — force-reset clears the slot and starts the next message fresh":
+    "A run is stuck — force-reset clears the slot and starts the next message fresh",
   "Cancel the active run first": "Cancel the active run first",
   "Icon sprite": "Icon sprite",
   Analytics: "Analytics",

@@ -492,6 +492,11 @@ const zh = {
   "Start the next message fresh — the recovery path for a wedged conversation":
     "下一条消息重新开始 — 卡住会话的恢复方式",
   "Confirm reset": "确认重置",
+  "Force reset": "强制重置",
+  "Confirm force reset": "确认强制重置",
+  "Could not reset:": "无法重置：",
+  "A run is stuck — force-reset clears the slot and starts the next message fresh":
+    "任务卡住了 — 强制重置会清空运行槽并让下一条消息重新开始",
   "Cancel the active run first": "请先取消正在运行的任务",
   "Icon sprite": "图标精灵",
   Analytics: "分析",

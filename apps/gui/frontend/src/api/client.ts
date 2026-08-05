@@ -239,7 +239,7 @@ export interface AgencyZeroApi {
   /** Forget the stored session so the next message starts fresh instead of
    *  resuming — the recovery path for a wedged conversation. Keeps the
    *  transcript; only clears the resume pointer. Rejects while a run is live. */
-  resetProjectSession(projectId: string, agent: string): Promise<void>;
+  resetProjectSession(projectId: string, agent: string, force?: boolean): Promise<void>;
   /** Point this project's agent at an existing session id so the next message
    *  resumes it — recovering a wedged session recovered by its id. */
   adoptSession(projectId: string, agent: string, sessionId: string): Promise<void>;

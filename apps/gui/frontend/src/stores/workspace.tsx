@@ -1861,8 +1861,8 @@ function createWorkspace() {
     getProjectVerbosity: (projectId: string) => client().getProjectVerbosity(projectId),
     setProjectVerbosity: (projectId: string, verbosity: string) =>
       client().setProjectVerbosity(projectId, verbosity),
-    resetProjectSession: (projectId: string, agent: string) =>
-      client().resetProjectSession(projectId, agent),
+    resetProjectSession: (projectId: string, agent: string, force?: boolean) =>
+      client().resetProjectSession(projectId, agent, force),
     adoptSession: (projectId: string, agent: string, sessionId: string) =>
       client().adoptSession(projectId, agent, sessionId),
     getProjectNotes: (projectId: string) => client().getProjectNotes(projectId),

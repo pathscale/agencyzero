@@ -201,8 +201,8 @@ export function ProjectTab(props: { tab: Tab; project: Project }): JSX.Element {
             and moving them up leaves the composer row for the controls that act
             on the next message.
           */}
-          <span class="flex shrink-0 items-center gap-2 rounded-full border border-az-hairline bg-base-300 px-2.5 py-0.5 font-mono text-[11px] text-az-muted">
-            {tx("conversation")} · {AGENT_LABELS[agent()]}
+          <span class="flex min-w-0 shrink items-center gap-2 overflow-hidden rounded-full border border-az-hairline bg-base-300 px-2.5 py-0.5 font-mono text-[11px] text-az-muted">
+            <span class="shrink-0 font-semibold text-az-body">{AGENT_LABELS[agent()]}</span>
             <Show when={totals().turns > 0}>
               <span class="text-az-faint">·</span>
               <span>

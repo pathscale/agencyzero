@@ -611,6 +611,23 @@ fn parse_agent(raw: Option<&str>) -> Result<Agent, String> {
     }
 }
 
+/// Parse the agent for a one-shot, read-only action (a PR review).
+///
+/// Unlike [`parse_agent`], this permits Copilot. The project-agent guard rejects
+/// Copilot because a project is a persistent, resumable session and Copilot's is
+/// not wired for that here — but a review is a single headless run with no
+/// session to resume, so the crate's Copilot support is enough. Clicking "Review
+/// with Copilot" used to hit the project guard and fail silently in the UI; this
+/// is why the button did nothing.
+fn parse_review_agent(raw: Option<&str>) -> Result<Agent, String> {
+    match raw.unwrap_or("claude") {
+        "claude" => Ok(Agent::Claude),
+        "codex" => Ok(Agent::Codex),
+        "copilot" => Ok(Agent::Copilot),
+        other => Err(format!("unknown review agent: {other}")),
+    }
+}
+
 fn can_inject(running: Agent, requested: Agent) -> bool {
     running == requested && requested.caps().live_follow_up
 }
@@ -4183,21 +4200,43 @@ pub async fn reset_project_session(
     app: AppHandle,
     project_id: String,
     agent: Option<String>,
+    force: Option<bool>,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
     let agent = parse_agent(agent.as_deref())?;
+    let force = force.unwrap_or(false);
 
-    // A live run owns the session id it is resuming; clearing it underneath the
-    // run would strand the turn. The owner cancels first, then resets.
+    // A live run owns the session id it is resuming; clearing it underneath a
+    // healthy run would strand the turn, so normally the owner cancels first.
+    //
+    // But a *wedged* run is exactly when reset is needed, and such a run holds
+    // this slot forever with no live process to cancel — the ordinary Cancel
+    // does nothing because there is nothing listening. `force` is the way out of
+    // that deadlock: it signals cancel to whatever may still be attached and
+    // evicts the registry entry, so the reset below can proceed. Without it, the
+    // greyed-out Reset button and a stuck slot made "reset does not work" a
+    // dead end with no visible cause.
     {
-        let active = state
+        let mut active = state
             .active
             .lock()
             .map_err(|_| "the run registry is unavailable".to_string())?;
         if active.contains_key(&project_id) {
-            return Err(
-                "a run is active on this project — cancel it before resetting the session".into(),
-            );
+            if !force {
+                return Err(
+                    "a run is active on this project — cancel it first, or force-reset to clear a wedged run".into(),
+                );
+            }
+            if let Some(run) = active.remove(&project_id) {
+                // Best-effort: tell anything still attached to stop, then drop
+                // the slot. A wedged run has no live receiver, so this is a
+                // no-op there, but a merely-slow run gets a clean cancel.
+                let _ = run.cancel.send(true);
+                // Tell the UI the run is over, so its running state (and the
+                // greyed-out Reset button) clears instead of hanging on a run
+                // that will never emit its own stop.
+                emit_run_stopped(&app, &project_id, agent, "", "", "force-reset", None);
+            }
         }
     }
 
@@ -5293,7 +5332,7 @@ pub async fn review_pull_request(
     url: String,
     agent: String,
 ) -> Result<(), String> {
-    let agent = parse_agent(Some(&agent))?;
+    let agent = parse_review_agent(Some(&agent))?;
     let settings = state
         .tables
         .kv_get(crate::settings::KEY)
@@ -7587,6 +7626,18 @@ mod tests {
         assert_eq!(parse_agent(Some("codex")), Ok(Agent::Codex));
         assert!(parse_agent(Some("copilot")).is_err());
         assert!(parse_agent(Some("unknown")).is_err());
+    }
+
+    /// Review is a one-shot, read-only run with no session to resume, so it
+    /// admits Copilot where a project would not. Clicking "Review with Copilot"
+    /// used to hit the project guard and fail silently, which is why the button
+    /// appeared to do nothing.
+    #[test]
+    fn review_admits_copilot_unlike_a_project() {
+        assert_eq!(parse_review_agent(Some("claude")), Ok(Agent::Claude));
+        assert_eq!(parse_review_agent(Some("codex")), Ok(Agent::Codex));
+        assert_eq!(parse_review_agent(Some("copilot")), Ok(Agent::Copilot));
+        assert!(parse_review_agent(Some("unknown")).is_err());
     }
 
     #[test]
