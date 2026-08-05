@@ -1,4 +1,4 @@
-//! The `wt-tools` binary: read-only queries over the GUI's store, one JSON
+//! The `agency-tools` binary: read-only queries over the GUI's store, one JSON
 //! object per line on stdout, errors on stderr with a nonzero exit.
 //!
 //! Arguments are parsed by hand. Three subcommands and one flag do not earn a
@@ -24,10 +24,13 @@ enum Command {
         project: Option<String>,
         bodies: bool,
     },
+    Usage {
+        project: Option<String>,
+    },
 }
 
 const USAGE: &str = "\
-usage: wt-tools <command>
+usage: agency-tools <command>
 
 Read-only queries over the agencyzero GUI's WorkTable store.
 Prints one JSON object per line. Never writes to the store; safe to run
@@ -41,6 +44,8 @@ commands:
   list-messages [--project ID] [--bodies]
                              one row per message, oldest first, with the usage
                              the turn reported
+  usage [--project ID]       token/cost rollup: whole-store totals, the single
+                             largest turn, and per-model / per-day breakdowns
 
 The store location honours the same overrides as the GUI: $AZ_DATA_DIR,
 then the data-location.json pointer next to the app's config, then the
@@ -97,6 +102,11 @@ fn parse_args(args: &[String]) -> Result<Command, String> {
             let query = args.next().ok_or("search-items needs a query")?.to_string();
             Command::SearchItems { query }
         }
+        "usage" => {
+            return Ok(Command::Usage {
+                project: project_filter(args)?,
+            });
+        }
         "-h" | "--help" | "help" => return Err(String::new()),
         other => return Err(format!("unknown command: {other}")),
     };
@@ -118,21 +128,21 @@ fn main() -> ExitCode {
                 println!("{USAGE}");
                 return ExitCode::SUCCESS;
             }
-            eprintln!("wt-tools: {message}\n\n{USAGE}");
+            eprintln!("agency-tools: {message}\n\n{USAGE}");
             return ExitCode::from(2);
         }
     };
     match run(command) {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {
-            eprintln!("wt-tools: {error:#}");
+            eprintln!("agency-tools: {error:#}");
             ExitCode::FAILURE
         }
     }
 }
 
 fn run(command: Command) -> eyre::Result<()> {
-    let location = wt_tools::data_location()?;
+    let location = agency_tools::data_location()?;
     let dir = location.path;
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
@@ -140,28 +150,35 @@ fn run(command: Command) -> eyre::Result<()> {
     runtime.block_on(async {
         match command {
             Command::ListProjects => {
-                let table = wt_tools::open_projects(&dir).await?;
-                print_lines(&wt_tools::list_projects(&table)?)
+                let table = agency_tools::open_projects(&dir).await?;
+                print_lines(&agency_tools::list_projects(&table)?)
             }
             Command::ListItems { project } => {
-                let table = wt_tools::open_items(&dir).await?;
-                print_lines(&wt_tools::list_items(&table, project.as_deref())?)
+                let table = agency_tools::open_items(&dir).await?;
+                print_lines(&agency_tools::list_items(&table, project.as_deref())?)
             }
             Command::SearchItems { query } => {
-                let table = wt_tools::open_items(&dir).await?;
-                print_lines(&wt_tools::search_items(&table, &query)?)
+                let table = agency_tools::open_items(&dir).await?;
+                print_lines(&agency_tools::search_items(&table, &query)?)
             }
             Command::ListRules { project } => {
-                let table = wt_tools::open_rules(&dir).await?;
-                print_lines(&wt_tools::list_rules(&table, project.as_deref())?)
+                let table = agency_tools::open_rules(&dir).await?;
+                print_lines(&agency_tools::list_rules(&table, project.as_deref())?)
             }
             Command::ListMessages { project, bodies } => {
-                let table = wt_tools::open_messages(&dir).await?;
-                print_lines(&wt_tools::list_messages(
+                let table = agency_tools::open_messages(&dir).await?;
+                print_lines(&agency_tools::list_messages(
                     &table,
                     project.as_deref(),
                     bodies,
                 )?)
+            }
+            Command::Usage { project } => {
+                let ledger = agency_tools::open_usage(&dir).await?;
+                let cache = agency_tools::open_usage_cache(&dir).await?;
+                let summary = agency_tools::usage_summary(&cache, &ledger, project.as_deref())?;
+                println!("{}", serde_json::to_string_pretty(&summary)?);
+                Ok(())
             }
         }
     })

@@ -59,11 +59,17 @@ pub mod project;
 pub mod project_item;
 #[path = "../../../apps/gui/src/db/schema/task_log.rs"]
 pub mod task_log;
+#[path = "../../../apps/gui/src/db/schema/usage_cache.rs"]
+pub mod usage_cache;
+#[path = "../../../apps/gui/src/db/schema/usage_ledger.rs"]
+pub mod usage_ledger;
 
 use approval_rule::{ApprovalRuleRow, ApprovalRuleWorkTable};
 use message::{MessageRow, MessageWorkTable};
 use project::{ProjectRow, ProjectWorkTable};
 use project_item::{ProjectItemRow, ProjectItemWorkTable};
+use usage_cache::UsageCacheWorkTable;
+use usage_ledger::UsageLedgerWorkTable;
 
 /// How often a torn read is retried before giving up.
 ///
@@ -151,6 +157,16 @@ open_read_only!(
     /// The remembered-approval table, read-only.
     open_rules,
     ApprovalRuleWorkTable
+);
+open_read_only!(
+    /// The usage ledger, read-only: one row per agent turn that reported usage.
+    open_usage,
+    UsageLedgerWorkTable
+);
+open_read_only!(
+    /// The cache table, read-only: the cache-read/write split per turn.
+    open_usage_cache,
+    UsageCacheWorkTable
 );
 open_read_only!(
     /// The transcript, read-only.
@@ -268,6 +284,193 @@ pub fn list_rules(
             .then_with(|| a.id.cmp(&b.id))
     });
     Ok(rows.into_iter().map(RuleOut::from).collect())
+}
+
+/// A usage rollup as the CLI prints it: the whole-store totals, the single
+/// biggest turn (the "is any one request enormous?" answer), and per-model /
+/// per-day breakdowns.
+///
+/// The token decomposition comes from the cache table (`usage_cache`), which
+/// carries the whole picture: uncached input, cache reads, cache writes and
+/// output. The ledger's bare `input_tokens` is only the *uncached* remainder —
+/// on a long Claude conversation nearly everything is a cache read, so reading
+/// the ledger alone makes a heavy session look near-empty. Cost comes from the
+/// ledger. These are independent per-turn rows; nothing here is cumulative
+/// context. A turn's `processed` is what the model actually handled that turn
+/// (input + reads + writes + output) — the number to watch when one request
+/// feels huge.
+#[derive(Debug, Serialize)]
+pub struct UsageOut {
+    pub turns: usize,
+    pub input_tokens: i64,
+    pub cache_read_tokens: i64,
+    pub cache_write_tokens: i64,
+    pub output_tokens: i64,
+    /// input + cache_read + cache_write + output, across every turn.
+    pub processed_tokens: i64,
+    pub cost_usd: f64,
+    /// The single turn that processed the most tokens.
+    pub largest_turn: Option<UsageTurnOut>,
+    pub by_model: Vec<UsageGroupOut>,
+    pub by_day: Vec<UsageGroupOut>,
+}
+
+/// One turn, as the agent reported it.
+#[derive(Debug, Serialize)]
+pub struct UsageTurnOut {
+    pub at: String,
+    pub project_id: String,
+    pub model: String,
+    pub input_tokens: i64,
+    pub cache_read_tokens: i64,
+    pub cache_write_tokens: i64,
+    pub processed_tokens: i64,
+}
+
+/// A bucket (a model, or a day) with its totals.
+#[derive(Debug, Serialize)]
+pub struct UsageGroupOut {
+    pub key: String,
+    pub turns: usize,
+    pub input_tokens: i64,
+    pub cache_read_tokens: i64,
+    pub cache_write_tokens: i64,
+    pub output_tokens: i64,
+    pub processed_tokens: i64,
+    pub cost_usd: f64,
+}
+
+/// Roll up usage across the whole token decomposition, optionally narrowed to
+/// one project.
+///
+/// Tokens come from `usage_cache` (the full split); cost is summed from the
+/// ledger separately, since the two tables key by turn independently and a
+/// per-row join is unnecessary for a store total.
+///
+/// # Errors
+/// Propagates WorkTable's own error when either scan fails.
+pub fn usage_summary(
+    cache: &UsageCacheWorkTable,
+    ledger: &UsageLedgerWorkTable,
+    project: Option<&str>,
+) -> eyre::Result<UsageOut> {
+    let mut rows = cache.select_all().execute()?;
+    if let Some(project) = project {
+        rows.retain(|row| row.project_id == project);
+    }
+
+    let mut ledger_rows = ledger.select_all().execute()?;
+    if let Some(project) = project {
+        ledger_rows.retain(|row| row.project_id == project);
+    }
+    let cost_micro: i64 = ledger_rows.iter().map(|row| row.cost_micro).sum();
+    let output_by_day: std::collections::BTreeMap<String, i64> =
+        ledger_rows.iter().fold(Default::default(), |mut acc, row| {
+            *acc.entry(row.day.clone()).or_default() += row.output_tokens;
+            acc
+        });
+    let output_by_model: std::collections::BTreeMap<String, i64> =
+        ledger_rows.iter().fold(Default::default(), |mut acc, row| {
+            *acc.entry(row.model.clone()).or_default() += row.output_tokens;
+            acc
+        });
+    let output_total: i64 = ledger_rows.iter().map(|row| row.output_tokens).sum();
+
+    let processed = |row: &usage_cache::UsageCacheRow, output: i64| -> i64 {
+        row.input_tokens + row.cache_read_tokens + row.cache_write_tokens + output
+    };
+
+    let mut by_model: std::collections::BTreeMap<String, UsageGroupOut> =
+        std::collections::BTreeMap::new();
+    let mut by_day: std::collections::BTreeMap<String, UsageGroupOut> =
+        std::collections::BTreeMap::new();
+    let (mut input, mut reads, mut writes) = (0i64, 0i64, 0i64);
+    let mut largest: Option<UsageTurnOut> = None;
+
+    for row in &rows {
+        input += row.input_tokens;
+        reads += row.cache_read_tokens;
+        writes += row.cache_write_tokens;
+
+        // Per-turn output is not in the cache table; the group output totals are
+        // folded in from the ledger after this loop.
+        for (map, key) in [
+            (&mut by_model, row.model.clone()),
+            (&mut by_day, row.day.clone()),
+        ] {
+            let group = map.entry(key.clone()).or_insert(UsageGroupOut {
+                key,
+                turns: 0,
+                input_tokens: 0,
+                cache_read_tokens: 0,
+                cache_write_tokens: 0,
+                output_tokens: 0,
+                processed_tokens: 0,
+                cost_usd: 0.0,
+            });
+            group.turns += 1;
+            group.input_tokens += row.input_tokens;
+            group.cache_read_tokens += row.cache_read_tokens;
+            group.cache_write_tokens += row.cache_write_tokens;
+        }
+
+        // The turn's own output is unknown here, so rank the biggest turn by
+        // input + cache only; output is a small tail next to a six-figure read.
+        let turn_processed = processed(row, 0);
+        let bigger = largest
+            .as_ref()
+            .is_none_or(|current| turn_processed > current.processed_tokens);
+        if bigger {
+            largest = Some(UsageTurnOut {
+                at: row.at.clone(),
+                project_id: row.project_id.clone(),
+                model: row.model.clone(),
+                input_tokens: row.input_tokens,
+                cache_read_tokens: row.cache_read_tokens,
+                cache_write_tokens: row.cache_write_tokens,
+                processed_tokens: turn_processed,
+            });
+        }
+    }
+
+    // Fold the ledger's output totals into each group and finalise processed.
+    for group in by_model.values_mut() {
+        group.output_tokens = output_by_model.get(&group.key).copied().unwrap_or(0);
+        group.cost_usd = ledger_rows
+            .iter()
+            .filter(|r| r.model == group.key)
+            .map(|r| r.cost_micro as f64 / 1e6)
+            .sum();
+        group.processed_tokens = group.input_tokens
+            + group.cache_read_tokens
+            + group.cache_write_tokens
+            + group.output_tokens;
+    }
+    for group in by_day.values_mut() {
+        group.output_tokens = output_by_day.get(&group.key).copied().unwrap_or(0);
+        group.cost_usd = ledger_rows
+            .iter()
+            .filter(|r| r.day == group.key)
+            .map(|r| r.cost_micro as f64 / 1e6)
+            .sum();
+        group.processed_tokens = group.input_tokens
+            + group.cache_read_tokens
+            + group.cache_write_tokens
+            + group.output_tokens;
+    }
+
+    Ok(UsageOut {
+        turns: rows.len(),
+        input_tokens: input,
+        cache_read_tokens: reads,
+        cache_write_tokens: writes,
+        output_tokens: output_total,
+        processed_tokens: input + reads + writes + output_total,
+        cost_usd: cost_micro as f64 / 1e6,
+        largest_turn: largest,
+        by_model: by_model.into_values().collect(),
+        by_day: by_day.into_values().collect(),
+    })
 }
 
 fn decode_embedded_json(raw: &str) -> serde_json::Value {

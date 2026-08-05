@@ -614,6 +614,23 @@ export interface UsageModel {
 }
 
 /** Everything the Analytics view charts, from one call. */
+/**
+ * The single heaviest turn — the answer to "is one request enormous, or is it
+ * many turns adding up?". `processedTokens` is what the model handled that turn
+ * (input + cache read + cache write + output), not the cumulative context of a
+ * running session.
+ */
+export interface UsageLargestTurn {
+  at: string;
+  model: string;
+  inputTokens: number;
+  cacheReadTokens: number;
+  cacheWriteTokens: number;
+  outputTokens: number;
+  processedTokens: number;
+  costUsd: number;
+}
+
 export interface UsageAnalytics {
   days: UsageDay[];
   models: UsageModel[];
@@ -622,6 +639,8 @@ export interface UsageAnalytics {
   totalOutputTokens: number;
   totalCacheReadTokens: number;
   totalCacheWriteTokens: number;
+  totalProcessedTokens: number;
+  largestTurn: UsageLargestTurn | null;
   turns: number;
 }
 

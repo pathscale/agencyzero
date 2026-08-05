@@ -1,5 +1,5 @@
 [package]
-name = "wt-tools"
+name = "agency-tools"
 description = "Headless read-only CLI over the GUI's WorkTable store"
 version.workspace = true
 edition.workspace = true
@@ -28,5 +28,5 @@ serde_json = "1"
 dirs = "6"
 
 [[bin]]
-name = "wt-tools"
+name = "agency-tools"
 path = "src/main.rs"

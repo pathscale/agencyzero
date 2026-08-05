@@ -4,7 +4,7 @@
 //!
 //! These are permission grants, and grants deserve the same standing as any
 //! other row: queryable one at a time (per-rule deletion is a `delete`, not a
-//! parse-edit-rewrite of a JSON string), visible to `wt-tools` for auditing,
+//! parse-edit-rewrite of a JSON string), visible to `agency-tools` for auditing,
 //! and shaped honestly — a list of rows is rows, not a string that happens to
 //! contain them.
 //!
