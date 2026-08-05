@@ -1027,13 +1027,30 @@ function createWorkspace() {
     });
 
     await bind("run:rate_limit_cleared", ({ projectId, agent }) => {
-      setState(
-        "rateLimits",
-        produce((limits) => {
-          delete limits[projectId]?.[agent];
-          if (Object.keys(limits[projectId] ?? {}).length === 0) delete limits[projectId];
-        }),
-      );
+      /*
+       * Reassign the inner record whole rather than `produce`-deleting the
+       * nested agent node. Deleting a *nested* store proxy node (unlike a
+       * top-level project key, which purgeProject deletes safely) leaves the
+       * reactive graph holding a torn-down node, and the 30s clock's re-read of
+       * `state.rateLimits[projectId][agent]` in `tabStatus` then threw
+       * "undefined is not an object" every tick. Building the next record and
+       * setting it via reconcile never strands a consumer on a deleted proxy;
+       * an empty record removes the project key at the top level, the safe way.
+       */
+      const current = state.rateLimits[projectId];
+      if (!current || !(agent in current)) return;
+      const next: Record<string, RateLimit> = {};
+      for (const [key, value] of Object.entries(current)) {
+        if (key !== agent) next[key] = value;
+      }
+      if (Object.keys(next).length === 0) {
+        setState(
+          "rateLimits",
+          produce((limits) => delete limits[projectId]),
+        );
+      } else {
+        setState("rateLimits", projectId, reconcile(next));
+      }
     });
 
     await bind("run:approval", ({ projectId, approvalId, tool, input }) => {
@@ -1380,6 +1397,11 @@ function createWorkspace() {
   function purgeProject(projectId: string): void {
     batch(() => {
       setState("projects", (projects) => projects.filter((project) => project.id !== projectId));
+      // Every per-project record, not a subset: leaving some behind let the
+      // record key-sets diverge, so a value could be absent under a key another
+      // record still had — which is how window-wide `Object.values(...)` reads
+      // met an undefined value. Delete top-level keys only (nested-node deletes
+      // strand the reactive proxy; see `run:rate_limit_cleared`).
       setState(
         produce((draft) => {
           delete draft.items[projectId];
@@ -1390,6 +1412,13 @@ function createWorkspace() {
           delete draft.rateLimits[projectId];
           delete draft.agentIo[projectId];
           delete draft.streaming[projectId];
+          delete draft.pullRequests[projectId];
+          delete draft.questions[projectId];
+          delete draft.pendingApprovals[projectId];
+          delete draft.runStatus[projectId];
+          delete draft.queued[projectId];
+          delete draft.compacting[projectId];
+          delete draft.commands[projectId];
         }),
       );
       closeTab(projectId);

@@ -25,12 +25,16 @@ export function useAppShell(): {
 
   const cancelClose = () => setIsClosing(false);
 
+  // Defensive optional chaining: `purgeProject` leaves some of these records
+  // with keys the others do not have, so a value can be absent even though the
+  // key exists. A bare `.length`/`.some` on an undefined value throws the same
+  // "undefined is not an object" this file must never raise on close.
   const hasLiveWork = () =>
     Object.keys(state.runStatus).length > 0 ||
-    Object.values(state.streaming).some((text) => text.length > 0) ||
-    Object.values(state.running).some((tasks) => tasks.length > 0) ||
+    Object.values(state.streaming).some((text) => (text?.length ?? 0) > 0) ||
+    Object.values(state.running).some((tasks) => (tasks?.length ?? 0) > 0) ||
     Object.values(state.messages).some((messages) =>
-      messages.some((message) => message.moderation?.needsApproval),
+      messages?.some((message) => message.moderation?.needsApproval),
     );
 
   const confirmClose = () => {
