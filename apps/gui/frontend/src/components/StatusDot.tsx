@@ -105,9 +105,7 @@ export function ItemMarker(props: { status: ProjectStatus }): JSX.Element {
       when={props.status !== "finished"}
       fallback={<Icon name="check" class="relative top-0.5 shrink-0 text-[12px] text-success" />}
     >
-      <span
-        class={`relative top-[3px] size-2 shrink-0 rounded-full ${ITEM_DOT[props.status] ?? ITEM_DOT.new}`}
-      />
+      <span class={`size-2 shrink-0 rounded-full ${ITEM_DOT[props.status] ?? ITEM_DOT.new}`} />
     </Show>
   );
 }

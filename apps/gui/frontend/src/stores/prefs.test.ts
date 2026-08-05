@@ -28,3 +28,16 @@ describe("colour mode", () => {
     setPrefs("colorMode", "dark");
   });
 });
+
+describe("workspace layout", () => {
+  it("persists sidebar visibility and expanded composers as UI preferences", () => {
+    setPrefs("projectPanelVisible", false);
+    setPrefs("expandedComposerKeys", ["project:abc"]);
+
+    expect(prefs.projectPanelVisible).toBe(false);
+    expect(prefs.expandedComposerKeys).toEqual(["project:abc"]);
+
+    setPrefs("projectPanelVisible", true);
+    setPrefs("expandedComposerKeys", []);
+  });
+});

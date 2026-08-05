@@ -102,6 +102,8 @@ export function createMockApi(): AgencyZeroApi {
    * turning it on here changes the switch and nothing else.
    */
   const checkpoints = new Set<string>();
+  /** Projects whose turns carry the concise-response instruction. */
+  const conciseProjects = new Set<string>();
 
   const listeners = new Map<string, Set<(payload: unknown) => void>>();
 
@@ -590,6 +592,13 @@ export function createMockApi(): AgencyZeroApi {
     setCheckpoints: (projectId, enabled) => {
       if (enabled) checkpoints.add(projectId);
       else checkpoints.delete(projectId);
+      return settle(enabled);
+    },
+
+    getProjectConcise: (projectId) => settle(conciseProjects.has(projectId)),
+    setProjectConcise: (projectId, enabled) => {
+      if (enabled) conciseProjects.add(projectId);
+      else conciseProjects.delete(projectId);
       return settle(enabled);
     },
 

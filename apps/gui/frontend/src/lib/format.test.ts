@@ -5,6 +5,7 @@ import {
   duration,
   elapsed,
   formatBytes,
+  isRetryableStop,
   isTransientStop,
   relativeTime,
   taskMeta,
@@ -81,6 +82,19 @@ describe("isTransientStop", () => {
     expect(isTransientStop("API Error: 401 Unauthorized")).toBe(false);
     // A 5xx mentioned as ordinary text is not a status the turn reported.
     expect(isTransientStop("the parser failed at line 512")).toBe(false);
+  });
+});
+
+describe("isRetryableStop", () => {
+  it("does not offer Retry after completion or a deliberate cancellation", () => {
+    expect(isRetryableStop("completed")).toBe(false);
+    expect(isRetryableStop("canceled")).toBe(false);
+  });
+
+  it("keeps Retry for failures and interrupted runs", () => {
+    expect(isRetryableStop("error")).toBe(true);
+    expect(isRetryableStop("interrupted")).toBe(true);
+    expect(isRetryableStop("API Error: 503 Service unavailable")).toBe(true);
   });
 });
 

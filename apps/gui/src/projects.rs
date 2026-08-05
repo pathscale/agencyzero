@@ -2068,6 +2068,22 @@ fn io_persist_key(project_id: &str) -> String {
     format!("io-persist:{project_id}")
 }
 
+/// Where one project's concise-response preference lives.
+///
+/// Kept in `kv` rather than adding a positional WorkTable column to `project`.
+/// A column addition would require migrating every existing project row.
+fn concise_key(project_id: &str) -> String {
+    format!("concise-responses:{project_id}")
+}
+
+fn project_concise(tables: &Tables, project_id: &str) -> bool {
+    tables
+        .kv_get(&concise_key(project_id))
+        .is_some_and(|value| value == "true")
+}
+
+const CONCISE_INSTRUCTION: &str = "Keep responses concise for this project. Lead with the answer, skip preambles and postambles, and prefer compact bullets when a list helps.";
+
 /// Where a run's partially streamed reply lives in `kv` while it streams.
 ///
 /// Written every few seconds during a run and cleared the moment the reply
@@ -4340,6 +4356,30 @@ pub async fn set_checkpoints(
     Ok(enabled)
 }
 
+/// Whether this project's agent is asked to answer concisely.
+#[tauri::command]
+pub fn get_project_concise(project_id: String, state: State<'_, AppState>) -> bool {
+    project_concise(&state.tables, &project_id)
+}
+
+/// Persist one project's concise-response posture without changing other projects.
+///
+/// # Errors
+/// Returns the store's error when the flag cannot be written.
+#[tauri::command]
+pub async fn set_project_concise(
+    project_id: String,
+    enabled: bool,
+    state: State<'_, AppState>,
+) -> Result<bool, String> {
+    state
+        .tables
+        .kv_put(&concise_key(&project_id), enabled.to_string())
+        .await
+        .map_err(|error| error.to_string())?;
+    Ok(enabled)
+}
+
 /// What this project's agent has been told to remember across compactions.
 ///
 /// Empty until a compaction has taken some, which is the honest default: a
@@ -4976,6 +5016,21 @@ fn build_turn_request(
     let asks = should_route_approvals(agent, permission);
     if asks && agent.caps().approvals {
         request = request.approvals();
+        if agent == Agent::Codex {
+            /*
+             * AgencyZero is the approval reviewer for this run. Codex can
+             * inherit `approvals_reviewer = "auto_review"` from the owner's
+             * config; that sends an escalation to Codex's reviewer instead of
+             * emitting the modern `item/.../requestApproval` request our UI
+             * answers. A stuck reviewer then looks exactly like a silent tool.
+             *
+             * Verified against codex-cli 0.146.0: the app-server accepts this
+             * top-level config override after `app-server --stdio`, and `user`
+             * routes approval requests to the client. The broad remembered
+             * rules in AgencyZero still auto-answer before showing a card.
+             */
+            request = request.unchecked_args(["-c", "approvals_reviewer=\"user\""]);
+        }
     }
     if agent.caps().live_follow_up {
         request = request.interactive();
@@ -5201,6 +5256,13 @@ async fn drive_run(
             }
             system.push_str(instructions.trim());
         }
+    }
+
+    if project_concise(&tables, &project_id) {
+        if !system.is_empty() {
+            system.push_str("\n\n");
+        }
+        system.push_str(CONCISE_INSTRUCTION);
     }
 
     if !notes.trim().is_empty() {
@@ -7271,6 +7333,28 @@ mod tests {
         assert!(should_route_approvals(Agent::Codex, "ask"));
         assert!(!should_route_approvals(Agent::Codex, "edit"));
         assert!(!should_route_approvals(Agent::Claude, "auto"));
+
+        let scope = InvocationScope {
+            cwd: "/workspace".into(),
+            extra_dirs: vec!["/repo".into()],
+            resume: None,
+            memory_dir: "/memory/project".into(),
+        };
+        let argv = build_turn_request(
+            Agent::Codex,
+            "probe".into(),
+            "auto",
+            "gpt-5.6-sol",
+            None,
+            None,
+            &scope,
+        )
+        .argv()
+        .expect("Codex approval request is valid");
+        assert!(
+            argv.windows(2)
+                .any(|pair| { pair == ["-c", "approvals_reviewer=\"user\""] })
+        );
     }
 
     /// The arithmetic that read "60 tokens" on a ten-minute run.
@@ -7868,6 +7952,30 @@ mod tests {
         assert!(snapshot.contains("pr-current · pathscale/worktable#46 · closed"));
         assert!(!snapshot.contains("pr-stale"));
         assert!(snapshot.contains("@agency:pr.retire(id: \"<pr association id>\")"));
+
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[tokio::test]
+    async fn concise_responses_are_scoped_to_one_project_without_a_schema_change() {
+        let dir = std::env::temp_dir().join(format!(
+            "az-project-concise-{}-{}",
+            std::process::id(),
+            chrono::Utc::now().timestamp_nanos_opt().unwrap_or_default()
+        ));
+        let tables = crate::db::tables::Tables::open(&dir)
+            .await
+            .expect("concise preference store opens");
+
+        assert!(!project_concise(&tables, "project-a"));
+        tables
+            .kv_put(&concise_key("project-a"), "true".into())
+            .await
+            .expect("concise preference writes");
+
+        assert!(project_concise(&tables, "project-a"));
+        assert!(!project_concise(&tables, "project-b"));
+        assert!(CONCISE_INSTRUCTION.starts_with("Keep responses concise"));
 
         let _ = std::fs::remove_dir_all(dir);
     }

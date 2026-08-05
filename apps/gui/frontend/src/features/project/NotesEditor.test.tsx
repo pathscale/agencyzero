@@ -214,6 +214,20 @@ describe("the knowledge checkpoint switch", () => {
   });
 });
 
+describe("concise project responses", () => {
+  it("starts off and keeps the project-local choice", async () => {
+    setPrefs("panelSections", "settings", true);
+    const { ready, screen } = mount();
+    await ready();
+
+    const toggle = screen.getByLabelText("Concise responses for this project") as HTMLInputElement;
+    await waitFor(() => expect(toggle.checked).toBe(false));
+
+    fireEvent.change(toggle, { target: { checked: true } });
+    await waitFor(() => expect(toggle.checked).toBe(true));
+  });
+});
+
 /*
  * The budget is duplicated across the language boundary — `notes::BUDGET` in the
  * Rust is the one that binds, and this copy is what lets the editor show the

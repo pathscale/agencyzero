@@ -96,6 +96,8 @@ export function createTauriApi(): AgencyZeroApi {
     compactProject: (projectId, agent) => call("compact_project", { projectId, agent }),
     getCheckpoints: (projectId) => call("get_checkpoints", { projectId }),
     setCheckpoints: (projectId, enabled) => call("set_checkpoints", { projectId, enabled }),
+    getProjectConcise: (projectId) => call("get_project_concise", { projectId }),
+    setProjectConcise: (projectId, enabled) => call("set_project_concise", { projectId, enabled }),
     getProjectNotes: (projectId) => call("get_project_notes", { projectId }),
     setProjectNotes: (projectId, notes) => call("set_project_notes", { projectId, notes }),
     listRunningTasks: (projectId) => call("list_running_tasks", { projectId }),

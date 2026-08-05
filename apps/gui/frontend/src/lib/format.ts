@@ -113,6 +113,11 @@ export function isTransientStop(stop: string): boolean {
   );
 }
 
+/** Whether replaying the last user prompt is a valid recovery action. */
+export function isRetryableStop(stop: string): boolean {
+  return stop !== "completed" && stop !== "canceled";
+}
+
 /** "resets 14:20" on the rate-limit pill. */
 export function clockTime(iso: string | null): string {
   if (!iso) return "";

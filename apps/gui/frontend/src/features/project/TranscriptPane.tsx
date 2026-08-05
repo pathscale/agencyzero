@@ -3,12 +3,12 @@ import { createEffect, createSignal, For, type JSX, Match, Show, Switch, untrack
 import { Icon } from "~/components/Icon";
 import { ApprovalCard } from "~/features/project/ApprovalCard";
 import { CopyMessageButton, InlineText, MessageBody } from "~/features/project/MessageBody";
-import { isTransientStop, relativeTime } from "~/lib/format";
+import { isRetryableStop, isTransientStop, relativeTime } from "~/lib/format";
 import { AGENT_LABELS } from "~/lib/labels";
 import { compactCount } from "~/lib/stats";
 import { tx } from "~/stores/i18n";
 import { type RunStatus, useNow, useWorkspace } from "~/stores/workspace";
-import type { Message, Project } from "~/types";
+import type { Message, Project, Question } from "~/types";
 
 const STARTERS = () => [
   tx("Review the GUI crate"),
@@ -56,6 +56,7 @@ export function TranscriptPane(props: {
     props.messages.length;
     props.streaming;
     void state.runStatus[props.project.id];
+    void (state.questions[props.project.id] ?? []).filter((question) => !question.answered).length;
     if (!untrack(pinned)) return;
     queueMicrotask(() => {
       scroller.scrollTop = scroller.scrollHeight;
@@ -129,6 +130,14 @@ export function TranscriptPane(props: {
             </Switch>
           )}
         </For>
+        {/* Agent questions belong in the conversation, where they remain
+            visible until answered. They used to float over the composer and
+            looked like transient input chrome rather than part of the turn. */}
+        <For
+          each={(state.questions[props.project.id] ?? []).filter((question) => !question.answered)}
+        >
+          {(question) => <QuestionCard question={question} />}
+        </For>
         {/* The run is blocked on this question; it renders where you read. */}
         <Show when={state.pendingApprovals[props.project.id]}>
           {(approval) => <ApprovalCard projectId={props.project.id} approval={approval()} />}
@@ -164,6 +173,57 @@ export function TranscriptPane(props: {
           )}
         </Show>
       </Show>
+    </div>
+  );
+}
+
+/** A persistent, urgency-coloured question inside the transcript flow. */
+function QuestionCard(props: { question: Question }): JSX.Element {
+  const { actions } = useWorkspace();
+  const tones: Record<Question["urgency"], { border: string; icon: string; label: string }> = {
+    critical: {
+      border: "border-error/45 bg-error/10",
+      icon: "text-error",
+      label: tx("Critical"),
+    },
+    blocking: {
+      border: "border-warning/40 bg-warning/9",
+      icon: "text-warning",
+      label: tx("Blocking"),
+    },
+    passive: {
+      border: "border-az-hairline bg-az-inset",
+      icon: "text-az-muted",
+      label: tx("When free"),
+    },
+  };
+  const tone = () => tones[props.question.urgency] ?? tones.blocking;
+
+  return (
+    <div
+      class={`flex items-start gap-3 rounded-[13px] border px-4 py-3 text-[12px] ${tone().border}`}
+    >
+      <Icon name="messages-square" class={`relative top-0.5 shrink-0 text-[15px] ${tone().icon}`} />
+      <div class="flex min-w-0 flex-1 flex-col gap-1.5">
+        <div class="flex items-baseline gap-2">
+          <span class={`shrink-0 font-semibold text-[11px] ${tone().icon}`}>{tone().label}</span>
+          <Show when={props.question.issueUrl}>
+            <span class="min-w-0 truncate text-[11px] text-az-muted">
+              {props.question.issueUrl}
+            </span>
+          </Show>
+        </div>
+        <span data-selectable class="whitespace-pre-wrap break-words text-az-strong">
+          {props.question.text}
+        </span>
+      </div>
+      <button
+        type="button"
+        onClick={() => void actions.answerQuestion(props.question.id, true)}
+        class="shrink-0 rounded-lg bg-primary px-3 py-1.5 font-semibold text-[11.5px] text-primary-content transition-colors hover:bg-az-primary-hover"
+      >
+        {tx("Answer")}
+      </button>
     </div>
   );
 }
@@ -299,6 +359,10 @@ function AgentBubble(props: { message: Message; onRetry?: () => void }): JSX.Ele
    * rather than as the turn having failed.
    */
   const failed = () => props.message.stop !== "completed";
+  // A cancellation is already an owner decision or an app restart. Offering
+  // Retry there replays a prompt the owner may have intentionally stopped and
+  // makes a normally completed pre-update reply look unfinished after restart.
+  const retryable = () => isRetryableStop(props.message.stop);
 
   /*
    * A provider outage is weather, not failure: amber rather than red, a short
@@ -339,7 +403,7 @@ function AgentBubble(props: { message: Message; onRetry?: () => void }): JSX.Ele
         <CopyMessageButton body={props.message.body} />
       </div>
       <MessageBody body={props.message.body} class={AGENT_TEXT} />
-      <Show when={failed() && props.onRetry}>
+      <Show when={retryable() && props.onRetry}>
         {(retry) => (
           <div class="flex items-center gap-2 pt-0.5">
             <button
