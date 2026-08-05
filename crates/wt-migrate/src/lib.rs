@@ -613,9 +613,10 @@ pub async fn rebuild_task_log(source: &Path, target: &Path) -> eyre::Result<(usi
 ///
 /// The non-unique `project_idx` remains an independent map from project ids to
 /// row links. Recovery copies only `task_log` into private scratch space,
-/// replaces the scratch primary index with an empty one, then asks the intact
-/// project index for every row. Rows are inserted into a fresh target table,
-/// which reconstructs both indexes and data-page accounting.
+/// replaces the scratch primary index with an empty one, then uses WorkTable's
+/// explicit recovery load to validate and read every surviving secondary-index
+/// entry. Rows are inserted into a fresh target table, which reconstructs both
+/// indexes and data-page accounting.
 ///
 /// `source` is never opened for writing and is never modified. `target` must
 /// not exist. A caller can validate the result before swapping only the
@@ -649,9 +650,9 @@ pub async fn recover_task_log_index(
         .collect();
     drop(project_index);
 
-    // Preserve the bad file inside the disposable scratch directory. With no
-    // primary file present, WorkTable bootstraps an empty one while retaining
-    // the independent project index that can still resolve every row link.
+    // Preserve the bad file inside the disposable scratch directory. Recovery
+    // mode permits the now-empty primary index to disagree with project_idx,
+    // but still validates every surviving project-index key and row link.
     tokio::fs::rename(
         scratch_table.join("primary.wt.idx"),
         scratch_table.join("primary.wt.idx.corrupt"),
@@ -670,7 +671,13 @@ pub async fn recover_task_log_index(
         }
     };
 
-    let damaged = open(&scratch_store).await?;
+    let config = worktable::prelude::DiskConfig::new_with_table_name(
+        scratch_store.to_string_lossy().into_owned(),
+        TaskLogWorkTable::name_snake_case(),
+        TaskLogWorkTable::version(),
+    );
+    let engine = TaskLogPersistenceEngine::new(config).await?;
+    let damaged = TaskLogWorkTable::load_with(engine, LoadMode::Recovery).await?;
     let mut rows = BTreeMap::new();
     for project_id in &project_ids {
         for row in damaged.select_by_project_id(project_id.clone()).execute()? {
@@ -889,6 +896,60 @@ mod recovery_tests {
         ids.sort();
         assert_eq!(ids, vec!["log-1", "log-2", "log-3"]);
         rebuilt.close().await.expect("rebuilt table closes");
+    }
+
+    #[tokio::test]
+    async fn task_log_recovery_refuses_a_corrupt_row_reached_through_the_secondary_index() {
+        let root = tempfile::tempdir().expect("temporary recovery store");
+        let source = root.path().join("source");
+        let target = root.path().join("target");
+        let config = DiskConfig::new_with_table_name(
+            source.to_string_lossy().into_owned(),
+            TaskLogWorkTable::name_snake_case(),
+            TaskLogWorkTable::version(),
+        );
+        let engine = TaskLogPersistenceEngine::new(config).await.expect("engine");
+        let table = TaskLogWorkTable::load(engine).await.expect("table");
+        let id = "log-corrupt".to_string();
+        let primary_key = table.insert(task(&id, "proj-1")).expect("row");
+        let link = table
+            .0
+            .primary_index
+            .pk_map
+            .get_value(&primary_key)
+            .expect("primary link")
+            .0;
+        table.close().await.expect("source closes cleanly");
+
+        let data_path = source.join("task_log/.wt.data");
+        let page_id: u32 = link.page_id.into();
+        let byte_offset = u64::from(page_id) * PAGE_SIZE as u64
+            + GENERAL_HEADER_SIZE as u64
+            + u64::from(link.offset);
+        {
+            use std::io::{Seek, SeekFrom, Write};
+
+            let mut file = std::fs::OpenOptions::new()
+                .write(true)
+                .open(data_path)
+                .expect("data file");
+            file.seek(SeekFrom::Start(byte_offset)).expect("row offset");
+            file.write_all(&vec![0; link.length as usize])
+                .expect("corrupt row bytes");
+            file.sync_all().expect("corruption reaches disk");
+        }
+        std::fs::write(source.join("task_log/primary.wt.idx"), b"torn primary")
+            .expect("primary index is made unreadable");
+
+        let error = recover_task_log_index(&source, &target)
+            .await
+            .expect_err("recovery must reject a corrupt row reached through project_idx");
+        let reason = format!("{error:#}");
+        assert!(
+            reason.contains("project_idx")
+                && (reason.contains("invalid row") || reason.contains("key does not match")),
+            "unexpected recovery refusal: {reason}"
+        );
     }
 
     #[tokio::test]
