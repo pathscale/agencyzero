@@ -822,6 +822,13 @@ function ProjectGroup(props: { project: Project }): JSX.Element {
               type="button"
               onClick={() => void remove()}
               disabled={isDeleting()}
+              // Spells out that this cleans up rather than orphans: the backend
+              // deletes the project's messages, items, PRs, agent I/O, message
+              // overflow and session keys. Only the usage ledger is kept on
+              // purpose (the money was spent whether or not the project stays).
+              title={tx(
+                "Removes this project and its transcript, items, pull requests and sessions from the store. Usage/cost history is kept.",
+              )}
               class="rounded-md border border-error/40 bg-error/15 px-2 py-0.5 font-semibold text-[11px] text-error transition-colors hover:bg-error/25 disabled:opacity-50"
             >
               {isDeleting() ? tx("Deleting…") : tx("Delete")}

@@ -473,6 +473,11 @@ const zh = {
   "Per-turn context detail for this project": "此项目每轮的上下文详情",
   Full: "完整",
   Compact: "精简",
+  "Removes this project and its transcript, items, pull requests and sessions from the store. Usage/cost history is kept.":
+    "从存储中移除此项目及其记录、条目、拉取请求和会话。用量/成本历史予以保留。",
+  "Every open item with title and reference": "每个未完成条目含标题和引用",
+  "Item ids and status only, no titles": "仅条目 id 和状态，无标题",
+  "Just a count and where to fetch the list": "仅数量和获取列表的位置",
   "Reset session": "重置会话",
   "Start the next message fresh — the recovery path for a wedged conversation":
     "下一条消息重新开始 — 卡住会话的恢复方式",

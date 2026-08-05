@@ -489,6 +489,11 @@ const en = {
   "Per-turn context detail for this project": "Per-turn context detail for this project",
   Full: "Full",
   Compact: "Compact",
+  "Removes this project and its transcript, items, pull requests and sessions from the store. Usage/cost history is kept.":
+    "Removes this project and its transcript, items, pull requests and sessions from the store. Usage/cost history is kept.",
+  "Every open item with title and reference": "Every open item with title and reference",
+  "Item ids and status only, no titles": "Item ids and status only, no titles",
+  "Just a count and where to fetch the list": "Just a count and where to fetch the list",
   "Reset session": "Reset session",
   "Start the next message fresh — the recovery path for a wedged conversation":
     "Start the next message fresh — the recovery path for a wedged conversation",

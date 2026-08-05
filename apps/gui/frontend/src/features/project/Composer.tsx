@@ -523,7 +523,7 @@ export function Composer(props: ComposerProps): JSX.Element {
                 onClick={toggleAdvanced}
                 aria-pressed={advanced()}
                 title={tx("Parse Prompt Syntax controls before sending")}
-                class={`rounded-full border px-2.5 py-1 font-medium text-[11px] transition-colors ${
+                class={`flex h-[30px] items-center rounded-full border px-2.5 font-medium text-[11px] transition-colors ${
                   advanced()
                     ? "border-primary/35 bg-primary/15 text-primary"
                     : "border-az-hairline-strong text-az-muted hover:text-base-content"
@@ -596,7 +596,7 @@ export function Composer(props: ComposerProps): JSX.Element {
                       )
                     : tx("Extra Thinking applies to Claude only.")
                 }
-                class={`flex items-center gap-1.5 rounded-full border px-2.5 py-1 font-medium text-[11px] transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
+                class={`flex h-[30px] items-center gap-1.5 rounded-full border px-2.5 font-medium text-[11px] transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
                   props.agent === "claude" && props.extraThinking
                     ? "border-primary/35 bg-primary/15 text-primary"
                     : "border-az-hairline-strong text-az-muted hover:text-base-content"
@@ -657,23 +657,31 @@ export function Composer(props: ComposerProps): JSX.Element {
                       : tx("Queued until the running turn finishes")
                     : undefined
                 }
-                class="flex size-8 items-center justify-center rounded-full bg-primary text-primary-content transition-colors hover:bg-az-primary-hover disabled:cursor-not-allowed disabled:opacity-40"
+                class="flex size-[30px] items-center justify-center rounded-full bg-primary text-primary-content transition-colors hover:bg-az-primary-hover disabled:cursor-not-allowed disabled:opacity-40"
               >
                 <Icon name="arrow-up" class="text-[17px]" />
               </button>
-              <Show when={props.isRunning}>
-                <button
-                  type="button"
-                  onClick={() => props.onStop?.()}
-                  // No handler means the backend cannot stop this run; a Stop
-                  // that only pretended would be worse than a disabled one.
-                  disabled={!props.onStop}
-                  aria-label={tx("Stop the run")}
-                  class="flex size-8 items-center justify-center rounded-full border border-primary/40 bg-base-300 transition-colors hover:border-primary disabled:cursor-not-allowed disabled:opacity-40"
-                >
-                  <span class="size-[11px] rounded-[3px] bg-primary" />
-                </button>
-              </Show>
+              {/*
+                Always rendered, only hidden when idle: mounting the Stop button
+                on run-start (and unmounting on stop) reflowed this wrap row and
+                slid the send button left-right every turn. Reserving its slot
+                keeps the send button fixed; `invisible` also drops it from the
+                tab order so an idle composer has no dead control.
+              */}
+              <button
+                type="button"
+                onClick={() => props.onStop?.()}
+                // No handler means the backend cannot stop this run; a Stop
+                // that only pretended would be worse than a disabled one.
+                disabled={!props.onStop}
+                aria-label={tx("Stop the run")}
+                tabindex={props.isRunning ? undefined : -1}
+                class={`flex size-[30px] items-center justify-center rounded-full border border-primary/40 bg-base-300 transition-colors hover:border-primary disabled:cursor-not-allowed disabled:opacity-40 ${
+                  props.isRunning ? "" : "invisible"
+                }`}
+              >
+                <span class="size-[11px] rounded-[3px] bg-primary" />
+              </button>
             </div>
           </div>
         </div>

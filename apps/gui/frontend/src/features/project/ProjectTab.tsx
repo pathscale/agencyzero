@@ -123,16 +123,30 @@ export function ProjectTab(props: { tab: Tab; project: Project }): JSX.Element {
     return `${compactCount(it.contextTokens ?? 0)} / ${compactCount(it.contextWindow ?? 0)} ctx · ${Math.round(share * 100)}%`;
   });
 
+  /** Warm the 7-day readout as it fills: above 90% is error, above 70% warning. */
+  const severityFor = (percent: number | null): "low" | "mid" | "high" => {
+    if (percent === null) return "low";
+    if (percent >= 90) return "high";
+    if (percent >= 70) return "mid";
+    return "low";
+  };
+
   /** The active tab's provider only, beside the turn count it constrains. */
-  const providerUsage = createMemo<{ label: string; title: string } | null>(() => {
+  const providerUsage = createMemo<{
+    label: string;
+    title: string;
+    severity: "low" | "mid" | "high";
+  } | null>(() => {
     if (props.tab.agent === "claude") {
       const window = state.claudeUsage?.sevenDay;
       if (!window) return null;
-      const used = Math.min(100, Math.max(0, window.utilization)).toFixed(0);
+      const percent = Math.min(100, Math.max(0, window.utilization));
+      const used = percent.toFixed(0);
       const reset = window.resetsAt ? countdown(window.resetsAt, now()) : "";
       return {
         label: `Claude 7d ${used}%`,
         title: reset ? `Resets in ${reset}` : "",
+        severity: severityFor(percent),
       };
     }
 
@@ -143,14 +157,16 @@ export function ProjectTab(props: { tab: Tab; project: Project }): JSX.Element {
       null,
     );
     if (!window) return null;
-    const used =
-      window.usedFraction === null || !Number.isFinite(window.usedFraction)
-        ? "not reported"
-        : `${Math.round(Math.min(1, Math.max(0, window.usedFraction)) * 100)}%`;
+    const reported =
+      window.usedFraction !== null && Number.isFinite(window.usedFraction)
+        ? Math.round(Math.min(1, Math.max(0, window.usedFraction)) * 100)
+        : null;
+    const used = reported === null ? "not reported" : `${reported}%`;
     const reset = window.resetsAt ? countdown(window.resetsAt, now()) : "";
     return {
-      label: `Codex 7d ${used}${used === "not reported" ? "" : " used"}`,
+      label: `Codex 7d ${used}${reported === null ? "" : " used"}`,
       title: reset ? `Resets in ${reset}` : "",
+      severity: severityFor(reported),
     };
   });
 
@@ -221,7 +237,21 @@ export function ProjectTab(props: { tab: Tab; project: Project }): JSX.Element {
               {(usage) => (
                 <>
                   <span class="text-az-faint">·</span>
-                  <span title={usage().title}>{usage().label}</span>
+                  {/* The 7-day window is the number that decides whether you can
+                      keep working today, so it is not left flat grey: it warms
+                      toward warning as it fills and goes error past 90%. */}
+                  <span
+                    class={`font-semibold ${
+                      usage().severity === "high"
+                        ? "text-error"
+                        : usage().severity === "mid"
+                          ? "text-warning"
+                          : "text-az-body"
+                    }`}
+                    title={usage().title}
+                  >
+                    {usage().label}
+                  </span>
                 </>
               )}
             </Show>

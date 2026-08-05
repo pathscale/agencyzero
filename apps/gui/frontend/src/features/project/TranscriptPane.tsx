@@ -278,10 +278,39 @@ export function RunStatusLine(props: {
 
   return (
     <div class="flex items-center gap-2.5 px-1 py-0.5 text-[12px] text-az-muted">
-      <span class="animate-pulse text-[13px] text-primary" aria-hidden="true">
-        ✳
-      </span>
-      <span>
+      {/*
+        Controls on the left, fixed: Cancel and the saved-to-store dot sit
+        before the text so the text can grow and shrink without sliding them
+        around. The old pulsing star lived here as a "thinking" marker; it is
+        gone, because the saved-dot (and the live elapsed/usage readout that
+        only ticks while a run is live) already says the run is working, and two
+        indicators for one fact is one too many.
+      */}
+      <Show when={isLive("cancelRun")}>
+        <button
+          type="button"
+          onClick={() => void actions.cancelRun(props.projectId)}
+          class="shrink-0 rounded-md border border-primary/16 px-2 py-px text-[11.5px] text-az-body transition-colors hover:border-error hover:text-error"
+        >
+          {tx("Cancel")}
+        </button>
+      </Show>
+      {/* Saved-to-store dot: green means killing the app now loses nothing
+          that has streamed; amber means the newest instant exists only
+          on screen. Only meaningful once something has streamed. */}
+      <Show when={props.streamedChars > 0}>
+        <span
+          role="img"
+          aria-label={isSynced() ? tx("streamed text saved") : tx("recent text not yet saved")}
+          title={
+            isSynced()
+              ? tx("Everything streamed so far is saved to the store")
+              : tx("The store checkpoint runs every 200ms — the newest text is not saved yet")
+          }
+          class={`size-[7px] shrink-0 rounded-full ${isSynced() ? "bg-success" : "bg-warning"}`}
+        />
+      </Show>
+      <span class="min-w-0 truncate">
         {elapsedText()}
         <Show when={usageText()}>
           {(usage) => (
@@ -304,30 +333,6 @@ export function RunStatusLine(props: {
         {" · "}
         {props.status.activity}
       </span>
-      {/* Saved-to-store dot: green means killing the app now loses nothing
-          that has streamed; amber means the newest instant exists only
-          on screen. Only meaningful once something has streamed. */}
-      <Show when={props.streamedChars > 0}>
-        <span
-          role="img"
-          aria-label={isSynced() ? tx("streamed text saved") : tx("recent text not yet saved")}
-          title={
-            isSynced()
-              ? tx("Everything streamed so far is saved to the store")
-              : tx("The store checkpoint runs every 200ms — the newest text is not saved yet")
-          }
-          class={`size-[7px] shrink-0 rounded-full ${isSynced() ? "bg-success" : "bg-warning"}`}
-        />
-      </Show>
-      <Show when={isLive("cancelRun")}>
-        <button
-          type="button"
-          onClick={() => void actions.cancelRun(props.projectId)}
-          class="rounded-md border border-primary/16 px-2 py-px text-[11.5px] text-az-body transition-colors hover:border-error hover:text-error"
-        >
-          {tx("Cancel")}
-        </button>
-      </Show>
     </div>
   );
 }

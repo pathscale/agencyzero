@@ -3,6 +3,7 @@ import { createEffect, createSignal, For, type JSX, Show } from "solid-js";
 import { NOTES_BUDGET } from "~/api/client";
 import { Icon } from "~/components/Icon";
 import { SectionPanel } from "~/components/Panel";
+import { PillMenu } from "~/components/PillMenu";
 import { ItemMarker } from "~/components/StatusDot";
 import { copyText } from "~/features/project/MessageBody";
 import { clockTime, elapsed, taskMeta } from "~/lib/format";
@@ -548,17 +549,30 @@ function ContextDetailSelect(props: { projectId: string }): JSX.Element {
           {tx("How much of the item list rides every turn — less means fewer tokens")}
         </span>
       </span>
-      <select
-        aria-label={tx("Per-turn context detail for this project")}
-        class="select select-xs w-[104px] border-az-hairline bg-base-100 text-[11px]"
-        disabled={!isLive("setProjectVerbosity")}
+      <PillMenu
+        label={tx("Per-turn context detail for this project")}
+        variant="outline"
         value={level()}
-        onChange={(event) => void choose(event.currentTarget.value)}
-      >
-        <option value="full">{tx("Full")}</option>
-        <option value="compact">{tx("Compact")}</option>
-        <option value="minimal">{tx("Minimal")}</option>
-      </select>
+        isDisabled={!isLive("setProjectVerbosity")}
+        options={[
+          {
+            value: "full",
+            label: tx("Full"),
+            hint: tx("Every open item with title and reference"),
+          },
+          {
+            value: "compact",
+            label: tx("Compact"),
+            hint: tx("Item ids and status only, no titles"),
+          },
+          {
+            value: "minimal",
+            label: tx("Minimal"),
+            hint: tx("Just a count and where to fetch the list"),
+          },
+        ]}
+        onChange={(value) => void choose(value)}
+      />
     </div>
   );
 }
@@ -865,10 +879,14 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
               class={`group flex flex-col rounded-[9px] transition-colors ${
                 item.status === "active"
                   ? "bg-base-300 shadow-[inset_2px_0_0_var(--color-primary)]"
-                  : "hover:bg-white/5"
+                  : // Zebra striping so a long list reads row by row; the hover
+                    // still lifts on top of whichever stripe is underneath.
+                    index() % 2 === 1
+                    ? "bg-white/[0.02] hover:bg-white/5"
+                    : "hover:bg-white/5"
               }`}
             >
-              <div class="flex items-start gap-1 pt-0.5">
+              <div class="flex items-start gap-1">
                 {/*
                  * The marker is the status control, and the only one.
                  *
@@ -883,13 +901,13 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
                   onClick={() => advance(item)}
                   aria-label={tx("Change the status of {name}", { name: item.title })}
                   title={`${statusSuffix(item.status)} — click for ${statusLabel(nextStatus(item.status))}`}
-                  class="ml-1.5 flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-full transition-colors hover:bg-primary/12 focus-visible:bg-primary/12"
+                  class="mt-0.5 ml-1.5 flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-full transition-colors hover:bg-primary/12 focus-visible:bg-primary/12"
                 >
                   <ItemMarker status={item.status} />
                 </button>
                 <div
                   data-selectable
-                  class="flex min-w-0 flex-1 items-baseline gap-2.5 px-2.5 py-2 text-left"
+                  class="flex min-w-0 flex-1 items-baseline gap-2.5 px-2.5 py-1 text-left"
                 >
                   <span
                     class={`min-w-0 flex-1 text-[12.5px] ${
