@@ -100,6 +100,8 @@ export interface AgencyZeroApi {
   refreshPullRequest(id: string): Promise<void>;
   /** Discover a project's open PRs from its git remotes, even with no rows yet. */
   discoverPullRequests(projectId: string): Promise<void>;
+  /** Review a PR headlessly; the result lands inline in the transcript. */
+  reviewPullRequest(projectId: string, url: string, agent: Agent): Promise<void>;
 
   // — Questions ————————————————————————————————————————————————
   /** This project's questions, answered ones included; callers filter. */

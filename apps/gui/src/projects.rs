@@ -4860,6 +4860,98 @@ pub async fn send_message(
     Ok(user_message)
 }
 
+/// Review a pull request with the chosen agent, inline and read-only.
+///
+/// A side-channel: the agent runs headlessly on the PR in the project's cwd, and
+/// the result lands as a `review`-authored message in the transcript, with a
+/// copy button, but is never part of the conversation sent to the Home agent.
+/// The owner reads it and pastes it on if they want. Model and prompt come from
+/// Settings' review config, both with a default when blank.
+///
+/// # Errors
+/// When the agent is unknown, or the headless run fails.
+#[tauri::command]
+pub async fn review_pull_request(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    project_id: String,
+    url: String,
+    agent: String,
+) -> Result<(), String> {
+    let agent = parse_agent(Some(&agent))?;
+    let settings = state
+        .tables
+        .kv_get(crate::settings::KEY)
+        .and_then(|raw| serde_json::from_str::<crate::settings::GlobalSettings>(&raw).ok())
+        .unwrap_or_default();
+    let instruction = if settings.review.prompt.trim().is_empty() {
+        crate::settings::DEFAULT_REVIEW_PROMPT.to_string()
+    } else {
+        settings.review.prompt.clone()
+    };
+    let model = settings
+        .review
+        .models
+        .get(agent_wire_name(agent))
+        .cloned()
+        .unwrap_or_default();
+
+    let scope = invocation_scope(
+        &state.tables,
+        &project_id,
+        agent,
+        crate::workspace_root_path(&app, &state),
+        &state.location.path,
+    );
+
+    let prompt = format!("{instruction}\n\nThe pull request: {url}");
+    let mut request = agent_abstraction::Request::new(agent, prompt).cwd(&scope.cwd);
+    for dir in &scope.extra_dirs {
+        request = request.add_dir(dir);
+    }
+    if !model.is_empty() {
+        request = request.model(&model);
+    }
+    let request = crate::experimental::apply(request, agent, &model).map_err(|e| e.to_string())?;
+
+    let outcome = agent_abstraction::run(request.request())
+        .await
+        .map_err(|error| format!("the review run failed: {error}"))?;
+
+    let body = if outcome.text.trim().is_empty() {
+        "The reviewer returned nothing.".to_string()
+    } else {
+        outcome.text
+    };
+    let message_id = id("msg");
+    let row = MessageRow {
+        id: message_id.clone(),
+        project_id: project_id.clone(),
+        item_id: String::new(),
+        author: "review".into(),
+        agent: agent_wire_name(agent).into(),
+        moderation: String::new(),
+        model,
+        permission: String::new(),
+        usage: String::new(),
+        // The PR it reviewed, so the transcript row can say what it is about.
+        stop: url,
+        exit_code: 0,
+        body: body_head(&body),
+        created_at: now(),
+    };
+    state
+        .tables
+        .message
+        .insert(row.clone())
+        .map_err(|error| error.to_string())?;
+    store_body(&state.tables, &message_id, &project_id, &body);
+    let mut appended = MessageDto::from(row);
+    appended.body = body;
+    let _ = app.emit("message:appended", appended);
+    Ok(())
+}
+
 /// Build the provider request whose filesystem and resume policy were resolved
 /// for this invocation.
 ///

@@ -18,7 +18,7 @@ import {
 } from "~/lib/stats";
 import { tx } from "~/stores/i18n";
 import { QUEUE_REASONS, useNow, useWorkspace } from "~/stores/workspace";
-import type { Project, PullRequest, Question, Tab } from "~/types";
+import type { Agent, Project, PullRequest, Question, Tab } from "~/types";
 
 /**
  * A project tab: the conversation on the left, the accordion on the right.
@@ -497,6 +497,7 @@ function PrChip(props: { pr: PullRequest }): JSX.Element {
       >
         <Icon name={copied() ? "check" : "copy"} class="text-[12px]" />
       </button>
+      <ReviewButtons pr={props.pr} />
       <button
         type="button"
         onClick={() => void actions.dismissPullRequest(props.pr.id)}
@@ -506,6 +507,58 @@ function PrChip(props: { pr: PullRequest }): JSX.Element {
         <Icon name="x" class="text-[13px]" />
       </button>
     </div>
+  );
+}
+
+/**
+ * Submit a PR for review by an agent, inline and read-only.
+ *
+ * "Review:" then one icon per agent. A click runs that agent headlessly on the
+ * PR; the result lands as a review note in the transcript, with a copy button,
+ * and is never sent to the Home agent. The clicked icon spins until the run
+ * returns, and a run is only offered where the command is live.
+ */
+function ReviewButtons(props: { pr: PullRequest }): JSX.Element {
+  const { actions, isLive } = useWorkspace();
+  const [pending, setPending] = createSignal<Agent | null>(null);
+
+  const review = (agent: Agent): void => {
+    setPending(agent);
+    void actions
+      .reviewPullRequest(props.pr.projectId, props.pr.url, agent)
+      .catch((cause) => log.error(`the review failed: ${describeError(cause)}`))
+      .finally(() => setPending(null));
+  };
+
+  const REVIEWERS = [
+    { agent: "claude", icon: "sparkles" },
+    { agent: "codex", icon: "gauge" },
+    { agent: "copilot", icon: "git-pull-request" },
+  ] as const;
+
+  return (
+    <Show when={isLive("reviewPullRequest")}>
+      <span class="flex shrink-0 items-center gap-1">
+        <span class="text-[10.5px] text-az-faint">{tx("Review")}</span>
+        <For each={REVIEWERS}>
+          {(reviewer) => (
+            <button
+              type="button"
+              disabled={pending() !== null}
+              onClick={() => review(reviewer.agent)}
+              title={tx("Review with {agent}", { agent: AGENT_LABELS[reviewer.agent] })}
+              aria-label={tx("Review with {agent}", { agent: AGENT_LABELS[reviewer.agent] })}
+              class="flex size-[22px] shrink-0 items-center justify-center rounded-md text-az-faint transition-colors hover:bg-white/5 hover:text-az-body disabled:opacity-40"
+            >
+              <Icon
+                name={pending() === reviewer.agent ? "history" : reviewer.icon}
+                class={`text-[12px] ${pending() === reviewer.agent ? "animate-spin" : ""}`}
+              />
+            </button>
+          )}
+        </For>
+      </span>
+    </Show>
   );
 }
 

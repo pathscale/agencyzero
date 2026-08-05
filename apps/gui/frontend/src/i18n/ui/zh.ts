@@ -445,6 +445,15 @@ const zh = {
   "Dismiss PR {number}": "隐藏 PR {number}",
   Copied: "已复制",
   "Copy the link": "复制链接",
+  Review: "审查",
+  "PR review prompt": "PR 审查提示",
+  "what a PR review asks; empty uses the built-in prompt":
+    "PR 审查所使用的提示；留空则使用内置提示",
+  "Leave empty for the default review prompt": "留空则使用默认审查提示",
+  "Review with {agent}": "使用 {agent} 审查",
+  "Review by {agent}": "{agent} 的审查",
+  "Not sent to the agent. Copy it and paste it on if you want.":
+    "不会发送给智能体。如需要可复制后手动粘贴。",
   "Copy this message": "复制此消息",
   "Copy this {language} block": "复制此 {language} 代码块",
   code: "代码",

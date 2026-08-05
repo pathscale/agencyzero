@@ -97,6 +97,9 @@ export function TranscriptPane(props: {
               <Match when={message.author === "system"}>
                 <SystemNote message={message} />
               </Match>
+              <Match when={message.author === "review"}>
+                <ReviewNote message={message} />
+              </Match>
               <Match when={message.author === "agent"}>
                 <AgentBubble
                   message={message}
@@ -443,6 +446,41 @@ function SystemNote(props: { message: Message }): JSX.Element {
           transcript: the path a checkpoint was just written to. */}
       <CopyMessageButton body={props.message.body} />
       <span class="h-px flex-1 bg-az-hairline" />
+    </div>
+  );
+}
+
+/**
+ * A PR review, run on the side and dropped inline.
+ *
+ * Distinct from an agent turn on purpose: it is not part of the conversation
+ * sent to the Home agent, it is a result the owner reads and copies. The whole
+ * body renders as markdown (so a review's tables and code show), with a copy
+ * button and the PR it reviewed named in the header.
+ */
+function ReviewNote(props: { message: Message }): JSX.Element {
+  return (
+    <div class="group flex flex-col gap-2 rounded-xl border border-az-hairline border-l-2 border-l-info bg-az-inset p-[13px_15px]">
+      <div class="flex items-center gap-2">
+        <Icon name="messages-square" class="shrink-0 text-[14px] text-info" />
+        <span class="font-semibold text-[12px] text-az-strong">
+          {tx("Review by {agent}", {
+            agent: AGENT_LABELS[props.message.agent] ?? props.message.agent,
+          })}
+        </span>
+        <Show when={props.message.stop}>
+          <span class="min-w-0 truncate font-mono text-[11px] text-az-muted">
+            {props.message.stop}
+          </span>
+        </Show>
+        <span class="ml-auto shrink-0">
+          <CopyMessageButton body={props.message.body} />
+        </span>
+      </div>
+      <MessageBody body={props.message.body} />
+      <span class="text-[11px] text-az-faint">
+        {tx("Not sent to the agent. Copy it and paste it on if you want.")}
+      </span>
     </div>
   );
 }

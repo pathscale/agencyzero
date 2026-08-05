@@ -461,6 +461,15 @@ const en = {
   "Dismiss PR {number}": "Dismiss PR {number}",
   Copied: "Copied",
   "Copy the link": "Copy the link",
+  Review: "Review",
+  "PR review prompt": "PR review prompt",
+  "what a PR review asks; empty uses the built-in prompt":
+    "what a PR review asks; empty uses the built-in prompt",
+  "Leave empty for the default review prompt": "Leave empty for the default review prompt",
+  "Review with {agent}": "Review with {agent}",
+  "Review by {agent}": "Review by {agent}",
+  "Not sent to the agent. Copy it and paste it on if you want.":
+    "Not sent to the agent. Copy it and paste it on if you want.",
   "Copy this message": "Copy this message",
   "Copy this {language} block": "Copy this {language} block",
   code: "code",

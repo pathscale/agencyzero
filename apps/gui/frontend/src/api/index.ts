@@ -37,6 +37,7 @@ const COMMAND_FOR: Partial<Record<keyof AgencyZeroApi, string>> = {
   dismissPullRequest: "dismiss_pull_request",
   refreshPullRequest: "refresh_pull_request",
   discoverPullRequests: "discover_pull_requests",
+  reviewPullRequest: "review_pull_request",
   listQuestions: "list_questions",
   answerQuestion: "answer_question",
   listMessages: "list_messages",

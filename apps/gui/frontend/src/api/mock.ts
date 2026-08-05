@@ -296,6 +296,27 @@ export function createMockApi(): AgencyZeroApi {
       return settle(undefined);
     },
 
+    async reviewPullRequest(projectId, url, agent) {
+      // No real agent in the mock; drop a canned review message so the inline
+      // rendering and copy button can be exercised.
+      emit("message:appended", {
+        id: `msg-review-${Date.now()}`,
+        projectId,
+        itemId: null,
+        author: "review",
+        agent,
+        moderation: null,
+        model: "",
+        permission: "",
+        usage: null,
+        stop: url,
+        exitCode: 0,
+        body: `Review of ${url} by ${agent}:\n\n- **Looks solid.** One nit: guard the empty case in \`parse()\`.`,
+        createdAt: new Date().toISOString(),
+      } as unknown as Message);
+      return settle(undefined);
+    },
+
     listQuestions: (projectId) =>
       settle(questions.filter((question) => question.projectId === projectId)),
 

@@ -83,7 +83,7 @@ export interface PendingApproval {
  * verdict; a compaction filed as a moderator note rendered as an empty amber
  * card, because the card is built out of a verdict it did not have.
  */
-export type MessageAuthor = "user" | "agent" | "moderator" | "system";
+export type MessageAuthor = "user" | "agent" | "moderator" | "system" | "review";
 
 /** `Stop` in the crate; anything other than these two arrives as a bare string. */
 export type StopReason = "completed" | "error" | (string & {});
@@ -517,6 +517,16 @@ export interface GlobalSettings {
    * config directory overrides the built-in text.
    */
   perTurnInjection: boolean;
+  /** How a PR review is shaped: the prompt, and the model per reviewer agent. */
+  review: ReviewSettings;
+}
+
+/** The PR-review side-channel's configuration. */
+export interface ReviewSettings {
+  /** The review instruction, prepended to the PR URL. Empty uses the default. */
+  prompt: string;
+  /** Model per reviewer agent ("claude" / "codex" / "copilot"); empty is default. */
+  models: Record<string, string>;
 }
 
 /**

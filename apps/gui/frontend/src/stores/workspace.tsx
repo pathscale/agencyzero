@@ -1814,6 +1814,8 @@ function createWorkspace() {
     deleteItem: (id: string) => client().deleteItem(id),
     chooseAttachments: () => client().chooseAttachments(),
     dismissPullRequest: (id: string) => client().dismissPullRequest(id),
+    reviewPullRequest: (projectId: string, url: string, agent: Agent) =>
+      client().reviewPullRequest(projectId, url, agent),
     refreshPullRequest: (id: string) => client().refreshPullRequest(id),
     answerQuestion: (id: string, answered = true) => client().answerQuestion(id, answered),
     /** Drop one queued prompt — second thoughts are allowed while it waits. */
