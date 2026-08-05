@@ -8,6 +8,7 @@ pub mod agent_io;
 pub mod approval_rule;
 pub mod kv;
 pub mod message;
+pub mod message_chunk;
 pub mod project;
 pub mod project_item;
 pub mod pull_request;
