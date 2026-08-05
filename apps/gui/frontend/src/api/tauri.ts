@@ -101,8 +101,7 @@ export function createTauriApi(): AgencyZeroApi {
     getProjectVerbosity: (projectId) => call("get_project_verbosity", { projectId }),
     setProjectVerbosity: (projectId, verbosity) =>
       call("set_project_verbosity", { projectId, verbosity }),
-    resetProjectSession: (projectId, agent) =>
-      call("reset_project_session", { projectId, agent }),
+    resetProjectSession: (projectId, agent) => call("reset_project_session", { projectId, agent }),
     getProjectNotes: (projectId) => call("get_project_notes", { projectId }),
     setProjectNotes: (projectId, notes) => call("set_project_notes", { projectId, notes }),
     listRunningTasks: (projectId) => call("list_running_tasks", { projectId }),

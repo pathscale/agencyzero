@@ -589,7 +589,9 @@ function ResetSession(props: { project: Project; running: boolean }): JSX.Elemen
     try {
       // Every agent that has a session on this project, so a project that ran
       // both providers is fully reset rather than half.
-      await Promise.all(agents().map((agent) => actions.resetProjectSession(props.project.id, agent)));
+      await Promise.all(
+        agents().map((agent) => actions.resetProjectSession(props.project.id, agent)),
+      );
       setConfirming(false);
     } catch (cause) {
       log.error(`could not reset the session: ${describeError(cause)}`);
