@@ -162,9 +162,9 @@ function LargestTurn(props: { usage: UsageAnalytics }): JSX.Element {
             </span>
           </div>
           <div class="mt-1.5 font-mono text-[11px] text-az-muted">
-            {tx("in")} {tokens(turn().inputTokens)} · {tx("read")}{" "}
-            {tokens(turn().cacheReadTokens)} · {tx("write")} {tokens(turn().cacheWriteTokens)} ·{" "}
-            {tx("out")} {tokens(turn().outputTokens)}
+            {tx("in")} {tokens(turn().inputTokens)} · {tx("read")} {tokens(turn().cacheReadTokens)}{" "}
+            · {tx("write")} {tokens(turn().cacheWriteTokens)} · {tx("out")}{" "}
+            {tokens(turn().outputTokens)}
           </div>
         </div>
       )}
