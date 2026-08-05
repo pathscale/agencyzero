@@ -17,6 +17,7 @@ use crate::db::schema::agent_io::{AgentIoRowPersistenceEngine, AgentIoRowWorkTab
 use crate::db::schema::approval_rule::{ApprovalRulePersistenceEngine, ApprovalRuleWorkTable};
 use crate::db::schema::kv::{KvPersistenceEngine, KvRow, KvWorkTable};
 use crate::db::schema::message::{MessagePersistenceEngine, MessageWorkTable};
+use crate::db::schema::message_chunk::{MessageChunkPersistenceEngine, MessageChunkWorkTable};
 use crate::db::schema::project::{ProjectPersistenceEngine, ProjectWorkTable};
 use crate::db::schema::project_item::{ProjectItemPersistenceEngine, ProjectItemWorkTable};
 use crate::db::schema::pull_request::{PullRequestPersistenceEngine, PullRequestWorkTable};
@@ -40,6 +41,9 @@ pub struct Tables {
     pub project: Arc<ProjectWorkTable>,
     pub project_item: Arc<ProjectItemWorkTable>,
     pub message: Arc<MessageWorkTable>,
+    /// Overflow for message bodies too large for one page. See
+    /// `schema/message_chunk.rs`.
+    pub message_chunk: Arc<MessageChunkWorkTable>,
     pub task_log: Arc<TaskLogWorkTable>,
     /// Opt-in per project. See the module doc on `schema/agent_io.rs`.
     pub agent_io: Arc<AgentIoRowWorkTable>,
@@ -76,10 +80,15 @@ impl Tables {
                     <$Table>::name_snake_case(),
                     <$Table>::version(),
                 );
-                let engine = <$Engine>::new(config).await?;
+                // Each table's load future is boxed onto the heap rather than
+                // held inline in this `open` future. Every table adds its whole
+                // load state machine to a single stack frame otherwise, and the
+                // sum overflowed the stack once the table count grew — a test
+                // that opens two stores in one frame hit it first.
+                let engine = Box::pin(<$Engine>::new(config)).await?;
                 // `load`, never `new`: `new` builds an empty table and silently
                 // discards whatever is on disk, so every launch started blank.
-                Arc::new(<$Table>::load(engine).await?)
+                Arc::new(Box::pin(<$Table>::load(engine)).await?)
             }};
         }
 
@@ -88,6 +97,7 @@ impl Tables {
             project: open!(ProjectPersistenceEngine, ProjectWorkTable),
             project_item: open!(ProjectItemPersistenceEngine, ProjectItemWorkTable),
             message: open!(MessagePersistenceEngine, MessageWorkTable),
+            message_chunk: open!(MessageChunkPersistenceEngine, MessageChunkWorkTable),
             task_log: open!(TaskLogPersistenceEngine, TaskLogWorkTable),
             agent_io: open!(AgentIoRowPersistenceEngine, AgentIoRowWorkTable),
             usage_ledger: open!(UsageLedgerPersistenceEngine, UsageLedgerWorkTable),

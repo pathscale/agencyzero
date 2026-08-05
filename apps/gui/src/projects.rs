@@ -482,21 +482,111 @@ fn truncate_to_bytes(text: &str, max_bytes: usize) -> String {
 /// an atomic refusal) belongs upstream and is tracked there.
 const MAX_PERSISTED_BLOB: usize = 8_000;
 
-/// Cap a message body under the page limit, saying so in the text when it
-/// bites.
+/// The inline head of a message body: the most that fits the row's page.
 ///
-/// Bodies are the record, so they get the roomiest cap in the store: 12K of a
-/// 16K page, the rest left for the row's other fields. The longest body ever
-/// persisted here is 7.4K, so the marker should never be seen; the cap exists
-/// because "should" is what the store has died of three times. The full text
-/// still exists in the agent's own transcript.
-fn capped_body(body: String) -> String {
-    const MAX_MESSAGE_BODY: usize = 12_000;
-    if body.len() <= MAX_MESSAGE_BODY {
-        return body;
+/// A WorkTable row must fit one ~16K page, and a body shares that page with the
+/// row's other fields (usage and moderation JSON among them), so 12K is the
+/// body's share. A body within that is stored whole. A larger one keeps its
+/// first 12K here and spills the rest to `message_chunk` via [`store_overflow`],
+/// so the read path can stitch the whole thing back — the tail is no longer
+/// truncated, only stored elsewhere.
+const MAX_MESSAGE_BODY: usize = 12_000;
+
+/// The largest byte length `<= max` that lands on a char boundary of `text`.
+///
+/// A clean cut, unlike [`truncate_to_bytes`], which appends an ellipsis and
+/// trims — that is right for a diagnostic tail but wrong here, where the head
+/// and the chunks must concatenate back to the exact original body. Always
+/// makes progress on a non-empty string: the first char alone is `<= max` only
+/// if `max` is at least that char's width, but a body over the cap always has a
+/// boundary at or below `max`, so this never returns 0 for the inputs it sees.
+fn split_boundary(text: &str, max: usize) -> usize {
+    let mut end = max.min(text.len());
+    while end > 0 && !text.is_char_boundary(end) {
+        end -= 1;
     }
-    truncate_to_bytes(&body, MAX_MESSAGE_BODY)
-        + "\n\n[truncated: the full text exceeded the store's page limit]"
+    end
+}
+
+fn body_head(body: &str) -> String {
+    if body.len() <= MAX_MESSAGE_BODY {
+        return body.to_string();
+    }
+    body[..split_boundary(body, MAX_MESSAGE_BODY)].to_string()
+}
+
+/// Spill a body's overflow to `message_chunk` rows. The head is stored on the
+/// message row separately via [`body_head`]; this writes only the tail.
+///
+/// Call after the message row's id is known; the chunks key off it. A body
+/// within the cap writes nothing. Every caller mints a fresh message id, so
+/// there are never prior chunks to clear: this is insert-only and synchronous,
+/// which keeps the send path off an await it does not need.
+fn store_body(tables: &Tables, message_id: &str, project_id: &str, body: &str) {
+    if body.len() <= MAX_MESSAGE_BODY {
+        return;
+    }
+    let head = body_head(body);
+    let rest = &body[head.len()..];
+    for (seq, chunk) in chunk_bytes(rest, MAX_MESSAGE_BODY).into_iter().enumerate() {
+        let row = crate::db::schema::message_chunk::MessageChunkRow {
+            id: format!("{message_id}#{seq}"),
+            message_id: message_id.to_string(),
+            project_id: project_id.to_string(),
+            seq: u32::try_from(seq).unwrap_or(u32::MAX),
+            text: chunk,
+        };
+        if let Err(error) = tables.message_chunk.insert(row) {
+            crate::log!(
+                crate::log::Level::Error,
+                "message",
+                "{message_id}: overflow chunk {seq} failed: {error}"
+            );
+            break;
+        }
+    }
+}
+
+/// Split `text` into page-safe slices on char boundaries, in order, that
+/// concatenate back to `text` exactly.
+fn chunk_bytes(text: &str, max: usize) -> Vec<String> {
+    let mut out = Vec::new();
+    let mut rest = text;
+    while !rest.is_empty() {
+        // A boundary at or below `max`; for a rest whose first char is wider
+        // than `max` this would be 0, so take that whole char to guarantee
+        // progress. `max` here is 12K, so this branch never fires in practice.
+        let cut = split_boundary(rest, max).max(
+            rest.char_indices()
+                .nth(1)
+                .map(|(i, _)| i)
+                .unwrap_or(rest.len()),
+        );
+        out.push(rest[..cut].to_string());
+        rest = &rest[cut..];
+    }
+    out
+}
+
+/// The whole body of a message: its inline head followed by its overflow chunks.
+///
+/// Rows within the cap have no chunks and read as their head alone. This is the
+/// inverse of [`store_body`]: the split is invisible above this call.
+fn full_body(tables: &Tables, message_id: &str, head: &str) -> String {
+    let mut chunks: Vec<crate::db::schema::message_chunk::MessageChunkRow> = tables
+        .message_chunk
+        .select_by_message_id(message_id.to_string())
+        .execute()
+        .unwrap_or_default();
+    if chunks.is_empty() {
+        return head.to_string();
+    }
+    chunks.sort_by_key(|chunk| chunk.seq);
+    let mut body = head.to_string();
+    for chunk in chunks {
+        body.push_str(&chunk.text);
+    }
+    body
 }
 
 fn parse_permission(raw: Option<&str>) -> Permission {
@@ -898,7 +988,14 @@ pub fn list_messages(project_id: String, state: State<'_, AppState>) -> Vec<Mess
         .execute()
         .unwrap_or_default()
         .into_iter()
-        .map(MessageDto::from)
+        .map(|row| {
+            // Stitch any overflow chunks back onto the inline head, so a body
+            // that spilled across pages reads as the whole thing again.
+            let id = row.id.clone();
+            let mut dto = MessageDto::from(row);
+            dto.body = full_body(&state.tables, &id, &dto.body);
+            dto
+        })
         .collect();
     rows.sort_by(|a, b| a.created_at.cmp(&b.created_at));
     rows
@@ -2125,7 +2222,7 @@ fn user_message_for_send(
         usage: String::new(),
         stop: "completed".into(),
         exit_code: -1,
-        body: capped_body(input.body.clone()),
+        body: body_head(&input.body),
         created_at: now(),
     };
     state
@@ -2133,8 +2230,13 @@ fn user_message_for_send(
         .message
         .insert(row.clone())
         .map_err(|error| error.to_string())?;
+    store_body(&state.tables, &row.id, &input.project_id, &input.body);
 
-    let message = MessageDto::from(row);
+    // The emitted DTO carries the whole body, not just the stored head: the
+    // caller has it in hand and the reader would otherwise have to round-trip
+    // the chunks it just wrote.
+    let mut message = MessageDto::from(row);
+    message.body = input.body.clone();
     record_study_turn(
         &state.tables,
         &input.project_id,
@@ -2177,11 +2279,14 @@ fn retry_user_message(
         .ok_or_else(|| "the queued user message no longer exists".to_string())?;
     if row.project_id != input.project_id
         || row.author != "user"
-        || row.body != capped_body(input.body.clone())
+        || row.body != body_head(&input.body)
     {
         return Err("the queued user message does not match this retry".into());
     }
-    Ok(Some(MessageDto::from(row)))
+    let id = row.id.clone();
+    let mut dto = MessageDto::from(row);
+    dto.body = full_body(tables, &id, &dto.body);
+    Ok(Some(dto))
 }
 
 fn emit_run_stopped(
@@ -2246,8 +2351,10 @@ pub async fn recover_partial_replies(tables: &Tables) {
             continue;
         }
         let checkpoint = decode_partial_reply(row.value);
+        let message_id = id("msg");
+        let checkpoint_body = checkpoint.body.clone();
         let message = MessageRow {
-            id: id("msg"),
+            id: message_id.clone(),
             project_id: project_id.clone(),
             item_id: String::new(),
             author: "agent".into(),
@@ -2258,10 +2365,12 @@ pub async fn recover_partial_replies(tables: &Tables) {
             usage: String::new(),
             stop: "interrupted".into(),
             exit_code: 0,
-            body: capped_body(checkpoint.body),
+            body: body_head(&checkpoint_body),
             created_at: now(),
         };
-        if let Err(error) = tables.message.insert(message) {
+        let insert_result = tables.message.insert(message);
+        store_body(tables, &message_id, &project_id, &checkpoint_body);
+        if let Err(error) = insert_result {
             crate::log!(
                 crate::log::Level::Error,
                 "run",
@@ -3978,6 +4087,14 @@ pub async fn delete_project(
         .delete_by_project(id.clone())
         .await
         .map_err(|error| failed("the pull request rows", &error))?;
+    // Message-body overflow follows the project out, so a purge cannot leave a
+    // reply's tail behind with no message to hang it off.
+    state
+        .tables
+        .message_chunk
+        .delete_by_project(id.clone())
+        .await
+        .map_err(|error| failed("the message overflow rows", &error))?;
     let mut keys = [Agent::Claude, Agent::Codex, Agent::Copilot]
         .map(|agent| agent_session_key(&id, agent))
         .to_vec();
@@ -5844,7 +5961,7 @@ async fn drive_run(
                 },
                 stop: stop.clone(),
                 exit_code: i64::from(outcome.exit_code),
-                body: capped_body(body.clone()),
+                body: body_head(&body),
                 created_at: now(),
             };
             crate::log!(
@@ -5953,7 +6070,12 @@ async fn drive_run(
                 );
                 return;
             }
-            let _ = app.emit("message:appended", MessageDto::from(row));
+            store_body(&tables, &row.id, &project_id, &body);
+            // Emit the whole reply, not just the stored head: the reader would
+            // otherwise round-trip the chunks this just wrote.
+            let mut appended = MessageDto::from(row);
+            appended.body = body.clone();
+            let _ = app.emit("message:appended", appended);
             // The reply row now owns these words; the checkpoint is done.
             clear_partial_reply(&tables, &project_id).await;
 
@@ -6077,6 +6199,7 @@ async fn drive_run(
              * turn reported no cost and its output is not a finished answer.
              */
             if !streamed_text.trim().is_empty() {
+                let canceled_body = streamed_text.clone();
                 let row = MessageRow {
                     id: id("msg"),
                     project_id: project_id.clone(),
@@ -6089,12 +6212,15 @@ async fn drive_run(
                     usage: String::new(),
                     stop: "canceled".into(),
                     exit_code: -1,
-                    body: capped_body(streamed_text),
+                    body: body_head(&canceled_body),
                     created_at: now(),
                 };
                 match tables.message.insert(row.clone()) {
                     Ok(_) => {
-                        let _ = app.emit("message:appended", MessageDto::from(row));
+                        store_body(&tables, &row.id, &project_id, &canceled_body);
+                        let mut appended = MessageDto::from(row);
+                        appended.body = canceled_body.clone();
+                        let _ = app.emit("message:appended", appended);
                         clear_partial_reply(&tables, &project_id).await;
                     }
                     // The insert failing is the one case the checkpoint is
@@ -6160,12 +6286,16 @@ async fn drive_run(
                     // transcript can explain itself later.
                     stop: error.to_string(),
                     exit_code: -1,
-                    body: capped_body(streamed_text),
+                    body: body_head(&streamed_text),
                     created_at: now(),
                 };
+                let failed_body = streamed_text.clone();
                 match tables.message.insert(row.clone()) {
                     Ok(_) => {
-                        let _ = app.emit("message:appended", MessageDto::from(row));
+                        store_body(&tables, &row.id, &project_id, &failed_body);
+                        let mut appended = MessageDto::from(row);
+                        appended.body = failed_body.clone();
+                        let _ = app.emit("message:appended", appended);
                         clear_partial_reply(&tables, &project_id).await;
                     }
                     // Left in place deliberately: the checkpoint is what the
@@ -7011,6 +7141,78 @@ mod tests {
         assert!(retry_user_message(&tables, &mismatched).is_err());
 
         tables.shutdown().await.expect("tables drain");
+        let _ = std::fs::remove_dir_all(store);
+    }
+
+    #[tokio::test]
+    async fn a_body_over_the_page_survives_whole_across_a_reopen() {
+        let store = std::env::temp_dir().join(format!(
+            "az-chunk-{}-{}",
+            std::process::id(),
+            chrono::Utc::now().timestamp_nanos_opt().unwrap_or_default()
+        ));
+        let tables = crate::db::tables::Tables::open(&store)
+            .await
+            .expect("chunk store opens");
+
+        // A body well past the 12K inline cap, with a marker every 1000 bytes so
+        // a dropped or reordered chunk is visible rather than hidden by
+        // repetition.
+        let mut body = String::new();
+        for i in 0..40 {
+            body.push_str(&format!("[block {i:02}]"));
+            body.push_str(&"x".repeat(1000));
+        }
+        assert!(body.len() > MAX_MESSAGE_BODY);
+
+        let row = MessageRow {
+            id: "msg-big".into(),
+            project_id: "proj-big".into(),
+            item_id: String::new(),
+            author: "agent".into(),
+            agent: "claude".into(),
+            moderation: String::new(),
+            model: "opus".into(),
+            permission: "auto".into(),
+            usage: String::new(),
+            stop: "completed".into(),
+            exit_code: 0,
+            body: body_head(&body),
+            created_at: now(),
+        };
+        tables.message.insert(row).expect("head row inserts");
+        store_body(&tables, "msg-big", "proj-big", &body);
+
+        // The inline head alone is capped; the whole body comes back only once
+        // the chunks are stitched on.
+        let head_only = tables
+            .message
+            .select("msg-big".to_string())
+            .expect("row present")
+            .body;
+        assert!(
+            head_only.len() <= MAX_MESSAGE_BODY,
+            "the head must fit a page"
+        );
+        assert_eq!(full_body(&tables, "msg-big", &head_only), body);
+
+        // And it survives a reopen: the chunks are persisted, not in-memory.
+        tables.shutdown().await.expect("tables drain");
+        let reopened = crate::db::tables::Tables::open(&store)
+            .await
+            .expect("chunk store reopens");
+        let head = reopened
+            .message
+            .select("msg-big".to_string())
+            .expect("row present after reopen")
+            .body;
+        assert_eq!(
+            full_body(&reopened, "msg-big", &head),
+            body,
+            "a body that spilled across pages must read back whole after a reopen"
+        );
+
+        reopened.shutdown().await.expect("reopen drains");
         let _ = std::fs::remove_dir_all(store);
     }
 
