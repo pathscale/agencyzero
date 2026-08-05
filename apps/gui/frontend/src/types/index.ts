@@ -413,6 +413,30 @@ export interface AgentModels {
   discovered: boolean;
 }
 
+/** One model's per-million-token prices, matched by substring on the model id. */
+export interface PriceRow {
+  /** Substring the model id must contain; longest-key-first in the table. */
+  key: string;
+  input: number;
+  output: number;
+  cacheRead: number;
+}
+
+/**
+ * The price table the estimate is computed from, plus the constants that make
+ * the frontend's arithmetic match the backend's. Fetched once; the composer's
+ * per-keystroke estimate is then pure local math (no round-trip per character).
+ */
+export interface PricingTable {
+  rows: PriceRow[];
+  /** Cache-write premium as a multiple of input price, for cold-start math. */
+  cacheWriteMultiple: number;
+  /** A next-turn estimate at or above this many USD warns. */
+  warnUsd: number;
+  /** …at or above this is flagged high. */
+  highUsd: number;
+}
+
 /**
  * Which models the user wants offered for one agent, and which is preselected.
  *

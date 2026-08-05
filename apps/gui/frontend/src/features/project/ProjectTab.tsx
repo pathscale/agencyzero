@@ -390,6 +390,9 @@ export function ProjectTab(props: { tab: Tab; project: Project }): JSX.Element {
             permission={props.tab.permission}
             permissions={permissionsFor(props.tab.agent)}
             usage={contextLabel()}
+            /* The warm context the next turn will resend, so the composer can
+               price it live as you type. From the tab's running totals. */
+            contextTokens={standing().contextTokens ?? 0}
             /*
              * The full turn, not just its visible parts: `runStatus` exists
              * from the accepted send to `run:stopped`, covering the quiet

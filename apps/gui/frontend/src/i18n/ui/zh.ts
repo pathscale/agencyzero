@@ -495,6 +495,23 @@ const zh = {
   "Force reset": "强制重置",
   "Confirm force reset": "确认强制重置",
   "Could not reset:": "无法重置：",
+  "~{cost}": "~{cost}",
+  "est. {cost}": "约 {cost}",
+  "Estimated from token counts — this agent does not report a cost.":
+    "根据 token 数量估算，此助手不报告成本。",
+  "Reported by the agent.": "由助手报告。",
+  Dismiss: "关闭",
+  "Estimated cost of the next turn (≈{ctx}k context + prompt + reply). A projection, not a charge — the real cost is shown on the turn.":
+    "下一轮的预计成本（约 {ctx}k 上下文 + 提示 + 回复）。这是预估而非实际扣费，真实成本会在该轮显示。",
+  "This turn is projected at {cost}.": "本轮预计花费 {cost}。",
+  "Most of it ({cost}) is the conversation being resent every turn — not this message.":
+    "其中大部分（{cost}）来自每轮都会重新发送的对话历史，而非这条消息。",
+  "Lower output verbosity in Settings — fewer reply tokens, every turn.":
+    "在设置中降低输出详细程度，每轮回复的 token 更少。",
+  "Compact this session (~{cost} once) to shrink the resent context.":
+    "压缩此会话（一次约 {cost}）以缩减重发的上下文。",
+  "Or start a fresh session (Reset in the panel) if the history no longer helps the next task.":
+    "或者，如果历史对下一个任务已无帮助，就开启新会话（在面板中重置）。",
   "A run is stuck — force-reset clears the slot and starts the next message fresh":
     "任务卡住了 — 强制重置会清空运行槽并让下一条消息重新开始",
   "Cancel the active run first": "请先取消正在运行的任务",

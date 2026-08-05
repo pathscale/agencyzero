@@ -1,10 +1,21 @@
 import { EmptyState } from "@pathscale/ui";
-import { createEffect, createSignal, For, type JSX, Match, Show, Switch, untrack } from "solid-js";
+import {
+  createEffect,
+  createMemo,
+  createSignal,
+  For,
+  type JSX,
+  Match,
+  Show,
+  Switch,
+  untrack,
+} from "solid-js";
 import { Icon } from "~/components/Icon";
 import { ApprovalCard } from "~/features/project/ApprovalCard";
 import { CopyMessageButton, InlineText, MessageBody } from "~/features/project/MessageBody";
 import { isRetryableStop, isTransientStop, relativeTime } from "~/lib/format";
 import { AGENT_LABELS } from "~/lib/labels";
+import { costLabel, estimateTurnCost } from "~/lib/pricing";
 import { compactCount } from "~/lib/stats";
 import { tx } from "~/stores/i18n";
 import { type RunStatus, useNow, useWorkspace } from "~/stores/workspace";
@@ -69,6 +80,20 @@ export function TranscriptPane(props: {
   const trackScroll = (): void => {
     setPinned(scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight < 48);
   };
+
+  /*
+   * Answered questions first (as resolved history), then still-open ones, so
+   * the questions awaiting an answer land last — nearest the composer, none
+   * hidden above an answered one. A stable partition keeps each group in its
+   * original chronological order rather than re-sorting by time.
+   */
+  const orderedQuestions = createMemo(() => {
+    const all = state.questions[props.project.id] ?? [];
+    return [
+      ...all.filter((question) => question.answered),
+      ...all.filter((question) => !question.answered),
+    ];
+  });
 
   // Follow the tail as content arrives: new messages, streaming deltas, the
   // status line appearing. Reading these is what subscribes the effect;
@@ -156,10 +181,13 @@ export function TranscriptPane(props: {
             erases the exchange the reply was part of. Answered ones render
             resolved (dimmed, no button); open ones keep their urgency colour
             and the Answer control. They used to float over the composer and
-            looked like transient input chrome rather than part of the turn. */}
-        <For each={state.questions[props.project.id] ?? []}>
-          {(question) => <QuestionCard question={question} />}
-        </For>
+            looked like transient input chrome rather than part of the turn.
+
+            Answered first, then open — so on a restart with several questions
+            the ones still needing an answer sit last, nearest the composer,
+            and none is buried above an answered one where it would be missed.
+            Chronological within each group; a stable sort keeps that order. */}
+        <For each={orderedQuestions()}>{(question) => <QuestionCard question={question} />}</For>
         {/* The run is blocked on this question; it renders where you read. */}
         <Show when={state.pendingApprovals[props.project.id]}>
           {(approval) => <ApprovalCard projectId={props.project.id} approval={approval()} />}
@@ -475,8 +503,54 @@ function AgentBubble(props: { message: Message; onRetry?: () => void }): JSX.Ele
        * different places and the eye had to go looking. A timestamp is what
        * the message turned out to be, not an announcement before it.
        */}
-      <MessageTime at={props.message.createdAt} />
+      <div class="flex items-center gap-2">
+        <MessageTime at={props.message.createdAt} />
+        <MessageCost message={props.message} />
+      </div>
     </div>
+  );
+}
+
+/**
+ * What this turn cost, beside its timestamp.
+ *
+ * Claude reports a real `costUsd`, shown plainly. Codex reports tokens but no
+ * cost, so its figure is estimated from the price table and labelled "est." —
+ * the honesty is in the word, since a guessed cost dressed as a real one would
+ * be worse than none. Absent when there is no usage yet or the model has no
+ * price on file.
+ */
+function MessageCost(props: { message: Message }): JSX.Element {
+  const { state } = useWorkspace();
+  const cost = createMemo<{ usd: number; estimated: boolean } | null>(() => {
+    const usage = props.message.usage;
+    if (!usage) return null;
+    if (typeof usage.costUsd === "number" && Number.isFinite(usage.costUsd)) {
+      return { usd: usage.costUsd, estimated: false };
+    }
+    const table = state.pricing;
+    if (!table) return null;
+    const usd = estimateTurnCost(table, props.message.model, usage);
+    return usd === null ? null : { usd, estimated: true };
+  });
+
+  return (
+    <Show when={cost()}>
+      {(value) => (
+        <span
+          title={
+            value().estimated
+              ? tx("Estimated from token counts — this agent does not report a cost.")
+              : tx("Reported by the agent.")
+          }
+          class="shrink-0 font-mono text-[10.5px] text-az-faint"
+        >
+          {value().estimated
+            ? tx("est. {cost}", { cost: costLabel(value().usd) })
+            : costLabel(value().usd)}
+        </span>
+      )}
+    </Show>
   );
 }
 

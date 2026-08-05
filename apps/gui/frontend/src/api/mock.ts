@@ -506,6 +506,27 @@ export function createMockApi(): AgencyZeroApi {
       return settle(models);
     },
 
+    // A representative slice of the real table so the preview's cost estimate
+    // renders with plausible numbers rather than "no price on file".
+    pricingTable: () =>
+      settle({
+        rows: [
+          { key: "claude-opus", input: 5.0, output: 25.0, cacheRead: 0.5 },
+          { key: "claude-fable", input: 10.0, output: 50.0, cacheRead: 1.0 },
+          { key: "claude-sonnet", input: 3.0, output: 15.0, cacheRead: 0.3 },
+          { key: "claude-haiku", input: 1.0, output: 5.0, cacheRead: 0.1 },
+          { key: "gpt-5.4-mini", input: 0.75, output: 4.5, cacheRead: 0.075 },
+          { key: "gpt-5.6-sol", input: 5.0, output: 30.0, cacheRead: 0.5 },
+          { key: "gpt-5.6-terra", input: 2.0, output: 12.0, cacheRead: 0.2 },
+          { key: "gpt-5.6-luna", input: 0.2, output: 1.2, cacheRead: 0.02 },
+          { key: "gpt-5.5", input: 5.0, output: 30.0, cacheRead: 0.5 },
+          { key: "gpt-5.4", input: 2.5, output: 15.0, cacheRead: 0.25 },
+        ],
+        cacheWriteMultiple: 1.25,
+        warnUsd: 0.5,
+        highUsd: 2.0,
+      }),
+
     /*
      * There is no database outside Tauri, so this reports the shape without
      * claiming a real path, and `isEditable: false` keeps the browser from

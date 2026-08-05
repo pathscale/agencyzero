@@ -28,6 +28,7 @@ import type {
   Message,
   PendingApproval,
   Permission,
+  PricingTable,
   Project,
   ProjectItem,
   ProjectStatus,
@@ -92,6 +93,8 @@ type WorkspaceState = {
   agents: AgentStatus[];
   /** Every agent's catalogue, for the Settings picker. Empty until boot ends. */
   models: AgentModels[];
+  /** The per-token price table, for the composer's live cost estimate. Null until boot ends. */
+  pricing: PricingTable | null;
   /** Where the tables were opened from. Null until boot ends. */
   dataLocation: DataLocationView | null;
   /** Where a new project runs. Null until boot ends. */
@@ -323,6 +326,7 @@ function createWorkspace() {
     settings: null,
     agents: [],
     models: [],
+    pricing: null,
     dataLocation: null,
     workspaceRoot: null,
     quota: null,
@@ -669,7 +673,7 @@ function createWorkspace() {
       await subscribe(backend);
 
       log.info("boot: hydrating");
-      const [projects, settings, agents, models, dataLocation, workspaceRoot, rateLimits] =
+      const [projects, settings, agents, models, pricing, dataLocation, workspaceRoot, rateLimits] =
         await Promise.all([
           backend.listProjects(),
           backend.getSettings(),
@@ -677,6 +681,7 @@ function createWorkspace() {
           // Compiled catalogues only. Discovery spawns a CLI per agent, which is
           // too slow to sit in front of the first paint; Settings can ask for it.
           backend.listModels(false),
+          backend.pricingTable(),
           backend.getDataLocation(),
           backend.getWorkspaceRoot(),
           backend.listRateLimits(),
@@ -692,6 +697,7 @@ function createWorkspace() {
         setState("settings", settings);
         setState("agents", reconcile(agents));
         setState("models", reconcile(models));
+        setState("pricing", pricing);
         setState("dataLocation", dataLocation);
         setState("workspaceRoot", workspaceRoot);
         setState(

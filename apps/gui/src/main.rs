@@ -8,6 +8,7 @@ mod log;
 mod models;
 mod notes;
 mod per_turn;
+mod pricing;
 mod projects;
 mod prs;
 mod questions;
@@ -106,6 +107,7 @@ const IMPLEMENTED: &[&str] = &[
     "clear_study_events",
     "list_agent_status",
     "list_models",
+    "pricing_table",
     "log_frontend",
     "get_log_path",
     "list_table_sizes",
@@ -1158,6 +1160,7 @@ fn main() {
             set_settings,
             list_agent_status,
             models::list_models,
+            pricing::pricing_table,
             log_frontend,
             get_log_path,
             list_table_sizes,

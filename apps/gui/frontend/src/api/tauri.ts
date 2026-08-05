@@ -82,6 +82,7 @@ export function createTauriApi(): AgencyZeroApi {
     claudeUsage: () => call("claude_usage"),
     listAgentStatus: (recheck) => call("list_agent_status", { recheck }),
     listModels: (discover) => call("list_models", { discover }),
+    pricingTable: () => call("pricing_table", {}),
     listTableSizes: () => call("list_table_sizes"),
     openExternal: (url) => call("open_external", { url }),
     getDataLocation: () => call("get_data_location"),

@@ -13,6 +13,7 @@ import type {
   Message,
   PendingApproval,
   Permission,
+  PricingTable,
   Project,
   ProjectItem,
   ProjectStatus,
@@ -150,6 +151,13 @@ export interface AgencyZeroApi {
    * be asked.
    */
   listModels(discover: boolean): Promise<AgentModels[]>;
+  /**
+   * The per-token price table. Fetched once and cached; the composer's live
+   * cost estimate is then computed locally so it can update on every keystroke
+   * and model switch without a round-trip. Prices are a moving target — a
+   * turn's real cost, which comes back afterwards, always wins over the guess.
+   */
+  pricingTable(): Promise<PricingTable>;
   /**
    * How much disk each table holds, largest first.
    *

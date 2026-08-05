@@ -511,6 +511,23 @@ const en = {
   "Force reset": "Force reset",
   "Confirm force reset": "Confirm force reset",
   "Could not reset:": "Could not reset:",
+  "~{cost}": "~{cost}",
+  "est. {cost}": "est. {cost}",
+  "Estimated from token counts — this agent does not report a cost.":
+    "Estimated from token counts — this agent does not report a cost.",
+  "Reported by the agent.": "Reported by the agent.",
+  Dismiss: "Dismiss",
+  "Estimated cost of the next turn (≈{ctx}k context + prompt + reply). A projection, not a charge — the real cost is shown on the turn.":
+    "Estimated cost of the next turn (≈{ctx}k context + prompt + reply). A projection, not a charge — the real cost is shown on the turn.",
+  "This turn is projected at {cost}.": "This turn is projected at {cost}.",
+  "Most of it ({cost}) is the conversation being resent every turn — not this message.":
+    "Most of it ({cost}) is the conversation being resent every turn — not this message.",
+  "Lower output verbosity in Settings — fewer reply tokens, every turn.":
+    "Lower output verbosity in Settings — fewer reply tokens, every turn.",
+  "Compact this session (~{cost} once) to shrink the resent context.":
+    "Compact this session (~{cost} once) to shrink the resent context.",
+  "Or start a fresh session (Reset in the panel) if the history no longer helps the next task.":
+    "Or start a fresh session (Reset in the panel) if the history no longer helps the next task.",
   "A run is stuck — force-reset clears the slot and starts the next message fresh":
     "A run is stuck — force-reset clears the slot and starts the next message fresh",
   "Cancel the active run first": "Cancel the active run first",
