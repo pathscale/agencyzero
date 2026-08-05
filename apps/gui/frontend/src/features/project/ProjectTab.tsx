@@ -187,24 +187,6 @@ export function ProjectTab(props: { tab: Tab; project: Project }): JSX.Element {
             class="min-w-0 flex-1 font-semibold text-[14.5px] text-az-title"
             inputClass="font-semibold text-[14.5px]"
           />
-          <button
-            type="button"
-            onClick={() => setPrefs("projectPanelVisible", (visible) => !visible)}
-            aria-pressed={prefs.projectPanelVisible}
-            aria-label={tx(
-              prefs.projectPanelVisible ? "Hide the project sidebar" : "Show the project sidebar",
-            )}
-            title={tx(
-              prefs.projectPanelVisible ? "Hide the project sidebar" : "Show the project sidebar",
-            )}
-            class={`flex size-7 shrink-0 items-center justify-center rounded-md border transition-colors ${
-              prefs.projectPanelVisible
-                ? "border-primary/25 bg-primary/10 text-primary"
-                : "border-az-hairline text-az-muted hover:text-base-content"
-            }`}
-          >
-            <Icon name="layout-grid" class="text-[13px]" />
-          </button>
           {/*
             Turns and cost live here rather than under the prompt. They describe
             the conversation as a whole, which is what this label already names,
@@ -294,6 +276,31 @@ export function ProjectTab(props: { tab: Tab; project: Project }): JSX.Element {
               </div>
             )}
           </Show>
+
+          {/*
+            The sidebar toggle lives at the far right of the header, hard against
+            the panel edge the sidebar attaches to, so the control that shows and
+            hides the right column sits next to that column rather than beside the
+            project name where it acted on something far away.
+          */}
+          <button
+            type="button"
+            onClick={() => setPrefs("projectPanelVisible", (visible) => !visible)}
+            aria-pressed={prefs.projectPanelVisible}
+            aria-label={tx(
+              prefs.projectPanelVisible ? "Hide the project sidebar" : "Show the project sidebar",
+            )}
+            title={tx(
+              prefs.projectPanelVisible ? "Hide the project sidebar" : "Show the project sidebar",
+            )}
+            class={`flex size-7 shrink-0 items-center justify-center rounded-md border transition-colors ${
+              prefs.projectPanelVisible
+                ? "border-primary/25 bg-primary/10 text-primary"
+                : "border-az-hairline text-az-muted hover:text-base-content"
+            }`}
+          >
+            <Icon name="layout-grid" class="text-[13px]" />
+          </button>
         </header>
 
         <TranscriptPane

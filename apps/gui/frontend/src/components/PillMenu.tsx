@@ -44,7 +44,7 @@ export function PillMenu<T extends string>(props: PillMenuProps<T>): JSX.Element
       <Dropdown.Trigger
         aria-label={props.label}
         disabled={props.isDisabled}
-        class={`flex h-[30px] shrink-0 items-center gap-[7px] rounded-full px-3 text-[12.5px] transition-colors ${
+        class={`flex h-[26px] shrink-0 items-center gap-[7px] rounded-full px-3 text-[12.5px] transition-colors ${
           props.variant === "outline"
             ? "border border-primary/35 text-az-body hover:border-primary/60 hover:text-az-title"
             : "border border-primary/35 bg-base-300 hover:border-primary/60"

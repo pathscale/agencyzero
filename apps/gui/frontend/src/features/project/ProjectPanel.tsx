@@ -876,17 +876,19 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
                * wrapped into a four-word column while the buttons kept their
                * space whether or not anyone was reaching for them.
                */
-              class={`group flex flex-col rounded-[9px] transition-colors ${
+              class={`group flex items-center rounded-[9px] transition-colors ${
                 item.status === "active"
                   ? "bg-base-300 shadow-[inset_2px_0_0_var(--color-primary)]"
                   : // Zebra striping so a long list reads row by row; the hover
-                    // still lifts on top of whichever stripe is underneath.
+                    // still lifts on top of whichever stripe is underneath. The
+                    // odd stripe is deliberately not faint: barely-visible
+                    // striping reads as a rendering smudge, not a pattern.
                     index() % 2 === 1
-                    ? "bg-white/[0.02] hover:bg-white/5"
+                    ? "bg-white/[0.055] hover:bg-white/[0.08]"
                     : "hover:bg-white/5"
               }`}
             >
-              <div class="flex items-start gap-1">
+              <div class="flex min-w-0 flex-1 items-center gap-1">
                 {/*
                  * The marker is the status control, and the only one.
                  *
@@ -901,13 +903,13 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
                   onClick={() => advance(item)}
                   aria-label={tx("Change the status of {name}", { name: item.title })}
                   title={`${statusSuffix(item.status)} — click for ${statusLabel(nextStatus(item.status))}`}
-                  class="mt-0.5 ml-1.5 flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-full transition-colors hover:bg-primary/12 focus-visible:bg-primary/12"
+                  class="ml-1.5 flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-full transition-colors hover:bg-primary/12 focus-visible:bg-primary/12"
                 >
                   <ItemMarker status={item.status} />
                 </button>
                 <div
                   data-selectable
-                  class="flex min-w-0 flex-1 items-baseline gap-2.5 px-2.5 py-1 text-left"
+                  class="flex min-w-0 flex-1 items-baseline gap-2.5 px-2.5 py-1.5 text-left"
                 >
                   <span
                     class={`min-w-0 flex-1 text-[12.5px] ${
@@ -993,10 +995,12 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
                 </div>
               </div>
               {/*
-               * Bottom right, and only ink when the row is hovered or busy.
-               * These act on the row; they are not part of reading it.
+               * Inline on the right of the row, only ink when hovered or busy.
+               * These act on the row; they are not part of reading it. Inline
+               * rather than a second line below the title: the extra line was
+               * dead vertical space and made the bottom of the list look off.
                */}
-              <div class="flex items-center justify-end gap-1 px-2.5 pb-1.5 opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100">
+              <div class="flex shrink-0 items-center justify-end gap-1 pr-2 opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100">
                 <Show when={item.status !== "finished"}>
                   <button
                     type="button"

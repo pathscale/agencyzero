@@ -142,11 +142,31 @@ export const ITEM_LADDER: ProjectStatus[] = [
   "canceled",
 ];
 
+/**
+ * The rungs a marker click cycles through: the working states only.
+ *
+ * `finished` and `canceled` are left out on purpose. They are terminal, and
+ * under the default `completed_items` handling a row that reaches one drops out
+ * of the open list, so a click that lands there reads as the row being deleted.
+ * The cycle now loops shipped back to new and stays in the visible set; the end
+ * states are still reachable through the owner's own finish/cancel path, just
+ * not by this toggle.
+ */
+const CYCLE_LADDER: ProjectStatus[] = [
+  "new",
+  "pending",
+  "planning",
+  "active",
+  "questions",
+  "shipped",
+];
+
 /** The next status a click on the marker means. */
 export function nextStatus(status: ProjectStatus): ProjectStatus {
-  const at = ITEM_LADDER.indexOf(status);
-  // An unknown future value starts at the first known rung.
-  return at === -1 ? "new" : (ITEM_LADDER[(at + 1) % ITEM_LADDER.length] ?? "new");
+  const at = CYCLE_LADDER.indexOf(status);
+  // A terminal or unknown state re-enters the cycle at the first rung rather
+  // than advancing off the end into another terminal state.
+  return at === -1 ? "new" : (CYCLE_LADDER[(at + 1) % CYCLE_LADDER.length] ?? "new");
 }
 
 /** Models the composer offers. Real values will come from the agent probe. */

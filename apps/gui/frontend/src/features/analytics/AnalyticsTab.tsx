@@ -78,13 +78,13 @@ export function AnalyticsTab(): JSX.Element {
 
 /** The six headline totals, in a responsive grid of tiles. */
 function StatTiles(props: { usage: UsageAnalytics }): JSX.Element {
-  // The headline numbers carry a colour, not the same flat grey: cost and the
-  // processed total are what the owner scans for, so they read at a glance
-  // instead of blending into the label above them. The four token components
-  // keep the neutral strong tone; they are the decomposition, not the headline.
+  // Every headline number carries a colour, none left flat grey. Cost,
+  // processed and turns are the figures the owner scans for, so they take the
+  // accent; the four token components take the same hues as the day-series
+  // legend so the tiles and the bars read as one system.
   const tiles = createMemo(() => [
     { label: tx("Total cost"), value: dollars(props.usage.totalUsd), tone: "text-primary" },
-    { label: tx("Input"), value: tokens(props.usage.totalInputTokens), tone: "text-az-strong" },
+    { label: tx("Input"), value: tokens(props.usage.totalInputTokens), tone: "text-primary" },
     { label: tx("Output"), value: tokens(props.usage.totalOutputTokens), tone: "text-success" },
     {
       label: tx("Cache read"),
@@ -101,7 +101,7 @@ function StatTiles(props: { usage: UsageAnalytics }): JSX.Element {
       value: tokens(props.usage.totalProcessedTokens),
       tone: "text-primary",
     },
-    { label: tx("Turns"), value: `${props.usage.turns}`, tone: "text-az-strong" },
+    { label: tx("Turns"), value: `${props.usage.turns}`, tone: "text-accent" },
   ]);
 
   return (
@@ -110,7 +110,7 @@ function StatTiles(props: { usage: UsageAnalytics }): JSX.Element {
         {(tile) => (
           <div class="rounded-xl border border-az-hairline bg-base-100 px-3.5 py-3">
             <div class="text-[11px] text-az-muted">{tile.label}</div>
-            <div class={`mt-1 font-mono font-semibold text-[17px] ${tile.tone}`}>{tile.value}</div>
+            <div class={`mt-1 font-bold font-mono text-[20px] ${tile.tone}`}>{tile.value}</div>
           </div>
         )}
       </For>
