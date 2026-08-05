@@ -1088,11 +1088,52 @@ impl From<&TaskLogEntryDto> for TaskLogRow {
 ///
 /// Finished rows are left out. They are the bulk of an old list and none of
 /// them is a thing the agent can act on, so they are cost without use.
+/// How much per-turn context a project re-sends.
+///
+/// The snapshot (open items + tracked PRs) rides every user turn so the agent
+/// can name ids without asking; it is also the single biggest recurring token
+/// cost on a busy project, re-billed each turn. This lets the owner trade
+/// detail for tokens per project.
+///
+/// Stored in the kv table under `verbosity:<project_id>` rather than a project
+/// column: adding a column to the persisted `project` table would move the
+/// schema fingerprint and risk reading every existing row through the wrong
+/// layout. `Full` is the default and the behaviour before this existed.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Verbosity {
+    /// Every open item with id, status, title and reference; all tracked PRs.
+    Full,
+    /// Open items as `id · status` only — titles and references dropped, since
+    /// the agent has already seen them earlier in the conversation. PRs kept.
+    Compact,
+    /// Just the counts and a pointer to `list-items`. Near-zero per turn.
+    Minimal,
+}
+
+impl Verbosity {
+    fn parse(raw: &str) -> Self {
+        match raw {
+            "compact" => Self::Compact,
+            "minimal" => Self::Minimal,
+            _ => Self::Full,
+        }
+    }
+}
+
+/// Read a project's snapshot verbosity from the kv store, defaulting to `Full`.
+fn project_verbosity(tables: &crate::db::tables::Tables, project_id: &str) -> Verbosity {
+    tables
+        .kv_get(&format!("verbosity:{project_id}"))
+        .map(|raw| Verbosity::parse(&raw))
+        .unwrap_or(Verbosity::Full)
+}
+
 fn state_snapshot(
     tables: &crate::db::tables::Tables,
     project_id: &str,
     focus: Option<&str>,
 ) -> String {
+    let verbosity = project_verbosity(tables, project_id);
     let mut items: Vec<ProjectItemRow> = tables
         .project_item
         .select_by_project_id(project_id.to_string())
@@ -1119,25 +1160,45 @@ fn state_snapshot(
         out.push_str("Home Task Manager uses this same authoring surface for every mutation.");
     } else if items.is_empty() {
         out.push_str("This project has no open items.");
+    } else if verbosity == Verbosity::Minimal {
+        // The lightest form: a count and where to get the rest. The agent asks
+        // for the list only on the turns it actually needs ids.
+        out.push_str(&format!(
+            "This project has {} open item(s). Run `agency-tools list-items` \
+             for the ids and titles when you need to act on one.\n",
+            items.len()
+        ));
     } else {
         out.push_str("Open items in this project. Answer with the id, never the title:\n");
-        for row in items.iter().take(40) {
-            let reference = if row.reference.is_empty() {
-                String::new()
-            } else if let Some(url) = row.reference.strip_prefix("issue:") {
-                format!(" (issue {url})")
+        let cap = if verbosity == Verbosity::Compact {
+            80
+        } else {
+            40
+        };
+        for row in items.iter().take(cap) {
+            if verbosity == Verbosity::Compact {
+                // Id and status only: the title and reference were sent when the
+                // item was created and live in the conversation already, so
+                // re-sending them every turn is pure cost.
+                out.push_str(&format!("  {} · {}\n", row.id, row.status));
             } else {
-                format!(" (#{})", row.reference)
-            };
-            out.push_str(&format!(
-                "  {} · {} · {}{}\n",
-                row.id, row.status, row.title, reference
-            ));
+                let reference = if row.reference.is_empty() {
+                    String::new()
+                } else if let Some(url) = row.reference.strip_prefix("issue:") {
+                    format!(" (issue {url})")
+                } else {
+                    format!(" (#{})", row.reference)
+                };
+                out.push_str(&format!(
+                    "  {} · {} · {}{}\n",
+                    row.id, row.status, row.title, reference
+                ));
+            }
         }
-        if items.len() > 40 {
+        if items.len() > cap {
             out.push_str(&format!(
                 "  ... {} more open items omitted\n",
-                items.len() - 40
+                items.len() - cap
             ));
         }
     }
@@ -3334,6 +3395,49 @@ pub async fn get_usage_analytics(state: State<'_, AppState>) -> Result<UsageAnal
         largest_turn: largest,
         turns: ledger.len(),
     })
+}
+
+/// Read a project's per-turn context verbosity: `"full"`, `"compact"` or
+/// `"minimal"`. Defaults to `"full"` when never set.
+///
+/// # Errors
+/// Infallible today; `Result` for signature stability.
+#[tauri::command]
+pub async fn get_project_verbosity(
+    state: State<'_, AppState>,
+    project_id: String,
+) -> Result<String, String> {
+    Ok(match project_verbosity(&state.tables, &project_id) {
+        Verbosity::Full => "full",
+        Verbosity::Compact => "compact",
+        Verbosity::Minimal => "minimal",
+    }
+    .to_string())
+}
+
+/// Set a project's per-turn context verbosity. Trades snapshot detail for
+/// tokens: `compact` drops item titles/references from the per-turn injection,
+/// `minimal` sends only a count. Unknown values are treated as `full`.
+///
+/// # Errors
+/// When the kv write fails.
+#[tauri::command]
+pub async fn set_project_verbosity(
+    state: State<'_, AppState>,
+    project_id: String,
+    verbosity: String,
+) -> Result<(), String> {
+    // Normalise through the parser so the store only ever holds a known value.
+    let normalized = match Verbosity::parse(&verbosity) {
+        Verbosity::Full => "full",
+        Verbosity::Compact => "compact",
+        Verbosity::Minimal => "minimal",
+    };
+    state
+        .tables
+        .kv_put(&format!("verbosity:{project_id}"), normalized.to_string())
+        .await
+        .map_err(|error| error.to_string())
 }
 
 /// What the Home task-manager screen needs that no other surface carries.
@@ -7082,6 +7186,19 @@ async fn checkpoint_if_due(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The stored value round-trips and anything unknown is the safe default,
+    /// so a record written by a newer build never silently blanks the snapshot.
+    #[test]
+    fn verbosity_parses_known_values_and_defaults_to_full() {
+        assert_eq!(Verbosity::parse("full"), Verbosity::Full);
+        assert_eq!(Verbosity::parse("compact"), Verbosity::Compact);
+        assert_eq!(Verbosity::parse("minimal"), Verbosity::Minimal);
+        // Unknown, empty and legacy values all fall back to Full rather than
+        // dropping the item list.
+        assert_eq!(Verbosity::parse(""), Verbosity::Full);
+        assert_eq!(Verbosity::parse("verbose"), Verbosity::Full);
+    }
 
     #[test]
     fn github_issues_are_canonical_and_pull_requests_are_refused() {

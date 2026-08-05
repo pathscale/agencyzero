@@ -483,6 +483,12 @@ const en = {
   "Lead with the answer and skip preambles for this project":
     "Lead with the answer and skip preambles for this project",
   "Concise responses for this project": "Concise responses for this project",
+  "Context detail": "Context detail",
+  "How much of the item list rides every turn — less means fewer tokens":
+    "How much of the item list rides every turn — less means fewer tokens",
+  "Per-turn context detail for this project": "Per-turn context detail for this project",
+  Full: "Full",
+  Compact: "Compact",
   "Icon sprite": "Icon sprite",
   Analytics: "Analytics",
   "token usage, summed from the usage ledger": "token usage, summed from the usage ledger",

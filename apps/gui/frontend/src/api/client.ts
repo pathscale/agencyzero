@@ -231,6 +231,11 @@ export interface AgencyZeroApi {
   getProjectConcise(projectId: string): Promise<boolean>;
   setProjectConcise(projectId: string, enabled: boolean): Promise<boolean>;
 
+  /** How much per-turn context this project re-sends: "full", "compact" or
+   *  "minimal". Trades snapshot detail for input tokens. */
+  getProjectVerbosity(projectId: string): Promise<string>;
+  setProjectVerbosity(projectId: string, verbosity: string): Promise<void>;
+
   getProjectNotes(projectId: string): Promise<string>;
   /** Returns the text as stored — clamped to the budget, so the editor shows
    *  what the agent will actually be told rather than what was typed. */
