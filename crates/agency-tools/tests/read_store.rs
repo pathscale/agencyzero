@@ -6,15 +6,17 @@ use std::path::{Path, PathBuf};
 // `new` on the engine is a `PersistenceEngine` method and `load` a
 // `PersistedWorkTable` one, so both traits have to be in scope even though
 // nothing here names them.
+use agency_tools::project::{ProjectPersistenceEngine, ProjectRow, ProjectWorkTable};
+use agency_tools::project_item::{
+    ProjectItemPersistenceEngine, ProjectItemRow, ProjectItemWorkTable,
+};
 use worktable::PersistedWorkTable;
 use worktable::persistence::PersistenceEngine;
 use worktable::prelude::DiskConfig;
-use wt_tools::project::{ProjectPersistenceEngine, ProjectRow, ProjectWorkTable};
-use wt_tools::project_item::{ProjectItemPersistenceEngine, ProjectItemRow, ProjectItemWorkTable};
 
 /// A fresh directory per test, so parallel tests never share a store.
 fn temp_store(tag: &str) -> PathBuf {
-    let dir = std::env::temp_dir().join(format!("wt-tools-test-{}-{tag}", std::process::id()));
+    let dir = std::env::temp_dir().join(format!("agency-tools-test-{}-{tag}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     dir
@@ -107,8 +109,8 @@ async fn projects_round_trip_without_writing() {
     .await;
 
     let before = store_bytes(&dir);
-    let table = wt_tools::open_projects(&dir).await.unwrap();
-    let projects = wt_tools::list_projects(&table).unwrap();
+    let table = agency_tools::open_projects(&dir).await.unwrap();
+    let projects = agency_tools::list_projects(&table).unwrap();
 
     // Ordered by position, not by insertion or id.
     assert_eq!(projects.len(), 2);
@@ -135,22 +137,22 @@ async fn items_filter_and_search() {
     )
     .await;
 
-    let table = wt_tools::open_items(&dir).await.unwrap();
+    let table = agency_tools::open_items(&dir).await.unwrap();
 
-    let all = wt_tools::list_items(&table, None).unwrap();
+    let all = agency_tools::list_items(&table, None).unwrap();
     assert_eq!(all.len(), 3);
 
-    let only_a = wt_tools::list_items(&table, Some("proj-a")).unwrap();
+    let only_a = agency_tools::list_items(&table, Some("proj-a")).unwrap();
     assert_eq!(only_a.len(), 2);
     assert!(only_a.iter().all(|item| item.project_id == "proj-a"));
 
     // Case-insensitive substring, across projects.
-    let hits = wt_tools::search_items(&table, "DEPLOY").unwrap();
+    let hits = agency_tools::search_items(&table, "DEPLOY").unwrap();
     let ids: Vec<&str> = hits.iter().map(|item| item.id.as_str()).collect();
     assert_eq!(ids, ["item-1", "item-3"]);
 
     assert!(
-        wt_tools::search_items(&table, "nonexistent")
+        agency_tools::search_items(&table, "nonexistent")
             .unwrap()
             .is_empty()
     );
@@ -160,8 +162,8 @@ async fn items_filter_and_search() {
 async fn missing_store_reads_empty_and_creates_nothing() {
     let dir = temp_store("missing").join("never-written");
 
-    let table = wt_tools::open_items(&dir).await.unwrap();
-    assert!(wt_tools::list_items(&table, None).unwrap().is_empty());
+    let table = agency_tools::open_items(&dir).await.unwrap();
+    assert!(agency_tools::list_items(&table, None).unwrap().is_empty());
 
     // Graceful is not enough — the read must not have conjured a store the
     // GUI would later mistake for its own.
@@ -185,8 +187,8 @@ async fn reads_while_a_writer_holds_the_store() {
     writer.wait_for_ops().await.expect("project rows persist");
 
     // Writer still open, exactly like a running GUI.
-    let reader = wt_tools::open_projects(&dir).await.unwrap();
-    let projects = wt_tools::list_projects(&reader).unwrap();
+    let reader = agency_tools::open_projects(&dir).await.unwrap();
+    let projects = agency_tools::list_projects(&reader).unwrap();
     assert_eq!(projects.len(), 1);
     assert_eq!(projects[0].id, "proj-live");
 
@@ -199,7 +201,7 @@ async fn binary_prints_json_lines() {
     let dir = temp_store("binary");
     write_projects(&dir, vec![project("proj-cli", "From the CLI", 1)]).await;
 
-    let output = std::process::Command::new(env!("CARGO_BIN_EXE_wt-tools"))
+    let output = std::process::Command::new(env!("CARGO_BIN_EXE_agency-tools"))
         .env("AZ_DATA_DIR", &dir)
         .arg("list-projects")
         .output()
@@ -220,7 +222,7 @@ async fn binary_prints_json_lines() {
 
 #[test]
 fn binary_rejects_unknown_commands_on_stderr() {
-    let output = std::process::Command::new(env!("CARGO_BIN_EXE_wt-tools"))
+    let output = std::process::Command::new(env!("CARGO_BIN_EXE_agency-tools"))
         .arg("frobnicate")
         .output()
         .unwrap();

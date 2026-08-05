@@ -2808,7 +2808,7 @@ fn approval_signature(tool: &str, input: &serde_json::Value) -> String {
 }
 
 /// The remembered approval signatures for one project, from the
-/// `approval_rule` table — rows, not a kv blob, so `wt-tools` can audit
+/// `approval_rule` table — rows, not a kv blob, so `agency-tools` can audit
 /// grants and a later per-rule delete is a `delete`, not a rewrite.
 fn load_rules(tables: &crate::db::tables::Tables, project_id: &str) -> Vec<String> {
     tables
@@ -3133,6 +3133,27 @@ pub struct UsageModelDto {
     pub turns: usize,
 }
 
+/// The single turn that processed the most tokens.
+///
+/// Answers the question a big bill raises: is one request enormous, or is it
+/// many ordinary turns adding up? `processedTokens` is input + cache read +
+/// cache write + output for that one turn — what the model actually handled,
+/// not the cumulative context. No turn here is the "90M" of a wedged live
+/// session: that figure is a running session's context size, which no table
+/// stores; these are finished, priced turns.
+#[derive(Debug, Clone, Default, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UsageLargestTurnDto {
+    pub at: String,
+    pub model: String,
+    pub input_tokens: i64,
+    pub cache_read_tokens: i64,
+    pub cache_write_tokens: i64,
+    pub output_tokens: i64,
+    pub processed_tokens: i64,
+    pub cost_usd: f64,
+}
+
 /// Everything the analytics view needs, in one call.
 #[derive(Debug, Clone, Default, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -3146,6 +3167,10 @@ pub struct UsageAnalyticsDto {
     pub total_output_tokens: i64,
     pub total_cache_read_tokens: i64,
     pub total_cache_write_tokens: i64,
+    /// input + output + cache read + cache write, across every priced turn.
+    pub total_processed_tokens: i64,
+    /// The single heaviest turn, or absent when the ledger is empty.
+    pub largest_turn: Option<UsageLargestTurnDto>,
     pub turns: usize,
 }
 
@@ -3245,6 +3270,55 @@ pub async fn get_usage_analytics(state: State<'_, AppState>) -> Result<UsageAnal
         total_write += write;
     }
 
+    // The heaviest single turn. The cache table carries the read/write split
+    // per turn keyed by `at`; join each ledger turn to its cache row by that
+    // timestamp so one turn's whole decomposition lands together. A ledger turn
+    // with no cache row (history predating the cache table) still ranks on its
+    // input+output alone.
+    let cache_by_at: std::collections::HashMap<&str, (i64, i64, i64)> = cache
+        .iter()
+        .map(|row| {
+            (
+                row.at.as_str(),
+                (
+                    row.input_tokens,
+                    row.cache_read_tokens,
+                    row.cache_write_tokens,
+                ),
+            )
+        })
+        .collect();
+    let mut largest: Option<UsageLargestTurnDto> = None;
+    for row in &ledger {
+        let (c_input, read, write) = cache_by_at
+            .get(row.at.as_str())
+            .copied()
+            .unwrap_or((0, 0, 0));
+        // Prefer the cache row's input when present (the full decomposition);
+        // fall back to the ledger's uncached input for pre-cache-table history.
+        let input = if c_input > 0 {
+            c_input
+        } else {
+            row.input_tokens
+        };
+        let processed = input + read + write + row.output_tokens;
+        let bigger = largest
+            .as_ref()
+            .is_none_or(|current| processed > current.processed_tokens);
+        if bigger {
+            largest = Some(UsageLargestTurnDto {
+                at: row.at.clone(),
+                model: row.model.clone(),
+                input_tokens: input,
+                cache_read_tokens: read,
+                cache_write_tokens: write,
+                output_tokens: row.output_tokens,
+                processed_tokens: processed,
+                cost_usd: row.cost_micro as f64 / 1_000_000.0,
+            });
+        }
+    }
+
     let mut models: Vec<UsageModelDto> = by_model.into_values().collect();
     models.sort_by(|a, b| b.cost_usd.total_cmp(&a.cost_usd));
 
@@ -3256,6 +3330,8 @@ pub async fn get_usage_analytics(state: State<'_, AppState>) -> Result<UsageAnal
         total_output_tokens: total_output,
         total_cache_read_tokens: total_read,
         total_cache_write_tokens: total_write,
+        total_processed_tokens: total_input + total_output + total_read + total_write,
+        largest_turn: largest,
         turns: ledger.len(),
     })
 }

@@ -1291,7 +1291,7 @@ fn main() {
                         "boot",
                         "the store at {:?} could not be read ({reason}), so it is left exactly \
                          as it is and this session runs on scratch, keeping nothing. Inspect it \
-                         read-only with `AZ_DATA_DIR={:?} wt-tools list-messages`, or carry what \
+                         read-only with `AZ_DATA_DIR={:?} agency-tools list-messages`, or carry what \
                          is readable forward with `wt-migrate <that path> <a new path>`.",
                         location.path,
                         location.path

@@ -10,7 +10,7 @@ libc = "0.2"
 worktable = { git = "https://github.com/pathscale/WorkTable", rev = "7225a224768b5584bd93909f0c9bce958ed2be92" }
 # The `worktable!` and `worktable_version!` macros emit code that names these by
 # bare path rather than through a re-export, so a consumer of the macros has to
-# declare them too. Kept identical to the block in wt-tools and apps/gui: the
+# declare them too. Kept identical to the block in agency-tools and apps/gui: the
 # schema files compiled here are the gui's own (see src/lib.rs).
 eyre = "0.6"
 rkyv = { version = "0.8.9", features = ["uuid-1"] }

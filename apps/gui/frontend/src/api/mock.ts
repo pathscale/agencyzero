@@ -780,6 +780,17 @@ export function createMockApi(): AgencyZeroApi {
         totalOutputTokens: 109_700,
         totalCacheReadTokens: 2_820_000,
         totalCacheWriteTokens: 386_000,
+        totalProcessedTokens: 3_584_800,
+        largestTurn: {
+          at: "2026-08-05T14:22:07.000Z",
+          model: "claude-opus-4",
+          inputTokens: 4_200,
+          cacheReadTokens: 182_000,
+          cacheWriteTokens: 9_100,
+          outputTokens: 3_400,
+          processedTokens: 198_700,
+          costUsd: 0.61,
+        },
         turns: 341,
       }),
 

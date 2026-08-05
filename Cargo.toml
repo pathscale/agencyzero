@@ -7,7 +7,7 @@ members = [
     "crates/core",
     "crates/mcp-proxy",
     "crates/wt-migrate",
-    "crates/wt-tools",
+    "crates/agency-tools",
 ]
 
 [workspace.package]

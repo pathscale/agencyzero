@@ -65,6 +65,7 @@ export function AnalyticsTab(): JSX.Element {
             <>
               <StatTiles usage={usage()} />
               <CacheEfficiency usage={usage()} />
+              <LargestTurn usage={usage()} />
               <DaySeries days={usage().days} />
               <ModelBreakdown models={usage().models} />
             </>
@@ -83,6 +84,7 @@ function StatTiles(props: { usage: UsageAnalytics }): JSX.Element {
     { label: tx("Output"), value: tokens(props.usage.totalOutputTokens) },
     { label: tx("Cache read"), value: tokens(props.usage.totalCacheReadTokens) },
     { label: tx("Cache write"), value: tokens(props.usage.totalCacheWriteTokens) },
+    { label: tx("Processed"), value: tokens(props.usage.totalProcessedTokens) },
     { label: tx("Turns"), value: `${props.usage.turns}` },
   ]);
 
@@ -129,6 +131,44 @@ function CacheEfficiency(props: { usage: UsageAnalytics }): JSX.Element {
         )}
       </p>
     </div>
+  );
+}
+
+/**
+ * The single heaviest turn, spelled out.
+ *
+ * This is the panel that answers "is one request enormous?" directly: it names
+ * the biggest turn and its decomposition. If this number is small but the bill
+ * is large, the spend is many ordinary turns, not one runaway request — and the
+ * lever is fewer/cheaper turns, not compaction. If it is large, the context is
+ * bloated and compaction is the lever.
+ */
+function LargestTurn(props: { usage: UsageAnalytics }): JSX.Element {
+  return (
+    <Show when={props.usage.largestTurn}>
+      {(turn) => (
+        <div class="rounded-xl border border-az-hairline bg-base-100 px-4 py-3.5">
+          <div class="flex items-baseline justify-between gap-3">
+            <span class="font-medium text-[12.5px] text-az-title">{tx("Largest single turn")}</span>
+            <span class="font-mono text-[11px] text-az-muted">{turn().model}</span>
+          </div>
+          <div class="mt-1 flex items-baseline gap-2">
+            <span class="font-mono font-semibold text-[24px] text-az-strong">
+              {tokens(turn().processedTokens)}
+            </span>
+            <span class="text-[12px] text-az-muted">{tx("tokens processed")}</span>
+            <span class="ml-auto font-mono text-[13px] text-az-title">
+              {dollars(turn().costUsd)}
+            </span>
+          </div>
+          <div class="mt-1.5 font-mono text-[11px] text-az-muted">
+            {tx("in")} {tokens(turn().inputTokens)} · {tx("read")}{" "}
+            {tokens(turn().cacheReadTokens)} · {tx("write")} {tokens(turn().cacheWriteTokens)} ·{" "}
+            {tx("out")} {tokens(turn().outputTokens)}
+          </div>
+        </div>
+      )}
+    </Show>
   );
 }
 
