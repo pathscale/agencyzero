@@ -312,6 +312,7 @@ function SettingsSection(props: { project: Project }): JSX.Element {
   const [path, setPath] = createSignal("");
 
   const moderatorDefault = () => state.settings?.moderator.enabled ?? true;
+  const isRunning = () => (state.running[props.project.id] ?? []).length > 0;
 
   /** The native panel, then straight into the list: no second confirmation. */
   async function pick(): Promise<void> {
@@ -449,6 +450,8 @@ function SettingsSection(props: { project: Project }): JSX.Element {
 
         <ApprovalRules projectId={props.project.id} />
 
+        <ResetSession project={props.project} running={isRunning()} />
+
         <div class="flex gap-[7px] pt-0.5 text-[11px] text-az-faint leading-[1.5]">
           <Icon name="info" class="relative top-0.5 shrink-0 text-[12px]" />
           {tx(
@@ -557,6 +560,89 @@ function ContextDetailSelect(props: { projectId: string }): JSX.Element {
         <option value="minimal">{tx("Minimal")}</option>
       </select>
     </div>
+  );
+}
+
+/**
+ * The recovery path for a wedged conversation: forget the resume pointer so the
+ * next message starts fresh, keeping the transcript.
+ *
+ * When a run is killed for going idle the session id survives so the next turn
+ * resumes — right for a transient stall, wrong when the session itself is the
+ * problem (a Codex thread that re-enters the same dead wait on resume). This is
+ * the way out that is not "delete the project". Two-step, because it breaks
+ * conversation continuity; hidden until there is a session to reset; disabled
+ * while a run is live (the backend refuses then too).
+ */
+function ResetSession(props: { project: Project; running: boolean }): JSX.Element {
+  const { actions } = useWorkspace();
+  const [confirming, setConfirming] = createSignal(false);
+  const [busy, setBusy] = createSignal(false);
+
+  const agents = (): string[] =>
+    Object.entries(props.project.sessions ?? {})
+      .filter(([, id]) => Boolean(id))
+      .map(([agent]) => agent);
+
+  const reset = async (): Promise<void> => {
+    setBusy(true);
+    try {
+      // Every agent that has a session on this project, so a project that ran
+      // both providers is fully reset rather than half.
+      await Promise.all(agents().map((agent) => actions.resetProjectSession(props.project.id, agent)));
+      setConfirming(false);
+    } catch (cause) {
+      log.error(`could not reset the session: ${describeError(cause)}`);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Show when={agents().length > 0}>
+      <div class="flex items-center gap-2.5">
+        <Icon name="history" class="shrink-0 text-[14px] text-primary/75" />
+        <span class="min-w-0 flex-1 text-[12px] text-az-body">
+          {tx("Reset session")}
+          <span class="mt-px block text-[11px] text-az-muted">
+            {tx("Start the next message fresh — the recovery path for a wedged conversation")}
+          </span>
+        </span>
+        <Show
+          when={confirming()}
+          fallback={
+            <button
+              type="button"
+              class="btn btn-xs border-az-hairline bg-base-100 text-[11px]"
+              disabled={props.running}
+              title={props.running ? tx("Cancel the active run first") : undefined}
+              onClick={() => setConfirming(true)}
+            >
+              {tx("Reset")}
+            </button>
+          }
+        >
+          <div class="flex items-center gap-1.5">
+            <button
+              type="button"
+              class="btn btn-xs btn-error text-[11px]"
+              disabled={busy() || props.running}
+              onClick={() => void reset()}
+            >
+              {tx("Confirm reset")}
+            </button>
+            <button
+              type="button"
+              class="btn btn-xs btn-ghost text-[11px]"
+              disabled={busy()}
+              onClick={() => setConfirming(false)}
+            >
+              {tx("Cancel")}
+            </button>
+          </div>
+        </Show>
+      </div>
+    </Show>
   );
 }
 

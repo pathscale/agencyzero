@@ -473,6 +473,11 @@ const zh = {
   "Per-turn context detail for this project": "此项目每轮的上下文详情",
   Full: "完整",
   Compact: "精简",
+  "Reset session": "重置会话",
+  "Start the next message fresh — the recovery path for a wedged conversation":
+    "下一条消息重新开始 — 卡住会话的恢复方式",
+  "Confirm reset": "确认重置",
+  "Cancel the active run first": "请先取消正在运行的任务",
   "Icon sprite": "图标精灵",
   Analytics: "分析",
   "token usage, summed from the usage ledger": "令牌用量，按用量账本汇总",
