@@ -2775,6 +2775,22 @@ fn load_rules(tables: &crate::db::tables::Tables, project_id: &str) -> Vec<Strin
 /// become a denial rather than a run that hangs until the agent's own timeout.
 const APPROVAL_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30 * 60);
 
+/// How long a live run may emit *nothing* before it is treated as wedged.
+///
+/// A run that is working streams constantly — reasoning deltas, text, tool
+/// events — so true silence means the turn is stuck, almost always on a shell
+/// command that never returns (a soak test, a `while` loop, a network call with
+/// no timeout). Codex faithfully waits on such a command forever and nothing
+/// upstream bounds it, so a wedged turn used to sit until the owner hit Stop.
+///
+/// This is an *idle* deadline, not a duration cap: it resets on every event, so
+/// a legitimately long turn that keeps streaming is never touched. Five minutes
+/// is long enough to clear a slow-but-progressing tool that briefly goes quiet
+/// (a big `cargo build` prints nothing for a while) and short enough that a
+/// genuinely dead turn does not cost the owner twenty minutes. A trip is a
+/// recoverable stall, not a failed run: the session resumes.
+const RUN_IDLE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5 * 60);
+
 /// The live run in each project: a reservation that there is at most one, and
 /// the signal that stops it.
 ///
@@ -5194,6 +5210,9 @@ async fn drive_run(
     // it lands. The loop exits, and the tail below tears the agent down.
     let mut cancelled = false;
     let mut stalled_injection = false;
+    // Set when the idle deadline trips: a run that went silent long enough to be
+    // treated as wedged. Recovered like a stall rather than reported as a crash.
+    let mut idle_stalled = false;
 
     /// What woke the loop: an agent event, or a message to queue for the
     /// independent delivery worker. Keeping receipt waits off this task is
@@ -5203,6 +5222,11 @@ async fn drive_run(
         Inject(InjectedMessage),
     }
 
+    // The idle deadline, as an absolute instant like the approval deadline
+    // below. Pushed forward past every event, so it measures silence since the
+    // last one rather than total run time; a streaming turn never reaches it,
+    // only one emitting nothing at all does.
+    let mut idle_deadline = tokio::time::Instant::now() + RUN_IDLE_TIMEOUT;
     loop {
         let wake = tokio::select! {
             event = run.recv() => match event {
@@ -5225,6 +5249,21 @@ async fn drive_run(
                 stalled_injection = true;
                 break;
             }
+            () = tokio::time::sleep_until(idle_deadline) => {
+                // No event for RUN_IDLE_TIMEOUT: the turn is wedged, almost
+                // always on a shell command that never returns. Tear the run
+                // down so the slot frees and the session can resume, rather than
+                // sit here until the owner notices and hits Stop.
+                crate::log!(
+                    crate::log::Level::Warn,
+                    "run",
+                    "{project_id}: no output for {}s — treating the run as wedged and stopping it",
+                    RUN_IDLE_TIMEOUT.as_secs()
+                );
+                cancelled = true;
+                idle_stalled = true;
+                break;
+            }
             injected = inject_rx.recv() => match injected {
                 Some(body) => Wake::Inject(body),
                 // The sender lives in the registry this run owns a slot in;
@@ -5232,6 +5271,9 @@ async fn drive_run(
                 None => continue,
             },
         };
+        // The run is alive: push the idle deadline past this event so only
+        // silence *after* it, not total run time, can trip the timeout.
+        idle_deadline = tokio::time::Instant::now() + RUN_IDLE_TIMEOUT;
         let event = match wake {
             Wake::Event(event) => event,
             Wake::Inject(injected) => {
@@ -5865,7 +5907,9 @@ async fn drive_run(
             &project_id,
             "sent",
             "cancel",
-            if stalled_injection {
+            if idle_stalled {
+                "the run went idle with no output for too long, likely wedged on a command that never returns; stopped so the session can resume"
+            } else if stalled_injection {
                 "interactive delivery stalled — restarting the run so the queued message can resume the session"
             } else {
                 "stop requested — tearing the agent down and waiting for it to exit"
