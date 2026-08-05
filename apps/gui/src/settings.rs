@@ -54,7 +54,32 @@ pub struct GlobalSettings {
     /// [`crate::per_turn`].
     #[serde(default = "default_true")]
     pub per_turn_injection: bool,
+    /// How a PR review is shaped: the model each reviewer uses, and the prompt.
+    #[serde(default)]
+    pub review: Review,
 }
+
+/// The PR-review side-channel's configuration.
+///
+/// A review runs the chosen agent headlessly on the PR and drops the result
+/// inline in the transcript for the owner to copy; it is never sent to the Home
+/// agent. `prompt` is prepended to the PR URL; empty means the built-in default.
+/// Per-agent model empty means the agent's own default.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase", default)]
+pub struct Review {
+    /// The review instruction, prepended to the PR URL. Empty uses the default.
+    pub prompt: String,
+    /// Model per reviewer agent (`claude` / `codex` / `copilot`); empty is the
+    /// agent's default.
+    pub models: BTreeMap<String, String>,
+}
+
+/// The built-in review instruction, used when the setting is blank.
+pub const DEFAULT_REVIEW_PROMPT: &str = "Review this pull request for correctness bugs, security issues, and \
+     anything that would block merge. Be concrete: name the file and line, say \
+     what is wrong and why, and rank findings most severe first. If it is solid, \
+     say so briefly.";
 
 /// `#[serde(default)]` for a bool field that should default to `true` rather
 /// than `false` — an absent flag on an older settings row must read as on.
@@ -284,6 +309,7 @@ impl Default for GlobalSettings {
             theme: Theme::default(),
             study_analytics: StudyAnalytics::default(),
             per_turn_injection: true,
+            review: Review::default(),
         }
     }
 }

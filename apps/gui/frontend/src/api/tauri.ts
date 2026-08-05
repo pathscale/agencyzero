@@ -64,6 +64,8 @@ export function createTauriApi(): AgencyZeroApi {
     dismissPullRequest: (id) => call("dismiss_pull_request", { id }),
     refreshPullRequest: (id) => call("refresh_pull_request", { id }),
     discoverPullRequests: (projectId) => call("discover_pull_requests", { projectId }),
+    reviewPullRequest: (projectId, url, agent) =>
+      call("review_pull_request", { projectId, url, agent }),
 
     listQuestions: (projectId) => call("list_questions", { projectId }),
     answerQuestion: (id, answered) => call("answer_question", { id, answered }),
@@ -106,6 +108,7 @@ export function createTauriApi(): AgencyZeroApi {
     clearTaskLog: (projectId) => call("clear_task_log", { projectId }),
     listRateLimits: () => call("list_rate_limits"),
     getCostSummary: () => call("get_cost_summary"),
+    getUsageAnalytics: () => call("get_usage_analytics"),
     getBuildInfo: () => call("get_build_info"),
     checkForUpdate: () => call("check_for_update"),
     installUpdate: () => call("install_update"),

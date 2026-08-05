@@ -26,6 +26,7 @@ import type {
   TableSize,
   TaskLogEntry,
   TaskManagerState,
+  UsageAnalytics,
   WorkspaceRoot,
 } from "~/types";
 
@@ -99,6 +100,8 @@ export interface AgencyZeroApi {
   refreshPullRequest(id: string): Promise<void>;
   /** Discover a project's open PRs from its git remotes, even with no rows yet. */
   discoverPullRequests(projectId: string): Promise<void>;
+  /** Review a PR headlessly; the result lands inline in the transcript. */
+  reviewPullRequest(projectId: string, url: string, agent: Agent): Promise<void>;
 
   // — Questions ————————————————————————————————————————————————
   /** This project's questions, answered ones included; callers filter. */
@@ -271,6 +274,8 @@ export interface AgencyZeroApi {
   clearApprovalRules(projectId: string): Promise<void>;
   /** Spend over Settings' ranges, from the usage ledger. Survives project deletion. */
   getCostSummary(): Promise<CostSummary>;
+  /** Ledger + cache aggregation for the Analytics view. */
+  getUsageAnalytics(): Promise<UsageAnalytics>;
   /** Which commit this binary is and when it was compiled. */
   getBuildInfo(): Promise<BuildInfo>;
   /**

@@ -8,7 +8,7 @@
  */
 
 /** Which screen a tab shows. `home` is not closable; the rest are. */
-export type TabKind = "home" | "draft" | "settings" | "project";
+export type TabKind = "home" | "draft" | "settings" | "project" | "analytics";
 
 /** One enum for both layers: a Project and its ProjectItems share it. */
 /**
@@ -83,7 +83,7 @@ export interface PendingApproval {
  * verdict; a compaction filed as a moderator note rendered as an empty amber
  * card, because the card is built out of a verdict it did not have.
  */
-export type MessageAuthor = "user" | "agent" | "moderator" | "system";
+export type MessageAuthor = "user" | "agent" | "moderator" | "system" | "review";
 
 /** `Stop` in the crate; anything other than these two arrives as a bare string. */
 export type StopReason = "completed" | "error" | (string & {});
@@ -517,6 +517,16 @@ export interface GlobalSettings {
    * config directory overrides the built-in text.
    */
   perTurnInjection: boolean;
+  /** How a PR review is shaped: the prompt, and the model per reviewer agent. */
+  review: ReviewSettings;
+}
+
+/** The PR-review side-channel's configuration. */
+export interface ReviewSettings {
+  /** The review instruction, prepended to the PR URL. Empty uses the default. */
+  prompt: string;
+  /** Model per reviewer agent ("claude" / "codex" / "copilot"); empty is default. */
+  models: Record<string, string>;
 }
 
 /**
@@ -578,6 +588,40 @@ export interface CostSummary {
   weekUsd: number;
   monthUsd: number;
   totalUsd: number;
+  turns: number;
+}
+
+/** One day's usage, decomposed for the analytics charts. */
+export interface UsageDay {
+  day: string;
+  costUsd: number;
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadTokens: number;
+  cacheWriteTokens: number;
+  turns: number;
+}
+
+/** One model's usage totals. */
+export interface UsageModel {
+  model: string;
+  costUsd: number;
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadTokens: number;
+  cacheWriteTokens: number;
+  turns: number;
+}
+
+/** Everything the Analytics view charts, from one call. */
+export interface UsageAnalytics {
+  days: UsageDay[];
+  models: UsageModel[];
+  totalUsd: number;
+  totalInputTokens: number;
+  totalOutputTokens: number;
+  totalCacheReadTokens: number;
+  totalCacheWriteTokens: number;
   turns: number;
 }
 

@@ -346,6 +346,20 @@ export function SettingsTab(): JSX.Element {
                   />
                 </Row>
                 <Row
+                  label={tx("PR review prompt")}
+                  hint={tx("what a PR review asks; empty uses the built-in prompt")}
+                >
+                  <textarea
+                    rows={3}
+                    value={current().review?.prompt ?? ""}
+                    placeholder={tx("Leave empty for the default review prompt")}
+                    onChange={(event) =>
+                      void actions.saveSettings({ review: { prompt: event.currentTarget.value } })
+                    }
+                    class="az-scroll w-full resize-none rounded-lg border border-az-hairline bg-base-300 px-2.5 py-2 text-[12px] text-az-body leading-[1.5] placeholder:text-az-faint focus:outline-none"
+                  />
+                </Row>
+                <Row
                   label={tx("Permission posture")}
                   hint={tx("read_only is the crate default; widen deliberately")}
                   isLast

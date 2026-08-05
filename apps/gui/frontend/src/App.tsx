@@ -1,6 +1,7 @@
 import { type JSX, Match, onCleanup, onMount, Show, Switch } from "solid-js";
 import { Icon } from "~/components/Icon";
 import { IconSprite } from "~/components/IconSprite";
+import { AnalyticsTab } from "~/features/analytics/AnalyticsTab";
 import { DraftTab } from "~/features/draft/DraftTab";
 import { HomeTab } from "~/features/home/HomeTab";
 import { ProjectTab } from "~/features/project/ProjectTab";
@@ -45,6 +46,9 @@ function Workspace(): JSX.Element {
             </Match>
             <Match when={activeTab().kind === "settings"}>
               <SettingsTab />
+            </Match>
+            <Match when={activeTab().kind === "analytics"}>
+              <AnalyticsTab />
             </Match>
             <Match when={activeTab().kind === "draft"}>
               <DraftTab tab={activeTab()} />
