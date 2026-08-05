@@ -6375,7 +6375,19 @@ async fn drive_run(
              * The figure is the agent's own; absent means the turn reported
              * nothing, and no row is written rather than a zero.
              */
-            if let Some(cost) = outcome.usage.cost_usd {
+            // Record a turn whenever it reported a cost OR any token figures.
+            // Gating on `cost_usd` alone dropped Codex entirely: Claude computes
+            // a cost, Codex reports tokens but not always a price, so every Codex
+            // turn fell through and the analytics view showed only Claude. Cost
+            // is zero when absent; the token columns are what the view charts.
+            let usage = &outcome.usage;
+            let has_usage = usage.cost_usd.is_some()
+                || usage.input_tokens.is_some()
+                || usage.output_tokens.is_some()
+                || usage.cache_read_tokens.is_some()
+                || usage.cache_write_tokens.is_some();
+            if has_usage {
+                let cost = usage.cost_usd.unwrap_or(0.0);
                 let at = now();
                 let ledger = crate::db::schema::usage_ledger::UsageLedgerRow {
                     id: id("cost"),
