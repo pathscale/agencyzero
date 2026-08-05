@@ -454,10 +454,36 @@ describe("project deletion", () => {
       "taskLog",
       "logTotals",
       "rateLimits",
+      "agentIo",
+      "streaming",
+      "pullRequests",
+      "questions",
+      "pendingApprovals",
+      "runStatus",
+      "queued",
+      "compacting",
+      "commands",
     ] as const) {
       expect(workspace.state[bucket]).not.toHaveProperty("worktable");
     }
     expect(workspace.state.tabs.map((tab) => tab.key)).not.toContain("worktable");
+  });
+
+  /*
+   * The 30s-clock crash: `tabStatus` re-reads `state.rateLimits[projectId]`
+   * every tick, so it must stay safe as that record is mutated and cleared. A
+   * project whose rate-limit record was purged must read as a plain status
+   * rather than throw "undefined is not an object" on the nested proxy.
+   */
+  it("keeps tabStatus safe after a project's rate-limit record is removed", async () => {
+    const workspace = await mountWorkspace();
+    expect(workspace.state.rateLimits.cafe).toBeTruthy();
+
+    // Purge removes the whole per-project record (a top-level key delete, the
+    // safe way) — the case the buggy nested delete used to strand.
+    workspace.actions.purgeProject("cafe");
+    expect(workspace.state.rateLimits).not.toHaveProperty("cafe");
+    expect(() => workspace.tabStatus("cafe")).not.toThrow();
   });
 });
 

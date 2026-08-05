@@ -20,14 +20,16 @@ export type CloseConfirmProps = {
 export function CloseConfirm(props: CloseConfirmProps): JSX.Element {
   const { state } = useWorkspace();
 
+  // Optional chaining because a purged project can leave one record with a key
+  // another lacks, so a value can be absent under an existing key.
   const runningCount = createMemo(() =>
-    Object.values(state.running).reduce((total, tasks) => total + tasks.length, 0),
+    Object.values(state.running).reduce((total, tasks) => total + (tasks?.length ?? 0), 0),
   );
 
   const heldCount = createMemo(
     () =>
       Object.values(state.messages).filter((messages) =>
-        messages.some((message) => message.moderation?.needsApproval),
+        messages?.some((message) => message.moderation?.needsApproval),
       ).length,
   );
 
