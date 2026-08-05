@@ -104,6 +104,7 @@ export function createMockApi(): AgencyZeroApi {
   const checkpoints = new Set<string>();
   /** Projects whose turns carry the concise-response instruction. */
   const conciseProjects = new Set<string>();
+  const verbosityByProject = new Map<string, string>();
 
   const listeners = new Map<string, Set<(payload: unknown) => void>>();
 
@@ -600,6 +601,12 @@ export function createMockApi(): AgencyZeroApi {
       if (enabled) conciseProjects.add(projectId);
       else conciseProjects.delete(projectId);
       return settle(enabled);
+    },
+
+    getProjectVerbosity: (projectId) => settle(verbosityByProject.get(projectId) ?? "full"),
+    setProjectVerbosity: (projectId, verbosity) => {
+      verbosityByProject.set(projectId, verbosity);
+      return settle(undefined);
     },
 
     getProjectNotes: (projectId) => settle(notes.get(projectId) ?? ""),

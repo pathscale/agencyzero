@@ -1858,6 +1858,9 @@ function createWorkspace() {
     getProjectConcise: (projectId: string) => client().getProjectConcise(projectId),
     setProjectConcise: (projectId: string, enabled: boolean) =>
       client().setProjectConcise(projectId, enabled),
+    getProjectVerbosity: (projectId: string) => client().getProjectVerbosity(projectId),
+    setProjectVerbosity: (projectId: string, verbosity: string) =>
+      client().setProjectVerbosity(projectId, verbosity),
     getProjectNotes: (projectId: string) => client().getProjectNotes(projectId),
     setProjectNotes: (projectId: string, notes: string) =>
       client().setProjectNotes(projectId, notes),

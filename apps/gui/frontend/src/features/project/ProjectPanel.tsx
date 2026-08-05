@@ -441,6 +441,10 @@ function SettingsSection(props: { project: Project }): JSX.Element {
 
         <div class="my-0.5 h-px bg-az-hairline-soft" />
 
+        <ContextDetailSelect projectId={props.project.id} />
+
+        <div class="my-0.5 h-px bg-az-hairline-soft" />
+
         <CheckpointToggle projectId={props.project.id} />
 
         <ApprovalRules projectId={props.project.id} />
@@ -496,6 +500,62 @@ function ConciseResponseToggle(props: { projectId: string }): JSX.Element {
         disabled={!isLive("setProjectConcise")}
         onChange={(event) => void toggle(event.currentTarget.checked)}
       />
+    </div>
+  );
+}
+
+/**
+ * How much per-turn context this project re-sends, stored in KV.
+ *
+ * The open-items + PR snapshot rides every user turn and is the biggest
+ * recurring input cost on a busy project. "Compact" drops item titles and
+ * references (the agent already saw them when they were created); "Minimal"
+ * sends only a count and a pointer to `agency-tools list-items`. This is the
+ * input-side companion to Concise responses, which trims the output.
+ */
+function ContextDetailSelect(props: { projectId: string }): JSX.Element {
+  const { actions, isLive } = useWorkspace();
+  const [level, setLevel] = createSignal("full");
+
+  createEffect(() => {
+    const id = props.projectId;
+    void actions
+      .getProjectVerbosity(id)
+      .then(setLevel)
+      .catch((cause) => log.warn(`could not read context detail: ${describeError(cause)}`));
+  });
+
+  const choose = async (next: string): Promise<void> => {
+    const previous = level();
+    setLevel(next);
+    try {
+      await actions.setProjectVerbosity(props.projectId, next);
+    } catch (cause) {
+      setLevel(previous);
+      log.error(`could not change context detail: ${describeError(cause)}`);
+    }
+  };
+
+  return (
+    <div class="flex items-center gap-2.5">
+      <Icon name="list-checks" class="shrink-0 text-[14px] text-primary/75" />
+      <span class="min-w-0 flex-1 text-[12px] text-az-body">
+        {tx("Context detail")}
+        <span class="mt-px block text-[11px] text-az-muted">
+          {tx("How much of the item list rides every turn — less means fewer tokens")}
+        </span>
+      </span>
+      <select
+        aria-label={tx("Per-turn context detail for this project")}
+        class="select select-xs w-[104px] border-az-hairline bg-base-100 text-[11px]"
+        disabled={!isLive("setProjectVerbosity")}
+        value={level()}
+        onChange={(event) => void choose(event.currentTarget.value)}
+      >
+        <option value="full">{tx("Full")}</option>
+        <option value="compact">{tx("Compact")}</option>
+        <option value="minimal">{tx("Minimal")}</option>
+      </select>
     </div>
   );
 }
