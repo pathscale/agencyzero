@@ -2702,6 +2702,31 @@ pub type PendingApprovals =
 /// object; those collapse to the sorted, exact write-root set so remembering
 /// one directory can never silently approve another. Anything else is the tool
 /// name alone.
+/// Peel a `<shell> -c "<cmd>"` wrapper down to the real command's words.
+///
+/// Codex runs everything through `/bin/zsh -c "<cmd>"`; the words that matter
+/// for an approval signature are inside the `-c` string, not the shell around
+/// it. When the first word is a known shell and a `-c`/`-lc` flag follows, the
+/// next word is the whole command as one string, so it is re-split with `shlex`.
+/// A command that is not shell-wrapped is returned unchanged.
+fn unwrap_shell_words(words: Vec<String>) -> Vec<String> {
+    let is_shell = |word: &str| {
+        let name = word.rsplit('/').next().unwrap_or(word);
+        matches!(name, "sh" | "bash" | "zsh" | "dash" | "fish")
+    };
+    let is_c_flag = |word: &str| matches!(word, "-c" | "-lc" | "-ic" | "-lic");
+    if words.len() >= 3
+        && is_shell(&words[0])
+        && is_c_flag(&words[1])
+        && let Some(inner) = shlex::split(&words[2])
+        && !inner.is_empty()
+    {
+        // Recurse: a wrapper can nest (`zsh -c "sh -c '...'"`).
+        return unwrap_shell_words(inner);
+    }
+    words
+}
+
 fn approval_signature(tool: &str, input: &serde_json::Value) -> String {
     let text = |key: &str| {
         input
@@ -2711,10 +2736,21 @@ fn approval_signature(tool: &str, input: &serde_json::Value) -> String {
     };
 
     if tool.eq_ignore_ascii_case("bash") {
-        let mut words = text("command").split_whitespace();
-        let program = words.next().unwrap_or("");
+        // Sign on the real command, not the shell wrapper. Codex runs every
+        // command as `/bin/zsh -c "<cmd>"`, so signing on the raw first word
+        // made it always `/bin/zsh`: one remembered "always allow" grant then
+        // matched *every* later command, including git push and git commit, and
+        // the owner was never prompted again. Unwrap the `-c` payload first, and
+        // tokenize with a real shell word-splitter (`shlex`) rather than
+        // whitespace, so a quoted argument does not split into a wrong word.
+        let raw = text("command");
+        let words = shlex::split(raw)
+            .unwrap_or_else(|| raw.split_whitespace().map(str::to_string).collect());
+        let words = unwrap_shell_words(words);
+        let program = words.first().map(String::as_str).unwrap_or("");
         let subcommand = words
-            .next()
+            .get(1)
+            .map(String::as_str)
             .filter(|word| {
                 !word.starts_with('-')
                     && word
@@ -7056,6 +7092,31 @@ mod tests {
         // Nor is a path.
         assert_eq!(sig("ls /etc"), "Bash: ls");
         assert_ne!(sig("cargo test"), sig("cargo publish"));
+
+        // The zsh wrapper is unwrapped: Codex runs everything as
+        // `/bin/zsh -c "<cmd>"`, and signing on the wrapper made every command
+        // share one signature so a single remembered grant auto-approved them
+        // all, including git push and git commit, with no further prompt.
+        assert_eq!(
+            sig(r#"/bin/zsh -c "git push origin master""#),
+            "Bash: git push"
+        );
+        assert_eq!(
+            sig(r#"/bin/zsh -c "cargo test -p az-gui""#),
+            "Bash: cargo test"
+        );
+        assert_eq!(sig(r#"bash -lc "git commit -m 'x'""#), "Bash: git commit");
+        // Distinct wrapped commands must NOT collide (the whole bug).
+        assert_ne!(
+            sig(r#"/bin/zsh -c "git push""#),
+            sig(r#"/bin/zsh -c "rm -rf /""#),
+            "a remembered git-push grant must not auto-approve rm"
+        );
+        // A nested wrapper is peeled to the real command.
+        assert_eq!(
+            sig(r#"/bin/zsh -c "sh -c 'git status'""#),
+            "Bash: git status"
+        );
     }
 
     /// A file rule covers the directory, not the disk.
