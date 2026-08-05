@@ -466,6 +466,25 @@ const en = {
   code: "code",
   "Copy the whole message": "Copy the whole message",
   "Icon sprite": "Icon sprite",
+  Analytics: "Analytics",
+  "token usage, summed from the usage ledger": "token usage, summed from the usage ledger",
+  "Loading usage…": "Loading usage…",
+  "Total cost": "Total cost",
+  Input: "Input",
+  Output: "Output",
+  "Cache read": "Cache read",
+  "Cache write": "Cache write",
+  Turns: "Turns",
+  ": 1": ": 1",
+  "cache read : write ratio": "cache read : write ratio",
+  "reads are roughly 10% the price of input, so a high read:write ratio means caching is working; a low one means the cache is being rebuilt (a miss) instead of hit.":
+    "reads are roughly 10% the price of input, so a high read:write ratio means caching is working; a low one means the cache is being rebuilt (a miss) instead of hit.",
+  "Per day": "Per day",
+  "Per model": "Per model",
+  input: "input",
+  output: "output",
+  "cache read": "cache read",
+  "cache write": "cache write",
 } as const;
 
 export default en;

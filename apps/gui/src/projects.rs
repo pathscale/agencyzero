@@ -3055,6 +3055,159 @@ pub async fn get_cost_summary(state: State<'_, AppState>) -> Result<CostSummaryD
     })
 }
 
+/// One day's usage, decomposed the way the analytics view charts it.
+#[derive(Debug, Clone, Default, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UsageDayDto {
+    pub day: String,
+    pub cost_usd: f64,
+    pub input_tokens: i64,
+    pub output_tokens: i64,
+    pub cache_read_tokens: i64,
+    pub cache_write_tokens: i64,
+    pub turns: usize,
+}
+
+/// One model's totals, for the per-model breakdown.
+#[derive(Debug, Clone, Default, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UsageModelDto {
+    pub model: String,
+    pub cost_usd: f64,
+    pub input_tokens: i64,
+    pub output_tokens: i64,
+    pub cache_read_tokens: i64,
+    pub cache_write_tokens: i64,
+    pub turns: usize,
+}
+
+/// Everything the analytics view needs, in one call.
+#[derive(Debug, Clone, Default, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UsageAnalyticsDto {
+    /// Per-day series, oldest first, for the time-series panels.
+    pub days: Vec<UsageDayDto>,
+    /// Per-model totals, most expensive first.
+    pub models: Vec<UsageModelDto>,
+    pub total_usd: f64,
+    pub total_input_tokens: i64,
+    pub total_output_tokens: i64,
+    pub total_cache_read_tokens: i64,
+    pub total_cache_write_tokens: i64,
+    pub turns: usize,
+}
+
+/// Aggregate the usage ledger and the cache table for the analytics view.
+///
+/// The two tables share `day`, `project_id` and `model`; the ledger carries the
+/// cost, input and output figures, the cache table the read/write split. Joined
+/// here by turn: they are written together, so a ledger row and its cache row
+/// line up one to one and the cache read/write folds onto the ledger totals for
+/// the same day and model.
+///
+/// # Errors
+/// Infallible today; `Result` for signature stability.
+#[tauri::command]
+pub async fn get_usage_analytics(state: State<'_, AppState>) -> Result<UsageAnalyticsDto, String> {
+    let ledger = state
+        .tables
+        .usage_ledger
+        .select_all()
+        .execute()
+        .unwrap_or_default();
+    let cache = state
+        .tables
+        .usage_cache
+        .select_all()
+        .execute()
+        .unwrap_or_default();
+
+    // Cache read/write summed by day and by model, so the ledger loop can fold
+    // them in without a nested scan.
+    let mut cache_by_day: std::collections::HashMap<String, (i64, i64)> =
+        std::collections::HashMap::new();
+    let mut cache_by_model: std::collections::HashMap<String, (i64, i64)> =
+        std::collections::HashMap::new();
+    for row in &cache {
+        let day = cache_by_day.entry(row.day.clone()).or_default();
+        day.0 += row.cache_read_tokens;
+        day.1 += row.cache_write_tokens;
+        let model = cache_by_model.entry(row.model.clone()).or_default();
+        model.0 += row.cache_read_tokens;
+        model.1 += row.cache_write_tokens;
+    }
+
+    let mut by_day: std::collections::BTreeMap<String, UsageDayDto> =
+        std::collections::BTreeMap::new();
+    let mut by_model: std::collections::HashMap<String, UsageModelDto> =
+        std::collections::HashMap::new();
+    let mut total_micro = 0i64;
+    let mut total_input = 0i64;
+    let mut total_output = 0i64;
+
+    for row in &ledger {
+        total_micro += row.cost_micro;
+        total_input += row.input_tokens;
+        total_output += row.output_tokens;
+
+        let day = by_day
+            .entry(row.day.clone())
+            .or_insert_with(|| UsageDayDto {
+                day: row.day.clone(),
+                ..Default::default()
+            });
+        day.cost_usd += row.cost_micro as f64 / 1_000_000.0;
+        day.input_tokens += row.input_tokens;
+        day.output_tokens += row.output_tokens;
+        day.turns += 1;
+
+        let model = by_model
+            .entry(row.model.clone())
+            .or_insert_with(|| UsageModelDto {
+                model: row.model.clone(),
+                ..Default::default()
+            });
+        model.cost_usd += row.cost_micro as f64 / 1_000_000.0;
+        model.input_tokens += row.input_tokens;
+        model.output_tokens += row.output_tokens;
+        model.turns += 1;
+    }
+
+    // Fold the cache split onto the per-day and per-model rows.
+    let mut total_read = 0i64;
+    let mut total_write = 0i64;
+    for (day_key, day) in &mut by_day {
+        if let Some((read, write)) = cache_by_day.get(day_key) {
+            day.cache_read_tokens = *read;
+            day.cache_write_tokens = *write;
+        }
+    }
+    for (model_key, model) in &mut by_model {
+        if let Some((read, write)) = cache_by_model.get(model_key) {
+            model.cache_read_tokens = *read;
+            model.cache_write_tokens = *write;
+        }
+    }
+    for (read, write) in cache_by_day.values() {
+        total_read += read;
+        total_write += write;
+    }
+
+    let mut models: Vec<UsageModelDto> = by_model.into_values().collect();
+    models.sort_by(|a, b| b.cost_usd.total_cmp(&a.cost_usd));
+
+    Ok(UsageAnalyticsDto {
+        days: by_day.into_values().collect(),
+        models,
+        total_usd: total_micro as f64 / 1_000_000.0,
+        total_input_tokens: total_input,
+        total_output_tokens: total_output,
+        total_cache_read_tokens: total_read,
+        total_cache_write_tokens: total_write,
+        turns: ledger.len(),
+    })
+}
+
 /// What the Home task-manager screen needs that no other surface carries.
 ///
 /// The task manager is a reserved project with **no project row** — it never
@@ -6154,11 +6307,46 @@ async fn drive_run(
                         .and_then(|tokens| i64::try_from(tokens).ok())
                         .unwrap_or(0),
                 };
+                let ledger_at = ledger.at.clone();
+                let ledger_day = ledger.day.clone();
                 if let Err(error) = tables.usage_ledger.insert(ledger) {
                     crate::log!(
                         crate::log::Level::Error,
                         "run",
                         "{project_id}: could not record the cost: {error}"
+                    );
+                }
+                // The cache split for this turn, in its own table so the
+                // analytics view can show read-vs-write over time. A turn that
+                // read or wrote no cache still records zeros, so the series has
+                // a point per priced turn.
+                let cache_row = crate::db::schema::usage_cache::UsageCacheRow {
+                    id: id("cache"),
+                    day: ledger_day,
+                    project_id: project_id.clone(),
+                    model: model.clone(),
+                    cache_read_tokens: outcome
+                        .usage
+                        .cache_read_tokens
+                        .and_then(|tokens| i64::try_from(tokens).ok())
+                        .unwrap_or(0),
+                    cache_write_tokens: outcome
+                        .usage
+                        .cache_write_tokens
+                        .and_then(|tokens| i64::try_from(tokens).ok())
+                        .unwrap_or(0),
+                    input_tokens: outcome
+                        .usage
+                        .input_tokens
+                        .and_then(|tokens| i64::try_from(tokens).ok())
+                        .unwrap_or(0),
+                    at: ledger_at,
+                };
+                if let Err(error) = tables.usage_cache.insert(cache_row) {
+                    crate::log!(
+                        crate::log::Level::Error,
+                        "run",
+                        "{project_id}: could not record the cache split: {error}"
                     );
                 }
             }

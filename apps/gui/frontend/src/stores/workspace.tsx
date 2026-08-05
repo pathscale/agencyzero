@@ -1342,6 +1342,17 @@ function createWorkspace() {
     focus("settings");
   }
 
+  /** The gauge opens Analytics as a real tab, the same way the gear opens Settings. */
+  function openAnalytics(): void {
+    if (!state.tabs.some((tab) => tab.kind === "analytics")) {
+      setState("tabs", (tabs) => [
+        ...tabs,
+        { ...HOME_TAB, key: "analytics", kind: "analytics", label: "Analytics" },
+      ]);
+    }
+    focus("analytics");
+  }
+
   /** One draft at a time: a second "+" focuses the Untitled tab already open. */
   function openDraft(): void {
     const existing = state.tabs.find((tab) => tab.kind === "draft");
@@ -1769,6 +1780,7 @@ function createWorkspace() {
     commitTabOrder,
     openProject,
     openSettings,
+    openAnalytics,
     openDraft,
     closeTab,
     setTabModel,
@@ -1817,6 +1829,7 @@ function createWorkspace() {
     listApprovalRules: (projectId: string) => client().listApprovalRules(projectId),
     clearApprovalRules: (projectId: string) => client().clearApprovalRules(projectId),
     getCostSummary: () => client().getCostSummary(),
+    getUsageAnalytics: () => client().getUsageAnalytics(),
     getBuildInfo: () => client().getBuildInfo(),
     checkForUpdate,
     installUpdate: () => client().installUpdate(),

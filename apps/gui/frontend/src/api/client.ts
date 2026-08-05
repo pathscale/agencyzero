@@ -26,6 +26,7 @@ import type {
   TableSize,
   TaskLogEntry,
   TaskManagerState,
+  UsageAnalytics,
   WorkspaceRoot,
 } from "~/types";
 
@@ -271,6 +272,8 @@ export interface AgencyZeroApi {
   clearApprovalRules(projectId: string): Promise<void>;
   /** Spend over Settings' ranges, from the usage ledger. Survives project deletion. */
   getCostSummary(): Promise<CostSummary>;
+  /** Ledger + cache aggregation for the Analytics view. */
+  getUsageAnalytics(): Promise<UsageAnalytics>;
   /** Which commit this binary is and when it was compiled. */
   getBuildInfo(): Promise<BuildInfo>;
   /**

@@ -15,6 +15,7 @@ const TAB_ICON: Record<Tab["kind"], IconProps["name"] | null> = {
   home: "layout-grid",
   draft: "file-plus-2",
   settings: "settings",
+  analytics: "gauge",
   project: null,
 };
 
@@ -144,6 +145,19 @@ export function TabStrip(): JSX.Element {
       </Show>
 
       <div class="flex flex-none items-center gap-1.5">
+        <button
+          type="button"
+          onClick={() => actions.openAnalytics()}
+          title={tx("Analytics")}
+          aria-label={tx("Analytics")}
+          class={`relative flex size-[30px] items-center justify-center rounded-full transition-colors hover:bg-white/6 ${
+            state.activeKey === "analytics"
+              ? "text-primary"
+              : "text-az-muted hover:text-base-content"
+          }`}
+        >
+          <Icon name="gauge" class="text-[15px]" />
+        </button>
         <button
           type="button"
           onClick={() => actions.openSettings()}

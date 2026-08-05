@@ -450,6 +450,25 @@ const zh = {
   code: "代码",
   "Copy the whole message": "复制整条消息",
   "Icon sprite": "图标精灵",
+  Analytics: "分析",
+  "token usage, summed from the usage ledger": "令牌用量，按用量账本汇总",
+  "Loading usage…": "正在加载用量…",
+  "Total cost": "总成本",
+  Input: "输入",
+  Output: "输出",
+  "Cache read": "缓存读取",
+  "Cache write": "缓存写入",
+  Turns: "轮次",
+  ": 1": ": 1",
+  "cache read : write ratio": "缓存读取 : 写入 比率",
+  "reads are roughly 10% the price of input, so a high read:write ratio means caching is working; a low one means the cache is being rebuilt (a miss) instead of hit.":
+    "读取的价格约为输入的 10%，因此高的读:写比率表示缓存在生效；低比率则表示缓存被重建（未命中）而非命中。",
+  "Per day": "按天",
+  "Per model": "按模型",
+  input: "输入",
+  output: "输出",
+  "cache read": "缓存读取",
+  "cache write": "缓存写入",
 } satisfies Record<keyof typeof en, string>;
 
 export default zh;

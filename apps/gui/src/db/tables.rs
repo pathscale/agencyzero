@@ -24,6 +24,7 @@ use crate::db::schema::pull_request::{PullRequestPersistenceEngine, PullRequestW
 use crate::db::schema::question::{QuestionPersistenceEngine, QuestionWorkTable};
 use crate::db::schema::study_event::{StudyEventPersistenceEngine, StudyEventWorkTable};
 use crate::db::schema::task_log::{TaskLogPersistenceEngine, TaskLogWorkTable};
+use crate::db::schema::usage_cache::{UsageCachePersistenceEngine, UsageCacheWorkTable};
 use crate::db::schema::usage_ledger::{UsageLedgerPersistenceEngine, UsageLedgerWorkTable};
 
 /// Every persisted table, opened once at startup.
@@ -49,6 +50,9 @@ pub struct Tables {
     pub agent_io: Arc<AgentIoRowWorkTable>,
     /// One row per turn that reported usage. See `schema/usage_ledger.rs`.
     pub usage_ledger: Arc<UsageLedgerWorkTable>,
+    /// Per-turn prompt-cache split, for the analytics view. See
+    /// `schema/usage_cache.rs`.
+    pub usage_cache: Arc<UsageCacheWorkTable>,
     /// One row per remembered approval. See `schema/approval_rule.rs`.
     pub approval_rule: Arc<ApprovalRuleWorkTable>,
     /// One row per PR cut during a run. See `schema/pull_request.rs`.
@@ -101,6 +105,7 @@ impl Tables {
             task_log: open!(TaskLogPersistenceEngine, TaskLogWorkTable),
             agent_io: open!(AgentIoRowPersistenceEngine, AgentIoRowWorkTable),
             usage_ledger: open!(UsageLedgerPersistenceEngine, UsageLedgerWorkTable),
+            usage_cache: open!(UsageCachePersistenceEngine, UsageCacheWorkTable),
             approval_rule: open!(ApprovalRulePersistenceEngine, ApprovalRuleWorkTable),
             pull_request: open!(PullRequestPersistenceEngine, PullRequestWorkTable),
             question: open!(QuestionPersistenceEngine, QuestionWorkTable),

@@ -75,6 +75,7 @@ const COMMAND_FOR: Partial<Record<keyof AgencyZeroApi, string>> = {
   clearTaskLog: "clear_task_log",
   listRateLimits: "list_rate_limits",
   getCostSummary: "get_cost_summary",
+  getUsageAnalytics: "get_usage_analytics",
   getBuildInfo: "get_build_info",
   checkForUpdate: "check_for_update",
   installUpdate: "install_update",

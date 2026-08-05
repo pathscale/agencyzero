@@ -671,6 +671,88 @@ export function createMockApi(): AgencyZeroApi {
     getCostSummary: () =>
       settle({ todayUsd: 0.41, weekUsd: 3.87, monthUsd: 11.02, totalUsd: 28.6, turns: 412 }),
 
+    // Fixture usage decomposition for the Analytics view, oldest to newest.
+    // Cache reads dominate on a healthy day (the conversation is re-sent and
+    // mostly hit); Aug 3 is a deliberate cache-miss day where writes spike and
+    // the read:write ratio collapses, so the efficiency panel has something to
+    // warn about.
+    getUsageAnalytics: () =>
+      settle({
+        days: [
+          {
+            day: "2026-08-01",
+            costUsd: 1.82,
+            inputTokens: 42_000,
+            outputTokens: 18_500,
+            cacheReadTokens: 610_000,
+            cacheWriteTokens: 54_000,
+            turns: 61,
+          },
+          {
+            day: "2026-08-02",
+            costUsd: 2.14,
+            inputTokens: 51_300,
+            outputTokens: 22_100,
+            cacheReadTokens: 742_000,
+            cacheWriteTokens: 61_000,
+            turns: 73,
+          },
+          {
+            day: "2026-08-03",
+            costUsd: 3.96,
+            inputTokens: 88_400,
+            outputTokens: 31_900,
+            cacheReadTokens: 190_000,
+            cacheWriteTokens: 172_000,
+            turns: 84,
+          },
+          {
+            day: "2026-08-04",
+            costUsd: 1.57,
+            inputTokens: 39_800,
+            outputTokens: 16_400,
+            cacheReadTokens: 588_000,
+            cacheWriteTokens: 47_000,
+            turns: 55,
+          },
+          {
+            day: "2026-08-05",
+            costUsd: 2.31,
+            inputTokens: 47_600,
+            outputTokens: 20_800,
+            cacheReadTokens: 690_000,
+            cacheWriteTokens: 52_000,
+            turns: 68,
+          },
+        ],
+        models: [
+          {
+            model: "claude-opus-4",
+            costUsd: 8.94,
+            inputTokens: 201_000,
+            outputTokens: 84_300,
+            cacheReadTokens: 1_720_000,
+            cacheWriteTokens: 268_000,
+            turns: 214,
+          },
+          {
+            model: "claude-sonnet-4",
+            costUsd: 2.86,
+            inputTokens: 68_100,
+            outputTokens: 25_400,
+            cacheReadTokens: 1_100_000,
+            cacheWriteTokens: 118_000,
+            turns: 127,
+          },
+        ],
+        totalUsd: 11.8,
+        totalInputTokens: 269_100,
+        totalOutputTokens: 109_700,
+        totalCacheReadTokens: 2_820_000,
+        totalCacheWriteTokens: 386_000,
+        turns: 341,
+      }),
+
     // A fixture stamp, shaped like the real one so the Settings row renders.
     getBuildInfo: () =>
       settle({ version: "0.1.0", gitSha: "fixture00", builtAt: "2026-07-30 00:00:00" }),

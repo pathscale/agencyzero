@@ -8,7 +8,7 @@
  */
 
 /** Which screen a tab shows. `home` is not closable; the rest are. */
-export type TabKind = "home" | "draft" | "settings" | "project";
+export type TabKind = "home" | "draft" | "settings" | "project" | "analytics";
 
 /** One enum for both layers: a Project and its ProjectItems share it. */
 /**
@@ -578,6 +578,40 @@ export interface CostSummary {
   weekUsd: number;
   monthUsd: number;
   totalUsd: number;
+  turns: number;
+}
+
+/** One day's usage, decomposed for the analytics charts. */
+export interface UsageDay {
+  day: string;
+  costUsd: number;
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadTokens: number;
+  cacheWriteTokens: number;
+  turns: number;
+}
+
+/** One model's usage totals. */
+export interface UsageModel {
+  model: string;
+  costUsd: number;
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadTokens: number;
+  cacheWriteTokens: number;
+  turns: number;
+}
+
+/** Everything the Analytics view charts, from one call. */
+export interface UsageAnalytics {
+  days: UsageDay[];
+  models: UsageModel[];
+  totalUsd: number;
+  totalInputTokens: number;
+  totalOutputTokens: number;
+  totalCacheReadTokens: number;
+  totalCacheWriteTokens: number;
   turns: number;
 }
 

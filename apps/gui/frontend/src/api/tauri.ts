@@ -106,6 +106,7 @@ export function createTauriApi(): AgencyZeroApi {
     clearTaskLog: (projectId) => call("clear_task_log", { projectId }),
     listRateLimits: () => call("list_rate_limits"),
     getCostSummary: () => call("get_cost_summary"),
+    getUsageAnalytics: () => call("get_usage_analytics"),
     getBuildInfo: () => call("get_build_info"),
     checkForUpdate: () => call("check_for_update"),
     installUpdate: () => call("install_update"),

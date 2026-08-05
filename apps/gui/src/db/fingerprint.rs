@@ -42,6 +42,7 @@ pub const SCHEMA_FINGERPRINT: &str = concat!(
     "study_event(id,study_id,at,project_id,turn_id,interaction_id,agent,pathway,operation,stage,outcome,code,target_kind,target_id,latency_ms,detail,app_version,parser_version,protocol_version);",
     "question(id,project_id,text,urgency,item_id,issue_url,answered,created_at);",
     "message_chunk(id,message_id,project_id,seq,text);",
+    "usage_cache(id,day,project_id,model,cache_read_tokens,cache_write_tokens,input_tokens,at);",
 );
 
 /// What opening the tables found, so the caller can say something useful.
