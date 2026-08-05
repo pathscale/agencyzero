@@ -1,4 +1,4 @@
-import { createMemo, createSignal, For, type JSX, onMount, Show } from "solid-js";
+import { createEffect, createMemo, createSignal, For, type JSX, onMount, Show } from "solid-js";
 import { Icon } from "~/components/Icon";
 import { PillMenu } from "~/components/PillMenu";
 import { PERMISSION_ORDER, permissionLabel } from "~/lib/labels";
@@ -194,6 +194,7 @@ export function Composer(props: ComposerProps): JSX.Element {
   const UNKEYED = "\u0000unkeyed";
   const bucket = () => props.draftKey ?? UNKEYED;
   const advanced = () => prefs.advancedComposerKeys.includes(bucket());
+  const expanded = () => prefs.expandedComposerKeys.includes(bucket());
   const compiled = createMemo(() =>
     advanced() ? compileAdvancedPrompt(draft(), props.modelOptions) : null,
   );
@@ -204,6 +205,15 @@ export function Composer(props: ComposerProps): JSX.Element {
       advanced()
         ? prefs.advancedComposerKeys.filter((candidate) => candidate !== key)
         : [...prefs.advancedComposerKeys, key],
+    );
+  };
+  const toggleExpanded = () => {
+    const key = bucket();
+    setPrefs(
+      "expandedComposerKeys",
+      expanded()
+        ? prefs.expandedComposerKeys.filter((candidate) => candidate !== key)
+        : [...prefs.expandedComposerKeys, key],
     );
   };
   const [errors, setErrors] = createSignal<Record<string, string | null>>({});
@@ -401,13 +411,21 @@ export function Composer(props: ComposerProps): JSX.Element {
    */
   onMount(() => {
     if (props.autofocus) field.focus();
+    resize();
   });
 
   /** Grow with the content up to a ceiling, then scroll — no jumping layout. */
   function resize(): void {
     field.style.height = "auto";
-    field.style.height = `${Math.min(field.scrollHeight, 168)}px`;
+    const ceiling = expanded() ? 420 : 168;
+    const floor = expanded() ? 240 : 0;
+    field.style.height = `${Math.max(floor, Math.min(field.scrollHeight, ceiling))}px`;
   }
+
+  createEffect(() => {
+    expanded();
+    queueMicrotask(() => resize());
+  });
 
   return (
     <div class="flex flex-col gap-1.5">
@@ -537,6 +555,21 @@ export function Composer(props: ComposerProps): JSX.Element {
                 class="flex size-[30px] items-center justify-center rounded-full border border-az-hairline-strong text-az-body transition-colors hover:border-primary/30 hover:text-az-title disabled:cursor-not-allowed disabled:opacity-40"
               >
                 <Icon name="plus" class="text-[16px]" />
+              </button>
+
+              <button
+                type="button"
+                onClick={toggleExpanded}
+                aria-pressed={expanded()}
+                aria-label={tx(expanded() ? "Restore the prompt size" : "Expand the prompt")}
+                title={tx(expanded() ? "Restore the prompt size" : "Expand the prompt")}
+                class={`flex size-[30px] items-center justify-center rounded-full border transition-colors ${
+                  expanded()
+                    ? "border-primary/35 bg-primary/15 text-primary"
+                    : "border-az-hairline-strong text-az-body hover:border-primary/30 hover:text-az-title"
+                }`}
+              >
+                <Icon name={expanded() ? "chevron-down" : "chevron-up"} class="text-[15px]" />
               </button>
             </div>
 

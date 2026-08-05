@@ -692,6 +692,8 @@ export interface UiPrefs {
   uiSize: "normal" | "large" | "extra-large";
   /** Local palette mode. Independent of the persisted accent axes. */
   colorMode: "dark" | "light";
+  /** Whether the project's right-hand workspace panel is visible. */
+  projectPanelVisible: boolean;
   /**
    * The last "Extra Thinking" choice, so a new tab starts where the last one
    * was left. On by default, like the composer control it seeds.
@@ -729,10 +731,10 @@ export interface UiPrefs {
   openTabKeys: string[];
   /** Home project groups folded to their header, by project id. */
   collapsedGroups: string[];
-  /** Project item lists the user expanded past their compact height. */
-  expandedItemProjects: string[];
   /** Composer drafts currently using the Prompt Syntax aware editor. */
   advancedComposerKeys: string[];
+  /** Composer drafts expanded for writing longer prompts. */
+  expandedComposerKeys: string[];
   taskPlacement: TaskPlacement;
   /**
    * Panel sections whose shipped default has already been applied once.

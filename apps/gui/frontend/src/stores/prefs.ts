@@ -15,6 +15,7 @@ const DEFAULTS: UiPrefs = {
   lastPermission: "read_only",
   uiSize: "large",
   colorMode: "dark",
+  projectPanelVisible: true,
   lastExtraThinking: true,
   // Settings starts collapsed: working directories are set once and then left
   // alone, while the other three change while you watch.
@@ -38,8 +39,8 @@ const DEFAULTS: UiPrefs = {
   lastTabKey: "home",
   openTabKeys: [],
   collapsedGroups: [],
-  expandedItemProjects: [],
   advancedComposerKeys: [],
+  expandedComposerKeys: [],
   taskPlacement: "panel",
   seenSections: [],
   composerDrafts: {},

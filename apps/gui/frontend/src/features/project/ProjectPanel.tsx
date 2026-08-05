@@ -4,11 +4,12 @@ import { NOTES_BUDGET } from "~/api/client";
 import { Icon } from "~/components/Icon";
 import { SectionPanel } from "~/components/Panel";
 import { ItemMarker } from "~/components/StatusDot";
+import { copyText } from "~/features/project/MessageBody";
 import { clockTime, elapsed, taskMeta } from "~/lib/format";
 import { nextStatus, statusLabel, statusSuffix } from "~/lib/labels";
 import { describeError, log } from "~/lib/log";
 import { tx } from "~/stores/i18n";
-import { prefs, setPrefs, togglePanelSection } from "~/stores/prefs";
+import { prefs, togglePanelSection } from "~/stores/prefs";
 import { useNow, useWorkspace } from "~/stores/workspace";
 import type { Project, ProjectItem } from "~/types";
 
@@ -28,14 +29,15 @@ export function ProjectPanel(props: { project: Project }): JSX.Element {
   const io = () => state.agentIo[props.project.id] ?? [];
 
   return (
-    <div class="az-scroll flex w-[322px] flex-none flex-col gap-2.5">
+    <div class="az-scroll flex min-h-0 w-[322px] flex-none flex-col gap-2.5">
       <SectionPanel
         icon="list-checks"
         title={tx("Items")}
         count={openItemCount(props.project.id)}
         isOpen={prefs.panelSections.items}
         onToggle={() => togglePanelSection("items")}
-        class="flex-none"
+        class={prefs.panelSections.items ? "flex min-h-0 flex-1 flex-col" : "flex-none"}
+        contentClass="flex min-h-0 flex-1 flex-col"
       >
         <ItemList projectId={props.project.id} items={itemsFor(props.project.id)} />
       </SectionPanel>
@@ -435,6 +437,10 @@ function SettingsSection(props: { project: Project }): JSX.Element {
 
         <div class="my-0.5 h-px bg-az-hairline-soft" />
 
+        <ConciseResponseToggle projectId={props.project.id} />
+
+        <div class="my-0.5 h-px bg-az-hairline-soft" />
+
         <CheckpointToggle projectId={props.project.id} />
 
         <ApprovalRules projectId={props.project.id} />
@@ -447,6 +453,50 @@ function SettingsSection(props: { project: Project }): JSX.Element {
         </div>
       </div>
     </SectionPanel>
+  );
+}
+
+/** A project-local instruction, stored in KV and added to every turn. */
+function ConciseResponseToggle(props: { projectId: string }): JSX.Element {
+  const { actions, isLive } = useWorkspace();
+  const [enabled, setEnabled] = createSignal(false);
+
+  createEffect(() => {
+    const id = props.projectId;
+    void actions
+      .getProjectConcise(id)
+      .then(setEnabled)
+      .catch((cause) => log.warn(`could not read concise responses: ${describeError(cause)}`));
+  });
+
+  const toggle = async (next: boolean): Promise<void> => {
+    setEnabled(next);
+    try {
+      await actions.setProjectConcise(props.projectId, next);
+    } catch (cause) {
+      setEnabled(!next);
+      log.error(`could not change concise responses: ${describeError(cause)}`);
+    }
+  };
+
+  return (
+    <div class="flex items-center gap-2.5">
+      <Icon name="message-square-dashed" class="shrink-0 text-[14px] text-primary/75" />
+      <span class="min-w-0 flex-1 text-[12px] text-az-body">
+        {tx("Concise responses")}
+        <span class="mt-px block text-[11px] text-az-muted">
+          {tx("Lead with the answer and skip preambles for this project")}
+        </span>
+      </span>
+      <Toggle
+        aria-label={tx("Concise responses for this project")}
+        checked={enabled()}
+        color="accent"
+        size="sm"
+        disabled={!isLive("setProjectConcise")}
+        onChange={(event) => void toggle(event.currentTarget.checked)}
+      />
+    </div>
   );
 }
 
@@ -509,20 +559,6 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
   const { state, actions } = useWorkspace();
   const [adding, setAdding] = createSignal(false);
   const [title, setTitle] = createSignal("");
-  /*
-   * Long lists are capped by default so the other sections keep the column,
-   * then fully expanded on demand. Six or fewer render in full: the old code
-   * capped every list but offered "Show all" only above six, so five wrapped
-   * XL rows were clipped with no way to expand them.
-   */
-  const tall = () => prefs.expandedItemProjects.includes(props.projectId);
-  const toggleTall = (): void => {
-    setPrefs("expandedItemProjects", (projects) =>
-      projects.includes(props.projectId)
-        ? projects.filter((project) => project !== props.projectId)
-        : [...projects, props.projectId],
-    );
-  };
   /**
    * The pull request a shipped row names, when this project has one by that
    * number. The item stores the number alone, deliberately: it is the match
@@ -623,11 +659,7 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
   }
 
   return (
-    <div
-      class={`az-scroll flex flex-col gap-0.5 px-2 pt-1.5 pb-2.5 ${
-        tall() || props.items.length <= 6 ? "" : "max-h-[300px]"
-      }`}
-    >
+    <div class="az-scroll flex min-h-0 flex-1 flex-col gap-0.5 px-2 pt-1.5 pb-2.5">
       <Show when={props.items.length > 3}>
         <div class="flex items-center gap-2 rounded-[9px] border border-az-hairline bg-az-inset px-2.5 py-1.5">
           <Icon name="search" class="shrink-0 text-[12px] text-primary/70" />
@@ -890,19 +922,6 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
         )}
       </For>
 
-      {/* Whenever the cap can be hiding anything: the 300px window fits about
-          seven rows. A shorter list has nothing to expand, and the row would
-          just be furniture. */}
-      <Show when={props.items.length > 6}>
-        <button
-          type="button"
-          onClick={toggleTall}
-          class="mt-0.5 rounded-md border border-az-hairline px-2 py-1 text-[10.5px] text-az-muted transition-colors hover:border-az-hairline-strong hover:text-base-content"
-        >
-          {tall() ? tx("Shrink the list") : tx("Show all {count}", { count: props.items.length })}
-        </button>
-      </Show>
-
       <Show
         when={adding()}
         fallback={
@@ -991,6 +1010,14 @@ function TaskLogList(props: { projectId: string }): JSX.Element {
   const entries = () => state.taskLog[props.projectId] ?? [];
   /** The one entry showing its whole command, if any. */
   const [expanded, setExpanded] = createSignal<string | null>(null);
+  /** The row whose copy action most recently succeeded. */
+  const [copied, setCopied] = createSignal<string | null>(null);
+
+  const copyEntry = async (id: string, text: string): Promise<void> => {
+    if (!(await copyText(text))) return;
+    setCopied(id);
+    window.setTimeout(() => setCopied((current) => (current === id ? null : current)), 1_400);
+  };
 
   return (
     /*
@@ -1011,52 +1038,73 @@ function TaskLogList(props: { projectId: string }): JSX.Element {
            * it with the error mark would tell you a tool failed when nothing
            * said so.
            */
-          <div class="flex items-baseline gap-2 text-[11.5px]">
-            <Icon
-              name={entry.ok === true ? "check" : entry.ok === false ? "x" : "info"}
-              label={entry.ok === null ? tx("Outcome not reported") : undefined}
-              class={`shrink-0 text-[12px] ${
-                entry.ok === true
-                  ? "text-success"
-                  : entry.ok === false
-                    ? "text-error"
-                    : "text-az-muted"
-              }`}
-            />
-            {/*
-             * Expands in place rather than truncating for good. A task log
-             * entry *is* the command, and a command cut at the panel's width
-             * — "…gh run rerun \"$ID\" --failed 2>&1 | t" — cannot be read,
-             * checked or copied, which is the whole reason to keep a log.
-             * The title attribute was the only way to see the rest, and a
-             * tooltip cannot be selected.
-             */}
-            {/*
-             * The verb, which the label alone does not carry. A row reading
-             * `Cargo.toml` says a file was involved and nothing about what
-             * happened to it: read, searched, written and stat'd all look
-             * identical. The tool name was already on the row's data and
-             * simply was not rendered.
-             */}
-            <span class="shrink-0 font-mono text-[11px] text-az-muted">{entry.tool}</span>
-            {/*
-             * `aria-label` rather than `title`: the tooltip fired on hover
-             * over every row on the way past, which reads as the panel
-             * flinching. The pointer already says the row is a control.
-             */}
-            <button
-              type="button"
-              onClick={() => setExpanded(expanded() === entry.id ? null : entry.id)}
-              aria-label={expanded() === entry.id ? tx("Collapse") : tx("Show the whole command")}
-              class={`min-w-0 flex-1 cursor-pointer text-left text-az-body ${
-                expanded() === entry.id ? "whitespace-pre-wrap break-all" : "truncate"
-              }`}
-            >
-              <span data-selectable>{entry.label}</span>
-            </button>
-            <span class={`shrink-0 ${entry.ok === false ? "text-error" : "text-az-muted"}`}>
-              {taskMeta(entry)}
-            </span>
+          <div class="flex flex-col gap-1 text-[11.5px]">
+            <div class="flex items-baseline gap-2">
+              <Icon
+                name={entry.ok === true ? "check" : entry.ok === false ? "x" : "info"}
+                label={entry.ok === null ? tx("Outcome not reported") : undefined}
+                class={`shrink-0 text-[12px] ${
+                  entry.ok === true
+                    ? "text-success"
+                    : entry.ok === false
+                      ? "text-error"
+                      : "text-az-muted"
+                }`}
+              />
+              {/*
+               * Expands in place rather than truncating for good. A task log
+               * entry *is* the command, and a command cut at the panel's width
+               * (for example, "…gh run rerun \"$ID\" --failed 2>&1 | t") cannot be read,
+               * checked or copied, which is the whole reason to keep a log.
+               * The title attribute was the only way to see the rest, and a
+               * tooltip cannot be selected.
+               */}
+              {/*
+               * The verb, which the label alone does not carry. A row reading
+               * `Cargo.toml` says a file was involved and nothing about what
+               * happened to it: read, searched, written and stat'd all look
+               * identical. The tool name was already on the row's data and
+               * simply was not rendered.
+               */}
+              <span class="shrink-0 font-mono text-[11px] text-az-muted">{entry.tool}</span>
+              {/*
+               * `aria-label` rather than `title`: the tooltip fired on hover
+               * over every row on the way past, which reads as the panel
+               * flinching. The pointer already says the row is a control.
+               */}
+              <button
+                type="button"
+                onClick={() => setExpanded(expanded() === entry.id ? null : entry.id)}
+                aria-label={expanded() === entry.id ? tx("Collapse") : tx("Show the whole command")}
+                class={`min-w-0 flex-1 cursor-pointer text-left text-az-body ${
+                  expanded() === entry.id ? "whitespace-pre-wrap break-all" : "truncate"
+                }`}
+              >
+                <span data-selectable>{entry.label}</span>
+              </button>
+              <span class={`shrink-0 ${entry.ok === false ? "text-error" : "text-az-muted"}`}>
+                {taskMeta(entry)}
+              </span>
+              <button
+                type="button"
+                onClick={() =>
+                  void copyEntry(
+                    entry.id,
+                    [`${entry.tool} ${entry.label}`, entry.output].filter(Boolean).join("\n\n"),
+                  )
+                }
+                aria-label={tx("Copy this task-log entry")}
+                title={copied() === entry.id ? tx("Copied") : tx("Copy")}
+                class="shrink-0 rounded p-0.5 text-az-faint transition-colors hover:text-az-body"
+              >
+                <Icon name={copied() === entry.id ? "check" : "copy"} class="text-[11px]" />
+              </button>
+            </div>
+            <Show when={expanded() === entry.id && entry.output}>
+              <pre class="az-scroll max-h-64 whitespace-pre-wrap break-words rounded-md border border-az-hairline bg-az-inset px-2 py-1.5 font-mono text-[10.5px] text-az-body">
+                {entry.output}
+              </pre>
+            </Show>
           </div>
         )}
       </For>

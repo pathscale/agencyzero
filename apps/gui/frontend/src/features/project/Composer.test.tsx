@@ -117,6 +117,19 @@ describe("Composer", () => {
     await booted();
   });
 
+  it("expands a long-prompt editor per tab and restores it", async () => {
+    setPrefs("expandedComposerKeys", []);
+    const screen = mount({ draftKey: "project:abc" });
+
+    fireEvent.click(screen.getByLabelText("Expand the prompt"));
+    await waitFor(() => expect(prefs.expandedComposerKeys).toContain("project:abc"));
+    await waitFor(() => expect(screen.field.style.height).toBe("240px"));
+
+    fireEvent.click(screen.getByLabelText("Restore the prompt size"));
+    await waitFor(() => expect(prefs.expandedComposerKeys).not.toContain("project:abc"));
+    await screen.booted();
+  });
+
   it("detects authored PromptSyntax even when Advanced leaves the message unchanged", async () => {
     const { field, onSend } = mount();
     type(field, "@model:sonnet Review this");

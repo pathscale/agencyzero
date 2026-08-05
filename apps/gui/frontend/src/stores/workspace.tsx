@@ -1855,6 +1855,9 @@ function createWorkspace() {
     getCheckpoints: (projectId: string) => client().getCheckpoints(projectId),
     setCheckpoints: (projectId: string, enabled: boolean) =>
       client().setCheckpoints(projectId, enabled),
+    getProjectConcise: (projectId: string) => client().getProjectConcise(projectId),
+    setProjectConcise: (projectId: string, enabled: boolean) =>
+      client().setProjectConcise(projectId, enabled),
     getProjectNotes: (projectId: string) => client().getProjectNotes(projectId),
     setProjectNotes: (projectId: string, notes: string) =>
       client().setProjectNotes(projectId, notes),

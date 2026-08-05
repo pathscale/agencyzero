@@ -40,6 +40,8 @@ export type SectionPanelProps = {
   onToggle: () => void;
   children: JSX.Element;
   class?: string;
+  /** Layout for the revealed body, used when a section owns remaining height. */
+  contentClass?: string;
 };
 
 /**
@@ -103,7 +105,9 @@ export function SectionPanel(props: SectionPanelProps): JSX.Element {
       </div>
 
       <Show when={props.isOpen}>
-        <div class="border-az-hairline-soft border-t">{props.children}</div>
+        <div class={`border-az-hairline-soft border-t ${props.contentClass ?? ""}`}>
+          {props.children}
+        </div>
       </Show>
     </Panel>
   );
