@@ -1,6 +1,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod agents;
+mod angel;
 mod chat_import;
 mod db;
 mod directives;
@@ -541,9 +542,9 @@ fn set_data_location(path: Option<String>, state: State<'_, AppState>) -> Result
 ///
 /// The self-hosting keystone: after `cargo tauri build` lands a new bundle at
 /// the same path, the running instance is the stale copy. Draining the tables
-/// first and then exec'ing our own path is "restart into the new build", and
-/// the clean half of any upgrade. It has to be the app's own move: an agent
-/// quitting the app from inside a run kills its own parent mid-flight.
+/// first and then handing our path to the restart angel is "restart into the
+/// new build", and the clean half of any upgrade. The angel, rather than the
+/// process being replaced, owns the relaunch.
 ///
 /// # Errors
 /// None reachable, the tail never returns. `Result` for command uniformity.
@@ -554,10 +555,21 @@ async fn relaunch_app(app: AppHandle, state: State<'_, AppState>) -> Result<(), 
         "boot",
         "relaunching into the binary on disk"
     );
-    // The same drain the quit path does: a half-written page is how a table
-    // becomes unreadable rather than merely stale.
+    restart_after_drain(&app, &state).await
+}
+
+/// Drain once, then hand the actual relaunch to a process that survives us.
+///
+/// Spawning happens only after a successful drain. If the angel cannot start,
+/// this process stays alive and reports the error instead of exiting with no
+/// replacement. The angel waits for this PID to disappear before executing
+/// the binary now present at the same path, so old and new builds never hold
+/// the single-writer store at the same time.
+pub(crate) async fn restart_after_drain(app: &AppHandle, state: &AppState) -> Result<(), String> {
     state.drain_tables_once().await?;
-    app.restart();
+    angel::spawn()?;
+    app.exit(0);
+    Ok(())
 }
 
 /// Drain off the native event loop, then let Tauri finish the process.
@@ -1090,6 +1102,14 @@ fn migrate_forward(location: &mut location::DataLocation, found: &str) -> Result
 }
 
 fn main() {
+    if let Some(result) = angel::run_from_env() {
+        if let Err(error) = result {
+            eprintln!("AgencyZero restart angel failed: {error}");
+            std::process::exit(1);
+        }
+        return;
+    }
+
     adopt_login_shell_path();
 
     /*
