@@ -317,7 +317,7 @@ export function SettingsTab(): JSX.Element {
                 </Row>
                 <Row
                   label={tx("Completed items")}
-                  hint={tx("what marking an item finished does to the row")}
+                  hint={tx("what manual completion does to the row")}
                 >
                   <PillMenu
                     label={tx("Completed items")}
@@ -330,6 +330,23 @@ export function SettingsTab(): JSX.Element {
                       void actions.saveSettings({
                         completedItems: completedItems as "resolve" | "delete",
                       })
+                    }
+                  />
+                </Row>
+                <Row
+                  label={tx("Agent-finished retention")}
+                  hint={tx("user turns kept before automatic retirement")}
+                >
+                  <PillMenu<"1" | "2" | "3">
+                    label={tx("Agent-finished retention")}
+                    value={String(current().agentFinishedRetentionTurns) as "1" | "2" | "3"}
+                    options={[
+                      { value: "1", label: tx("1 turn") },
+                      { value: "2", label: tx("2 turns") },
+                      { value: "3", label: tx("3 turns") },
+                    ]}
+                    onChange={(turns) =>
+                      void actions.saveSettings({ agentFinishedRetentionTurns: Number(turns) })
                     }
                   />
                 </Row>

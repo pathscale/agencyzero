@@ -43,7 +43,12 @@ const en = {
   "reasoning level a new tab starts on": "reasoning level a new tab starts on",
   "Default effort": "Default effort",
   "Completed items": "Completed items",
-  "what marking an item finished does to the row": "what marking an item finished does to the row",
+  "what manual completion does to the row": "what manual completion does to the row",
+  "Agent-finished retention": "Agent-finished retention",
+  "user turns kept before automatic retirement": "user turns kept before automatic retirement",
+  "1 turn": "1 turn",
+  "2 turns": "2 turns",
+  "3 turns": "3 turns",
   "Inject AgencyZero and Prompt Syntax per turn": "Inject AgencyZero and Prompt Syntax per turn",
   "extended features (items, questions, PR tracking); override with AgencyZeroPerTurn.md":
     "extended features (items, questions, PR tracking); override with AgencyZeroPerTurn.md",

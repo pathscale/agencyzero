@@ -32,11 +32,15 @@ pub const EMBEDDED: &str = include_str!("per_turn_default.md");
 /// "inject no instructions", and the toggle already exists for the deliberate
 /// case.
 #[must_use]
-pub fn instructions(config_dir: &std::path::Path) -> String {
+pub fn instructions(config_dir: &std::path::Path, agent_finished_retention_turns: u8) -> String {
     std::fs::read_to_string(config_dir.join(OVERRIDE_FILE))
         .ok()
         .filter(|text| !text.trim().is_empty())
         .unwrap_or_else(|| EMBEDDED.to_string())
+        .replace(
+            "{{agent_finished_retention_turns}}",
+            &agent_finished_retention_turns.to_string(),
+        )
 }
 
 #[cfg(test)]
@@ -59,7 +63,7 @@ mod tests {
         std::fs::create_dir_all(&dir).expect("temp dir");
         std::fs::write(dir.join(OVERRIDE_FILE), "my own rules").expect("write override");
 
-        assert_eq!(instructions(&dir), "my own rules");
+        assert_eq!(instructions(&dir, 2), "my own rules");
 
         let _ = std::fs::remove_dir_all(&dir);
     }
@@ -70,11 +74,17 @@ mod tests {
         std::fs::create_dir_all(&dir).expect("temp dir");
 
         // Missing entirely.
-        assert_eq!(instructions(&dir), EMBEDDED);
+        assert_eq!(
+            instructions(&dir, 2),
+            EMBEDDED.replace("{{agent_finished_retention_turns}}", "2")
+        );
 
         // Present but blank: a mistake, not a deliberate silencing.
         std::fs::write(dir.join(OVERRIDE_FILE), "   \n\t\n").expect("write blank");
-        assert_eq!(instructions(&dir), EMBEDDED);
+        assert_eq!(
+            instructions(&dir, 2),
+            EMBEDDED.replace("{{agent_finished_retention_turns}}", "2")
+        );
 
         let _ = std::fs::remove_dir_all(&dir);
     }

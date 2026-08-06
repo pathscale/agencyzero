@@ -536,6 +536,8 @@ export interface GlobalSettings {
    * keeps the finished row, while `"delete"` removes it outright.
    */
   completedItems: "resolve" | "delete";
+  /** Subsequent user turns before an agent-finished row is retired. */
+  agentFinishedRetentionTurns: number;
   /** How the workspace is coloured. See {@link ThemeSettings}. */
   theme: ThemeSettings;
   /** Off by default; events stay local until an explicit export. */

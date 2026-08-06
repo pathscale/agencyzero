@@ -75,6 +75,11 @@ the current ids and the declared closed verb set:
   titles are refused as ambiguous rather than choosing one.
 - `items.state` moves an existing id through `new`, `planning`, `active`,
   `questions`, `shipped`, `finished`, or `canceled`.
+- `finished` remains visible for the number of subsequent user turns stored in
+  the `agentFinishedRetentionTurns` database setting, then AgencyZero retires
+  the row automatically. Reopening it before then cancels retirement. The
+  exact instruction shown to agents is authored in
+  `apps/gui/src/per_turn_default.md`; runtime substitutes the persisted value.
 - `items.retire` removes exactly the named id.
 - `pr.link` records an authored GitHub PR URL and may attach its number to an
   item. A URL in prose is display text only.
