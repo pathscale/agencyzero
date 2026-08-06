@@ -192,281 +192,297 @@ export function ProjectTab(props: { tab: Tab; project: Project }): JSX.Element {
   });
 
   return (
-    <div class="flex min-h-0 min-w-0 flex-1 gap-3">
-      <Panel class="relative flex min-w-0 flex-1 flex-col">
-        <header class="flex flex-none items-center gap-3 border-az-hairline-soft border-b px-4 py-3">
-          <Icon name="messages-square" class="text-[16px] text-az-muted" />
-          {/*
+    <div class="flex min-h-0 min-w-0 flex-1">
+      <div class="relative flex min-h-0 min-w-0 flex-1">
+        <Panel class="relative flex min-w-0 flex-1 flex-col">
+          <header class="flex flex-none items-center gap-3 border-az-hairline-soft border-b px-4 py-3">
+            <Icon name="messages-square" class="text-[16px] text-az-muted" />
+            {/*
             The name owns the row and truncates on its own. Everything after it
             is `shrink-0` and sits to the right of a spacer, so no label can push
             the name around or take width from it.
           */}
-          <EditableTitle
-            value={props.project.name}
-            onRename={(name) => actions.renameProject(props.project.id, name)}
-            label={tx("Rename project")}
-            class="min-w-0 flex-1 font-semibold text-[14.5px] text-az-title"
-            inputClass="font-semibold text-[14.5px]"
-          />
-          {/*
+            <EditableTitle
+              value={props.project.name}
+              onRename={(name) => actions.renameProject(props.project.id, name)}
+              label={tx("Rename project")}
+              class="min-w-0 flex-1 font-semibold text-[14.5px] text-az-title"
+              inputClass="font-semibold text-[14.5px]"
+            />
+            {/*
             Turns and cost live here rather than under the prompt. They describe
             the conversation as a whole, which is what this label already names,
             and moving them up leaves the composer row for the controls that act
             on the next message.
           */}
-          <span class="flex min-w-0 shrink items-center gap-2 overflow-hidden rounded-full border border-az-hairline bg-base-300 px-2.5 py-0.5 font-mono text-[11px] text-az-muted">
-            {/* No leading agent label: the 7-day readout at the end already says
+            <span class="flex min-w-0 shrink items-center gap-2 overflow-hidden rounded-full border border-az-hairline bg-base-300 px-2.5 py-0.5 font-mono text-[11px] text-az-muted">
+              {/* No leading agent label: the 7-day readout at the end already says
                 "Claude 7d …", so a "Claude ·" prefix here was the same word
                 twice. The turn count leads instead. */}
-            <Show when={totals().turns > 0}>
-              <span class="font-semibold text-az-body">
-                {tx("Turn")} {totals().turns}
-              </span>
-              <span class="text-az-faint">·</span>
-              {/* The session's summed consumption — where the tokens went. The
+              <Show when={totals().turns > 0}>
+                <span class="font-semibold text-az-body">
+                  {tx("Turn")} {totals().turns}
+                </span>
+                <span class="text-az-faint">·</span>
+                {/* The session's summed consumption — where the tokens went. The
                   context readout under the composer answers a different
                   question (how full the window is), so both exist. Coloured
                   accent, not flat grey: these are the numbers worth reading. */}
-              <span title={costTitle()} class="font-semibold text-accent">
-                {compactCount(totals().tokens)} {tx("tok")}
-              </span>
-              <span class="text-az-faint">·</span>
-              {/* A leading ~ marks a partial total (some turns reported no
+                <span title={costTitle()} class="font-semibold text-accent">
+                  {compactCount(totals().tokens)} {tx("tok")}
+                </span>
+                <span class="text-az-faint">·</span>
+                {/* A leading ~ marks a partial total (some turns reported no
                   usage) without stealing a whole word from a tight header — the
                   hover still explains it. */}
-              <span
-                title={
-                  totals().reported < totals().turns
-                    ? tx("Some turns reported no usage")
-                    : costTitle()
-                }
-                class="font-semibold text-accent"
-              >
-                {costs().missing > 0 ? "~" : ""}
-                {costs().estimated
-                  ? tx("est. {cost}", { cost: costLabel(costs().usd) })
-                  : costLabel(costs().usd)}
-              </span>
-            </Show>
-            <Show when={providerUsage()}>
-              {(usage) => (
-                <>
-                  <span class="text-az-faint">·</span>
-                  {/* The 7-day window is the number that decides whether you can
+                <span
+                  title={
+                    totals().reported < totals().turns
+                      ? tx("Some turns reported no usage")
+                      : costTitle()
+                  }
+                  class="font-semibold text-accent"
+                >
+                  {costs().missing > 0 ? "~" : ""}
+                  {costs().estimated
+                    ? tx("est. {cost}", { cost: costLabel(costs().usd) })
+                    : costLabel(costs().usd)}
+                </span>
+              </Show>
+              <Show when={providerUsage()}>
+                {(usage) => (
+                  <>
+                    <span class="text-az-faint">·</span>
+                    {/* The 7-day window is the number that decides whether you can
                       keep working today, so it is not left flat grey: it warms
                       toward warning as it fills and goes error past 90%. */}
-                  <span
-                    class={`font-semibold ${
-                      usage().severity === "high"
-                        ? "text-error"
-                        : usage().severity === "mid"
-                          ? "text-warning"
-                          : "text-az-body"
-                    }`}
-                    title={usage().title}
-                  >
-                    {usage().label}
-                  </span>
-                </>
+                    <span
+                      class={`font-semibold ${
+                        usage().severity === "high"
+                          ? "text-error"
+                          : usage().severity === "mid"
+                            ? "text-warning"
+                            : "text-az-body"
+                      }`}
+                      title={usage().title}
+                    >
+                      {usage().label}
+                    </span>
+                  </>
+                )}
+              </Show>
+            </span>
+
+            <Show when={likelyCacheBreak()}>
+              <span
+                title={tx(
+                  "The latest comparable turn reported zero cache reads after a substantial cached turn. This can increase usage, but the provider does not expose the cause.",
+                )}
+                class="shrink-0 rounded-full border border-warning/30 bg-warning/10 px-2.5 py-0.5 text-[11px] text-warning"
+              >
+                {tx("cache miss?")}
+              </span>
+            </Show>
+
+            <SessionChip
+              sessionId={
+                props.tab.agent === "claude"
+                  ? (props.project.sessions.claude ?? props.project.sessionId)
+                  : (props.project.sessions[props.tab.agent] ?? null)
+              }
+            />
+
+            <Show when={rateLimit()}>
+              {(limit) => (
+                /*
+                 * One line, in words, and nothing else.
+                 *
+                 * It read `allowed_warning (seven_day) · resets 21:00`, which is
+                 * the provider's status word, the provider's window name and a
+                 * time, wrapped onto two lines in a pill. Three facts where one
+                 * was wanted: whether to slow down. The window and the reset are
+                 * dropped, and `whitespace-nowrap` is what keeps the pill on one
+                 * line however narrow the header gets.
+                 */
+                <div class="mr-1.5 flex items-center gap-[7px] whitespace-nowrap rounded-full border border-warning/34 bg-warning/15 px-2.5 py-1 text-[11.5px]">
+                  <Icon name="pause" class="text-[12px] text-warning" />
+                  <span class="font-semibold text-warning">{rateLimitLabel(limit().message)}</span>
+                </div>
               )}
             </Show>
-          </span>
+          </header>
 
-          <Show when={likelyCacheBreak()}>
-            <span
-              title={tx(
-                "The latest comparable turn reported zero cache reads after a substantial cached turn. This can increase usage, but the provider does not expose the cause.",
-              )}
-              class="shrink-0 rounded-full border border-warning/30 bg-warning/10 px-2.5 py-0.5 text-[11px] text-warning"
-            >
-              {tx("cache miss?")}
-            </span>
-          </Show>
-
-          <SessionChip
-            sessionId={
-              props.tab.agent === "claude"
-                ? (props.project.sessions.claude ?? props.project.sessionId)
-                : (props.project.sessions[props.tab.agent] ?? null)
-            }
+          <TranscriptPane
+            project={props.project}
+            messages={messages()}
+            streaming={state.streaming[props.project.id] ?? ""}
           />
 
-          <Show when={rateLimit()}>
-            {(limit) => (
-              /*
-               * One line, in words, and nothing else.
-               *
-               * It read `allowed_warning (seven_day) · resets 21:00`, which is
-               * the provider's status word, the provider's window name and a
-               * time, wrapped onto two lines in a pill. Three facts where one
-               * was wanted: whether to slow down. The window and the reset are
-               * dropped, and `whitespace-nowrap` is what keeps the pill on one
-               * line however narrow the header gets.
-               */
-              <div class="mr-1.5 flex items-center gap-[7px] whitespace-nowrap rounded-full border border-warning/34 bg-warning/15 px-2.5 py-1 text-[11.5px]">
-                <Icon name="pause" class="text-[12px] text-warning" />
-                <span class="font-semibold text-warning">{rateLimitLabel(limit().message)}</span>
-              </div>
-            )}
-          </Show>
-
-          {/*
-            The sidebar toggle lives at the far right of the header, hard against
-            the panel edge the sidebar attaches to, so the control that shows and
-            hides the right column sits next to that column rather than beside the
-            project name where it acted on something far away.
-          */}
-          <button
-            type="button"
-            onClick={() => setPrefs("projectPanelVisible", (visible) => !visible)}
-            aria-pressed={prefs.projectPanelVisible}
-            aria-label={tx(
-              prefs.projectPanelVisible ? "Hide the project sidebar" : "Show the project sidebar",
-            )}
-            title={tx(
-              prefs.projectPanelVisible ? "Hide the project sidebar" : "Show the project sidebar",
-            )}
-            class={`flex size-7 shrink-0 items-center justify-center rounded-md border transition-colors ${
-              prefs.projectPanelVisible
-                ? "border-primary/25 bg-primary/10 text-primary"
-                : "border-az-hairline text-az-muted hover:text-base-content"
-            }`}
-          >
-            <Icon name="layout-grid" class="text-[13px]" />
-          </button>
-        </header>
-
-        <TranscriptPane
-          project={props.project}
-          messages={messages()}
-          streaming={state.streaming[props.project.id] ?? ""}
-        />
-
-        <div class="flex flex-none flex-col gap-2.5 px-4 pt-2 pb-4">
-          {/* PRs this project's runs have cut, tracked like Claude Desktop's
+          <div class="flex flex-none flex-col gap-2.5 px-4 pt-2 pb-4">
+            {/* PRs this project's runs have cut, tracked like Claude Desktop's
               chips: state, diff stats, CI — with a way to wave each away. */}
-          <Show when={(state.pullRequests[props.project.id] ?? []).some((pr) => !pr.dismissed)}>
-            <div class="flex flex-col gap-1">
-              <For
-                each={(state.pullRequests[props.project.id] ?? []).filter((pr) => !pr.dismissed)}
-              >
-                {(pr) => <PrChip pr={pr} />}
-              </For>
-            </div>
-          </Show>
-          {/* Prompts waiting their turn, each with its way out. Above the
+            <Show when={(state.pullRequests[props.project.id] ?? []).some((pr) => !pr.dismissed)}>
+              <div class="flex flex-col gap-1">
+                <For
+                  each={(state.pullRequests[props.project.id] ?? []).filter((pr) => !pr.dismissed)}
+                >
+                  {(pr) => <PrChip pr={pr} />}
+                </For>
+              </div>
+            </Show>
+            {/* Prompts waiting their turn, each with its way out. Above the
               composer so the words are visibly held, not vanished. */}
-          <Show when={(state.queued[props.project.id] ?? []).length > 0}>
-            <div class="flex flex-col gap-1">
-              <For each={state.queued[props.project.id]}>
-                {(prompt, index) => (
-                  <div class="flex items-center gap-2 rounded-[11px] border border-primary/14 border-dashed bg-az-inset px-3 py-1.5 text-[12px]">
-                    <Icon name="history" class="shrink-0 text-[12px] text-az-faint" />
-                    <span class="min-w-0 flex-1 truncate text-az-body">{prompt.body}</span>
-                    {/* Why, not just that. A wait with no stated cause reads as
+            <Show when={(state.queued[props.project.id] ?? []).length > 0}>
+              <div class="flex flex-col gap-1">
+                <For each={state.queued[props.project.id]}>
+                  {(prompt, index) => (
+                    <div class="flex items-center gap-2 rounded-[11px] border border-primary/14 border-dashed bg-az-inset px-3 py-1.5 text-[12px]">
+                      <Icon name="history" class="shrink-0 text-[12px] text-az-faint" />
+                      <span class="min-w-0 flex-1 truncate text-az-body">{prompt.body}</span>
+                      {/* Why, not just that. A wait with no stated cause reads as
                         the message having been swallowed. */}
-                    <span class="shrink-0 text-[10.5px] text-az-faint">
-                      {QUEUE_REASONS[prompt.reason]}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => actions.removeQueued(props.project.id, index())}
-                      aria-label={tx("Drop this queued message")}
-                      class="shrink-0 text-az-faint transition-colors hover:text-error"
-                    >
-                      <Icon name="x" class="text-[12px]" />
-                    </button>
-                  </div>
-                )}
-              </For>
-            </div>
-          </Show>
-          <Composer
-            draftKey={props.tab.key}
-            onCompact={
-              capabilitiesFor(props.tab.agent)?.commands
-                ? () => actions.compactProject(props.project.id, props.tab.agent)
-                : undefined
-            }
-            available={state.commands[props.project.id]?.[props.tab.agent]}
-            autofocus
-            placeholder={tx("Ask, or type / for commands…")}
-            agent={props.tab.agent}
-            model={props.tab.model}
-            modelOptions={promptModels()}
-            efforts={effortsFor(props.tab.agent, props.tab.model)}
-            effort={props.tab.effort}
-            /*
-             * This was missing entirely: the effort menu rendered and called
-             * an optional handler nobody passed, so picking "low" changed
-             * nothing. The bug read as "low cannot be selected".
-             */
-            onEffortChange={(effort) =>
-              actions.setTabModel(
-                props.tab.key,
-                props.tab.agent,
-                props.tab.model,
-                props.tab.permission,
-                effort,
-              )
-            }
-            extraThinking={props.tab.extraThinking}
-            onExtraThinkingChange={(enabled) => actions.setTabExtraThinking(props.tab.key, enabled)}
-            permission={props.tab.permission}
-            permissions={permissionsFor(props.tab.agent)}
-            usage={contextLabel()}
-            /* The warm context the next turn will resend, so the composer can
+                      <span class="shrink-0 text-[10.5px] text-az-faint">
+                        {QUEUE_REASONS[prompt.reason]}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => actions.removeQueued(props.project.id, index())}
+                        aria-label={tx("Drop this queued message")}
+                        class="shrink-0 text-az-faint transition-colors hover:text-error"
+                      >
+                        <Icon name="x" class="text-[12px]" />
+                      </button>
+                    </div>
+                  )}
+                </For>
+              </div>
+            </Show>
+            <Composer
+              draftKey={props.tab.key}
+              onCompact={
+                capabilitiesFor(props.tab.agent)?.commands
+                  ? () => actions.compactProject(props.project.id, props.tab.agent)
+                  : undefined
+              }
+              available={state.commands[props.project.id]?.[props.tab.agent]}
+              autofocus
+              placeholder={tx("Ask, or type / for commands…")}
+              agent={props.tab.agent}
+              model={props.tab.model}
+              modelOptions={promptModels()}
+              efforts={effortsFor(props.tab.agent, props.tab.model)}
+              effort={props.tab.effort}
+              /*
+               * This was missing entirely: the effort menu rendered and called
+               * an optional handler nobody passed, so picking "low" changed
+               * nothing. The bug read as "low cannot be selected".
+               */
+              onEffortChange={(effort) =>
+                actions.setTabModel(
+                  props.tab.key,
+                  props.tab.agent,
+                  props.tab.model,
+                  props.tab.permission,
+                  effort,
+                )
+              }
+              extraThinking={props.tab.extraThinking}
+              onExtraThinkingChange={(enabled) =>
+                actions.setTabExtraThinking(props.tab.key, enabled)
+              }
+              permission={props.tab.permission}
+              permissions={permissionsFor(props.tab.agent)}
+              usage={contextLabel()}
+              /* The warm context the next turn will resend, so the composer can
                price it live as you type. From the tab's running totals. */
-            contextTokens={
-              contextOwner()?.agent !== props.tab.agent
-                ? (conversationTotals().contextTokens ?? 0)
-                : (standing().contextTokens ?? 0)
-            }
-            contextAgent={contextOwner()?.agent as Agent | undefined}
-            contextModel={contextOwner()?.model}
-            /*
-             * The full turn, not just its visible parts: `runStatus` exists
-             * from the accepted send to `run:stopped`, covering the quiet
-             * stretches where no tool row and no text would otherwise read
-             * as idle. The older signals stay as belt for replayed state.
-             */
-            isRunning={
-              props.project.id in state.runStatus ||
-              running().length > 0 ||
-              (state.streaming[props.project.id] ?? "") !== ""
-            }
-            canFollowUp={canFollowUp()}
-            /*
-             * Only offered when the backend can actually stop the run. An
-             * ungated Stop routed to the mock, which emitted `run:stopped`
-             * while the real agent kept working — the worst kind of button.
-             */
-            onStop={
-              isLive("cancelRun")
-                ? () =>
-                    void actions.cancelRun(props.project.id).catch((cause) => {
-                      log.warn(`stop: ${describeError(cause)}`);
-                    })
-                : undefined
-            }
-            onModelChange={(agent, model) =>
-              actions.setTabModel(props.tab.key, agent, model, props.tab.permission)
-            }
-            onPermissionChange={(permission) =>
-              actions.setTabModel(props.tab.key, props.tab.agent, props.tab.model, permission)
-            }
-            replyQuestion={replyQuestion()}
-            onCancelQuestionReply={() => actions.clearQuestionReply(props.project.id)}
-            onSend={(body, study, replyQuestionId) =>
-              actions.send(props.project.id, body, study, replyQuestionId)
-            }
-          />
-        </div>
-      </Panel>
+              contextTokens={
+                contextOwner()?.agent !== props.tab.agent
+                  ? (conversationTotals().contextTokens ?? 0)
+                  : (standing().contextTokens ?? 0)
+              }
+              contextAgent={contextOwner()?.agent as Agent | undefined}
+              contextModel={contextOwner()?.model}
+              /*
+               * The full turn, not just its visible parts: `runStatus` exists
+               * from the accepted send to `run:stopped`, covering the quiet
+               * stretches where no tool row and no text would otherwise read
+               * as idle. The older signals stay as belt for replayed state.
+               */
+              isRunning={
+                props.project.id in state.runStatus ||
+                running().length > 0 ||
+                (state.streaming[props.project.id] ?? "") !== ""
+              }
+              canFollowUp={canFollowUp()}
+              /*
+               * Only offered when the backend can actually stop the run. An
+               * ungated Stop routed to the mock, which emitted `run:stopped`
+               * while the real agent kept working — the worst kind of button.
+               */
+              onStop={
+                isLive("cancelRun")
+                  ? () =>
+                      void actions.cancelRun(props.project.id).catch((cause) => {
+                        log.warn(`stop: ${describeError(cause)}`);
+                      })
+                  : undefined
+              }
+              onModelChange={(agent, model) =>
+                actions.setTabModel(props.tab.key, agent, model, props.tab.permission)
+              }
+              onPermissionChange={(permission) =>
+                actions.setTabModel(props.tab.key, props.tab.agent, props.tab.model, permission)
+              }
+              replyQuestion={replyQuestion()}
+              onCancelQuestionReply={() => actions.clearQuestionReply(props.project.id)}
+              onSend={(body, study, replyQuestionId) =>
+                actions.send(props.project.id, body, study, replyQuestionId)
+              }
+            />
+          </div>
+        </Panel>
 
-      <Show when={prefs.projectPanelVisible}>
+        {/*
+          This control acts on the boundary, so it lives on the boundary. It is
+          outside the conversation header and remains reachable when the panel
+          is closed. The button and panel animate independently: the button's
+          tone describes state while the panel's width/opacity show the change.
+        */}
+        <button
+          type="button"
+          onClick={() => setPrefs("projectPanelVisible", (visible) => !visible)}
+          aria-pressed={prefs.projectPanelVisible}
+          aria-label={tx(
+            prefs.projectPanelVisible ? "Hide the project sidebar" : "Show the project sidebar",
+          )}
+          title={tx(
+            prefs.projectPanelVisible ? "Hide the project sidebar" : "Show the project sidebar",
+          )}
+          class={`absolute top-1/2 -right-3.5 z-20 flex size-7 -translate-y-1/2 items-center justify-center rounded-full border bg-base-100 shadow-md transition-[color,background-color,border-color,transform] duration-200 motion-reduce:transition-none ${
+            prefs.projectPanelVisible
+              ? "border-primary/30 text-primary hover:scale-105"
+              : "border-az-hairline text-az-muted hover:scale-105 hover:text-base-content"
+          }`}
+        >
+          <Icon
+            name="layout-grid"
+            class={`text-[13px] transition-transform duration-200 motion-reduce:transition-none ${
+              prefs.projectPanelVisible ? "rotate-0" : "rotate-90"
+            }`}
+          />
+        </button>
+      </div>
+
+      <div
+        aria-hidden={!prefs.projectPanelVisible}
+        class={`min-h-0 flex-none overflow-hidden transition-[width,margin,opacity,transform] duration-200 ease-out motion-reduce:transition-none ${
+          prefs.projectPanelVisible
+            ? "ml-3 w-[322px] translate-x-0 opacity-100"
+            : "pointer-events-none ml-0 w-0 translate-x-3 opacity-0"
+        }`}
+      >
         <ProjectPanel project={props.project} />
-      </Show>
+      </div>
     </div>
   );
 }
