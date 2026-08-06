@@ -185,6 +185,94 @@ fn processed_tokens(usage: &agent_abstraction::Usage) -> u64 {
         + usage.cache_write_tokens.unwrap_or(0)
 }
 
+/// Whether this usage contains anything the durable accounting tables store.
+///
+/// Kept separate from [`agent_abstraction::Usage::is_empty`]: context-window
+/// metadata alone belongs on a message, but it is not a spent token or a cost
+/// and must not create an empty ledger turn.
+fn has_accountable_usage(usage: &agent_abstraction::Usage) -> bool {
+    usage.cost_usd.is_some()
+        || usage.input_tokens.is_some()
+        || usage.output_tokens.is_some()
+        || usage.cache_read_tokens.is_some()
+        || usage.cache_write_tokens.is_some()
+}
+
+/// The message-row representation of whatever usage the agent reported.
+fn usage_json(usage: &agent_abstraction::Usage) -> String {
+    if usage.is_empty() {
+        String::new()
+    } else {
+        serde_json::to_string(&UsageDto::from(usage)).unwrap_or_default()
+    }
+}
+
+/// Persist one observed turn's token and cost accounting.
+///
+/// This accepts a terminal outcome or the live accumulator from an interrupted
+/// turn. The latter is the only record left when a run is stopped on an
+/// approval: those model calls already happened and were already reported, so
+/// discarding them makes the ledger claim that real consumption was free.
+/// Missing fields stay zero in the decomposition and a missing provider cost
+/// stays zero dollars. The transcript labels a locally estimated cost as such;
+/// this durable ledger never promotes that estimate into a provider charge.
+fn record_turn_usage(
+    tables: &Tables,
+    project_id: &str,
+    model: &str,
+    usage: &agent_abstraction::Usage,
+) {
+    if !has_accountable_usage(usage) {
+        return;
+    }
+
+    let count = |value: Option<u64>| {
+        value
+            .and_then(|tokens| i64::try_from(tokens).ok())
+            .unwrap_or(0)
+    };
+    let at = now();
+    let ledger = crate::db::schema::usage_ledger::UsageLedgerRow {
+        id: id("cost"),
+        day: at.chars().take(10).collect(),
+        at: at.clone(),
+        project_id: project_id.to_string(),
+        model: model.to_string(),
+        #[expect(
+            clippy::cast_possible_truncation,
+            reason = "a turn costing more than 9 trillion dollars is not a rounding concern"
+        )]
+        cost_micro: (usage.cost_usd.unwrap_or(0.0) * 1_000_000.0).round() as i64,
+        input_tokens: count(usage.input_tokens),
+        output_tokens: count(usage.output_tokens),
+    };
+    let cache = crate::db::schema::usage_cache::UsageCacheRow {
+        id: id("cache"),
+        day: ledger.day.clone(),
+        project_id: project_id.to_string(),
+        model: model.to_string(),
+        cache_read_tokens: count(usage.cache_read_tokens),
+        cache_write_tokens: count(usage.cache_write_tokens),
+        input_tokens: count(usage.input_tokens),
+        at: ledger.at.clone(),
+    };
+
+    if let Err(error) = tables.usage_ledger.insert(ledger) {
+        crate::log!(
+            crate::log::Level::Error,
+            "run",
+            "{project_id}: could not record the turn usage: {error}"
+        );
+    }
+    if let Err(error) = tables.usage_cache.insert(cache) {
+        crate::log!(
+            crate::log::Level::Error,
+            "run",
+            "{project_id}: could not record the cache split: {error}"
+        );
+    }
+}
+
 impl From<&agent_abstraction::Usage> for UsageDto {
     fn from(usage: &agent_abstraction::Usage) -> Self {
         UsageDto {
@@ -7037,11 +7125,7 @@ async fn drive_run(
                 permission: permission.clone(),
                 // Empty means the agent reported nothing, which the transcript
                 // renders as an em dash. Zeroes would read as a free turn.
-                usage: if outcome.usage.is_empty() {
-                    String::new()
-                } else {
-                    serde_json::to_string(&UsageDto::from(&outcome.usage)).unwrap_or_default()
-                },
+                usage: usage_json(&outcome.usage),
                 stop: stop.clone(),
                 exit_code: i64::from(outcome.exit_code),
                 body: body_head(&body),
@@ -7169,85 +7253,10 @@ async fn drive_run(
              * The figure is the agent's own; absent means the turn reported
              * nothing, and no row is written rather than a zero.
              */
-            // Record a turn whenever it reported a cost OR any token figures.
-            // Gating on `cost_usd` alone dropped Codex entirely: Claude computes
-            // a cost, Codex reports tokens but not always a price, so every Codex
-            // turn fell through and the analytics view showed only Claude. Cost
-            // is zero when absent; the token columns are what the view charts.
-            let usage = &outcome.usage;
-            let has_usage = usage.cost_usd.is_some()
-                || usage.input_tokens.is_some()
-                || usage.output_tokens.is_some()
-                || usage.cache_read_tokens.is_some()
-                || usage.cache_write_tokens.is_some();
-            if has_usage {
-                let cost = usage.cost_usd.unwrap_or(0.0);
-                let at = now();
-                let ledger = crate::db::schema::usage_ledger::UsageLedgerRow {
-                    id: id("cost"),
-                    day: at.chars().take(10).collect(),
-                    at,
-                    project_id: project_id.clone(),
-                    model: model.clone(),
-                    #[expect(
-                        clippy::cast_possible_truncation,
-                        reason = "a turn costing more than 9 trillion dollars is not a rounding concern"
-                    )]
-                    cost_micro: (cost * 1_000_000.0).round() as i64,
-                    input_tokens: outcome
-                        .usage
-                        .input_tokens
-                        .and_then(|tokens| i64::try_from(tokens).ok())
-                        .unwrap_or(0),
-                    output_tokens: outcome
-                        .usage
-                        .output_tokens
-                        .and_then(|tokens| i64::try_from(tokens).ok())
-                        .unwrap_or(0),
-                };
-                let ledger_at = ledger.at.clone();
-                let ledger_day = ledger.day.clone();
-                if let Err(error) = tables.usage_ledger.insert(ledger) {
-                    crate::log!(
-                        crate::log::Level::Error,
-                        "run",
-                        "{project_id}: could not record the cost: {error}"
-                    );
-                }
-                // The cache split for this turn, in its own table so the
-                // analytics view can show read-vs-write over time. A turn that
-                // read or wrote no cache still records zeros, so the series has
-                // a point per priced turn.
-                let cache_row = crate::db::schema::usage_cache::UsageCacheRow {
-                    id: id("cache"),
-                    day: ledger_day,
-                    project_id: project_id.clone(),
-                    model: model.clone(),
-                    cache_read_tokens: outcome
-                        .usage
-                        .cache_read_tokens
-                        .and_then(|tokens| i64::try_from(tokens).ok())
-                        .unwrap_or(0),
-                    cache_write_tokens: outcome
-                        .usage
-                        .cache_write_tokens
-                        .and_then(|tokens| i64::try_from(tokens).ok())
-                        .unwrap_or(0),
-                    input_tokens: outcome
-                        .usage
-                        .input_tokens
-                        .and_then(|tokens| i64::try_from(tokens).ok())
-                        .unwrap_or(0),
-                    at: ledger_at,
-                };
-                if let Err(error) = tables.usage_cache.insert(cache_row) {
-                    crate::log!(
-                        crate::log::Level::Error,
-                        "run",
-                        "{project_id}: could not record the cache split: {error}"
-                    );
-                }
-            }
+            // Record a turn whenever it reported a cost or any token figures.
+            // The same path is used for interrupted turns below, so a stop on
+            // an approval cannot erase work already reported by the provider.
+            record_turn_usage(&tables, &project_id, &model, &outcome.usage);
 
             /*
              * One reverse-channel parser for Home and project tabs. The
@@ -7325,10 +7334,12 @@ async fn drive_run(
             /*
              * The partial transcript is what the user watched stream; a
              * cancelled run that said something must not read afterwards as
-             * if it never spoke. No usage row and no harvest: an interrupted
-             * turn reported no cost and its output is not a finished answer.
+             * if it never spoke. Its live usage is also real: every figure in
+             * `turn_usage` came from a provider event before the cancellation.
+             * Keep it on the message and in the ledger, while still skipping
+             * harvest because this is not a finished answer.
              */
-            if !streamed_text.trim().is_empty() {
+            if !streamed_text.trim().is_empty() || has_accountable_usage(&turn_usage) {
                 let canceled_body = streamed_text.clone();
                 let row = MessageRow {
                     id: id("msg"),
@@ -7339,7 +7350,7 @@ async fn drive_run(
                     moderation: String::new(),
                     model: model.clone(),
                     permission: permission.clone(),
-                    usage: String::new(),
+                    usage: usage_json(&turn_usage),
                     stop: "canceled".into(),
                     exit_code: -1,
                     body: body_head(&canceled_body),
@@ -7351,6 +7362,7 @@ async fn drive_run(
                         let mut appended = MessageDto::from(row);
                         appended.body = canceled_body.clone();
                         let _ = app.emit("message:appended", appended);
+                        record_turn_usage(&tables, &project_id, &model, &turn_usage);
                         clear_partial_reply(&tables, &project_id).await;
                     }
                     // The insert failing is the one case the checkpoint is
@@ -7397,11 +7409,12 @@ async fn drive_run(
              * this way; a failure is the same situation with a different
              * label.
              *
-             * No usage row and no harvest, exactly as with a cancellation: a
-             * turn that ended badly reported no cost, and its words are not a
-             * finished answer to mine for tasks.
+             * No harvest, exactly as with a cancellation: its words are not a
+             * finished answer to mine for tasks. Usage already reported before
+             * the failure remains real consumption, so it is persisted with
+             * the partial message and in the durable ledger.
              */
-            if !streamed_text.trim().is_empty() {
+            if !streamed_text.trim().is_empty() || has_accountable_usage(&turn_usage) {
                 let row = MessageRow {
                     id: id("msg"),
                     project_id: project_id.clone(),
@@ -7411,7 +7424,7 @@ async fn drive_run(
                     moderation: String::new(),
                     model: model.clone(),
                     permission: permission.clone(),
-                    usage: String::new(),
+                    usage: usage_json(&turn_usage),
                     // The reason, kept with the words it interrupted, so the
                     // transcript can explain itself later.
                     stop: error.to_string(),
@@ -7426,6 +7439,7 @@ async fn drive_run(
                         let mut appended = MessageDto::from(row);
                         appended.body = failed_body.clone();
                         let _ = app.emit("message:appended", appended);
+                        record_turn_usage(&tables, &project_id, &model, &turn_usage);
                         clear_partial_reply(&tables, &project_id).await;
                     }
                     // Left in place deliberately: the checkpoint is what the
@@ -8214,6 +8228,57 @@ mod tests {
             live + 497,
             "the live figure is the terminal one less the output still to come"
         );
+    }
+
+    /// The exact approval-abort regression: the provider had already reported
+    /// this turn's consumption, then the run stopped before producing a terminal
+    /// outcome. Those figures must still survive in both places that read them.
+    #[tokio::test]
+    async fn interrupted_usage_reaches_the_message_shape_and_durable_ledger() {
+        let dir = std::env::temp_dir().join(format!(
+            "az-interrupted-usage-{}-{}",
+            std::process::id(),
+            chrono::Utc::now().timestamp_nanos_opt().unwrap_or_default()
+        ));
+        let tables = Tables::open(&dir)
+            .await
+            .expect("interrupted usage store opens");
+
+        let mut usage = agent_abstraction::Usage::default();
+        usage.input_tokens = Some(50);
+        usage.output_tokens = Some(7);
+        usage.cache_read_tokens = Some(300_000);
+        usage.context_tokens = Some(300_050);
+
+        let message_usage: serde_json::Value =
+            serde_json::from_str(&usage_json(&usage)).expect("message usage serializes");
+        assert_eq!(message_usage["tokens"], 300_057);
+        assert!(message_usage["costUsd"].is_null());
+
+        record_turn_usage(&tables, "project-current", "gpt-5.6-sol", &usage);
+
+        let ledger = tables
+            .usage_ledger
+            .select_all()
+            .execute()
+            .expect("usage ledger reads");
+        assert_eq!(ledger.len(), 1);
+        assert_eq!(ledger[0].project_id, "project-current");
+        assert_eq!(ledger[0].model, "gpt-5.6-sol");
+        assert_eq!(ledger[0].cost_micro, 0, "Codex did not report a price");
+        assert_eq!(ledger[0].input_tokens, 50);
+        assert_eq!(ledger[0].output_tokens, 7);
+
+        let cache = tables
+            .usage_cache
+            .select_all()
+            .execute()
+            .expect("usage cache reads");
+        assert_eq!(cache.len(), 1);
+        assert_eq!(cache[0].cache_read_tokens, 300_000);
+        assert_eq!(cache[0].input_tokens, 50);
+
+        let _ = std::fs::remove_dir_all(dir);
     }
 
     /// The exact mismatch that crashed the transcript: the crate's field names
