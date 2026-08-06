@@ -19,3 +19,4 @@ pub mod study_event;
 pub mod task_log;
 pub mod usage_cache;
 pub mod usage_ledger;
+pub mod usage_session;

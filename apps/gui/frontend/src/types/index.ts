@@ -662,6 +662,23 @@ export interface UsageProject {
   turns: number;
 }
 
+/** Usage owned by one provider-native conversation session. */
+export interface UsageSession {
+  projectId: string;
+  projectName: string;
+  agent: string;
+  sessionId: string;
+  model: string;
+  costUsd: number;
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadTokens: number;
+  cacheWriteTokens: number;
+  processedTokens: number;
+  turns: number;
+  lastAt: string;
+}
+
 /** Everything the Analytics view charts, from one call. */
 /**
  * The single heaviest turn — the answer to "is one request enormous, or is it
@@ -684,6 +701,7 @@ export interface UsageAnalytics {
   days: UsageDay[];
   models: UsageModel[];
   projects: UsageProject[];
+  sessions: UsageSession[];
   totalUsd: number;
   totalInputTokens: number;
   totalOutputTokens: number;

@@ -619,6 +619,11 @@ const en = {
   "Or start a fresh session if the history no longer helps the next task.":
     "Or start a fresh session if the history no longer helps the next task.",
   "Per project": "Per project",
+  "Per session": "Per session",
+  "captured from this build onward": "captured from this build onward",
+  "Provider supplied no session id": "Provider supplied no session id",
+  "no session id": "no session id",
+  processed: "processed",
   turns: "turns",
 } as const;
 

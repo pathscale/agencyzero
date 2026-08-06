@@ -601,6 +601,11 @@ const zh = {
   "Or start a fresh session if the history no longer helps the next task.":
     "如果历史对下一个任务已无帮助，也可以开启新会话。",
   "Per project": "按项目",
+  "Per session": "按会话",
+  "captured from this build onward": "从此版本开始记录",
+  "Provider supplied no session id": "提供商未提供会话 ID",
+  "no session id": "无会话 ID",
+  processed: "已处理",
   turns: "轮",
 } satisfies Record<keyof typeof en, string>;
 

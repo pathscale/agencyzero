@@ -1,7 +1,7 @@
 import { createMemo, createSignal, For, type JSX, onMount, Show } from "solid-js";
 import { tx } from "~/stores/i18n";
 import { useWorkspace } from "~/stores/workspace";
-import type { UsageAnalytics, UsageDay, UsageModel, UsageProject } from "~/types";
+import type { UsageAnalytics, UsageDay, UsageModel, UsageProject, UsageSession } from "~/types";
 
 /** The four token classes, each with a stable label and bar colour. */
 const TOKEN_CLASSES = [
@@ -66,6 +66,7 @@ export function AnalyticsTab(): JSX.Element {
               <StatTiles usage={usage()} />
               <CacheEfficiency usage={usage()} />
               <LargestTurn usage={usage()} />
+              <SessionBreakdown sessions={usage().sessions} />
               <DaySeries days={usage().days} />
               <ProjectBreakdown projects={usage().projects} total={usage().totalUsd} />
               <ModelBreakdown models={usage().models} />
@@ -74,6 +75,49 @@ export function AnalyticsTab(): JSX.Element {
         </Show>
       </div>
     </div>
+  );
+}
+
+/** Provider-native sessions, newest first, without guessing historical ownership. */
+function SessionBreakdown(props: { sessions: UsageSession[] }): JSX.Element {
+  return (
+    <Show when={props.sessions.length > 0}>
+      <div class="rounded-xl border border-az-hairline bg-base-100 px-4 py-3.5">
+        <div class="flex items-baseline justify-between gap-3">
+          <h2 class="font-medium text-[12.5px] text-az-title">{tx("Per session")}</h2>
+          <span class="text-[10.5px] text-az-muted">{tx("captured from this build onward")}</span>
+        </div>
+        <div class="mt-3 flex flex-col gap-2.5">
+          <For each={props.sessions}>
+            {(session) => (
+              <div class="rounded-lg border border-az-hairline px-3 py-2.5">
+                <div class="flex items-baseline gap-2 text-[11.5px]">
+                  <span class="min-w-0 flex-1 truncate text-az-strong">{session.projectName}</span>
+                  <span class="font-mono text-[10.5px] text-az-muted">{session.agent}</span>
+                  <span class="font-mono text-[11px] text-az-title">
+                    {dollars(session.costUsd)}
+                  </span>
+                </div>
+                <div class="mt-1 flex items-center gap-2 font-mono text-[10.5px] text-az-muted">
+                  <span title={session.sessionId || tx("Provider supplied no session id")}>
+                    {session.sessionId ? session.sessionId.slice(0, 8) : tx("no session id")}
+                  </span>
+                  <span>·</span>
+                  <span>{session.model}</span>
+                  <span>·</span>
+                  <span>
+                    {session.turns} {tx("turns")}
+                  </span>
+                  <span class="ml-auto text-az-strong">
+                    {tokens(session.processedTokens)} {tx("processed")}
+                  </span>
+                </div>
+              </div>
+            )}
+          </For>
+        </div>
+      </div>
+    </Show>
   );
 }
 

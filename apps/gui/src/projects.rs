@@ -229,6 +229,7 @@ fn usage_json(usage: &agent_abstraction::Usage) -> String {
 fn record_turn_usage(
     tables: &Tables,
     project_id: &str,
+    agent: Agent,
     model: &str,
     usage: &agent_abstraction::Usage,
 ) {
@@ -242,8 +243,9 @@ fn record_turn_usage(
             .unwrap_or(0)
     };
     let at = now();
+    let ledger_id = id("cost");
     let ledger = crate::db::schema::usage_ledger::UsageLedgerRow {
-        id: id("cost"),
+        id: ledger_id.clone(),
         day: at.chars().take(10).collect(),
         at: at.clone(),
         project_id: project_id.to_string(),
@@ -257,13 +259,23 @@ fn record_turn_usage(
         output_tokens: count(usage.output_tokens),
     };
     let cache = crate::db::schema::usage_cache::UsageCacheRow {
-        id: id("cache"),
+        id: ledger_id.clone(),
         day: ledger.day.clone(),
         project_id: project_id.to_string(),
         model: model.to_string(),
         cache_read_tokens: count(usage.cache_read_tokens),
         cache_write_tokens: count(usage.cache_write_tokens),
         input_tokens: count(usage.input_tokens),
+        at: ledger.at.clone(),
+    };
+    let session = crate::db::schema::usage_session::UsageSessionRow {
+        id: ledger_id,
+        project_id: project_id.to_string(),
+        agent: agent_wire_name(agent).to_string(),
+        session_id: tables
+            .kv_get(&agent_session_key(project_id, agent))
+            .unwrap_or_default(),
+        model: model.to_string(),
         at: ledger.at.clone(),
     };
 
@@ -279,6 +291,13 @@ fn record_turn_usage(
             crate::log::Level::Error,
             "run",
             "{project_id}: could not record the cache split: {error}"
+        );
+    }
+    if let Err(error) = tables.usage_session.insert(session) {
+        crate::log!(
+            crate::log::Level::Error,
+            "run",
+            "{project_id}: could not record usage session ownership: {error}"
         );
     }
 }
@@ -4172,6 +4191,29 @@ pub struct UsageProjectDto {
     pub turns: usize,
 }
 
+/// Usage attributed to one provider-native conversation session.
+///
+/// Historical ledger rows predate the ownership relation and intentionally do
+/// not appear here: assigning them to whichever session the project resumes
+/// today would manufacture precision the store never captured.
+#[derive(Debug, Clone, Default, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UsageSessionDto {
+    pub project_id: String,
+    pub project_name: String,
+    pub agent: String,
+    pub session_id: String,
+    pub model: String,
+    pub cost_usd: f64,
+    pub input_tokens: i64,
+    pub output_tokens: i64,
+    pub cache_read_tokens: i64,
+    pub cache_write_tokens: i64,
+    pub processed_tokens: i64,
+    pub turns: usize,
+    pub last_at: String,
+}
+
 /// The single turn that processed the most tokens.
 ///
 /// Answers the question a big bill raises: is one request enormous, or is it
@@ -4203,6 +4245,8 @@ pub struct UsageAnalyticsDto {
     pub models: Vec<UsageModelDto>,
     /// Per-project totals, most expensive first.
     pub projects: Vec<UsageProjectDto>,
+    /// Provider-native sessions captured by builds that record ownership.
+    pub sessions: Vec<UsageSessionDto>,
     pub total_usd: f64,
     pub total_input_tokens: i64,
     pub total_output_tokens: i64,
@@ -4236,6 +4280,12 @@ pub async fn get_usage_analytics(state: State<'_, AppState>) -> Result<UsageAnal
     let cache = state
         .tables
         .usage_cache
+        .select_all()
+        .execute()
+        .unwrap_or_default();
+    let usage_sessions = state
+        .tables
+        .usage_session
         .select_all()
         .execute()
         .unwrap_or_default();
@@ -4275,6 +4325,14 @@ pub async fn get_usage_analytics(state: State<'_, AppState>) -> Result<UsageAnal
         .collect();
     let mut by_project: std::collections::HashMap<String, UsageProjectDto> =
         std::collections::HashMap::new();
+    let mut by_session: std::collections::HashMap<(String, String, String), UsageSessionDto> =
+        std::collections::HashMap::new();
+    let session_by_ledger: std::collections::HashMap<_, _> = usage_sessions
+        .iter()
+        .map(|row| (row.id.as_str(), row))
+        .collect();
+    let cache_by_id: std::collections::HashMap<_, _> =
+        cache.iter().map(|row| (row.id.as_str(), row)).collect();
     let mut total_micro = 0i64;
     let mut total_input = 0i64;
     let mut total_output = 0i64;
@@ -4320,6 +4378,44 @@ pub async fn get_usage_analytics(state: State<'_, AppState>) -> Result<UsageAnal
         project.input_tokens += row.input_tokens;
         project.output_tokens += row.output_tokens;
         project.turns += 1;
+
+        if let Some(owner) = session_by_ledger.get(row.id.as_str()) {
+            let key = (
+                owner.project_id.clone(),
+                owner.agent.clone(),
+                owner.session_id.clone(),
+            );
+            let session = by_session.entry(key).or_insert_with(|| UsageSessionDto {
+                project_id: owner.project_id.clone(),
+                project_name: project_names
+                    .get(&owner.project_id)
+                    .cloned()
+                    .unwrap_or_else(|| format!("Deleted project ({})", owner.project_id)),
+                agent: owner.agent.clone(),
+                session_id: owner.session_id.clone(),
+                model: owner.model.clone(),
+                last_at: owner.at.clone(),
+                ..Default::default()
+            });
+            if session.model != owner.model {
+                session.model = "multiple models".to_string();
+            }
+            session.cost_usd += row.cost_micro as f64 / 1_000_000.0;
+            session.input_tokens += row.input_tokens;
+            session.output_tokens += row.output_tokens;
+            if let Some(split) = cache_by_id.get(row.id.as_str()) {
+                session.cache_read_tokens += split.cache_read_tokens;
+                session.cache_write_tokens += split.cache_write_tokens;
+            }
+            session.processed_tokens = session.input_tokens
+                + session.output_tokens
+                + session.cache_read_tokens
+                + session.cache_write_tokens;
+            session.turns += 1;
+            if owner.at > session.last_at {
+                session.last_at.clone_from(&owner.at);
+            }
+        }
     }
 
     // Fold the cache split onto the per-day and per-model rows.
@@ -4401,11 +4497,14 @@ pub async fn get_usage_analytics(state: State<'_, AppState>) -> Result<UsageAnal
     models.sort_by(|a, b| b.cost_usd.total_cmp(&a.cost_usd));
     let mut projects: Vec<UsageProjectDto> = by_project.into_values().collect();
     projects.sort_by(|a, b| b.cost_usd.total_cmp(&a.cost_usd));
+    let mut sessions: Vec<UsageSessionDto> = by_session.into_values().collect();
+    sessions.sort_by(|a, b| b.last_at.cmp(&a.last_at));
 
     Ok(UsageAnalyticsDto {
         days: by_day.into_values().collect(),
         models,
         projects,
+        sessions,
         total_usd: total_micro as f64 / 1_000_000.0,
         total_input_tokens: total_input,
         total_output_tokens: total_output,
@@ -5150,65 +5249,12 @@ pub async fn compact_project(
         .map_err(|error| error.to_string())?;
     let _ = app.emit("message:appended", &MessageDto::from(row));
     if has_usage {
-        let at = now();
         let model = if compact_model.is_empty() {
             agent_wire_name(agent).to_string()
         } else {
             compact_model.clone()
         };
-        let ledger = crate::db::schema::usage_ledger::UsageLedgerRow {
-            id: id("cost"),
-            day: at.chars().take(10).collect(),
-            at: at.clone(),
-            project_id: project_id.clone(),
-            model: model.clone(),
-            #[expect(
-                clippy::cast_possible_truncation,
-                reason = "usage is stored in micro-dollars"
-            )]
-            cost_micro: (compact_usage.cost_usd.unwrap_or(0.0) * 1_000_000.0).round() as i64,
-            input_tokens: compact_usage
-                .input_tokens
-                .and_then(|value| i64::try_from(value).ok())
-                .unwrap_or(0),
-            output_tokens: compact_usage
-                .output_tokens
-                .and_then(|value| i64::try_from(value).ok())
-                .unwrap_or(0),
-        };
-        let cache = crate::db::schema::usage_cache::UsageCacheRow {
-            id: id("cache"),
-            day: at.chars().take(10).collect(),
-            project_id: project_id.clone(),
-            model,
-            cache_read_tokens: compact_usage
-                .cache_read_tokens
-                .and_then(|value| i64::try_from(value).ok())
-                .unwrap_or(0),
-            cache_write_tokens: compact_usage
-                .cache_write_tokens
-                .and_then(|value| i64::try_from(value).ok())
-                .unwrap_or(0),
-            input_tokens: compact_usage
-                .input_tokens
-                .and_then(|value| i64::try_from(value).ok())
-                .unwrap_or(0),
-            at,
-        };
-        if let Err(error) = state.tables.usage_ledger.insert(ledger) {
-            crate::log!(
-                crate::log::Level::Error,
-                "run",
-                "{project_id}: could not record compaction cost: {error}"
-            );
-        }
-        if let Err(error) = state.tables.usage_cache.insert(cache) {
-            crate::log!(
-                crate::log::Level::Error,
-                "run",
-                "{project_id}: could not record compaction cache usage: {error}"
-            );
-        }
+        record_turn_usage(&state.tables, &project_id, agent, &model, &compact_usage);
     }
     let _ = app.emit(
         "run:compaction",
@@ -8184,7 +8230,7 @@ async fn drive_run(
             // Record a turn whenever it reported a cost or any token figures.
             // The same path is used for interrupted turns below, so a stop on
             // an approval cannot erase work already reported by the provider.
-            record_turn_usage(&tables, &project_id, &model, &outcome.usage);
+            record_turn_usage(&tables, &project_id, agent, &model, &outcome.usage);
 
             /*
              * One reverse-channel parser for Home and project tabs. The
@@ -8284,7 +8330,7 @@ async fn drive_run(
                 {
                     Ok(appended) => {
                         let _ = app.emit("message:appended", appended);
-                        record_turn_usage(&tables, &project_id, &model, &turn_usage);
+                        record_turn_usage(&tables, &project_id, agent, &model, &turn_usage);
                         clear_partial_reply(&tables, &project_id).await;
                     }
                     // The insert failing is the one case the checkpoint is
@@ -8353,7 +8399,7 @@ async fn drive_run(
                 {
                     Ok(appended) => {
                         let _ = app.emit("message:appended", appended);
-                        record_turn_usage(&tables, &project_id, &model, &turn_usage);
+                        record_turn_usage(&tables, &project_id, agent, &model, &turn_usage);
                         clear_partial_reply(&tables, &project_id).await;
                     }
                     // Left in place deliberately: the checkpoint is what the
@@ -9358,12 +9404,26 @@ mod tests {
         usage.cache_read_tokens = Some(300_000);
         usage.context_tokens = Some(300_050);
 
+        tables
+            .kv_put(
+                &agent_session_key("project-current", Agent::Codex),
+                "session-current".to_string(),
+            )
+            .await
+            .expect("session id persists");
+
         let message_usage: serde_json::Value =
             serde_json::from_str(&usage_json(&usage)).expect("message usage serializes");
         assert_eq!(message_usage["tokens"], 300_057);
         assert!(message_usage["costUsd"].is_null());
 
-        record_turn_usage(&tables, "project-current", "gpt-5.6-sol", &usage);
+        record_turn_usage(
+            &tables,
+            "project-current",
+            Agent::Codex,
+            "gpt-5.6-sol",
+            &usage,
+        );
 
         let ledger = tables
             .usage_ledger
@@ -9385,6 +9445,16 @@ mod tests {
         assert_eq!(cache.len(), 1);
         assert_eq!(cache[0].cache_read_tokens, 300_000);
         assert_eq!(cache[0].input_tokens, 50);
+
+        let sessions = tables
+            .usage_session
+            .select_all()
+            .execute()
+            .expect("usage session ownership reads");
+        assert_eq!(sessions.len(), 1);
+        assert_eq!(sessions[0].id, ledger[0].id);
+        assert_eq!(sessions[0].agent, "codex");
+        assert_eq!(sessions[0].session_id, "session-current");
 
         let _ = std::fs::remove_dir_all(dir);
     }
