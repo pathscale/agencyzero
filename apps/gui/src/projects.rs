@@ -8849,7 +8849,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn response_verbosity_is_scoped_and_migrates_the_old_boolean() {
+    async fn response_verbosity_persists_per_project_and_migrates_the_old_boolean() {
         let dir = std::env::temp_dir().join(format!(
             "az-project-concise-{}-{}",
             std::process::id(),
@@ -8861,12 +8861,22 @@ mod tests {
 
         assert_eq!(project_response_verbosity(&tables, "project-a"), "default");
         tables
-            .kv_put(&concise_key("project-a"), "true".into())
+            .kv_put(&concise_key("project-a"), "low".into())
             .await
             .expect("concise preference writes");
+        tables
+            .kv_put(&concise_key("legacy-project"), "true".into())
+            .await
+            .expect("legacy concise preference writes");
+
+        drop(tables);
+        let tables = crate::db::tables::Tables::open(&dir)
+            .await
+            .expect("concise preference store reopens");
 
         assert_eq!(project_response_verbosity(&tables, "project-a"), "low");
         assert_eq!(project_response_verbosity(&tables, "project-b"), "default");
+        assert_eq!(project_response_verbosity(&tables, "legacy-project"), "low");
         assert!(
             response_verbosity_instruction("low")
                 .expect("low has an instruction")
@@ -8874,6 +8884,7 @@ mod tests {
         );
         assert!(response_verbosity_instruction("default").is_none());
 
+        drop(tables);
         let _ = std::fs::remove_dir_all(dir);
     }
 
