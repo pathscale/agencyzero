@@ -64,6 +64,30 @@ function priceFor(table: PricingTable, model: string): PriceRow | undefined {
 export const ASSUMED_OUTPUT_TOKENS = 8_000;
 
 /**
+ * Project visible output plus reasoning work from the selected effort.
+ * Output tokens are the expensive side of both Claude and Codex pricing, so a
+ * fixed 8k projection made `low` and `high` look identical even though the
+ * latter explicitly grants a much larger reasoning budget.
+ */
+export function assumedOutputTokensForEffort(effort: string, extraThinking = false): number {
+  const projected = (() => {
+    switch (effort.trim().toLowerCase()) {
+      case "low":
+        return 4_000;
+      case "high":
+        return 16_000;
+      case "xhigh":
+      case "max":
+      case "maximum":
+        return 32_000;
+      default:
+        return ASSUMED_OUTPUT_TOKENS;
+    }
+  })();
+  return extraThinking ? Math.max(projected, 32_000) : projected;
+}
+
+/**
  * Estimate the next turn's cost.
  *
  * @param contextTokens size of the conversation the agent will resend, from the

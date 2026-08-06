@@ -96,6 +96,10 @@ export function TranscriptPane(props: {
   onMount(() => {
     if (typeof ResizeObserver === "undefined") return;
     resizeObserver = new ResizeObserver(() => {
+      // A width transition can leave an overflow-hidden element with a real,
+      // retained horizontal offset. The bar is invisible but the first words
+      // are clipped off the left edge until another layout happens.
+      scroller.scrollLeft = 0;
       if (!untrack(pinned)) return;
       queueMicrotask(() => {
         scroller.scrollTop = scroller.scrollHeight;

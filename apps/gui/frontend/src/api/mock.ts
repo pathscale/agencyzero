@@ -892,6 +892,7 @@ export function createMockApi(): AgencyZeroApi {
           },
         ],
         totalUsd: 11.8,
+        estimatedCostUsd: 2.86,
         totalInputTokens: 269_100,
         totalOutputTokens: 109_700,
         totalCacheReadTokens: 2_820_000,

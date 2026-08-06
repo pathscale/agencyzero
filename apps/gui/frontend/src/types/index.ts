@@ -718,6 +718,7 @@ export interface UsageAnalytics {
   sessions: UsageSession[];
   agents: UsageAgentValue[];
   totalUsd: number;
+  estimatedCostUsd: number;
   totalInputTokens: number;
   totalOutputTokens: number;
   totalCacheReadTokens: number;

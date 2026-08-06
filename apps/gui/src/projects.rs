@@ -982,6 +982,10 @@ async fn persist_terminal_agent_chunk(
     last_chunk_id: Option<&str>,
     outcome: AgentMessageOutcome,
 ) -> Result<MessageDto, String> {
+    // A cancellation, provider failure, or clean stop can all land between two
+    // deltas of an authored span. Persist the prose before it, never the
+    // executable-looking fragment the agent did not finish authoring.
+    let body = without_incomplete_prompt_syntax_tail(&body);
     if body.is_empty()
         && let Some(message_id) = last_chunk_id
     {
@@ -1414,6 +1418,24 @@ async fn age_finished_items_by(
     project_id: &str,
     midturn: bool,
 ) -> Result<Vec<ProjectItemDto>, String> {
+    // Finished rows written by older builds, and rows completed through the
+    // GUI before that path scheduled retirement, have no marker at all. Such a
+    // row would otherwise be immortal because the loop below only sees marker
+    // keys. Backfill before aging; this accepted owner message is already a
+    // subsequent turn, so the normal retention count applies immediately.
+    let finished: Vec<ProjectItemRow> = tables
+        .project_item
+        .select_by_project_id(project_id.to_string())
+        .execute()
+        .unwrap_or_default()
+        .into_iter()
+        .filter(|row| row.status == "finished")
+        .collect();
+    for row in finished {
+        if tables.kv.select(finished_retire_key(&row.id)).is_none() {
+            schedule_finished_retirement(tables, &row.id).await?;
+        }
+    }
     let markers = tables.kv.select_all().execute().unwrap_or_default();
     let mut retired = Vec::new();
     for marker in markers {
@@ -1557,9 +1579,13 @@ pub async fn set_item_status(
         );
         return Err(format!("not an item status: {status}"));
     }
-    clear_finished_retirement(&state.tables, &id).await?;
     let delete_finished =
         status == "finished" && global_settings(&state.tables).completed_items == "delete";
+    if status == "finished" && !delete_finished {
+        schedule_finished_retirement(&state.tables, &id).await?;
+    } else {
+        clear_finished_retirement(&state.tables, &id).await?;
+    }
     let written = write_item_status(&state.tables, &id, &status, delete_finished, None).await?;
     written.emit(&app);
     let dto = written.item().clone();
@@ -4568,6 +4594,9 @@ pub struct UsageAnalyticsDto {
     /// Outcome-per-dollar by agent, from newly attributed durable rows.
     pub agents: Vec<UsageAgentValueDto>,
     pub total_usd: f64,
+    /// Portion of `total_usd` supplied by the local pricing table because the
+    /// provider reported tokens but no dollar charge.
+    pub estimated_cost_usd: f64,
     pub total_input_tokens: i64,
     pub total_output_tokens: i64,
     pub total_cache_read_tokens: i64,
@@ -4577,6 +4606,27 @@ pub struct UsageAnalyticsDto {
     /// The single heaviest turn, or absent when the ledger is empty.
     pub largest_turn: Option<UsageLargestTurnDto>,
     pub turns: usize,
+}
+
+fn effective_ledger_cost(
+    row: &crate::db::schema::usage_ledger::UsageLedgerRow,
+    split: Option<&crate::db::schema::usage_cache::UsageCacheRow>,
+) -> (f64, bool) {
+    let reported = row.cost_micro as f64 / 1_000_000.0;
+    if reported > 0.0 {
+        return (reported, false);
+    }
+    let read = split.map_or(0, |cache| cache.cache_read_tokens);
+    let write = split.map_or(0, |cache| cache.cache_write_tokens);
+    let estimated = crate::pricing::estimate_running_cost(
+        &row.model,
+        u64::try_from(row.input_tokens).unwrap_or(0),
+        u64::try_from(row.output_tokens).unwrap_or(0),
+        u64::try_from(read).unwrap_or(0),
+        u64::try_from(write).unwrap_or(0),
+    )
+    .unwrap_or(0.0);
+    (estimated, estimated > 0.0)
 }
 
 /// Aggregate the usage ledger and the cache table for the analytics view.
@@ -4661,12 +4711,18 @@ pub async fn get_usage_analytics(state: State<'_, AppState>) -> Result<UsageAnal
         .collect();
     let cache_by_id: std::collections::HashMap<_, _> =
         cache.iter().map(|row| (row.id.as_str(), row)).collect();
-    let mut total_micro = 0i64;
+    let mut total_usd = 0.0;
+    let mut estimated_cost_usd = 0.0;
     let mut total_input = 0i64;
     let mut total_output = 0i64;
 
     for row in &ledger {
-        total_micro += row.cost_micro;
+        let split = cache_by_id.get(row.id.as_str()).copied();
+        let (cost_usd, estimated) = effective_ledger_cost(row, split);
+        total_usd += cost_usd;
+        if estimated {
+            estimated_cost_usd += cost_usd;
+        }
         total_input += row.input_tokens;
         total_output += row.output_tokens;
 
@@ -4676,7 +4732,7 @@ pub async fn get_usage_analytics(state: State<'_, AppState>) -> Result<UsageAnal
                 day: row.day.clone(),
                 ..Default::default()
             });
-        day.cost_usd += row.cost_micro as f64 / 1_000_000.0;
+        day.cost_usd += cost_usd;
         day.input_tokens += row.input_tokens;
         day.output_tokens += row.output_tokens;
         day.turns += 1;
@@ -4687,7 +4743,7 @@ pub async fn get_usage_analytics(state: State<'_, AppState>) -> Result<UsageAnal
                 model: row.model.clone(),
                 ..Default::default()
             });
-        model.cost_usd += row.cost_micro as f64 / 1_000_000.0;
+        model.cost_usd += cost_usd;
         model.input_tokens += row.input_tokens;
         model.output_tokens += row.output_tokens;
         model.turns += 1;
@@ -4702,7 +4758,7 @@ pub async fn get_usage_analytics(state: State<'_, AppState>) -> Result<UsageAnal
                     .unwrap_or_else(|| format!("Deleted project ({})", row.project_id)),
                 ..Default::default()
             });
-        project.cost_usd += row.cost_micro as f64 / 1_000_000.0;
+        project.cost_usd += cost_usd;
         project.input_tokens += row.input_tokens;
         project.output_tokens += row.output_tokens;
         project.turns += 1;
@@ -4728,7 +4784,7 @@ pub async fn get_usage_analytics(state: State<'_, AppState>) -> Result<UsageAnal
             if session.model != owner.model {
                 session.model = "multiple models".to_string();
             }
-            session.cost_usd += row.cost_micro as f64 / 1_000_000.0;
+            session.cost_usd += cost_usd;
             session.input_tokens += row.input_tokens;
             session.output_tokens += row.output_tokens;
             if let Some(split) = cache_by_id.get(row.id.as_str()) {
@@ -4749,14 +4805,7 @@ pub async fn get_usage_analytics(state: State<'_, AppState>) -> Result<UsageAnal
             let write = split.map_or(0, |cache| cache.cache_write_tokens);
             let processed = row.input_tokens + row.output_tokens + read + write;
             let reported = row.cost_micro as f64 / 1_000_000.0;
-            let estimated = crate::pricing::estimate_running_cost(
-                &row.model,
-                u64::try_from(row.input_tokens).unwrap_or(0),
-                u64::try_from(row.output_tokens).unwrap_or(0),
-                u64::try_from(read).unwrap_or(0),
-                u64::try_from(write).unwrap_or(0),
-            )
-            .unwrap_or(0.0);
+            let estimated_cost = if estimated { cost_usd } else { 0.0 };
             let value = by_agent
                 .entry(owner.agent.clone())
                 .or_insert_with(|| UsageAgentValueDto {
@@ -4765,9 +4814,9 @@ pub async fn get_usage_analytics(state: State<'_, AppState>) -> Result<UsageAnal
                 });
             value.reported_cost_usd += reported;
             if reported <= 0.0 {
-                value.estimated_cost_usd += estimated;
+                value.estimated_cost_usd += estimated_cost;
             }
-            value.effective_cost_usd += if reported > 0.0 { reported } else { estimated };
+            value.effective_cost_usd += cost_usd;
             value.processed_tokens += processed;
             value.turns += 1;
         }
@@ -4860,7 +4909,7 @@ pub async fn get_usage_analytics(state: State<'_, AppState>) -> Result<UsageAnal
                 cache_write_tokens: write,
                 output_tokens: row.output_tokens,
                 processed_tokens: processed,
-                cost_usd: row.cost_micro as f64 / 1_000_000.0,
+                cost_usd: effective_ledger_cost(row, cache_by_id.get(row.id.as_str()).copied()).0,
             });
         }
     }
@@ -4880,7 +4929,8 @@ pub async fn get_usage_analytics(state: State<'_, AppState>) -> Result<UsageAnal
         projects,
         sessions,
         agents,
-        total_usd: total_micro as f64 / 1_000_000.0,
+        total_usd,
+        estimated_cost_usd,
         total_input_tokens: total_input,
         total_output_tokens: total_output,
         total_cache_read_tokens: total_read,
@@ -8940,11 +8990,12 @@ async fn drive_run(
              * Keep it on the message and in the ledger, while still skipping
              * harvest because this is not a finished answer.
              */
-            if !streamed_text.trim().is_empty() || has_accountable_usage(&turn_usage) {
+            let visible_chunk = without_incomplete_prompt_syntax_tail(&streamed_chunk);
+            if !visible_chunk.trim().is_empty() || has_accountable_usage(&turn_usage) {
                 match persist_terminal_agent_chunk(
                     &tables,
                     message_context,
-                    streamed_chunk.clone(),
+                    visible_chunk,
                     chunk_started_at.clone(),
                     last_chunk_id.as_deref(),
                     AgentMessageOutcome {
@@ -8968,6 +9019,11 @@ async fn drive_run(
                         "{project_id}: could not persist the cancelled turn: {error}"
                     ),
                 }
+            } else {
+                // The only streamed content was an unfinished control span.
+                // It is deliberately discarded and must not return through
+                // crash-recovery on the next launch.
+                clear_partial_reply(&tables, &project_id).await;
             }
             emit_run_stopped(
                 &app,
@@ -9009,11 +9065,12 @@ async fn drive_run(
              * the failure remains real consumption, so it is persisted with
              * the partial message and in the durable ledger.
              */
-            if !streamed_text.trim().is_empty() || has_accountable_usage(&turn_usage) {
+            let visible_chunk = without_incomplete_prompt_syntax_tail(&streamed_chunk);
+            if !visible_chunk.trim().is_empty() || has_accountable_usage(&turn_usage) {
                 match persist_terminal_agent_chunk(
                     &tables,
                     message_context,
-                    streamed_chunk.clone(),
+                    visible_chunk,
                     chunk_started_at.clone(),
                     last_chunk_id.as_deref(),
                     AgentMessageOutcome {
@@ -9037,6 +9094,8 @@ async fn drive_run(
                         "{project_id}: could not persist the failed turn: {error}"
                     ),
                 }
+            } else {
+                clear_partial_reply(&tables, &project_id).await;
             }
             emit_run_stopped(
                 &app,
@@ -9316,6 +9375,35 @@ mod tests {
         // sends full state whenever the provider might not hold it.
         assert_eq!(Verbosity::parse(""), Verbosity::Adaptive);
         assert_eq!(Verbosity::parse("verbose"), Verbosity::Adaptive);
+    }
+
+    #[test]
+    fn analytics_prices_a_tokenized_codex_turn_when_the_provider_reports_no_dollars() {
+        let ledger = crate::db::schema::usage_ledger::UsageLedgerRow {
+            id: "cost-estimated".into(),
+            at: "2026-08-07T00:00:00Z".into(),
+            day: "2026-08-07".into(),
+            project_id: "project-a".into(),
+            model: "gpt-5.6-sol".into(),
+            cost_micro: 0,
+            input_tokens: 1_000,
+            output_tokens: 100,
+        };
+        let cache = crate::db::schema::usage_cache::UsageCacheRow {
+            id: ledger.id.clone(),
+            at: ledger.at.clone(),
+            day: ledger.day.clone(),
+            project_id: ledger.project_id.clone(),
+            model: ledger.model.clone(),
+            cache_read_tokens: 10_000,
+            cache_write_tokens: 0,
+            input_tokens: ledger.input_tokens,
+        };
+
+        let (cost, estimated) = effective_ledger_cost(&ledger, Some(&cache));
+
+        assert!(estimated);
+        assert!((cost - 0.013).abs() < f64::EPSILON);
     }
 
     #[test]
@@ -11145,6 +11233,50 @@ mod tests {
             .shutdown()
             .await
             .expect("finished-retention store drains");
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[tokio::test]
+    async fn an_unmarked_legacy_finished_item_is_backfilled_and_retired() {
+        let dir = std::env::temp_dir().join(format!(
+            "az-project-legacy-finished-{}-{}",
+            std::process::id(),
+            chrono::Utc::now().timestamp_nanos_opt().unwrap_or_default()
+        ));
+        let tables = crate::db::tables::Tables::open(&dir)
+            .await
+            .expect("legacy-finished store opens");
+        tables
+            .project_item
+            .insert(ProjectItemRow {
+                id: "item-legacy-finished".into(),
+                project_id: "project-a".into(),
+                title: "Already overstayed its grace turn".into(),
+                status: "finished".into(),
+                position: 0,
+                reference: String::new(),
+            })
+            .expect("legacy finished item inserts");
+        assert!(
+            tables
+                .kv
+                .select(finished_retire_key("item-legacy-finished"))
+                .is_none()
+        );
+
+        let retired = age_finished_items(&tables, "project-a")
+            .await
+            .expect("legacy row ages");
+
+        assert_eq!(retired.len(), 1);
+        assert!(
+            tables
+                .project_item
+                .select("item-legacy-finished".to_string())
+                .is_none()
+        );
+
+        tables.shutdown().await.expect("legacy store drains");
         let _ = std::fs::remove_dir_all(dir);
     }
 

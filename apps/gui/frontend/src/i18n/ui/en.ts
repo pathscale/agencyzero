@@ -620,6 +620,8 @@ const en = {
     "Switching providers attaches the conversation to the target agent and creates a cold context charge of about {cost}.",
   "Changing models invalidates the prompt cache and creates a cold context charge of about {cost}.":
     "Changing models invalidates the prompt cache and creates a cold context charge of about {cost}.",
+  "Changing Claude effort can rebuild the long-session prompt cache. This estimate conservatively prices that context rewrite at about {cost}.":
+    "Changing Claude effort can rebuild the long-session prompt cache. This estimate conservatively prices that context rewrite at about {cost}.",
   "Most of it ({cost}) is the conversation being resent every turn, not this message.":
     "Most of it ({cost}) is the conversation being resent every turn, not this message.",
   "Lower project verbosity to reduce reply tokens on every turn.":
