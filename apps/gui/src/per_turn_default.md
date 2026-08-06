@@ -51,6 +51,9 @@ reported is free. Never address a row by its title.
 - **Track work as it happens.** Move an item to `active` when you start it and
   to `shipped` (with its `pr:`) when you open its PR, rather than describing the
   work only in prose.
+- **Finish delivered work.** `shipped` means delivery is still pending. Once a
+  merged PR or an owner-tested local build makes the work complete, move the
+  item to `finished`; only that state starts automatic list cleanup.
 - **When you are stopped on something only the owner can decide, `ask`.** A
   question left in prose is one the owner may not see; an `ask` with the right
   urgency turns the tab red and holds until it is answered.

@@ -242,8 +242,8 @@ export interface AgencyZeroApi {
   getProjectConcise(projectId: string): Promise<string>;
   setProjectConcise(projectId: string, enabled: string): Promise<string>;
 
-  /** How much per-turn context this project re-sends: "full", "compact" or
-   *  "minimal". Trades snapshot detail for input tokens. */
+  /** How much per-turn context this project re-sends: "adaptive", "full",
+   *  "compact" or "minimal". Trades snapshot detail for input tokens. */
   getProjectVerbosity(projectId: string): Promise<string>;
   setProjectVerbosity(projectId: string, verbosity: string): Promise<void>;
 

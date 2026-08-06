@@ -581,7 +581,7 @@ function ConciseResponseToggle(props: { projectId: string }): JSX.Element {
  */
 function ContextDetailSelect(props: { projectId: string }): JSX.Element {
   const { actions, isLive } = useWorkspace();
-  const [level, setLevel] = createSignal("full");
+  const [level, setLevel] = createSignal("adaptive");
 
   createEffect(() => {
     const id = props.projectId;
@@ -617,6 +617,11 @@ function ContextDetailSelect(props: { projectId: string }): JSX.Element {
         value={level()}
         isDisabled={!isLive("setProjectVerbosity")}
         options={[
+          {
+            value: "adaptive",
+            label: tx("Auto"),
+            hint: tx("Full after changes or a fresh session; compact while unchanged"),
+          },
           {
             value: "full",
             label: tx("Full"),

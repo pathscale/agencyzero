@@ -583,6 +583,24 @@ fn needs_text_break(streamed_any: bool, last_was_text: bool) -> bool {
     streamed_any && !last_was_text
 }
 
+/// Move an unfinished, standalone Prompt Syntax line out of a chunk that is
+/// about to be closed by a mid-turn owner message.
+///
+/// The provider stream itself continues after the injected message. If the
+/// chunk boundary bisects `<ps ...>`, persisting both halves separately makes
+/// each half visible and neither half executable. Carrying the unfinished line
+/// into the next agent chunk keeps the control atomic while complete prose
+/// before it still lands above the owner's message.
+fn take_incomplete_prompt_syntax_tail(body: &mut String) -> Option<String> {
+    let start = body.rfind('\n').map_or(0, |at| at + 1);
+    let tail = &body[start..];
+    if tail.starts_with("<ps") && !tail.contains('>') {
+        Some(body.split_off(start))
+    } else {
+        None
+    }
+}
+
 /// Whether this run needs an approval callback as well as its sandbox posture.
 ///
 /// Ask is explicitly human-gated for every capable provider. Auto deliberately
@@ -1352,6 +1370,40 @@ async fn schedule_finished_retirement(
         .map_err(|error| error.to_string())
 }
 
+/// Complete every shipped item attached to a pull request that just merged.
+///
+/// A PR association is delivery state the app can observe directly, so leaving
+/// those rows at `shipped` forever would make cleanup depend on the agent
+/// remembering a second status directive after the work is already over.
+pub(crate) async fn finish_shipped_items_for_pr(
+    app: &AppHandle,
+    tables: &Tables,
+    project_id: &str,
+    number: u32,
+) -> Result<usize, String> {
+    let reference = number.to_string();
+    let rows: Vec<ProjectItemRow> = tables
+        .project_item
+        .select_by_project_id(project_id.to_string())
+        .execute()
+        .unwrap_or_default()
+        .into_iter()
+        .filter(|row| row.status == "shipped" && row.reference == reference)
+        .collect();
+    let delete_finished = global_settings(tables).completed_items == "delete";
+    let mut finished = 0;
+
+    for row in rows {
+        if !delete_finished {
+            schedule_finished_retirement(tables, &row.id).await?;
+        }
+        let written = write_item_status(tables, &row.id, "finished", delete_finished, None).await?;
+        written.emit(app);
+        finished += 1;
+    }
+    Ok(finished)
+}
+
 /// Advance this project's agent-finished rows by one user turn.
 ///
 /// The marker is durable, so closing the app cannot turn the configured grace
@@ -1835,9 +1887,13 @@ impl From<&TaskLogEntryDto> for TaskLogRow {
 /// Stored in the kv table under `verbosity:<project_id>` rather than a project
 /// column: adding a column to the persisted `project` table would move the
 /// schema fingerprint and risk reading every existing row through the wrong
-/// layout. `Full` is the default and the behaviour before this existed.
+/// layout. `Adaptive` is the default: full when the provider needs a refresh,
+/// compact while its resumed session already holds the unchanged titles.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Verbosity {
+    /// Full on a fresh provider session or after project state changed; compact
+    /// while a resumed session already holds the unchanged titles.
+    Adaptive,
     /// Every open item with id, status, title and reference; all tracked PRs.
     Full,
     /// Open items as `id · status` only — titles and references dropped, since
@@ -1850,27 +1906,69 @@ enum Verbosity {
 impl Verbosity {
     fn parse(raw: &str) -> Self {
         match raw {
+            "adaptive" | "auto" | "" => Self::Adaptive,
+            "full" => Self::Full,
             "compact" => Self::Compact,
             "minimal" => Self::Minimal,
-            _ => Self::Full,
+            _ => Self::Adaptive,
         }
     }
 }
 
-/// Read a project's snapshot verbosity from the kv store, defaulting to `Full`.
+/// Read a project's snapshot verbosity, defaulting to adaptive delivery.
 fn project_verbosity(tables: &crate::db::tables::Tables, project_id: &str) -> Verbosity {
     tables
         .kv_get(&format!("verbosity:{project_id}"))
         .map(|raw| Verbosity::parse(&raw))
-        .unwrap_or(Verbosity::Full)
+        .unwrap_or(Verbosity::Adaptive)
+}
+
+fn timestamp_is_after(value: &str, baseline: &str) -> bool {
+    match (
+        chrono::DateTime::parse_from_rfc3339(value),
+        chrono::DateTime::parse_from_rfc3339(baseline),
+    ) {
+        (Ok(value), Ok(baseline)) => value > baseline,
+        _ => value > baseline,
+    }
+}
+
+/// Whether an adaptive snapshot needs to refresh titles and references.
+fn snapshot_changed_since_last_agent(
+    tables: &crate::db::tables::Tables,
+    project_id: &str,
+    items: &[ProjectItemRow],
+    prs: &[crate::db::schema::pull_request::PullRequestRow],
+) -> bool {
+    let latest_agent = tables
+        .message
+        .select_by_project_id(project_id.to_string())
+        .execute()
+        .unwrap_or_default()
+        .into_iter()
+        .filter(|row| row.author == "agent")
+        .map(|row| row.created_at)
+        .max();
+    let Some(latest_agent) = latest_agent else {
+        return true;
+    };
+
+    items.iter().any(|row| {
+        tables
+            .kv_get(&item_activity_key(&row.id))
+            .is_some_and(|at| timestamp_is_after(&at, &latest_agent))
+    }) || prs
+        .iter()
+        .any(|row| timestamp_is_after(&row.updated_at, &latest_agent))
 }
 
 fn state_snapshot(
     tables: &crate::db::tables::Tables,
     project_id: &str,
     focus: Option<&str>,
+    fresh_session: bool,
 ) -> String {
-    let verbosity = project_verbosity(tables, project_id);
+    let requested_verbosity = project_verbosity(tables, project_id);
     let mut items: Vec<ProjectItemRow> = tables
         .project_item
         .select_by_project_id(project_id.to_string())
@@ -1891,6 +1989,16 @@ fn state_snapshot(
     .into_iter()
     .filter(|row| !row.dismissed)
     .collect();
+
+    let verbosity = if requested_verbosity == Verbosity::Adaptive {
+        if fresh_session || snapshot_changed_since_last_agent(tables, project_id, &items, &prs) {
+            Verbosity::Full
+        } else {
+            Verbosity::Compact
+        }
+    } else {
+        requested_verbosity
+    };
 
     let mut out = String::new();
     if project_id == crate::tasks::TASK_MANAGER_ID {
@@ -4783,8 +4891,8 @@ pub async fn get_usage_analytics(state: State<'_, AppState>) -> Result<UsageAnal
     })
 }
 
-/// Read a project's per-turn context verbosity: `"full"`, `"compact"` or
-/// `"minimal"`. Defaults to `"full"` when never set.
+/// Read a project's per-turn context verbosity: `"adaptive"`, `"full"`,
+/// `"compact"` or `"minimal"`. Defaults to `"adaptive"` when never set.
 ///
 /// # Errors
 /// Infallible today; `Result` for signature stability.
@@ -4794,6 +4902,7 @@ pub async fn get_project_verbosity(
     project_id: String,
 ) -> Result<String, String> {
     Ok(match project_verbosity(&state.tables, &project_id) {
+        Verbosity::Adaptive => "adaptive",
         Verbosity::Full => "full",
         Verbosity::Compact => "compact",
         Verbosity::Minimal => "minimal",
@@ -4801,9 +4910,9 @@ pub async fn get_project_verbosity(
     .to_string())
 }
 
-/// Set a project's per-turn context verbosity. Trades snapshot detail for
-/// tokens: `compact` drops item titles/references from the per-turn injection,
-/// `minimal` sends only a count. Unknown values are treated as `full`.
+/// Set a project's per-turn context verbosity. `adaptive` sends a full list on
+/// fresh sessions and after mutations, then compact ids/status while unchanged.
+/// `compact` always drops titles/references; `minimal` sends only a count.
 ///
 /// # Errors
 /// When the kv write fails.
@@ -4815,6 +4924,7 @@ pub async fn set_project_verbosity(
 ) -> Result<(), String> {
     // Normalise through the parser so the store only ever holds a known value.
     let normalized = match Verbosity::parse(&verbosity) {
+        Verbosity::Adaptive => "adaptive",
         Verbosity::Full => "full",
         Verbosity::Compact => "compact",
         Verbosity::Minimal => "minimal",
@@ -7331,7 +7441,12 @@ async fn drive_run(
          * where changing content is cheap, leaving the system prompt stable and
          * cacheable.
          */
-        let snapshot = state_snapshot(&tables, &project_id, item_id.as_deref());
+        let snapshot = state_snapshot(
+            &tables,
+            &project_id,
+            item_id.as_deref(),
+            resume.as_deref().is_none_or(str::is_empty),
+        );
         let receipts_line = receipts
             .lock()
             .ok()
@@ -7792,6 +7907,7 @@ async fn drive_run(
                 // A correction typed mid-turn. The user row was persisted and
                 // broadcast by `send_message`. Close the agent text the owner
                 // was replying to before delivering the new words.
+                let partial_directive = take_incomplete_prompt_syntax_tail(&mut streamed_chunk);
                 if let Some(id) = flush_continued_agent_chunk(
                     &app,
                     &tables,
@@ -7803,11 +7919,16 @@ async fn drive_run(
                 {
                     last_chunk_id = Some(id);
                 }
+                if let Some(partial) = partial_directive.as_deref() {
+                    chunk_started_at = Some(now());
+                    streamed_chunk.push_str(partial);
+                }
                 directive_turn_id.clone_from(&injected.turn_id);
                 let _ = injection_delivery_tx.send(injected);
-                // A user message is a block boundary: the next streamed text
-                // starts a new paragraph rather than gluing to the old one.
-                last_was_text = false;
+                // A user message is normally a block boundary. An unfinished
+                // directive is the exception: its next delta must complete the
+                // same line, not gain the paragraph break that broke the span.
+                last_was_text = partial_directive.is_some();
                 continue;
             }
         };
@@ -7816,6 +7937,9 @@ async fn drive_run(
             opening_message_read = true;
         }
         let is_text = matches!(&event, Event::Text(_));
+        // An owner message can arrive while an approval event is being handled.
+        // Preserve adjacency after that event only when it bisected a PS line.
+        let mut preserve_text_adjacency = false;
         match event {
             Event::ApprovalRequest(approval) => {
                 note_io(
@@ -7940,6 +8064,8 @@ async fn drive_run(
                         }
                         injected = inject_rx.recv() => {
                             if let Some(injected) = injected {
+                                let partial_directive =
+                                    take_incomplete_prompt_syntax_tail(&mut streamed_chunk);
                                 if let Some(id) = flush_continued_agent_chunk(
                                     &app,
                                     &tables,
@@ -7949,6 +8075,11 @@ async fn drive_run(
                                 ).await {
                                     last_chunk_id = Some(id);
                                 }
+                                if let Some(partial) = partial_directive.as_deref() {
+                                    chunk_started_at = Some(now());
+                                    streamed_chunk.push_str(partial);
+                                }
+                                preserve_text_adjacency |= partial_directive.is_some();
                                 directive_turn_id.clone_from(&injected.turn_id);
                                 let _ = injection_delivery_tx.send(injected);
                             }
@@ -8420,7 +8551,7 @@ async fn drive_run(
             }
             _ => {}
         }
-        last_was_text = is_text;
+        last_was_text = is_text || preserve_text_adjacency;
         // The approval arm can learn about a stop mid-question; honour it
         // here rather than waiting for the next event that may never come.
         if cancelled {
@@ -9176,14 +9307,15 @@ mod tests {
     /// The stored value round-trips and anything unknown is the safe default,
     /// so a record written by a newer build never silently blanks the snapshot.
     #[test]
-    fn verbosity_parses_known_values_and_defaults_to_full() {
+    fn verbosity_parses_known_values_and_defaults_to_adaptive() {
+        assert_eq!(Verbosity::parse("adaptive"), Verbosity::Adaptive);
         assert_eq!(Verbosity::parse("full"), Verbosity::Full);
         assert_eq!(Verbosity::parse("compact"), Verbosity::Compact);
         assert_eq!(Verbosity::parse("minimal"), Verbosity::Minimal);
-        // Unknown, empty and legacy values all fall back to Full rather than
-        // dropping the item list.
-        assert_eq!(Verbosity::parse(""), Verbosity::Full);
-        assert_eq!(Verbosity::parse("verbose"), Verbosity::Full);
+        // Unknown and empty values use the safe adaptive default: it still
+        // sends full state whenever the provider might not hold it.
+        assert_eq!(Verbosity::parse(""), Verbosity::Adaptive);
+        assert_eq!(Verbosity::parse("verbose"), Verbosity::Adaptive);
     }
 
     #[test]
@@ -10630,6 +10762,33 @@ mod tests {
         assert!(!user_authored_ps(&format!("> {directive}")));
     }
 
+    #[test]
+    fn an_incomplete_directive_moves_whole_across_a_midturn_chunk_boundary() {
+        let mut chunk =
+            "The completed rows can now retire.\n\n<ps @agency:items.state(id: \"item-a"
+                .to_string();
+
+        let carried = take_incomplete_prompt_syntax_tail(&mut chunk);
+
+        assert_eq!(chunk, "The completed rows can now retire.\n\n");
+        assert_eq!(
+            carried.as_deref(),
+            Some("<ps @agency:items.state(id: \"item-a")
+        );
+    }
+
+    #[test]
+    fn ordinary_ps_mentions_and_complete_directives_are_not_carried() {
+        for source in [
+            "A literal <ps mention in prose",
+            "<ps @agency:items.state(id: \"item-a\", status: \"active\")>",
+        ] {
+            let mut chunk = source.to_string();
+            assert_eq!(take_incomplete_prompt_syntax_tail(&mut chunk), None);
+            assert_eq!(chunk, source);
+        }
+    }
+
     #[tokio::test]
     async fn study_targets_use_resolved_ids_instead_of_authored_prefixes() {
         let dir = std::env::temp_dir().join(format!("az-study-target-{}", std::process::id()));
@@ -10705,11 +10864,88 @@ mod tests {
             tables.pull_request.insert(row).expect("PR row inserts");
         }
 
-        let snapshot = state_snapshot(&tables, "project-private", None);
+        let snapshot = state_snapshot(&tables, "project-private", None, true);
         assert!(snapshot.contains("pr-current · pathscale/worktable#46 · closed"));
         assert!(!snapshot.contains("pr-stale"));
         assert!(snapshot.contains("@agency:pr.retire(id: \"<pr association id>\")"));
 
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[tokio::test]
+    async fn adaptive_snapshot_is_compact_until_project_state_changes() {
+        let dir = std::env::temp_dir().join(format!(
+            "az-adaptive-snapshot-{}-{}",
+            std::process::id(),
+            chrono::Utc::now().timestamp_nanos_opt().unwrap_or_default()
+        ));
+        let tables = crate::db::tables::Tables::open(&dir)
+            .await
+            .expect("adaptive snapshot store opens");
+        tables
+            .project_item
+            .insert(ProjectItemRow {
+                id: "item-adaptive".into(),
+                project_id: "project-adaptive".into(),
+                title: "Only resend this title when it changed".into(),
+                status: "active".into(),
+                position: 0,
+                reference: String::new(),
+            })
+            .expect("adaptive item inserts");
+        tables
+            .kv_put(
+                &item_activity_key("item-adaptive"),
+                "2026-08-07T00:00:00Z".into(),
+            )
+            .await
+            .expect("old item activity writes");
+        tables
+            .message
+            .insert(MessageRow {
+                id: "msg-adaptive".into(),
+                project_id: "project-adaptive".into(),
+                item_id: String::new(),
+                author: "agent".into(),
+                agent: "codex".into(),
+                moderation: String::new(),
+                model: "gpt-5".into(),
+                permission: "ask".into(),
+                usage: String::new(),
+                stop: "end".into(),
+                exit_code: 0,
+                body: "Seen".into(),
+                created_at: "2026-08-07T01:00:00Z".into(),
+            })
+            .expect("agent message inserts");
+
+        let unchanged = state_snapshot(&tables, "project-adaptive", None, false);
+        assert!(unchanged.contains("item-adaptive · active"));
+        assert!(!unchanged.contains("Only resend this title when it changed"));
+
+        tables
+            .kv_put(
+                &item_activity_key("item-adaptive"),
+                "2026-08-07T02:00:00Z".into(),
+            )
+            .await
+            .expect("new item activity writes");
+        let changed = state_snapshot(&tables, "project-adaptive", None, false);
+        assert!(changed.contains("Only resend this title when it changed"));
+
+        // A new native provider session always gets the recoverable full list,
+        // even when no row changed since the last visible response.
+        tables
+            .kv_put(
+                &item_activity_key("item-adaptive"),
+                "2026-08-07T00:00:00Z".into(),
+            )
+            .await
+            .expect("old activity restores");
+        let fresh = state_snapshot(&tables, "project-adaptive", None, true);
+        assert!(fresh.contains("Only resend this title when it changed"));
+
+        tables.shutdown().await.expect("adaptive store drains");
         let _ = std::fs::remove_dir_all(dir);
     }
 

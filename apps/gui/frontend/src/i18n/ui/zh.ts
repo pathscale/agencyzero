@@ -502,6 +502,8 @@ const zh = {
   "How much of the item list rides every turn — less means fewer tokens":
     "每轮携带多少条目列表 — 越少 token 越省",
   "Per-turn context detail for this project": "此项目每轮的上下文详情",
+  "Full after changes or a fresh session; compact while unchanged":
+    "更改后或新会话时发送完整列表；无更改时发送精简列表",
   Full: "完整",
   Compact: "精简",
   "Removes this project and its transcript, items, pull requests and sessions from the store. Usage/cost history is kept.":

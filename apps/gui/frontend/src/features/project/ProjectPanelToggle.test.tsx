@@ -17,7 +17,10 @@ describe("the project panel toggle", () => {
     expect(button.classList).toContain("left-full");
     expect(button.classList).toContain("rounded-r-full");
     expect(button.classList).toContain("border-l-0");
+    expect(button.classList).toContain("h-8");
+    expect(button.classList).toContain("w-4");
     expect(button.classList).not.toContain("rounded-full");
+    expect(button.classList).not.toContain("shadow-[3px_0_8px_rgb(0_0_0_/_0.22)]");
     expect(button.className).not.toContain("-right-");
     expect(button.querySelector("use")?.getAttribute("href")).toBe("#i-chevron-right");
 

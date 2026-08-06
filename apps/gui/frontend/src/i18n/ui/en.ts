@@ -518,6 +518,8 @@ const en = {
   "How much of the item list rides every turn — less means fewer tokens":
     "How much of the item list rides every turn — less means fewer tokens",
   "Per-turn context detail for this project": "Per-turn context detail for this project",
+  "Full after changes or a fresh session; compact while unchanged":
+    "Full after changes or a fresh session; compact while unchanged",
   Full: "Full",
   Compact: "Compact",
   "Removes this project and its transcript, items, pull requests and sessions from the store. Usage/cost history is kept.":

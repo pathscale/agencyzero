@@ -54,6 +54,7 @@ mod tests {
         // would inject a grammar with no reason to use it.
         assert!(EMBEDDED.contains("pr.link"));
         assert!(EMBEDDED.contains("Report every pull request"));
+        assert!(EMBEDDED.contains("Finish delivered work"));
         assert!(EMBEDDED.contains("@agency:ask"));
     }
 

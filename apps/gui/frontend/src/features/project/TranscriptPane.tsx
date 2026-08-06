@@ -6,6 +6,8 @@ import {
   For,
   type JSX,
   Match,
+  onCleanup,
+  onMount,
   Show,
   Switch,
   untrack,
@@ -81,6 +83,27 @@ export function TranscriptPane(props: {
   const trackScroll = (): void => {
     setPinned(scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight < 48);
   };
+
+  /*
+   * Keep a pinned transcript pinned when the project sidebar changes width.
+   * Narrowing the transcript reflows long messages, increasing scrollHeight
+   * without emitting a content update. The ordinary tail-following effect
+   * therefore never ran and the visible conversation appeared to jump upward.
+   * ResizeObserver catches that geometry-only change while leaving a reader
+   * who deliberately scrolled up exactly where they were.
+   */
+  let resizeObserver: ResizeObserver | undefined;
+  onMount(() => {
+    if (typeof ResizeObserver === "undefined") return;
+    resizeObserver = new ResizeObserver(() => {
+      if (!untrack(pinned)) return;
+      queueMicrotask(() => {
+        scroller.scrollTop = scroller.scrollHeight;
+      });
+    });
+    resizeObserver.observe(scroller);
+  });
+  onCleanup(() => resizeObserver?.disconnect());
 
   /*
    * The transcript is one timeline, not "messages, then a pile of questions".
