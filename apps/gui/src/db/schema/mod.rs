@@ -14,6 +14,7 @@ pub mod project_item;
 pub mod pull_request;
 pub mod question;
 pub mod question_reply;
+pub mod reply_checkpoint;
 pub mod study_event;
 pub mod task_log;
 pub mod usage_cache;

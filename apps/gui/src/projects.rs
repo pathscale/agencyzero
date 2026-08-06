@@ -9,11 +9,12 @@
 //! order people saw without writing a row per token.
 //!
 //! One exception, learned the hard way: the streaming reply is checkpointed to
-//! an atomic recovery file every 200ms, because "close the app, reopen it" lost
-//! every word the user had watched stream. This used to overwrite a variable-
-//! sized `kv` row five times a second and repeatedly crashed WorkTable's unsized
-//! persistence index. A checkpoint found at boot becomes an `interrupted`
-//! message row; a run that ends normally removes it before anyone can see it.
+//! a dedicated WorkTable every 200ms, because "close the app, reopen it" lost
+//! every word the user had watched stream. Each snapshot is inserted as an
+//! immutable row before the older one is deleted; resizing one hot KV record is
+//! what repeatedly crashed WorkTable's unsized persistence index. A checkpoint
+//! found at boot becomes an `interrupted` message row; a run that ends normally
+//! removes it before anyone can see it.
 //!
 //! # Naming
 //!
@@ -36,6 +37,7 @@ use crate::db::schema::project_item::{
     ReferenceByIdQuery as ItemReferenceByIdQuery, StatusByIdQuery as ItemStatusByIdQuery,
     TitleByIdQuery as ItemTitleByIdQuery,
 };
+use crate::db::schema::reply_checkpoint::ReplyCheckpointRow;
 use crate::db::schema::task_log::TaskLogRow;
 use crate::db::tables::Tables;
 
@@ -2728,8 +2730,9 @@ pub(crate) fn partial_reply_key(project_id: &str) -> String {
 const PARTIAL_REPLY_FILE_PREFIX: &str = "partial-reply-";
 const PARTIAL_REPLY_FILE_SUFFIX: &str = ".json";
 const PARTIAL_TRUNCATION_SUFFIX: &str = "\n\n[checkpoint truncated; the reply continued]";
+const LEGACY_DURABLE_PREFIX_MIN: usize = 64;
 
-fn partial_reply_path(tables: &Tables, project_id: &str) -> std::path::PathBuf {
+fn legacy_partial_reply_path(tables: &Tables, project_id: &str) -> std::path::PathBuf {
     // Project ids are generated internally (`proj-<uuid>`), and Home's fixed id
     // uses the same filename-safe alphabet. Keep a defensive replacement here
     // because this path is still an authority boundary.
@@ -2743,7 +2746,7 @@ fn partial_reply_path(tables: &Tables, project_id: &str) -> std::path::PathBuf {
             }
         })
         .collect();
-    tables.recovery_dir.join(format!(
+    tables.data_dir.join("recovery").join(format!(
         "{PARTIAL_REPLY_FILE_PREFIX}{safe}{PARTIAL_REPLY_FILE_SUFFIX}"
     ))
 }
@@ -2813,27 +2816,34 @@ async fn write_partial_reply(
     project_id: &str,
     encoded: &str,
 ) -> Result<(), String> {
-    tokio::fs::create_dir_all(&tables.recovery_dir)
-        .await
+    let checkpoint_id = id("checkpoint");
+    tables
+        .reply_checkpoint
+        .insert(ReplyCheckpointRow {
+            id: checkpoint_id.clone(),
+            project_id: project_id.to_string(),
+            payload: encoded.to_string(),
+            created_at: now(),
+        })
         .map_err(|error| error.to_string())?;
-    let target = partial_reply_path(tables, project_id);
-    let temporary = target.with_extension(format!("tmp-{}", uuid::Uuid::now_v7()));
-    tokio::fs::write(&temporary, encoded)
-        .await
+
+    // Insert first, then delete: a process death can leave extra snapshots but
+    // never a moment with no recoverable row. There is no variable-sized
+    // update, so this does not repeat the old KV overwrite failure mode.
+    let older = tables
+        .reply_checkpoint
+        .select_by_project_id(project_id.to_string())
+        .execute()
         .map_err(|error| error.to_string())?;
-    if let Err(error) = tokio::fs::rename(&temporary, &target).await {
-        // Windows does not replace an existing target. AgencyZero ships on
-        // macOS today, but this fallback keeps tests and future ports honest.
-        if error.kind() != std::io::ErrorKind::AlreadyExists {
-            let _ = tokio::fs::remove_file(&temporary).await;
-            return Err(error.to_string());
+    for row in older.into_iter().filter(|row| row.id != checkpoint_id) {
+        if let Err(error) = tables.reply_checkpoint.delete(row.id.clone()).await {
+            crate::log!(
+                crate::log::Level::Warn,
+                "run",
+                "{project_id}: could not prune reply checkpoint {}: {error}",
+                row.id
+            );
         }
-        tokio::fs::remove_file(&target)
-            .await
-            .map_err(|remove| remove.to_string())?;
-        tokio::fs::rename(&temporary, &target)
-            .await
-            .map_err(|rename| rename.to_string())?;
     }
     Ok(())
 }
@@ -3121,13 +3131,42 @@ fn emit_run_stopped(
 
 /// Drop a run's reply checkpoint, once a real row owns the words.
 async fn clear_partial_reply(tables: &Tables, project_id: &str) {
-    if let Err(error) = tokio::fs::remove_file(partial_reply_path(tables, project_id)).await
+    if let Err(error) = tables
+        .reply_checkpoint
+        .delete_by_project(project_id.to_string())
+        .await
+    {
+        crate::log!(
+            crate::log::Level::Warn,
+            "run",
+            "{project_id}: could not clear the reply checkpoint table: {error}"
+        );
+    }
+    // One-time cleanup for 0.1.124-0.1.131.
+    if let Err(error) = tokio::fs::remove_file(legacy_partial_reply_path(tables, project_id)).await
         && error.kind() != std::io::ErrorKind::NotFound
     {
         crate::log!(
             crate::log::Level::Warn,
             "run",
             "{project_id}: could not clear the reply checkpoint: {error}"
+        );
+    }
+    // Builds through 0.1.123 wrote this hot checkpoint into KV. The first
+    // file-backed implementation read the old slot during boot migration but
+    // normal terminal cleanup removed only the new file, so a legacy value
+    // could survive a clean quit and be resurrected much later. Consume it as
+    // soon as any real terminal row owns the reply.
+    let legacy_key = partial_reply_key(project_id);
+    if tables
+        .kv_get(&legacy_key)
+        .is_some_and(|value| !value.is_empty())
+        && let Err(error) = tables.kv_put(&legacy_key, String::new()).await
+    {
+        crate::log!(
+            crate::log::Level::Warn,
+            "run",
+            "{project_id}: could not clear the legacy reply checkpoint: {error}"
         );
     }
 }
@@ -3163,8 +3202,71 @@ fn checkpoint_is_already_durable(
                 .as_deref()
                 .is_some_and(|started| started == row.created_at);
             let body = full_body(tables, &row.id, &row.body);
-            body == prefix || (body.starts_with(prefix) && (same_timestamp || prefix.len() >= 256))
+            body == prefix
+                || (body.starts_with(prefix)
+                    && (same_timestamp || prefix.len() >= LEGACY_DURABLE_PREFIX_MIN))
         }))
+}
+
+/// Remove rows created by the too-conservative legacy-prefix upgrader.
+///
+/// `interrupted` is written only by checkpoint recovery. A substantial body
+/// that is already the exact prefix of an older durable agent message is not a
+/// second interrupted turn; it is the earlier bug made visible. This runs on
+/// boot so installs that already materialized such a row are repaired once the
+/// corrected build opens, while unrelated genuine crash recovery remains.
+async fn discard_recovered_prefix_duplicates(tables: &Tables) {
+    let rows: Vec<MessageRow> = tables.message.select_all().execute().unwrap_or_default();
+    for candidate in rows
+        .iter()
+        .filter(|row| row.author == "agent" && row.stop == "interrupted" && row.usage.is_empty())
+    {
+        let candidate_body = full_body(tables, &candidate.id, &candidate.body);
+        if candidate_body.len() < LEGACY_DURABLE_PREFIX_MIN {
+            continue;
+        }
+        let duplicate = rows.iter().any(|durable| {
+            durable.id != candidate.id
+                && durable.project_id == candidate.project_id
+                && durable.author == "agent"
+                && durable.created_at < candidate.created_at
+                && full_body(tables, &durable.id, &durable.body).starts_with(&candidate_body)
+        });
+        if !duplicate {
+            continue;
+        }
+        if let Err(error) = tables
+            .message_chunk
+            .delete_by_message(candidate.id.clone())
+            .await
+        {
+            crate::log!(
+                crate::log::Level::Warn,
+                "run",
+                "{}: could not clear duplicate recovery chunks for {}: {error}",
+                candidate.project_id,
+                candidate.id
+            );
+            continue;
+        }
+        if let Err(error) = tables.message.delete(candidate.id.clone()).await {
+            crate::log!(
+                crate::log::Level::Warn,
+                "run",
+                "{}: could not clear duplicate recovered reply {}: {error}",
+                candidate.project_id,
+                candidate.id
+            );
+            continue;
+        }
+        crate::log!(
+            crate::log::Level::Info,
+            "run",
+            "{}: removed stale recovered reply {} already owned by the transcript",
+            candidate.project_id,
+            candidate.id
+        );
+    }
 }
 
 /// An interrupted authoring segment has no useful transcript meaning. The
@@ -3251,7 +3353,35 @@ async fn recover_partial_reply(tables: &Tables, project_id: &str, raw: String) -
 /// the durable-message check prevents a persistence-worker failure from
 /// resurrecting the same old prefix on every later launch.
 pub async fn recover_partial_replies(tables: &Tables) {
-    if let Ok(mut entries) = tokio::fs::read_dir(&tables.recovery_dir).await {
+    discard_recovered_prefix_duplicates(tables).await;
+
+    // Current format: there may be several rows only if a process died between
+    // inserting the newest immutable snapshot and pruning the older one.
+    let rows: Vec<ReplyCheckpointRow> = tables
+        .reply_checkpoint
+        .select_all()
+        .execute()
+        .unwrap_or_default();
+    let mut latest = std::collections::BTreeMap::<String, ReplyCheckpointRow>::new();
+    for row in rows {
+        let replace = latest.get(&row.project_id).is_none_or(|kept| {
+            (row.created_at.as_str(), row.id.as_str())
+                > (kept.created_at.as_str(), kept.id.as_str())
+        });
+        if replace {
+            latest.insert(row.project_id.clone(), row);
+        }
+    }
+    for (project_id, row) in latest {
+        if recover_partial_reply(tables, &project_id, row.payload).await {
+            let _ = tables.reply_checkpoint.delete_by_project(project_id).await;
+        }
+    }
+
+    // Upgrade path for builds 0.1.124 through 0.1.131. These files are consumed
+    // and removed; no new build writes them.
+    let legacy_recovery_dir = tables.data_dir.join("recovery");
+    if let Ok(mut entries) = tokio::fs::read_dir(&legacy_recovery_dir).await {
         while let Ok(Some(entry)) = entries.next_entry().await {
             let name = entry.file_name();
             let name = name.to_string_lossy();
@@ -3278,6 +3408,7 @@ pub async fn recover_partial_replies(tables: &Tables) {
             }
         }
     }
+    let _ = tokio::fs::remove_dir(&legacy_recovery_dir).await;
 
     // Upgrade path for builds through 0.1.123.
     let rows = tables.kv.select_all().execute().unwrap_or_default();
@@ -8550,7 +8681,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn repeated_variable_sized_checkpoints_stay_atomic() {
+    async fn repeated_variable_sized_checkpoints_leave_one_latest_table_row() {
         let dir = std::env::temp_dir().join(format!(
             "az-recovery-overwrite-{}-{}",
             std::process::id(),
@@ -8573,11 +8704,14 @@ mod tests {
                 .expect("checkpoint replacement stays atomic");
         }
 
-        let stored = tokio::fs::read_to_string(partial_reply_path(&tables, "project-a"))
-            .await
-            .expect("latest checkpoint reads");
-        assert_eq!(stored, expected);
-        let recovered = decode_partial_reply(stored);
+        let stored = tables
+            .reply_checkpoint
+            .select_by_project_id("project-a".into())
+            .execute()
+            .expect("checkpoints select");
+        assert_eq!(stored.len(), 1, "only the latest immutable row remains");
+        assert_eq!(stored[0].payload, expected);
+        let recovered = decode_partial_reply(stored[0].payload.clone());
         assert_eq!(recovered.agent, "codex");
         assert_eq!(recovered.model, "gpt-5.6-sol");
 
@@ -8642,7 +8776,7 @@ mod tests {
 
         let legacy = serde_json::to_string(&PartialReply {
             version: 1,
-            body: durable_body[..512].to_string(),
+            body: durable_body[..69].to_string(),
             agent: "codex".into(),
             model: "gpt-5.6-sol".into(),
             permission: "edit".into(),
@@ -8666,6 +8800,68 @@ mod tests {
             Some(String::new()),
             "the consumed legacy checkpoint is cleared"
         );
+
+        tables.shutdown().await.expect("partial store drains");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[tokio::test]
+    async fn boot_removes_an_already_materialized_legacy_prefix_duplicate() {
+        let dir = std::env::temp_dir().join(format!(
+            "az-materialized-stale-partial-{}-{}",
+            std::process::id(),
+            uuid::Uuid::now_v7()
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+        let tables = Tables::open(&dir).await.expect("partial store opens");
+        tables
+            .project
+            .insert(project_row("project-a", "Project A"))
+            .expect("project inserts");
+
+        let durable_body = format!("{} the durable tail", "Tracked reply prefix ".repeat(8));
+        for (id, stop, body, created_at) in [
+            (
+                "durable",
+                CONTINUED_STOP,
+                durable_body.clone(),
+                "2026-08-07T00:00:00Z",
+            ),
+            (
+                "stale-recovery",
+                "interrupted",
+                durable_body[..80].to_string(),
+                "2026-08-07T01:00:00Z",
+            ),
+        ] {
+            tables
+                .message
+                .insert(MessageRow {
+                    id: id.into(),
+                    project_id: "project-a".into(),
+                    item_id: String::new(),
+                    author: "agent".into(),
+                    agent: "codex".into(),
+                    moderation: String::new(),
+                    model: "gpt-5.6-sol".into(),
+                    permission: "auto".into(),
+                    usage: String::new(),
+                    stop: stop.into(),
+                    exit_code: 0,
+                    body: body.clone(),
+                    created_at: created_at.into(),
+                })
+                .expect("message inserts");
+        }
+
+        recover_partial_replies(&tables).await;
+        let messages: Vec<MessageRow> = tables
+            .message
+            .select_by_project_id("project-a".into())
+            .execute()
+            .expect("messages select");
+        assert_eq!(messages.len(), 1);
+        assert_eq!(messages[0].id, "durable");
 
         tables.shutdown().await.expect("partial store drains");
         let _ = std::fs::remove_dir_all(&dir);

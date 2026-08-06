@@ -23,6 +23,9 @@ use crate::db::schema::project_item::{ProjectItemPersistenceEngine, ProjectItemW
 use crate::db::schema::pull_request::{PullRequestPersistenceEngine, PullRequestWorkTable};
 use crate::db::schema::question::{QuestionPersistenceEngine, QuestionWorkTable};
 use crate::db::schema::question_reply::{QuestionReplyPersistenceEngine, QuestionReplyWorkTable};
+use crate::db::schema::reply_checkpoint::{
+    ReplyCheckpointPersistenceEngine, ReplyCheckpointWorkTable,
+};
 use crate::db::schema::study_event::{StudyEventPersistenceEngine, StudyEventWorkTable};
 use crate::db::schema::task_log::{TaskLogPersistenceEngine, TaskLogWorkTable};
 use crate::db::schema::usage_cache::{UsageCachePersistenceEngine, UsageCacheWorkTable};
@@ -39,11 +42,8 @@ use crate::db::schema::usage_ledger::{UsageLedgerPersistenceEngine, UsageLedgerW
     reason = "the entity tables land before the read path that reads them"
 )]
 pub struct Tables {
-    /// Private crash-recovery files that must not share WorkTable's hot KV
-    /// index. Streaming replies overwrite their checkpoint five times a second;
-    /// keeping that write pattern out of the database prevents one recovery
-    /// aid from taking the KV persistence worker down with it.
-    pub recovery_dir: std::path::PathBuf,
+    /// Store root retained only to consume pre-0.2 JSON checkpoints once.
+    pub data_dir: std::path::PathBuf,
     pub kv: Arc<KvWorkTable>,
     pub project: Arc<ProjectWorkTable>,
     pub project_item: Arc<ProjectItemWorkTable>,
@@ -67,6 +67,8 @@ pub struct Tables {
     pub question: Arc<QuestionWorkTable>,
     /// Which owner message answered which tracked question.
     pub question_reply: Arc<QuestionReplyWorkTable>,
+    /// Immutable snapshots of replies that are still streaming.
+    pub reply_checkpoint: Arc<ReplyCheckpointWorkTable>,
     /// Content-free records from an explicitly enabled deployment study.
     pub study_event: Arc<StudyEventWorkTable>,
 }
@@ -81,7 +83,7 @@ impl Tables {
     /// failure than refusing to start.
     pub async fn open(dir: &Path) -> Result<Tables, Box<dyn std::error::Error + Send + Sync>> {
         std::fs::create_dir_all(dir)?;
-        let recovery_dir = dir.join("recovery");
+        let data_dir = dir.to_path_buf();
         let dir = dir.to_string_lossy().to_string();
 
         /// Each table names its own directory and schema version, so two tables
@@ -106,7 +108,7 @@ impl Tables {
         }
 
         Ok(Tables {
-            recovery_dir,
+            data_dir,
             kv: open!(KvPersistenceEngine, KvWorkTable),
             project: open!(ProjectPersistenceEngine, ProjectWorkTable),
             project_item: open!(ProjectItemPersistenceEngine, ProjectItemWorkTable),
@@ -120,6 +122,7 @@ impl Tables {
             pull_request: open!(PullRequestPersistenceEngine, PullRequestWorkTable),
             question: open!(QuestionPersistenceEngine, QuestionWorkTable),
             question_reply: open!(QuestionReplyPersistenceEngine, QuestionReplyWorkTable),
+            reply_checkpoint: open!(ReplyCheckpointPersistenceEngine, ReplyCheckpointWorkTable),
             study_event: open!(StudyEventPersistenceEngine, StudyEventWorkTable),
         })
     }
@@ -632,11 +635,12 @@ impl Tables {
             drain("pull_request", self.pull_request.wait_for_ops()),
             drain("question", self.question.wait_for_ops()),
             drain("question_reply", self.question_reply.wait_for_ops()),
+            drain("reply_checkpoint", self.reply_checkpoint.wait_for_ops()),
             drain("study_event", self.study_event.wait_for_ops()),
         );
         let errors: Vec<String> = [
             results.0, results.1, results.2, results.3, results.4, results.5, results.6, results.7,
-            results.8, results.9, results.10, results.11, results.12, results.13,
+            results.8, results.9, results.10, results.11, results.12, results.13, results.14,
         ]
         .into_iter()
         .filter_map(Result::err)
