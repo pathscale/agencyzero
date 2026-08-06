@@ -69,20 +69,26 @@ pub const SURFACE: Surface = Surface {
         "pr.retire",
         "issue.link",
     ],
-    reserved: &["status:finished", "status:canceled"],
+    reserved: &[],
     bound: "any project in this installation's store, named by id or by name; \
             items.add may create an explicitly named project inside that store; \
             no reach outside it, and no other namespace is live",
 };
 
-/// The statuses an agent may set.
+/// Every stored item status is agent-settable.
 ///
-/// `finished` is deliberately absent. The owner closes an item, because an
-/// agent can say it shipped something but cannot say the thing works, and this
-/// is the mechanical form of that rule: a house style note can be forgotten,
-/// a parser that refuses cannot. `canceled` is absent for the same reason,
-/// retiring work is the owner's call.
-const SETTABLE: [&str; 5] = ["new", "planning", "active", "questions", "shipped"];
+/// `finished` closes completed work and `canceled` closes work that will not be
+/// done. Neither removes the row; [`Directive::ItemRetire`] remains the separate
+/// cleanup operation for a row that should not exist.
+const SETTABLE: [&str; 7] = [
+    "new",
+    "planning",
+    "active",
+    "questions",
+    "shipped",
+    "finished",
+    "canceled",
+];
 
 /// One thing the agent asked the app to do.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -555,15 +561,12 @@ mod tests {
         assert_eq!(parse_authored("ordinary prose"), None);
     }
 
-    /// The owner closes an item. The agent can report that it shipped
-    /// something; it cannot report that the thing works, because it is not the
-    /// one looking at the screen.
     #[test]
-    fn an_agent_may_not_finish_or_cancel_a_row() {
+    fn an_agent_may_close_a_row_without_retiring_it() {
         assert!(settable("shipped"));
         assert!(settable("questions"));
-        assert!(!settable("finished"));
-        assert!(!settable("canceled"));
+        assert!(settable("finished"));
+        assert!(settable("canceled"));
     }
 
     /// Retiring names the row. The verb it replaces matched by title, which on
@@ -587,6 +590,7 @@ mod tests {
                 "{reserved} is reserved and unpublished"
             );
         }
+        assert!(published.contains("reserved: []"));
         assert!(published.contains(SURFACE.namespace));
         // The bound is the point of 13.2.3: reach that is real must be written.
         assert!(published.contains("any project in this installation"));

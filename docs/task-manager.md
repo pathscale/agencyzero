@@ -74,15 +74,16 @@ the current ids and the declared closed verb set:
   returns that stable id and applies the requested status; legacy duplicate
   titles are refused as ambiguous rather than choosing one.
 - `items.state` moves an existing id through `new`, `planning`, `active`,
-  `questions`, or `shipped`.
+  `questions`, `shipped`, `finished`, or `canceled`.
 - `items.retire` removes exactly the named id.
 - `pr.link` records an authored GitHub PR URL and may attach its number to an
   item. A URL in prose is display text only.
 - `pr.retire` dismisses a tracked PR association by the stable id shown in the
   prompt. Legacy duplicate rows for that same GitHub PR are dismissed together.
 
-`finished` and `canceled` are reserved to the owner on Home and project tabs.
 Checkboxes, prose, quoted examples, fenced examples, and bare PR URLs are inert.
+An explicit owner request to cancel or stop work retires the item; a pause,
+hold, or "not now" keeps it.
 
 ## Can the agent read the WorkTable store?
 
