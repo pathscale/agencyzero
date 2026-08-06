@@ -255,6 +255,21 @@ describe("tabStatus", () => {
     expect(workspace.tabStatus("cafe")).toBe("blocked");
   });
 
+  it("clears a standing question as soon as its reply is accepted", async () => {
+    const workspace = await mountWorkspace();
+    await workspace.actions.focus("cafe");
+    await waitFor(() => expect(workspace.state.questions.cafe?.[0]?.answered).toBe(false));
+
+    await workspace.actions.send("cafe", "Keep patching the integration.");
+
+    expect(workspace.state.questions.cafe[0].answered).toBe(true);
+    expect(
+      workspace.state.messages.cafe.some(
+        (message) => message.author === "agent" && message.body.includes("Keep patching"),
+      ),
+    ).toBe(false);
+  });
+
   /*
    * The older attention signal: an item moved to `questions` by
    * `items.state`, distinct from an `@agency:ask` row. Any tab that needs a

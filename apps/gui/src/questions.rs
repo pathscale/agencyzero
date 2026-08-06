@@ -128,3 +128,102 @@ pub async fn answer_question(
     }
     Ok(())
 }
+
+/// Close every standing question as soon as the owner's reply is accepted.
+///
+/// A question's answer is the next user message in the transcript. Waiting for
+/// the agent's whole response before updating these rows leaves the tab red
+/// while the requested answer is already sitting directly beneath the ask.
+/// Called after the user message is durable, so a send that was refused before
+/// persistence cannot accidentally dismiss anything.
+pub async fn answer_open_for_reply(app: &AppHandle, tables: &Tables, project_id: &str) {
+    for updated in mark_open_for_reply(tables, project_id).await {
+        let _ = app.emit("question:updated", updated);
+    }
+}
+
+/// Store half of [`answer_open_for_reply`], split out so the transition has a
+/// direct regression test without constructing a desktop application handle.
+async fn mark_open_for_reply(tables: &Tables, project_id: &str) -> Vec<QuestionDto> {
+    let rows = tables
+        .question
+        .select_by_project_id(project_id.to_string())
+        .execute()
+        .unwrap_or_default();
+    let mut updated_rows = Vec::new();
+    for row in rows.into_iter().filter(|row| !row.answered) {
+        let id = row.id.clone();
+        if let Err(error) = tables
+            .question
+            .update_question_answered_by_id(
+                QuestionAnsweredByIdQuery { answered: true },
+                id.clone(),
+            )
+            .await
+        {
+            crate::log!(
+                crate::log::Level::Error,
+                "questions",
+                "{project_id}: could not clear answered question {id}: {error}"
+            );
+            continue;
+        }
+        if let Some(updated) = tables.question.select(id) {
+            updated_rows.push(QuestionDto::from(updated));
+        }
+    }
+    updated_rows
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn accepting_the_reply_closes_open_questions_immediately() {
+        let dir = std::env::temp_dir().join(format!(
+            "az-question-reply-{}-{}",
+            std::process::id(),
+            chrono::Utc::now().timestamp_nanos_opt().unwrap_or_default()
+        ));
+        let tables = Tables::open(&dir).await.expect("question store opens");
+        let question = |id: &str, project_id: &str, answered: bool| QuestionRow {
+            id: id.into(),
+            project_id: project_id.into(),
+            text: "Can I continue?".into(),
+            urgency: "blocking".into(),
+            item_id: String::new(),
+            issue_url: String::new(),
+            answered,
+            created_at: "2026-08-06T00:00:00Z".into(),
+        };
+        tables
+            .question
+            .insert(question("open", "project-a", false))
+            .expect("open question inserts");
+        tables
+            .question
+            .insert(question("already-answered", "project-a", true))
+            .expect("answered question inserts");
+        tables
+            .question
+            .insert(question("other-project", "project-b", false))
+            .expect("other project question inserts");
+
+        let changed = mark_open_for_reply(&tables, "project-a").await;
+        assert_eq!(changed.len(), 1);
+        assert_eq!(changed[0].id, "open");
+        assert!(changed[0].answered);
+        assert!(tables.question.select("open".to_string()).unwrap().answered);
+        assert!(
+            !tables
+                .question
+                .select("other-project".to_string())
+                .unwrap()
+                .answered,
+            "a reply only clears its own project's indicator"
+        );
+
+        let _ = std::fs::remove_dir_all(dir);
+    }
+}

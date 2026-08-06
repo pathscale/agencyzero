@@ -428,9 +428,8 @@ fn needs_text_break(streamed_any: bool, last_was_text: bool) -> bool {
 /// Whether this run needs an approval callback as well as its sandbox posture.
 ///
 /// `ask` is explicitly human-gated for every capable provider. Codex `auto`
-/// also keeps the callback open so a path outside the declared workspace roots
-/// can ask the user for access instead of being silently denied and provoking
-/// the model to clone a second copy somewhere writable.
+/// also keeps the callback open, but leaves the reviewer automatic; see
+/// [`build_turn_request`].
 fn should_route_approvals(agent: Agent, permission: &str) -> bool {
     permission == "ask" || (agent == Agent::Codex && permission == "auto")
 }
@@ -2477,6 +2476,7 @@ fn user_message_for_send(
     followup: bool,
 ) -> Result<MessageDto, String> {
     if let Some(message) = retry_user_message(&state.tables, input)? {
+        answer_questions_after_reply(app, state, &input.project_id);
         return Ok(message);
     }
 
@@ -2501,6 +2501,8 @@ fn user_message_for_send(
         .insert(row.clone())
         .map_err(|error| error.to_string())?;
     store_body(&state.tables, &row.id, &input.project_id, &input.body);
+
+    answer_questions_after_reply(app, state, &input.project_id);
 
     // The emitted DTO carries the whole body, not just the stored head: the
     // caller has it in hand and the reader would otherwise have to round-trip
@@ -2531,6 +2533,20 @@ fn user_message_for_send(
     );
     let _ = app.emit("message:appended", &message);
     Ok(message)
+}
+
+/// Persist the question transition without holding up message acceptance.
+///
+/// The frontend clears its red indicator as soon as `send_message` returns.
+/// This task makes that state durable and emits the canonical rows immediately
+/// afterwards, rather than waiting for the agent's reply to finish.
+fn answer_questions_after_reply(app: &AppHandle, state: &AppState, project_id: &str) {
+    let app = app.clone();
+    let tables = state.tables.clone();
+    let project_id = project_id.to_string();
+    tauri::async_runtime::spawn(async move {
+        crate::questions::answer_open_for_reply(&app, &tables, &project_id).await;
+    });
 }
 
 /// Resolve a retry without changing the transcript. Kept independent of the
@@ -5828,18 +5844,18 @@ fn build_turn_request(
     let asks = should_route_approvals(agent, permission);
     if asks && agent.caps().approvals {
         request = request.approvals();
-        if agent == Agent::Codex {
+        if agent == Agent::Codex && permission == "ask" {
             /*
-             * AgencyZero is the approval reviewer for this run. Codex can
-             * inherit `approvals_reviewer = "auto_review"` from the owner's
-             * config; that sends an escalation to Codex's reviewer instead of
-             * emitting the modern `item/.../requestApproval` request our UI
-             * answers. A stuck reviewer then looks exactly like a silent tool.
+             * AgencyZero is the approval reviewer only when the owner selected
+             * Ask. Auto must inherit Codex's `approvals_reviewer =
+             * "auto_review"`: overriding it to `user` turned every routine
+             * escalation into a visible question, and if that card failed to
+             * render the whole turn sat blocked until it was cancelled.
              *
              * Verified against codex-cli 0.146.0: the app-server accepts this
              * top-level config override after `app-server --stdio`, and `user`
-             * routes approval requests to the client. The broad remembered
-             * rules in AgencyZero still auto-answer before showing a card.
+             * routes approval requests to the client. Ask's broad remembered
+             * rules still auto-answer before showing a card.
              */
             request = request.unchecked_args(["-c", "approvals_reviewer=\"user\""]);
         }
@@ -8139,7 +8155,7 @@ mod tests {
     }
 
     #[test]
-    fn codex_auto_can_ask_for_a_missing_workspace_root() {
+    fn codex_auto_keeps_automatic_review_and_ask_routes_to_the_user() {
         assert!(should_route_approvals(Agent::Codex, "auto"));
         assert!(should_route_approvals(Agent::Codex, "ask"));
         assert!(!should_route_approvals(Agent::Codex, "edit"));
@@ -8151,20 +8167,31 @@ mod tests {
             resume: None,
             memory_dir: "/memory/project".into(),
         };
-        let argv = build_turn_request(
-            Agent::Codex,
-            "probe".into(),
-            "auto",
-            "gpt-5.6-sol",
-            None,
-            None,
-            &scope,
-        )
-        .argv()
-        .expect("Codex approval request is valid");
+        let argv = |permission| {
+            build_turn_request(
+                Agent::Codex,
+                "probe".into(),
+                permission,
+                "gpt-5.6-sol",
+                None,
+                None,
+                &scope,
+            )
+            .argv()
+            .expect("Codex approval request is valid")
+        };
+        let forces_user_review = |args: &[String]| {
+            args.windows(2)
+                .any(|pair| pair == ["-c", "approvals_reviewer=\"user\""])
+        };
+
         assert!(
-            argv.windows(2)
-                .any(|pair| { pair == ["-c", "approvals_reviewer=\"user\""] })
+            !forces_user_review(&argv("auto")),
+            "Auto inherits Codex's automatic reviewer"
+        );
+        assert!(
+            forces_user_review(&argv("ask")),
+            "Ask routes the decision to AgencyZero's approval card"
         );
     }
 
