@@ -5,9 +5,8 @@ import { type RunStatus, WorkspaceProvider } from "~/stores/workspace";
 
 /*
  * The figure on this line went a whole release reading "60 tokens" for a
- * ten-minute run, because it was built from the two fields `Event::Usage`
- * cannot supply mid-turn: `output_tokens`, which the crate withholds on
- * purpose, and Claude's `input_tokens`, which counts only the uncached delta.
+ * ten-minute run because it counted only newly streamed text and ignored the
+ * prompt traffic reported by the provider.
  *
  * Nothing below the real backend emits `run:usage` — the mock fakes no agent
  * output, deliberately — so this component test is the only thing standing
@@ -43,8 +42,11 @@ function mount(over: { status?: Partial<RunStatus>; streamedChars?: number } = {
 
 describe("the run status line's token figure", () => {
   it("reports what the agent said, compactly", () => {
-    const { container } = mount({ status: { liveTokens: 340_500 } });
-    expect(container.textContent).toContain("340.5k tok");
+    const { container } = mount({
+      status: { liveTokens: 1_722_572, contextTokens: 225_252 },
+    });
+    expect(container.textContent).toContain("225.3k ctx");
+    expect(container.textContent).toContain("1.7M processed");
   });
 
   /*
@@ -55,7 +57,7 @@ describe("the run status line's token figure", () => {
    */
   it("does not report a cache-heavy turn as dozens of tokens", () => {
     const { container } = mount({ status: { liveTokens: 202_010 } });
-    expect(container.textContent).toContain("202.0k tok");
+    expect(container.textContent).toContain("202.0k processed");
     expect(container.textContent).not.toMatch(/\b\d{1,2} tokens\b/);
   });
 
@@ -66,13 +68,13 @@ describe("the run status line's token figure", () => {
    */
   it("falls back to a marked estimate before any usage arrives", () => {
     const { container } = mount({ status: { liveTokens: null }, streamedChars: 2_000 });
-    expect(container.textContent).toContain("~500 tokens");
+    expect(container.textContent).toContain("~500 output");
   });
 
   /* A real report replaces the estimate, tilde and all. */
   it("prefers the reported figure over the estimate", () => {
     const { container } = mount({ status: { liveTokens: 12_000 }, streamedChars: 2_000 });
-    expect(container.textContent).toContain("12.0k tok");
+    expect(container.textContent).toContain("12.0k processed");
     expect(container.textContent).not.toContain("~");
   });
 
@@ -82,7 +84,8 @@ describe("the run status line's token figure", () => {
    */
   it("says nothing about tokens when there is nothing to say", () => {
     const { container } = mount({ status: { liveTokens: null }, streamedChars: 0 });
-    expect(container.textContent).not.toContain("tok");
+    expect(container.textContent).not.toContain("processed");
+    expect(container.textContent).not.toContain("output");
   });
 
   it("keeps the activity and the elapsed clock alongside it", () => {

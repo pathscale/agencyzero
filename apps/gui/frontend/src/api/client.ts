@@ -410,13 +410,12 @@ export interface AppEvents {
    * completes (`Event::Usage`, 0.3.8). Same definition as the header totals:
    * everything the model processed, cache included.
    *
-   * The prompt side only. `Event::Usage` withholds `output_tokens` because the
-   * mid-turn figure understates badly, so it is left out rather than guessed
-   * at, and the number steps up to the final one instead of overshooting it.
-   * Cache dominates, so the gap is small.
+   * Every completed model call reported so far. Claude withholds unfinished
+   * output while Codex includes completed-call output; neither is guessed, so
+   * the number steps up to the final one instead of overshooting it.
    *
-   * Never sent by agents that report no mid-turn usage — Codex reports none at
-   * all — and the estimate from streamed characters covers that case.
+   * Never sent by agents that report no mid-turn usage; the estimate from
+   * streamed characters covers that case.
    */
   "run:usage": {
     projectId: string;

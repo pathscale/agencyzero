@@ -7850,11 +7850,10 @@ async fn drive_run(
                  * figure is just the same `processed_tokens` the finished turn
                  * gets. One definition, one accumulator, nothing to drift.
                  *
-                 * `output_tokens` is absent from `Event::Usage` by design and
-                 * is not guessed at. It arrives with the `Outcome`, where the
-                 * ledger adds it, so this figure steps up to the final one
-                 * rather than jumping past it. Cache dominates it by orders of
-                 * magnitude, so the live number is close throughout.
+                 * Claude withholds incomplete mid-call output; Codex reports
+                 * completed-call output. Nothing is guessed. The terminal
+                 * outcome adds whatever had not yet been reportable, so this
+                 * figure steps up to the final total rather than overshooting.
                  *
                  * No note_io -- a tool-heavy turn would bury the panel in
                  * bookkeeping.
@@ -7866,8 +7865,8 @@ async fn drive_run(
                         "projectId": project_id,
                         "tokens": processed_tokens(&turn_usage),
                         /*
-                         * How full the window is *now*, which is the one figure
-                         * here that is exact mid-turn — the crate says so, and
+                         * How full the window is *now*, kept separate from the
+                         * additive processed total above. The crate says so, and
                          * `Event::Usage` exists to carry it.
                          *
                          * The header used to learn this only from a finished
