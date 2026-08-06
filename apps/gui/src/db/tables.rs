@@ -370,36 +370,6 @@ mod tests {
 
         let _ = std::fs::remove_dir_all(&dir);
     }
-
-    #[tokio::test]
-    async fn repeated_variable_sized_blob_overwrites_keep_the_writer_alive() {
-        let dir = std::env::temp_dir().join(format!(
-            "az-kv-overwrite-{}-{}",
-            std::process::id(),
-            uuid::Uuid::now_v7()
-        ));
-        let _ = std::fs::remove_dir_all(&dir);
-
-        let tables = Tables::open(&dir).await.expect("should open");
-        let mut expected = String::new();
-        for n in 0..1_000 {
-            expected = "x".repeat((n * 97) % 8_192);
-            tables
-                .kv_put("streaming-checkpoint", expected.clone())
-                .await
-                .expect("overwrite should be accepted");
-        }
-        tables.shutdown().await.expect("writer should drain");
-        drop(tables);
-
-        let reopened = Tables::open(&dir).await.expect("should reopen");
-        assert_eq!(reopened.kv_get("streaming-checkpoint"), Some(expected));
-        reopened
-            .shutdown()
-            .await
-            .expect("reopened store should drain");
-        let _ = std::fs::remove_dir_all(&dir);
-    }
 }
 
 #[cfg(test)]

@@ -2843,9 +2843,9 @@ async fn write_partial_reply(
 /// Every text delta re-arms this; the write happens on the first delta after
 /// the interval passes. 200ms by owner request (down from 2s): killing the
 /// app should lose a breath of prose, not a paragraph. Still throttled at
-/// all, because a delta can be a single token and one kv upsert per token
-/// is a continuous write load on the store everything else depends on —
-/// at ~5 writes/second the cost is noise and the loss window is invisible.
+/// all, because a delta can be a single token and one atomic file replacement
+/// per token is needless filesystem churn. At about five writes per second the
+/// cost is noise and the loss window is invisible.
 const PARTIAL_FLUSH_EVERY: std::time::Duration = std::time::Duration::from_millis(200);
 
 /// Deliver a mid-turn message into the open turn, per 0.3.6's contract.
@@ -8496,6 +8496,42 @@ mod tests {
             Some("2026-08-07T00:00:00Z")
         );
         assert!(recovered.body.contains("checkpoint truncated"));
+    }
+
+    #[tokio::test]
+    async fn repeated_variable_sized_checkpoints_stay_atomic() {
+        let dir = std::env::temp_dir().join(format!(
+            "az-recovery-overwrite-{}-{}",
+            std::process::id(),
+            uuid::Uuid::now_v7()
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+        let tables = Tables::open(&dir).await.expect("recovery store opens");
+
+        let mut expected = String::new();
+        for n in 0..1_000 {
+            expected = encode_partial_reply(
+                &"x".repeat((n * 97) % 8_192),
+                Agent::Codex,
+                "gpt-5.6-sol",
+                "edit",
+                Some("2026-08-07T00:00:00Z"),
+            );
+            write_partial_reply(&tables, "project-a", &expected)
+                .await
+                .expect("checkpoint replacement stays atomic");
+        }
+
+        let stored = tokio::fs::read_to_string(partial_reply_path(&tables, "project-a"))
+            .await
+            .expect("latest checkpoint reads");
+        assert_eq!(stored, expected);
+        let recovered = decode_partial_reply(stored);
+        assert_eq!(recovered.agent, "codex");
+        assert_eq!(recovered.model, "gpt-5.6-sol");
+
+        tables.shutdown().await.expect("recovery store drains");
+        let _ = std::fs::remove_dir_all(dir);
     }
 
     #[test]
