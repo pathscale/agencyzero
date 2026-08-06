@@ -21,7 +21,8 @@ describe("the manual item status cycle", () => {
     // The click cycle loops within the visible working set: shipped wraps back
     // to new, and the two terminal states are not part of it, so a click can
     // never push a row into finished/canceled where it would drop out of view
-    // and read as a delete.
+    // and read as a delete. Explicit actions and agent directives may still
+    // choose either terminal state.
     const working: ProjectStatus[] = [
       "new",
       "pending",

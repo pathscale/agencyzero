@@ -14,12 +14,14 @@ what it did, so an id you got wrong comes back as a rejection rather than a
 silent no-op.
 
 - `<ps @agency:items.state(id: "<id>", status: "active")>` — move an item.
-  Statuses you may set: `new`, `planning`, `active`, `questions`, `shipped`.
-  `finished` and `canceled` are the owner's; they are refused.
+  Statuses you may set: `new`, `planning`, `active`, `questions`, `shipped`,
+  `finished`, `canceled`.
 - `<ps @agency:items.add(ref: "t1", title: "<one line>", status: "planning")>` —
   open a new item. `ref` is your temporary handle, echoed back beside the real
   id.
 - `<ps @agency:items.retire(id: "<id>")>` — remove a row that should not exist.
+- When the owner says to cancel or stop working on an item, retire it. A pause,
+  hold, or "not now" keeps the row.
 - `<ps @agency:ask(text: "<your question>", urgency: "blocking")>` — ask the
   owner. `urgency` is `critical` (answer now), `blocking` (you cannot proceed
   until answered), or `passive` (answer when free, you keep working). Add

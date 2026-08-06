@@ -149,8 +149,8 @@ export const ITEM_LADDER: ProjectStatus[] = [
  * under the default `completed_items` handling a row that reaches one drops out
  * of the open list, so a click that lands there reads as the row being deleted.
  * The cycle now loops shipped back to new and stays in the visible set; the end
- * states are still reachable through the owner's own finish/cancel path, just
- * not by this toggle.
+ * states are still reachable through explicit item actions and the agent
+ * authoring surface, just not by this toggle.
  */
 const CYCLE_LADDER: ProjectStatus[] = [
   "new",

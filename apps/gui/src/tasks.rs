@@ -32,6 +32,8 @@ Task Manager rules for the declared Prompt Syntax surface:\n\
 - `items.add` must name `project`. Here only, if that exact project id or name \
 does not exist, the application creates a bare project before adding the row.\n\
 - Omission changes nothing. Retire only an item the user explicitly asked to remove.\n\
+- An explicit request to cancel or stop work means retire the item. A pause, hold, or \
+\"not now\" keeps it.\n\
 - Keep titles under 120 characters. Use one directive per mutation.\n\
 - If there is no mutation to record, emit no directive.";
 
@@ -48,7 +50,9 @@ mod tests {
     }
 
     #[test]
-    fn owner_only_end_states_stay_owner_only_on_home() {
+    fn home_keeps_omission_inert_while_terminal_states_stay_available() {
         assert!(OUTPUT_CONTRACT.contains("Omission changes nothing"));
+        assert!(OUTPUT_CONTRACT.contains("cancel or stop work means retire"));
+        assert!(OUTPUT_CONTRACT.contains("pause, hold"));
     }
 }

@@ -1410,6 +1410,11 @@ fn state_snapshot(
      * described in prose, so the surface the agent is told about and the one
      * the parser enforces cannot drift.
      */
+    let reserved = if crate::directives::SURFACE.reserved.is_empty() {
+        "none".to_string()
+    } else {
+        crate::directives::SURFACE.reserved.join(", ")
+    };
     let declared = format!(
         "\nThis is a declared authoring surface (Prompt Syntax 13.2). Segment: {}. \
          Live verbs, and nothing else: {}. Reserved to the owner: {}. Reach: {}. \
@@ -1421,7 +1426,7 @@ fn state_snapshot(
             .map(|verb| format!("@{}:{verb}", crate::directives::SURFACE.namespace))
             .collect::<Vec<_>>()
             .join(", "),
-        crate::directives::SURFACE.reserved.join(", "),
+        reserved,
         crate::directives::SURFACE.bound
     );
     out.push_str(&declared);
@@ -1434,7 +1439,7 @@ fn state_snapshot(
      */
     out.push_str(
         "\nAuthor these on their own line, as it happens rather than at the end. \
-         Statuses you may set: new, planning, active, questions, shipped.\n\
+         Statuses you may set: new, planning, active, questions, shipped, finished, canceled.\n\
          <ps @agency:items.state(id: \"<id>\", status: \"active\")>\n\
          <ps @agency:items.state(id: \"<id>\", status: \"shipped\", pr: \"https://github.com/owner/repo/pull/66\")>\n\
          <ps @agency:items.add(ref: \"t1\", title: \"<one line>\", status: \"planning\")>\n\
@@ -1479,9 +1484,7 @@ async fn apply_directive(
             if !crate::directives::settable(&status) {
                 return Outcome::Refused {
                     what: format!("items.state({id} -> {status})"),
-                    // The owner closes an item. Refusing here makes that a
-                    // property of the system rather than a rule to remember.
-                    code: "STATUS_NOT_YOURS".into(),
+                    code: "STATUS_INVALID".into(),
                 };
             }
             let known: Vec<&str> = rows.iter().map(|row| row.id.as_str()).collect();
@@ -1565,7 +1568,7 @@ async fn apply_directive(
             if !crate::directives::settable(&status) {
                 return Outcome::Refused {
                     what: format!("items.add({title:?} -> {status})"),
-                    code: "STATUS_NOT_YOURS".into(),
+                    code: "STATUS_INVALID".into(),
                 };
             }
             let target_project = match project.as_deref() {

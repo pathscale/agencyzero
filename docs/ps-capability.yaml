@@ -23,11 +23,8 @@ standing_promotion:
     - agency:pr.retire
     - agency:issue.link
 
-  # 13.2.2 Verbs and values reserved to principals above the agent. An agent may
-  # report that it shipped something; it cannot report that the thing works.
-  reserved:
-    - status:finished
-    - status:canceled
+  # 13.2.2 Verbs and values reserved to principals above the agent.
+  reserved: []
 
   # 13.2.3 The capability bound. `items.add(project: ...)` can write outside
   # the project a turn came from, and item ids resolve installation-wide.
@@ -61,7 +58,7 @@ standing_promotion:
   trace:
     per_directive_outcome: true
     failure_codes:
-      [ENTITY_NOT_FOUND, ENTITY_AMBIGUOUS, SYNTAX_INVALID, STATUS_NOT_YOURS, WRITE_FAILED]
+      [ENTITY_NOT_FOUND, ENTITY_AMBIGUOUS, SYNTAX_INVALID, STATUS_INVALID, WRITE_FAILED]
     surfaced_to: [agent, agent_io_panel]
     # Not yet: outcomes are text lines rather than traced events carrying the
     # segment and its provenance type. Stated because an unmet obligation that

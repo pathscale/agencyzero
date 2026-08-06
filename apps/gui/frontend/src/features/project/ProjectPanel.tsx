@@ -910,9 +910,9 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
    * The ladder lives in `lib/labels` now, because Home had its own and the
    * same click on the same row did different things on the two screens.
    *
-   * Every stored state is in the cycle, including the two owner-only end
-   * states. Agent directives cannot set those states, but this button belongs
-   * to the owner and must be able to correct every row manually.
+   * The click cycle stays on visible working states so a row cannot disappear
+   * by surprise. Terminal states remain reachable through explicit actions and
+   * the agent authoring surface.
    */
   function advance(item: ProjectItem): void {
     void actions.setItemStatus(item.id, nextStatus(item.status));
