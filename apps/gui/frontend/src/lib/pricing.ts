@@ -12,7 +12,7 @@
  * answers one question the real cost answers too late: is the next turn about
  * to be expensive, and what can I do about it.
  */
-import type { PriceRow, PricingTable } from "~/types";
+import type { Message, PriceRow, PricingTable } from "~/types";
 
 export type Severity = "low" | "warning" | "high";
 
@@ -229,6 +229,57 @@ export function estimateTurnCost(
       output * price.output) /
     1_000_000;
   return cost > 0 ? cost : null;
+}
+
+export interface TurnCostTotals {
+  /** Null only when no stored turn can be priced honestly. */
+  usd: number | null;
+  /** True when at least one turn used the local price table. */
+  estimated: boolean;
+  /** Agent turns with neither a reported cost nor an exact estimable split. */
+  missing: number;
+}
+
+/**
+ * Total finished-turn costs without pretending Codex reports dollar figures.
+ *
+ * A provider-reported cost always wins. Codex's exact input/output/cache split
+ * is estimated with the same table as the per-message label, and legacy rows
+ * that lack that split remain missing instead of being priced from their broad
+ * processed-token total.
+ */
+export function turnCostTotals(
+  table: PricingTable | null,
+  messages: readonly Message[],
+): TurnCostTotals {
+  let usd = 0;
+  let priced = 0;
+  let estimated = false;
+  let missing = 0;
+
+  for (const message of messages) {
+    if (message.author !== "agent") continue;
+    const usage = message.usage;
+    if (!usage) {
+      missing += 1;
+      continue;
+    }
+    if (typeof usage.costUsd === "number" && Number.isFinite(usage.costUsd)) {
+      usd += usage.costUsd;
+      priced += 1;
+      continue;
+    }
+    const estimate = table ? estimateTurnCost(table, message.model, usage) : null;
+    if (estimate === null) {
+      missing += 1;
+      continue;
+    }
+    usd += estimate;
+    priced += 1;
+    estimated = true;
+  }
+
+  return { usd: priced > 0 ? usd : null, estimated, missing };
 }
 
 /** A compact "$0.0042" / "$1.23" / "$12" label — precision scales with size. */

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { PricingTable } from "~/types";
+import type { Message, PricingTable } from "~/types";
 import {
   compactEstimate,
   compactionCost,
@@ -8,6 +8,7 @@ import {
   estimateTokens,
   estimateTurnCost,
   thinkingCostPerThousand,
+  turnCostTotals,
 } from "./pricing";
 
 // A small table mirroring the real one's shape and longest-key-first order.
@@ -26,11 +27,81 @@ const table: PricingTable = {
   highUsd: 2.0,
 };
 
+function turn(model: string, usage: Message["usage"]): Message {
+  return {
+    id: Math.random().toString(36),
+    projectId: "project",
+    itemId: null,
+    author: "agent",
+    agent: model.startsWith("gpt") ? "codex" : "claude",
+    moderation: null,
+    model,
+    permission: "auto",
+    usage,
+    stop: "completed",
+    exitCode: 0,
+    body: "done",
+    createdAt: "2026-08-06T00:00:00.000Z",
+  };
+}
+
 describe("estimateTokens", () => {
   it("errs high, four chars to a token", () => {
     expect(estimateTokens("0123456789012345678901234567890123456789")).toBe(10);
     // Rounds up rather than truncating — a partial token still costs.
     expect(estimateTokens("abcde")).toBe(2);
+  });
+});
+
+describe("turnCostTotals", () => {
+  it("combines reported costs with labeled estimates and keeps legacy gaps partial", () => {
+    const totals = turnCostTotals(table, [
+      turn("opus", {
+        tokens: 10,
+        contextTokens: 10,
+        contextWindow: null,
+        cacheReads: 0,
+        reasoningTokens: null,
+        costUsd: 0.5,
+        premiumRequests: null,
+        durationMs: null,
+      }),
+      turn("gpt-5.4", {
+        tokens: 112_000,
+        inputTokens: 10_000,
+        outputTokens: 2_000,
+        contextTokens: 110_000,
+        contextWindow: null,
+        cacheReads: 100_000,
+        cacheWrites: 0,
+        reasoningTokens: null,
+        costUsd: null,
+        premiumRequests: null,
+        durationMs: null,
+      }),
+      turn("gpt-5.4", {
+        tokens: 50_000,
+        contextTokens: 50_000,
+        contextWindow: null,
+        cacheReads: 40_000,
+        reasoningTokens: null,
+        costUsd: null,
+        premiumRequests: null,
+        durationMs: null,
+      }),
+    ]);
+
+    expect(totals.usd).toBeCloseTo(0.58, 8);
+    expect(totals.estimated).toBe(true);
+    expect(totals.missing).toBe(1);
+  });
+
+  it("leaves the total absent when no turn can be priced", () => {
+    expect(turnCostTotals(null, [turn("gpt-5.4", null)])).toEqual({
+      usd: null,
+      estimated: false,
+      missing: 1,
+    });
   });
 });
 
