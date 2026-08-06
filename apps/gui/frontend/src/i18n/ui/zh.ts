@@ -602,6 +602,8 @@ const zh = {
     "切换服务商会把对话附加给目标代理，并产生约 {cost} 的冷上下文费用。",
   "Changing models invalidates the prompt cache and creates a cold context charge of about {cost}.":
     "更改模型会使提示缓存失效，并产生约 {cost} 的冷上下文费用。",
+  "Changing Claude effort can rebuild the long-session prompt cache. This estimate conservatively prices that context rewrite at about {cost}.":
+    "更改 Claude 的工作强度可能会重建长会话提示缓存。此估算会保守地按约 {cost} 计算该上下文重写费用。",
   "Most of it ({cost}) is the conversation being resent every turn, not this message.":
     "其中大部分（{cost}）来自每轮重发的对话，而非这条消息。",
   "Lower project verbosity to reduce reply tokens on every turn.":

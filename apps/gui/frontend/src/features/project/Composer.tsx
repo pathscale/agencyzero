@@ -4,6 +4,7 @@ import { PillMenu } from "~/components/PillMenu";
 import { PERMISSION_ORDER, permissionLabel } from "~/lib/labels";
 import { describeError, log } from "~/lib/log";
 import {
+  assumedOutputTokensForEffort,
   compactEstimate,
   compactedContextTokens,
   compactionCost,
@@ -244,6 +245,10 @@ export function Composer(props: ComposerProps): JSX.Element {
    */
   const UNKEYED = "\u0000unkeyed";
   const bucket = () => props.draftKey ?? UNKEYED;
+  // The mounted selection is the effort that produced the warm session. Keep
+  // it stable while another effort is previewed; an accepted send establishes
+  // the next baseline.
+  const [lastSentEffort, setLastSentEffort] = createSignal(props.effort);
   const advanced = () => prefs.advancedComposerKeys.includes(bucket());
   const expanded = () => prefs.expandedComposerKeys.includes(bucket());
   const compiled = createMemo(() =>
@@ -266,6 +271,12 @@ export function Composer(props: ComposerProps): JSX.Element {
   const isContextSwitch = () =>
     (props.contextTokens ?? 0) > 0 &&
     (estimateAgent() !== props.contextAgent || estimateModel() !== props.contextModel);
+  const isEffortSwitch = () =>
+    !isContextSwitch() &&
+    props.agent === "claude" &&
+    (props.contextTokens ?? 0) > 0 &&
+    props.effort !== lastSentEffort();
+  const isColdContext = () => isContextSwitch() || isEffortSwitch();
   /*
    * A half-typed `/compact` (or any command) is not a turn, so the estimate must
    * not price the drafted string as a prompt. `/compact` in particular runs the
@@ -292,8 +303,8 @@ export function Composer(props: ComposerProps): JSX.Element {
       estimateModel(),
       draft(),
       props.contextTokens ?? 0,
-      undefined,
-      isContextSwitch(),
+      assumedOutputTokensForEffort(props.effort, props.agent === "claude" && props.extraThinking),
+      isColdContext(),
     );
   });
 
@@ -507,6 +518,7 @@ export function Composer(props: ComposerProps): JSX.Element {
       } else {
         await props.onSend(body, study);
       }
+      setLastSentEffort(props.effort);
       remember("");
       setAttachments([]);
       props.onCancelQuestionReply?.();
@@ -606,9 +618,15 @@ export function Composer(props: ComposerProps): JSX.Element {
                             { cost: costLabel(est().contextCost) },
                           )}
                     </Show>
+                    <Show when={isEffortSwitch()}>
+                      {tx(
+                        "Changing Claude effort can rebuild the long-session prompt cache. This estimate conservatively prices that context rewrite at about {cost}.",
+                        { cost: costLabel(est().contextCost) },
+                      )}
+                    </Show>
                     <Show
                       when={
-                        !isContextSwitch() && est().contextCost > est().inputCost + est().outputCost
+                        !isColdContext() && est().contextCost > est().inputCost + est().outputCost
                       }
                     >
                       {tx(

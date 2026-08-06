@@ -1,4 +1,5 @@
 import { createMemo, createSignal, For, type JSX, onMount, Show } from "solid-js";
+import { Icon } from "~/components/Icon";
 import { tx } from "~/stores/i18n";
 import { useWorkspace } from "~/stores/workspace";
 import type {
@@ -32,32 +33,51 @@ function dollars(value: number): string {
 /**
  * Token usage over time, opened by the gauge as a real tab you can leave open.
  *
- * Read once on mount, the same as the Cost section: the usage ledger only
- * grows when a run finishes, and this is not a screen left open while runs
- * happen. Everything is drawn with plain divs and inline bars, no chart
- * library, so it stays inside the app's own visual tokens.
+ * Loads when opened and refreshes only on explicit request. The durable ledger
+ * can grow large, so a background timer would turn an occasional report into
+ * permanent database work. Everything is drawn with plain divs and inline
+ * bars, no chart library.
  */
 export function AnalyticsTab(): JSX.Element {
   const { actions } = useWorkspace();
   const [data, setData] = createSignal<UsageAnalytics | null>(null);
+  const [refreshing, setRefreshing] = createSignal(false);
+
+  const refresh = async (): Promise<void> => {
+    if (refreshing()) return;
+    setRefreshing(true);
+    try {
+      setData(await actions.getUsageAnalytics());
+    } finally {
+      setRefreshing(false);
+    }
+  };
 
   onMount(() => {
-    void actions
-      .getUsageAnalytics()
-      .then(setData)
-      .catch(() => setData(null));
+    void refresh().catch(() => setData(null));
   });
 
   return (
     <div class="az-scroll flex min-w-0 flex-1 justify-center rounded-panel border border-az-hairline bg-az-sunken">
       <div class="flex w-full max-w-[820px] flex-col gap-3 px-6 pt-5.5 pb-7">
-        <div class="flex items-baseline gap-2.5 pb-0.5">
-          <h1 class="font-semibold text-[18px] text-az-title tracking-[-.01em]">
-            {tx("Analytics")}
-          </h1>
-          <span class="text-[11.5px] text-az-muted">
-            {tx("token usage, summed from the usage ledger")}
-          </span>
+        <div class="flex items-center justify-between gap-3 pb-0.5">
+          <div class="flex items-baseline gap-2.5">
+            <h1 class="font-semibold text-[18px] text-az-title tracking-[-.01em]">
+              {tx("Analytics")}
+            </h1>
+            <span class="text-[11.5px] text-az-muted">
+              {tx("token usage, summed from the usage ledger")}
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={() => void refresh()}
+            disabled={refreshing()}
+            class="flex items-center gap-1.5 rounded-md border border-primary/25 bg-primary/8 px-2.5 py-1 font-medium text-[11px] text-primary transition-colors hover:bg-primary/14 disabled:cursor-wait disabled:opacity-55"
+          >
+            <Icon name="refresh-cw" class={`text-[12px] ${refreshing() ? "animate-spin" : ""}`} />
+            {tx("Refresh")}
+          </button>
         </div>
 
         <Show
@@ -224,7 +244,11 @@ function StatTiles(props: { usage: UsageAnalytics }): JSX.Element {
   // accent; the four token components take the same hues as the day-series
   // legend so the tiles and the bars read as one system.
   const tiles = createMemo(() => [
-    { label: tx("Total cost"), value: dollars(props.usage.totalUsd), tone: "text-primary" },
+    {
+      label: tx("Total cost"),
+      value: `${props.usage.estimatedCostUsd > 0 ? "~" : ""}${dollars(props.usage.totalUsd)}`,
+      tone: "text-primary",
+    },
     { label: tx("Input"), value: tokens(props.usage.totalInputTokens), tone: "text-primary" },
     { label: tx("Output"), value: tokens(props.usage.totalOutputTokens), tone: "text-success" },
     {

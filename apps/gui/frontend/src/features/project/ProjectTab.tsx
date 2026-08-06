@@ -458,9 +458,10 @@ export function ProjectTab(props: { tab: Tab; project: Project }): JSX.Element {
 
 /**
  * The sidebar handle starts at the conversation boundary and occupies the
- * whole gap on its right. A true 16-by-32 half-circle is small enough that it
- * reaches neither panel's scrollbar. The arrow points toward the action:
- * right closes the visible sidebar, left restores the hidden one.
+ * whole gap on its right. The slim rectangular tab uses the same primary blue
+ * as Send without becoming a second focal button, and reaches neither panel's
+ * scrollbar. The arrow points toward the action: right closes the visible
+ * sidebar, left restores the hidden one.
  */
 export function ProjectPanelToggle(props: { visible: boolean; onToggle: () => void }): JSX.Element {
   const label = () => tx(props.visible ? "Hide the project sidebar" : "Show the project sidebar");
@@ -471,9 +472,7 @@ export function ProjectPanelToggle(props: { visible: boolean; onToggle: () => vo
       aria-pressed={props.visible}
       aria-label={label()}
       title={label()}
-      class={`absolute top-1/2 left-full z-20 flex h-8 w-4 -translate-y-1/2 items-center justify-center rounded-r-full border border-az-hairline border-l-0 bg-base-200 transition-[color,background-color,border-color,transform] duration-200 hover:translate-x-px hover:bg-base-300 hover:text-primary motion-reduce:transition-none ${
-        props.visible ? "text-primary" : "text-az-muted"
-      }`}
+      class="absolute top-1/2 left-full z-20 flex h-8 w-4 -translate-y-1/2 items-center justify-center rounded-r-md border border-primary/35 border-l-0 bg-primary/14 text-primary transition-[color,background-color,border-color,transform] duration-200 hover:translate-x-px hover:border-primary/55 hover:bg-primary/24 motion-reduce:transition-none"
     >
       <Icon
         name="chevron-right"

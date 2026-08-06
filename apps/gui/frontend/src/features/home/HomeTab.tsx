@@ -144,7 +144,11 @@ export function HomeTab(): JSX.Element {
                       {project.name}
                     </span>
                     <span class="shrink-0 text-[11px] text-az-muted">
-                      {itemsFor(project.id).filter((item) => item.status !== "finished").length}{" "}
+                      {
+                        itemsFor(project.id).filter(
+                          (item) => item.status !== "finished" && item.status !== "canceled",
+                        ).length
+                      }{" "}
                       {tx("open")}
                     </span>
                   </button>

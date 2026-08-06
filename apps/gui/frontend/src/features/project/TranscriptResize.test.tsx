@@ -51,6 +51,7 @@ describe("transcript resize anchoring", () => {
       scrollHeight: { configurable: true, get: () => scrollHeight },
     });
     scroller.scrollTop = 600;
+    scroller.scrollLeft = 24;
     fireEvent.scroll(scroller);
 
     scrollHeight = 1_240;
@@ -58,6 +59,7 @@ describe("transcript resize anchoring", () => {
     await Promise.resolve();
 
     expect(scroller.scrollTop).toBe(1_240);
+    expect(scroller.scrollLeft).toBe(0);
   });
 
   it("does not move a transcript whose reader scrolled up", async () => {
@@ -87,6 +89,7 @@ describe("transcript resize anchoring", () => {
       scrollHeight: { configurable: true, get: () => scrollHeight },
     });
     scroller.scrollTop = 200;
+    scroller.scrollLeft = 24;
     fireEvent.scroll(scroller);
 
     scrollHeight = 1_240;
@@ -94,5 +97,6 @@ describe("transcript resize anchoring", () => {
     await Promise.resolve();
 
     expect(scroller.scrollTop).toBe(200);
+    expect(scroller.scrollLeft).toBe(0);
   });
 });

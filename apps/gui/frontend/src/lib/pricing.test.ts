@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Message, PricingTable } from "~/types";
 import {
+  assumedOutputTokensForEffort,
   compactEstimate,
   compactedContextTokens,
   compactionCost,
@@ -51,6 +52,19 @@ describe("estimateTokens", () => {
     expect(estimateTokens("0123456789012345678901234567890123456789")).toBe(10);
     // Rounds up rather than truncating — a partial token still costs.
     expect(estimateTokens("abcde")).toBe(2);
+  });
+});
+
+describe("assumedOutputTokensForEffort", () => {
+  it("raises the projected expensive output budget with effort", () => {
+    expect(assumedOutputTokensForEffort("low")).toBe(4_000);
+    expect(assumedOutputTokensForEffort("medium")).toBe(8_000);
+    expect(assumedOutputTokensForEffort("high")).toBe(16_000);
+    expect(assumedOutputTokensForEffort("max")).toBe(32_000);
+  });
+
+  it("prices adaptive extra thinking at the conservative maximum projection", () => {
+    expect(assumedOutputTokensForEffort("low", true)).toBe(32_000);
   });
 });
 
