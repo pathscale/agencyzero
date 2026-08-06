@@ -881,6 +881,80 @@ pub fn create_item(
     Ok(dto)
 }
 
+enum ItemStatusWrite {
+    Updated(ProjectItemDto),
+    Deleted(ProjectItemDto),
+}
+
+impl ItemStatusWrite {
+    fn item(&self) -> &ProjectItemDto {
+        match self {
+            Self::Updated(item) | Self::Deleted(item) => item,
+        }
+    }
+
+    fn emit(&self, app: &AppHandle) {
+        match self {
+            Self::Updated(item) => {
+                let _ = app.emit("item:updated", item.clone());
+            }
+            Self::Deleted(item) => {
+                let _ = app.emit(
+                    "item:deleted",
+                    serde_json::json!({ "id": item.id, "projectId": item.project_id }),
+                );
+            }
+        }
+    }
+}
+
+/// Persist one status change using the owner's completed-item preference.
+///
+/// Shared by clicks and Prompt Syntax so `finished` cannot mean "delete now"
+/// in one path and "leave a resolved row behind" in the other.
+async fn write_item_status(
+    tables: &crate::db::tables::Tables,
+    id: &str,
+    status: &str,
+) -> Result<ItemStatusWrite, String> {
+    let delete_completed = status == "finished"
+        && tables
+            .kv_get(crate::settings::KEY)
+            .and_then(|raw| serde_json::from_str::<crate::settings::GlobalSettings>(&raw).ok())
+            .unwrap_or_default()
+            .completed_items
+            == "delete";
+    if delete_completed {
+        let mut row = tables
+            .project_item
+            .select(id.to_string())
+            .ok_or_else(|| format!("no item {id}"))?;
+        tables
+            .project_item
+            .delete(id.to_string())
+            .await
+            .map_err(|error| error.to_string())?;
+        row.status = status.to_string();
+        return Ok(ItemStatusWrite::Deleted(ProjectItemDto::from(row)));
+    }
+
+    tables
+        .project_item
+        .update_status_by_id(
+            ItemStatusByIdQuery {
+                status: status.to_string(),
+            },
+            id.to_string(),
+        )
+        .await
+        .map_err(|error| error.to_string())?;
+    let row = tables
+        .project_item
+        .select(id.to_string())
+        .ok_or_else(|| format!("no item {id}"))?;
+    Ok(ItemStatusWrite::Updated(ProjectItemDto::from(row)))
+}
+
 /// Move one item through pending → active → finished.
 ///
 /// # Errors
@@ -924,52 +998,9 @@ pub async fn set_item_status(
         );
         return Err(format!("not an item status: {status}"));
     }
-    let delete_completed = status == "finished"
-        && state
-            .tables
-            .kv_get(crate::settings::KEY)
-            .and_then(|raw| serde_json::from_str::<crate::settings::GlobalSettings>(&raw).ok())
-            .unwrap_or_default()
-            .completed_items
-            == "delete";
-    if delete_completed {
-        let mut row = state
-            .tables
-            .project_item
-            .select(id.clone())
-            .ok_or_else(|| format!("no item {id}"))?;
-        state
-            .tables
-            .project_item
-            .delete(id.clone())
-            .await
-            .map_err(|error| error.to_string())?;
-        let _ = app.emit(
-            "item:deleted",
-            serde_json::json!({ "id": id, "projectId": row.project_id }),
-        );
-        let mut study =
-            crate::study::Record::manual(row.project_id.clone(), "items.state", "item", id.clone());
-        study.latency = Some(started.elapsed());
-        crate::study::record(&state.tables, study);
-        // Preserve the command's return shape for callers that await it even
-        // though the event removes the row from the live store.
-        row.status = status;
-        return Ok(ProjectItemDto::from(row));
-    }
-    state
-        .tables
-        .project_item
-        .update_status_by_id(ItemStatusByIdQuery { status }, id.clone())
-        .await
-        .map_err(|error| error.to_string())?;
-    let row = state
-        .tables
-        .project_item
-        .select(id.clone())
-        .ok_or_else(|| format!("no item {id}"))?;
-    let dto = ProjectItemDto::from(row);
-    let _ = app.emit("item:updated", dto.clone());
+    let written = write_item_status(&state.tables, &id, &status).await?;
+    written.emit(&app);
+    let dto = written.item().clone();
     let mut study = crate::study::Record::manual(
         dto.project_id.clone(),
         "items.state",
@@ -1542,20 +1573,9 @@ async fn apply_directive(
                     code: format!("WRITE_FAILED: {error}"),
                 };
             }
-            match tables
-                .project_item
-                .update_status_by_id(
-                    ItemStatusByIdQuery {
-                        status: status.clone(),
-                    },
-                    resolved.clone(),
-                )
-                .await
-            {
-                Ok(()) => {
-                    if let Some(updated) = tables.project_item.select(resolved.clone()) {
-                        let _ = app.emit("item:updated", ProjectItemDto::from(updated));
-                    }
+            match write_item_status(tables, &resolved, &status).await {
+                Ok(written) => {
+                    written.emit(app);
                     let said = match pr_number {
                         Some(number) => format!("{resolved} -> {status} (#{number})"),
                         None => format!("{resolved} -> {status}"),
@@ -8897,6 +8917,58 @@ mod tests {
         assert!(response_verbosity_instruction("default").is_none());
 
         drop(tables);
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[tokio::test]
+    async fn the_shared_status_writer_deletes_finished_items_immediately_when_configured() {
+        let dir = std::env::temp_dir().join(format!(
+            "az-project-completed-items-{}-{}",
+            std::process::id(),
+            chrono::Utc::now().timestamp_nanos_opt().unwrap_or_default()
+        ));
+        let tables = crate::db::tables::Tables::open(&dir)
+            .await
+            .expect("completed-item store opens");
+        let settings = crate::settings::GlobalSettings {
+            completed_items: "delete".into(),
+            ..crate::settings::GlobalSettings::default()
+        };
+        tables
+            .kv_put(
+                crate::settings::KEY,
+                serde_json::to_string(&settings).expect("settings serialize"),
+            )
+            .await
+            .expect("completed-item preference writes");
+        tables
+            .project_item
+            .insert(ProjectItemRow {
+                id: "item-delete-now".into(),
+                project_id: "project-a".into(),
+                title: "Already done".into(),
+                status: "shipped".into(),
+                position: 0,
+                reference: "119".into(),
+            })
+            .expect("item inserts");
+
+        let written = write_item_status(&tables, "item-delete-now", "finished")
+            .await
+            .expect("finished status applies");
+
+        assert!(matches!(written, ItemStatusWrite::Deleted(_)));
+        assert!(
+            tables
+                .project_item
+                .select("item-delete-now".to_string())
+                .is_none()
+        );
+
+        tables
+            .shutdown()
+            .await
+            .expect("completed-item store drains");
         let _ = std::fs::remove_dir_all(dir);
     }
 
