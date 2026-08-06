@@ -436,21 +436,12 @@ fn needs_text_break(streamed_any: bool, last_was_text: bool) -> bool {
 
 /// Whether this run needs an approval callback as well as its sandbox posture.
 ///
-/// `ask` is explicitly human-gated for every capable provider. Codex `auto`
-/// also keeps the callback open, but leaves the reviewer automatic; see
-/// [`build_turn_request`].
-fn should_route_approvals(agent: Agent, permission: &str) -> bool {
-    permission == "ask" || (agent == Agent::Codex && permission == "auto")
-}
-
-/// Auto is an instruction to AgencyZero, not a hint to a provider reviewer.
-///
-/// Codex may still emit an approval request when workspace-write needs network
-/// or another sandbox widening. AgencyZero has to answer that request itself:
-/// relying on Codex's reviewer setting let the host abort the run before a card
-/// appeared, which made routine `git push` and `gh` reads fail in Auto.
-fn auto_allows_approval(permission: &str) -> bool {
-    permission == "auto"
+/// Ask is explicitly human-gated for every capable provider. Auto deliberately
+/// has no approval channel: agent-abstraction gives Codex network access inside
+/// the declared workspace roots, while a request to widen beyond those roots
+/// is refused instead of becoming a hidden owner prompt.
+fn should_route_approvals(permission: &str) -> bool {
+    permission == "ask"
 }
 
 /// The Markdown fence currently making reply content inert.
@@ -6007,16 +5998,15 @@ fn build_turn_request(
     for dir in &scope.extra_dirs {
         request = request.add_dir(dir);
     }
-    let asks = should_route_approvals(agent, permission);
+    let asks = should_route_approvals(permission);
     if asks && agent.caps().approvals {
         request = request.approvals();
-        if agent == Agent::Codex && permission == "ask" {
+        if agent == Agent::Codex {
             /*
              * AgencyZero is the approval reviewer only when the owner selected
-             * Ask. Auto must inherit Codex's `approvals_reviewer =
-             * "auto_review"`: overriding it to `user` turned every routine
-             * escalation into a visible question, and if that card failed to
-             * render the whole turn sat blocked until it was cancelled.
+             * Ask. Auto opens no approval channel and agent-abstraction gives
+             * its workspace-write sandbox network access directly, so routine
+             * GitHub commands neither ask nor widen the filesystem sandbox.
              *
              * Verified against codex-cli 0.146.0: the app-server accepts this
              * top-level config override after `app-server --stdio`, and `user`
@@ -6609,40 +6599,6 @@ async fn drive_run(
                     // there, and approving on the name approves an unseen command.
                     format!("{} {}", approval.tool, approval.input),
                 );
-
-                /*
-                 * Auto must not wait on a frontend card. In particular,
-                 * Codex asks for a permission widening when a workspace-write
-                 * command needs GitHub network access. The previous path sent
-                 * that request toward the UI, where the host could abort the
-                 * turn before the card rendered. Answering on the event loop
-                 * keeps the same sandbox audit trail and lets the run continue.
-                 */
-                if auto_allows_approval(&permission) {
-                    crate::log!(
-                        crate::log::Level::Info,
-                        "run",
-                        "{project_id}: auto-allowed {}",
-                        approval.tool
-                    );
-                    if let Err(error) = run.respond(&approval.id, &Decision::Allow).await {
-                        crate::log!(
-                            crate::log::Level::Error,
-                            "run",
-                            "{project_id}: could not deliver the automatic approval: {error}"
-                        );
-                    }
-                    note_io(
-                        &app,
-                        &io,
-                        &project_id,
-                        "sent",
-                        "approval",
-                        format!("{} - allowed by Auto", approval.tool),
-                    );
-                    last_was_text = is_text;
-                    continue;
-                }
 
                 /*
                  * The remembered answer, before the question ever reaches a
@@ -8354,14 +8310,10 @@ mod tests {
     }
 
     #[test]
-    fn codex_auto_keeps_automatic_review_and_ask_routes_to_the_user() {
-        assert!(should_route_approvals(Agent::Codex, "auto"));
-        assert!(should_route_approvals(Agent::Codex, "ask"));
-        assert!(!should_route_approvals(Agent::Codex, "edit"));
-        assert!(!should_route_approvals(Agent::Claude, "auto"));
-        assert!(auto_allows_approval("auto"));
-        assert!(!auto_allows_approval("ask"));
-        assert!(!auto_allows_approval("edit"));
+    fn codex_auto_stays_prompt_free_and_ask_routes_to_the_user() {
+        assert!(!should_route_approvals("auto"));
+        assert!(should_route_approvals("ask"));
+        assert!(!should_route_approvals("edit"));
 
         let scope = InvocationScope {
             cwd: "/workspace".into(),
@@ -8389,7 +8341,7 @@ mod tests {
 
         assert!(
             !forces_user_review(&argv("auto")),
-            "Auto inherits Codex's automatic reviewer"
+            "Auto opens no approval channel"
         );
         assert!(
             forces_user_review(&argv("ask")),
