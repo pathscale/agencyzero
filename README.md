@@ -85,6 +85,22 @@ inside the bundle directly when you need it:
 AZ_DATA_DIR=/tmp/az-scratch "./target/release/bundle/macos/AgencyZero Dev.app/Contents/MacOS/az-gui" &
 ```
 
+### One local delivery check
+
+The repository's local delivery script runs the same frontend and Rust gates in
+one order, then optionally produces an isolated unsigned bundle:
+
+```bash
+scripts/local-delivery.sh verify
+scripts/local-delivery.sh dev
+scripts/local-delivery.sh experimental
+```
+
+Add `--offline` when every dependency is already cached and GitHub or a package
+registry is unavailable. The bundle modes disable updater artifacts and signing;
+they are for local testing, never distribution. Each prints the completed `.app`
+path, so no CI run or deployment is required to exercise a change.
+
 ## Distribution
 
 Other Macs install through Homebrew, and the app upgrades itself from there:
