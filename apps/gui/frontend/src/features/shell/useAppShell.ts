@@ -1,6 +1,7 @@
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { type Accessor, createSignal, onCleanup, onMount } from "solid-js";
+import { describeError, log } from "~/lib/log";
 import { isTauri } from "~/lib/platform";
 import { useWorkspace } from "~/stores/workspace";
 
@@ -17,13 +18,18 @@ import { useWorkspace } from "~/stores/workspace";
  */
 export function useAppShell(): {
   isClosing: Accessor<boolean>;
+  closeError: Accessor<string>;
   cancelClose: () => void;
   confirmClose: () => void;
 } {
   const { state, actions } = useWorkspace();
   const [isClosing, setIsClosing] = createSignal(false);
+  const [closeError, setCloseError] = createSignal("");
 
-  const cancelClose = () => setIsClosing(false);
+  const cancelClose = () => {
+    setIsClosing(false);
+    setCloseError("");
+  };
 
   // Defensive optional chaining: `purgeProject` leaves some of these records
   // with keys the others do not have, so a value can be absent even though the
@@ -39,10 +45,17 @@ export function useAppShell(): {
 
   const confirmClose = () => {
     setIsClosing(false);
+    setCloseError("");
     // Rust drains persistence away from Tauri's synchronous exit callback, so
-    // macOS keeps receiving events instead of showing a beachball. Destroy is
-    // only the fallback for a backend too old to expose the command.
-    void actions.quitApp().catch(() => getCurrentWindow().destroy());
+    // macOS keeps receiving events instead of showing a beachball. A drain
+    // failure must keep the process alive: destroying the window in this catch
+    // was exactly how a visibly clean quit discarded a failed checkpoint clear.
+    void actions.quitApp().catch((cause) => {
+      const detail = describeError(cause);
+      log.error(`safe quit was blocked: ${detail}`);
+      setCloseError(detail);
+      setIsClosing(true);
+    });
   };
 
   const requestClose = () => {
@@ -86,5 +99,5 @@ export function useAppShell(): {
     });
   });
 
-  return { isClosing, cancelClose, confirmClose };
+  return { isClosing, closeError, cancelClose, confirmClose };
 }

@@ -5,6 +5,7 @@ import { useWorkspace } from "~/stores/workspace";
 
 export type CloseConfirmProps = {
   isOpen: boolean;
+  error?: string;
   onCancel: () => void;
   onConfirm: () => void;
 };
@@ -48,40 +49,52 @@ export function CloseConfirm(props: CloseConfirmProps): JSX.Element {
             <div class="flex items-baseline gap-2.5">
               <Icon name="info" class="relative top-0.5 text-[15px] text-primary" />
               <h2 id="close-confirm-title" class="font-semibold text-[14.5px] text-az-title">
-                {tx("Work is still in progress")}
+                {tx(props.error ? "Could not safely quit" : "Work is still in progress")}
               </h2>
             </div>
 
-            <p class="text-[12.5px] text-az-body leading-[1.55]">
-              <Show
-                when={runningCount() > 0 || heldCount() > 0}
-                fallback={tx("Nothing is running. Your projects and their items are saved.")}
-              >
-                <Show when={runningCount() > 0}>
-                  <span class="text-primary">
-                    {tx(
-                      runningCount() === 1
-                        ? "{count} task is still running"
-                        : "{count} tasks are still running",
-                      { count: runningCount() },
-                    )}
-                  </span>
-                  {heldCount() > 0 ? ", and " : ". "}
+            <Show
+              when={!props.error}
+              fallback={
+                <p
+                  data-selectable
+                  class="rounded-lg border border-error/25 bg-error/8 p-3 font-mono text-[11.5px] text-error leading-[1.55]"
+                >
+                  {props.error}
+                </p>
+              }
+            >
+              <p class="text-[12.5px] text-az-body leading-[1.55]">
+                <Show
+                  when={runningCount() > 0 || heldCount() > 0}
+                  fallback={tx("Nothing is running. Your projects and their items are saved.")}
+                >
+                  <Show when={runningCount() > 0}>
+                    <span class="text-primary">
+                      {tx(
+                        runningCount() === 1
+                          ? "{count} task is still running"
+                          : "{count} tasks are still running",
+                        { count: runningCount() },
+                      )}
+                    </span>
+                    {heldCount() > 0 ? ", and " : ". "}
+                  </Show>
+                  <Show when={heldCount() > 0}>
+                    <span class="text-warning">
+                      {tx(
+                        heldCount() === 1
+                          ? "{count} project is holding on your approval"
+                          : "{count} projects are holding on your approval",
+                        { count: heldCount() },
+                      )}
+                    </span>
+                    {". "}
+                  </Show>
+                  {tx("Quitting cancels every run and its whole process group.")}
                 </Show>
-                <Show when={heldCount() > 0}>
-                  <span class="text-warning">
-                    {tx(
-                      heldCount() === 1
-                        ? "{count} project is holding on your approval"
-                        : "{count} projects are holding on your approval",
-                      { count: heldCount() },
-                    )}
-                  </span>
-                  {". "}
-                </Show>
-                {tx("Quitting cancels every run and its whole process group.")}
-              </Show>
-            </p>
+              </p>
+            </Show>
 
             <div class="flex items-center justify-end gap-2 pt-0.5">
               <button
@@ -89,16 +102,18 @@ export function CloseConfirm(props: CloseConfirmProps): JSX.Element {
                 onClick={props.onCancel}
                 class="rounded-lg border border-az-hairline-strong px-3.5 py-1.5 text-[12.5px] text-az-body transition-colors hover:border-primary/30 hover:text-az-title"
               >
-                {tx("Wait for completion")}
+                {tx(props.error ? "Keep AgencyZero open" : "Wait for completion")}
               </button>
-              <button
-                type="button"
-                autofocus
-                onClick={props.onConfirm}
-                class="rounded-lg bg-primary px-3.5 py-1.5 font-semibold text-[12.5px] text-primary-content transition-colors hover:bg-az-primary-hover"
-              >
-                {tx("Exit now")}
-              </button>
+              <Show when={!props.error}>
+                <button
+                  type="button"
+                  autofocus
+                  onClick={props.onConfirm}
+                  class="rounded-lg bg-primary px-3.5 py-1.5 font-semibold text-[12.5px] text-primary-content transition-colors hover:bg-az-primary-hover"
+                >
+                  {tx("Exit now")}
+                </button>
+              </Show>
             </div>
           </div>
         </div>

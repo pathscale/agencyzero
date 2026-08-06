@@ -9,10 +9,11 @@
 //! order people saw without writing a row per token.
 //!
 //! One exception, learned the hard way: the streaming reply is checkpointed to
-//! `kv` every 200ms (`partial_reply_key`), because "close the app,
-//! reopen it" lost every word the user had watched stream. A checkpoint found
-//! at boot becomes an `interrupted` message row; a run that ends normally
-//! clears it before anyone can see it.
+//! an atomic recovery file every 200ms, because "close the app, reopen it" lost
+//! every word the user had watched stream. This used to overwrite a variable-
+//! sized `kv` row five times a second and repeatedly crashed WorkTable's unsized
+//! persistence index. A checkpoint found at boot becomes an `interrupted`
+//! message row; a run that ends normally removes it before anyone can see it.
 //!
 //! # Naming
 //!
@@ -2704,14 +2705,32 @@ fn response_verbosity_instruction(level: &str) -> Option<&'static str> {
     }
 }
 
-/// Where a run's partially streamed reply lives in `kv` while it streams.
-///
-/// Written every few seconds during a run and cleared the moment the reply
-/// lands as a real message row. Anything found here at boot is a reply the
-/// app was closed on top of — `recover_partial_replies` turns it into an
-/// `interrupted` message so the words the user watched stream are not lost.
+/// The old KV key, read only so upgrades can consume one last checkpoint.
 pub(crate) fn partial_reply_key(project_id: &str) -> String {
     format!("partial-reply:{project_id}")
+}
+
+const PARTIAL_REPLY_FILE_PREFIX: &str = "partial-reply-";
+const PARTIAL_REPLY_FILE_SUFFIX: &str = ".json";
+const PARTIAL_TRUNCATION_SUFFIX: &str = "\n\n[checkpoint truncated; the reply continued]";
+
+fn partial_reply_path(tables: &Tables, project_id: &str) -> std::path::PathBuf {
+    // Project ids are generated internally (`proj-<uuid>`), and Home's fixed id
+    // uses the same filename-safe alphabet. Keep a defensive replacement here
+    // because this path is still an authority boundary.
+    let safe: String = project_id
+        .chars()
+        .map(|character| {
+            if character.is_ascii_alphanumeric() || matches!(character, '-' | '_') {
+                character
+            } else {
+                '_'
+            }
+        })
+        .collect();
+    tables.recovery_dir.join(format!(
+        "{PARTIAL_REPLY_FILE_PREFIX}{safe}{PARTIAL_REPLY_FILE_SUFFIX}"
+    ))
 }
 
 /// Provider identity travels with a streamed-reply checkpoint.
@@ -2726,23 +2745,31 @@ struct PartialReply {
     agent: String,
     model: String,
     permission: String,
+    #[serde(default)]
+    started_at: Option<String>,
 }
 
-fn encode_partial_reply(body: &str, agent: Agent, model: &str, permission: &str) -> String {
-    let suffix = "\n\n[checkpoint truncated; the reply continued]";
+fn encode_partial_reply(
+    body: &str,
+    agent: Agent,
+    model: &str,
+    permission: &str,
+    started_at: Option<&str>,
+) -> String {
     let mut body_limit = body.len().min(MAX_PERSISTED_BLOB);
     loop {
         let clipped = if body_limit < body.len() {
-            truncate_to_bytes(body, body_limit) + suffix
+            truncate_to_bytes(body, body_limit) + PARTIAL_TRUNCATION_SUFFIX
         } else {
             body.to_string()
         };
         let encoded = serde_json::to_string(&PartialReply {
-            version: 1,
+            version: 2,
             body: clipped,
             agent: agent_wire_name(agent).into(),
             model: model.into(),
             permission: permission.into(),
+            started_at: started_at.map(str::to_string),
         })
         .unwrap_or_default();
         if encoded.len() <= MAX_PERSISTED_BLOB || body_limit == 0 {
@@ -2755,14 +2782,45 @@ fn encode_partial_reply(body: &str, agent: Agent, model: &str, permission: &str)
 fn decode_partial_reply(raw: String) -> PartialReply {
     serde_json::from_str::<PartialReply>(&raw)
         .ok()
-        .filter(|checkpoint| checkpoint.version == 1)
+        .filter(|checkpoint| matches!(checkpoint.version, 1 | 2))
         .unwrap_or(PartialReply {
             version: 0,
             body: raw,
             agent: "claude".into(),
             model: String::new(),
             permission: String::new(),
+            started_at: None,
         })
+}
+
+async fn write_partial_reply(
+    tables: &Tables,
+    project_id: &str,
+    encoded: &str,
+) -> Result<(), String> {
+    tokio::fs::create_dir_all(&tables.recovery_dir)
+        .await
+        .map_err(|error| error.to_string())?;
+    let target = partial_reply_path(tables, project_id);
+    let temporary = target.with_extension(format!("tmp-{}", uuid::Uuid::now_v7()));
+    tokio::fs::write(&temporary, encoded)
+        .await
+        .map_err(|error| error.to_string())?;
+    if let Err(error) = tokio::fs::rename(&temporary, &target).await {
+        // Windows does not replace an existing target. AgencyZero ships on
+        // macOS today, but this fallback keeps tests and future ports honest.
+        if error.kind() != std::io::ErrorKind::AlreadyExists {
+            let _ = tokio::fs::remove_file(&temporary).await;
+            return Err(error.to_string());
+        }
+        tokio::fs::remove_file(&target)
+            .await
+            .map_err(|remove| remove.to_string())?;
+        tokio::fs::rename(&temporary, &target)
+            .await
+            .map_err(|rename| rename.to_string())?;
+    }
+    Ok(())
 }
 
 /// How stale the persisted copy of a streaming reply may get.
@@ -2984,9 +3042,8 @@ fn emit_run_stopped(
 
 /// Drop a run's reply checkpoint, once a real row owns the words.
 async fn clear_partial_reply(tables: &Tables, project_id: &str) {
-    if let Err(error) = tables
-        .kv_put(&partial_reply_key(project_id), String::new())
-        .await
+    if let Err(error) = tokio::fs::remove_file(partial_reply_path(tables, project_id)).await
+        && error.kind() != std::io::ErrorKind::NotFound
     {
         crate::log!(
             crate::log::Level::Warn,
@@ -2996,14 +3053,154 @@ async fn clear_partial_reply(tables: &Tables, project_id: &str) {
     }
 }
 
+fn checkpoint_body_for_matching(body: &str) -> &str {
+    body.strip_suffix(PARTIAL_TRUNCATION_SUFFIX).unwrap_or(body)
+}
+
+/// A stale checkpoint may survive even though a durable chunk owns its words.
+///
+/// Version 2 carries the first-delta timestamp used by the message row, giving
+/// an exact identity check. Version 0/1 needs one upgrade-only heuristic: long
+/// checkpoint prefixes are matched against durable agent bodies. Exact matches
+/// are safe at any length; prefix matching is restricted to substantial text so
+/// two unrelated short replies such as "Yes." cannot erase real recovery data.
+fn checkpoint_is_already_durable(
+    tables: &Tables,
+    project_id: &str,
+    checkpoint: &PartialReply,
+) -> Result<bool, String> {
+    let prefix = checkpoint_body_for_matching(&checkpoint.body);
+    let rows: Vec<MessageRow> = tables
+        .message
+        .select_by_project_id(project_id.to_string())
+        .execute()
+        .map_err(|error| error.to_string())?;
+    Ok(rows
+        .into_iter()
+        .filter(|row| row.author == "agent")
+        .any(|row| {
+            let same_timestamp = checkpoint
+                .started_at
+                .as_deref()
+                .is_some_and(|started| started == row.created_at);
+            let body = full_body(tables, &row.id, &row.body);
+            body == prefix || (body.starts_with(prefix) && (same_timestamp || prefix.len() >= 256))
+        }))
+}
+
+/// An interrupted authoring segment has no useful transcript meaning. The
+/// complete prose before it is still the user's, but an unfinished final `<ps`
+/// line is recovery plumbing, not a sentence the agent intended to show.
+fn without_incomplete_prompt_syntax_tail(body: &str) -> String {
+    let (head, tail) = body.rsplit_once('\n').unwrap_or(("", body));
+    if tail.trim_start().starts_with("<ps") && !tail.trim_end().ends_with('>') {
+        head.trim_end().to_string()
+    } else {
+        body.to_string()
+    }
+}
+
+/// Returns `true` only when the source checkpoint is safe to remove.
+async fn recover_partial_reply(tables: &Tables, project_id: &str, raw: String) -> bool {
+    // The task manager has no project row; every real project must still exist.
+    if project_id != crate::tasks::TASK_MANAGER_ID
+        && tables.project.select(project_id.to_string()).is_none()
+    {
+        return true;
+    }
+    let checkpoint = decode_partial_reply(raw);
+    match checkpoint_is_already_durable(tables, project_id, &checkpoint) {
+        Ok(true) => {
+            crate::log!(
+                crate::log::Level::Info,
+                "run",
+                "{project_id}: discarded a stale reply checkpoint already owned by the transcript"
+            );
+            return true;
+        }
+        Ok(false) => {}
+        Err(error) => {
+            crate::log!(
+                crate::log::Level::Error,
+                "run",
+                "{project_id}: could not compare the reply checkpoint with the transcript: {error}"
+            );
+            return false;
+        }
+    }
+    let checkpoint_body = without_incomplete_prompt_syntax_tail(&checkpoint.body);
+    if checkpoint_body.trim().is_empty() {
+        return true;
+    }
+    let message_id = id("msg");
+    let message = MessageRow {
+        id: message_id.clone(),
+        project_id: project_id.to_string(),
+        item_id: String::new(),
+        author: "agent".into(),
+        agent: checkpoint.agent,
+        moderation: String::new(),
+        model: checkpoint.model,
+        permission: checkpoint.permission,
+        usage: String::new(),
+        stop: "interrupted".into(),
+        exit_code: 0,
+        body: body_head(&checkpoint_body),
+        created_at: checkpoint.started_at.unwrap_or_else(now),
+    };
+    if let Err(error) = tables.message.insert(message) {
+        crate::log!(
+            crate::log::Level::Error,
+            "run",
+            "{project_id}: could not recover the interrupted reply: {error}"
+        );
+        return false;
+    }
+    store_body(tables, &message_id, project_id, &checkpoint_body);
+    crate::log!(
+        crate::log::Level::Info,
+        "run",
+        "{project_id}: recovered a reply the last launch was closed on top of"
+    );
+    true
+}
+
 /// Turn any partially streamed replies from a previous launch into rows.
 ///
-/// Called once at boot, before the window asks for messages. A non-empty
-/// `partial-reply:` key means a run was streaming when the process died — the
-/// reply row was never written, but the prose the user watched was flushed
-/// here. It becomes a message with `stop: "interrupted"`, so the transcript
-/// says honestly that the turn did not finish.
+/// Called once at boot, before the window asks for messages. Atomic recovery
+/// files are the current format. Legacy KV rows are consumed once on upgrade;
+/// the durable-message check prevents a persistence-worker failure from
+/// resurrecting the same old prefix on every later launch.
 pub async fn recover_partial_replies(tables: &Tables) {
+    if let Ok(mut entries) = tokio::fs::read_dir(&tables.recovery_dir).await {
+        while let Ok(Some(entry)) = entries.next_entry().await {
+            let name = entry.file_name();
+            let name = name.to_string_lossy();
+            let Some(project_id) = name
+                .strip_prefix(PARTIAL_REPLY_FILE_PREFIX)
+                .and_then(|name| name.strip_suffix(PARTIAL_REPLY_FILE_SUFFIX))
+            else {
+                if name.starts_with(PARTIAL_REPLY_FILE_PREFIX) && name.contains(".tmp-") {
+                    let _ = tokio::fs::remove_file(entry.path()).await;
+                }
+                continue;
+            };
+            match tokio::fs::read_to_string(entry.path()).await {
+                Ok(raw) => {
+                    if recover_partial_reply(tables, project_id, raw).await {
+                        let _ = tokio::fs::remove_file(entry.path()).await;
+                    }
+                }
+                Err(error) => crate::log!(
+                    crate::log::Level::Warn,
+                    "run",
+                    "{project_id}: could not read the reply checkpoint: {error}"
+                ),
+            }
+        }
+    }
+
+    // Upgrade path for builds through 0.1.123.
     let rows = tables.kv.select_all().execute().unwrap_or_default();
     for row in rows {
         let Some(project_id) = row.key.strip_prefix("partial-reply:") else {
@@ -3013,48 +3210,9 @@ pub async fn recover_partial_replies(tables: &Tables) {
         if row.value.is_empty() {
             continue;
         }
-        // The task manager has no project row; every real project must still
-        // exist — a partial for a deleted project is just cleared.
-        if project_id != crate::tasks::TASK_MANAGER_ID
-            && tables.project.select(project_id.clone()).is_none()
-        {
+        if recover_partial_reply(tables, &project_id, row.value).await {
             let _ = tables.kv_put(&row.key, String::new()).await;
-            continue;
         }
-        let checkpoint = decode_partial_reply(row.value);
-        let message_id = id("msg");
-        let checkpoint_body = checkpoint.body.clone();
-        let message = MessageRow {
-            id: message_id.clone(),
-            project_id: project_id.clone(),
-            item_id: String::new(),
-            author: "agent".into(),
-            agent: checkpoint.agent,
-            moderation: String::new(),
-            model: checkpoint.model,
-            permission: checkpoint.permission,
-            usage: String::new(),
-            stop: "interrupted".into(),
-            exit_code: 0,
-            body: body_head(&checkpoint_body),
-            created_at: now(),
-        };
-        let insert_result = tables.message.insert(message);
-        store_body(tables, &message_id, &project_id, &checkpoint_body);
-        if let Err(error) = insert_result {
-            crate::log!(
-                crate::log::Level::Error,
-                "run",
-                "{project_id}: could not recover the interrupted reply: {error}"
-            );
-            continue;
-        }
-        crate::log!(
-            crate::log::Level::Info,
-            "run",
-            "{project_id}: recovered a reply the last launch was closed on top of"
-        );
-        let _ = tables.kv_put(&row.key, String::new()).await;
     }
 }
 
@@ -4982,6 +5140,7 @@ pub async fn reset_project_session(
         .map_err(|error| error.to_string())?;
     // The partial-reply checkpoint belongs to the session just cleared; leaving
     // it would splice the old turn's tail onto the fresh conversation.
+    clear_partial_reply(&state.tables, &project_id).await;
     state
         .tables
         .kv_put(&partial_reply_key(&project_id), String::new())
@@ -5063,6 +5222,7 @@ pub async fn adopt_session(
         .map_err(|error| error.to_string())?;
     // The partial-reply checkpoint belonged to whatever session was here before;
     // clear it so the adopted session's next turn does not splice an old tail on.
+    clear_partial_reply(&state.tables, &project_id).await;
     state
         .tables
         .kv_put(&partial_reply_key(&project_id), String::new())
@@ -5434,7 +5594,6 @@ pub async fn delete_project(
         .to_vec();
     keys.extend([
         io_persist_key(&id),
-        partial_reply_key(&id),
         crate::notes::checkpoints_key(&id),
         crate::notes::checkpoint_mark_key(&id, "claude"),
         crate::notes::checkpoint_mark_key(&id, "codex"),
@@ -5452,6 +5611,19 @@ pub async fn delete_project(
                 "could not clear {key} for deleted {id}: {error}"
             );
         }
+    }
+    clear_partial_reply(&state.tables, &id).await;
+    // One upgrade-only key from builds through 0.1.123.
+    if let Err(error) = state
+        .tables
+        .kv_put(&partial_reply_key(&id), String::new())
+        .await
+    {
+        crate::log!(
+            crate::log::Level::Warn,
+            "projects",
+            "could not clear the legacy reply checkpoint for deleted {id}: {error}"
+        );
     }
 
     // The display metadata follows the run it described.
@@ -7137,12 +7309,14 @@ async fn drive_run(
                      * finished reply is unaffected — it lands as a message
                      * row, not here.
                      */
-                    let checkpoint =
-                        encode_partial_reply(&streamed_chunk, agent, &model, &permission);
-                    match tables
-                        .kv_put(&partial_reply_key(&project_id), checkpoint)
-                        .await
-                    {
+                    let checkpoint = encode_partial_reply(
+                        &streamed_chunk,
+                        agent,
+                        &model,
+                        &permission,
+                        chunk_started_at.as_deref(),
+                    );
+                    match write_partial_reply(&tables, &project_id, &checkpoint).await {
                         Ok(()) => {
                             // The saved/unsaved dot: how much of what streamed
                             // is already safe in the store.
@@ -8201,14 +8375,19 @@ mod tests {
             Agent::Codex,
             "gpt-5.6-sol",
             "edit",
+            Some("2026-08-07T00:00:00Z"),
         );
         assert!(raw.len() <= MAX_PERSISTED_BLOB);
 
         let recovered = decode_partial_reply(raw);
-        assert_eq!(recovered.version, 1);
+        assert_eq!(recovered.version, 2);
         assert_eq!(recovered.agent, "codex");
         assert_eq!(recovered.model, "gpt-5.6-sol");
         assert_eq!(recovered.permission, "edit");
+        assert_eq!(
+            recovered.started_at.as_deref(),
+            Some("2026-08-07T00:00:00Z")
+        );
         assert!(recovered.body.contains("checkpoint truncated"));
     }
 
@@ -8218,6 +8397,84 @@ mod tests {
         assert_eq!(recovered.version, 0);
         assert_eq!(recovered.agent, "claude");
         assert_eq!(recovered.body, "unfinished words");
+    }
+
+    #[test]
+    fn interrupted_prompt_syntax_tail_is_not_rendered_as_agent_prose() {
+        assert_eq!(
+            without_incomplete_prompt_syntax_tail(
+                "Useful result\n\n<ps @agency:items.retire(id: \"item-12"
+            ),
+            "Useful result"
+        );
+        assert_eq!(
+            without_incomplete_prompt_syntax_tail("A literal <ps mention inside prose"),
+            "A literal <ps mention inside prose"
+        );
+    }
+
+    #[tokio::test]
+    async fn recovery_discards_a_legacy_checkpoint_prefix_owned_by_a_durable_chunk() {
+        let dir = std::env::temp_dir().join(format!(
+            "az-stale-partial-{}-{}",
+            std::process::id(),
+            uuid::Uuid::now_v7()
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+        let tables = Tables::open(&dir).await.expect("partial store opens");
+        tables
+            .project
+            .insert(project_row("project-a", "Project A"))
+            .expect("project inserts");
+
+        let durable_body = format!("{}\n\nThe finished tail.", "verified history ".repeat(40));
+        let row = MessageRow {
+            id: "durable-chunk".into(),
+            project_id: "project-a".into(),
+            item_id: String::new(),
+            author: "agent".into(),
+            agent: "codex".into(),
+            moderation: String::new(),
+            model: "gpt-5.6-sol".into(),
+            permission: "edit".into(),
+            usage: String::new(),
+            stop: CONTINUED_STOP.into(),
+            exit_code: 0,
+            body: body_head(&durable_body),
+            created_at: "2026-08-07T00:00:00Z".into(),
+        };
+        tables.message.insert(row).expect("chunk inserts");
+        store_body(&tables, "durable-chunk", "project-a", &durable_body);
+
+        let legacy = serde_json::to_string(&PartialReply {
+            version: 1,
+            body: durable_body[..512].to_string(),
+            agent: "codex".into(),
+            model: "gpt-5.6-sol".into(),
+            permission: "edit".into(),
+            started_at: None,
+        })
+        .expect("checkpoint encodes");
+        tables
+            .kv_put(&partial_reply_key("project-a"), legacy)
+            .await
+            .expect("legacy checkpoint writes");
+
+        recover_partial_replies(&tables).await;
+        let messages: Vec<MessageRow> = tables
+            .message
+            .select_by_project_id("project-a".into())
+            .execute()
+            .expect("messages select");
+        assert_eq!(messages.len(), 1, "the durable prefix must not resurrect");
+        assert_eq!(
+            tables.kv_get(&partial_reply_key("project-a")),
+            Some(String::new()),
+            "the consumed legacy checkpoint is cleared"
+        );
+
+        tables.shutdown().await.expect("partial store drains");
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
