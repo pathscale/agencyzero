@@ -370,7 +370,9 @@ export function SettingsTab(): JSX.Element {
                   <textarea
                     rows={3}
                     value={current().review?.prompt ?? ""}
-                    placeholder={tx("Leave empty for the default review prompt")}
+                    placeholder={tx(
+                      "Review this pull request for correctness bugs, security issues, and anything that would block merge. Be concrete: name the file and line, say what is wrong and why, and rank findings most severe first. If it is solid, say so briefly.",
+                    )}
                     onChange={(event) =>
                       void actions.saveSettings({ review: { prompt: event.currentTarget.value } })
                     }

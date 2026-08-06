@@ -792,16 +792,28 @@ function SystemNote(props: { message: Message }): JSX.Element {
  * body renders as markdown (so a review's tables and code show), with a copy
  * button and the PR it reviewed named in the header.
  */
-function ReviewNote(props: { message: Message }): JSX.Element {
+export function ReviewNote(props: { message: Message }): JSX.Element {
+  const failed = () => props.message.exitCode !== null && props.message.exitCode !== 0;
   return (
-    <div class="group flex flex-col gap-2 rounded-xl border border-az-hairline border-l-2 border-l-info bg-az-inset p-[13px_15px]">
+    <div
+      data-selectable
+      class={`group ${AGENT_BUBBLE} ${failed() ? "border-error/40" : "border-info/30"}`}
+    >
       <div class="flex items-center gap-2">
-        <Icon name="messages-square" class="shrink-0 text-[14px] text-info" />
+        <Icon
+          name="messages-square"
+          class={`shrink-0 text-[14px] ${failed() ? "text-error" : "text-info"}`}
+        />
         <span class="font-semibold text-[12px] text-az-strong">
           {tx("Review by {agent}", {
             agent: AGENT_LABELS[props.message.agent] ?? props.message.agent,
           })}
         </span>
+        <Show when={failed()}>
+          <span class="rounded-[5px] bg-error/18 px-[6px] py-px font-semibold text-[10px] text-error">
+            {tx("Review failed")}
+          </span>
+        </Show>
         <Show when={props.message.stop}>
           <span class="min-w-0 truncate font-mono text-[11px] text-az-muted">
             {props.message.stop}
@@ -811,10 +823,8 @@ function ReviewNote(props: { message: Message }): JSX.Element {
           <CopyMessageButton body={props.message.body} />
         </span>
       </div>
-      <MessageBody body={props.message.body} />
-      <span class="text-[11px] text-az-faint">
-        {tx("Not sent to the agent. Copy it and paste it on if you want.")}
-      </span>
+      <MessageBody body={props.message.body} class={AGENT_TEXT} />
+      <MessageTime at={props.message.createdAt} />
     </div>
   );
 }

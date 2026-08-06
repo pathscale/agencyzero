@@ -6373,7 +6373,8 @@ pub async fn send_message(
 /// Settings' review config, both with a default when blank.
 ///
 /// # Errors
-/// When the agent is unknown, or the headless run fails.
+/// When the agent is unknown, or the review result cannot be persisted. Fetch
+/// and provider failures are themselves persisted as visible review messages.
 #[tauri::command]
 pub async fn review_pull_request(
     app: AppHandle,
@@ -6399,6 +6400,12 @@ pub async fn review_pull_request(
         .get(agent_wire_name(agent))
         .cloned()
         .unwrap_or_default();
+    let review = ReviewMessageContext {
+        project_id: &project_id,
+        url: &url,
+        agent,
+        model: &model,
+    };
 
     let scope = invocation_scope(
         &state.tables,
@@ -6426,7 +6433,7 @@ pub async fn review_pull_request(
         Ok(output) => {
             let detail = String::from_utf8_lossy(&output.stderr);
             let detail = detail.trim();
-            return Err(format!(
+            let body = format!(
                 "could not fetch the pull request diff with `gh pr diff {url}`: {}. \
                  Check that the GitHub CLI is installed and logged in (`gh auth status`) \
                  and that this account can see the pull request.",
@@ -6435,13 +6442,20 @@ pub async fn review_pull_request(
                 } else {
                     detail
                 }
-            ));
+            );
+            return append_review_message(&app, &state.tables, &review, body, 1);
         }
         Err(error) => {
-            return Err(format!(
-                "could not run the GitHub CLI to fetch the diff: {error}. Install `gh` and \
+            return append_review_message(
+                &app,
+                &state.tables,
+                &review,
+                format!(
+                    "could not run the GitHub CLI to fetch the diff: {error}. Install `gh` and \
                  run `gh auth login`, then try the review again."
-            ));
+                ),
+                1,
+            );
         }
     };
 
@@ -6469,40 +6483,77 @@ pub async fn review_pull_request(
     if !model.is_empty() {
         request = request.model(&model);
     }
-    let request = crate::experimental::apply(request, agent, &model).map_err(|e| e.to_string())?;
-
-    let outcome = agent_abstraction::run(request.request())
-        .await
-        .map_err(|error| format!("the review run failed: {error}"))?;
-
-    let body = if outcome.text.trim().is_empty() {
-        "The reviewer returned nothing.".to_string()
-    } else {
-        outcome.text
+    let request = match crate::experimental::apply(request, agent, &model) {
+        Ok(request) => request,
+        Err(error) => {
+            return append_review_message(
+                &app,
+                &state.tables,
+                &review,
+                format!("the review request could not be configured: {error}"),
+                1,
+            );
+        }
     };
+
+    let outcome = match agent_abstraction::run(request.request()).await {
+        Ok(outcome) => outcome,
+        Err(error) => {
+            return append_review_message(
+                &app,
+                &state.tables,
+                &review,
+                format!("the review run failed: {error}"),
+                1,
+            );
+        }
+    };
+
+    let (body, exit_code) = if outcome.text.trim().is_empty() {
+        ("The reviewer returned nothing.".to_string(), 1)
+    } else {
+        (outcome.text, i64::from(outcome.exit_code))
+    };
+    append_review_message(&app, &state.tables, &review, body, exit_code)
+}
+
+struct ReviewMessageContext<'a> {
+    project_id: &'a str,
+    url: &'a str,
+    agent: Agent,
+    model: &'a str,
+}
+
+/// Persist one visible review outcome, successful or not.
+fn append_review_message(
+    app: &AppHandle,
+    tables: &Tables,
+    review: &ReviewMessageContext<'_>,
+    body: String,
+    exit_code: i64,
+) -> Result<(), String> {
     let message_id = id("msg");
     let row = MessageRow {
         id: message_id.clone(),
-        project_id: project_id.clone(),
+        project_id: review.project_id.to_string(),
         item_id: String::new(),
         author: "review".into(),
-        agent: agent_wire_name(agent).into(),
+        agent: agent_wire_name(review.agent).into(),
         moderation: String::new(),
-        model,
+        model: review.model.to_string(),
         permission: String::new(),
         usage: String::new(),
         // The PR it reviewed, so the transcript row can say what it is about.
-        stop: url,
-        exit_code: 0,
+        stop: review.url.to_string(),
+        exit_code,
         body: body_head(&body),
         created_at: now(),
     };
-    state
-        .tables
+    tables
         .message
         .insert(row.clone())
         .map_err(|error| error.to_string())?;
-    store_body(&state.tables, &message_id, &project_id, &body);
+    store_body(tables, &message_id, review.project_id, &body);
     let mut appended = MessageDto::from(row);
     appended.body = body;
     let _ = app.emit("message:appended", appended);

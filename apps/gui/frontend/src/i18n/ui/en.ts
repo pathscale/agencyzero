@@ -477,8 +477,11 @@ const en = {
   "what a PR review asks; empty uses the built-in prompt":
     "what a PR review asks; empty uses the built-in prompt",
   "Leave empty for the default review prompt": "Leave empty for the default review prompt",
+  "Review this pull request for correctness bugs, security issues, and anything that would block merge. Be concrete: name the file and line, say what is wrong and why, and rank findings most severe first. If it is solid, say so briefly.":
+    "Review this pull request for correctness bugs, security issues, and anything that would block merge. Be concrete: name the file and line, say what is wrong and why, and rank findings most severe first. If it is solid, say so briefly.",
   "Review with {agent}": "Review with {agent}",
   "Review by {agent}": "Review by {agent}",
+  "Review failed": "Review failed",
   "Not sent to the agent. Copy it and paste it on if you want.":
     "Not sent to the agent. Copy it and paste it on if you want.",
   "Copy this message": "Copy this message",
