@@ -589,22 +589,31 @@ function PrChip(props: { pr: PullRequest }): JSX.Element {
  * and is never sent to the Home agent. The clicked icon spins until the run
  * returns, and a run is only offered where the command is live.
  */
-function ReviewButtons(props: { pr: PullRequest }): JSX.Element {
+export function ReviewButtons(props: { pr: PullRequest }): JSX.Element {
   const { actions, isLive } = useWorkspace();
-  const [pending, setPending] = createSignal<Agent | null>(null);
+  const [pending, setPending] = createSignal<ReadonlySet<Agent>>(new Set());
+
+  const isPending = (agent: Agent): boolean => pending().has(agent);
 
   const review = (agent: Agent): void => {
-    setPending(agent);
+    if (isPending(agent)) return;
+    setPending((current) => new Set(current).add(agent));
     void actions
       .reviewPullRequest(props.pr.projectId, props.pr.url, agent)
       .catch((cause) => log.error(`the review failed: ${describeError(cause)}`))
-      .finally(() => setPending(null));
+      .finally(() =>
+        setPending((current) => {
+          const next = new Set(current);
+          next.delete(agent);
+          return next;
+        }),
+      );
   };
 
   const REVIEWERS = [
-    { agent: "claude", icon: "sparkles" },
-    { agent: "codex", icon: "gauge" },
-    { agent: "copilot", icon: "git-pull-request" },
+    { agent: "claude", icon: "vendor-claude" },
+    { agent: "codex", icon: "vendor-openai" },
+    { agent: "copilot", icon: "vendor-copilot" },
   ] as const;
 
   return (
@@ -615,15 +624,15 @@ function ReviewButtons(props: { pr: PullRequest }): JSX.Element {
           {(reviewer) => (
             <button
               type="button"
-              disabled={pending() !== null}
+              disabled={isPending(reviewer.agent)}
               onClick={() => review(reviewer.agent)}
               title={tx("Review with {agent}", { agent: AGENT_LABELS[reviewer.agent] })}
               aria-label={tx("Review with {agent}", { agent: AGENT_LABELS[reviewer.agent] })}
               class="flex size-[22px] shrink-0 items-center justify-center rounded-md text-az-faint transition-colors hover:bg-white/5 hover:text-az-body disabled:opacity-40"
             >
               <Icon
-                name={pending() === reviewer.agent ? "history" : reviewer.icon}
-                class={`text-[12px] ${pending() === reviewer.agent ? "animate-spin" : ""}`}
+                name={isPending(reviewer.agent) ? "history" : reviewer.icon}
+                class={`text-[12px] ${isPending(reviewer.agent) ? "animate-spin" : ""}`}
               />
             </button>
           )}
