@@ -30,6 +30,7 @@ use crate::db::schema::study_event::{StudyEventPersistenceEngine, StudyEventWork
 use crate::db::schema::task_log::{TaskLogPersistenceEngine, TaskLogWorkTable};
 use crate::db::schema::usage_cache::{UsageCachePersistenceEngine, UsageCacheWorkTable};
 use crate::db::schema::usage_ledger::{UsageLedgerPersistenceEngine, UsageLedgerWorkTable};
+use crate::db::schema::usage_session::{UsageSessionPersistenceEngine, UsageSessionWorkTable};
 
 /// Every persisted table, opened once at startup.
 ///
@@ -59,6 +60,8 @@ pub struct Tables {
     /// Per-turn prompt-cache split, for the analytics view. See
     /// `schema/usage_cache.rs`.
     pub usage_cache: Arc<UsageCacheWorkTable>,
+    /// Provider-session ownership for each new usage-ledger row.
+    pub usage_session: Arc<UsageSessionWorkTable>,
     /// One row per remembered approval. See `schema/approval_rule.rs`.
     pub approval_rule: Arc<ApprovalRuleWorkTable>,
     /// One row per PR cut during a run. See `schema/pull_request.rs`.
@@ -118,6 +121,7 @@ impl Tables {
             agent_io: open!(AgentIoRowPersistenceEngine, AgentIoRowWorkTable),
             usage_ledger: open!(UsageLedgerPersistenceEngine, UsageLedgerWorkTable),
             usage_cache: open!(UsageCachePersistenceEngine, UsageCacheWorkTable),
+            usage_session: open!(UsageSessionPersistenceEngine, UsageSessionWorkTable),
             approval_rule: open!(ApprovalRulePersistenceEngine, ApprovalRuleWorkTable),
             pull_request: open!(PullRequestPersistenceEngine, PullRequestWorkTable),
             question: open!(QuestionPersistenceEngine, QuestionWorkTable),
@@ -631,6 +635,7 @@ impl Tables {
             drain("agent_io_row", self.agent_io.wait_for_ops()),
             drain("usage_ledger", self.usage_ledger.wait_for_ops()),
             drain("usage_cache", self.usage_cache.wait_for_ops()),
+            drain("usage_session", self.usage_session.wait_for_ops()),
             drain("approval_rule", self.approval_rule.wait_for_ops()),
             drain("pull_request", self.pull_request.wait_for_ops()),
             drain("question", self.question.wait_for_ops()),
@@ -641,6 +646,7 @@ impl Tables {
         let errors: Vec<String> = [
             results.0, results.1, results.2, results.3, results.4, results.5, results.6, results.7,
             results.8, results.9, results.10, results.11, results.12, results.13, results.14,
+            results.15,
         ]
         .into_iter()
         .filter_map(Result::err)
