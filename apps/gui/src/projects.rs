@@ -443,6 +443,16 @@ fn should_route_approvals(agent: Agent, permission: &str) -> bool {
     permission == "ask" || (agent == Agent::Codex && permission == "auto")
 }
 
+/// Auto is an instruction to AgencyZero, not a hint to a provider reviewer.
+///
+/// Codex may still emit an approval request when workspace-write needs network
+/// or another sandbox widening. AgencyZero has to answer that request itself:
+/// relying on Codex's reviewer setting let the host abort the run before a card
+/// appeared, which made routine `git push` and `gh` reads fail in Auto.
+fn auto_allows_approval(permission: &str) -> bool {
+    permission == "auto"
+}
+
 /// The Markdown fence currently making reply content inert.
 ///
 /// Marker and width both matter. A tilde fence cannot close a backtick fence,
@@ -6478,6 +6488,40 @@ async fn drive_run(
                 );
 
                 /*
+                 * Auto must not wait on a frontend card. In particular,
+                 * Codex asks for a permission widening when a workspace-write
+                 * command needs GitHub network access. The previous path sent
+                 * that request toward the UI, where the host could abort the
+                 * turn before the card rendered. Answering on the event loop
+                 * keeps the same sandbox audit trail and lets the run continue.
+                 */
+                if auto_allows_approval(&permission) {
+                    crate::log!(
+                        crate::log::Level::Info,
+                        "run",
+                        "{project_id}: auto-allowed {}",
+                        approval.tool
+                    );
+                    if let Err(error) = run.respond(&approval.id, &Decision::Allow).await {
+                        crate::log!(
+                            crate::log::Level::Error,
+                            "run",
+                            "{project_id}: could not deliver the automatic approval: {error}"
+                        );
+                    }
+                    note_io(
+                        &app,
+                        &io,
+                        &project_id,
+                        "sent",
+                        "approval",
+                        format!("{} - allowed by Auto", approval.tool),
+                    );
+                    last_was_text = is_text;
+                    continue;
+                }
+
+                /*
                  * The remembered answer, before the question ever reaches a
                  * human. "Always allow similar" stored this signature; the
                  * agent may keep asking, but the click marathon is answered
@@ -8192,6 +8236,9 @@ mod tests {
         assert!(should_route_approvals(Agent::Codex, "ask"));
         assert!(!should_route_approvals(Agent::Codex, "edit"));
         assert!(!should_route_approvals(Agent::Claude, "auto"));
+        assert!(auto_allows_approval("auto"));
+        assert!(!auto_allows_approval("ask"));
+        assert!(!auto_allows_approval("edit"));
 
         let scope = InvocationScope {
             cwd: "/workspace".into(),
