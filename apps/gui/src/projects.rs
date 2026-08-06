@@ -549,6 +549,23 @@ fn agent_session_key(project_id: &str, agent: Agent) -> String {
     }
 }
 
+/// Whether a failed run proved that its persisted resume pointer is unusable.
+///
+/// A deliberate stop before the first provider event says nothing about the
+/// session, so it keeps the pointer. An idle timeout or a rejected live steer
+/// does: the resumed process accepted neither the opening prompt nor the
+/// follow-up. Retrying that same pointer only repeats the dead wait.
+fn should_forget_unresponsive_resume(
+    resume: Option<&str>,
+    opening_message_read: bool,
+    stalled_injection: bool,
+    idle_stalled: bool,
+) -> bool {
+    resume.is_some_and(|session| !session.is_empty())
+        && !opening_message_read
+        && (stalled_injection || idle_stalled)
+}
+
 fn agent_wire_name(agent: Agent) -> &'static str {
     match agent {
         Agent::Claude => "claude",
@@ -8738,6 +8755,53 @@ async fn drive_run(
                 "{project_id}: run cancelled ({error})"
             );
             /*
+             * A poisoned native session used to survive this exact recovery
+             * path. The failed live message was queued, the run was torn down,
+             * and the queued retry resumed the same pointer and wedged again.
+             * Only forget it when the provider never emitted even one event
+             * and recovery, rather than the owner, caused the cancellation.
+             */
+            if should_forget_unresponsive_resume(
+                resume.as_deref(),
+                opening_message_read,
+                stalled_injection,
+                idle_stalled,
+            ) {
+                match tables
+                    .kv_put(&agent_session_key(&project_id, agent), String::new())
+                    .await
+                {
+                    Ok(()) => {
+                        clear_partial_reply(&tables, &project_id).await;
+                        crate::log!(
+                            crate::log::Level::Warn,
+                            "run",
+                            "{project_id}: forgot an unresponsive {} session; the queued retry starts fresh",
+                            agent_wire_name(agent)
+                        );
+                        note_io(
+                            &app,
+                            &io,
+                            &project_id,
+                            "received",
+                            "recovery",
+                            "the resumed session accepted no messages; the retry starts fresh",
+                        );
+                        if let Some(row) = tables.project.select(project_id.clone()) {
+                            let _ = app.emit(
+                                "project:updated",
+                                with_session(ProjectDto::from(row), &tables),
+                            );
+                        }
+                    }
+                    Err(clear_error) => crate::log!(
+                        crate::log::Level::Error,
+                        "run",
+                        "{project_id}: could not forget the unresponsive session: {clear_error}"
+                    ),
+                }
+            }
+            /*
              * The partial transcript is what the user watched stream; a
              * cancelled run that said something must not read afterwards as
              * if it never spoke. Its live usage is also real: every figure in
@@ -9506,6 +9570,42 @@ mod tests {
             agent_session_key("proj-1", Agent::Claude),
             agent_session_key("proj-1", Agent::Codex)
         );
+    }
+
+    #[test]
+    fn only_recovery_before_the_first_provider_event_forgets_a_resume() {
+        assert!(should_forget_unresponsive_resume(
+            Some("thread-stuck"),
+            false,
+            true,
+            false
+        ));
+        assert!(should_forget_unresponsive_resume(
+            Some("thread-stuck"),
+            false,
+            false,
+            true
+        ));
+
+        assert!(!should_forget_unresponsive_resume(
+            Some("thread-healthy"),
+            true,
+            true,
+            false
+        ));
+        assert!(!should_forget_unresponsive_resume(
+            Some("thread-stopped-by-owner"),
+            false,
+            false,
+            false
+        ));
+        assert!(!should_forget_unresponsive_resume(None, false, true, false));
+        assert!(!should_forget_unresponsive_resume(
+            Some(""),
+            false,
+            true,
+            false
+        ));
     }
 
     #[tokio::test]
