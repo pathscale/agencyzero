@@ -337,7 +337,9 @@ export function createMockApi(): AgencyZeroApi {
       ),
 
     async createItem(projectId, title) {
+      findProject(projectId);
       const siblings = items.filter((item) => item.projectId === projectId);
+      const order = siblings.reduce((largest, item) => Math.max(largest, item.order), -1) + 1;
       const item: ProjectItem = {
         id: nextId("item"),
         projectId,
@@ -345,7 +347,7 @@ export function createMockApi(): AgencyZeroApi {
         reference: null,
         title,
         status: "pending",
-        order: siblings.length,
+        order,
       };
       items.push(item);
       emit("item:created", item);

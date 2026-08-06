@@ -588,9 +588,11 @@ function createWorkspace() {
     return [...(state.items[projectId] ?? [])].sort((a, b) => a.order - b.order);
   }
 
-  /** The Items badge counts what is left to do, so finished items drop out. */
+  /** The Items badge counts what is left to do, so terminal items drop out. */
   function openItemCount(projectId: string): number {
-    return itemsFor(projectId).filter((item) => item.status !== "finished").length;
+    return itemsFor(projectId).filter(
+      (item) => item.status !== "finished" && item.status !== "canceled",
+    ).length;
   }
 
   // — loading ————————————————————————————————————————————————————
@@ -928,15 +930,21 @@ function createWorkspace() {
 
     await bind("project:deleted", ({ id }) => purgeProject(id));
 
-    await bind("item:created", (item) => {
-      setState("items", item.projectId, (list = []) => [...list, item]);
-    });
-
-    await bind("item:updated", (item) => {
-      setState("items", item.projectId, (list = []) =>
-        list.map((existing) => (existing.id === item.id ? item : existing)),
-      );
-    });
+    const upsertItem = (item: ProjectItem) => {
+      setState("items", item.projectId, (list = []) => {
+        const index = list.findIndex((existing) => existing.id === item.id);
+        if (index < 0) return [...list, item];
+        const next = [...list];
+        next[index] = item;
+        return next;
+      });
+    };
+    // Both event types upsert. A create buffered during hydration can already
+    // be present in the snapshot when replay runs, while an update may be the
+    // first event seen after reconnecting. Append/map made the former duplicate
+    // and the latter disappear.
+    await bind("item:created", upsertItem);
+    await bind("item:updated", upsertItem);
 
     await bind("item:deleted", ({ id, projectId }) => {
       setState("items", projectId, (list = []) => list.filter((item) => item.id !== id));

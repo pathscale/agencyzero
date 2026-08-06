@@ -95,6 +95,12 @@ describe("items", () => {
     expect(created).toHaveBeenCalledWith(expect.objectContaining({ id: item.id }));
   });
 
+  it("refuses to create an orphan item for an unknown project", async () => {
+    await expect(api.createItem("missing-project", "Lost work")).rejects.toThrow(
+      "unknown project: missing-project",
+    );
+  });
+
   it("deletes and says which project lost it", async () => {
     const deleted = vi.fn();
     await api.on("item:deleted", deleted);
