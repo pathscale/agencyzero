@@ -490,20 +490,27 @@ export function Composer(props: ComposerProps): JSX.Element {
             {(_) => {
               const est = () => costEstimate()!;
               return (
+                // A labelled chip, not a bare dim number, so the estimate is
+                // findable at a glance next to the context readout. Icon +
+                // "est" + the dollar figure; accent by default, warning/error
+                // when the turn is projected pricey. Shown even with an empty
+                // draft — the context-resend cost alone is worth seeing before
+                // you type.
                 <span
                   title={tx(
                     "Estimated cost of the next turn (≈{ctx}k context + prompt + reply). A projection, not a charge — the real cost is shown on the turn.",
                     { ctx: Math.round((est().contextTokens ?? 0) / 1000) },
                   )}
-                  class={`font-mono text-[10.5px] ${
+                  class={`flex items-center gap-1 rounded-full border px-2 py-px font-mono font-semibold text-[10.5px] ${
                     est().severity === "high"
-                      ? "font-semibold text-error"
+                      ? "border-error/40 bg-error/10 text-error"
                       : est().severity === "warning"
-                        ? "font-semibold text-warning"
-                        : "text-az-muted"
+                        ? "border-warning/40 bg-warning/10 text-warning"
+                        : "border-accent/35 bg-accent/10 text-accent"
                   }`}
                 >
-                  {tx("~{cost}", { cost: costLabel(est().total) })}
+                  <Icon name="gauge" class="text-[11px]" />
+                  {tx("est {cost}", { cost: costLabel(est().total) })}
                 </span>
               );
             }}

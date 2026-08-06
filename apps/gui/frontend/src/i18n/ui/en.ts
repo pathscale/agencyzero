@@ -511,7 +511,7 @@ const en = {
   "Force reset": "Force reset",
   "Confirm force reset": "Confirm force reset",
   "Could not reset:": "Could not reset:",
-  "~{cost}": "~{cost}",
+  "est {cost}": "est {cost}",
   "est. {cost}": "est. {cost}",
   "Estimated from token counts — this agent does not report a cost.":
     "Estimated from token counts — this agent does not report a cost.",

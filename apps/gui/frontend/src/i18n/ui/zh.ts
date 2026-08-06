@@ -495,7 +495,7 @@ const zh = {
   "Force reset": "强制重置",
   "Confirm force reset": "确认强制重置",
   "Could not reset:": "无法重置：",
-  "~{cost}": "~{cost}",
+  "est {cost}": "约 {cost}",
   "est. {cost}": "约 {cost}",
   "Estimated from token counts — this agent does not report a cost.":
     "根据 token 数量估算，此助手不报告成本。",
