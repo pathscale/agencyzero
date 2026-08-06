@@ -40,14 +40,6 @@ export function ProjectTab(props: { tab: Tab; project: Project }): JSX.Element {
 
   const messages = () => state.messages[props.project.id] ?? [];
 
-  /*
-   * The agent that actually ran, not a hardcoded name: the last message that
-   * recorded one, falling back to the tab's next provider. A project can be
-   * switched before its next reply, and a header hardcoded to Claude would lie.
-   */
-  const agent = () =>
-    [...messages()].reverse().find((message) => message.author === "agent")?.agent ??
-    props.tab.agent;
   const running = () => state.running[props.project.id] ?? [];
   const canFollowUp = () => {
     const runningAgent = state.runStatus[props.project.id]?.agent;
@@ -202,21 +194,25 @@ export function ProjectTab(props: { tab: Tab; project: Project }): JSX.Element {
             on the next message.
           */}
           <span class="flex min-w-0 shrink items-center gap-2 overflow-hidden rounded-full border border-az-hairline bg-base-300 px-2.5 py-0.5 font-mono text-[11px] text-az-muted">
-            <span class="shrink-0 font-semibold text-az-body">{AGENT_LABELS[agent()]}</span>
+            {/* No leading agent label: the 7-day readout at the end already says
+                "Claude 7d …", so a "Claude ·" prefix here was the same word
+                twice. The turn count leads instead. */}
             <Show when={totals().turns > 0}>
-              <span class="text-az-faint">·</span>
-              <span>
+              <span class="font-semibold text-az-body">
                 {totals().turns} {tx("turn")}
               </span>
               <span class="text-az-faint">·</span>
               {/* The session's summed consumption — where the tokens went. The
                   context readout under the composer answers a different
-                  question (how full the window is), so both exist. */}
-              <span title={costTitle()}>
+                  question (how full the window is), so both exist. Coloured
+                  accent, not flat grey: these are the numbers worth reading. */}
+              <span title={costTitle()} class="font-semibold text-accent">
                 {compactCount(totals().tokens)} {tx("tok")}
               </span>
               <span class="text-az-faint">·</span>
-              <span title={costTitle()}>{costLabel(totals().costUsd)}</span>
+              <span title={costTitle()} class="font-semibold text-accent">
+                {costLabel(totals().costUsd)}
+              </span>
               <Show when={totals().reported < totals().turns}>
                 <span class="text-az-faint" title={tx("Some turns reported no usage")}>
                   {tx("(partial)")}

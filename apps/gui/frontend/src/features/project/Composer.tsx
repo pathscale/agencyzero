@@ -476,8 +476,11 @@ export function Composer(props: ComposerProps): JSX.Element {
           text. */}
       <Show when={props.usage || costEstimate()?.priced}>
         <div class="flex items-center justify-end gap-2 px-1">
+          {/* Accent, not grey: the context fill is a number worth reading, and
+              the owner asked for it coloured like the controls rather than dim
+              chrome. */}
           <Show when={props.usage}>
-            <span class="font-mono text-[10.5px] text-az-faint">{props.usage}</span>
+            <span class="font-medium font-mono text-[10.5px] text-accent">{props.usage}</span>
           </Show>
           {/* The live estimate for the next turn: a projection, not a charge —
               the real cost comes back on the turn and the header shows it then.
