@@ -1,5 +1,5 @@
 import { Toggle } from "@pathscale/ui";
-import { createEffect, createSignal, For, type JSX, Show } from "solid-js";
+import { createEffect, createMemo, createSignal, For, type JSX, Show } from "solid-js";
 import { NOTES_BUDGET } from "~/api/client";
 import { Icon } from "~/components/Icon";
 import { SectionPanel } from "~/components/Panel";
@@ -7,10 +7,11 @@ import { PillMenu } from "~/components/PillMenu";
 import { ItemMarker } from "~/components/StatusDot";
 import { copyText } from "~/features/project/MessageBody";
 import { clockTime, elapsed, taskMeta } from "~/lib/format";
+import { sortItems } from "~/lib/itemSort";
 import { nextStatus, statusLabel, statusSuffix } from "~/lib/labels";
 import { describeError, log } from "~/lib/log";
 import { tx } from "~/stores/i18n";
-import { prefs, togglePanelSection } from "~/stores/prefs";
+import { prefs, setPrefs, togglePanelSection } from "~/stores/prefs";
 import { useNow, useWorkspace } from "~/stores/workspace";
 import type { Project, ProjectItem, RunningTask } from "~/types";
 
@@ -35,6 +36,7 @@ export function ProjectPanel(props: { project: Project }): JSX.Element {
         icon="list-checks"
         title={tx("Items")}
         count={openItemCount(props.project.id)}
+        lead={<ItemSortControls />}
         isOpen={prefs.panelSections.items}
         onToggle={() => togglePanelSection("items")}
         class={prefs.panelSections.items ? "flex min-h-0 flex-1 flex-col" : "flex-none"}
@@ -106,6 +108,39 @@ export function ProjectPanel(props: { project: Project }): JSX.Element {
           top of the column. */}
       <SettingsSection project={props.project} />
     </div>
+  );
+}
+
+/** Two small toggles produce Status/Time × ascending/descending. */
+function ItemSortControls(): JSX.Element {
+  return (
+    <fieldset
+      class="m-0 flex min-w-0 shrink-0 items-center gap-1 border-0 p-0"
+      aria-label={tx("Sort items")}
+    >
+      <button
+        type="button"
+        onClick={() => setPrefs("itemSortBy", prefs.itemSortBy === "status" ? "time" : "status")}
+        class="rounded-md border border-az-hairline bg-az-inset px-1.5 py-0.5 font-medium text-[10.5px] text-az-muted transition-colors hover:text-az-strong"
+        title={tx("Toggle item sort between status and time")}
+      >
+        {tx(prefs.itemSortBy === "status" ? "Status" : "Time")}
+      </button>
+      <button
+        type="button"
+        onClick={() =>
+          setPrefs("itemSortDirection", prefs.itemSortDirection === "asc" ? "desc" : "asc")
+        }
+        class="flex size-5 items-center justify-center rounded-md border border-az-hairline bg-az-inset text-az-muted transition-colors hover:text-az-strong"
+        aria-label={tx(prefs.itemSortDirection === "asc" ? "Sort descending" : "Sort ascending")}
+        title={tx(prefs.itemSortDirection === "asc" ? "Ascending" : "Descending")}
+      >
+        <Icon
+          name="arrow-up"
+          class={`text-[11px] transition-transform ${prefs.itemSortDirection === "desc" ? "rotate-180" : ""}`}
+        />
+      </button>
+    </fieldset>
   );
 }
 
@@ -877,11 +912,13 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
    * when rows 2 and 4 are invisible.
    */
   const [query, setQuery] = createSignal("");
-  const shown = () => {
+  const shown = createMemo(() => {
     const needle = query().trim().toLowerCase();
-    if (!needle) return props.items;
-    return props.items.filter((item) => item.title.toLowerCase().includes(needle));
-  };
+    const items = needle
+      ? props.items.filter((item) => item.title.toLowerCase().includes(needle))
+      : props.items;
+    return sortItems(items, prefs.itemSortBy, prefs.itemSortDirection);
+  });
   const filtering = () => query().trim().length > 0;
 
   /** The item whose title is being rewritten in place, if any. */
@@ -958,7 +995,7 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
   return (
     <div class="az-scroll flex min-h-0 flex-1 flex-col gap-0.5 px-2 pt-1.5 pb-2.5">
       <Show when={props.items.length > 3}>
-        <div class="flex items-center gap-2 rounded-[9px] border border-az-hairline bg-az-inset px-2.5 py-1.5">
+        <div class="sticky top-0 z-10 flex items-center gap-2 rounded-[9px] border border-az-hairline bg-az-inset px-2.5 py-1.5">
           <Icon name="search" class="shrink-0 text-[12px] text-primary/70" />
           <input
             type="text"
