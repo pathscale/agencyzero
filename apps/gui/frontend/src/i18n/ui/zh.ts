@@ -461,8 +461,11 @@ const zh = {
   "what a PR review asks; empty uses the built-in prompt":
     "PR 审查所使用的提示；留空则使用内置提示",
   "Leave empty for the default review prompt": "留空则使用默认审查提示",
+  "Review this pull request for correctness bugs, security issues, and anything that would block merge. Be concrete: name the file and line, say what is wrong and why, and rank findings most severe first. If it is solid, say so briefly.":
+    "审查此拉取请求中的正确性缺陷、安全问题以及任何会阻止合并的事项。请具体说明文件和行号、问题及原因，并按严重程度排序。如果没有问题，请明确说明。",
   "Review with {agent}": "使用 {agent} 审查",
   "Review by {agent}": "{agent} 的审查",
+  "Review failed": "审查失败",
   "Not sent to the agent. Copy it and paste it on if you want.":
     "不会发送给智能体。如需要可复制后手动粘贴。",
   "Copy this message": "复制此消息",
