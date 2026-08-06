@@ -82,17 +82,34 @@ export function TranscriptPane(props: {
   };
 
   /*
-   * Answered questions first (as resolved history), then still-open ones, so
-   * the questions awaiting an answer land last — nearest the composer, none
-   * hidden above an answered one. A stable partition keeps each group in its
-   * original chronological order rather than re-sorting by time.
+   * The transcript is one timeline, not "messages, then a pile of questions".
+   *
+   * An *answered* question is history — it happened at a point in the
+   * conversation, so it belongs inline there, threaded among the messages by
+   * when it was asked, not appended to the bottom long after the turns that
+   * followed it. Open questions are the exception: they are the thing you still
+   * have to act on, so they collect at the end, nearest the composer.
+   *
+   * So: merge messages and answered questions into one list sorted by
+   * `createdAt`, render that inline; keep only the open questions for the
+   * trailing block. This is the fix for a backlog of "Answered" cards stacking
+   * up below the whole conversation instead of sitting where they were asked.
    */
-  const orderedQuestions = createMemo(() => {
-    const all = state.questions[props.project.id] ?? [];
-    return [
-      ...all.filter((question) => question.answered),
-      ...all.filter((question) => !question.answered),
-    ];
+  const questionsFor = () => state.questions[props.project.id] ?? [];
+  const openQuestions = createMemo(() => questionsFor().filter((q) => !q.answered));
+  const timeline = createMemo(() => {
+    const answered = questionsFor()
+      .filter((q) => q.answered)
+      .map((q) => ({ kind: "question" as const, at: q.createdAt, question: q }));
+    const messages = props.messages.map((message, index) => ({
+      kind: "message" as const,
+      at: message.createdAt,
+      message,
+      index,
+    }));
+    // Stable sort by timestamp; ties keep insertion order (messages before a
+    // question created in the same millisecond, which reads as ask-then-turn).
+    return [...messages, ...answered].sort((a, b) => (a.at < b.at ? -1 : a.at > b.at ? 1 : 0));
   });
 
   // Follow the tail as content arrives: new messages, streaming deltas, the
@@ -132,62 +149,70 @@ export function TranscriptPane(props: {
           />
         }
       >
-        <For each={props.messages}>
-          {(message, index) => (
+        {/* Messages and answered questions, threaded together by time, so an
+            answered question sits where it was asked rather than in a pile at
+            the bottom. */}
+        <For each={timeline()}>
+          {(entry) => (
             <Switch>
-              <Match when={message.author === "user"}>
-                <UserBubble message={message} />
+              <Match when={entry.kind === "question" && entry}>
+                {(item) => <QuestionCard question={item().question} />}
               </Match>
-              <Match when={message.author === "moderator"}>
-                <ModeratorNote message={message} />
+              <Match when={entry.kind === "message" && entry.message.author === "user" && entry}>
+                {(item) => <UserBubble message={item().message} />}
               </Match>
-              <Match when={message.author === "system"}>
-                <SystemNote message={message} />
+              <Match
+                when={entry.kind === "message" && entry.message.author === "moderator" && entry}
+              >
+                {(item) => <ModeratorNote message={item().message} />}
               </Match>
-              <Match when={message.author === "review"}>
-                <ReviewNote message={message} />
+              <Match when={entry.kind === "message" && entry.message.author === "system" && entry}>
+                {(item) => <SystemNote message={item().message} />}
               </Match>
-              <Match when={message.author === "agent"}>
-                <AgentBubble
-                  message={message}
-                  onRetry={(() => {
-                    /*
-                     * Only the last turn is retryable: a failed turn further up
-                     * was already answered or resent, and a button there would
-                     * replay a stale prompt onto today's session.
-                     *
-                     * The prompt the failed turn was answering is the nearest
-                     * user message above it. Resent through the ordinary send
-                     * path so the retry is a real turn — persisted, moderated,
-                     * and resumed on the same session — not a special case.
-                     */
-                    if (index() !== props.messages.length - 1) return undefined;
-                    for (let at = index() - 1; at >= 0; at--) {
-                      const earlier = props.messages[at];
-                      if (earlier.author === "user") {
-                        const body = earlier.body;
-                        return () => void actions.send(props.project.id, body);
+              <Match when={entry.kind === "message" && entry.message.author === "review" && entry}>
+                {(item) => <ReviewNote message={item().message} />}
+              </Match>
+              <Match when={entry.kind === "message" && entry.message.author === "agent" && entry}>
+                {(item) => (
+                  <AgentBubble
+                    message={item().message}
+                    onRetry={(() => {
+                      /*
+                       * Only the last turn is retryable: a failed turn further
+                       * up was already answered or resent, and a button there
+                       * would replay a stale prompt onto today's session. The
+                       * index is the message's position in the ORIGINAL message
+                       * list, preserved through the merge, so threading answered
+                       * questions in does not shift what "the last turn" means.
+                       *
+                       * The prompt the failed turn was answering is the nearest
+                       * user message above it. Resent through the ordinary send
+                       * path so the retry is a real turn — persisted, moderated,
+                       * and resumed on the same session — not a special case.
+                       */
+                      const index = item().index;
+                      if (index !== props.messages.length - 1) return undefined;
+                      for (let at = index - 1; at >= 0; at--) {
+                        const earlier = props.messages[at];
+                        if (earlier.author === "user") {
+                          const body = earlier.body;
+                          return () => void actions.send(props.project.id, body);
+                        }
                       }
-                    }
-                    return undefined;
-                  })()}
-                />
+                      return undefined;
+                    })()}
+                  />
+                )}
               </Match>
             </Switch>
           )}
         </For>
-        {/* Agent questions belong in the conversation, and they stay there
-            after they are answered too: a question that vanishes on reply
-            erases the exchange the reply was part of. Answered ones render
-            resolved (dimmed, no button); open ones keep their urgency colour
-            and the Answer control. They used to float over the composer and
-            looked like transient input chrome rather than part of the turn.
-
-            Answered first, then open — so on a restart with several questions
-            the ones still needing an answer sit last, nearest the composer,
-            and none is buried above an answered one where it would be missed.
-            Chronological within each group; a stable sort keeps that order. */}
-        <For each={orderedQuestions()}>{(question) => <QuestionCard question={question} />}</For>
+        {/* Only the OPEN questions collect here, at the end nearest the
+            composer — the ones you still have to answer. Answered ones are
+            inline above, threaded into the turn they belong to. On a restart
+            with several open questions this keeps them all visible together
+            where you act on them. */}
+        <For each={openQuestions()}>{(question) => <QuestionCard question={question} />}</For>
         {/* The run is blocked on this question; it renders where you read. */}
         <Show when={state.pendingApprovals[props.project.id]}>
           {(approval) => <ApprovalCard projectId={props.project.id} approval={approval()} />}
