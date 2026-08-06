@@ -103,7 +103,7 @@ export function createMockApi(): AgencyZeroApi {
    */
   const checkpoints = new Set<string>();
   /** Projects whose turns carry the concise-response instruction. */
-  const conciseProjects = new Set<string>();
+  const responseVerbosity = new Map<string, string>();
   const verbosityByProject = new Map<string, string>();
 
   const listeners = new Map<string, Set<(payload: unknown) => void>>();
@@ -522,7 +522,7 @@ export function createMockApi(): AgencyZeroApi {
           { key: "gpt-5.5", input: 5.0, output: 30.0, cacheRead: 0.5 },
           { key: "gpt-5.4", input: 2.5, output: 15.0, cacheRead: 0.25 },
         ],
-        cacheWriteMultiple: 1.25,
+        cacheWriteMultiple: 2.0,
         warnUsd: 0.5,
         highUsd: 2.0,
       }),
@@ -617,10 +617,9 @@ export function createMockApi(): AgencyZeroApi {
       return settle(enabled);
     },
 
-    getProjectConcise: (projectId) => settle(conciseProjects.has(projectId)),
+    getProjectConcise: (projectId) => settle(responseVerbosity.get(projectId) ?? "default"),
     setProjectConcise: (projectId, enabled) => {
-      if (enabled) conciseProjects.add(projectId);
-      else conciseProjects.delete(projectId);
+      responseVerbosity.set(projectId, enabled);
       return settle(enabled);
     },
 
@@ -804,6 +803,28 @@ export function createMockApi(): AgencyZeroApi {
             cacheReadTokens: 1_100_000,
             cacheWriteTokens: 118_000,
             turns: 127,
+          },
+        ],
+        projects: [
+          {
+            projectId: "project-alpha",
+            projectName: "AgencyZero",
+            costUsd: 8.94,
+            inputTokens: 181_000,
+            outputTokens: 79_000,
+            cacheReadTokens: 2_100_000,
+            cacheWriteTokens: 244_000,
+            turns: 239,
+          },
+          {
+            projectId: "project-beta",
+            projectName: "Release research",
+            costUsd: 2.86,
+            inputTokens: 88_100,
+            outputTokens: 30_700,
+            cacheReadTokens: 720_000,
+            cacheWriteTokens: 142_000,
+            turns: 102,
           },
         ],
         totalUsd: 11.8,

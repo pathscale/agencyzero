@@ -33,9 +33,10 @@ struct Price {
 }
 
 /// The write premium a fresh cache prefix pays, as a multiple of input price.
-/// Both providers land near here; a single constant keeps the estimate simple
-/// and the error smaller than the table's own staleness.
-const CACHE_WRITE_MULTIPLE: f64 = 1.25;
+/// Claude is explicitly configured for a one-hour cache in `build_turn_request`,
+/// whose write price is 2x input. Use that conservative rate for cross-provider
+/// handoffs too: understating a large cold transfer is the dangerous error.
+const CACHE_WRITE_MULTIPLE: f64 = 2.0;
 
 /// Claude and Codex/GPT prices, longest key first so `gpt-5.4-mini` is matched
 /// before `gpt-5.4`. Matched by substring, and the Claude keys are the bare

@@ -21,7 +21,7 @@ export function DraftTab(props: { tab: Tab }): JSX.Element {
 
   return (
     <Panel class="flex min-w-0 flex-1 items-center justify-center p-7">
-      <div class="w-full max-w-[620px]">
+      <div class="w-full max-w-[900px]">
         <Composer
           draftKey={props.tab.key}
           size="lg"

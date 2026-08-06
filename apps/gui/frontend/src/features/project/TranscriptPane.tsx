@@ -84,23 +84,17 @@ export function TranscriptPane(props: {
   /*
    * The transcript is one timeline, not "messages, then a pile of questions".
    *
-   * An *answered* question is history — it happened at a point in the
-   * conversation, so it belongs inline there, threaded among the messages by
-   * when it was asked, not appended to the bottom long after the turns that
-   * followed it. Open questions are the exception: they are the thing you still
-   * have to act on, so they collect at the end, nearest the composer.
-   *
-   * So: merge messages and answered questions into one list sorted by
-   * `createdAt`, render that inline; keep only the open questions for the
-   * trailing block. This is the fix for a backlog of "Answered" cards stacking
-   * up below the whole conversation instead of sitting where they were asked.
+   * Every question stays at the point where it was asked, open or answered.
+   * The next user message is its inline response, so moving an open question
+   * down beside the composer separates the two halves of the exchange.
    */
   const questionsFor = () => state.questions[props.project.id] ?? [];
-  const openQuestions = createMemo(() => questionsFor().filter((q) => !q.answered));
   const timeline = createMemo(() => {
-    const answered = questionsFor()
-      .filter((q) => q.answered)
-      .map((q) => ({ kind: "question" as const, at: q.createdAt, question: q }));
+    const questions = questionsFor().map((q) => ({
+      kind: "question" as const,
+      at: q.createdAt,
+      question: q,
+    }));
     const messages = props.messages.map((message, index) => ({
       kind: "message" as const,
       at: message.createdAt,
@@ -109,7 +103,7 @@ export function TranscriptPane(props: {
     }));
     // Stable sort by timestamp; ties keep insertion order (messages before a
     // question created in the same millisecond, which reads as ask-then-turn).
-    return [...messages, ...answered].sort((a, b) => (a.at < b.at ? -1 : a.at > b.at ? 1 : 0));
+    return [...messages, ...questions].sort((a, b) => (a.at < b.at ? -1 : a.at > b.at ? 1 : 0));
   });
 
   // Follow the tail as content arrives: new messages, streaming deltas, the
@@ -207,12 +201,6 @@ export function TranscriptPane(props: {
             </Switch>
           )}
         </For>
-        {/* Only the OPEN questions collect here, at the end nearest the
-            composer — the ones you still have to answer. Answered ones are
-            inline above, threaded into the turn they belong to. On a restart
-            with several open questions this keeps them all visible together
-            where you act on them. */}
-        <For each={openQuestions()}>{(question) => <QuestionCard question={question} />}</For>
         {/* The run is blocked on this question; it renders where you read. */}
         <Show when={state.pendingApprovals[props.project.id]}>
           {(approval) => <ApprovalCard projectId={props.project.id} approval={approval()} />}
@@ -561,7 +549,11 @@ function MessageCost(props: { message: Message }): JSX.Element {
               ? tx("Estimated from token counts — this agent does not report a cost.")
               : tx("Reported by the agent.")
           }
-          class="shrink-0 font-mono text-[10.5px] text-az-faint"
+          class={`shrink-0 font-mono text-[10.5px] ${
+            props.message.agent === "claude" && !value().estimated && value().usd > 2
+              ? "font-semibold text-error"
+              : "text-az-faint"
+          }`}
         >
           {value().estimated
             ? tx("est. {cost}", { cost: costLabel(value().usd) })
@@ -643,6 +635,7 @@ function SystemNote(props: { message: Message }): JSX.Element {
       >
         <Icon name={failed() ? "info" : "sparkles"} class="relative top-px shrink-0 text-[12px]" />
         {props.message.body}
+        <MessageCost message={props.message} />
       </span>
       {/* These notes carry the one thing most worth copying out of a
           transcript: the path a checkpoint was just written to. */}

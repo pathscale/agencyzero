@@ -214,17 +214,18 @@ describe("the knowledge checkpoint switch", () => {
   });
 });
 
-describe("concise project responses", () => {
-  it("starts off and keeps the project-local choice", async () => {
+describe("project response verbosity", () => {
+  it("starts at model default and keeps the project-local choice", async () => {
     setPrefs("panelSections", "settings", true);
     const { ready, screen } = mount();
     await ready();
 
-    const toggle = screen.getByLabelText("Concise responses for this project") as HTMLInputElement;
-    await waitFor(() => expect(toggle.checked).toBe(false));
+    const slider = screen.getByLabelText("Response verbosity for this project") as HTMLInputElement;
+    await waitFor(() => expect(slider.value).toBe("0"));
 
-    fireEvent.change(toggle, { target: { checked: true } });
-    await waitFor(() => expect(toggle.checked).toBe(true));
+    fireEvent.input(slider, { target: { value: "2" } });
+    await waitFor(() => expect(slider.value).toBe("2"));
+    expect(screen.getByText("Medium")).toBeTruthy();
   });
 });
 

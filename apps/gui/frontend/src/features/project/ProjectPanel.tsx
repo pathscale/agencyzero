@@ -470,46 +470,67 @@ function SettingsSection(props: { project: Project }): JSX.Element {
   );
 }
 
-/** A project-local instruction, stored in KV and added to every turn. */
+/** Project response verbosity, stored in KV and added to every turn. */
 function ConciseResponseToggle(props: { projectId: string }): JSX.Element {
   const { actions, isLive } = useWorkspace();
-  const [enabled, setEnabled] = createSignal(false);
+  const levels = ["default", "low", "medium", "high"] as const;
+  const labels = () => [tx("Model default"), tx("Low"), tx("Medium"), tx("High")];
+  const hints = () => [
+    tx("Use the model's default response detail"),
+    tx("Keep responses concise"),
+    tx("Balance detail and brevity"),
+    tx("Include more detail in responses"),
+  ];
+  const [level, setLevel] = createSignal<(typeof levels)[number]>("default");
 
   createEffect(() => {
     const id = props.projectId;
     void actions
       .getProjectConcise(id)
-      .then(setEnabled)
-      .catch((cause) => log.warn(`could not read concise responses: ${describeError(cause)}`));
+      .then((value) =>
+        setLevel(
+          levels.includes(value as (typeof levels)[number])
+            ? (value as (typeof levels)[number])
+            : "default",
+        ),
+      )
+      .catch((cause) => log.warn(`could not read response verbosity: ${describeError(cause)}`));
   });
 
-  const toggle = async (next: boolean): Promise<void> => {
-    setEnabled(next);
+  const choose = async (index: number): Promise<void> => {
+    const previous = level();
+    const next = levels[index] ?? "default";
+    setLevel(next);
     try {
       await actions.setProjectConcise(props.projectId, next);
     } catch (cause) {
-      setEnabled(!next);
-      log.error(`could not change concise responses: ${describeError(cause)}`);
+      setLevel(previous);
+      log.error(`could not change response verbosity: ${describeError(cause)}`);
     }
   };
+  const index = () => levels.indexOf(level());
 
   return (
-    <div class="flex items-center gap-2.5">
+    <div class="flex items-start gap-2.5">
       <Icon name="message-square-dashed" class="shrink-0 text-[14px] text-primary/75" />
-      <span class="min-w-0 flex-1 text-[12px] text-az-body">
-        {tx("Concise responses")}
-        <span class="mt-px block text-[11px] text-az-muted">
-          {tx("Lead with the answer and skip preambles for this project")}
-        </span>
-      </span>
-      <Toggle
-        aria-label={tx("Concise responses for this project")}
-        checked={enabled()}
-        color="accent"
-        size="sm"
-        disabled={!isLive("setProjectConcise")}
-        onChange={(event) => void toggle(event.currentTarget.checked)}
-      />
+      <div class="min-w-0 flex-1">
+        <div class="flex items-center justify-between text-[12px] text-az-body">
+          <span>{tx("Verbosity")}</span>
+          <span class="font-medium text-primary">{labels()[index()]}</span>
+        </div>
+        <input
+          type="range"
+          min="0"
+          max="3"
+          step="1"
+          value={index()}
+          aria-label={tx("Response verbosity for this project")}
+          disabled={!isLive("setProjectConcise")}
+          onInput={(event) => void choose(Number(event.currentTarget.value))}
+          class="mt-1 h-1.5 w-full cursor-pointer accent-primary disabled:cursor-not-allowed disabled:opacity-50"
+        />
+        <span class="mt-1 block text-[10.5px] text-az-muted">{hints()[index()]}</span>
+      </div>
     </div>
   );
 }

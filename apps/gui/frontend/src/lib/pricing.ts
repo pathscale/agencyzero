@@ -31,6 +31,8 @@ export interface CostEstimate {
   inputTokens: number;
   outputTokens: number;
   severity: Severity;
+  /** A model or provider switch cannot reuse the previous prompt cache. */
+  coldContext: boolean;
 }
 
 /**
@@ -74,6 +76,7 @@ export function estimate(
   prompt: string,
   contextTokens: number,
   expectedOutput: number = ASSUMED_OUTPUT_TOKENS,
+  coldContext = false,
 ): CostEstimate {
   const price = priceFor(table, model);
   if (!price) {
@@ -87,12 +90,14 @@ export function estimate(
       inputTokens: estimateTokens(prompt),
       outputTokens: expectedOutput,
       severity: "low",
+      coldContext,
     };
   }
 
   const perMillion = (tokens: number, rate: number) => (tokens * rate) / 1_000_000;
   const inputTokens = estimateTokens(prompt);
-  const contextCost = perMillion(contextTokens, price.cacheRead);
+  const contextRate = coldContext ? price.input * table.cacheWriteMultiple : price.cacheRead;
+  const contextCost = perMillion(contextTokens, contextRate);
   const inputCost = perMillion(inputTokens, price.input);
   const outputCost = perMillion(expectedOutput, price.output);
   const total = contextCost + inputCost + outputCost;
@@ -110,6 +115,7 @@ export function estimate(
     inputTokens,
     outputTokens: expectedOutput,
     severity,
+    coldContext,
   };
 }
 
@@ -119,13 +125,24 @@ export function estimate(
  * lets the alert say whether a compaction pays for itself against the per-turn
  * context cost it removes.
  */
-export function compactionCost(table: PricingTable, model: string, contextTokens: number): number {
+export function compactionCost(
+  table: PricingTable,
+  model: string,
+  contextTokens: number,
+  learnsFirst = true,
+): number {
   const price = priceFor(table, model);
   if (!price) return 0;
   const SUMMARY_TOKENS = 4_000;
-  return (
-    (contextTokens * price.cacheRead) / 1_000_000 + (SUMMARY_TOKENS * price.output) / 1_000_000
-  );
+  const onePass =
+    (contextTokens * price.cacheRead) / 1_000_000 + (SUMMARY_TOKENS * price.output) / 1_000_000;
+  return onePass * (learnsFirst ? 2 : 1);
+}
+
+/** Additional cost for each 1K thinking tokens, billed at the model's output rate. */
+export function thinkingCostPerThousand(table: PricingTable, model: string): number | null {
+  const price = priceFor(table, model);
+  return price ? price.output / 1_000 : null;
 }
 
 /**

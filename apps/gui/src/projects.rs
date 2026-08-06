@@ -589,6 +589,60 @@ fn full_body(tables: &Tables, message_id: &str, head: &str) -> String {
     body
 }
 
+/// Carry a project's transcript across provider boundaries.
+///
+/// Native session ids are provider-specific. When the previous turn belonged
+/// to another provider, resuming the target provider cannot make those turns
+/// appear. Attach the visible conversation to this turn so the target model
+/// receives the same handoff the user can see in the transcript.
+fn provider_handoff(tables: &Tables, project_id: &str, turn_id: &str, target: Agent) -> String {
+    const MAX_HANDOFF_BYTES: usize = 4_000_000;
+    let mut rows = tables
+        .message
+        .select_by_project_id(project_id.to_string())
+        .execute()
+        .unwrap_or_default();
+    rows.sort_by(|a, b| a.created_at.cmp(&b.created_at));
+    let prior_agent = rows
+        .iter()
+        .rev()
+        .find(|row| {
+            row.id != turn_id
+                && (row.author == "user" || row.author == "agent")
+                && !row.agent.is_empty()
+        })
+        .map(|row| row.agent.as_str());
+    if prior_agent.is_none_or(|agent| agent == agent_wire_name(target)) {
+        return String::new();
+    }
+
+    let mut parts = Vec::new();
+    let mut bytes = 0usize;
+    for row in rows
+        .into_iter()
+        .rev()
+        .filter(|row| row.id != turn_id && (row.author == "user" || row.author == "agent"))
+    {
+        let body = full_body(tables, &row.id, &row.body);
+        let label = if row.author == "user" {
+            "User".to_string()
+        } else {
+            format!("Assistant ({})", row.agent)
+        };
+        let part = format!("{label}:\n{body}");
+        if bytes + part.len() > MAX_HANDOFF_BYTES && !parts.is_empty() {
+            break;
+        }
+        bytes += part.len();
+        parts.push(part);
+    }
+    parts.reverse();
+    format!(
+        "Conversation handoff from another provider. Treat this transcript as the conversation you are continuing. Do not repeat it back to the user.\n\n{}",
+        parts.join("\n\n")
+    )
+}
+
 fn parse_permission(raw: Option<&str>) -> Permission {
     match raw.unwrap_or("read_only") {
         "plan" => Permission::Plan,
@@ -2170,13 +2224,31 @@ fn concise_key(project_id: &str) -> String {
     format!("concise-responses:{project_id}")
 }
 
-fn project_concise(tables: &Tables, project_id: &str) -> bool {
-    tables
-        .kv_get(&concise_key(project_id))
-        .is_some_and(|value| value == "true")
+fn project_response_verbosity(tables: &Tables, project_id: &str) -> String {
+    match tables.kv_get(&concise_key(project_id)).as_deref() {
+        // Migrate the former boolean without changing the key or losing intent.
+        Some("true" | "low") => "low",
+        Some("medium") => "medium",
+        Some("high") => "high",
+        _ => "default",
+    }
+    .to_string()
 }
 
-const CONCISE_INSTRUCTION: &str = "Keep responses concise for this project. Lead with the answer, skip preambles and postambles, and prefer compact bullets when a list helps.";
+fn response_verbosity_instruction(level: &str) -> Option<&'static str> {
+    match level {
+        "low" => Some(
+            "Keep responses concise for this project. Lead with the answer, skip preambles and postambles, and prefer compact bullets when a list helps.",
+        ),
+        "medium" => Some(
+            "Balance detail and brevity in responses for this project. Explain decisions that affect the result, but avoid repetition and unnecessary preambles.",
+        ),
+        "high" => Some(
+            "Include more detail in responses for this project. Explain important reasoning, tradeoffs, verification, and follow-up implications clearly.",
+        ),
+        _ => None,
+    }
+}
 
 /// Where a run's partially streamed reply lives in `kv` while it streams.
 ///
@@ -3227,6 +3299,20 @@ pub struct UsageModelDto {
     pub turns: usize,
 }
 
+/// One project's durable spend, retained even if the project itself was deleted.
+#[derive(Debug, Clone, Default, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UsageProjectDto {
+    pub project_id: String,
+    pub project_name: String,
+    pub cost_usd: f64,
+    pub input_tokens: i64,
+    pub output_tokens: i64,
+    pub cache_read_tokens: i64,
+    pub cache_write_tokens: i64,
+    pub turns: usize,
+}
+
 /// The single turn that processed the most tokens.
 ///
 /// Answers the question a big bill raises: is one request enormous, or is it
@@ -3256,6 +3342,8 @@ pub struct UsageAnalyticsDto {
     pub days: Vec<UsageDayDto>,
     /// Per-model totals, most expensive first.
     pub models: Vec<UsageModelDto>,
+    /// Per-project totals, most expensive first.
+    pub projects: Vec<UsageProjectDto>,
     pub total_usd: f64,
     pub total_input_tokens: i64,
     pub total_output_tokens: i64,
@@ -3299,6 +3387,8 @@ pub async fn get_usage_analytics(state: State<'_, AppState>) -> Result<UsageAnal
         std::collections::HashMap::new();
     let mut cache_by_model: std::collections::HashMap<String, (i64, i64)> =
         std::collections::HashMap::new();
+    let mut cache_by_project: std::collections::HashMap<String, (i64, i64)> =
+        std::collections::HashMap::new();
     for row in &cache {
         let day = cache_by_day.entry(row.day.clone()).or_default();
         day.0 += row.cache_read_tokens;
@@ -3306,11 +3396,25 @@ pub async fn get_usage_analytics(state: State<'_, AppState>) -> Result<UsageAnal
         let model = cache_by_model.entry(row.model.clone()).or_default();
         model.0 += row.cache_read_tokens;
         model.1 += row.cache_write_tokens;
+        let project = cache_by_project.entry(row.project_id.clone()).or_default();
+        project.0 += row.cache_read_tokens;
+        project.1 += row.cache_write_tokens;
     }
 
     let mut by_day: std::collections::BTreeMap<String, UsageDayDto> =
         std::collections::BTreeMap::new();
     let mut by_model: std::collections::HashMap<String, UsageModelDto> =
+        std::collections::HashMap::new();
+    let project_names: std::collections::HashMap<String, String> = state
+        .tables
+        .project
+        .select_all()
+        .execute()
+        .unwrap_or_default()
+        .into_iter()
+        .map(|project| (project.id, project.name))
+        .collect();
+    let mut by_project: std::collections::HashMap<String, UsageProjectDto> =
         std::collections::HashMap::new();
     let mut total_micro = 0i64;
     let mut total_input = 0i64;
@@ -3342,6 +3446,21 @@ pub async fn get_usage_analytics(state: State<'_, AppState>) -> Result<UsageAnal
         model.input_tokens += row.input_tokens;
         model.output_tokens += row.output_tokens;
         model.turns += 1;
+
+        let project = by_project
+            .entry(row.project_id.clone())
+            .or_insert_with(|| UsageProjectDto {
+                project_id: row.project_id.clone(),
+                project_name: project_names
+                    .get(&row.project_id)
+                    .cloned()
+                    .unwrap_or_else(|| format!("Deleted project ({})", row.project_id)),
+                ..Default::default()
+            });
+        project.cost_usd += row.cost_micro as f64 / 1_000_000.0;
+        project.input_tokens += row.input_tokens;
+        project.output_tokens += row.output_tokens;
+        project.turns += 1;
     }
 
     // Fold the cache split onto the per-day and per-model rows.
@@ -3357,6 +3476,12 @@ pub async fn get_usage_analytics(state: State<'_, AppState>) -> Result<UsageAnal
         if let Some((read, write)) = cache_by_model.get(model_key) {
             model.cache_read_tokens = *read;
             model.cache_write_tokens = *write;
+        }
+    }
+    for (project_key, project) in &mut by_project {
+        if let Some((read, write)) = cache_by_project.get(project_key) {
+            project.cache_read_tokens = *read;
+            project.cache_write_tokens = *write;
         }
     }
     for (read, write) in cache_by_day.values() {
@@ -3415,10 +3540,13 @@ pub async fn get_usage_analytics(state: State<'_, AppState>) -> Result<UsageAnal
 
     let mut models: Vec<UsageModelDto> = by_model.into_values().collect();
     models.sort_by(|a, b| b.cost_usd.total_cmp(&a.cost_usd));
+    let mut projects: Vec<UsageProjectDto> = by_project.into_values().collect();
+    projects.sort_by(|a, b| b.cost_usd.total_cmp(&a.cost_usd));
 
     Ok(UsageAnalyticsDto {
         days: by_day.into_values().collect(),
         models,
+        projects,
         total_usd: total_micro as f64 / 1_000_000.0,
         total_input_tokens: total_input,
         total_output_tokens: total_output,
@@ -3685,7 +3813,7 @@ async fn learn_before_compacting(
     agent: Agent,
     cwd: &str,
     session: Option<&str>,
-) -> Option<String> {
+) -> Option<(String, agent_abstraction::Usage)> {
     let existing = state
         .tables
         .kv_get(&crate::notes::notes_key(project_id))
@@ -3760,7 +3888,7 @@ async fn learn_before_compacting(
         "{project_id}: kept {} characters of notes before compacting",
         learned.len()
     );
-    Some(learned)
+    Some((learned, outcome.usage))
 }
 
 /// Who gets to say whether a compaction happened, and why it did not.
@@ -4003,10 +4131,10 @@ pub async fn compact_project(
 
     /*
      * Three events matter, and the third is the one an empty conversation
-     * answers with. A compaction reports no usage worth recording and its
-     * `result` is empty by design — but an agent that will not compact at all
-     * says so as ordinary assistant text and emits no compaction record
-     * whatsoever. Checked against the CLI on a fresh session: the entire reply
+     * answers with. A compaction's `result` is empty by design, but its terminal
+     * outcome still carries billable usage and is recorded below. An agent that
+     * will not compact at all says so as ordinary assistant text and emits no
+     * compaction record whatsoever. Checked against the CLI on a fresh session: the entire reply
      * is `Error: No messages to compact`, the run exits `success`, and nothing
      * else is said. Dropping that text left the user reading "the agent ended
      * without reporting a compaction" while the agent had explained itself
@@ -4014,6 +4142,17 @@ pub async fn compact_project(
      */
     let mut outcome_note = None;
     let mut spoken = String::new();
+    let mut compact_model = state
+        .tables
+        .message
+        .select_by_project_id(project_id.clone())
+        .execute()
+        .unwrap_or_default()
+        .into_iter()
+        .filter(|row| row.agent == agent_wire_name(agent) && !row.model.is_empty())
+        .max_by(|a, b| a.created_at.cmp(&b.created_at))
+        .map(|row| row.model)
+        .unwrap_or_default();
     let mut cancelled = false;
     loop {
         let event = tokio::select! {
@@ -4038,8 +4177,12 @@ pub async fn compact_project(
             // there was none to resume — the command has just brought one into
             // being and the next message has to resume *it*.
             agent_abstraction::Event::Started {
-                session: started, ..
+                session: started,
+                model,
             } => {
+                if let Some(model) = model.filter(|model| !model.is_empty()) {
+                    compact_model = model;
+                }
                 if let Err(error) = state
                     .tables
                     .kv_put(&agent_session_key(&project_id, agent), started.clone())
@@ -4081,7 +4224,7 @@ pub async fn compact_project(
          * — it is also the prompt to go and check them if the agent starts
          * behaving oddly afterwards.
          */
-        match learned.as_deref() {
+        match learned.as_ref().map(|(notes, _)| notes.as_str()) {
             Some(notes) => format!(
                 "Compacted the conversation, keeping {} rule(s) learned so far. \
                  What came before is now a summary, but those rules ride every \
@@ -4105,6 +4248,23 @@ pub async fn compact_project(
         body.clone(),
     );
 
+    let mut compact_usage = agent_abstraction::Usage::default();
+    if let Some((_, usage)) = &learned {
+        compact_usage.accumulate(usage);
+    }
+    if let Ok(outcome) = &finished {
+        compact_usage.accumulate(&outcome.usage);
+    }
+    let has_usage = compact_usage.cost_usd.is_some()
+        || compact_usage.input_tokens.is_some()
+        || compact_usage.output_tokens.is_some()
+        || compact_usage.cache_read_tokens.is_some()
+        || compact_usage.cache_write_tokens.is_some();
+    let usage_json = if has_usage {
+        serde_json::to_string(&UsageDto::from(&compact_usage)).unwrap_or_default()
+    } else {
+        String::new()
+    };
     let row = MessageRow {
         id: id("msg"),
         project_id: project_id.clone(),
@@ -4116,9 +4276,9 @@ pub async fn compact_project(
         author: "system".into(),
         agent: agent_wire_name(agent).into(),
         moderation: String::new(),
-        model: String::new(),
+        model: compact_model.clone(),
         permission: String::new(),
-        usage: String::new(),
+        usage: usage_json,
         stop: if ok { "completed" } else { "error" }.into(),
         exit_code: 0,
         body,
@@ -4130,6 +4290,67 @@ pub async fn compact_project(
         .insert(row.clone())
         .map_err(|error| error.to_string())?;
     let _ = app.emit("message:appended", &MessageDto::from(row));
+    if has_usage {
+        let at = now();
+        let model = if compact_model.is_empty() {
+            agent_wire_name(agent).to_string()
+        } else {
+            compact_model.clone()
+        };
+        let ledger = crate::db::schema::usage_ledger::UsageLedgerRow {
+            id: id("cost"),
+            day: at.chars().take(10).collect(),
+            at: at.clone(),
+            project_id: project_id.clone(),
+            model: model.clone(),
+            #[expect(
+                clippy::cast_possible_truncation,
+                reason = "usage is stored in micro-dollars"
+            )]
+            cost_micro: (compact_usage.cost_usd.unwrap_or(0.0) * 1_000_000.0).round() as i64,
+            input_tokens: compact_usage
+                .input_tokens
+                .and_then(|value| i64::try_from(value).ok())
+                .unwrap_or(0),
+            output_tokens: compact_usage
+                .output_tokens
+                .and_then(|value| i64::try_from(value).ok())
+                .unwrap_or(0),
+        };
+        let cache = crate::db::schema::usage_cache::UsageCacheRow {
+            id: id("cache"),
+            day: at.chars().take(10).collect(),
+            project_id: project_id.clone(),
+            model,
+            cache_read_tokens: compact_usage
+                .cache_read_tokens
+                .and_then(|value| i64::try_from(value).ok())
+                .unwrap_or(0),
+            cache_write_tokens: compact_usage
+                .cache_write_tokens
+                .and_then(|value| i64::try_from(value).ok())
+                .unwrap_or(0),
+            input_tokens: compact_usage
+                .input_tokens
+                .and_then(|value| i64::try_from(value).ok())
+                .unwrap_or(0),
+            at,
+        };
+        if let Err(error) = state.tables.usage_ledger.insert(ledger) {
+            crate::log!(
+                crate::log::Level::Error,
+                "run",
+                "{project_id}: could not record compaction cost: {error}"
+            );
+        }
+        if let Err(error) = state.tables.usage_cache.insert(cache) {
+            crate::log!(
+                crate::log::Level::Error,
+                "run",
+                "{project_id}: could not record compaction cache usage: {error}"
+            );
+        }
+    }
     let _ = app.emit(
         "run:compaction",
         serde_json::json!({
@@ -4795,28 +5016,32 @@ pub async fn set_checkpoints(
     Ok(enabled)
 }
 
-/// Whether this project's agent is asked to answer concisely.
+/// This project's response verbosity: default, low, medium, or high.
 #[tauri::command]
-pub fn get_project_concise(project_id: String, state: State<'_, AppState>) -> bool {
-    project_concise(&state.tables, &project_id)
+pub fn get_project_concise(project_id: String, state: State<'_, AppState>) -> String {
+    project_response_verbosity(&state.tables, &project_id)
 }
 
-/// Persist one project's concise-response posture without changing other projects.
+/// Persist one project's response verbosity without changing other projects.
 ///
 /// # Errors
 /// Returns the store's error when the flag cannot be written.
 #[tauri::command]
 pub async fn set_project_concise(
     project_id: String,
-    enabled: bool,
+    enabled: String,
     state: State<'_, AppState>,
-) -> Result<bool, String> {
+) -> Result<String, String> {
+    let level = match enabled.as_str() {
+        "low" | "medium" | "high" => enabled,
+        _ => "default".to_string(),
+    };
     state
         .tables
-        .kv_put(&concise_key(&project_id), enabled.to_string())
+        .kv_put(&concise_key(&project_id), level.clone())
         .await
         .map_err(|error| error.to_string())?;
-    Ok(enabled)
+    Ok(level)
 }
 
 /// What this project's agent has been told to remember across compactions.
@@ -5612,7 +5837,7 @@ async fn drive_run(
     let extra_dirs = scope.extra_dirs.clone();
     let resume = scope.resume.clone();
     let memory_dir = scope.memory_dir.clone();
-    let mut directive_turn_id = turn_id;
+    let mut directive_turn_id = turn_id.clone();
     /*
      * Home's conversation is the task manager, and its replies have to become
      * rows. The user's own words go out unchanged with the output contract
@@ -5620,6 +5845,7 @@ async fn drive_run(
      * theirs, the format is ours.
      */
     let is_task_manager = project_id == crate::tasks::TASK_MANAGER_ID;
+    let handoff = provider_handoff(&tables, &project_id, &turn_id, agent);
     let prompt = if is_task_manager {
         /*
          * The current lists ride along with every prompt. Without them the
@@ -5669,7 +5895,12 @@ async fn drive_run(
                 )
             })
             .unwrap_or_default();
-        format!("{prompt}\n\n{snapshot}{receipts_line}{usage_line}")
+        let handoff = if handoff.is_empty() {
+            String::new()
+        } else {
+            format!("{handoff}\n\nCurrent request:\n")
+        };
+        format!("{handoff}{prompt}\n\n{snapshot}{receipts_line}{usage_line}")
     };
 
     // Kept for the I/O panel before the builder consumes them, so the "sent"
@@ -5757,11 +5988,13 @@ async fn drive_run(
         }
     }
 
-    if project_concise(&tables, &project_id) {
+    if let Some(instruction) =
+        response_verbosity_instruction(&project_response_verbosity(&tables, &project_id))
+    {
         if !system.is_empty() {
             system.push_str("\n\n");
         }
-        system.push_str(CONCISE_INSTRUCTION);
+        system.push_str(instruction);
     }
 
     if !notes.trim().is_empty() {
@@ -8521,7 +8754,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn concise_responses_are_scoped_to_one_project_without_a_schema_change() {
+    async fn response_verbosity_is_scoped_and_migrates_the_old_boolean() {
         let dir = std::env::temp_dir().join(format!(
             "az-project-concise-{}-{}",
             std::process::id(),
@@ -8531,15 +8764,90 @@ mod tests {
             .await
             .expect("concise preference store opens");
 
-        assert!(!project_concise(&tables, "project-a"));
+        assert_eq!(project_response_verbosity(&tables, "project-a"), "default");
         tables
             .kv_put(&concise_key("project-a"), "true".into())
             .await
             .expect("concise preference writes");
 
-        assert!(project_concise(&tables, "project-a"));
-        assert!(!project_concise(&tables, "project-b"));
-        assert!(CONCISE_INSTRUCTION.starts_with("Keep responses concise"));
+        assert_eq!(project_response_verbosity(&tables, "project-a"), "low");
+        assert_eq!(project_response_verbosity(&tables, "project-b"), "default");
+        assert!(
+            response_verbosity_instruction("low")
+                .expect("low has an instruction")
+                .starts_with("Keep responses concise")
+        );
+        assert!(response_verbosity_instruction("default").is_none());
+
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[tokio::test]
+    async fn a_provider_switch_hands_off_prior_turns_but_not_the_current_prompt() {
+        let dir = std::env::temp_dir().join(format!(
+            "az-provider-handoff-{}-{}",
+            std::process::id(),
+            chrono::Utc::now().timestamp_nanos_opt().unwrap_or_default()
+        ));
+        let tables = crate::db::tables::Tables::open(&dir)
+            .await
+            .expect("handoff store opens");
+        let row = |id: &str, author: &str, agent: &str, body: &str, at: &str| MessageRow {
+            id: id.into(),
+            project_id: "project-a".into(),
+            item_id: String::new(),
+            author: author.into(),
+            agent: agent.into(),
+            moderation: String::new(),
+            model: if agent == "claude" {
+                "opus"
+            } else {
+                "gpt-5.6-sol"
+            }
+            .into(),
+            permission: "read_only".into(),
+            usage: String::new(),
+            stop: "completed".into(),
+            exit_code: 0,
+            body: body.into(),
+            created_at: at.into(),
+        };
+        tables
+            .message
+            .insert(row(
+                "user-1",
+                "user",
+                "claude",
+                "first request",
+                "2026-08-06T01:00:00Z",
+            ))
+            .expect("first message writes");
+        tables
+            .message
+            .insert(row(
+                "agent-1",
+                "agent",
+                "claude",
+                "first answer",
+                "2026-08-06T01:01:00Z",
+            ))
+            .expect("answer writes");
+        tables
+            .message
+            .insert(row(
+                "current",
+                "user",
+                "codex",
+                "current request",
+                "2026-08-06T01:02:00Z",
+            ))
+            .expect("current message writes");
+
+        let handoff = provider_handoff(&tables, "project-a", "current", Agent::Codex);
+        assert!(handoff.contains("first request"));
+        assert!(handoff.contains("first answer"));
+        assert!(!handoff.contains("current request"));
+        assert!(provider_handoff(&tables, "project-a", "current", Agent::Claude).is_empty());
 
         let _ = std::fs::remove_dir_all(dir);
     }

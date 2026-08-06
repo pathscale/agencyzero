@@ -544,6 +544,33 @@ const zh = {
   output: "输出",
   "cache read": "缓存读取",
   "cache write": "缓存写入",
+  Turn: "轮次",
+  Verbosity: "详细程度",
+  "Model default": "模型默认",
+  Low: "低",
+  Medium: "中",
+  High: "高",
+  "Use the model's default response detail": "使用模型默认的回复详细程度",
+  "Keep responses concise": "保持回复简洁",
+  "Balance detail and brevity": "平衡细节与简洁",
+  "Include more detail in responses": "在回复中包含更多细节",
+  "Response verbosity for this project": "此项目的回复详细程度",
+  "Switching providers attaches the conversation to the target agent and creates a cold context charge of about {cost}.":
+    "切换服务商会把对话附加给目标代理，并产生约 {cost} 的冷上下文费用。",
+  "Changing models invalidates the prompt cache and creates a cold context charge of about {cost}.":
+    "更改模型会使提示缓存失效，并产生约 {cost} 的冷上下文费用。",
+  "Most of it ({cost}) is the conversation being resent every turn, not this message.":
+    "其中大部分（{cost}）来自每轮重发的对话，而非这条消息。",
+  "Lower project verbosity to reduce reply tokens on every turn.":
+    "降低项目详细程度以减少每轮回复 token。",
+  "Extra Thinking is adaptive; each additional 1K thinking tokens costs about {cost} at this model's output rate.":
+    "额外思考是自适应的；按此模型的输出费率，每增加 1K 思考 token 约花费 {cost}。",
+  "Compact this session (~{cost} once, including the learning pass) to shrink the resent context.":
+    "压缩此会话（一次约 {cost}，包含学习步骤）以缩减重发的上下文。",
+  "Or start a fresh session if the history no longer helps the next task.":
+    "如果历史对下一个任务已无帮助，也可以开启新会话。",
+  "Per project": "按项目",
+  turns: "轮",
 } satisfies Record<keyof typeof en, string>;
 
 export default zh;

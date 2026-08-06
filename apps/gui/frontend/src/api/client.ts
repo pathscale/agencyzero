@@ -235,9 +235,9 @@ export interface AgencyZeroApi {
   getCheckpoints(projectId: string): Promise<boolean>;
   setCheckpoints(projectId: string, enabled: boolean): Promise<boolean>;
 
-  /** Whether this project's turns carry the concise-response instruction. */
-  getProjectConcise(projectId: string): Promise<boolean>;
-  setProjectConcise(projectId: string, enabled: boolean): Promise<boolean>;
+  /** Response verbosity for this project: default, low, medium, or high. */
+  getProjectConcise(projectId: string): Promise<string>;
+  setProjectConcise(projectId: string, enabled: string): Promise<string>;
 
   /** How much per-turn context this project re-sends: "full", "compact" or
    *  "minimal". Trades snapshot detail for input tokens. */
