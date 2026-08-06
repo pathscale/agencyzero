@@ -31,7 +31,7 @@ export function ProjectPanel(props: { project: Project }): JSX.Element {
   const io = () => state.agentIo[props.project.id] ?? [];
 
   return (
-    <div class="az-scroll flex min-h-0 w-[322px] flex-none flex-col gap-2.5">
+    <div class="az-scroll flex h-full min-h-0 w-[322px] flex-none flex-col gap-2.5">
       <SectionPanel
         icon="list-checks"
         title={tx("Items")}
