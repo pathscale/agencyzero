@@ -1,10 +1,9 @@
-//! Questions an agent raised during a run, tracked as chips over the composer.
+//! Questions an agent raised during a run, tracked inline in the transcript.
 //!
 //! An authored `@agency:ask` is the source: it turns the agent's question into a
-//! row the owner answers, beside the PR chips because it is the same kind of
-//! standing fact. A question is not a work item and not a tool approval: the
-//! owner reads it here rather than scrolling the transcript, and answers it in
-//! place. `urgency` decides how loudly the tab calls: `critical` (now),
+//! row the owner answers at the conversation tail. A question is not a work
+//! item and not a tool approval. `urgency` decides how loudly the tab calls:
+//! `critical` (now),
 //! `blocking` (the agent is stopped until answered), `passive` (answer when free).
 
 use serde::Serialize;
@@ -45,11 +44,11 @@ impl From<QuestionRow> for QuestionDto {
     }
 }
 
-/// Record one `@agency:ask`, and announce its chip.
+/// Record one `@agency:ask`, and announce its transcript card.
 ///
 /// `reference` is split by shape, the same way `pr.link` tells a URL from a
 /// number: an `https://` value is a GitHub issue, anything else is an item id.
-/// The row is always emitted so the chip lands the moment the directive parses,
+/// The row is always emitted so the card lands the moment the directive parses,
 /// not at the next project load.
 pub fn record(
     app: &AppHandle,

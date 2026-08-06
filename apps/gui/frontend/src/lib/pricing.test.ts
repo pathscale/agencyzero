@@ -54,6 +54,17 @@ describe("estimateTokens", () => {
 });
 
 describe("turnCostTotals", () => {
+  it("does not price continued transcript chunks as extra turns", () => {
+    const chunk = turn("gpt-5.4", null);
+    chunk.stop = "continued";
+
+    expect(turnCostTotals(table, [chunk])).toEqual({
+      usd: null,
+      estimated: false,
+      missing: 0,
+    });
+  });
+
   it("combines reported costs with labeled estimates and keeps legacy gaps partial", () => {
     const totals = turnCostTotals(table, [
       turn("opus", {

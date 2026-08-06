@@ -258,7 +258,7 @@ export function turnCostTotals(
   let missing = 0;
 
   for (const message of messages) {
-    if (message.author !== "agent") continue;
+    if (message.author !== "agent" || message.stop === "continued") continue;
     const usage = message.usage;
     if (!usage) {
       missing += 1;

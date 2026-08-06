@@ -88,7 +88,7 @@ export type MessageAuthor = "user" | "agent" | "moderator" | "system" | "review"
 /** Live delivery state for a user message sent to the active provider. */
 export type MessageReceipt = "sent" | "read";
 
-/** `Stop` in the crate; anything other than these two arrives as a bare string. */
+/** `continued` is a non-terminal agent chunk closed by a mid-turn owner reply. */
 export type StopReason = "completed" | "error" | (string & {});
 
 /** How a moderator note landed. */

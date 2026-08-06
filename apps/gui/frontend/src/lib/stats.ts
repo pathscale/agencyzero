@@ -81,7 +81,9 @@ export function usageTotals(messages: readonly Message[]): UsageTotals {
   const totals: UsageTotals = { ...EMPTY };
 
   for (const message of messages) {
-    if (message.author !== "agent") continue;
+    // A live owner reply closes the text above it as a durable `continued`
+    // chunk. It is still agent prose, but not another billed turn.
+    if (message.author !== "agent" || message.stop === "continued") continue;
     totals.turns += 1;
 
     const usage = message.usage;

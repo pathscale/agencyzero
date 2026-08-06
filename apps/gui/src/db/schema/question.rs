@@ -2,10 +2,9 @@
 //!
 //! A question is its own entity, not a work item and not a tool approval. An
 //! `@agency:ask` directive is the source: it turns authored text into a row the
-//! owner answers, the same way `@agency:pr.link` turns a URL into a PR chip. It
-//! sits beside the PR chips precisely because it is the same kind of thing, a
-//! standing fact about this project that the owner acts on, rather than a line
-//! of prose to scroll back and find.
+//! owner answers. While open it sits at the transcript tail, the action the
+//! conversation is waiting on. Once answered it stays inline above that owner
+//! reply so the exchange remains readable in order.
 //!
 //! `urgency` is how loudly it calls for attention: `critical` (answer now, e.g.
 //! a security hole), `blocking` (the agent cannot proceed until answered), or
