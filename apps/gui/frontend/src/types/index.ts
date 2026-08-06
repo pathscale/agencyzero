@@ -247,6 +247,8 @@ export interface Message {
   projectId: string;
   /** Soft association to a ProjectItem — never enforced; null is normal. */
   itemId: string | null;
+  /** Tracked question this owner message answers, when associated. */
+  replyToQuestionId?: string;
   author: MessageAuthor;
   agent: Agent;
   /** Set when `author` is "moderator". */
@@ -822,6 +824,8 @@ export interface UiPrefs {
    * theirs, and losing it is never the smaller surprise.
    */
   composerDrafts: Record<string, string>;
+  /** Question staged as the target of each project's next owner message. */
+  replyQuestionIds: Record<string, string>;
 }
 
 /**

@@ -111,6 +111,39 @@ describe("Composer", () => {
     await waitFor(() => expect(field.value).toBe(""));
   });
 
+  it("sends a staged question id as metadata and clears its chip on success", async () => {
+    const onCancelQuestionReply = vi.fn();
+    const screen = mount({
+      replyQuestion: {
+        id: "q-specific",
+        projectId: "cafe",
+        text: "Which fix should land first?",
+        urgency: "blocking",
+        answered: false,
+        createdAt: "2026-08-07T00:00:00Z",
+      },
+      onCancelQuestionReply,
+    });
+    expect(screen.getByText("Which fix should land first?")).toBeInTheDocument();
+    type(screen.field, "Ship the question flow first.");
+
+    screen.field.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+
+    await waitFor(() =>
+      expect(screen.onSend).toHaveBeenCalledWith(
+        "Ship the question flow first.",
+        {
+          authoredCharacterCount: 29,
+          authoredLineCount: 1,
+          attachmentCount: 0,
+          userAuthoredPs: false,
+        },
+        "q-specific",
+      ),
+    );
+    expect(onCancelQuestionReply).toHaveBeenCalledOnce();
+  });
+
   it("never shows a horizontal scrollbar in the prompt field", async () => {
     const { field, booted } = mount();
     expect(field).toHaveClass("overflow-x-hidden");

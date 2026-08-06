@@ -128,50 +128,77 @@ pub async fn answer_question(
     Ok(())
 }
 
-/// Close every standing question as soon as the owner's reply is accepted.
+/// Resolve which standing question a newly accepted owner message answers.
 ///
-/// A question's answer is the next user message in the transcript. Waiting for
-/// the agent's whole response before updating these rows leaves the tab red
-/// while the requested answer is already sitting directly beneath the ask.
-/// Called after the user message is durable, so a send that was refused before
-/// persistence cannot accidentally dismiss anything.
-pub async fn answer_open_for_reply(app: &AppHandle, tables: &Tables, project_id: &str) {
-    for updated in mark_open_for_reply(tables, project_id).await {
+/// A chip names its question exactly. Untagged prose is associated only when
+/// there is exactly one possible target; closing every open question made
+/// stacked asks unusable and silently guessed at out-of-order replies.
+pub fn reply_target(
+    tables: &Tables,
+    project_id: &str,
+    requested_id: Option<&str>,
+) -> Result<Option<QuestionRow>, String> {
+    let open: Vec<QuestionRow> = tables
+        .question
+        .select_by_project_id(project_id.to_owned())
+        .execute()
+        .unwrap_or_default()
+        .into_iter()
+        .filter(|row| !row.answered)
+        .collect();
+
+    let Some(requested_id) = requested_id else {
+        return Ok((open.len() == 1).then(|| open[0].clone()));
+    };
+    let Some(row) = open.into_iter().find(|row| row.id == requested_id) else {
+        return Err(format!(
+            "question {requested_id} is not open in project {project_id}"
+        ));
+    };
+    Ok(Some(row))
+}
+
+/// Mark one linked question answered after the owner message is durable.
+pub async fn answer_for_reply(
+    app: &AppHandle,
+    tables: &Tables,
+    project_id: &str,
+    question_id: &str,
+) {
+    if let Some(updated) = mark_for_reply(tables, project_id, question_id).await {
         let _ = app.emit("question:updated", updated);
     }
 }
 
-/// Store half of [`answer_open_for_reply`], split out so the transition has a
-/// direct regression test without constructing a desktop application handle.
-async fn mark_open_for_reply(tables: &Tables, project_id: &str) -> Vec<QuestionDto> {
-    let rows = tables
-        .question
-        .select_by_project_id(project_id.to_string())
-        .execute()
-        .unwrap_or_default();
-    let mut updated_rows = Vec::new();
-    for row in rows.into_iter().filter(|row| !row.answered) {
-        let id = row.id.clone();
-        if let Err(error) = tables
-            .question
-            .update_question_answered_by_id(
-                QuestionAnsweredByIdQuery { answered: true },
-                id.clone(),
-            )
-            .await
-        {
-            crate::log!(
-                crate::log::Level::Error,
-                "questions",
-                "{project_id}: could not clear answered question {id}: {error}"
-            );
-            continue;
-        }
-        if let Some(updated) = tables.question.select(id) {
-            updated_rows.push(QuestionDto::from(updated));
-        }
+/// Store half of [`answer_for_reply`], split out for direct regression tests.
+async fn mark_for_reply(
+    tables: &Tables,
+    project_id: &str,
+    question_id: &str,
+) -> Option<QuestionDto> {
+    let row = tables.question.select(question_id.to_owned())?;
+    if row.project_id != project_id || row.answered {
+        return None;
     }
-    updated_rows
+    if let Err(error) = tables
+        .question
+        .update_question_answered_by_id(
+            QuestionAnsweredByIdQuery { answered: true },
+            question_id.to_owned(),
+        )
+        .await
+    {
+        crate::log!(
+            crate::log::Level::Error,
+            "questions",
+            "{project_id}: could not clear answered question {question_id}: {error}"
+        );
+        return None;
+    }
+    tables
+        .question
+        .select(question_id.to_owned())
+        .map(QuestionDto::from)
 }
 
 #[cfg(test)]
@@ -179,7 +206,7 @@ mod tests {
     use super::*;
 
     #[tokio::test]
-    async fn accepting_the_reply_closes_open_questions_immediately() {
+    async fn a_tagged_reply_closes_only_its_question() {
         let dir = std::env::temp_dir().join(format!(
             "az-question-reply-{}-{}",
             std::process::id(),
@@ -202,27 +229,118 @@ mod tests {
             .expect("open question inserts");
         tables
             .question
-            .insert(question("already-answered", "project-a", true))
-            .expect("answered question inserts");
+            .insert(question("second-open", "project-a", false))
+            .expect("second question inserts");
         tables
             .question
             .insert(question("other-project", "project-b", false))
             .expect("other project question inserts");
 
-        let changed = mark_open_for_reply(&tables, "project-a").await;
-        assert_eq!(changed.len(), 1);
-        assert_eq!(changed[0].id, "open");
-        assert!(changed[0].answered);
+        let target = reply_target(&tables, "project-a", Some("open"))
+            .expect("target validates")
+            .expect("target exists");
+        assert_eq!(target.id, "open");
+        let changed = mark_for_reply(&tables, "project-a", &target.id)
+            .await
+            .expect("question changes");
+        assert_eq!(changed.id, "open");
+        assert!(changed.answered);
         assert!(tables.question.select("open".to_string()).unwrap().answered);
+        assert!(
+            !tables
+                .question
+                .select("second-open".to_string())
+                .unwrap()
+                .answered,
+            "a tagged reply must not close a different standing question"
+        );
         assert!(
             !tables
                 .question
                 .select("other-project".to_string())
                 .unwrap()
                 .answered,
-            "a reply only clears its own project's indicator"
+            "a reply must not clear another project's indicator"
         );
 
+        tables.shutdown().await.expect("tables drain");
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[tokio::test]
+    async fn untagged_prose_is_implicit_only_when_one_question_is_open() {
+        let dir = std::env::temp_dir().join(format!(
+            "az-question-inference-{}-{}",
+            std::process::id(),
+            chrono::Utc::now().timestamp_nanos_opt().unwrap_or_default()
+        ));
+        let tables = Tables::open(&dir).await.expect("question store opens");
+        let question = |id: &str| QuestionRow {
+            id: id.into(),
+            project_id: "project-a".into(),
+            text: format!("Question {id}?"),
+            urgency: "blocking".into(),
+            item_id: String::new(),
+            issue_url: String::new(),
+            answered: false,
+            created_at: "2026-08-06T00:00:00Z".into(),
+        };
+        tables
+            .question
+            .insert(question("only"))
+            .expect("question inserts");
+        assert_eq!(
+            reply_target(&tables, "project-a", None)
+                .expect("inference succeeds")
+                .expect("single question is inferred")
+                .id,
+            "only"
+        );
+        tables
+            .question
+            .insert(question("ambiguous"))
+            .expect("second question inserts");
+        assert!(
+            reply_target(&tables, "project-a", None)
+                .expect("ambiguity is valid")
+                .is_none(),
+            "plain prose must not guess between stacked questions"
+        );
+
+        tables.shutdown().await.expect("tables drain");
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[tokio::test]
+    async fn a_question_reply_link_survives_reopen() {
+        let dir = std::env::temp_dir().join(format!(
+            "az-question-link-{}-{}",
+            std::process::id(),
+            chrono::Utc::now().timestamp_nanos_opt().unwrap_or_default()
+        ));
+        let tables = Tables::open(&dir).await.expect("question store opens");
+        tables
+            .question_reply
+            .insert(crate::db::schema::question_reply::QuestionReplyRow {
+                id: "link-1".into(),
+                project_id: "project-a".into(),
+                question_id: "question-a".into(),
+                message_id: "message-a".into(),
+                created_at: "2026-08-07T00:00:00Z".into(),
+            })
+            .expect("reply link inserts");
+        tables.shutdown().await.expect("tables drain");
+
+        let reopened = Tables::open(&dir).await.expect("question store reopens");
+        let links = reopened
+            .question_reply
+            .select_by_message_id("message-a".into())
+            .execute()
+            .expect("reply links read");
+        assert_eq!(links.len(), 1);
+        assert_eq!(links[0].question_id, "question-a");
+
+        reopened.shutdown().await.expect("reopened tables drain");
         let _ = std::fs::remove_dir_all(dir);
     }
 }

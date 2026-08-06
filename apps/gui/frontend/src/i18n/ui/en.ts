@@ -520,6 +520,9 @@ const en = {
   "Could not reset:": "Could not reset:",
   "est {cost}": "est {cost}",
   "Dismiss this question": "Dismiss this question",
+  Reply: "Reply",
+  "Reply to this question": "Reply to this question",
+  "Remove question reply": "Remove question reply",
   "Dismiss — answer by typing your reply in the composer":
     "Dismiss — answer by typing your reply in the composer",
   "est. {cost}": "est. {cost}",

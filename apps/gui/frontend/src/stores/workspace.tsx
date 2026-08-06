@@ -237,6 +237,8 @@ export type QueuedPrompt = {
   reason: QueueReason;
   /** Reuse this visible transcript row instead of appending the words twice. */
   messageId?: string;
+  /** Question association that must survive waiting and retry. */
+  replyQuestionId?: string;
   study?: StudyTurnMetadata;
 };
 
@@ -968,6 +970,9 @@ function createWorkspace() {
         next[index] = question;
         return next;
       });
+      if (question.answered && prefs.replyQuestionIds[question.projectId] === question.id) {
+        setPrefs("replyQuestionIds", question.projectId, "");
+      }
     });
 
     const appendMessage = (message: Message) => {
@@ -1106,12 +1111,12 @@ function createWorkspace() {
       touchRunStatus(projectId, "waiting for the agent…", { agent, model, permission });
     });
 
-    await bind("run:inject_failed", ({ projectId, messageId, body }) => {
+    await bind("run:inject_failed", ({ projectId, messageId, body, replyQuestionId }) => {
       // The turn settled before the interruption reached it. The transcript
       // already shows the words; queue that exact row so a fresh turn hears it
       // without appending the same user message a second time.
       if (!(state.queued[projectId] ?? []).some((prompt) => prompt.messageId === messageId)) {
-        enqueue(projectId, body, "busy", undefined, messageId);
+        enqueue(projectId, body, "busy", undefined, messageId, replyQuestionId);
       }
     });
 
@@ -1682,12 +1687,14 @@ function createWorkspace() {
     body: string,
     study?: StudyTurnMetadata,
     retryMessageId?: string,
+    replyQuestionId?: string,
   ): Promise<void> => {
     const tab = state.tabs.find((candidate) => candidate.projectId === projectId);
-    await client().sendMessage({
+    const sent = await client().sendMessage({
       projectId,
       body,
       retryMessageId,
+      replyQuestionId,
       agent: tab?.agent,
       model: tab?.model,
       permission: tab?.permission,
@@ -1698,21 +1705,18 @@ function createWorkspace() {
       study,
     });
 
-    /*
-     * The next accepted user message is the answer to every standing
-     * `@agency:ask` in this conversation. Clear the local rows at that exact
-     * boundary, not when the agent eventually finishes its reply: keeping the
-     * red blocked dot for another multi-minute turn says the owner still owes
-     * an answer that is already visible in the transcript.
-     *
-     * Rust makes the same transition durable and emits canonical updates. This
-     * optimistic local step covers the IPC gap between acceptance and those
-     * events; a refused send never reaches it, so questions stay open when the
-     * drafted answer was not actually accepted.
-     */
+    // The backend returns the canonical association. Only that question
+    // clears; stacked asks must survive an answer aimed at their neighbour.
+    const target = sent.replyToQuestionId;
+    if (!target) return;
     setState("questions", projectId, (questions = []) =>
-      questions.map((question) => (question.answered ? question : { ...question, answered: true })),
+      questions.map((question) =>
+        question.id === target ? { ...question, answered: true } : question,
+      ),
     );
+    if (prefs.replyQuestionIds[projectId] === target) {
+      setPrefs("replyQuestionIds", projectId, "");
+    }
   };
 
   /** Hold a prompt, and say what it is waiting for. */
@@ -1722,10 +1726,11 @@ function createWorkspace() {
     reason: QueueReason,
     study?: StudyTurnMetadata,
     messageId?: string,
+    replyQuestionId?: string,
   ): void {
     setState("queued", projectId, (waiting = []) => [
       ...waiting,
-      { body, reason, study, messageId },
+      { body, reason, study, messageId, replyQuestionId },
     ]);
   }
 
@@ -1733,6 +1738,7 @@ function createWorkspace() {
     projectId: string,
     body: string,
     study?: StudyTurnMetadata,
+    replyQuestionId?: string,
   ): Promise<void> => {
     /*
      * A compaction is the one busy state worth checking *before* dispatching.
@@ -1741,7 +1747,7 @@ function createWorkspace() {
      * that a message vanishing into it looks like the app dropping it.
      */
     if (state.compacting[projectId]) {
-      enqueue(projectId, body, "compacting", study);
+      enqueue(projectId, body, "compacting", study, undefined, replyQuestionId);
       return;
     }
 
@@ -1751,7 +1757,7 @@ function createWorkspace() {
       runningAgent !== undefined &&
       !capabilitiesFor(runningAgent)?.liveFollowUp
     ) {
-      enqueue(projectId, body, "busy", study);
+      enqueue(projectId, body, "busy", study, undefined, replyQuestionId);
       return;
     }
 
@@ -1764,11 +1770,11 @@ function createWorkspace() {
      * back.
      */
     try {
-      await dispatch(projectId, body, study);
+      await dispatch(projectId, body, study, undefined, replyQuestionId);
     } catch (cause) {
       const reason = queueReason(cause);
       if (reason) {
-        enqueue(projectId, body, reason, study);
+        enqueue(projectId, body, reason, study, undefined, replyQuestionId);
         return;
       }
       throw cause;
@@ -1789,7 +1795,7 @@ function createWorkspace() {
     if (isBusy(projectId)) return; // a newer run took the slot; its stop will re-cue
     setState("queued", projectId, waiting.slice(1));
     try {
-      await dispatch(projectId, next.body, next.study, next.messageId);
+      await dispatch(projectId, next.body, next.study, next.messageId, next.replyQuestionId);
     } catch (cause) {
       setState("queued", projectId, (rest = []) => [next, ...rest]);
       if (attempt < 4) {
@@ -1870,6 +1876,12 @@ function createWorkspace() {
       client().reviewPullRequest(projectId, url, agent),
     refreshPullRequest: (id: string) => client().refreshPullRequest(id),
     answerQuestion: (id: string, answered = true) => client().answerQuestion(id, answered),
+    selectQuestionReply(projectId: string, questionId: string) {
+      setPrefs("replyQuestionIds", projectId, questionId);
+    },
+    clearQuestionReply(projectId: string) {
+      setPrefs("replyQuestionIds", projectId, "");
+    },
     /** Drop one queued prompt — second thoughts are allowed while it waits. */
     removeQueued(projectId: string, index: number) {
       setState("queued", projectId, (waiting = []) =>

@@ -1,7 +1,8 @@
-import { render, waitFor } from "@solidjs/testing-library";
+import { fireEvent, render, waitFor } from "@solidjs/testing-library";
 import { Show } from "solid-js";
 import { describe, expect, it } from "vitest";
 import { TranscriptPane } from "~/features/project/TranscriptPane";
+import { prefs, setPrefs } from "~/stores/prefs";
 import { useWorkspace, WorkspaceProvider } from "~/stores/workspace";
 
 function TranscriptHarness() {
@@ -42,5 +43,19 @@ describe("transcript questions", () => {
       latestReply.compareDocumentPosition(question) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).not.toBe(0);
     await waitFor(() => expect(question.closest("[data-selectable]")).not.toBeNull());
+  });
+
+  it("stages the exact question when Reply is clicked", async () => {
+    setPrefs("replyQuestionIds", {});
+    const screen = render(() => (
+      <WorkspaceProvider>
+        <TranscriptHarness />
+      </WorkspaceProvider>
+    ));
+
+    const reply = await screen.findByRole("button", { name: "Reply to this question" });
+    fireEvent.click(reply);
+
+    await waitFor(() => expect(prefs.replyQuestionIds.cafe).toBe("q-block"));
   });
 });

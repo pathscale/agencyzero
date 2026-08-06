@@ -504,6 +504,9 @@ const zh = {
   "Could not reset:": "无法重置：",
   "est {cost}": "约 {cost}",
   "Dismiss this question": "关闭此问题",
+  Reply: "回复",
+  "Reply to this question": "回复此问题",
+  "Remove question reply": "移除问题回复",
   "Dismiss — answer by typing your reply in the composer": "关闭 — 在输入框中键入你的回复即可作答",
   "est. {cost}": "约 {cost}",
   "Estimated from token counts — this agent does not report a cost.":
