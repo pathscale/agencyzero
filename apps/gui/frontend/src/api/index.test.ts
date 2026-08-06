@@ -31,6 +31,11 @@ const IMPLEMENTED = [
   "create_project",
   "send_message",
   "get_settings",
+  "pricing_table",
+  "get_project_verbosity",
+  "set_project_verbosity",
+  "reset_project_session",
+  "adopt_session",
   "quit_app",
 ];
 
@@ -106,7 +111,24 @@ describe("selectApi", () => {
     expect(live.has("addDir")).toBe(true);
     expect(live.has("removeDir")).toBe(true);
     expect(live.has("quitApp")).toBe(true);
+    expect(live.has("pricingTable")).toBe(true);
+    expect(live.has("resetProjectSession")).toBe(true);
     // Not in IMPLEMENTED, so it stays on the mock and the UI greys it out.
     expect(live.has("createItem")).toBe(false);
+  });
+
+  it("routes recovery and pricing to Rust instead of successful mock no-ops", async () => {
+    const { selectApi } = await import("./index");
+    const { api } = await selectApi();
+
+    await api.pricingTable();
+    await api.resetProjectSession("project-stuck", "codex", true);
+
+    expect(invoke).toHaveBeenCalledWith("pricing_table", {});
+    expect(invoke).toHaveBeenCalledWith("reset_project_session", {
+      projectId: "project-stuck",
+      agent: "codex",
+      force: true,
+    });
   });
 });

@@ -4244,6 +4244,7 @@ pub async fn reset_project_session(
                 );
             }
             if let Some(run) = active.remove(&project_id) {
+                let stopped_agent = run.agent;
                 // Best-effort: tell anything still attached to stop, then drop
                 // the slot. A wedged run has no live receiver, so this is a
                 // no-op there, but a merely-slow run gets a clean cancel.
@@ -4251,7 +4252,15 @@ pub async fn reset_project_session(
                 // Tell the UI the run is over, so its running state (and the
                 // greyed-out Reset button) clears instead of hanging on a run
                 // that will never emit its own stop.
-                emit_run_stopped(&app, &project_id, agent, "", "", "force-reset", None);
+                emit_run_stopped(
+                    &app,
+                    &project_id,
+                    stopped_agent,
+                    "",
+                    "",
+                    "force-reset",
+                    None,
+                );
             }
         }
     }

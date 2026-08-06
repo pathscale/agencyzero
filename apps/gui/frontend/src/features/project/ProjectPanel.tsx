@@ -616,14 +616,17 @@ function ResetSession(props: { project: Project; running: boolean }): JSX.Elemen
     setError("");
     try {
       // Every agent that has a session on this project, so a project that ran
-      // both providers is fully reset rather than half. `force` when a run
-      // still appears active: a wedged run holds the slot with no live process
-      // to cancel, and reset is exactly the way out of that.
-      await Promise.all(
-        agents().map((agent) =>
-          actions.resetProjectSession(props.project.id, agent, props.running),
-        ),
-      );
+      // both providers is fully reset rather than half.
+      /*
+       * Confirmation is authoritative even when the window's running signal is
+       * stale. That stale split is the recovery case: Rust still owns a slot,
+       * while the webview no longer shows a run. Always allow the confirmed
+       * reset to evict such a slot, and clear provider sessions in sequence so
+       * only one call can own the eviction.
+       */
+      for (const agent of agents()) {
+        await actions.resetProjectSession(props.project.id, agent, true);
+      }
       setConfirming(false);
     } catch (cause) {
       const detail = describeError(cause);
