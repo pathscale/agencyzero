@@ -521,6 +521,7 @@ const en = {
   "est {cost}": "est {cost}",
   "Dismiss this question": "Dismiss this question",
   Reply: "Reply",
+  "Turn {number}": "Turn {number}",
   "Reply to this question": "Reply to this question",
   "Remove question reply": "Remove question reply",
   "Dismiss — answer by typing your reply in the composer":
