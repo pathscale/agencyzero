@@ -1,7 +1,7 @@
 import { createMemo, createSignal, For, type JSX, onMount, Show } from "solid-js";
 import { tx } from "~/stores/i18n";
 import { useWorkspace } from "~/stores/workspace";
-import type { UsageAnalytics, UsageDay, UsageModel } from "~/types";
+import type { UsageAnalytics, UsageDay, UsageModel, UsageProject } from "~/types";
 
 /** The four token classes, each with a stable label and bar colour. */
 const TOKEN_CLASSES = [
@@ -67,10 +67,53 @@ export function AnalyticsTab(): JSX.Element {
               <CacheEfficiency usage={usage()} />
               <LargestTurn usage={usage()} />
               <DaySeries days={usage().days} />
+              <ProjectBreakdown projects={usage().projects} total={usage().totalUsd} />
               <ModelBreakdown models={usage().models} />
             </>
           )}
         </Show>
+      </div>
+    </div>
+  );
+}
+
+/** Cost ownership by project, sorted by spend with a share bar. */
+function ProjectBreakdown(props: { projects: UsageProject[]; total: number }): JSX.Element {
+  return (
+    <div class="rounded-xl border border-az-hairline bg-base-100 px-4 py-3.5">
+      <h2 class="font-medium text-[12.5px] text-az-title">{tx("Per project")}</h2>
+      <div class="mt-3 flex flex-col gap-3">
+        <For each={props.projects}>
+          {(project) => {
+            const share = () => (project.costUsd / Math.max(props.total, 0.000001)) * 100;
+            return (
+              <div>
+                <div class="flex items-baseline gap-2 text-[11.5px]">
+                  <span class="min-w-0 flex-1 truncate text-az-strong" title={project.projectId}>
+                    {project.projectName}
+                  </span>
+                  <span class="font-mono text-[10.5px] text-az-muted">
+                    {project.turns} {tx("turns")}
+                  </span>
+                  <span class="w-[58px] text-right font-mono text-az-strong">
+                    {dollars(project.costUsd)}
+                  </span>
+                </div>
+                <div class="mt-1.5 h-1.5 overflow-hidden rounded-full bg-base-300">
+                  <div class="h-full rounded-full bg-primary" style={{ width: `${share()}%` }} />
+                </div>
+                <div class="mt-1 flex justify-between font-mono text-[9.5px] text-az-faint">
+                  <span>{share().toFixed(1)}%</span>
+                  <span>
+                    {tx("in")} {tokens(project.inputTokens)} · {tx("out")}{" "}
+                    {tokens(project.outputTokens)} · {tx("read")} {tokens(project.cacheReadTokens)}{" "}
+                    · {tx("write")} {tokens(project.cacheWriteTokens)}
+                  </span>
+                </div>
+              </div>
+            );
+          }}
+        </For>
       </div>
     </div>
   );

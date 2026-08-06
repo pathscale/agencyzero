@@ -561,6 +561,33 @@ const en = {
   output: "output",
   "cache read": "cache read",
   "cache write": "cache write",
+  Turn: "Turn",
+  Verbosity: "Verbosity",
+  "Model default": "Model default",
+  Low: "Low",
+  Medium: "Medium",
+  High: "High",
+  "Use the model's default response detail": "Use the model's default response detail",
+  "Keep responses concise": "Keep responses concise",
+  "Balance detail and brevity": "Balance detail and brevity",
+  "Include more detail in responses": "Include more detail in responses",
+  "Response verbosity for this project": "Response verbosity for this project",
+  "Switching providers attaches the conversation to the target agent and creates a cold context charge of about {cost}.":
+    "Switching providers attaches the conversation to the target agent and creates a cold context charge of about {cost}.",
+  "Changing models invalidates the prompt cache and creates a cold context charge of about {cost}.":
+    "Changing models invalidates the prompt cache and creates a cold context charge of about {cost}.",
+  "Most of it ({cost}) is the conversation being resent every turn, not this message.":
+    "Most of it ({cost}) is the conversation being resent every turn, not this message.",
+  "Lower project verbosity to reduce reply tokens on every turn.":
+    "Lower project verbosity to reduce reply tokens on every turn.",
+  "Extra Thinking is adaptive; each additional 1K thinking tokens costs about {cost} at this model's output rate.":
+    "Extra Thinking is adaptive; each additional 1K thinking tokens costs about {cost} at this model's output rate.",
+  "Compact this session (~{cost} once, including the learning pass) to shrink the resent context.":
+    "Compact this session (~{cost} once, including the learning pass) to shrink the resent context.",
+  "Or start a fresh session if the history no longer helps the next task.":
+    "Or start a fresh session if the history no longer helps the next task.",
+  "Per project": "Per project",
+  turns: "turns",
 } as const;
 
 export default en;

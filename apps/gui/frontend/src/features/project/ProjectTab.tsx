@@ -39,6 +39,14 @@ export function ProjectTab(props: { tab: Tab; project: Project }): JSX.Element {
   const now = useNow();
 
   const messages = () => state.messages[props.project.id] ?? [];
+  const contextOwner = createMemo(() =>
+    [...messages()]
+      .reverse()
+      .find(
+        (message) =>
+          (message.author === "agent" || message.author === "user") && message.model.length > 0,
+      ),
+  );
 
   const running = () => state.running[props.project.id] ?? [];
   const canFollowUp = () => {
@@ -84,6 +92,7 @@ export function ProjectTab(props: { tab: Tab; project: Project }): JSX.Element {
     messages().filter((message) => message.author !== "agent" || message.agent === props.tab.agent),
   );
   const totals = createMemo(() => usageTotals(tabMessages()));
+  const conversationTotals = createMemo(() => usageTotals(messages()));
   const likelyCacheBreak = createMemo(() => cacheBreak(tabMessages()));
 
   /** Why the cost reads as it does, for the hover on the header figure. */
@@ -199,7 +208,7 @@ export function ProjectTab(props: { tab: Tab; project: Project }): JSX.Element {
                 twice. The turn count leads instead. */}
             <Show when={totals().turns > 0}>
               <span class="font-semibold text-az-body">
-                {totals().turns} {tx("turn")}
+                {tx("Turn")} {totals().turns}
               </span>
               <span class="text-az-faint">·</span>
               {/* The session's summed consumption — where the tokens went. The
@@ -388,7 +397,13 @@ export function ProjectTab(props: { tab: Tab; project: Project }): JSX.Element {
             usage={contextLabel()}
             /* The warm context the next turn will resend, so the composer can
                price it live as you type. From the tab's running totals. */
-            contextTokens={standing().contextTokens ?? 0}
+            contextTokens={
+              contextOwner()?.agent !== props.tab.agent
+                ? (conversationTotals().contextTokens ?? 0)
+                : (standing().contextTokens ?? 0)
+            }
+            contextAgent={contextOwner()?.agent as Agent | undefined}
+            contextModel={contextOwner()?.model}
             /*
              * The full turn, not just its visible parts: `runStatus` exists
              * from the accepted send to `run:stopped`, covering the quiet

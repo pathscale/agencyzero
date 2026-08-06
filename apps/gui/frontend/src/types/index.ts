@@ -637,6 +637,18 @@ export interface UsageModel {
   turns: number;
 }
 
+/** One project's usage totals. */
+export interface UsageProject {
+  projectId: string;
+  projectName: string;
+  costUsd: number;
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadTokens: number;
+  cacheWriteTokens: number;
+  turns: number;
+}
+
 /** Everything the Analytics view charts, from one call. */
 /**
  * The single heaviest turn — the answer to "is one request enormous, or is it
@@ -658,6 +670,7 @@ export interface UsageLargestTurn {
 export interface UsageAnalytics {
   days: UsageDay[];
   models: UsageModel[];
+  projects: UsageProject[];
   totalUsd: number;
   totalInputTokens: number;
   totalOutputTokens: number;

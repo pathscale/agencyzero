@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 import type { PricingTable } from "~/types";
-import { costLabel, estimate, estimateTokens, estimateTurnCost } from "./pricing";
+import {
+  compactionCost,
+  costLabel,
+  estimate,
+  estimateTokens,
+  estimateTurnCost,
+  thinkingCostPerThousand,
+} from "./pricing";
 
 // A small table mirroring the real one's shape and longest-key-first order.
 // Claude keys are the bare picker alias (`opus`, not `claude-opus`), because a
@@ -13,7 +20,7 @@ const table: PricingTable = {
     { key: "gpt-5.4-mini", input: 0.75, output: 4.5, cacheRead: 0.075 },
     { key: "gpt-5.4", input: 2.5, output: 15.0, cacheRead: 0.25 },
   ],
-  cacheWriteMultiple: 1.25,
+  cacheWriteMultiple: 2.0,
   warnUsd: 0.5,
   highUsd: 2.0,
 };
@@ -58,6 +65,23 @@ describe("estimate", () => {
     expect(heavy.severity).toBe("high");
     const tiny = estimate(table, "gpt-5.4-mini", "hi", 200, 100);
     expect(tiny.severity).toBe("low");
+  });
+
+  it("prices a model switch as a cold cache write", () => {
+    const warm = estimate(table, "opus", "next", 500_000, 1000);
+    const cold = estimate(table, "opus", "next", 500_000, 1000, true);
+    expect(cold.coldContext).toBe(true);
+    expect(cold.contextCost).toBeCloseTo((500_000 * 5 * 2) / 1_000_000, 10);
+    expect(cold.contextCost).toBeGreaterThan(warm.contextCost);
+  });
+
+  it("includes both the learning and summary passes in Claude compaction", () => {
+    const onePass = compactionCost(table, "opus", 500_000, false);
+    expect(compactionCost(table, "opus", 500_000)).toBeCloseTo(onePass * 2, 10);
+  });
+
+  it("quotes extra thinking at the model output rate per thousand", () => {
+    expect(thinkingCostPerThousand(table, "opus")).toBe(0.025);
   });
 });
 

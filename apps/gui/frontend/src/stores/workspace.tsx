@@ -1862,7 +1862,7 @@ function createWorkspace() {
     setCheckpoints: (projectId: string, enabled: boolean) =>
       client().setCheckpoints(projectId, enabled),
     getProjectConcise: (projectId: string) => client().getProjectConcise(projectId),
-    setProjectConcise: (projectId: string, enabled: boolean) =>
+    setProjectConcise: (projectId: string, enabled: string) =>
       client().setProjectConcise(projectId, enabled),
     getProjectVerbosity: (projectId: string) => client().getProjectVerbosity(projectId),
     setProjectVerbosity: (projectId: string, verbosity: string) =>

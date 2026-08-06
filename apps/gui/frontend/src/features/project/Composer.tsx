@@ -3,7 +3,7 @@ import { Icon } from "~/components/Icon";
 import { PillMenu } from "~/components/PillMenu";
 import { PERMISSION_ORDER, permissionLabel } from "~/lib/labels";
 import { describeError, log } from "~/lib/log";
-import { compactionCost, costLabel, estimate } from "~/lib/pricing";
+import { compactionCost, costLabel, estimate, thinkingCostPerThousand } from "~/lib/pricing";
 import { compileAdvancedPrompt, type PromptModelOption } from "~/lib/promptEditor";
 import { parseSlash } from "~/lib/slash";
 import { tx, type UiMessage } from "~/stores/i18n";
@@ -95,6 +95,9 @@ export type ComposerProps = {
    * fresh session, where the estimate is just the new prompt.
    */
   contextTokens?: number;
+  /** The provider/model that owns the history represented by contextTokens. */
+  contextAgent?: Agent;
+  contextModel?: string;
   /** A run is in flight: the send button becomes Stop. */
   isRunning?: boolean;
   /** Whether a send during that run enters it instead of waiting for the slot. */
@@ -218,10 +221,21 @@ export function Composer(props: ComposerProps): JSX.Element {
    * warm history the agent resends.
    */
   const estimateModel = () => compiled()?.model?.model ?? props.model;
+  const estimateAgent = () => compiled()?.model?.agent ?? props.agent;
+  const isContextSwitch = () =>
+    (props.contextTokens ?? 0) > 0 &&
+    (estimateAgent() !== props.contextAgent || estimateModel() !== props.contextModel);
   const costEstimate = createMemo(() => {
     const table = state.pricing;
     if (!table) return null;
-    return estimate(table, estimateModel(), draft(), props.contextTokens ?? 0);
+    return estimate(
+      table,
+      estimateModel(),
+      draft(),
+      props.contextTokens ?? 0,
+      undefined,
+      isContextSwitch(),
+    );
   });
 
   /*
@@ -235,7 +249,7 @@ export function Composer(props: ComposerProps): JSX.Element {
     setCostAlertDismissedAt((current) => ({ ...current, [key]: draft() }));
   const showCostAlert = () => {
     const est = costEstimate();
-    if (!est?.priced || est.severity === "low") return false;
+    if (!est?.priced || (est.severity === "low" && !isContextSwitch())) return false;
     // Re-arms whenever the text differs from what was showing when dismissed.
     return costAlertDismissedAt()[bucket()] !== draft();
   };
@@ -470,12 +484,87 @@ export function Composer(props: ComposerProps): JSX.Element {
 
   return (
     <div class="flex flex-col gap-1.5">
-      {/* Context readout: its own row above the prompt box, right-aligned, so a
-          long sentence being typed never runs under it. Above rather than
-          inside the box for exactly that reason — an in-box chip overlapped the
-          text. */}
+      {/* Cost guidance comes first so the action is read before the two figures
+          it explains. */}
+      <Show when={showCostAlert()}>
+        {(_) => {
+          const est = () => costEstimate()!;
+          const table = () => state.pricing!;
+          const compactUsd = () => compactionCost(table(), estimateModel(), est().contextTokens);
+          const thinkingPerThousand = () => thinkingCostPerThousand(table(), estimateModel());
+          return (
+            <div
+              class={`flex flex-col gap-1.5 rounded-xl border px-3 py-2 text-[11.5px] leading-[1.5] ${
+                est().severity === "high"
+                  ? "border-error/40 bg-error/8 text-error"
+                  : "border-warning/40 bg-warning/8 text-warning"
+              }`}
+            >
+              <div class="flex items-start gap-2">
+                <Icon name="gauge" class="relative top-0.5 shrink-0 text-[13px]" />
+                <div class="min-w-0 flex-1 text-az-body">
+                  <span class="font-semibold">
+                    {tx("This turn is projected at {cost}.", { cost: costLabel(est().total) })}
+                  </span>{" "}
+                  <Show when={isContextSwitch()}>
+                    {estimateAgent() !== props.contextAgent
+                      ? tx(
+                          "Switching providers attaches the conversation to the target agent and creates a cold context charge of about {cost}.",
+                          { cost: costLabel(est().contextCost) },
+                        )
+                      : tx(
+                          "Changing models invalidates the prompt cache and creates a cold context charge of about {cost}.",
+                          { cost: costLabel(est().contextCost) },
+                        )}
+                  </Show>
+                  <Show
+                    when={
+                      !isContextSwitch() && est().contextCost > est().inputCost + est().outputCost
+                    }
+                  >
+                    {tx(
+                      "Most of it ({cost}) is the conversation being resent every turn, not this message.",
+                      { cost: costLabel(est().contextCost) },
+                    )}
+                  </Show>
+                  <ul class="mt-1 list-disc space-y-0.5 pl-4 text-az-muted">
+                    <li>{tx("Lower project verbosity to reduce reply tokens on every turn.")}</li>
+                    <Show when={props.extraThinking && thinkingPerThousand() !== null}>
+                      <li>
+                        {tx(
+                          "Extra Thinking is adaptive; each additional 1K thinking tokens costs about {cost} at this model's output rate.",
+                          { cost: costLabel(thinkingPerThousand()!) },
+                        )}
+                      </li>
+                    </Show>
+                    <Show when={props.onCompact && est().contextTokens > 0}>
+                      <li>
+                        {tx(
+                          "Compact this session (~{cost} once, including the learning pass) to shrink the resent context.",
+                          { cost: costLabel(compactUsd()) },
+                        )}
+                      </li>
+                    </Show>
+                    <li>
+                      {tx("Or start a fresh session if the history no longer helps the next task.")}
+                    </li>
+                  </ul>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setCostAlertDismissed(bucket())}
+                  aria-label={tx("Dismiss")}
+                  class="shrink-0 rounded p-0.5 text-az-faint transition-colors hover:text-az-body"
+                >
+                  <Icon name="x" class="text-[12px]" />
+                </button>
+              </div>
+            </div>
+          );
+        }}
+      </Show>
       <Show when={props.usage || costEstimate()?.priced}>
-        <div class="flex items-center justify-end gap-2 px-1">
+        <div class="flex min-h-[24px] items-center justify-end gap-2 px-1">
           {/* Accent, not grey: the context fill is a number worth reading, and
               the owner asked for it coloured like the controls rather than dim
               chrome. */}
@@ -516,68 +605,6 @@ export function Composer(props: ComposerProps): JSX.Element {
             }}
           </Show>
         </div>
-      </Show>
-      {/* Pre-send alert: only when the next turn is projected to be pricey. It
-          names why (mostly the resent context) and the levers that actually
-          move it — trim output, compact, or start fresh — with the concrete
-          cost of a /compact so "compacting has a cost" is a number, not a
-          caveat. Dismissable per keystroke: it re-arms if the estimate stays
-          high, so it warns without nagging. */}
-      <Show when={showCostAlert()}>
-        {(_) => {
-          const est = () => costEstimate()!;
-          const table = () => state.pricing!;
-          const compactUsd = () => compactionCost(table(), estimateModel(), est().contextTokens);
-          return (
-            <div
-              class={`flex flex-col gap-1.5 rounded-xl border px-3 py-2 text-[11.5px] leading-[1.5] ${
-                est().severity === "high"
-                  ? "border-error/40 bg-error/8 text-error"
-                  : "border-warning/40 bg-warning/8 text-warning"
-              }`}
-            >
-              <div class="flex items-start gap-2">
-                <Icon name="gauge" class="relative top-0.5 shrink-0 text-[13px]" />
-                <div class="min-w-0 flex-1 text-az-body">
-                  <span class="font-semibold">
-                    {tx("This turn is projected at {cost}.", { cost: costLabel(est().total) })}
-                  </span>{" "}
-                  <Show when={est().contextCost > est().inputCost + est().outputCost}>
-                    {tx(
-                      "Most of it ({cost}) is the conversation being resent every turn — not this message.",
-                      { cost: costLabel(est().contextCost) },
-                    )}
-                  </Show>
-                  <ul class="mt-1 list-disc space-y-0.5 pl-4 text-az-muted">
-                    <li>
-                      {tx("Lower output verbosity in Settings — fewer reply tokens, every turn.")}
-                    </li>
-                    <Show when={props.onCompact && est().contextTokens > 0}>
-                      <li>
-                        {tx("Compact this session (~{cost} once) to shrink the resent context.", {
-                          cost: costLabel(compactUsd()),
-                        })}
-                      </li>
-                    </Show>
-                    <li>
-                      {tx(
-                        "Or start a fresh session (Reset in the panel) if the history no longer helps the next task.",
-                      )}
-                    </li>
-                  </ul>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setCostAlertDismissed(bucket())}
-                  aria-label={tx("Dismiss")}
-                  class="shrink-0 rounded p-0.5 text-az-faint transition-colors hover:text-az-body"
-                >
-                  <Icon name="x" class="text-[12px]" />
-                </button>
-              </div>
-            </div>
-          );
-        }}
       </Show>
       <div
         class={`az-ring az-ring-composer rounded-[17px] ${props.size === "lg" ? "az-ring-strong rounded-[19px]" : ""}`}
