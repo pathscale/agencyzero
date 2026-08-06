@@ -33,8 +33,11 @@ describe("transcript questions", () => {
     const latestReply = screen.getByText(
       "Paused. The scan itself is unaffected; only the cleanup step is blocked.",
     );
+    const card = question.parentElement?.parentElement;
 
     expect(screen.getByText("Question")).toBeInTheDocument();
+    expect(card).toHaveClass("border-error");
+    expect(card).not.toHaveClass("opacity-45");
     expect(
       latestReply.compareDocumentPosition(question) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).not.toBe(0);
