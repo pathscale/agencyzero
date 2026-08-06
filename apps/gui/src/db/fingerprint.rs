@@ -46,6 +46,7 @@ pub const SCHEMA_FINGERPRINT: &str = concat!(
     "question_reply(id,project_id,question_id,message_id,created_at);",
     "reply_checkpoint(id,project_id,payload,created_at);",
     "usage_session(id,project_id,agent,session_id,model,at);",
+    "item_completion(id,project_id,agent,completed_at);",
 );
 
 /// What opening the tables found, so the caller can say something useful.

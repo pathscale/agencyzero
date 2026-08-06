@@ -6,6 +6,7 @@
 
 pub mod agent_io;
 pub mod approval_rule;
+pub mod item_completion;
 pub mod kv;
 pub mod message;
 pub mod message_chunk;

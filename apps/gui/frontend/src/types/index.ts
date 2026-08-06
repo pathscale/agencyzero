@@ -681,6 +681,18 @@ export interface UsageSession {
   lastAt: string;
 }
 
+/** Durable outcomes and effective spend attributed to one agent. */
+export interface UsageAgentValue {
+  agent: string;
+  reportedCostUsd: number;
+  estimatedCostUsd: number;
+  effectiveCostUsd: number;
+  completedItems: number;
+  costPerCompletedItem: number | null;
+  processedTokens: number;
+  turns: number;
+}
+
 /** Everything the Analytics view charts, from one call. */
 /**
  * The single heaviest turn — the answer to "is one request enormous, or is it
@@ -704,6 +716,7 @@ export interface UsageAnalytics {
   models: UsageModel[];
   projects: UsageProject[];
   sessions: UsageSession[];
+  agents: UsageAgentValue[];
   totalUsd: number;
   totalInputTokens: number;
   totalOutputTokens: number;

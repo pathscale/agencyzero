@@ -612,6 +612,12 @@ const zh = {
     "如果历史对下一个任务已无帮助，也可以开启新会话。",
   "Per project": "按项目",
   "Per session": "按会话",
+  "Outcome per dollar": "每美元产出",
+  "captured completions and attributed turns only": "仅统计已记录的完成项和已归属轮次",
+  "finished item": "已完成事项",
+  finished: "已完成",
+  "effective cost": "有效成本",
+  "includes local estimates": "包含本地估算",
   "Import chats": "导入聊天",
   "copy local provider transcripts into new AgencyZero projects":
     "将本地提供商对话复制到新的 AgencyZero 项目",
