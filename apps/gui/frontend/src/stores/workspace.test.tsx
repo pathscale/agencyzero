@@ -227,6 +227,19 @@ describe("tabStatus", () => {
     await waitFor(() => expect(workspace.tabStatus("worktable")).toBe("ready"));
   });
 
+  it("does not turn a deliberate cancellation into an error message", async () => {
+    const workspace = await mountWorkspace();
+
+    await workspace.actions.cancelRun("worktable");
+
+    await waitFor(() => expect(workspace.tabStatus("worktable")).toBe("ready"));
+    expect(
+      workspace.state.messages.worktable.some(
+        (message) => message.body === "The run stopped: canceled",
+      ),
+    ).toBe(false);
+  });
+
   /*
    * An unanswered `@agency:ask` calls for attention by urgency: `blocking`
    * reads as blocked (red). `cafe` carries one blocking question in the

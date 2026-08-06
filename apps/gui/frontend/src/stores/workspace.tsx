@@ -1215,11 +1215,13 @@ function createWorkspace() {
         );
 
         /*
-         * A run that did not complete has to say so in the transcript. Clearing
-         * the spinner and leaving nothing behind is what made a failed first
-         * prompt look like the app simply ignoring it.
+         * A failed run has to say so in the transcript. Clearing the spinner
+         * and leaving nothing behind is what made a failed first prompt look
+         * like the app simply ignored it. Deliberate cancellation is different:
+         * it is the normal stop/yield path, and the backend has already kept
+         * any partial reply and usage it received.
          */
-        if (stop !== "completed") {
+        if (stop !== "completed" && stop !== "canceled") {
           appendMessage({
             id: `run-error-${Date.now()}`,
             projectId,
