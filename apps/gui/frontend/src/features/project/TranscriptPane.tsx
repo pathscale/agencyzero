@@ -84,17 +84,20 @@ export function TranscriptPane(props: {
   /*
    * The transcript is one timeline, not "messages, then a pile of questions".
    *
-   * Every question stays at the point where it was asked, open or answered.
-   * The next user message is its inline response, so moving an open question
-   * down beside the composer separates the two halves of the exchange.
+   * Answered questions stay at the point where they were asked, immediately
+   * above the owner reply that answered them. An open question is different:
+   * it is the action the conversation is waiting on, so it stays at the tail.
    */
   const questionsFor = () => state.questions[props.project.id] ?? [];
+  const openQuestions = () => questionsFor().filter((question) => !question.answered);
   const timeline = createMemo(() => {
-    const questions = questionsFor().map((q) => ({
-      kind: "question" as const,
-      at: q.createdAt,
-      question: q,
-    }));
+    const questions = questionsFor()
+      .filter((question) => question.answered)
+      .map((q) => ({
+        kind: "question" as const,
+        at: q.createdAt,
+        question: q,
+      }));
     const messages = props.messages.map((message, index) => ({
       kind: "message" as const,
       at: message.createdAt,
@@ -240,22 +243,24 @@ export function TranscriptPane(props: {
             />
           )}
         </Show>
+
+        {/* The unresolved ask is the conversation's current action, so it is
+            always the last authored content rather than floating above the
+            reply that introduced it. Once answered, it moves into `timeline`
+            immediately above the owner's response. */}
+        <For each={openQuestions()}>{(question) => <QuestionCard question={question} />}</For>
       </Show>
     </div>
   );
 }
 
 /**
- * A question, inline in the chat thread — a quiet callout, not a dialog.
+ * A question, inline in the chat thread, not a dialog.
  *
  * The owner asked for this repeatedly: it must read as part of the
- * conversation, not a modal box. So it is a slim left-accent rule (the colour
- * carries the urgency) with the text beside it, no heavy fill, no icon chip, no
- * prominent button. The only control is a small × to dismiss it — because the
- * *answer* is the next message you type (optionally a `<ps>` directive), and a
- * big "Mark answered" button that then leaves an "Answered" record was the spam
- * the owner objected to. Dismiss removes it; the exchange lives in the
- * surrounding messages, not in a lingering resolved card.
+ * It needs enough identity to read as a question at a glance, so it carries a
+ * small label and urgency beside the accent rule. The answer remains the next
+ * message typed; the only button dismisses the prompt.
  */
 function QuestionCard(props: { question: Question }): JSX.Element {
   const { actions } = useWorkspace();
@@ -272,14 +277,29 @@ function QuestionCard(props: { question: Question }): JSX.Element {
     }
   };
   const answered = () => props.question.answered;
+  const urgency = () => {
+    switch (props.question.urgency) {
+      case "critical":
+        return tx("Critical");
+      case "passive":
+        return tx("When free");
+      default:
+        return tx("Blocking");
+    }
+  };
 
   return (
     <div
-      class={`group flex items-start gap-2.5 border-l-2 py-0.5 pr-1 pl-3 text-[12.5px] transition-opacity ${
-        answered() ? "border-az-hairline opacity-45" : accent()
+      class={`group flex items-start gap-2.5 rounded-r-xl border-l-[3px] py-2.5 pr-2.5 pl-3.5 text-[12.5px] transition-opacity ${
+        answered() ? "border-az-hairline bg-az-inset opacity-45" : `bg-az-inset ${accent()}`
       }`}
     >
-      <div class="flex min-w-0 flex-1 flex-col gap-0.5">
+      <div class="flex min-w-0 flex-1 flex-col gap-1.5">
+        <div class="flex items-center gap-1.5">
+          <Icon name="message-square-dashed" class="text-[13px] text-warning" />
+          <span class="font-semibold text-[11px] text-az-strong">{tx("Question")}</span>
+          <span class="text-[10.5px] text-az-muted">· {urgency()}</span>
+        </div>
         <Show when={props.question.issueUrl}>
           <span class="min-w-0 truncate text-[10.5px] text-az-muted">
             {props.question.issueUrl}
@@ -299,7 +319,7 @@ function QuestionCard(props: { question: Question }): JSX.Element {
           onClick={() => void actions.answerQuestion(props.question.id, true)}
           aria-label={tx("Dismiss this question")}
           title={tx("Dismiss — answer by typing your reply in the composer")}
-          class="shrink-0 rounded p-0.5 text-az-faint opacity-0 transition-opacity hover:text-az-body group-hover:opacity-100"
+          class="shrink-0 rounded p-0.5 text-az-faint transition-colors hover:bg-white/5 hover:text-az-body"
         >
           <Icon name="x" class="text-[13px]" />
         </button>
@@ -443,7 +463,7 @@ function AgentBubble(props: { message: Message; onRetry?: () => void }): JSX.Ele
    * partial, and an unexplained short reply reads as the agent being unhelpful
    * rather than as the turn having failed.
    */
-  const failed = () => props.message.stop !== "completed";
+  const failed = () => props.message.stop !== "completed" && props.message.stop !== "continued";
   // A cancellation is already an owner decision or an app restart. Offering
   // Retry there replays a prompt the owner may have intentionally stopped and
   // makes a normally completed pre-update reply look unfinished after restart.

@@ -439,6 +439,7 @@ const zh = {
   Merged: "已合并",
   Critical: "紧急",
   Blocking: "阻塞",
+  Question: "问题",
   "When free": "有空时",
   Answered: "已回答",
   "Mark answered": "标记为已回答",

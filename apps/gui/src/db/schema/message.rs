@@ -37,6 +37,9 @@ worktable!(
         project_idx: project_id,
     },
     queries: {
+        update: {
+            FinalizeById(usage, stop, exit_code) by id,
+        },
         delete: {
             ByProject() by project_id,
         }

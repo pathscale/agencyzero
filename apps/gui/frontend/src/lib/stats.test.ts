@@ -67,6 +67,18 @@ describe("usageTotals", () => {
     expect(totals.cacheReads).toBe(30);
   });
 
+  it("does not count continued transcript chunks as extra turns", () => {
+    const chunk = turn("agent", null, "chunk");
+    chunk.stop = "continued";
+    const completed = turn("agent", usage({ tokens: 100 }), "completed");
+
+    const totals = usageTotals([chunk, completed]);
+
+    expect(totals.turns).toBe(1);
+    expect(totals.reported).toBe(1);
+    expect(totals.tokens).toBe(100);
+  });
+
   /*
    * The distinction the whole module turns on: a run that reported nothing is
    * not a free run. Summing absent costs into 0 would say the session cost

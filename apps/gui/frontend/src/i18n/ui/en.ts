@@ -455,6 +455,7 @@ const en = {
   Merged: "Merged",
   Critical: "Critical",
   Blocking: "Blocking",
+  Question: "Question",
   "When free": "When free",
   Answered: "Answered",
   "Mark answered": "Mark answered",

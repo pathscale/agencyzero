@@ -1,11 +1,12 @@
 //! Projects, their items, their transcripts, and the agent run that fills them.
 //!
-//! # Streaming, and when a row is written
+//! # Streaming, and when rows are written
 //!
-//! Events reach the UI as they arrive; the database is written once, when the
-//! run finishes. A row per token would hammer the table for data that is
-//! superseded microseconds later, and `Outcome::text` is the authoritative body
-//! anyway: the deltas are for the eye, the outcome is for the record.
+//! Events reach the UI as they arrive. A normal run becomes one message row when
+//! it finishes. When the owner speaks into a live run, the text already on
+//! screen is closed as a `continued` agent row first; the owner message then
+//! sits between that chunk and whatever the agent says next. This preserves the
+//! order people saw without writing a row per token.
 //!
 //! One exception, learned the hard way: the streaming reply is checkpointed to
 //! `kv` every 200ms (`partial_reply_key`), because "close the app,
@@ -27,7 +28,7 @@ use tauri::{AppHandle, Emitter, Manager, State};
 use worktable::prelude::*;
 
 use crate::AppState;
-use crate::db::schema::message::MessageRow;
+use crate::db::schema::message::{FinalizeByIdQuery, MessageRow};
 use crate::db::schema::project::{DirsByIdQuery, NameByIdQuery, PinnedByIdQuery, ProjectRow};
 use crate::db::schema::project_item::{
     PositionByIdQuery as ItemPositionByIdQuery, ProjectItemRow,
@@ -684,6 +685,165 @@ fn full_body(tables: &Tables, message_id: &str, head: &str) -> String {
         body.push_str(&chunk.text);
     }
     body
+}
+
+/// A non-terminal slice of one agent turn, closed when the owner speaks into
+/// the live run. The final slice carries the run's real stop and usage.
+const CONTINUED_STOP: &str = "continued";
+
+#[derive(Clone, Copy)]
+struct AgentMessageContext<'a> {
+    project_id: &'a str,
+    agent: Agent,
+    model: &'a str,
+    permission: &'a str,
+}
+
+struct AgentMessageOutcome {
+    usage: String,
+    stop: String,
+    exit_code: i64,
+}
+
+fn persist_message_body(
+    tables: &Tables,
+    row: MessageRow,
+    body: &str,
+) -> Result<MessageDto, String> {
+    tables
+        .message
+        .insert(row.clone())
+        .map_err(|error| error.to_string())?;
+    store_body(tables, &row.id, &row.project_id, body);
+    let mut dto = MessageDto::from(row);
+    dto.body = body.to_string();
+    Ok(dto)
+}
+
+/// Close the visible agent text before a mid-turn owner message.
+///
+/// The chunk keeps the timestamp of its first delta, which is necessarily
+/// earlier than the owner message that closes it. Sorting the transcript by
+/// timestamp therefore recreates the order seen live even though the owner row
+/// reached the store first.
+async fn flush_continued_agent_chunk(
+    app: &AppHandle,
+    tables: &Tables,
+    context: AgentMessageContext<'_>,
+    body: &mut String,
+    started_at: &mut Option<String>,
+) -> Option<String> {
+    if body.is_empty() {
+        return None;
+    }
+    let full = body.clone();
+    let row = MessageRow {
+        id: id("msg"),
+        project_id: context.project_id.to_string(),
+        item_id: String::new(),
+        author: "agent".into(),
+        agent: agent_wire_name(context.agent).into(),
+        moderation: String::new(),
+        model: context.model.to_string(),
+        permission: context.permission.to_string(),
+        usage: String::new(),
+        stop: CONTINUED_STOP.into(),
+        exit_code: 0,
+        body: body_head(&full),
+        created_at: started_at.take().unwrap_or_else(now),
+    };
+    match persist_message_body(tables, row, &full) {
+        Ok(dto) => {
+            let id = dto.id.clone();
+            let _ = app.emit("message:appended", dto);
+            body.clear();
+            // The durable message now owns this slice. Recovery should retain
+            // only words streamed after the boundary.
+            clear_partial_reply(tables, context.project_id).await;
+            Some(id)
+        }
+        Err(error) => {
+            crate::log!(
+                crate::log::Level::Error,
+                "run",
+                "{}: could not persist a continued reply chunk: {error}",
+                context.project_id
+            );
+            None
+        }
+    }
+}
+
+/// Attach the terminal usage and stop to an already-persisted final chunk.
+///
+/// This is needed when the owner speaks after the agent's last text: the chunk
+/// was closed to put the owner row after it, but no later text exists to carry
+/// the run outcome. Updating that same row avoids an empty terminal bubble.
+async fn finalize_agent_chunk(
+    tables: &Tables,
+    message_id: &str,
+    usage: String,
+    stop: String,
+    exit_code: i64,
+) -> Result<MessageDto, String> {
+    tables
+        .message
+        .update_finalize_by_id(
+            FinalizeByIdQuery {
+                usage,
+                stop,
+                exit_code,
+            },
+            message_id.to_string(),
+        )
+        .await
+        .map_err(|error| error.to_string())?;
+    let row = tables
+        .message
+        .select(message_id.to_string())
+        .ok_or_else(|| format!("message disappeared while finalizing: {message_id}"))?;
+    let body = full_body(tables, message_id, &row.body);
+    let mut dto = MessageDto::from(row);
+    dto.body = body;
+    Ok(dto)
+}
+
+async fn persist_terminal_agent_chunk(
+    tables: &Tables,
+    context: AgentMessageContext<'_>,
+    body: String,
+    started_at: Option<String>,
+    last_chunk_id: Option<&str>,
+    outcome: AgentMessageOutcome,
+) -> Result<MessageDto, String> {
+    if body.is_empty()
+        && let Some(message_id) = last_chunk_id
+    {
+        return finalize_agent_chunk(
+            tables,
+            message_id,
+            outcome.usage,
+            outcome.stop,
+            outcome.exit_code,
+        )
+        .await;
+    }
+    let row = MessageRow {
+        id: id("msg"),
+        project_id: context.project_id.to_string(),
+        item_id: String::new(),
+        author: "agent".into(),
+        agent: agent_wire_name(context.agent).into(),
+        moderation: String::new(),
+        model: context.model.to_string(),
+        permission: context.permission.to_string(),
+        usage: outcome.usage,
+        stop: outcome.stop,
+        exit_code: outcome.exit_code,
+        body: body_head(&body),
+        created_at: started_at.unwrap_or_else(now),
+    };
+    persist_message_body(tables, row, &body)
 }
 
 /// Carry a project's transcript across provider boundaries.
@@ -6496,6 +6656,18 @@ async fn drive_run(
      * fallback for a run that never streamed.
      */
     let mut streamed_text = String::new();
+    // The not-yet-persisted slice of `streamed_text`. A live owner message
+    // closes this slice so it can render before that message instead of the
+    // whole agent turn landing as one final blob below it.
+    let mut streamed_chunk = String::new();
+    let mut chunk_started_at: Option<String> = None;
+    let mut last_chunk_id: Option<String> = None;
+    let message_context = AgentMessageContext {
+        project_id: &project_id,
+        agent,
+        model: &model,
+        permission: &permission,
+    };
     /*
      * How much of `streamed_text` has been scanned for PS directive lines.
      *
@@ -6600,8 +6772,19 @@ async fn drive_run(
             Wake::Event(event) => event,
             Wake::Inject(injected) => {
                 // A correction typed mid-turn. The user row was persisted and
-                // broadcast by `send_message`. Queue it without waiting for
-                // Codex's receipt so this task can immediately drain events.
+                // broadcast by `send_message`. Close the agent text the owner
+                // was replying to before delivering the new words.
+                if let Some(id) = flush_continued_agent_chunk(
+                    &app,
+                    &tables,
+                    message_context,
+                    &mut streamed_chunk,
+                    &mut chunk_started_at,
+                )
+                .await
+                {
+                    last_chunk_id = Some(id);
+                }
                 directive_turn_id.clone_from(&injected.turn_id);
                 let _ = injection_delivery_tx.send(injected);
                 // A user message is a block boundary: the next streamed text
@@ -6739,6 +6922,15 @@ async fn drive_run(
                         }
                         injected = inject_rx.recv() => {
                             if let Some(injected) = injected {
+                                if let Some(id) = flush_continued_agent_chunk(
+                                    &app,
+                                    &tables,
+                                    message_context,
+                                    &mut streamed_chunk,
+                                    &mut chunk_started_at,
+                                ).await {
+                                    last_chunk_id = Some(id);
+                                }
                                 directive_turn_id.clone_from(&injected.turn_id);
                                 let _ = injection_delivery_tx.send(injected);
                             }
@@ -6798,8 +6990,12 @@ async fn drive_run(
                 } else {
                     delta
                 };
+                if streamed_chunk.is_empty() {
+                    chunk_started_at = Some(now());
+                }
                 streamed_any = true;
                 streamed_text.push_str(&delta);
+                streamed_chunk.push_str(&delta);
                 note_io(&app, &io, &project_id, "received", "text", &delta);
                 let _ = app.emit(
                     "run:text",
@@ -6870,7 +7066,7 @@ async fn drive_run(
                      * row, not here.
                      */
                     let checkpoint =
-                        encode_partial_reply(&streamed_text, agent, &model, &permission);
+                        encode_partial_reply(&streamed_chunk, agent, &model, &permission);
                     match tables
                         .kv_put(&partial_reply_key(&project_id), checkpoint)
                         .await
@@ -6882,7 +7078,7 @@ async fn drive_run(
                                 "run:persisted",
                                 serde_json::json!({
                                     "projectId": project_id,
-                                    "chars": streamed_text.len(),
+                                    "chars": streamed_chunk.len(),
                                 }),
                             );
                         }
@@ -7304,6 +7500,13 @@ async fn drive_run(
             } else {
                 outcome.text.clone()
             };
+            // Earlier slices were persisted when owner messages arrived. Only
+            // the text since the last boundary belongs in the terminal row.
+            let final_chunk_body = if used_streamed_body {
+                streamed_chunk
+            } else {
+                outcome.text.clone()
+            };
             let stop = match &outcome.stop {
                 Stop::Completed => "completed".to_string(),
                 Stop::Error => "error".to_string(),
@@ -7312,23 +7515,6 @@ async fn drive_run(
                 // crate release must reach the transcript as itself rather than
                 // be flattened into "error".
                 other => format!("{other:?}"),
-            };
-            let row = MessageRow {
-                id: id("msg"),
-                project_id: project_id.clone(),
-                item_id: String::new(),
-                author: "agent".into(),
-                agent: agent_wire_name(agent).into(),
-                moderation: String::new(),
-                model: model.clone(),
-                permission: permission.clone(),
-                // Empty means the agent reported nothing, which the transcript
-                // renders as an em dash. Zeroes would read as a free turn.
-                usage: usage_json(&outcome.usage),
-                stop: stop.clone(),
-                exit_code: i64::from(outcome.exit_code),
-                body: body_head(&body),
-                created_at: now(),
             };
             crate::log!(
                 crate::log::Level::Info,
@@ -7404,43 +7590,52 @@ async fn drive_run(
                 );
             }
             /*
-             * The reply row is the canonical record; everything below derives
-             * from it. If it cannot be written, emitting `message:appended`
-             * would show a reply that vanishes on restart, the ledger would
-             * price a turn the transcript cannot account for, and the harvest
-             * would mutate tasks from a reply that no longer exists to audit.
-             * So a failed insert ends the run visibly, with nothing derived.
+             * The terminal row is the canonical record for the turn's outcome.
+             * Usually it is a new final chunk. If the owner spoke after the
+             * agent's last text, finalize that already-persisted chunk instead
+             * of drawing an empty bubble below the owner message.
              */
-            if let Err(error) = tables.message.insert(row.clone()) {
-                crate::log!(
-                    crate::log::Level::Error,
-                    "run",
-                    "{project_id}: could not persist the reply: {error}"
-                );
-                note_io(
-                    &app,
-                    &io,
-                    &project_id,
-                    "received",
-                    "error",
-                    format!("the reply could not be persisted: {error}"),
-                );
-                emit_run_stopped(
-                    &app,
-                    &project_id,
-                    agent,
-                    &model,
-                    &permission,
-                    format!("the reply could not be persisted: {error}"),
-                    None,
-                );
-                return;
-            }
-            store_body(&tables, &row.id, &project_id, &body);
-            // Emit the whole reply, not just the stored head: the reader would
-            // otherwise round-trip the chunks this just wrote.
-            let mut appended = MessageDto::from(row);
-            appended.body = body.clone();
+            let appended = persist_terminal_agent_chunk(
+                &tables,
+                message_context,
+                final_chunk_body,
+                chunk_started_at,
+                last_chunk_id.as_deref(),
+                AgentMessageOutcome {
+                    usage: usage_json(&outcome.usage),
+                    stop: stop.clone(),
+                    exit_code: i64::from(outcome.exit_code),
+                },
+            )
+            .await;
+            let appended = match appended {
+                Ok(message) => message,
+                Err(error) => {
+                    crate::log!(
+                        crate::log::Level::Error,
+                        "run",
+                        "{project_id}: could not persist the reply: {error}"
+                    );
+                    note_io(
+                        &app,
+                        &io,
+                        &project_id,
+                        "received",
+                        "error",
+                        format!("the reply could not be persisted: {error}"),
+                    );
+                    emit_run_stopped(
+                        &app,
+                        &project_id,
+                        agent,
+                        &model,
+                        &permission,
+                        format!("the reply could not be persisted: {error}"),
+                        None,
+                    );
+                    return;
+                }
+            };
             let _ = app.emit("message:appended", appended);
             // The reply row now owns these words; the checkpoint is done.
             clear_partial_reply(&tables, &project_id).await;
@@ -7539,27 +7734,21 @@ async fn drive_run(
              * harvest because this is not a finished answer.
              */
             if !streamed_text.trim().is_empty() || has_accountable_usage(&turn_usage) {
-                let canceled_body = streamed_text.clone();
-                let row = MessageRow {
-                    id: id("msg"),
-                    project_id: project_id.clone(),
-                    item_id: String::new(),
-                    author: "agent".into(),
-                    agent: agent_wire_name(agent).into(),
-                    moderation: String::new(),
-                    model: model.clone(),
-                    permission: permission.clone(),
-                    usage: usage_json(&turn_usage),
-                    stop: "canceled".into(),
-                    exit_code: -1,
-                    body: body_head(&canceled_body),
-                    created_at: now(),
-                };
-                match tables.message.insert(row.clone()) {
-                    Ok(_) => {
-                        store_body(&tables, &row.id, &project_id, &canceled_body);
-                        let mut appended = MessageDto::from(row);
-                        appended.body = canceled_body.clone();
+                match persist_terminal_agent_chunk(
+                    &tables,
+                    message_context,
+                    streamed_chunk.clone(),
+                    chunk_started_at.clone(),
+                    last_chunk_id.as_deref(),
+                    AgentMessageOutcome {
+                        usage: usage_json(&turn_usage),
+                        stop: "canceled".into(),
+                        exit_code: -1,
+                    },
+                )
+                .await
+                {
+                    Ok(appended) => {
                         let _ = app.emit("message:appended", appended);
                         record_turn_usage(&tables, &project_id, &model, &turn_usage);
                         clear_partial_reply(&tables, &project_id).await;
@@ -7614,29 +7803,21 @@ async fn drive_run(
              * the partial message and in the durable ledger.
              */
             if !streamed_text.trim().is_empty() || has_accountable_usage(&turn_usage) {
-                let row = MessageRow {
-                    id: id("msg"),
-                    project_id: project_id.clone(),
-                    item_id: String::new(),
-                    author: "agent".into(),
-                    agent: agent_wire_name(agent).into(),
-                    moderation: String::new(),
-                    model: model.clone(),
-                    permission: permission.clone(),
-                    usage: usage_json(&turn_usage),
-                    // The reason, kept with the words it interrupted, so the
-                    // transcript can explain itself later.
-                    stop: error.to_string(),
-                    exit_code: -1,
-                    body: body_head(&streamed_text),
-                    created_at: now(),
-                };
-                let failed_body = streamed_text.clone();
-                match tables.message.insert(row.clone()) {
-                    Ok(_) => {
-                        store_body(&tables, &row.id, &project_id, &failed_body);
-                        let mut appended = MessageDto::from(row);
-                        appended.body = failed_body.clone();
+                match persist_terminal_agent_chunk(
+                    &tables,
+                    message_context,
+                    streamed_chunk.clone(),
+                    chunk_started_at.clone(),
+                    last_chunk_id.as_deref(),
+                    AgentMessageOutcome {
+                        usage: usage_json(&turn_usage),
+                        stop: error.to_string(),
+                        exit_code: -1,
+                    },
+                )
+                .await
+                {
+                    Ok(appended) => {
                         let _ = app.emit("message:appended", appended);
                         record_turn_usage(&tables, &project_id, &model, &turn_usage);
                         clear_partial_reply(&tables, &project_id).await;
@@ -8707,6 +8888,152 @@ mod tests {
         );
 
         reopened.shutdown().await.expect("reopen drains");
+        let _ = std::fs::remove_dir_all(store);
+    }
+
+    #[tokio::test]
+    async fn continued_agent_chunks_keep_owner_messages_in_transcript_order() {
+        let store = std::env::temp_dir().join(format!(
+            "az-conversation-chunks-{}-{}",
+            std::process::id(),
+            chrono::Utc::now().timestamp_nanos_opt().unwrap_or_default()
+        ));
+        let tables = Tables::open(&store).await.expect("chunk store opens");
+
+        let before = MessageRow {
+            id: "agent-before".into(),
+            project_id: "project-chunks".into(),
+            item_id: String::new(),
+            author: "agent".into(),
+            agent: "claude".into(),
+            moderation: String::new(),
+            model: "opus".into(),
+            permission: "auto".into(),
+            usage: String::new(),
+            stop: CONTINUED_STOP.into(),
+            exit_code: 0,
+            body: "Before the reply".into(),
+            created_at: "2026-08-07T00:00:01Z".into(),
+        };
+        persist_message_body(&tables, before, "Before the reply")
+            .expect("continued chunk persists");
+        tables
+            .message
+            .insert(MessageRow {
+                id: "owner-reply".into(),
+                project_id: "project-chunks".into(),
+                item_id: String::new(),
+                author: "user".into(),
+                agent: "claude".into(),
+                moderation: String::new(),
+                model: "opus".into(),
+                permission: "auto".into(),
+                usage: String::new(),
+                stop: "completed".into(),
+                exit_code: 0,
+                body: "Owner reply".into(),
+                created_at: "2026-08-07T00:00:02Z".into(),
+            })
+            .expect("owner reply persists");
+        persist_terminal_agent_chunk(
+            &tables,
+            AgentMessageContext {
+                project_id: "project-chunks",
+                agent: Agent::Claude,
+                model: "opus",
+                permission: "auto",
+            },
+            "After the reply".into(),
+            Some("2026-08-07T00:00:03Z".into()),
+            Some("agent-before"),
+            AgentMessageOutcome {
+                usage: "{}".into(),
+                stop: "completed".into(),
+                exit_code: 0,
+            },
+        )
+        .await
+        .expect("terminal chunk persists");
+
+        let mut rows = tables
+            .message
+            .select_by_project_id("project-chunks".into())
+            .execute()
+            .expect("messages read");
+        rows.sort_by(|a, b| a.created_at.cmp(&b.created_at));
+        assert_eq!(
+            rows.iter().map(|row| row.body.as_str()).collect::<Vec<_>>(),
+            ["Before the reply", "Owner reply", "After the reply"]
+        );
+        assert_eq!(rows[0].stop, CONTINUED_STOP);
+        assert_eq!(rows[2].stop, "completed");
+
+        tables.shutdown().await.expect("tables drain");
+        let _ = std::fs::remove_dir_all(store);
+    }
+
+    #[tokio::test]
+    async fn a_last_continued_chunk_becomes_the_terminal_row_without_an_empty_bubble() {
+        let store = std::env::temp_dir().join(format!(
+            "az-finalize-chunk-{}-{}",
+            std::process::id(),
+            chrono::Utc::now().timestamp_nanos_opt().unwrap_or_default()
+        ));
+        let tables = Tables::open(&store).await.expect("chunk store opens");
+        let row = MessageRow {
+            id: "agent-last".into(),
+            project_id: "project-chunks".into(),
+            item_id: String::new(),
+            author: "agent".into(),
+            agent: "codex".into(),
+            moderation: String::new(),
+            model: "gpt-5.6-sol".into(),
+            permission: "auto".into(),
+            usage: String::new(),
+            stop: CONTINUED_STOP.into(),
+            exit_code: 0,
+            body: "Nothing followed this".into(),
+            created_at: "2026-08-07T00:00:01Z".into(),
+        };
+        persist_message_body(&tables, row, "Nothing followed this")
+            .expect("continued chunk persists");
+
+        let finalized = persist_terminal_agent_chunk(
+            &tables,
+            AgentMessageContext {
+                project_id: "project-chunks",
+                agent: Agent::Codex,
+                model: "gpt-5.6-sol",
+                permission: "auto",
+            },
+            String::new(),
+            None,
+            Some("agent-last"),
+            AgentMessageOutcome {
+                usage: "{\"tokens\":42}".into(),
+                stop: "completed".into(),
+                exit_code: 0,
+            },
+        )
+        .await
+        .expect("continued chunk finalizes");
+
+        assert_eq!(finalized.id, "agent-last");
+        assert_eq!(finalized.body, "Nothing followed this");
+        assert_eq!(finalized.stop, "completed");
+        assert_eq!(finalized.usage.unwrap()["tokens"], 42);
+        assert_eq!(
+            tables
+                .message
+                .select_by_project_id("project-chunks".into())
+                .execute()
+                .expect("messages read")
+                .len(),
+            1,
+            "finalization must not add an empty terminal row"
+        );
+
+        tables.shutdown().await.expect("tables drain");
         let _ = std::fs::remove_dir_all(store);
     }
 
