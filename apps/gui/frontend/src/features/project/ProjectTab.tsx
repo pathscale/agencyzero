@@ -5,7 +5,7 @@ import { Panel } from "~/components/Panel";
 import { Composer } from "~/features/project/Composer";
 import { ProjectPanel } from "~/features/project/ProjectPanel";
 import { TranscriptPane } from "~/features/project/TranscriptPane";
-import { countdown } from "~/lib/format";
+import { providerUsageLabel } from "~/features/shell/UsageReadout";
 import { AGENT_LABELS, rateLimitLabel } from "~/lib/labels";
 import { describeError, log } from "~/lib/log";
 import { turnCostTotals } from "~/lib/pricing";
@@ -162,11 +162,9 @@ export function ProjectTab(props: { tab: Tab; project: Project }): JSX.Element {
       const window = state.claudeUsage?.sevenDay;
       if (!window) return null;
       const percent = Math.min(100, Math.max(0, window.utilization));
-      const used = percent.toFixed(0);
-      const reset = window.resetsAt ? countdown(window.resetsAt, now()) : "";
       return {
-        label: `Claude 7d ${used}%`,
-        title: reset ? `Resets in ${reset}` : "",
+        label: providerUsageLabel("Claude", percent, window.resetsAt, now()),
+        title: window.resetsAt ?? "",
         severity: severityFor(percent),
       };
     }
@@ -182,11 +180,9 @@ export function ProjectTab(props: { tab: Tab; project: Project }): JSX.Element {
       window.usedFraction !== null && Number.isFinite(window.usedFraction)
         ? Math.round(Math.min(1, Math.max(0, window.usedFraction)) * 100)
         : null;
-    const used = reported === null ? "not reported" : `${reported}%`;
-    const reset = window.resetsAt ? countdown(window.resetsAt, now()) : "";
     return {
-      label: `Codex 7d ${used}${reported === null ? "" : " used"}`,
-      title: reset ? `Resets in ${reset}` : "",
+      label: providerUsageLabel("Codex", reported, window.resetsAt, now()),
+      title: window.resetsAt ?? "",
       severity: severityFor(reported),
     };
   });
@@ -243,10 +239,8 @@ export function ProjectTab(props: { tab: Tab; project: Project }): JSX.Element {
                   }
                   class="font-semibold text-accent"
                 >
-                  {costs().missing > 0 ? "~" : ""}
-                  {costs().estimated
-                    ? tx("est. {cost}", { cost: costLabel(costs().usd) })
-                    : costLabel(costs().usd)}
+                  {costs().missing > 0 || costs().estimated ? "~" : ""}
+                  {costLabel(costs().usd)}
                 </span>
               </Show>
               <Show when={providerUsage()}>

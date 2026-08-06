@@ -30,3 +30,15 @@ export function windowValue(window: QuotaWindow, now: number): string {
   const left = countdown(window.resetsAt, now);
   return left ? `${used} · resets in ${left}` : used;
 }
+
+/** One compact provider chip format, regardless of whose quota supplied it. */
+export function providerUsageLabel(
+  agent: string,
+  usedPercent: number | null,
+  resetsAt: string | null,
+  now: number,
+): string {
+  const reset = countdown(resetsAt, now);
+  const usage = usedPercent === null ? "usage not reported" : `${Math.round(usedPercent)}% used`;
+  return [agent, reset ? `resets in ${reset}` : null, usage].filter(Boolean).join(" · ");
+}
