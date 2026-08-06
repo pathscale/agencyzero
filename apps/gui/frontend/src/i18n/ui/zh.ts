@@ -538,6 +538,8 @@ const zh = {
   "tokens processed": "已处理 token",
   in: "输入",
   read: "读取",
+  Sent: "已发送",
+  "Read by agent": "助手已读取",
   write: "写入",
   out: "输出",
   Turns: "轮次",

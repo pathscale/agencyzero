@@ -85,6 +85,9 @@ export interface PendingApproval {
  */
 export type MessageAuthor = "user" | "agent" | "moderator" | "system" | "review";
 
+/** Live delivery state for a user message sent to the active provider. */
+export type MessageReceipt = "sent" | "read";
+
 /** `Stop` in the crate; anything other than these two arrives as a bare string. */
 export type StopReason = "completed" | "error" | (string & {});
 

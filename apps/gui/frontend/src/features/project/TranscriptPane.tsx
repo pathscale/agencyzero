@@ -19,7 +19,7 @@ import { costLabel, estimateTurnCost } from "~/lib/pricing";
 import { compactCount } from "~/lib/stats";
 import { tx } from "~/stores/i18n";
 import { type RunStatus, useNow, useWorkspace } from "~/stores/workspace";
-import type { Message, Project, Question } from "~/types";
+import type { Message, MessageReceipt as MessageReceiptState, Project, Question } from "~/types";
 
 const STARTERS = () => [
   tx("Review the GUI crate"),
@@ -153,7 +153,12 @@ export function TranscriptPane(props: {
                 {(item) => <QuestionCard question={item().question} />}
               </Match>
               <Match when={entry.kind === "message" && entry.message.author === "user" && entry}>
-                {(item) => <UserBubble message={item().message} />}
+                {(item) => (
+                  <UserBubble
+                    message={item().message}
+                    receipt={state.messageReceipts[props.project.id]?.[item().message.id]}
+                  />
+                )}
               </Match>
               <Match
                 when={entry.kind === "message" && entry.message.author === "moderator" && entry}
@@ -586,7 +591,7 @@ export function MessageCost(props: { message: Message }): JSX.Element {
  * initials placeholder that shipped as-is and read as a mystery glyph. The
  * right-aligned bubble already says whose words these are.
  */
-function UserBubble(props: { message: Message }): JSX.Element {
+function UserBubble(props: { message: Message; receipt?: MessageReceiptState }): JSX.Element {
   return (
     <div class="flex max-w-[76%] flex-col items-end gap-[7px] self-end">
       <div
@@ -595,8 +600,47 @@ function UserBubble(props: { message: Message }): JSX.Element {
       >
         {props.message.body}
       </div>
-      <MessageTime at={props.message.createdAt} />
+      <div class="flex items-center gap-1.5">
+        <MessageTime at={props.message.createdAt} />
+        <MessageReceipt status={props.receipt} />
+      </div>
     </div>
+  );
+}
+
+/** Compact chat-style acknowledgement beside a user message's timestamp. */
+export function MessageReceipt(props: { status?: MessageReceiptState }): JSX.Element {
+  const read = () => props.status === "read";
+  const label = () => (read() ? tx("Read by agent") : tx("Sent"));
+
+  return (
+    <Show when={props.status}>
+      <span
+        role="img"
+        aria-label={label()}
+        title={label()}
+        class={`inline-flex h-3 w-4 items-center ${read() ? "text-primary" : "text-az-faint"}`}
+      >
+        <svg aria-hidden="true" viewBox="0 0 18 12" class="h-3 w-[18px] fill-none">
+          <path
+            d="M1 6.3 4.1 9.4 10.1 2.5"
+            stroke="currentColor"
+            stroke-width="1.6"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          />
+          <Show when={read()}>
+            <path
+              d="m7.2 8.5 1 1 6-6.9"
+              stroke="currentColor"
+              stroke-width="1.6"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            />
+          </Show>
+        </svg>
+      </span>
+    </Show>
   );
 }
 
