@@ -81,6 +81,21 @@ export function usageTotals(messages: readonly Message[]): UsageTotals {
   const totals: UsageTotals = { ...EMPTY };
 
   for (const message of messages) {
+    /*
+     * A successful compaction is an app-authored system row, not another agent
+     * turn. It may nevertheless carry the new standing context size. Apply
+     * only those latest-value fields; never count its operation usage twice in
+     * the conversation totals.
+     */
+    if (message.author === "system" && message.stop === "completed" && message.usage) {
+      if (isNumber(message.usage.contextTokens)) {
+        totals.contextTokens = message.usage.contextTokens;
+      }
+      if (isNumber(message.usage.contextWindow)) {
+        totals.contextWindow = message.usage.contextWindow;
+      }
+      continue;
+    }
     // A live owner reply closes the text above it as a durable `continued`
     // chunk. It is still agent prose, but not another billed turn.
     if (message.author !== "agent" || message.stop === "continued") continue;

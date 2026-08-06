@@ -558,6 +558,20 @@ const en = {
     "Reported by the agent: {reported}. Token-derived check: {calculated}.",
   "calc {cost}": "calc {cost}",
   Dismiss: "Dismiss",
+  "Permanently disable this warning": "Permanently disable this warning",
+  "Disable cost warnings permanently?": "Disable cost warnings permanently?",
+  Confirm: "Confirm",
+  "Freshen context": "Freshen context",
+  "Compact context": "Compact context",
+  "Keep a bounded handoff, then start the next Codex turn in a fresh session.":
+    "Keep a bounded handoff, then start the next Codex turn in a fresh session.",
+  "Learn what must survive, then compact this Claude session.":
+    "Learn what must survive, then compact this Claude session.",
+  Freshen: "Freshen",
+  "Cost warnings": "Cost warnings",
+  "turn off the large projected-cost warning; estimates and Compact remain visible":
+    "turn off the large projected-cost warning; estimates and Compact remain visible",
+  "Show projected-cost warnings": "Show projected-cost warnings",
   "Estimated cost of the next turn (≈{ctx}k context + prompt + reply). A projection, not a charge — the real cost is shown on the turn.":
     "Estimated cost of the next turn (≈{ctx}k context + prompt + reply). A projection, not a charge — the real cost is shown on the turn.",
   "This turn is projected at {cost}.": "This turn is projected at {cost}.",

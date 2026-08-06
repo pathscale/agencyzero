@@ -67,6 +67,23 @@ describe("usageTotals", () => {
     expect(totals.cacheReads).toBe(30);
   });
 
+  it("takes a successful compaction's new context without counting another turn", () => {
+    const compacted = turn(
+      "system",
+      usage({ tokens: 900_000, contextTokens: 18_000, contextWindow: 1_000_000, costUsd: 5 }),
+    );
+    const totals = usageTotals([
+      turn("agent", usage({ tokens: 100, contextTokens: 850_000, contextWindow: 1_000_000 })),
+      compacted,
+    ]);
+
+    expect(totals.turns).toBe(1);
+    expect(totals.tokens).toBe(100);
+    expect(totals.costUsd).toBeNull();
+    expect(totals.contextTokens).toBe(18_000);
+    expect(totals.contextWindow).toBe(1_000_000);
+  });
+
   it("does not count continued transcript chunks as extra turns", () => {
     const chunk = turn("agent", null, "chunk");
     chunk.stop = "continued";

@@ -365,7 +365,7 @@ export function ProjectTab(props: { tab: Tab; project: Project }): JSX.Element {
             <Composer
               draftKey={props.tab.key}
               onCompact={
-                capabilitiesFor(props.tab.agent)?.commands
+                props.tab.agent === "codex" || capabilitiesFor(props.tab.agent)?.commands
                   ? () => actions.compactProject(props.project.id, props.tab.agent)
                   : undefined
               }
@@ -401,10 +401,13 @@ export function ProjectTab(props: { tab: Tab; project: Project }): JSX.Element {
               /* The warm context the next turn will resend, so the composer can
                price it live as you type. From the tab's running totals. */
               contextTokens={
-                contextOwner()?.agent !== props.tab.agent
-                  ? (conversationTotals().contextTokens ?? 0)
-                  : (standing().contextTokens ?? 0)
+                !props.project.sessions[props.tab.agent]
+                  ? 0
+                  : contextOwner()?.agent !== props.tab.agent
+                    ? (conversationTotals().contextTokens ?? 0)
+                    : (standing().contextTokens ?? 0)
               }
+              contextWindow={standing().contextWindow ?? undefined}
               contextAgent={contextOwner()?.agent as Agent | undefined}
               contextModel={contextOwner()?.model}
               /*
@@ -484,11 +487,11 @@ export function ProjectPanelToggle(props: { visible: boolean; onToggle: () => vo
       aria-pressed={props.visible}
       aria-label={label()}
       title={label()}
-      class="absolute top-1/2 left-full z-20 flex h-8 w-4 -translate-y-1/2 items-center justify-center rounded-r-md border border-primary/35 border-l-0 bg-primary/14 text-primary transition-[color,background-color,border-color,transform] duration-200 hover:translate-x-px hover:border-primary/55 hover:bg-primary/24 motion-reduce:transition-none"
+      class="absolute top-1/2 left-full z-20 flex h-10 w-5 -translate-y-1/2 items-center justify-center rounded-r-md border border-primary/40 border-l-0 bg-primary/20 text-primary transition-[color,background-color,border-color,transform] duration-200 hover:translate-x-px hover:border-primary/60 hover:bg-primary/30 motion-reduce:transition-none"
     >
       <Icon
         name="chevron-right"
-        class={`text-[12px] transition-transform duration-200 motion-reduce:transition-none ${
+        class={`text-[13px] transition-transform duration-200 motion-reduce:transition-none ${
           props.visible ? "rotate-0" : "rotate-180"
         }`}
       />

@@ -1677,9 +1677,19 @@ function CostSection(): JSX.Element {
           "{count} priced turn(s) · priced by the agent at API list rates — consumption, not a bill",
           { count: summary()?.turns ?? 0 },
         )}
-        isLast
       >
         {figure(summary()?.totalUsd)}
+      </Row>
+      <Row
+        label={tx("Cost warnings")}
+        hint={tx("turn off the large projected-cost warning; estimates and Compact remain visible")}
+        isLast
+      >
+        <SettingToggle
+          label={tx("Show projected-cost warnings")}
+          checked={!prefs.costWarningsDisabled}
+          onChange={(enabled) => setPrefs("costWarningsDisabled", !enabled)}
+        />
       </Row>
     </Section>
   );

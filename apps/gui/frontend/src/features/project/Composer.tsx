@@ -107,6 +107,8 @@ export type ComposerProps = {
    * fresh session, where the estimate is just the new prompt.
    */
   contextTokens?: number;
+  /** Reported provider context limit; absent when the provider exposes none. */
+  contextWindow?: number;
   /** The provider/model that owns the history represented by contextTokens. */
   contextAgent?: Agent;
   contextModel?: string;
@@ -312,19 +314,49 @@ export function Composer(props: ComposerProps): JSX.Element {
   });
 
   /*
-   * The alert is dismissable but must not stay dismissed forever: the estimate
-   * moves as the user edits, and a warning they closed at $0.60 should return
-   * if the turn climbs to $3. Keyed by (bucket, draft) so any edit re-arms it,
-   * and cleared on send. Not persisted — it is a per-composition nudge.
+   * Dismiss means a real ten-minute snooze, not "hide until the next
+   * keystroke". That older behaviour made a warning the user had explicitly
+   * closed jump straight back while they were still editing. The count is
+   * durable so its second appearance can offer the permanent opt-out.
    */
-  const [costAlertDismissedAt, setCostAlertDismissedAt] = createSignal<Record<string, string>>({});
-  const setCostAlertDismissed = (key: string) =>
-    setCostAlertDismissedAt((current) => ({ ...current, [key]: draft() }));
+  const [confirmDisableCostWarning, setConfirmDisableCostWarning] = createSignal(false);
+  const dismissCostAlert = () => {
+    setConfirmDisableCostWarning(false);
+    setPrefs({
+      costWarningDismissals: prefs.costWarningDismissals + 1,
+      costWarningSnoozedUntil: Date.now() + 10 * 60 * 1_000,
+    });
+  };
   const showCostAlert = () => {
     const est = costEstimate();
+    if (prefs.costWarningsDisabled || Date.now() < prefs.costWarningSnoozedUntil) return false;
     if (!est?.priced || (est.severity === "low" && !isContextSwitch())) return false;
-    // Re-arms whenever the text differs from what was showing when dismissed.
-    return costAlertDismissedAt()[bucket()] !== draft();
+    return true;
+  };
+  const compactPressure = () => {
+    const tokens = props.contextTokens ?? 0;
+    const window = props.contextWindow ?? 0;
+    const share = window > 0 ? tokens / window : null;
+    if (share !== null) {
+      if (share >= 0.9) return "red" as const;
+      if (share >= 0.8) return "orange" as const;
+      if (share >= 0.65) return "yellow" as const;
+      return null;
+    }
+    // Codex does not currently report its window. Raw thresholds keep the
+    // app-owned rollover available without inventing a percentage.
+    if (props.agent === "codex") {
+      if (tokens >= 300_000) return "red" as const;
+      if (tokens >= 200_000) return "orange" as const;
+      if (tokens >= 100_000) return "yellow" as const;
+    }
+    return null;
+  };
+  const runCompact = () => {
+    const compact = props.onCompact;
+    if (!compact) return;
+    const key = bucket();
+    void compact().catch((cause: unknown) => setErrorFor(key, describeError(cause)));
   };
   const toggleAdvanced = () => {
     const key = bucket();
@@ -467,8 +499,7 @@ export function Composer(props: ComposerProps): JSX.Element {
            * failure belongs to the conversation it was asked of even if the
            * user has moved to another tab.
            */
-          const key = bucket();
-          void compact().catch((cause: unknown) => setErrorFor(key, describeError(cause)));
+          runCompact();
           break;
         }
         default:
@@ -638,7 +669,6 @@ export function Composer(props: ComposerProps): JSX.Element {
                       )}
                     </Show>
                     <ul class="mt-1 list-disc space-y-0.5 pl-4 text-az-muted">
-                      <li>{tx("Lower project verbosity to reduce reply tokens on every turn.")}</li>
                       <Show when={props.extraThinking && thinkingPerThousand() !== null}>
                         <li>
                           {tx(
@@ -665,19 +695,79 @@ export function Composer(props: ComposerProps): JSX.Element {
                 </Show>
                 <button
                   type="button"
-                  onClick={() => setCostAlertDismissed(bucket())}
+                  onClick={dismissCostAlert}
                   aria-label={tx("Dismiss")}
                   class="shrink-0 rounded p-0.5 text-az-faint transition-colors hover:text-az-body"
                 >
                   <Icon name="x" class="text-[12px]" />
                 </button>
               </div>
+              <Show when={prefs.costWarningDismissals > 0}>
+                <div class="flex justify-end">
+                  <Show
+                    when={confirmDisableCostWarning()}
+                    fallback={
+                      <button
+                        type="button"
+                        onClick={() => setConfirmDisableCostWarning(true)}
+                        class="text-[10.5px] text-az-muted underline decoration-current/40 underline-offset-2 hover:text-az-body"
+                      >
+                        {tx("Permanently disable this warning")}
+                      </button>
+                    }
+                  >
+                    <div class="flex items-center gap-2 text-[10.5px] text-az-muted">
+                      <span>{tx("Disable cost warnings permanently?")}</span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setPrefs("costWarningsDisabled", true);
+                          setConfirmDisableCostWarning(false);
+                        }}
+                        class="rounded border border-error/40 px-2 py-0.5 font-medium text-error hover:bg-error/10"
+                      >
+                        {tx("Confirm")}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setConfirmDisableCostWarning(false)}
+                        class="text-az-muted hover:text-az-body"
+                      >
+                        {tx("Cancel")}
+                      </button>
+                    </div>
+                  </Show>
+                </div>
+              </Show>
             </div>
           );
         }}
       </Show>
       <Show when={props.usage || costEstimate()?.priced}>
         <div class="flex min-h-[24px] items-center justify-end gap-2 px-1">
+          <Show when={props.onCompact && compactPressure() && state.pricing}>
+            <button
+              type="button"
+              onClick={runCompact}
+              aria-label={props.agent === "codex" ? tx("Freshen context") : tx("Compact context")}
+              title={
+                props.agent === "codex"
+                  ? tx("Keep a bounded handoff, then start the next Codex turn in a fresh session.")
+                  : tx("Learn what must survive, then compact this Claude session.")
+              }
+              class={`rounded-md border px-2.5 py-1 font-semibold text-[10.5px] transition-colors ${
+                compactPressure() === "red"
+                  ? "border-error/55 bg-error/15 text-error hover:bg-error/25"
+                  : compactPressure() === "orange"
+                    ? "border-warning/70 bg-warning/20 text-warning hover:bg-warning/30"
+                    : "border-warning/40 bg-warning/10 text-warning hover:bg-warning/20"
+              }`}
+            >
+              {props.agent === "codex" ? tx("Freshen") : tx("Compact")}{" "}
+              {costLabel(compactionCost(state.pricing!, estimateModel(), props.contextTokens ?? 0))}{" "}
+              ›
+            </button>
+          </Show>
           {/* Accent, not grey: the context fill is a number worth reading, and
               the owner asked for it coloured like the controls rather than dim
               chrome. */}

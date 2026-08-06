@@ -5316,6 +5316,20 @@ fn compaction_verdict(
     )
 }
 
+/// Conservative standing context after a native compaction.
+///
+/// Mirrors the frontend estimate: one observed 167k conversation resumed at
+/// 8.6k, while larger summaries grew at roughly two percent. This is used only
+/// for the post-operation context meter; the usage ledger keeps the provider's
+/// exact operation usage and cost.
+fn compacted_context_tokens(before: u64) -> u64 {
+    if before == 0 {
+        0
+    } else {
+        8_000.max(before.div_ceil(50))
+    }
+}
+
 /// Summarise the conversation so far and continue from the summary.
 ///
 /// The answer to a session that has filled its context window: past about
@@ -5360,7 +5374,8 @@ pub async fn compact_project(
     state: State<'_, AppState>,
 ) -> Result<(), String> {
     let agent = parse_agent(agent.as_deref())?;
-    if !agent.caps().commands {
+    let app_owned_rollover = !agent.caps().commands && agent == Agent::Codex;
+    if !agent.caps().commands && !app_owned_rollover {
         return Err(format!(
             "{} does not expose a command vocabulary, so this conversation cannot be compacted from AgencyZero",
             agent_wire_name(agent)
@@ -5370,6 +5385,9 @@ pub async fn compact_project(
         .tables
         .kv_get(&agent_session_key(&project_id, agent))
         .filter(|id| !id.is_empty());
+    if app_owned_rollover && session.is_none() {
+        return Err("this Codex conversation is already fresh".into());
+    }
 
     // Held for the rest of the body: the slot is released when this drops,
     // however the compaction ends.
@@ -5473,6 +5491,108 @@ pub async fn compact_project(
     } else {
         None
     };
+
+    /*
+     * Codex has no native compact command. Its safe equivalent is an app-owned
+     * rollover: make one final read-only pass against the old session, persist
+     * the bounded successor handoff as standing system instructions, then
+     * clear only that provider's resume pointer. The transcript, items and
+     * project remain; the next message opens a new Codex thread with the handoff
+     * injected above its conversation.
+     *
+     * Learning is mandatory here. Native compaction can still preserve a
+     * provider-generated summary when the optional notes pass fails; a reset
+     * cannot, so clearing the pointer without a handoff would be data loss.
+     */
+    if app_owned_rollover {
+        let Some((notes, usage)) = learned.as_ref() else {
+            let reason =
+                "could not create the successor handoff, so the Codex session was left unchanged";
+            let _ = app.emit(
+                "run:compaction",
+                serde_json::json!({
+                    "projectId": project_id,
+                    "agent": agent,
+                    "driver": "command",
+                    "phase": "finished",
+                    "ok": false,
+                    "error": reason,
+                }),
+            );
+            return Err(reason.into());
+        };
+
+        let compact_model = state
+            .tables
+            .message
+            .select_by_project_id(project_id.clone())
+            .execute()
+            .unwrap_or_default()
+            .into_iter()
+            .filter(|row| row.agent == agent_wire_name(agent) && !row.model.is_empty())
+            .max_by(|a, b| a.created_at.cmp(&b.created_at))
+            .map(|row| row.model)
+            .unwrap_or_else(|| agent_wire_name(agent).to_string());
+
+        // Attribute the handoff pass to the session that actually paid for it
+        // before clearing that id.
+        record_turn_usage(&state.tables, &project_id, agent, &compact_model, usage);
+        state
+            .tables
+            .kv_put(&agent_session_key(&project_id, agent), String::new())
+            .await
+            .map_err(|error| error.to_string())?;
+        clear_partial_reply(&state.tables, &project_id).await;
+        state
+            .tables
+            .kv_put(&partial_reply_key(&project_id), String::new())
+            .await
+            .map_err(|error| error.to_string())?;
+
+        let body = format!(
+            "Freshened the Codex conversation, keeping {} handoff rule(s). The next message starts a new Codex session with those rules, while this transcript and the project's tracked work stay here.",
+            notes.lines().filter(|line| !line.trim().is_empty()).count()
+        );
+        let row = MessageRow {
+            id: id("msg"),
+            project_id: project_id.clone(),
+            item_id: String::new(),
+            author: "system".into(),
+            agent: agent_wire_name(agent).into(),
+            moderation: String::new(),
+            model: compact_model,
+            permission: String::new(),
+            usage: usage_json(usage),
+            stop: "completed".into(),
+            exit_code: 0,
+            body,
+            created_at: now(),
+        };
+        state
+            .tables
+            .message
+            .insert(row.clone())
+            .map_err(|error| error.to_string())?;
+        let _ = app.emit("message:appended", &MessageDto::from(row));
+        if let Some(project) = state.tables.project.select(project_id.clone()) {
+            let _ = app.emit(
+                "project:updated",
+                with_session(ProjectDto::from(project), &state.tables),
+            );
+        }
+        let _ = app.emit(
+            "run:compaction",
+            serde_json::json!({
+                "projectId": project_id,
+                "agent": agent,
+                "driver": "command",
+                "phase": "finished",
+                "ok": true,
+                "error": null,
+            }),
+        );
+        return Ok(());
+    }
 
     let mut request = agent_abstraction::Request::command(
         agent,
@@ -5646,7 +5766,12 @@ pub async fn compact_project(
         || compact_usage.cache_read_tokens.is_some()
         || compact_usage.cache_write_tokens.is_some();
     let usage_json = if has_usage {
-        serde_json::to_string(&UsageDto::from(&compact_usage)).unwrap_or_default()
+        let mut standing_usage = compact_usage;
+        if ok {
+            standing_usage.context_tokens =
+                standing_usage.context_tokens.map(compacted_context_tokens);
+        }
+        serde_json::to_string(&UsageDto::from(&standing_usage)).unwrap_or_default()
     } else {
         String::new()
     };
@@ -10801,6 +10926,13 @@ mod tests {
         );
         assert!(!ok);
         assert_eq!(why.as_deref(), Some("you stopped the compaction"));
+    }
+
+    #[test]
+    fn compacted_context_uses_the_observed_floor_then_two_percent() {
+        assert_eq!(compacted_context_tokens(0), 0);
+        assert_eq!(compacted_context_tokens(167_354), 8_000);
+        assert_eq!(compacted_context_tokens(900_000), 18_000);
     }
 
     #[test]

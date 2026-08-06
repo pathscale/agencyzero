@@ -47,6 +47,9 @@ const DEFAULTS: UiPrefs = {
   seenSections: [],
   composerDrafts: {},
   replyQuestionIds: {},
+  costWarningsDisabled: false,
+  costWarningSnoozedUntil: 0,
+  costWarningDismissals: 0,
 };
 
 /**
