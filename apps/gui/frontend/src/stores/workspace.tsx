@@ -978,7 +978,12 @@ function createWorkspace() {
       });
     });
     await bind("message:receipt", ({ projectId, messageId, status }) => {
-      setState("messageReceipts", projectId, messageId, status);
+      // A path setter cannot descend through a missing project record. Replace
+      // that record instead, creating it when the first receipt arrives.
+      setState("messageReceipts", projectId, (receipts = {}) => ({
+        ...receipts,
+        [messageId]: status,
+      }));
     });
     await bind("moderation:blocked", appendMessage);
 
@@ -1036,7 +1041,10 @@ function createWorkspace() {
       // A limit replayed from the buffer, or delivered late, can already be
       // spent by the time it lands.
       if (!isLimitLive(limit)) return;
-      setState("rateLimits", limit.projectId, limit.agent, limit);
+      setState("rateLimits", limit.projectId, (limits = {}) => ({
+        ...limits,
+        [limit.agent]: limit,
+      }));
     });
 
     await bind("run:rate_limit_cleared", ({ projectId, agent }) => {
@@ -1177,7 +1185,11 @@ function createWorkspace() {
     });
 
     await bind("run:commands", ({ projectId, agent, all, skills }) => {
-      setState("commands", projectId, agent, { all, skills });
+      // Same missing-parent case as the first receipt above.
+      setState("commands", projectId, (commands = {}) => ({
+        ...commands,
+        [agent]: { all, skills },
+      }));
     });
 
     await bind("run:usage", ({ projectId, tokens, contextTokens, contextWindow }) => {

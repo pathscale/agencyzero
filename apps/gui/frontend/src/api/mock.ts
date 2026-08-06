@@ -417,6 +417,13 @@ export function createMockApi(): AgencyZeroApi {
       };
       messages.push(message);
       emit("message:appended", message);
+      // The mock has no provider process, so it can honestly acknowledge only
+      // that AgencyZero accepted the row, not that an agent read it.
+      emit("message:receipt", {
+        projectId: message.projectId,
+        messageId: message.id,
+        status: "sent",
+      });
       if (project) {
         project.lastActivityAt = message.createdAt;
         emit("project:updated", project);
