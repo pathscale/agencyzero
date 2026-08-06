@@ -630,6 +630,13 @@ const en = {
     "Or start a fresh session if the history no longer helps the next task.",
   "Per project": "Per project",
   "Per session": "Per session",
+  "Outcome per dollar": "Outcome per dollar",
+  "captured completions and attributed turns only":
+    "captured completions and attributed turns only",
+  "finished item": "finished item",
+  finished: "finished",
+  "effective cost": "effective cost",
+  "includes local estimates": "includes local estimates",
   "Import chats": "Import chats",
   "copy local provider transcripts into new AgencyZero projects":
     "copy local provider transcripts into new AgencyZero projects",

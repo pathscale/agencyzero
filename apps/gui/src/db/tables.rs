@@ -15,6 +15,9 @@ use worktable::prelude::DiskConfig;
 pub use crate::db::fingerprint::{FINGERPRINT_KEY, SCHEMA_FINGERPRINT, SchemaState, check_schema};
 use crate::db::schema::agent_io::{AgentIoRowPersistenceEngine, AgentIoRowWorkTable};
 use crate::db::schema::approval_rule::{ApprovalRulePersistenceEngine, ApprovalRuleWorkTable};
+use crate::db::schema::item_completion::{
+    ItemCompletionPersistenceEngine, ItemCompletionWorkTable,
+};
 use crate::db::schema::kv::{KvPersistenceEngine, KvRow, KvWorkTable};
 use crate::db::schema::message::{MessagePersistenceEngine, MessageWorkTable};
 use crate::db::schema::message_chunk::{MessageChunkPersistenceEngine, MessageChunkWorkTable};
@@ -48,6 +51,8 @@ pub struct Tables {
     pub kv: Arc<KvWorkTable>,
     pub project: Arc<ProjectWorkTable>,
     pub project_item: Arc<ProjectItemWorkTable>,
+    /// First accepted finish per item, retained for outcome analytics.
+    pub item_completion: Arc<ItemCompletionWorkTable>,
     pub message: Arc<MessageWorkTable>,
     /// Overflow for message bodies too large for one page. See
     /// `schema/message_chunk.rs`.
@@ -115,6 +120,7 @@ impl Tables {
             kv: open!(KvPersistenceEngine, KvWorkTable),
             project: open!(ProjectPersistenceEngine, ProjectWorkTable),
             project_item: open!(ProjectItemPersistenceEngine, ProjectItemWorkTable),
+            item_completion: open!(ItemCompletionPersistenceEngine, ItemCompletionWorkTable),
             message: open!(MessagePersistenceEngine, MessageWorkTable),
             message_chunk: open!(MessageChunkPersistenceEngine, MessageChunkWorkTable),
             task_log: open!(TaskLogPersistenceEngine, TaskLogWorkTable),
@@ -629,6 +635,7 @@ impl Tables {
             drain("kv", self.kv.wait_for_ops()),
             drain("project", self.project.wait_for_ops()),
             drain("project_item", self.project_item.wait_for_ops()),
+            drain("item_completion", self.item_completion.wait_for_ops()),
             drain("message", self.message.wait_for_ops()),
             drain("message_chunk", self.message_chunk.wait_for_ops()),
             drain("task_log", self.task_log.wait_for_ops()),
@@ -646,7 +653,7 @@ impl Tables {
         let errors: Vec<String> = [
             results.0, results.1, results.2, results.3, results.4, results.5, results.6, results.7,
             results.8, results.9, results.10, results.11, results.12, results.13, results.14,
-            results.15,
+            results.15, results.16,
         ]
         .into_iter()
         .filter_map(Result::err)

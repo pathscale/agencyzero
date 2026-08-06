@@ -1,7 +1,14 @@
 import { createMemo, createSignal, For, type JSX, onMount, Show } from "solid-js";
 import { tx } from "~/stores/i18n";
 import { useWorkspace } from "~/stores/workspace";
-import type { UsageAnalytics, UsageDay, UsageModel, UsageProject, UsageSession } from "~/types";
+import type {
+  UsageAgentValue,
+  UsageAnalytics,
+  UsageDay,
+  UsageModel,
+  UsageProject,
+  UsageSession,
+} from "~/types";
 
 /** The four token classes, each with a stable label and bar colour. */
 const TOKEN_CLASSES = [
@@ -66,6 +73,7 @@ export function AnalyticsTab(): JSX.Element {
               <StatTiles usage={usage()} />
               <CacheEfficiency usage={usage()} />
               <LargestTurn usage={usage()} />
+              <AgentValue agents={usage().agents} />
               <SessionBreakdown sessions={usage().sessions} />
               <DaySeries days={usage().days} />
               <ProjectBreakdown projects={usage().projects} total={usage().totalUsd} />
@@ -75,6 +83,52 @@ export function AnalyticsTab(): JSX.Element {
         </Show>
       </div>
     </div>
+  );
+}
+
+/** Outcome-per-dollar comparison using durable completions, not visible rows. */
+function AgentValue(props: { agents: UsageAgentValue[] }): JSX.Element {
+  return (
+    <Show when={props.agents.length > 0}>
+      <div class="rounded-xl border border-az-hairline bg-base-100 px-4 py-3.5">
+        <div class="flex items-baseline justify-between gap-3">
+          <h2 class="font-medium text-[12.5px] text-az-title">{tx("Outcome per dollar")}</h2>
+          <span class="text-[10.5px] text-az-muted">
+            {tx("captured completions and attributed turns only")}
+          </span>
+        </div>
+        <div class="mt-3 grid gap-2 sm:grid-cols-2">
+          <For each={props.agents}>
+            {(agent) => (
+              <div class="rounded-lg border border-az-hairline px-3 py-2.5">
+                <div class="flex items-baseline justify-between gap-2">
+                  <span class="font-semibold text-[12px] text-az-strong">
+                    {agent.agent === "codex"
+                      ? "Codex"
+                      : agent.agent === "claude"
+                        ? "Claude"
+                        : agent.agent}
+                  </span>
+                  <span class="font-mono text-[12px] text-primary">
+                    {agent.costPerCompletedItem === null
+                      ? "—"
+                      : `${dollars(agent.costPerCompletedItem)} / ${tx("finished item")}`}
+                  </span>
+                </div>
+                <div class="mt-1.5 font-mono text-[10.5px] text-az-muted">
+                  {agent.completedItems} {tx("finished")} · {agent.turns} {tx("turns")} ·{" "}
+                  {tokens(agent.processedTokens)} {tx("processed")}
+                </div>
+                <div class="mt-1 text-[10.5px] text-az-faint">
+                  {dollars(agent.effectiveCostUsd)} {tx("effective cost")}
+                  {agent.estimatedCostUsd > 0 ? ` · ${tx("includes local estimates")}` : ""}
+                </div>
+              </div>
+            )}
+          </For>
+        </div>
+      </div>
+    </Show>
   );
 }
 

@@ -134,9 +134,14 @@ impl From<ProjectItemRow> for ProjectItemDto {
 }
 
 const ITEM_ACTIVITY_PREFIX: &str = "item-activity:";
+const ITEM_AGENT_PREFIX: &str = "item-agent:";
 
 fn item_activity_key(item_id: &str) -> String {
     format!("{ITEM_ACTIVITY_PREFIX}{item_id}")
+}
+
+fn item_agent_key(item_id: &str) -> String {
+    format!("{ITEM_AGENT_PREFIX}{item_id}")
 }
 
 fn item_dto(row: ProjectItemRow, tables: &Tables) -> ProjectItemDto {
@@ -168,6 +173,62 @@ async fn clear_item_activity(tables: &Tables, item_id: &str) {
             crate::log::Level::Warn,
             "items",
             "could not clear timestamp for {item_id}: {error}"
+        );
+    }
+}
+
+async fn clear_item_assignment(tables: &Tables, item_id: &str) {
+    let key = item_agent_key(item_id);
+    if tables.kv.select(key.clone()).is_some()
+        && let Err(error) = tables.kv.delete(key).await
+    {
+        crate::log!(
+            crate::log::Level::Warn,
+            "items",
+            "could not clear assignment for {item_id}: {error}"
+        );
+    }
+}
+
+async fn clear_item_metadata(tables: &Tables, item_id: &str) {
+    clear_item_activity(tables, item_id).await;
+    clear_item_assignment(tables, item_id).await;
+}
+
+async fn assign_item_agent(tables: &Tables, item_id: &str, agent: &str) {
+    if let Err(error) = tables
+        .kv_put(&item_agent_key(item_id), agent.to_string())
+        .await
+    {
+        crate::log!(
+            crate::log::Level::Warn,
+            "items",
+            "could not assign {item_id} to {agent}: {error}"
+        );
+    }
+}
+
+async fn record_item_completion(tables: &Tables, row: &ProjectItemRow, actor: Option<&str>) {
+    if tables.item_completion.select(row.id.clone()).is_some() {
+        return;
+    }
+    let agent = actor
+        .filter(|agent| matches!(*agent, "claude" | "codex" | "copilot"))
+        .map(str::to_string)
+        .or_else(|| tables.kv_get(&item_agent_key(&row.id)))
+        .unwrap_or_else(|| "owner".to_string());
+    let completion = crate::db::schema::item_completion::ItemCompletionRow {
+        id: row.id.clone(),
+        project_id: row.project_id.clone(),
+        agent,
+        completed_at: now(),
+    };
+    if let Err(error) = tables.item_completion.insert(completion) {
+        crate::log!(
+            crate::log::Level::Warn,
+            "items",
+            "could not record completion for {}: {error}",
+            row.id
         );
     }
 }
@@ -1171,18 +1232,20 @@ async fn write_item_status(
     id: &str,
     status: &str,
     delete_finished: bool,
+    actor: Option<&str>,
 ) -> Result<ItemStatusWrite, String> {
     if status == "finished" && delete_finished {
         let mut row = tables
             .project_item
             .select(id.to_string())
             .ok_or_else(|| format!("no item {id}"))?;
+        record_item_completion(tables, &row, actor).await;
         tables
             .project_item
             .delete(id.to_string())
             .await
             .map_err(|error| error.to_string())?;
-        clear_item_activity(tables, id).await;
+        clear_item_metadata(tables, id).await;
         row.status = status.to_string();
         return Ok(ItemStatusWrite::Deleted(item_dto(row, tables)));
     }
@@ -1201,6 +1264,9 @@ async fn write_item_status(
         .project_item
         .select(id.to_string())
         .ok_or_else(|| format!("no item {id}"))?;
+    if status == "finished" {
+        record_item_completion(tables, &row, actor).await;
+    }
     touch_item(tables, id).await;
     Ok(ItemStatusWrite::Updated(item_dto(row, tables)))
 }
@@ -1291,7 +1357,7 @@ async fn age_finished_items(
             .delete(item_id.to_string())
             .await
             .map_err(|error| error.to_string())?;
-        clear_item_activity(tables, item_id).await;
+        clear_item_metadata(tables, item_id).await;
         clear_finished_retirement(tables, item_id).await?;
         retired.push(ProjectItemDto::from(row));
     }
@@ -1368,7 +1434,7 @@ pub async fn set_item_status(
     clear_finished_retirement(&state.tables, &id).await?;
     let delete_finished =
         status == "finished" && global_settings(&state.tables).completed_items == "delete";
-    let written = write_item_status(&state.tables, &id, &status, delete_finished).await?;
+    let written = write_item_status(&state.tables, &id, &status, delete_finished, None).await?;
     written.emit(&app);
     let dto = written.item().clone();
     let mut study = crate::study::Record::manual(
@@ -1511,7 +1577,7 @@ pub async fn delete_item(
         .delete(id.clone())
         .await
         .map_err(|error| error.to_string())?;
-    clear_item_activity(&state.tables, &id).await;
+    clear_item_metadata(&state.tables, &id).await;
     let _ = app.emit(
         "item:deleted",
         serde_json::json!({ "id": id, "projectId": row.project_id }),
@@ -1886,6 +1952,7 @@ async fn apply_directive(
     app: &AppHandle,
     tables: &crate::db::tables::Tables,
     project_id: &str,
+    actor: &str,
     directive: crate::directives::Directive,
 ) -> crate::directives::Outcome {
     use crate::directives::{Directive, Outcome};
@@ -1971,7 +2038,7 @@ async fn apply_directive(
                     code: format!("WRITE_FAILED: {error}"),
                 };
             }
-            match write_item_status(tables, &resolved, &status, false).await {
+            match write_item_status(tables, &resolved, &status, false, Some(actor)).await {
                 Ok(written) => {
                     written.emit(app);
                     let said = match pr_number {
@@ -2090,7 +2157,9 @@ async fn apply_directive(
                         };
                     }
                     if moved {
-                        match write_item_status(tables, &existing.id, &status, false).await {
+                        match write_item_status(tables, &existing.id, &status, false, Some(actor))
+                            .await
+                        {
                             Ok(written) => written.emit(app),
                             Err(error) => {
                                 return Outcome::Refused {
@@ -2169,7 +2238,7 @@ async fn apply_directive(
                 .unwrap_or_else(|| project_id.to_string());
             match tables.project_item.delete(resolved.clone()).await {
                 Ok(()) => {
-                    clear_item_activity(tables, &resolved).await;
+                    clear_item_metadata(tables, &resolved).await;
                     if let Err(error) = clear_finished_retirement(tables, &resolved).await {
                         crate::log!(
                             crate::log::Level::Warn,
@@ -2551,7 +2620,7 @@ async fn apply_directives_with_state(
                     },
                 );
                 let started = std::time::Instant::now();
-                let outcome = apply_directive(app, tables, project_id, directive).await;
+                let outcome = apply_directive(app, tables, project_id, agent, directive).await;
                 let (result, code) = outcome.study_result();
                 study_target_after_add(tables, &mut target, operation, result == "applied");
                 crate::study::record(
@@ -4267,6 +4336,20 @@ pub struct UsageSessionDto {
     pub last_at: String,
 }
 
+/// Cost and durable finished outcomes owned by one agent.
+#[derive(Debug, Clone, Default, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UsageAgentValueDto {
+    pub agent: String,
+    pub reported_cost_usd: f64,
+    pub estimated_cost_usd: f64,
+    pub effective_cost_usd: f64,
+    pub completed_items: usize,
+    pub cost_per_completed_item: Option<f64>,
+    pub processed_tokens: i64,
+    pub turns: usize,
+}
+
 /// The single turn that processed the most tokens.
 ///
 /// Answers the question a big bill raises: is one request enormous, or is it
@@ -4300,6 +4383,8 @@ pub struct UsageAnalyticsDto {
     pub projects: Vec<UsageProjectDto>,
     /// Provider-native sessions captured by builds that record ownership.
     pub sessions: Vec<UsageSessionDto>,
+    /// Outcome-per-dollar by agent, from newly attributed durable rows.
+    pub agents: Vec<UsageAgentValueDto>,
     pub total_usd: f64,
     pub total_input_tokens: i64,
     pub total_output_tokens: i64,
@@ -4342,6 +4427,12 @@ pub async fn get_usage_analytics(state: State<'_, AppState>) -> Result<UsageAnal
         .select_all()
         .execute()
         .unwrap_or_default();
+    let completions = state
+        .tables
+        .item_completion
+        .select_all()
+        .execute()
+        .unwrap_or_default();
 
     // Cache read/write summed by day and by model, so the ledger loop can fold
     // them in without a nested scan.
@@ -4379,6 +4470,8 @@ pub async fn get_usage_analytics(state: State<'_, AppState>) -> Result<UsageAnal
     let mut by_project: std::collections::HashMap<String, UsageProjectDto> =
         std::collections::HashMap::new();
     let mut by_session: std::collections::HashMap<(String, String, String), UsageSessionDto> =
+        std::collections::HashMap::new();
+    let mut by_agent: std::collections::HashMap<String, UsageAgentValueDto> =
         std::collections::HashMap::new();
     let session_by_ledger: std::collections::HashMap<_, _> = usage_sessions
         .iter()
@@ -4468,6 +4561,50 @@ pub async fn get_usage_analytics(state: State<'_, AppState>) -> Result<UsageAnal
             if owner.at > session.last_at {
                 session.last_at.clone_from(&owner.at);
             }
+
+            let split = cache_by_id.get(row.id.as_str());
+            let read = split.map_or(0, |cache| cache.cache_read_tokens);
+            let write = split.map_or(0, |cache| cache.cache_write_tokens);
+            let processed = row.input_tokens + row.output_tokens + read + write;
+            let reported = row.cost_micro as f64 / 1_000_000.0;
+            let estimated = crate::pricing::estimate_running_cost(
+                &row.model,
+                u64::try_from(row.input_tokens).unwrap_or(0),
+                u64::try_from(row.output_tokens).unwrap_or(0),
+                u64::try_from(read).unwrap_or(0),
+                u64::try_from(write).unwrap_or(0),
+            )
+            .unwrap_or(0.0);
+            let value = by_agent
+                .entry(owner.agent.clone())
+                .or_insert_with(|| UsageAgentValueDto {
+                    agent: owner.agent.clone(),
+                    ..Default::default()
+                });
+            value.reported_cost_usd += reported;
+            if reported <= 0.0 {
+                value.estimated_cost_usd += estimated;
+            }
+            value.effective_cost_usd += if reported > 0.0 { reported } else { estimated };
+            value.processed_tokens += processed;
+            value.turns += 1;
+        }
+    }
+
+    for completion in completions {
+        let value =
+            by_agent
+                .entry(completion.agent.clone())
+                .or_insert_with(|| UsageAgentValueDto {
+                    agent: completion.agent,
+                    ..Default::default()
+                });
+        value.completed_items += 1;
+    }
+    for value in by_agent.values_mut() {
+        if value.completed_items > 0 {
+            let completed = u32::try_from(value.completed_items).unwrap_or(u32::MAX);
+            value.cost_per_completed_item = Some(value.effective_cost_usd / f64::from(completed));
         }
     }
 
@@ -4552,12 +4689,15 @@ pub async fn get_usage_analytics(state: State<'_, AppState>) -> Result<UsageAnal
     projects.sort_by(|a, b| b.cost_usd.total_cmp(&a.cost_usd));
     let mut sessions: Vec<UsageSessionDto> = by_session.into_values().collect();
     sessions.sort_by(|a, b| b.last_at.cmp(&a.last_at));
+    let mut agents: Vec<UsageAgentValueDto> = by_agent.into_values().collect();
+    agents.sort_by(|a, b| b.effective_cost_usd.total_cmp(&a.effective_cost_usd));
 
     Ok(UsageAnalyticsDto {
         days: by_day.into_values().collect(),
         models,
         projects,
         sessions,
+        agents,
         total_usd: total_micro as f64 / 1_000_000.0,
         total_input_tokens: total_input,
         total_output_tokens: total_output,
@@ -5869,7 +6009,7 @@ pub async fn delete_project(
         .await
         .map_err(|error| failed("the items", &error))?;
     for item_id in deleting_item_ids {
-        clear_item_activity(&state.tables, &item_id).await;
+        clear_item_metadata(&state.tables, &item_id).await;
     }
     state
         .tables
@@ -6700,6 +6840,9 @@ pub async fn send_message(
      * gets worked on again is genuinely active again, but re-announcing
      * `active` on every follow-up in the same conversation would be noise.
      */
+    if let Some(item) = item_id.as_deref() {
+        assign_item_agent(&state.tables, item, agent_wire_name(agent)).await;
+    }
     if let Some(item) = item_id.as_deref()
         && let Some(row) = state.tables.project_item.select(item.to_string())
         && row.status != "active"
@@ -10486,7 +10629,7 @@ mod tests {
             })
             .expect("item inserts");
 
-        let written = write_item_status(&tables, "item-delete-now", "finished", true)
+        let written = write_item_status(&tables, "item-delete-now", "finished", true, None)
             .await
             .expect("finished status applies");
 
@@ -10497,6 +10640,12 @@ mod tests {
                 .select("item-delete-now".to_string())
                 .is_none()
         );
+        let completion = tables
+            .item_completion
+            .select("item-delete-now".to_string())
+            .expect("completion survives immediate item deletion");
+        assert_eq!(completion.project_id, "project-a");
+        assert_eq!(completion.agent, "owner");
 
         tables
             .shutdown()
