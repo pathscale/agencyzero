@@ -391,6 +391,8 @@ const en = {
     "Current conversation size for the latest model call. This is window occupancy, not cumulative billing traffic.",
   "Cumulative billable token traffic across this turn's model calls: fresh input, repeated cached input, cache writes, and generated output reported so far.":
     "Cumulative billable token traffic across this turn's model calls: fresh input, repeated cached input, cache writes, and generated output reported so far.",
+  "Live estimate from reported input, output and cache traffic plus unfinished streamed output. The provider's terminal cost remains canonical.":
+    "Live estimate from reported input, output and cache traffic plus unfinished streamed output. The provider's terminal cost remains canonical.",
   "recent text not yet saved": "recent text not yet saved",
   "Everything streamed so far is saved to the store":
     "Everything streamed so far is saved to the store",

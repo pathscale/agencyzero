@@ -131,6 +131,29 @@ fn price_for(model: &str) -> Option<Price> {
         .find(|price| model.contains(price.key))
 }
 
+/// Price the consumption reported so far for a running turn.
+///
+/// Unlike the durable ledger this is deliberately an estimate: it uses the
+/// current local price table and may include a character-derived output count
+/// while a provider withholds unfinished output tokens. It exists while Cancel
+/// can still change the result; the provider's terminal cost remains canonical.
+#[must_use]
+pub fn estimate_running_cost(
+    model: &str,
+    input_tokens: u64,
+    output_tokens: u64,
+    cache_read_tokens: u64,
+    cache_write_tokens: u64,
+) -> Option<f64> {
+    let price = price_for(model)?;
+    let cost = (input_tokens as f64 * price.input
+        + output_tokens as f64 * price.output
+        + cache_read_tokens as f64 * price.cache_read
+        + cache_write_tokens as f64 * price.input * CACHE_WRITE_MULTIPLE)
+        / 1_000_000.0;
+    (cost > 0.0 && cost.is_finite()).then_some(cost)
+}
+
 /// One row of the price table, for the frontend to do its own per-keystroke
 /// math. The estimate updates as the user types and on every model switch, so
 /// it has to be local: a Tauri round-trip per keystroke would lag the composer
@@ -357,5 +380,12 @@ mod tests {
             estimate_tokens("0123456789012345678901234567890123456789"),
             10
         );
+    }
+
+    #[test]
+    fn running_cost_prices_the_reported_cache_split() {
+        let cost =
+            estimate_running_cost("gpt-5.6-sol", 1_502, 101, 202_496, 0).expect("Sol is priced");
+        assert!((cost - 0.111_788).abs() < 0.000_001);
     }
 }
