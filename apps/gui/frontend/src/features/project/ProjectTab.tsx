@@ -8,6 +8,7 @@ import { TranscriptPane } from "~/features/project/TranscriptPane";
 import { countdown } from "~/lib/format";
 import { AGENT_LABELS, rateLimitLabel } from "~/lib/labels";
 import { describeError, log } from "~/lib/log";
+import { turnCostTotals } from "~/lib/pricing";
 import {
   cacheBreak,
   compactCount,
@@ -92,6 +93,7 @@ export function ProjectTab(props: { tab: Tab; project: Project }): JSX.Element {
     messages().filter((message) => message.author !== "agent" || message.agent === props.tab.agent),
   );
   const totals = createMemo(() => usageTotals(tabMessages()));
+  const costs = createMemo(() => turnCostTotals(state.pricing, tabMessages()));
   const conversationTotals = createMemo(() => usageTotals(messages()));
   const likelyCacheBreak = createMemo(() => cacheBreak(tabMessages()));
 
@@ -100,7 +102,10 @@ export function ProjectTab(props: { tab: Tab; project: Project }): JSX.Element {
     const it = totals();
     const partial =
       it.reported < it.turns ? ` ${it.turns - it.reported} turn(s) reported no usage.` : "";
-    return `${compactCount(it.tokens)} tokens processed across ${it.turns} turn(s), cache reads included.${partial} Each turn is priced by the agent itself at API list rates — on a subscription plan this measures consumption, not a bill. Nothing here computes a cost.`;
+    const estimate = costs().estimated
+      ? " Codex turns are estimated from their exact input, output, and cache split."
+      : "";
+    return `${compactCount(it.tokens)} tokens processed across ${it.turns} turn(s), cache reads included.${partial}${estimate} On a subscription plan this measures consumption, not a bill.`;
   };
 
   /**
@@ -230,8 +235,10 @@ export function ProjectTab(props: { tab: Tab; project: Project }): JSX.Element {
                 }
                 class="font-semibold text-accent"
               >
-                {totals().reported < totals().turns ? "~" : ""}
-                {costLabel(totals().costUsd)}
+                {costs().missing > 0 ? "~" : ""}
+                {costs().estimated
+                  ? tx("est. {cost}", { cost: costLabel(costs().usd) })
+                  : costLabel(costs().usd)}
               </span>
             </Show>
             <Show when={providerUsage()}>
