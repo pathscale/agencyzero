@@ -257,10 +257,10 @@ export function TranscriptPane(props: {
 /**
  * A question, inline in the chat thread, not a dialog.
  *
- * The owner asked for this repeatedly: it must read as part of the
- * It needs enough identity to read as a question at a glance, so it carries a
- * small label and urgency beside the accent rule. The answer remains the next
- * message typed; the only button dismisses the prompt.
+ * It must read as part of the conversation, while carrying enough identity to
+ * scan as a question at a glance. A small label and urgency sit beside the
+ * accent rule. The answer remains the next message typed; the only button
+ * dismisses the prompt.
  */
 function QuestionCard(props: { question: Question }): JSX.Element {
   const { actions } = useWorkspace();
@@ -273,7 +273,9 @@ function QuestionCard(props: { question: Question }): JSX.Element {
       case "passive":
         return "border-az-hairline-strong";
       default:
-        return "border-warning";
+        // The tab dot is red for a blocking question; the card uses the same
+        // signal so the reason for that dot is visually immediate.
+        return "border-error";
     }
   };
   const answered = () => props.question.answered;
@@ -287,16 +289,18 @@ function QuestionCard(props: { question: Question }): JSX.Element {
         return tx("Blocking");
     }
   };
+  const iconTone = () => (props.question.urgency === "passive" ? "text-az-muted" : "text-error");
+  const openSurface = () => (props.question.urgency === "critical" ? "bg-error/8" : "bg-az-inset");
 
   return (
     <div
       class={`group flex items-start gap-2.5 rounded-r-xl border-l-[3px] py-2.5 pr-2.5 pl-3.5 text-[12.5px] transition-opacity ${
-        answered() ? "border-az-hairline bg-az-inset opacity-45" : `bg-az-inset ${accent()}`
+        answered() ? "border-az-hairline bg-az-inset opacity-80" : `${openSurface()} ${accent()}`
       }`}
     >
       <div class="flex min-w-0 flex-1 flex-col gap-1.5">
         <div class="flex items-center gap-1.5">
-          <Icon name="message-square-dashed" class="text-[13px] text-warning" />
+          <Icon name="message-square-dashed" class={`text-[13px] ${iconTone()}`} />
           <span class="font-semibold text-[11px] text-az-strong">{tx("Question")}</span>
           <span class="text-[10.5px] text-az-muted">· {urgency()}</span>
         </div>
