@@ -310,7 +310,7 @@ impl Default for GlobalSettings {
             forward_proxy_vars: false,
             notifications: Notifications::default(),
             completed_items: "resolve".into(),
-            agent_finished_retention_turns: 2,
+            agent_finished_retention_turns: 1,
             theme: Theme::default(),
             study_analytics: StudyAnalytics::default(),
             per_turn_injection: true,
@@ -407,7 +407,7 @@ mod tests {
             "research collection is opt-in"
         );
         assert!(back.study_analytics.session_id.is_empty());
-        assert_eq!(back.agent_finished_retention_turns, 2);
+        assert_eq!(back.agent_finished_retention_turns, 1);
         assert!(json.contains("defaultAgent"), "must be camelCase: {json}");
     }
 
@@ -422,7 +422,7 @@ mod tests {
         assert_eq!(loaded.task_manager.agent, "codex");
         assert_eq!(loaded.task_manager.permission, "ask");
         assert!(!loaded.study_analytics.enabled);
-        assert_eq!(loaded.agent_finished_retention_turns, 2);
+        assert_eq!(loaded.agent_finished_retention_turns, 1);
         assert_eq!(
             loaded.moderator.model, "haiku",
             "absent blocks use defaults"

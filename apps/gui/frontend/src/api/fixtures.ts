@@ -605,7 +605,7 @@ export const SETTINGS: GlobalSettings = {
   envPolicy: "minimal",
   forwardProxyVars: false,
   completedItems: "resolve",
-  agentFinishedRetentionTurns: 2,
+  agentFinishedRetentionTurns: 1,
   theme: { accent: "", softness: 0, wash: 10, textBrightness: 0 },
   studyAnalytics: { enabled: false, sessionId: "", enabledAt: "" },
   perTurnInjection: true,
