@@ -119,6 +119,8 @@ export function createTauriApi(): AgencyZeroApi {
     listRateLimits: () => call("list_rate_limits"),
     getCostSummary: () => call("get_cost_summary"),
     getUsageAnalytics: () => call("get_usage_analytics"),
+    discoverChatImports: () => call("discover_chat_imports"),
+    importChatSession: (source, sessionId) => call("import_chat_session", { source, sessionId }),
     getBuildInfo: () => call("get_build_info"),
     checkForUpdate: () => call("check_for_update"),
     installUpdate: () => call("install_update"),

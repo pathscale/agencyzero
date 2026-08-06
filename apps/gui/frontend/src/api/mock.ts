@@ -887,6 +887,25 @@ export function createMockApi(): AgencyZeroApi {
         },
         turns: 341,
       }),
+    discoverChatImports: () =>
+      settle([
+        {
+          source: "claude-code",
+          label: "Claude Code",
+          available: true,
+          note: "1 importable local session",
+          sessions: [
+            {
+              id: "fixture-session",
+              title: "Imported fixture conversation",
+              updatedAt: "2026-08-07T00:00:00Z",
+              messages: 12,
+              importable: true,
+            },
+          ],
+        },
+      ]),
+    importChatSession: () => settle(clone(projects[0])),
 
     // A fixture stamp, shaped like the real one so the Settings row renders.
     getBuildInfo: () =>

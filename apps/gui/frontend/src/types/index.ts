@@ -727,6 +727,24 @@ export interface BuildInfo {
   builtAt: string;
 }
 
+/** One provider-native conversation available for read-only import. */
+export interface ChatImportSession {
+  id: string;
+  title: string;
+  updatedAt: string;
+  messages: number;
+  importable: boolean;
+}
+
+/** Discovery status for one supported local chat source. */
+export interface ChatImportSource {
+  source: string;
+  label: string;
+  available: boolean;
+  note: string;
+  sessions: ChatImportSession[];
+}
+
 /** A newer published version than the one running, from the update manifest. */
 export interface AvailableUpdate {
   version: string;

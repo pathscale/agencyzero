@@ -93,6 +93,8 @@ const COMMAND_FOR: Record<CommandMethod, string> = {
   listRateLimits: "list_rate_limits",
   getCostSummary: "get_cost_summary",
   getUsageAnalytics: "get_usage_analytics",
+  discoverChatImports: "discover_chat_imports",
+  importChatSession: "import_chat_session",
   getBuildInfo: "get_build_info",
   checkForUpdate: "check_for_update",
   installUpdate: "install_update",
