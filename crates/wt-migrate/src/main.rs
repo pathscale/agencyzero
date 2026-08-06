@@ -17,6 +17,64 @@ use std::process::ExitCode;
 fn main() -> ExitCode {
     let mut args: Vec<String> = std::env::args().skip(1).collect();
 
+    if args.first().map(String::as_str) == Some("recover-pull-request-index") {
+        args.remove(0);
+        let [source, target] = args.as_slice() else {
+            eprintln!(
+                "usage: wt-migrate recover-pull-request-index <source-store> <new-target-store>"
+            );
+            return ExitCode::from(2);
+        };
+        let source = PathBuf::from(source);
+        let target = PathBuf::from(target);
+        if !source.join("pull_request/.wt.data").is_file()
+            || !source.join("pull_request/primary.wt.idx").is_file()
+        {
+            eprintln!(
+                "{} does not contain pull_request data plus primary.wt.idx; nothing was touched",
+                source.display()
+            );
+            return ExitCode::from(2);
+        }
+        if target.exists() {
+            eprintln!(
+                "{} already exists; recover into a new directory",
+                target.display()
+            );
+            return ExitCode::from(2);
+        }
+        let _source_lock = match wt_migrate::lock_store(&source) {
+            Ok(lock) => lock,
+            Err(message) => {
+                eprintln!("{message}");
+                return ExitCode::FAILURE;
+            }
+        };
+        let runtime = tokio::runtime::Builder::new_multi_thread()
+            .worker_threads(2)
+            .enable_io()
+            .enable_time()
+            .build()
+            .expect("runtime");
+        return match runtime.block_on(wt_migrate::recover_pull_request_index(&source, &target)) {
+            Ok(report) => {
+                println!(
+                    "recovered {} pull-request row(s) across {} project key(s) into {}",
+                    report.rows,
+                    report.projects,
+                    target.display()
+                );
+                ExitCode::SUCCESS
+            }
+            Err(error) => {
+                eprintln!(
+                    "pull-request recovery failed: {error:#}. The source was not modified; the target may be partial."
+                );
+                ExitCode::FAILURE
+            }
+        };
+    }
+
     if args.first().map(String::as_str) == Some("recover-message-index") {
         args.remove(0);
         let [source, target] = args.as_slice() else {

@@ -22,6 +22,15 @@ inserts sequence. This is independent from the earlier loaded-primary growth
 bug and requires the same rule: repair indexes by rebuilding rows into a
 fresh table, never by copying the damaged index file.
 
+The August 6 pull-request failure was written by WorkTable beta5 during a long
+session of periodic fact refreshes. Those updates changed unindexed String
+fields but beta5 still rebuilt the whole row and its unchanged project index;
+the persistence worker terminated and the next launch found 38 primary rows
+disagreeing with `pr_project_idx`. Beta7 keeps those updates in place instead,
+removing that secondary-index churn. `recover-pull-request-index` carries the
+authoritative primary-linked rows into a fresh table when an older store has
+already taken the damage.
+
 ## The rules, before anything else
 
 Each of these was paid for by an incident. They are not advice.
@@ -118,9 +127,11 @@ the target. `wt-migrate recover-task-log-index <source> <target>` rebuilds a
 task log when its primary index is damaged but its project index survives.
 `wt-migrate recover-message-index <source> <target>` rebuilds messages when
 their project index is damaged but the authoritative primary index survives.
+`wt-migrate recover-pull-request-index <source> <target>` does the same for a
+damaged pull-request project index.
 These commands validate every recovered row and never modify the source.
-`wt-tools` reads any store read-only for inspection (`AZ_DATA_DIR=<dir>
-wt-tools list-messages`). None will ever write into a store the GUI has
+`agency-tools` reads any store read-only for inspection (`AZ_DATA_DIR=<dir>
+agency-tools list-messages`). None will ever write into a store the GUI has
 open; the lock sees to it.
 
 ## The incident this file is made of
