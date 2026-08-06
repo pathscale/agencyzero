@@ -17,6 +17,7 @@ import { isRetryableStop, isTransientStop, relativeTime } from "~/lib/format";
 import { AGENT_LABELS } from "~/lib/labels";
 import { costLabel, estimateTurnCost } from "~/lib/pricing";
 import { compactCount } from "~/lib/stats";
+import { agentTurnLabels } from "~/lib/turns";
 import { tx } from "~/stores/i18n";
 import { type RunStatus, useNow, useWorkspace } from "~/stores/workspace";
 import type { Message, MessageReceipt as MessageReceiptState, Project, Question } from "~/types";
@@ -90,6 +91,7 @@ export function TranscriptPane(props: {
    */
   const questionsFor = () => state.questions[props.project.id] ?? [];
   const openQuestions = () => questionsFor().filter((question) => !question.answered);
+  const turnLabels = createMemo(() => agentTurnLabels(props.messages));
   const timeline = createMemo(() => {
     const questions = questionsFor()
       .filter((question) => question.answered)
@@ -201,6 +203,7 @@ export function TranscriptPane(props: {
                 {(item) => (
                   <AgentBubble
                     message={item().message}
+                    turn={turnLabels()[item().message.id]}
                     onRetry={(() => {
                       /*
                        * Only the last turn is retryable: a failed turn further
@@ -489,7 +492,11 @@ const AGENT_BUBBLE =
  * one-line messages. */
 const AGENT_TEXT = "text-[14px] text-az-bubble-text leading-[1.75]";
 
-function AgentBubble(props: { message: Message; onRetry?: () => void }): JSX.Element {
+function AgentBubble(props: {
+  message: Message;
+  turn?: string;
+  onRetry?: () => void;
+}): JSX.Element {
   /*
    * A run that did not complete says so on the bubble. The body may be empty or
    * partial, and an unexplained short reply reads as the agent being unhelpful
@@ -567,6 +574,13 @@ function AgentBubble(props: { message: Message; onRetry?: () => void }): JSX.Ele
        * the message turned out to be, not an announcement before it.
        */}
       <div class="flex items-center gap-2">
+        <Show when={props.turn}>
+          {(turn) => (
+            <span class="shrink-0 text-[10.5px] text-az-faint">
+              {tx("Turn {number}", { number: turn() })} ·
+            </span>
+          )}
+        </Show>
         <MessageTime at={props.message.createdAt} />
         <MessageCost message={props.message} />
       </div>
