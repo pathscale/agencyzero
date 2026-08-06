@@ -475,6 +475,8 @@ const en = {
   Critical: "Critical",
   Blocking: "Blocking",
   Question: "Question",
+  "Question #{number}": "Question #{number}",
+  "Reply to #{number}": "Reply to #{number}",
   "When free": "When free",
   Answered: "Answered",
   "Mark answered": "Mark answered",

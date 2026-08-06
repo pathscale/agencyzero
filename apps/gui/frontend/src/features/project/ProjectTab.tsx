@@ -47,6 +47,17 @@ export function ProjectTab(props: { tab: Tab; project: Project }): JSX.Element {
       (question) => question.id === selected && !question.answered,
     );
   });
+  const replyQuestionNumber = createMemo(() => {
+    const selected = replyQuestion();
+    if (!selected) return undefined;
+    const ordered = [...(state.questions[props.project.id] ?? [])].sort((left, right) =>
+      left.createdAt === right.createdAt
+        ? left.id.localeCompare(right.id)
+        : left.createdAt.localeCompare(right.createdAt),
+    );
+    const index = ordered.findIndex((question) => question.id === selected.id);
+    return index >= 0 ? index + 1 : undefined;
+  });
   const contextOwner = createMemo(() =>
     [...messages()]
       .reverse()
@@ -428,6 +439,7 @@ export function ProjectTab(props: { tab: Tab; project: Project }): JSX.Element {
                 actions.setTabModel(props.tab.key, props.tab.agent, props.tab.model, permission)
               }
               replyQuestion={replyQuestion()}
+              replyQuestionNumber={replyQuestionNumber()}
               onCancelQuestionReply={() => actions.clearQuestionReply(props.project.id)}
               onSend={(body, study, replyQuestionId) =>
                 actions.send(props.project.id, body, study, replyQuestionId)
