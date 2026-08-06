@@ -1667,6 +1667,22 @@ function createWorkspace() {
       extraThinking: tab?.extraThinking,
       study,
     });
+
+    /*
+     * The next accepted user message is the answer to every standing
+     * `@agency:ask` in this conversation. Clear the local rows at that exact
+     * boundary, not when the agent eventually finishes its reply: keeping the
+     * red blocked dot for another multi-minute turn says the owner still owes
+     * an answer that is already visible in the transcript.
+     *
+     * Rust makes the same transition durable and emits canonical updates. This
+     * optimistic local step covers the IPC gap between acceptance and those
+     * events; a refused send never reaches it, so questions stay open when the
+     * drafted answer was not actually accepted.
+     */
+    setState("questions", projectId, (questions = []) =>
+      questions.map((question) => (question.answered ? question : { ...question, answered: true })),
+    );
   };
 
   /** Hold a prompt, and say what it is waiting for. */
