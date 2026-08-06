@@ -23,7 +23,7 @@ checksum = "320119579fcad9c21884f5c4861d16174d0e06250625266f50fe6898340abefa"
 
 [[package]]
 name = "agency-tools"
-version = "0.1.96"
+version = "0.1.97"
 dependencies = [
  "derive_more 2.1.1",
  "dirs",
@@ -189,25 +189,25 @@ checksum = "f2032f911046de80f0a198e0901378627c33f59ea0ac00e363d481118bd70a53"
 
 [[package]]
 name = "az-agent"
-version = "0.1.96"
+version = "0.1.97"
 dependencies = [
  "az-core",
 ]
 
 [[package]]
 name = "az-agent-proxy"
-version = "0.1.96"
+version = "0.1.97"
 dependencies = [
  "az-core",
 ]
 
 [[package]]
 name = "az-core"
-version = "0.1.96"
+version = "0.1.97"
 
 [[package]]
 name = "az-gui"
-version = "0.1.96"
+version = "0.1.97"
 dependencies = [
  "agent-abstraction",
  "agent-experimental",
@@ -233,7 +233,7 @@ dependencies = [
 
 [[package]]
 name = "az-mcp-proxy"
-version = "0.1.96"
+version = "0.1.97"
 dependencies = [
  "az-core",
 ]
@@ -5601,8 +5601,8 @@ checksum = "1ebf944e87a7c253233ad6766e082e3cd714b5d03812acc24c318f549614536e"
 
 [[package]]
 name = "worktable"
-version = "1.0.0-beta.5"
-source = "git+https://github.com/pathscale/WorkTable?rev=7225a224768b5584bd93909f0c9bce958ed2be92#7225a224768b5584bd93909f0c9bce958ed2be92"
+version = "1.0.0-beta.7"
+source = "git+https://github.com/pathscale/WorkTable?rev=9e5f58a050f20da16ada520c6fc04f2fa0fb1e3b#9e5f58a050f20da16ada520c6fc04f2fa0fb1e3b"
 dependencies = [
  "WorkTablesIndex",
  "arctic-wt",
@@ -5632,8 +5632,8 @@ dependencies = [
 
 [[package]]
 name = "worktable_codegen"
-version = "1.0.0-beta.5"
-source = "git+https://github.com/pathscale/WorkTable?rev=7225a224768b5584bd93909f0c9bce958ed2be92#7225a224768b5584bd93909f0c9bce958ed2be92"
+version = "1.0.0-beta.7"
+source = "git+https://github.com/pathscale/WorkTable?rev=9e5f58a050f20da16ada520c6fc04f2fa0fb1e3b#9e5f58a050f20da16ada520c6fc04f2fa0fb1e3b"
 dependencies = [
  "convert_case 0.6.0",
  "indexmap 2.14.0",
@@ -5695,7 +5695,7 @@ dependencies = [
 
 [[package]]
 name = "wt-migrate"
-version = "0.1.96"
+version = "0.1.97"
 dependencies = [
  "derive_more 2.1.1",
  "eyre",
