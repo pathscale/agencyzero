@@ -2579,6 +2579,7 @@ async fn deliver_injection(
 ) -> bool {
     match control.send(&body).await {
         Ok(()) => {
+            emit_message_receipt(app, project_id, message_id, "read");
             note_io(
                 app,
                 io,
@@ -2607,6 +2608,23 @@ async fn deliver_injection(
             false
         }
     }
+}
+
+/// Tell the window what became of one visible user row.
+///
+/// `sent` means the row is durably in AgencyZero. `read` means the provider
+/// accepted it, either by emitting the opening run event or acknowledging a
+/// live steer. The event is intentionally session-local: once a reply lands,
+/// the transcript itself is the durable acknowledgement.
+fn emit_message_receipt(app: &AppHandle, project_id: &str, message_id: &str, status: &str) {
+    let _ = app.emit(
+        "message:receipt",
+        serde_json::json!({
+            "projectId": project_id,
+            "messageId": message_id,
+            "status": status,
+        }),
+    );
 }
 
 /// Persist a new user message, or recover the exact row whose live steer was
@@ -5665,6 +5683,7 @@ pub async fn send_message(
 
             let user_message =
                 user_message_for_send(&app, &state, &input, agent_name, &model, &permission, true)?;
+            emit_message_receipt(&app, &input.project_id, &user_message.id, "sent");
 
             if inject
                 .send(InjectedMessage {
@@ -5712,6 +5731,7 @@ pub async fn send_message(
 
     let user_message =
         user_message_for_send(&app, &state, &input, agent_name, &model, &permission, false)?;
+    emit_message_receipt(&app, &input.project_id, &user_message.id, "sent");
     // The run exists from this moment: the slot is claimed and the spawn below
     // cannot be refused. This is what starts the transcript's status line —
     // event-driven rather than assumed by the sender, so a backend that fakes
@@ -6508,6 +6528,10 @@ async fn drive_run(
     // it lands. The loop exits, and the tail below tears the agent down.
     let mut cancelled = false;
     let mut stalled_injection = false;
+    // The first provider event proves the opening prompt crossed the process
+    // boundary. A live steer has its own acknowledgement in
+    // `deliver_injection` and does not touch this flag.
+    let mut opening_message_read = false;
     // Set when the idle deadline trips: a run that went silent long enough to be
     // treated as wedged. Recovered like a stall rather than reported as a crash.
     let mut idle_stalled = false;
@@ -6586,6 +6610,10 @@ async fn drive_run(
                 continue;
             }
         };
+        if !opening_message_read {
+            emit_message_receipt(&app, &project_id, &turn_id, "read");
+            opening_message_read = true;
+        }
         let is_text = matches!(&event, Event::Text(_));
         match event {
             Event::ApprovalRequest(approval) => {

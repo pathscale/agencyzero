@@ -556,6 +556,8 @@ const en = {
   "tokens processed": "tokens processed",
   in: "in",
   read: "read",
+  Sent: "Sent",
+  "Read by agent": "Read by agent",
   write: "write",
   out: "out",
   Turns: "Turns",

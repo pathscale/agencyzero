@@ -26,6 +26,7 @@ import type {
   DataLocationView,
   GlobalSettings,
   Message,
+  MessageReceipt,
   PendingApproval,
   Permission,
   PricingTable,
@@ -70,6 +71,8 @@ type WorkspaceState = {
   projects: Project[];
   items: Record<string, ProjectItem[]>;
   messages: Record<string, Message[]>;
+  /** Live sent/read acknowledgements, keyed by project and message id. */
+  messageReceipts: Record<string, Record<string, MessageReceipt>>;
   running: Record<string, RunningTask[]>;
   taskLog: Record<string, TaskLogEntry[]>;
   /** PRs cut during runs, per project, dismissed rows included. */
@@ -314,6 +317,7 @@ function createWorkspace() {
     projects: [],
     items: {},
     messages: {},
+    messageReceipts: {},
     running: {},
     taskLog: {},
     pullRequests: {},
@@ -973,6 +977,9 @@ function createWorkspace() {
         appendMessage(message);
       });
     });
+    await bind("message:receipt", ({ projectId, messageId, status }) => {
+      setState("messageReceipts", projectId, messageId, status);
+    });
     await bind("moderation:blocked", appendMessage);
 
     const upsertTask = (task: RunningTask) => {
@@ -1425,6 +1432,7 @@ function createWorkspace() {
         produce((draft) => {
           delete draft.items[projectId];
           delete draft.messages[projectId];
+          delete draft.messageReceipts[projectId];
           delete draft.running[projectId];
           delete draft.taskLog[projectId];
           delete draft.logTotals[projectId];

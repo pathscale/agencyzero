@@ -352,6 +352,12 @@ export interface AppEvents {
   "question:updated": Question;
   /** author: user | agent | moderator. */
   "message:appended": Message;
+  /** One check when stored, two once the provider accepts the message. */
+  "message:receipt": {
+    projectId: string;
+    messageId: string;
+    status: import("~/types").MessageReceipt;
+  };
   /** The tab dot goes blocked until this one is resolved. */
   "moderation:blocked": Message;
   /** `Event::ToolCall`. */
