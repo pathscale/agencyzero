@@ -91,6 +91,18 @@ describe("Composer", () => {
     expect(primary).toContainElement(getByLabelText("Permission"));
     expect(secondary).toHaveClass("ml-auto", "justify-end");
     expect(secondary).toContainElement(getByLabelText("Send"));
+    for (const button of controls!.querySelectorAll("button")) {
+      expect(
+        button.classList.contains("h-[24px]") || button.classList.contains("size-[24px]"),
+        `${button.getAttribute("aria-label") ?? button.textContent} must use the 24px composer height`,
+      ).toBe(true);
+    }
+    for (const trigger of controls!.querySelectorAll('[data-slot="dropdown-trigger"]')) {
+      // @pathscale/ui defaults dropdown triggers to a 36px minimum with 8px
+      // vertical padding. Both properties must be overridden; h-[24px] alone
+      // looks correct in source while rendering tall.
+      expect(trigger).toHaveClass("h-[24px]", "min-h-[24px]", "py-0", "leading-none");
+    }
     await booted();
   });
 
