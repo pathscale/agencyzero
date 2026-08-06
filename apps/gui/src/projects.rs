@@ -140,6 +140,10 @@ impl From<ProjectItemRow> for ProjectItemDto {
 pub struct UsageDto {
     /// Everything this turn processed: input, output and both cache figures.
     pub tokens: u64,
+    /// Uncached input tokens across every model call in this turn.
+    pub input_tokens: Option<u64>,
+    /// Generated tokens across every model call in this turn.
+    pub output_tokens: Option<u64>,
     /// Every input token the turn was charged for, cached or not — the size of
     /// the conversation as the model saw it.
     ///
@@ -154,6 +158,8 @@ pub struct UsageDto {
     pub context_window: Option<u64>,
     /// Tokens served from cache during this turn. Additive across turns.
     pub cache_reads: Option<u64>,
+    /// Tokens written to cache during this turn.
+    pub cache_writes: Option<u64>,
     pub reasoning_tokens: Option<u64>,
     pub cost_usd: Option<f64>,
     /// Copilot's only unit.
@@ -277,9 +283,12 @@ impl From<&agent_abstraction::Usage> for UsageDto {
     fn from(usage: &agent_abstraction::Usage) -> Self {
         UsageDto {
             tokens: processed_tokens(usage),
+            input_tokens: usage.input_tokens,
+            output_tokens: usage.output_tokens,
             context_tokens: usage.context_tokens,
             context_window: usage.context_window,
             cache_reads: usage.cache_read_tokens,
+            cache_writes: usage.cache_write_tokens,
             reasoning_tokens: usage.reasoning_tokens,
             cost_usd: usage.cost_usd,
             premium_requests: usage.premium_requests,
@@ -8332,6 +8341,9 @@ mod tests {
             "everything processed: input, output and both cache figures"
         );
         assert_eq!(encoded["cacheReads"], 4_096);
+        assert_eq!(encoded["cacheWrites"], 64);
+        assert_eq!(encoded["inputTokens"], 1_200);
+        assert_eq!(encoded["outputTokens"], 300);
         assert_eq!(encoded["costUsd"], 0.017);
         assert!(encoded["premiumRequests"].is_null());
         // The names the frontend actually reads. Present as camelCase, and the

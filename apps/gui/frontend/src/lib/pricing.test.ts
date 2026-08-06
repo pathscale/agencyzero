@@ -101,11 +101,12 @@ describe("estimate", () => {
 
 describe("estimateTurnCost", () => {
   it("decomposes a finished turn from its token figures", () => {
-    // 100k context, 90k of it cache reads, 10k output beyond context.
+    // 10k fresh input, 90k cache reads, and 10k output.
     const usd = estimateTurnCost(table, "claude-opus-4-8", {
-      tokens: 110_000,
-      contextTokens: 100_000,
+      inputTokens: 10_000,
+      outputTokens: 10_000,
       cacheReads: 90_000,
+      cacheWrites: 0,
     });
     // 90k*0.5 + 10k*5 + 10k*25, all per million.
     const expected = (90_000 * 0.5 + 10_000 * 5.0 + 10_000 * 25.0) / 1_000_000;
@@ -114,8 +115,16 @@ describe("estimateTurnCost", () => {
 
   it("returns null for an unpriced model", () => {
     expect(
-      estimateTurnCost(table, "mystery", { tokens: 1000, contextTokens: 500, cacheReads: 0 }),
+      estimateTurnCost(table, "mystery", {
+        inputTokens: 500,
+        outputTokens: 500,
+        cacheReads: 0,
+      }),
     ).toBeNull();
+  });
+
+  it("refuses to invent output cost for a legacy multi-call turn", () => {
+    expect(estimateTurnCost(table, "gpt-5.6-sol", { cacheReads: 5_000_000 })).toBeNull();
   });
 });
 

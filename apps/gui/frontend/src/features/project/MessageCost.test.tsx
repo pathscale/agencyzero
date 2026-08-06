@@ -16,9 +16,12 @@ function message(agent: Message["agent"], overrides: Partial<Message> = {}): Mes
     permission: "edit",
     usage: {
       tokens: 340_500,
+      inputTokens: 50_000,
+      outputTokens: 40_500,
       contextTokens: 300_000,
       contextWindow: null,
       cacheReads: 250_000,
+      cacheWrites: 0,
       reasoningTokens: null,
       costUsd: agent === "claude" ? 2.89 : null,
       premiumRequests: null,
@@ -58,6 +61,17 @@ describe("per-message cost and tokens", () => {
   it("puts Codex's processed tokens beside its estimated cost", async () => {
     const { container, booted } = mount(message("codex"));
     await waitFor(() => expect(container).toHaveTextContent("est. $0.636 · 340.5k tok"));
+    await booted();
+  });
+
+  it("does not invent a cost for a legacy multi-call Codex turn", async () => {
+    const legacy = message("codex");
+    delete legacy.usage?.inputTokens;
+    delete legacy.usage?.outputTokens;
+    delete legacy.usage?.cacheWrites;
+    const { container, booted } = mount(legacy);
+    await waitFor(() => expect(container).toHaveTextContent("340.5k tok"));
+    expect(container).not.toHaveTextContent("est.");
     await booted();
   });
 });
