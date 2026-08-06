@@ -583,7 +583,7 @@ fn get_settings(state: State<'_, AppState>) -> GlobalSettings {
             }
         })
         .unwrap_or_default();
-    settings::normalize_task_manager(&mut settings);
+    settings::normalize(&mut settings);
     settings
 }
 
@@ -622,7 +622,7 @@ async fn set_settings(
     // fail here rather than land on disk and break the next launch.
     let mut parsed: GlobalSettings =
         serde_json::from_value(merged.clone()).map_err(|error| error.to_string())?;
-    settings::normalize_task_manager(&mut parsed);
+    settings::normalize(&mut parsed);
     let boundary = study::normalize_setting(&previous.study_analytics, &mut parsed.study_analytics);
     let merged = serde_json::to_value(&parsed).map_err(|error| error.to_string())?;
 

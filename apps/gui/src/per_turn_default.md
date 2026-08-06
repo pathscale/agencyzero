@@ -22,6 +22,9 @@ silent no-op.
 - `<ps @agency:items.retire(id: "<id>")>` — remove a row that should not exist.
 - When the owner says to cancel or stop working on an item, retire it. A pause,
   hold, or "not now" keeps the row.
+- An item marked `finished` remains visible for
+  `{{agent_finished_retention_turns}}` subsequent user turns, then AgencyZero
+  retires it automatically. Reopening it before then cancels retirement.
 - `<ps @agency:ask(text: "<your question>", urgency: "blocking")>` — ask the
   owner. `urgency` is `critical` (answer now), `blocking` (you cannot proceed
   until answered), or `passive` (answer when free, you keep working). Add

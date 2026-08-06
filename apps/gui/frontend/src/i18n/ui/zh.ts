@@ -42,7 +42,12 @@ const zh = {
   "reasoning level a new tab starts on": "新标签页的初始推理级别",
   "Default effort": "默认推理强度",
   "Completed items": "已完成事项",
-  "what marking an item finished does to the row": "将事项标为完成后如何处理该行",
+  "what manual completion does to the row": "手动完成后如何处理该行",
+  "Agent-finished retention": "智能体完成项保留时间",
+  "user turns kept before automatic retirement": "自动移除前保留的用户轮数",
+  "1 turn": "保留 1 轮",
+  "2 turns": "保留 2 轮",
+  "3 turns": "保留 3 轮",
   "Inject AgencyZero and Prompt Syntax per turn": "每轮注入 AgencyZero 与 Prompt Syntax",
   "extended features (items, questions, PR tracking); override with AgencyZeroPerTurn.md":
     "扩展功能（事项、提问、PR 跟踪）；可用 AgencyZeroPerTurn.md 覆盖",

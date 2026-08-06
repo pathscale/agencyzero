@@ -926,15 +926,9 @@ async fn write_item_status(
     tables: &crate::db::tables::Tables,
     id: &str,
     status: &str,
+    delete_finished: bool,
 ) -> Result<ItemStatusWrite, String> {
-    let delete_completed = status == "finished"
-        && tables
-            .kv_get(crate::settings::KEY)
-            .and_then(|raw| serde_json::from_str::<crate::settings::GlobalSettings>(&raw).ok())
-            .unwrap_or_default()
-            .completed_items
-            == "delete";
-    if delete_completed {
+    if status == "finished" && delete_finished {
         let mut row = tables
             .project_item
             .select(id.to_string())
@@ -963,6 +957,98 @@ async fn write_item_status(
         .select(id.to_string())
         .ok_or_else(|| format!("no item {id}"))?;
     Ok(ItemStatusWrite::Updated(ProjectItemDto::from(row)))
+}
+
+const FINISHED_RETIRE_PREFIX: &str = "finished-retire-turns:";
+
+fn finished_retire_key(item_id: &str) -> String {
+    format!("{FINISHED_RETIRE_PREFIX}{item_id}")
+}
+
+fn global_settings(tables: &crate::db::tables::Tables) -> crate::settings::GlobalSettings {
+    tables
+        .kv_get(crate::settings::KEY)
+        .and_then(|raw| serde_json::from_str(&raw).ok())
+        .unwrap_or_default()
+}
+
+fn agent_finished_retention_turns(tables: &crate::db::tables::Tables) -> u8 {
+    global_settings(tables)
+        .agent_finished_retention_turns
+        .clamp(1, 3)
+}
+
+async fn clear_finished_retirement(
+    tables: &crate::db::tables::Tables,
+    item_id: &str,
+) -> Result<(), String> {
+    let key = finished_retire_key(item_id);
+    if tables.kv.select(key.clone()).is_some() {
+        tables
+            .kv
+            .delete(key)
+            .await
+            .map_err(|error| error.to_string())?;
+    }
+    Ok(())
+}
+
+async fn schedule_finished_retirement(
+    tables: &crate::db::tables::Tables,
+    item_id: &str,
+) -> Result<(), String> {
+    tables
+        .kv_put(
+            &finished_retire_key(item_id),
+            agent_finished_retention_turns(tables).to_string(),
+        )
+        .await
+        .map_err(|error| error.to_string())
+}
+
+/// Advance this project's agent-finished rows by one user turn.
+///
+/// The marker is durable, so closing the app cannot turn the configured grace
+/// period into retained history. A reopened row cancels its marker instead of
+/// being deleted later under a new status.
+async fn age_finished_items(
+    tables: &crate::db::tables::Tables,
+    project_id: &str,
+) -> Result<Vec<ProjectItemDto>, String> {
+    let markers = tables.kv.select_all().execute().unwrap_or_default();
+    let mut retired = Vec::new();
+    for marker in markers {
+        let Some(item_id) = marker.key.strip_prefix(FINISHED_RETIRE_PREFIX) else {
+            continue;
+        };
+        let Some(row) = tables.project_item.select(item_id.to_string()) else {
+            clear_finished_retirement(tables, item_id).await?;
+            continue;
+        };
+        if row.project_id != project_id {
+            continue;
+        }
+        if row.status != "finished" {
+            clear_finished_retirement(tables, item_id).await?;
+            continue;
+        }
+        let remaining = marker.value.parse::<u8>().unwrap_or(1);
+        if remaining > 1 {
+            tables
+                .kv_put(&marker.key, (remaining - 1).to_string())
+                .await
+                .map_err(|error| error.to_string())?;
+            continue;
+        }
+        tables
+            .project_item
+            .delete(item_id.to_string())
+            .await
+            .map_err(|error| error.to_string())?;
+        clear_finished_retirement(tables, item_id).await?;
+        retired.push(ProjectItemDto::from(row));
+    }
+    Ok(retired)
 }
 
 /// Move one item through pending → active → finished.
@@ -1008,7 +1094,10 @@ pub async fn set_item_status(
         );
         return Err(format!("not an item status: {status}"));
     }
-    let written = write_item_status(&state.tables, &id, &status).await?;
+    clear_finished_retirement(&state.tables, &id).await?;
+    let delete_finished =
+        status == "finished" && global_settings(&state.tables).completed_items == "delete";
+    let written = write_item_status(&state.tables, &id, &status, delete_finished).await?;
     written.emit(&app);
     let dto = written.item().clone();
     let mut study = crate::study::Record::manual(
@@ -1583,7 +1672,18 @@ async fn apply_directive(
                     code: format!("WRITE_FAILED: {error}"),
                 };
             }
-            match write_item_status(tables, &resolved, &status).await {
+            let retirement = if status == "finished" {
+                schedule_finished_retirement(tables, &resolved).await
+            } else {
+                clear_finished_retirement(tables, &resolved).await
+            };
+            if let Err(error) = retirement {
+                return Outcome::Refused {
+                    what: format!("items.state({resolved}) retirement"),
+                    code: format!("WRITE_FAILED: {error}"),
+                };
+            }
+            match write_item_status(tables, &resolved, &status, false).await {
                 Ok(written) => {
                     written.emit(app);
                     let said = match pr_number {
@@ -1683,25 +1783,27 @@ async fn apply_directive(
                 }
                 (Some(existing), None) => {
                     let moved = existing.status != status;
-                    if moved
-                        && let Err(error) = tables
-                            .project_item
-                            .update_status_by_id(
-                                ItemStatusByIdQuery {
-                                    status: status.clone(),
-                                },
-                                existing.id.clone(),
-                            )
-                            .await
-                    {
+                    let retirement = if status == "finished" {
+                        schedule_finished_retirement(tables, &existing.id).await
+                    } else {
+                        clear_finished_retirement(tables, &existing.id).await
+                    };
+                    if let Err(error) = retirement {
                         return Outcome::Refused {
-                            what: format!("items.add({title:?})"),
+                            what: format!("items.add({title:?}) retirement"),
                             code: format!("WRITE_FAILED: {error}"),
                         };
                     }
-                    if moved && let Some(updated) = tables.project_item.select(existing.id.clone())
-                    {
-                        let _ = app.emit("item:updated", ProjectItemDto::from(updated));
+                    if moved {
+                        match write_item_status(tables, &existing.id, &status, false).await {
+                            Ok(written) => written.emit(app),
+                            Err(error) => {
+                                return Outcome::Refused {
+                                    what: format!("items.add({title:?})"),
+                                    code: format!("WRITE_FAILED: {error}"),
+                                };
+                            }
+                        }
                     }
                     let state = moved.then(|| format!("; -> {status}"));
                     return Outcome::Done(match handle {
@@ -1725,6 +1827,14 @@ async fn apply_directive(
                 position: u32::try_from(target_rows.len()).unwrap_or(0),
                 reference: String::new(),
             };
+            if row.status == "finished"
+                && let Err(error) = schedule_finished_retirement(tables, &row.id).await
+            {
+                return Outcome::Refused {
+                    what: format!("items.add({title:?}) retirement"),
+                    code: format!("WRITE_FAILED: {error}"),
+                };
+            }
             match tables.project_item.insert(row.clone()) {
                 Ok(_) => {
                     let said = match handle {
@@ -1763,6 +1873,13 @@ async fn apply_directive(
                 .unwrap_or_else(|| project_id.to_string());
             match tables.project_item.delete(resolved.clone()).await {
                 Ok(()) => {
+                    if let Err(error) = clear_finished_retirement(tables, &resolved).await {
+                        crate::log!(
+                            crate::log::Level::Warn,
+                            "items",
+                            "could not clear retirement marker for {resolved}: {error}"
+                        );
+                    }
                     let _ = app.emit(
                         "item:deleted",
                         serde_json::json!({ "id": resolved, "projectId": target_project }),
@@ -5489,6 +5606,13 @@ pub async fn send_message(
         ));
     }
 
+    for retired in age_finished_items(&state.tables, &input.project_id).await? {
+        let _ = app.emit(
+            "item:deleted",
+            serde_json::json!({ "id": retired.id, "projectId": retired.project_id }),
+        );
+    }
+
     // Read the durable row before deciding whether this message can ride an
     // already-open Codex turn. A turn's app-server sandbox cannot be widened in
     // place: if Settings changed its roots, the frontend queues this message
@@ -6118,14 +6242,13 @@ async fn drive_run(
      * On by default, and a user file overrides the built-in text without a
      * rebuild; the toggle is the deliberate off. See `crate::per_turn`.
      */
-    let inject_per_turn = tables
-        .kv_get(crate::settings::KEY)
-        .and_then(|raw| serde_json::from_str::<crate::settings::GlobalSettings>(&raw).ok())
-        .unwrap_or_default()
-        .per_turn_injection;
-    if inject_per_turn {
+    let settings = global_settings(&tables);
+    if settings.per_turn_injection {
         let config_dir = app.state::<crate::AppState>().config_dir.clone();
-        let instructions = crate::per_turn::instructions(&config_dir);
+        let instructions = crate::per_turn::instructions(
+            &config_dir,
+            settings.agent_finished_retention_turns.clamp(1, 3),
+        );
         if !instructions.trim().is_empty() {
             if !system.is_empty() {
                 system.push_str("\n\n");
@@ -9000,7 +9123,7 @@ mod tests {
             })
             .expect("item inserts");
 
-        let written = write_item_status(&tables, "item-delete-now", "finished")
+        let written = write_item_status(&tables, "item-delete-now", "finished", true)
             .await
             .expect("finished status applies");
 
@@ -9016,6 +9139,82 @@ mod tests {
             .shutdown()
             .await
             .expect("completed-item store drains");
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[tokio::test]
+    async fn agent_finished_items_retire_after_the_persisted_number_of_turns() {
+        let dir = std::env::temp_dir().join(format!(
+            "az-project-finished-retention-{}-{}",
+            std::process::id(),
+            chrono::Utc::now().timestamp_nanos_opt().unwrap_or_default()
+        ));
+        let tables = crate::db::tables::Tables::open(&dir)
+            .await
+            .expect("finished-retention store opens");
+        let settings = crate::settings::GlobalSettings {
+            agent_finished_retention_turns: 2,
+            ..crate::settings::GlobalSettings::default()
+        };
+        tables
+            .kv_put(
+                crate::settings::KEY,
+                serde_json::to_string(&settings).expect("settings serialize"),
+            )
+            .await
+            .expect("retention setting writes");
+        tables
+            .project_item
+            .insert(ProjectItemRow {
+                id: "item-retire-later".into(),
+                project_id: "project-a".into(),
+                title: "Verified result".into(),
+                status: "finished".into(),
+                position: 0,
+                reference: String::new(),
+            })
+            .expect("item inserts");
+        schedule_finished_retirement(&tables, "item-retire-later")
+            .await
+            .expect("retirement schedules");
+
+        assert!(
+            age_finished_items(&tables, "project-a")
+                .await
+                .expect("first turn ages")
+                .is_empty()
+        );
+        assert!(
+            tables
+                .project_item
+                .select("item-retire-later".to_string())
+                .is_some(),
+            "the row stays visible for the first subsequent turn"
+        );
+
+        let retired = age_finished_items(&tables, "project-a")
+            .await
+            .expect("second turn ages");
+        assert_eq!(retired.len(), 1);
+        assert!(
+            tables
+                .project_item
+                .select("item-retire-later".to_string())
+                .is_none(),
+            "the second subsequent turn retires the row"
+        );
+        assert!(
+            tables
+                .kv
+                .select(finished_retire_key("item-retire-later"))
+                .is_none(),
+            "retirement metadata is cleaned with the item"
+        );
+
+        tables
+            .shutdown()
+            .await
+            .expect("finished-retention store drains");
         let _ = std::fs::remove_dir_all(dir);
     }
 

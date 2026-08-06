@@ -41,6 +41,10 @@ pub struct GlobalSettings {
     /// `"delete"` removes it outright for owners who want the list to be only
     /// what is still open.
     pub completed_items: String,
+    /// How many subsequent user turns an agent-finished row remains visible
+    /// before AgencyZero retires it. Persisted so runtime behavior, Settings,
+    /// and the injected instruction all read one value.
+    pub agent_finished_retention_turns: u8,
     /// How the workspace is coloured. See [`Theme`].
     pub theme: Theme,
     /// Explicit local consent for the content-free PS deployment study.
@@ -306,6 +310,7 @@ impl Default for GlobalSettings {
             forward_proxy_vars: false,
             notifications: Notifications::default(),
             completed_items: "resolve".into(),
+            agent_finished_retention_turns: 2,
             theme: Theme::default(),
             study_analytics: StudyAnalytics::default(),
             per_turn_injection: true,
@@ -358,6 +363,12 @@ pub fn normalize_task_manager(settings: &mut GlobalSettings) {
     }
 }
 
+/// Clamp persisted settings whose valid range is narrower than their wire type.
+pub fn normalize(settings: &mut GlobalSettings) {
+    normalize_task_manager(settings);
+    settings.agent_finished_retention_turns = settings.agent_finished_retention_turns.clamp(1, 3);
+}
+
 /// Merge a partial patch into a stored record.
 ///
 /// Objects merge key by key; everything else replaces. **Arrays replace rather
@@ -396,6 +407,7 @@ mod tests {
             "research collection is opt-in"
         );
         assert!(back.study_analytics.session_id.is_empty());
+        assert_eq!(back.agent_finished_retention_turns, 2);
         assert!(json.contains("defaultAgent"), "must be camelCase: {json}");
     }
 
@@ -410,6 +422,7 @@ mod tests {
         assert_eq!(loaded.task_manager.agent, "codex");
         assert_eq!(loaded.task_manager.permission, "ask");
         assert!(!loaded.study_analytics.enabled);
+        assert_eq!(loaded.agent_finished_retention_turns, 2);
         assert_eq!(
             loaded.moderator.model, "haiku",
             "absent blocks use defaults"
