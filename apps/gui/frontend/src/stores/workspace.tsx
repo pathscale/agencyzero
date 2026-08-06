@@ -205,6 +205,8 @@ export type RunStatus = {
    * gap.
    */
   liveTokens: number | null;
+  /** Running-turn estimate; terminal provider cost remains canonical. */
+  liveCostUsd: number | null;
   /**
    * The conversation's size and the window it sits in, as of the last report.
    *
@@ -1191,6 +1193,7 @@ function createWorkspace() {
         startedAt: current?.startedAt ?? Date.now(),
         activity: current?.activity ?? "working…",
         liveTokens: current?.liveTokens ?? null,
+        liveCostUsd: current?.liveCostUsd ?? null,
         contextTokens: current?.contextTokens ?? null,
         contextWindow: current?.contextWindow ?? null,
         persistedChars: chars,
@@ -1205,19 +1208,23 @@ function createWorkspace() {
       }));
     });
 
-    await bind("run:usage", ({ projectId, tokens, contextTokens, contextWindow }) => {
-      setState("runStatus", projectId, (current) => ({
-        ...runIdentity(projectId, current),
-        startedAt: current?.startedAt ?? Date.now(),
-        activity: current?.activity ?? "working…",
-        persistedChars: current?.persistedChars ?? 0,
-        liveTokens: tokens,
-        // Held rather than overwritten with a null: an agent that reports the
-        // window once and the tokens thereafter would otherwise blank it.
-        contextTokens: contextTokens ?? current?.contextTokens ?? null,
-        contextWindow: contextWindow ?? current?.contextWindow ?? null,
-      }));
-    });
+    await bind(
+      "run:usage",
+      ({ projectId, tokens, contextTokens, contextWindow, estimatedCostUsd }) => {
+        setState("runStatus", projectId, (current) => ({
+          ...runIdentity(projectId, current),
+          startedAt: current?.startedAt ?? Date.now(),
+          activity: current?.activity ?? "working…",
+          persistedChars: current?.persistedChars ?? 0,
+          liveTokens: tokens,
+          liveCostUsd: estimatedCostUsd,
+          // Held rather than overwritten with a null: an agent that reports the
+          // window once and the tokens thereafter would otherwise blank it.
+          contextTokens: contextTokens ?? current?.contextTokens ?? null,
+          contextWindow: contextWindow ?? current?.contextWindow ?? null,
+        }));
+      },
+    );
 
     await bind("run:stopped", ({ projectId, agent, model, permission, stop, exitCode }) => {
       /*
@@ -1665,6 +1672,7 @@ function createWorkspace() {
       startedAt: current?.startedAt ?? Date.now(),
       persistedChars: current?.persistedChars ?? 0,
       liveTokens: current?.liveTokens ?? null,
+      liveCostUsd: current?.liveCostUsd ?? null,
       contextTokens: current?.contextTokens ?? null,
       contextWindow: current?.contextWindow ?? null,
       activity,

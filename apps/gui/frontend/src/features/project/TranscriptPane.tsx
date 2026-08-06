@@ -414,6 +414,12 @@ export function RunStatusLine(props: {
     return tx("~{count} output", { count });
   };
 
+  /** What the reported traffic has cost at the current local price table. */
+  const liveCostText = () => {
+    const cost = props.status.liveCostUsd;
+    return cost !== null && cost > 0 ? tx("est. {cost}", { cost: costLabel(cost) }) : null;
+  };
+
   const isSynced = () => props.status.persistedChars >= props.streamedChars;
 
   return (
@@ -480,6 +486,21 @@ export function RunStatusLine(props: {
                 }
               >
                 {usage()}
+              </span>
+            </>
+          )}
+        </Show>
+        <Show when={liveCostText()}>
+          {(cost) => (
+            <>
+              {" · "}
+              <span
+                class="font-semibold text-accent"
+                title={tx(
+                  "Live estimate from reported input, output and cache traffic plus unfinished streamed output. The provider's terminal cost remains canonical.",
+                )}
+              >
+                {cost()}
               </span>
             </>
           )}

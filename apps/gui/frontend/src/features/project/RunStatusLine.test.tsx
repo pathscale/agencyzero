@@ -22,6 +22,7 @@ function status(overrides: Partial<RunStatus> = {}): RunStatus {
     activity: "working…",
     persistedChars: 0,
     liveTokens: null,
+    liveCostUsd: null,
     contextTokens: null,
     contextWindow: null,
     ...overrides,
@@ -47,6 +48,13 @@ describe("the run status line's token figure", () => {
     });
     expect(container.textContent).toContain("225.3k ctx");
     expect(container.textContent).toContain("1.7M processed");
+  });
+
+  it("puts the running estimate on the cancel line", () => {
+    const { container } = mount({
+      status: { liveTokens: 1_722_572, contextTokens: 225_252, liveCostUsd: 1.387 },
+    });
+    expect(container.textContent).toContain("est. $1.39");
   });
 
   /*

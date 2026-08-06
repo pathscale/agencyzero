@@ -376,6 +376,8 @@ const zh = {
     "最新模型调用的当前会话大小。这是上下文窗口占用量，不是累计计费流量。",
   "Cumulative billable token traffic across this turn's model calls: fresh input, repeated cached input, cache writes, and generated output reported so far.":
     "本轮所有模型调用的累计计费令牌流量：新输入、重复缓存输入、缓存写入及目前已报告的生成输出。",
+  "Live estimate from reported input, output and cache traffic plus unfinished streamed output. The provider's terminal cost remains canonical.":
+    "根据已报告的输入、输出、缓存流量及未完成的流式输出计算的实时估算。最终以提供商的终端费用为准。",
   "recent text not yet saved": "最新文本尚未保存",
   "Everything streamed so far is saved to the store": "目前为止的所有流式文本均已保存到存储",
   "The store checkpoint runs every 200ms — the newest text is not saved yet":

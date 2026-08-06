@@ -435,6 +435,8 @@ export interface AppEvents {
      */
     contextTokens: number | null;
     contextWindow: number | null;
+    /** Local price-table estimate for consumption reported so far. */
+    estimatedCostUsd: number | null;
   };
   /**
    * What this agent can do, from its own catalogue at run start.

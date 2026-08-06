@@ -8127,6 +8127,15 @@ async fn drive_run(
                  * bookkeeping.
                  */
                 turn_usage.accumulate(&usage);
+                let unfinished_output =
+                    u64::try_from(streamed_text.chars().count() / 4).unwrap_or(u64::MAX);
+                let estimated_cost_usd = crate::pricing::estimate_running_cost(
+                    &model,
+                    turn_usage.input_tokens.unwrap_or(0),
+                    turn_usage.output_tokens.unwrap_or(unfinished_output),
+                    turn_usage.cache_read_tokens.unwrap_or(0),
+                    turn_usage.cache_write_tokens.unwrap_or(0),
+                );
                 let _ = app.emit(
                     "run:usage",
                     serde_json::json!({
@@ -8149,6 +8158,7 @@ async fn drive_run(
                          */
                         "contextTokens": turn_usage.context_tokens,
                         "contextWindow": turn_usage.context_window,
+                        "estimatedCostUsd": estimated_cost_usd,
                     }),
                 );
             }
