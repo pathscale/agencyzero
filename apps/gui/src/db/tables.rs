@@ -623,17 +623,20 @@ impl Tables {
             drain("project", self.project.wait_for_ops()),
             drain("project_item", self.project_item.wait_for_ops()),
             drain("message", self.message.wait_for_ops()),
+            drain("message_chunk", self.message_chunk.wait_for_ops()),
             drain("task_log", self.task_log.wait_for_ops()),
             drain("agent_io_row", self.agent_io.wait_for_ops()),
             drain("usage_ledger", self.usage_ledger.wait_for_ops()),
+            drain("usage_cache", self.usage_cache.wait_for_ops()),
             drain("approval_rule", self.approval_rule.wait_for_ops()),
             drain("pull_request", self.pull_request.wait_for_ops()),
-            drain("study_event", self.study_event.wait_for_ops()),
+            drain("question", self.question.wait_for_ops()),
             drain("question_reply", self.question_reply.wait_for_ops()),
+            drain("study_event", self.study_event.wait_for_ops()),
         );
         let errors: Vec<String> = [
             results.0, results.1, results.2, results.3, results.4, results.5, results.6, results.7,
-            results.8, results.9, results.10,
+            results.8, results.9, results.10, results.11, results.12, results.13,
         ]
         .into_iter()
         .filter_map(Result::err)
