@@ -219,6 +219,18 @@ export type RunStatus = {
   contextWindow: number | null;
 };
 
+/** Billable running totals never go backwards; context size deliberately can. */
+export function monotonicUsage(
+  current: number | null | undefined,
+  incoming: number | null | undefined,
+): number | null {
+  if (incoming === null || incoming === undefined || !Number.isFinite(incoming)) {
+    return current ?? null;
+  }
+  if (current === null || current === undefined || !Number.isFinite(current)) return incoming;
+  return Math.max(current, incoming);
+}
+
 /**
  * Why a prompt is waiting instead of being sent.
  *
@@ -1216,8 +1228,12 @@ function createWorkspace() {
           startedAt: current?.startedAt ?? Date.now(),
           activity: current?.activity ?? "working…",
           persistedChars: current?.persistedChars ?? 0,
-          liveTokens: tokens,
-          liveCostUsd: estimatedCostUsd,
+          // A provider can begin a new accounting snapshot after compacting.
+          // Processed traffic and its cost are cumulative for this run, so a
+          // lower snapshot must not erase work already shown. Context below is
+          // latest-wins on purpose: compacting is expected to shrink it.
+          liveTokens: monotonicUsage(current?.liveTokens, tokens),
+          liveCostUsd: monotonicUsage(current?.liveCostUsd, estimatedCostUsd),
           // Held rather than overwritten with a null: an agent that reports the
           // window once and the tokens thereafter would otherwise blank it.
           contextTokens: contextTokens ?? current?.contextTokens ?? null,

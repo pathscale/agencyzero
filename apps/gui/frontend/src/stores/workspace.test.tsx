@@ -3,12 +3,21 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { setPrefs } from "~/stores/prefs";
 import {
   isLimitLive,
+  monotonicUsage,
   queueReason,
   shortModelName,
   useWorkspace,
   type Workspace,
   WorkspaceProvider,
 } from "~/stores/workspace";
+
+describe("running usage continuity", () => {
+  it("keeps cumulative traffic and cost through a lower post-compact snapshot", () => {
+    expect(monotonicUsage(91_800_000, 225_000)).toBe(91_800_000);
+    expect(monotonicUsage(46.768, 0.14)).toBe(46.768);
+    expect(monotonicUsage(null, 225_000)).toBe(225_000);
+  });
+});
 
 /**
  * Mounts the provider and hands back the live workspace once it has loaded.
