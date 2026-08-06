@@ -446,7 +446,7 @@ export function ProjectTab(props: { tab: Tab; project: Project }): JSX.Element {
         aria-hidden={!prefs.projectPanelVisible}
         class={`min-h-0 flex-none overflow-hidden transition-[width,margin,opacity,transform] duration-200 ease-out motion-reduce:transition-none ${
           prefs.projectPanelVisible
-            ? "ml-3 w-[322px] translate-x-0 opacity-100"
+            ? "ml-4 w-[322px] translate-x-0 opacity-100"
             : "pointer-events-none ml-0 w-0 translate-x-3 opacity-0"
         }`}
       >
@@ -457,10 +457,10 @@ export function ProjectTab(props: { tab: Tab; project: Project }): JSX.Element {
 }
 
 /**
- * The sidebar handle starts at the conversation boundary and grows only into
- * the gap on its right. Its flat edge therefore never covers the conversation
- * scrollbar. The arrow points toward the action: right closes the visible
- * sidebar, left restores the hidden one.
+ * The sidebar handle starts at the conversation boundary and occupies the
+ * whole gap on its right. A true 16-by-32 half-circle is small enough that it
+ * reaches neither panel's scrollbar. The arrow points toward the action:
+ * right closes the visible sidebar, left restores the hidden one.
  */
 export function ProjectPanelToggle(props: { visible: boolean; onToggle: () => void }): JSX.Element {
   const label = () => tx(props.visible ? "Hide the project sidebar" : "Show the project sidebar");
@@ -471,15 +471,13 @@ export function ProjectPanelToggle(props: { visible: boolean; onToggle: () => vo
       aria-pressed={props.visible}
       aria-label={label()}
       title={label()}
-      class={`absolute top-1/2 left-full z-20 flex h-10 w-5 -translate-y-1/2 items-center justify-center rounded-r-full border border-l-0 bg-base-100 shadow-[3px_0_8px_rgb(0_0_0_/_0.22)] transition-[color,background-color,border-color,transform] duration-200 motion-reduce:transition-none ${
-        props.visible
-          ? "border-primary/30 text-primary hover:translate-x-px"
-          : "border-az-hairline text-az-muted hover:translate-x-px hover:text-base-content"
+      class={`absolute top-1/2 left-full z-20 flex h-8 w-4 -translate-y-1/2 items-center justify-center rounded-r-full border border-az-hairline border-l-0 bg-base-200 transition-[color,background-color,border-color,transform] duration-200 hover:translate-x-px hover:bg-base-300 hover:text-primary motion-reduce:transition-none ${
+        props.visible ? "text-primary" : "text-az-muted"
       }`}
     >
       <Icon
         name="chevron-right"
-        class={`text-[14px] transition-transform duration-200 motion-reduce:transition-none ${
+        class={`text-[12px] transition-transform duration-200 motion-reduce:transition-none ${
           props.visible ? "rotate-0" : "rotate-180"
         }`}
       />

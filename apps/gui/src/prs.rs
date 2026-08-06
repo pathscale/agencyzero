@@ -507,7 +507,24 @@ pub fn refresh_project(app: AppHandle, project_id: String) {
                     continue;
                 }
                 if let Some(updated) = state.tables.pull_request.select(pr.id.clone()) {
+                    let merged = updated.state.eq_ignore_ascii_case("MERGED");
                     let _ = app.emit("pr:updated", PullRequestDto::from(updated));
+                    if merged
+                        && let Err(error) = crate::projects::finish_shipped_items_for_pr(
+                            &app,
+                            &state.tables,
+                            &project_id,
+                            pr.number,
+                        )
+                        .await
+                    {
+                        crate::log!(
+                            crate::log::Level::Warn,
+                            "items",
+                            "{project_id}: could not finish items delivered by #{}: {error}",
+                            pr.number
+                        );
+                    }
                 }
             }
         }

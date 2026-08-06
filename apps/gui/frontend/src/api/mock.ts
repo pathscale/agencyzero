@@ -648,7 +648,7 @@ export function createMockApi(): AgencyZeroApi {
       return settle(enabled);
     },
 
-    getProjectVerbosity: (projectId) => settle(verbosityByProject.get(projectId) ?? "full"),
+    getProjectVerbosity: (projectId) => settle(verbosityByProject.get(projectId) ?? "adaptive"),
     setProjectVerbosity: (projectId, verbosity) => {
       verbosityByProject.set(projectId, verbosity);
       return settle(undefined);
