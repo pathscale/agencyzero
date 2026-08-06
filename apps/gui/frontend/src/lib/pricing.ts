@@ -194,25 +194,40 @@ export function coldPrefixCost(table: PricingTable, model: string, prefixTokens:
  * For Claude this is never needed — the turn carries a real `costUsd`. It is
  * the Codex path: `agent-abstraction` reports Codex tokens but no cost, so a
  * dollar figure by a Codex reply can only be an estimate, and it is labelled as
- * one. Decomposed from what a turn reports: `cacheReads` at the cache rate,
- * the rest of the context at input rate, and the output (total processed minus
- * everything on the input side) at output rate. Returns null when the model
- * isn't priced or there is nothing to price.
+ * one. Decomposed from the exact per-turn input/output/cache split. Older
+ * stored turns do not carry that split, so they return null rather than
+ * treating multi-call input traffic as expensive generated output.
  */
 export function estimateTurnCost(
   table: PricingTable,
   model: string,
-  usage: { tokens: number; contextTokens: number | null; cacheReads: number | null },
+  usage: {
+    inputTokens?: number | null;
+    outputTokens?: number | null;
+    cacheReads: number | null;
+    cacheWrites?: number | null;
+  },
 ): number | null {
   const price = priceFor(table, model);
   if (!price) return null;
-  const context = usage.contextTokens ?? 0;
-  const cached = Math.min(usage.cacheReads ?? 0, context);
-  const freshInput = Math.max(context - cached, 0);
-  // Everything processed that wasn't input-side is the reply.
-  const output = Math.max(usage.tokens - context, 0);
+  const freshInput = usage.inputTokens;
+  const output = usage.outputTokens;
+  if (
+    typeof freshInput !== "number" ||
+    !Number.isFinite(freshInput) ||
+    typeof output !== "number" ||
+    !Number.isFinite(output)
+  ) {
+    return null;
+  }
+  const cached = usage.cacheReads ?? 0;
+  const cacheWrites = usage.cacheWrites ?? 0;
   const cost =
-    (cached * price.cacheRead + freshInput * price.input + output * price.output) / 1_000_000;
+    (cached * price.cacheRead +
+      cacheWrites * price.input * table.cacheWriteMultiple +
+      freshInput * price.input +
+      output * price.output) /
+    1_000_000;
   return cost > 0 ? cost : null;
 }
 

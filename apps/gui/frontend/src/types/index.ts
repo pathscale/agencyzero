@@ -189,6 +189,10 @@ export interface ProjectDraft {
 export interface Usage {
   /** Everything this turn processed: input, output and both cache figures. */
   tokens: number;
+  /** Uncached input tokens across every model call in this turn. */
+  inputTokens?: number | null;
+  /** Generated tokens across every model call in this turn. */
+  outputTokens?: number | null;
   /**
    * Every input token the turn was charged for, cached or not — the size of the
    * conversation as the model saw it.
@@ -202,8 +206,10 @@ export interface Usage {
   contextTokens: number | null;
   /** The model's context window. Claude alone reports one. */
   contextWindow: number | null;
-  /** Cumulative like `contextTokens`, not additive. */
+  /** Cache reads across every model call in this turn. */
   cacheReads: number | null;
+  /** Cache writes across every model call in this turn. */
+  cacheWrites?: number | null;
   reasoningTokens: number | null;
   costUsd: number | null;
   /** Copilot reports premium requests instead of a dollar cost. */

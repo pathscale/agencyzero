@@ -523,12 +523,12 @@ function AgentBubble(props: { message: Message; onRetry?: () => void }): JSX.Ele
  * Claude reports a real `costUsd`, shown plainly. Codex reports tokens but no
  * cost, so its figure is estimated from the price table and labelled "est." —
  * the honesty is in the word, since a guessed cost dressed as a real one would
- * be worse than none. Absent when there is no usage yet or the model has no
- * price on file.
+ * be worse than none. A legacy Codex turn that lacks the exact token split
+ * keeps its token count but shows no invented dollar figure.
  */
 export function MessageCost(props: { message: Message }): JSX.Element {
   const { state } = useWorkspace();
-  const cost = createMemo<{ usd: number; estimated: boolean; tokens: number } | null>(() => {
+  const cost = createMemo<{ usd: number | null; estimated: boolean; tokens: number } | null>(() => {
     const usage = props.message.usage;
     if (!usage) return null;
     const tokens =
@@ -537,9 +537,8 @@ export function MessageCost(props: { message: Message }): JSX.Element {
       return { usd: usage.costUsd, estimated: false, tokens };
     }
     const table = state.pricing;
-    if (!table) return null;
-    const usd = estimateTurnCost(table, props.message.model, usage);
-    return usd === null ? null : { usd, estimated: true, tokens };
+    const usd = table ? estimateTurnCost(table, props.message.model, usage) : null;
+    return usd === null && tokens === 0 ? null : { usd, estimated: usd !== null, tokens };
   });
 
   return (
@@ -547,27 +546,35 @@ export function MessageCost(props: { message: Message }): JSX.Element {
       {(value) => (
         <span
           title={
-            value().estimated
-              ? tx("Estimated from token counts — this agent does not report a cost.")
-              : tx("Reported by the agent.")
+            value().usd === null
+              ? undefined
+              : value().estimated
+                ? tx("Estimated from token counts — this agent does not report a cost.")
+                : tx("Reported by the agent.")
           }
           class="inline-flex shrink-0 items-center font-mono text-[10.5px]"
         >
-          <span
-            class={
-              props.message.agent === "claude" && !value().estimated && value().usd > 2
-                ? "font-semibold text-error"
-                : "text-az-faint"
-            }
-          >
-            {value().estimated
-              ? tx("est. {cost}", { cost: costLabel(value().usd) })
-              : costLabel(value().usd)}
-          </span>
-          <span class="text-az-faint">{" · "}</span>
-          <span class="text-az-faint">
-            {compactCount(value().tokens)} {tx("tok")}
-          </span>
+          <Show when={value().usd !== null}>
+            <span
+              class={
+                props.message.agent === "claude" && !value().estimated && value().usd! > 2
+                  ? "font-semibold text-error"
+                  : "text-az-faint"
+              }
+            >
+              {value().estimated
+                ? tx("est. {cost}", { cost: costLabel(value().usd!) })
+                : costLabel(value().usd!)}
+            </span>
+          </Show>
+          <Show when={value().tokens > 0}>
+            <Show when={value().usd !== null}>
+              <span class="text-az-faint">{" · "}</span>
+            </Show>
+            <span class="text-az-faint">
+              {compactCount(value().tokens)} {tx("tok")}
+            </span>
+          </Show>
         </span>
       )}
     </Show>
