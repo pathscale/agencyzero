@@ -49,7 +49,11 @@ echo "==> rust"
   cd "$repo_root"
   cargo fmt --all --check
   cargo clippy --workspace --all-targets --all-features -- -D warnings
-  cargo test --workspace --all-features
+  # Store-backed tests open several files apiece. macOS's default descriptor
+  # ceiling can make the parallel harness fail with `Too many open files`,
+  # masking healthy assertions as a broken release. Serial execution adds less
+  # than a second here and keeps the delivery gate deterministic.
+  RUST_TEST_THREADS=${RUST_TEST_THREADS:-1} cargo test --workspace --all-features
 )
 
 case "$mode" in
