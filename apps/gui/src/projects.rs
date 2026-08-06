@@ -1272,9 +1272,14 @@ async fn write_item_status(
 }
 
 const FINISHED_RETIRE_PREFIX: &str = "finished-retire-turns:";
+const FINISHED_RETIRE_MIDTURN_PREFIX: &str = "finished-retire-midturn:";
 
 fn finished_retire_key(item_id: &str) -> String {
     format!("{FINISHED_RETIRE_PREFIX}{item_id}")
+}
+
+fn finished_retire_midturn_key(item_id: &str) -> String {
+    format!("{FINISHED_RETIRE_MIDTURN_PREFIX}{item_id}")
 }
 
 fn global_settings(tables: &crate::db::tables::Tables) -> crate::settings::GlobalSettings {
@@ -1294,13 +1299,17 @@ async fn clear_finished_retirement(
     tables: &crate::db::tables::Tables,
     item_id: &str,
 ) -> Result<(), String> {
-    let key = finished_retire_key(item_id);
-    if tables.kv.select(key.clone()).is_some() {
-        tables
-            .kv
-            .delete(key)
-            .await
-            .map_err(|error| error.to_string())?;
+    for key in [
+        finished_retire_key(item_id),
+        finished_retire_midturn_key(item_id),
+    ] {
+        if tables.kv.select(key.clone()).is_some() {
+            tables
+                .kv
+                .delete(key)
+                .await
+                .map_err(|error| error.to_string())?;
+        }
     }
     Ok(())
 }
@@ -1309,6 +1318,14 @@ async fn schedule_finished_retirement(
     tables: &crate::db::tables::Tables,
     item_id: &str,
 ) -> Result<(), String> {
+    let midturn_key = finished_retire_midturn_key(item_id);
+    if tables.kv.select(midturn_key.clone()).is_some() {
+        tables
+            .kv
+            .delete(midturn_key)
+            .await
+            .map_err(|error| error.to_string())?;
+    }
     tables
         .kv_put(
             &finished_retire_key(item_id),
@@ -1323,9 +1340,10 @@ async fn schedule_finished_retirement(
 /// The marker is durable, so closing the app cannot turn the configured grace
 /// period into retained history. A reopened row cancels its marker instead of
 /// being deleted later under a new status.
-async fn age_finished_items(
+async fn age_finished_items_by(
     tables: &crate::db::tables::Tables,
     project_id: &str,
+    midturn: bool,
 ) -> Result<Vec<ProjectItemDto>, String> {
     let markers = tables.kv.select_all().execute().unwrap_or_default();
     let mut retired = Vec::new();
@@ -1343,6 +1361,21 @@ async fn age_finished_items(
         if row.status != "finished" {
             clear_finished_retirement(tables, item_id).await?;
             continue;
+        }
+        let midturn_key = finished_retire_midturn_key(item_id);
+        if midturn && tables.kv.select(midturn_key.clone()).is_none() {
+            tables
+                .kv_put(&midturn_key, "1".into())
+                .await
+                .map_err(|error| error.to_string())?;
+            continue;
+        }
+        if tables.kv.select(midturn_key.clone()).is_some() {
+            tables
+                .kv
+                .delete(midturn_key)
+                .await
+                .map_err(|error| error.to_string())?;
         }
         let remaining = marker.value.parse::<u8>().unwrap_or(1);
         if remaining > 1 {
@@ -1364,14 +1397,38 @@ async fn age_finished_items(
     Ok(retired)
 }
 
+async fn age_finished_items(
+    tables: &crate::db::tables::Tables,
+    project_id: &str,
+) -> Result<Vec<ProjectItemDto>, String> {
+    age_finished_items_by(tables, project_id, false).await
+}
+
+async fn age_finished_items_after_midturn(
+    tables: &crate::db::tables::Tables,
+    project_id: &str,
+) -> Result<Vec<ProjectItemDto>, String> {
+    age_finished_items_by(tables, project_id, true).await
+}
+
 /// Count one accepted owner message toward agent-finished retention.
 ///
 /// Aging is deliberately best-effort and happens only after the user row is
 /// durable. A rejected send is not a turn, and a marker cleanup failure must
 /// not turn an already-visible owner message into an IPC error that the
 /// frontend retries as a duplicate.
-async fn age_items_after_accepted_message(app: &AppHandle, tables: &Tables, project_id: &str) {
-    match age_finished_items(tables, project_id).await {
+async fn age_items_after_accepted_message(
+    app: &AppHandle,
+    tables: &Tables,
+    project_id: &str,
+    midturn: bool,
+) {
+    let result = if midturn {
+        age_finished_items_after_midturn(tables, project_id).await
+    } else {
+        age_finished_items(tables, project_id).await
+    };
+    match result {
         Ok(retired) => {
             for item in retired {
                 let _ = app.emit(
@@ -6745,7 +6802,7 @@ pub async fn send_message(
             &input.body,
             user_message.reply_to_question_id.as_deref(),
         );
-        age_items_after_accepted_message(&app, &state.tables, &input.project_id).await;
+        age_items_after_accepted_message(&app, &state.tables, &input.project_id, true).await;
         emit_message_receipt(&app, &input.project_id, &user_message.id, "sent");
 
         if inject
@@ -6780,7 +6837,7 @@ pub async fn send_message(
         &input.body,
         user_message.reply_to_question_id.as_deref(),
     );
-    age_items_after_accepted_message(&app, &state.tables, &input.project_id).await;
+    age_items_after_accepted_message(&app, &state.tables, &input.project_id, false).await;
     emit_message_receipt(&app, &input.project_id, &user_message.id, "sent");
     // The run exists from this moment: the slot is claimed and the spawn below
     // cannot be refused. This is what starts the transcript's status line —
@@ -10752,6 +10809,64 @@ mod tests {
             .shutdown()
             .await
             .expect("finished-retention store drains");
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[tokio::test]
+    async fn two_midturn_messages_age_finished_items_once() {
+        let dir = std::env::temp_dir().join(format!(
+            "az-project-finished-midturn-{}-{}",
+            std::process::id(),
+            chrono::Utc::now().timestamp_nanos_opt().unwrap_or_default()
+        ));
+        let tables = crate::db::tables::Tables::open(&dir)
+            .await
+            .expect("finished-midturn store opens");
+        tables
+            .project_item
+            .insert(ProjectItemRow {
+                id: "item-two-halves".into(),
+                project_id: "project-a".into(),
+                title: "Visible through one follow-up".into(),
+                status: "finished".into(),
+                position: 0,
+                reference: String::new(),
+            })
+            .expect("item inserts");
+        schedule_finished_retirement(&tables, "item-two-halves")
+            .await
+            .expect("retirement schedules");
+
+        assert!(
+            age_finished_items_after_midturn(&tables, "project-a")
+                .await
+                .expect("first midturn records half")
+                .is_empty()
+        );
+        assert!(
+            tables
+                .project_item
+                .select("item-two-halves".to_string())
+                .is_some(),
+            "one midturn is not a full cleanup turn"
+        );
+
+        let retired = age_finished_items_after_midturn(&tables, "project-a")
+            .await
+            .expect("second midturn completes the turn");
+        assert_eq!(retired.len(), 1);
+        assert!(
+            tables
+                .kv
+                .select(finished_retire_midturn_key("item-two-halves"))
+                .is_none(),
+            "the half-turn marker leaves with the item"
+        );
+
+        tables
+            .shutdown()
+            .await
+            .expect("finished-midturn store drains");
         let _ = std::fs::remove_dir_all(dir);
     }
 
