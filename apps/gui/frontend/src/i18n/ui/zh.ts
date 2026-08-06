@@ -422,7 +422,6 @@ const zh = {
   turn: "轮",
   tok: "令牌",
   "Some turns reported no usage": "部分轮次未报告用量",
-  "(partial)": "（部分）",
   "The latest comparable turn reported zero cache reads after a substantial cached turn. This can increase usage, but the provider does not expose the cause.":
     "在一次大量使用缓存的轮次之后，最近的可比轮次报告缓存读取为零。这可能增加用量，但提供方未公开原因。",
   "cache miss?": "缓存未命中？",
@@ -506,6 +505,9 @@ const zh = {
   "Estimated cost of the next turn (≈{ctx}k context + prompt + reply). A projection, not a charge — the real cost is shown on the turn.":
     "下一轮的预计成本（约 {ctx}k 上下文 + 提示 + 回复）。这是预估而非实际扣费，真实成本会在该轮显示。",
   "This turn is projected at {cost}.": "本轮预计花费 {cost}。",
+  "Compacting this session is projected at {cost}.": "压缩本会话预计花费 {cost}。",
+  "It reads the whole conversation and writes a summary, including the learning pass. It runs against the session, so the drafted text is not sent.":
+    "它会读取整个会话并写出摘要，包括学习环节。它针对会话运行，因此草稿文本不会被发送。",
   "Most of it ({cost}) is the conversation being resent every turn — not this message.":
     "其中大部分（{cost}）来自每轮都会重新发送的对话历史，而非这条消息。",
   "Lower output verbosity in Settings — fewer reply tokens, every turn.":

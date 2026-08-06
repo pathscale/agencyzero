@@ -438,7 +438,6 @@ const en = {
   turn: "turn",
   tok: "tok",
   "Some turns reported no usage": "Some turns reported no usage",
-  "(partial)": "(partial)",
   "The latest comparable turn reported zero cache reads after a substantial cached turn. This can increase usage, but the provider does not expose the cause.":
     "The latest comparable turn reported zero cache reads after a substantial cached turn. This can increase usage, but the provider does not expose the cause.",
   "cache miss?": "cache miss?",
@@ -523,6 +522,10 @@ const en = {
   "Estimated cost of the next turn (≈{ctx}k context + prompt + reply). A projection, not a charge — the real cost is shown on the turn.":
     "Estimated cost of the next turn (≈{ctx}k context + prompt + reply). A projection, not a charge — the real cost is shown on the turn.",
   "This turn is projected at {cost}.": "This turn is projected at {cost}.",
+  "Compacting this session is projected at {cost}.":
+    "Compacting this session is projected at {cost}.",
+  "It reads the whole conversation and writes a summary, including the learning pass. It runs against the session, so the drafted text is not sent.":
+    "It reads the whole conversation and writes a summary, including the learning pass. It runs against the session, so the drafted text is not sent.",
   "Most of it ({cost}) is the conversation being resent every turn — not this message.":
     "Most of it ({cost}) is the conversation being resent every turn — not this message.",
   "Lower output verbosity in Settings — fewer reply tokens, every turn.":

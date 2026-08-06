@@ -219,14 +219,20 @@ export function ProjectTab(props: { tab: Tab; project: Project }): JSX.Element {
                 {compactCount(totals().tokens)} {tx("tok")}
               </span>
               <span class="text-az-faint">·</span>
-              <span title={costTitle()} class="font-semibold text-accent">
+              {/* A leading ~ marks a partial total (some turns reported no
+                  usage) without stealing a whole word from a tight header — the
+                  hover still explains it. */}
+              <span
+                title={
+                  totals().reported < totals().turns
+                    ? tx("Some turns reported no usage")
+                    : costTitle()
+                }
+                class="font-semibold text-accent"
+              >
+                {totals().reported < totals().turns ? "~" : ""}
                 {costLabel(totals().costUsd)}
               </span>
-              <Show when={totals().reported < totals().turns}>
-                <span class="text-az-faint" title={tx("Some turns reported no usage")}>
-                  {tx("(partial)")}
-                </span>
-              </Show>
             </Show>
             <Show when={providerUsage()}>
               {(usage) => (

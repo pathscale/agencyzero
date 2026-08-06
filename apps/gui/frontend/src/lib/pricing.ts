@@ -139,6 +139,38 @@ export function compactionCost(
   return onePass * (learnsFirst ? 2 : 1);
 }
 
+/**
+ * A `/compact` typed into the composer is not a normal turn: it does not send
+ * the drafted text and it does not draw a reply. Its cost is the compaction pass
+ * ({@link compactionCost}), so the pre-send estimate and the est chip must show
+ * *that* figure, not a projection built from the "/compact" string as if it were
+ * a prompt. Shaped as a CostEstimate so the composer renders it through the same
+ * chip and alert, with the whole cost attributed to context (the session being
+ * read) and no input/output turn cost.
+ */
+export function compactEstimate(
+  table: PricingTable,
+  model: string,
+  contextTokens: number,
+): CostEstimate {
+  const priced = priceFor(table, model) !== undefined;
+  const total = compactionCost(table, model, contextTokens);
+  const severity: Severity =
+    total >= table.highUsd ? "high" : total >= table.warnUsd ? "warning" : "low";
+  return {
+    priced,
+    contextCost: total,
+    inputCost: 0,
+    outputCost: 0,
+    total,
+    contextTokens,
+    inputTokens: 0,
+    outputTokens: 0,
+    severity,
+    coldContext: false,
+  };
+}
+
 /** Additional cost for each 1K thinking tokens, billed at the model's output rate. */
 export function thinkingCostPerThousand(table: PricingTable, model: string): number | null {
   const price = priceFor(table, model);

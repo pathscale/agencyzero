@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { PricingTable } from "~/types";
 import {
+  compactEstimate,
   compactionCost,
   costLabel,
   estimate,
@@ -82,6 +83,19 @@ describe("estimate", () => {
 
   it("quotes extra thinking at the model output rate per thousand", () => {
     expect(thinkingCostPerThousand(table, "opus")).toBe(0.025);
+  });
+
+  it("prices a typed /compact as the compaction pass, not a turn", () => {
+    // The whole cost is the compaction; no drafted prompt is sent, so there is
+    // no input or output turn cost and it is all attributed to context.
+    const est = compactEstimate(table, "opus", 500_000);
+    expect(est.total).toBeCloseTo(compactionCost(table, "opus", 500_000), 10);
+    expect(est.inputCost).toBe(0);
+    expect(est.outputCost).toBe(0);
+    expect(est.contextCost).toBe(est.total);
+    // Severity comes from the same thresholds a turn uses: this 500k session's
+    // ~$0.70 compaction clears the warn line without hitting high.
+    expect(est.severity).toBe("warning");
   });
 });
 
