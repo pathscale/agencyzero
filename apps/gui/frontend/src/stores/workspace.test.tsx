@@ -532,3 +532,24 @@ describe("the data location", () => {
     expect(workspace.state.dataLocation).toEqual(before);
   });
 });
+
+describe("delivery receipts", () => {
+  /*
+   * The first receipt for a project arrives before any receipt record exists,
+   * so the nested set had no object to write the message-id key onto and threw
+   * inside the event handler. Sending through the mock exercises the same
+   * listener path as Rust and must record that first acknowledgement.
+   */
+  it("records the first receipt through the normal send path", async () => {
+    const workspace = await mountWorkspace();
+    expect(workspace.state.messageReceipts.worktable).toBeUndefined();
+
+    await workspace.actions.send("worktable", "receipt regression");
+
+    const message = workspace.state.messages.worktable?.find(
+      (candidate) => candidate.body === "receipt regression",
+    );
+    expect(message).toBeDefined();
+    expect(workspace.state.messageReceipts.worktable?.[message?.id ?? ""]).toBe("sent");
+  });
+});
