@@ -82,6 +82,7 @@ function Workspace(): JSX.Element {
 
       <CloseConfirm
         isOpen={shell.isClosing()}
+        error={shell.closeError()}
         onCancel={shell.cancelClose}
         onConfirm={shell.confirmClose}
       />

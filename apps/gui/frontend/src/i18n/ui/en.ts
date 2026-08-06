@@ -274,6 +274,7 @@ const en = {
   "Delete?": "Delete?",
   Cancel: "Cancel",
   "Work is still in progress": "Work is still in progress",
+  "Could not safely quit": "Could not safely quit",
   "Nothing is running. Your projects and their items are saved.":
     "Nothing is running. Your projects and their items are saved.",
   "{count} task is still running": "{count} task is still running",
@@ -283,6 +284,7 @@ const en = {
   "Quitting cancels every run and its whole process group.":
     "Quitting cancels every run and its whole process group.",
   "Wait for completion": "Wait for completion",
+  "Keep AgencyZero open": "Keep AgencyZero open",
   "Exit now": "Exit now",
   Items: "Items",
   Running: "Running",

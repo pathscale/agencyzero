@@ -147,6 +147,10 @@ pub(crate) struct AppState {
     /// normal UI path drains asynchronously before asking Tauri to exit; the
     /// native exit callback is only a fallback for exits that bypass IPC.
     exit_drain_started: std::sync::atomic::AtomicBool,
+    /// Distinguishes "already drained" from "the one attempted drain failed".
+    /// Treating both as success let a second close request exit after the first
+    /// one had proved persistence was unsafe.
+    exit_drain_succeeded: std::sync::atomic::AtomicBool,
     /// Kept so `set_data_location` can write the pointer beside the settings.
     config_dir: std::path::PathBuf,
     /// Kept so `get_data_location` can re-resolve the pointer against the same
@@ -166,9 +170,21 @@ impl AppState {
             .exit_drain_started
             .swap(true, std::sync::atomic::Ordering::AcqRel)
         {
-            return Ok(());
+            return if self
+                .exit_drain_succeeded
+                .load(std::sync::atomic::Ordering::Acquire)
+            {
+                Ok(())
+            } else {
+                Err("the persistence drain already failed or is still in progress; quit remains blocked to protect the store".into())
+            };
         }
-        self.tables.shutdown().await
+        let result = self.tables.shutdown().await;
+        if result.is_ok() {
+            self.exit_drain_succeeded
+                .store(true, std::sync::atomic::Ordering::Release);
+        }
+        result
     }
 }
 
@@ -555,6 +571,9 @@ async fn quit_app(app: AppHandle, state: State<'_, AppState>) -> Result<(), Stri
             "boot",
             "quit drain reported a persistence failure: {error}"
         );
+        return Err(format!(
+            "AgencyZero stayed open because its persistence worker failed: {error}. Copy anything important from the current turn, then use Force Quit only if necessary."
+        ));
     }
     app.exit(0);
     Ok(())
@@ -1370,6 +1389,7 @@ fn main() {
                 receipts: Arc::default(),
                 settings_write: tokio::sync::Mutex::new(()),
                 exit_drain_started: std::sync::atomic::AtomicBool::new(false),
+                exit_drain_succeeded: std::sync::atomic::AtomicBool::new(false),
                 config_dir,
                 data_dir,
                 location,

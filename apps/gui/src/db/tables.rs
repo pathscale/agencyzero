@@ -38,6 +38,11 @@ use crate::db::schema::usage_ledger::{UsageLedgerPersistenceEngine, UsageLedgerW
     reason = "the entity tables land before the read path that reads them"
 )]
 pub struct Tables {
+    /// Private crash-recovery files that must not share WorkTable's hot KV
+    /// index. Streaming replies overwrite their checkpoint five times a second;
+    /// keeping that write pattern out of the database prevents one recovery
+    /// aid from taking the KV persistence worker down with it.
+    pub recovery_dir: std::path::PathBuf,
     pub kv: Arc<KvWorkTable>,
     pub project: Arc<ProjectWorkTable>,
     pub project_item: Arc<ProjectItemWorkTable>,
@@ -73,6 +78,7 @@ impl Tables {
     /// failure than refusing to start.
     pub async fn open(dir: &Path) -> Result<Tables, Box<dyn std::error::Error + Send + Sync>> {
         std::fs::create_dir_all(dir)?;
+        let recovery_dir = dir.join("recovery");
         let dir = dir.to_string_lossy().to_string();
 
         /// Each table names its own directory and schema version, so two tables
@@ -97,6 +103,7 @@ impl Tables {
         }
 
         Ok(Tables {
+            recovery_dir,
             kv: open!(KvPersistenceEngine, KvWorkTable),
             project: open!(ProjectPersistenceEngine, ProjectWorkTable),
             project_item: open!(ProjectItemPersistenceEngine, ProjectItemWorkTable),
@@ -357,6 +364,36 @@ mod tests {
             "a second write replaces rather than appends"
         );
 
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[tokio::test]
+    async fn repeated_variable_sized_blob_overwrites_keep_the_writer_alive() {
+        let dir = std::env::temp_dir().join(format!(
+            "az-kv-overwrite-{}-{}",
+            std::process::id(),
+            uuid::Uuid::now_v7()
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+
+        let tables = Tables::open(&dir).await.expect("should open");
+        let mut expected = String::new();
+        for n in 0..1_000 {
+            expected = "x".repeat((n * 97) % 8_192);
+            tables
+                .kv_put("streaming-checkpoint", expected.clone())
+                .await
+                .expect("overwrite should be accepted");
+        }
+        tables.shutdown().await.expect("writer should drain");
+        drop(tables);
+
+        let reopened = Tables::open(&dir).await.expect("should reopen");
+        assert_eq!(reopened.kv_get("streaming-checkpoint"), Some(expected));
+        reopened
+            .shutdown()
+            .await
+            .expect("reopened store should drain");
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

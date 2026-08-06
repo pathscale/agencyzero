@@ -263,6 +263,7 @@ const zh = {
   "Delete?": "删除？",
   Cancel: "取消",
   "Work is still in progress": "工作仍在进行",
+  "Could not safely quit": "无法安全退出",
   "Nothing is running. Your projects and their items are saved.":
     "当前没有任务运行。你的项目及其事项均已保存。",
   "{count} task is still running": "仍有 {count} 个任务在运行",
@@ -271,6 +272,7 @@ const zh = {
   "{count} projects are holding on your approval": "有 {count} 个项目正在等待你的批准",
   "Quitting cancels every run and its whole process group.": "退出会取消所有运行及其整个进程组。",
   "Wait for completion": "等待完成",
+  "Keep AgencyZero open": "保持 AgencyZero 打开",
   "Exit now": "立即退出",
   Items: "事项",
   Running: "运行中",
