@@ -632,6 +632,22 @@ fn can_inject(running: Agent, requested: Agent) -> bool {
     running == requested && requested.caps().live_follow_up
 }
 
+/// Whether two root lists describe the same Codex sandbox, order aside.
+///
+/// The sandbox is the *set* of directories, not their sequence, so a follow-up
+/// that resolves the same dirs in a different order can still ride the open
+/// turn. Comparing the vecs directly forced those to queue for no real reason.
+fn same_roots(a: &[String], b: &[String]) -> bool {
+    if a.len() != b.len() {
+        return false;
+    }
+    let mut a: Vec<&String> = a.iter().collect();
+    let mut b: Vec<&String> = b.iter().collect();
+    a.sort();
+    b.sort();
+    a == b
+}
+
 // — read path ——————————————————————————————————————————————————————
 
 #[tauri::command]
@@ -5128,7 +5144,14 @@ pub async fn send_message(
                 drop(active);
                 return Err(BUSY_WITH_RUN.into());
             }
-            if agent == Agent::Codex && running.workspace_roots != workspace_roots {
+            // Codex's app-server sandbox cannot be widened mid-turn, so a
+            // follow-up whose roots differ must queue for a fresh invocation.
+            // But it is the *set* of roots that defines the sandbox, not their
+            // order: comparing the vecs directly made a mere ordering
+            // difference (same dirs, different sequence) force a queue, which is
+            // a big part of why a Codex follow-up "frequently" queued when it
+            // could have been injected. Compare as sets.
+            if agent == Agent::Codex && !same_roots(&running.workspace_roots, &workspace_roots) {
                 drop(active);
                 return Err(BUSY_WITH_RUN.into());
             }
@@ -7842,6 +7865,21 @@ mod tests {
         assert!(can_inject(Agent::Codex, Agent::Codex));
         assert!(!can_inject(Agent::Claude, Agent::Codex));
         assert!(!can_inject(Agent::Codex, Agent::Claude));
+    }
+
+    #[test]
+    fn codex_roots_match_regardless_of_order() {
+        // Same set, different order: a follow-up should still inject, not queue.
+        assert!(same_roots(
+            &["/a".into(), "/b".into(), "/mem".into()],
+            &["/mem".into(), "/a".into(), "/b".into()],
+        ));
+        // A genuinely different set still forces a queue.
+        assert!(!same_roots(
+            &["/a".into(), "/b".into()],
+            &["/a".into(), "/c".into()]
+        ));
+        assert!(!same_roots(&["/a".into()], &["/a".into(), "/b".into()]));
     }
 
     #[test]

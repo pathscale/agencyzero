@@ -38,37 +38,40 @@ struct Price {
 const CACHE_WRITE_MULTIPLE: f64 = 1.25;
 
 /// Claude and Codex/GPT prices, longest key first so `gpt-5.4-mini` is matched
-/// before `gpt-5.4`, and `claude-opus-4-8` before a bare `opus`. Matched by
-/// substring rather than equality because a model id may carry a suffix
-/// (`-fast`, a date) the table should still price.
+/// before `gpt-5.4`. Matched by substring, and the Claude keys are the bare
+/// model *name* (`opus`, not `claude-opus`) on purpose: a tab stores Claude's
+/// model as the short alias the picker uses — `opus`, `sonnet` — not the full
+/// `claude-opus-4-8` id. A `claude-opus` key would miss `opus` and the estimate
+/// would silently never price a Claude turn, which is exactly the bug this
+/// fixes. `opus` still matches the full id too, so both spellings resolve.
 const PRICES: &[Price] = &[
-    // Claude
+    // Claude — keyed by the bare name so the picker's short aliases match.
     Price {
-        key: "claude-opus",
+        key: "opus",
         input: 5.00,
         output: 25.00,
         cache_read: 0.50,
     },
     Price {
-        key: "claude-fable",
+        key: "fable",
         input: 10.00,
         output: 50.00,
         cache_read: 1.00,
     },
     Price {
-        key: "claude-mythos",
+        key: "mythos",
         input: 10.00,
         output: 50.00,
         cache_read: 1.00,
     },
     Price {
-        key: "claude-sonnet",
+        key: "sonnet",
         input: 3.00,
         output: 15.00,
         cache_read: 0.30,
     },
     Price {
-        key: "claude-haiku",
+        key: "haiku",
         input: 1.00,
         output: 5.00,
         cache_read: 0.10,
@@ -303,6 +306,17 @@ mod tests {
         // A dated or suffixed id still resolves by substring.
         assert_eq!(price_for("claude-opus-4-8").unwrap().output, 25.00);
         assert_eq!(price_for("gpt-5.6-terra-2026").unwrap().input, 2.00);
+    }
+
+    #[test]
+    fn bare_picker_aliases_price() {
+        // The regression that shipped an estimate that never appeared: a tab
+        // stores Claude's model as the short alias, so the table must price
+        // `opus`/`sonnet`/etc., not only the full `claude-opus-4-8` id.
+        assert_eq!(price_for("opus").unwrap().output, 25.00);
+        assert_eq!(price_for("sonnet").unwrap().output, 15.00);
+        assert_eq!(price_for("haiku").unwrap().input, 1.00);
+        assert_eq!(price_for("fable").unwrap().input, 10.00);
     }
 
     #[test]

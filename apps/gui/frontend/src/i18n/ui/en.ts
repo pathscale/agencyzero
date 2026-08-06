@@ -512,6 +512,9 @@ const en = {
   "Confirm force reset": "Confirm force reset",
   "Could not reset:": "Could not reset:",
   "est {cost}": "est {cost}",
+  "Dismiss this question": "Dismiss this question",
+  "Dismiss — answer by typing your reply in the composer":
+    "Dismiss — answer by typing your reply in the composer",
   "est. {cost}": "est. {cost}",
   "Estimated from token counts — this agent does not report a cost.":
     "Estimated from token counts — this agent does not report a cost.",

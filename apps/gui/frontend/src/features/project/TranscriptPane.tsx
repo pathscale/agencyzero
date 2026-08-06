@@ -252,70 +252,63 @@ export function TranscriptPane(props: {
   );
 }
 
-/** A persistent, urgency-coloured question inside the transcript flow. */
+/**
+ * A question, inline in the chat thread — a quiet callout, not a dialog.
+ *
+ * The owner asked for this repeatedly: it must read as part of the
+ * conversation, not a modal box. So it is a slim left-accent rule (the colour
+ * carries the urgency) with the text beside it, no heavy fill, no icon chip, no
+ * prominent button. The only control is a small × to dismiss it — because the
+ * *answer* is the next message you type (optionally a `<ps>` directive), and a
+ * big "Mark answered" button that then leaves an "Answered" record was the spam
+ * the owner objected to. Dismiss removes it; the exchange lives in the
+ * surrounding messages, not in a lingering resolved card.
+ */
 function QuestionCard(props: { question: Question }): JSX.Element {
   const { actions } = useWorkspace();
-  const tones: Record<Question["urgency"], { border: string; icon: string; label: string }> = {
-    critical: {
-      border: "border-error/45 bg-error/10",
-      icon: "text-error",
-      label: tx("Critical"),
-    },
-    blocking: {
-      border: "border-warning/40 bg-warning/9",
-      icon: "text-warning",
-      label: tx("Blocking"),
-    },
-    passive: {
-      border: "border-az-hairline bg-az-inset",
-      icon: "text-az-muted",
-      label: tx("When free"),
-    },
+  // The left rule's colour, by urgency. That is the whole visual weight — no
+  // fill, no label chip.
+  const accent = (): string => {
+    switch (props.question.urgency) {
+      case "critical":
+        return "border-error";
+      case "passive":
+        return "border-az-hairline-strong";
+      default:
+        return "border-warning";
+    }
   };
-  const tone = () => tones[props.question.urgency] ?? tones.blocking;
   const answered = () => props.question.answered;
 
   return (
     <div
-      class={`flex items-start gap-3 rounded-[13px] border px-4 py-3 text-[12px] transition-opacity ${
-        // Answered stays on screen as a record of the exchange, just quieted:
-        // a neutral border and dimmed, so it reads as resolved rather than
-        // still waiting on you.
-        answered() ? "border-az-hairline bg-az-inset opacity-60" : tone().border
+      class={`group flex items-start gap-2.5 border-l-2 py-0.5 pr-1 pl-3 text-[12.5px] transition-opacity ${
+        answered() ? "border-az-hairline opacity-45" : accent()
       }`}
     >
-      <Icon
-        name={answered() ? "check" : "messages-square"}
-        class={`relative top-0.5 shrink-0 text-[15px] ${answered() ? "text-success" : tone().icon}`}
-      />
-      <div class="flex min-w-0 flex-1 flex-col gap-1.5">
-        <div class="flex items-baseline gap-2">
-          <span
-            class={`shrink-0 font-semibold text-[11px] ${answered() ? "text-success" : tone().icon}`}
-          >
-            {answered() ? tx("Answered") : tone().label}
+      <div class="flex min-w-0 flex-1 flex-col gap-0.5">
+        <Show when={props.question.issueUrl}>
+          <span class="min-w-0 truncate text-[10.5px] text-az-muted">
+            {props.question.issueUrl}
           </span>
-          <Show when={props.question.issueUrl}>
-            <span class="min-w-0 truncate text-[11px] text-az-muted">
-              {props.question.issueUrl}
-            </span>
-          </Show>
-        </div>
-        <span data-selectable class="whitespace-pre-wrap break-words text-az-strong">
+        </Show>
+        <span data-selectable class="whitespace-pre-wrap break-words text-az-body leading-[1.5]">
           {props.question.text}
         </span>
       </div>
-      {/* The button is only on an open question. Answering it just marks it
-          resolved; the reply itself is the message you send in the composer,
-          which is why the card stays put rather than swapping to an input. */}
+      {/* Dismiss, not "mark answered": answering is just typing the reply (a
+          `<ps>` directive or plain prose) in the composer, and this × removes
+          the prompt once it is dealt with. Only shown while open; an answered
+          one has already been dismissed or dimmed. */}
       <Show when={!answered()}>
         <button
           type="button"
           onClick={() => void actions.answerQuestion(props.question.id, true)}
-          title={tx("Mark this question answered. It stays in the conversation.")}
-          class="shrink-0 rounded-lg bg-primary px-3 py-1.5 font-semibold text-[11.5px] text-primary-content transition-colors hover:bg-az-primary-hover"
+          aria-label={tx("Dismiss this question")}
+          title={tx("Dismiss — answer by typing your reply in the composer")}
+          class="shrink-0 rounded p-0.5 text-az-faint opacity-0 transition-opacity hover:text-az-body group-hover:opacity-100"
         >
-          {tx("Mark answered")}
+          <Icon name="x" class="text-[13px]" />
         </button>
       </Show>
     </div>
