@@ -541,6 +541,20 @@ const zh = {
     "助手报告：{reported}。根据 token 推算：{calculated}。",
   "calc {cost}": "推算 {cost}",
   Dismiss: "关闭",
+  "Permanently disable this warning": "永久禁用此警告",
+  "Disable cost warnings permanently?": "永久禁用成本警告？",
+  Confirm: "确认",
+  "Freshen context": "刷新上下文",
+  "Compact context": "压缩上下文",
+  "Keep a bounded handoff, then start the next Codex turn in a fresh session.":
+    "保留有限的交接说明，然后在新会话中开始下一轮 Codex。",
+  "Learn what must survive, then compact this Claude session.":
+    "先记录必须保留的内容，然后压缩此 Claude 会话。",
+  Freshen: "刷新",
+  "Cost warnings": "成本警告",
+  "turn off the large projected-cost warning; estimates and Compact remain visible":
+    "关闭大型预计成本警告；估算和压缩操作仍然可见",
+  "Show projected-cost warnings": "显示预计成本警告",
   "Estimated cost of the next turn (≈{ctx}k context + prompt + reply). A projection, not a charge — the real cost is shown on the turn.":
     "下一轮的预计成本（约 {ctx}k 上下文 + 提示 + 回复）。这是预估而非实际扣费，真实成本会在该轮显示。",
   "This turn is projected at {cost}.": "本轮预计花费 {cost}。",

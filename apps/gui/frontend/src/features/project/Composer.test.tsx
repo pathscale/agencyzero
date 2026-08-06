@@ -136,7 +136,7 @@ describe("Composer", () => {
       },
       onCancelQuestionReply,
     });
-    expect(screen.getByText("Which fix should land first?")).toBeInTheDocument();
+    expect(screen.getByTitle("Which fix should land first?")).toHaveTextContent("Reply to #?");
     type(screen.field, "Ship the question flow first.");
 
     screen.field.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
@@ -524,6 +524,58 @@ describe("the alert slot means failure", () => {
     expect(alert.textContent).toContain("the backend is unreachable");
     // And the words are where the alert says they are.
     expect(field.value).toBe("a real prompt");
+  });
+});
+
+describe("cost guidance controls", () => {
+  beforeEach(() => {
+    setPrefs({
+      costWarningsDisabled: false,
+      costWarningDismissals: 0,
+      costWarningSnoozedUntil: 0,
+    });
+  });
+
+  it("snoozes a dismissed warning and offers permanent disable on its next appearance", async () => {
+    const screen = mount({
+      contextTokens: 900_000,
+      contextWindow: 1_000_000,
+      contextAgent: "claude",
+      contextModel: "sonnet",
+    });
+    await screen.booted();
+    await waitFor(() => expect(screen.getByText(/This turn is projected/)).toBeTruthy());
+
+    fireEvent.click(screen.getByLabelText("Dismiss"));
+    expect(screen.queryByText(/This turn is projected/)).toBeNull();
+    expect(prefs.costWarningSnoozedUntil).toBeGreaterThan(Date.now());
+
+    // Stand in for the ten-minute clock elapsing without making the provider's
+    // async boot run under fake timers.
+    setPrefs("costWarningSnoozedUntil", 0);
+    await waitFor(() => expect(screen.getByText("Permanently disable this warning")).toBeTruthy());
+    fireEvent.click(screen.getByText("Permanently disable this warning"));
+    fireEvent.click(screen.getByRole("button", { name: "Confirm" }));
+
+    expect(prefs.costWarningsDisabled).toBe(true);
+    expect(screen.queryByText(/This turn is projected/)).toBeNull();
+  });
+
+  it("shows the staged compact action without requiring the warning card", async () => {
+    const onCompact = vi.fn().mockResolvedValue(undefined);
+    const screen = mount({
+      contextTokens: 700_000,
+      contextWindow: 1_000_000,
+      contextAgent: "claude",
+      contextModel: "sonnet",
+      onCompact,
+    });
+    await screen.booted();
+
+    const action = await waitFor(() => screen.getByLabelText("Compact context"));
+    expect(action.textContent).toMatch(/Compact \$/);
+    fireEvent.click(action);
+    expect(onCompact).toHaveBeenCalledOnce();
   });
 });
 

@@ -881,6 +881,12 @@ export interface UiPrefs {
   composerDrafts: Record<string, string>;
   /** Question staged as the target of each project's next owner message. */
   replyQuestionIds: Record<string, string>;
+  /** Never show the projected-turn warning card. Cost chips/actions remain. */
+  costWarningsDisabled: boolean;
+  /** Epoch milliseconds until which dismissing the warning has snoozed it. */
+  costWarningSnoozedUntil: number;
+  /** Persisted so the second appearance can offer the permanent opt-out. */
+  costWarningDismissals: number;
 }
 
 /**
