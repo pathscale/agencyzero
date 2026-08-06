@@ -991,6 +991,24 @@ pub fn list_items(project_id: String, state: State<'_, AppState>) -> Vec<Project
     rows
 }
 
+/// Append after the greatest stored position, not after the row count.
+///
+/// Deleted rows leave gaps and older builds allowed duplicate positions. Using
+/// `len()` in either case can reuse a live position, making the new row jump
+/// unpredictably whenever the list is reloaded or reordered.
+fn next_item_position<'a>(rows: impl Iterator<Item = &'a ProjectItemRow>) -> u32 {
+    rows.map(|row| row.position)
+        .max()
+        .map_or(0, |position| position.saturating_add(1))
+}
+
+fn next_project_position(rows: &[ProjectRow]) -> u32 {
+    rows.iter()
+        .map(|row| row.position)
+        .max()
+        .map_or(0, |position| position.saturating_add(1))
+}
+
 /// Add one item at the end of a project's list.
 ///
 /// These four item commands land together: the panel's controls existed for
@@ -1012,19 +1030,23 @@ pub fn create_item(
     if title.is_empty() {
         return Err("an item needs a title".into());
     }
-    let count = state
+    if project_id != crate::tasks::TASK_MANAGER_ID
+        && state.tables.project.select(project_id.clone()).is_none()
+    {
+        return Err(format!("no project {project_id}"));
+    }
+    let siblings = state
         .tables
         .project_item
         .select_by_project_id(project_id.clone())
         .execute()
-        .unwrap_or_default()
-        .len();
+        .unwrap_or_default();
     let row = ProjectItemRow {
         id: id("item"),
         project_id,
         title,
         status: "pending".into(),
-        position: u32::try_from(count).unwrap_or(u32::MAX),
+        position: next_item_position(siblings.iter()),
         // Nothing has shipped for a row that was only just proposed.
         reference: String::new(),
     };
@@ -1200,6 +1222,30 @@ async fn age_finished_items(
         retired.push(ProjectItemDto::from(row));
     }
     Ok(retired)
+}
+
+/// Count one accepted owner message toward agent-finished retention.
+///
+/// Aging is deliberately best-effort and happens only after the user row is
+/// durable. A rejected send is not a turn, and a marker cleanup failure must
+/// not turn an already-visible owner message into an IPC error that the
+/// frontend retries as a duplicate.
+async fn age_items_after_accepted_message(app: &AppHandle, tables: &Tables, project_id: &str) {
+    match age_finished_items(tables, project_id).await {
+        Ok(retired) => {
+            for item in retired {
+                let _ = app.emit(
+                    "item:deleted",
+                    serde_json::json!({ "id": item.id, "projectId": item.project_id }),
+                );
+            }
+        }
+        Err(error) => crate::log!(
+            crate::log::Level::Warn,
+            "items",
+            "{project_id}: could not age finished items after the accepted message: {error}"
+        ),
+    }
 }
 
 /// Move one item through pending → active → finished.
@@ -1763,11 +1809,15 @@ async fn apply_directive(
      * Task Manager able to speak the same state/retire/link verbs as a project
      * tab instead of needing title-based JSONL mutations of its own.
      */
-    let rows: Vec<ProjectItemRow> = tables
-        .project_item
-        .select_all()
-        .execute()
-        .unwrap_or_default();
+    let rows: Vec<ProjectItemRow> = match tables.project_item.select_all().execute() {
+        Ok(rows) => rows,
+        Err(error) => {
+            return Outcome::Refused {
+                what: directive.operation().to_string(),
+                code: format!("READ_FAILED: {error}"),
+            };
+        }
+    };
 
     match directive {
         Directive::ItemState { id, status, pr } => {
@@ -1863,8 +1913,15 @@ async fn apply_directive(
             }
             let target_project = match project.as_deref() {
                 Some(named) => {
-                    let projects: Vec<ProjectRow> =
-                        tables.project.select_all().execute().unwrap_or_default();
+                    let projects: Vec<ProjectRow> = match tables.project.select_all().execute() {
+                        Ok(projects) => projects,
+                        Err(error) => {
+                            return Outcome::Refused {
+                                what: format!("items.add({title:?}) project"),
+                                code: format!("READ_FAILED: {error}"),
+                            };
+                        }
+                    };
                     match resolve_project(&projects, named) {
                         Some(found) => found,
                         None => {
@@ -1879,7 +1936,7 @@ async fn apply_directive(
                                 id: id("proj"),
                                 name: truncate_on_char_boundary(named.trim(), 80),
                                 status: "active".into(),
-                                position: u32::try_from(projects.len()).unwrap_or(0),
+                                position: next_project_position(&projects),
                                 dirs: "[]".into(),
                                 pinned: false,
                                 moderator_enabled: false,
@@ -1975,7 +2032,7 @@ async fn apply_directive(
                 project_id: target_project,
                 title: truncate_on_char_boundary(title.trim(), 120),
                 status,
-                position: u32::try_from(target_rows.len()).unwrap_or(0),
+                position: next_item_position(target_rows.iter().copied()),
                 reference: String::new(),
             };
             if row.status == "finished"
@@ -5775,13 +5832,6 @@ pub async fn send_message(
         ));
     }
 
-    for retired in age_finished_items(&state.tables, &input.project_id).await? {
-        let _ = app.emit(
-            "item:deleted",
-            serde_json::json!({ "id": retired.id, "projectId": retired.project_id }),
-        );
-    }
-
     // Read the durable row before deciding whether this message can ride an
     // already-open Codex turn. A turn's app-server sandbox cannot be widened in
     // place: if Settings changed its roots, the frontend queues this message
@@ -5807,7 +5857,16 @@ pub async fn send_message(
      * the provider's interactive control channel, and the model takes it at
      * its next step boundary. The interruption the owner asked for.
      */
-    let (reservation, cancel, inject_rx) = {
+    enum SendRoute {
+        Inject(tokio::sync::mpsc::UnboundedSender<InjectedMessage>),
+        Start {
+            reservation: RunReservation,
+            cancel: tokio::sync::watch::Receiver<bool>,
+            inject_rx: tokio::sync::mpsc::UnboundedReceiver<InjectedMessage>,
+        },
+    }
+
+    let route = {
         let mut active = state
             .active
             .lock()
@@ -5839,58 +5898,71 @@ pub async fn send_message(
                 drop(active);
                 return Err(BUSY_WITH_COMMAND.into());
             };
-            drop(active);
-
-            let user_message =
-                user_message_for_send(&app, &state, &input, agent_name, &model, &permission, true)?;
-            emit_message_receipt(&app, &input.project_id, &user_message.id, "sent");
-
-            if inject
-                .send(InjectedMessage {
-                    body: input.body.clone(),
-                    turn_id: user_message.id.clone(),
-                })
-                .is_err()
-            {
-                // The run tore down after the row became visible. Hand that
-                // same row to the retry queue and report this send as accepted;
-                // returning the busy error as well would enqueue it twice.
-                let _ = app.emit(
-                    "run:inject_failed",
-                    serde_json::json!({
-                        "projectId": input.project_id,
-                        "messageId": user_message.id,
-                        "body": input.body,
-                    }),
-                );
+            SendRoute::Inject(inject)
+        } else {
+            let (cancel_tx, cancel_rx) = tokio::sync::watch::channel(false);
+            let (inject_tx, inject_rx) = tokio::sync::mpsc::unbounded_channel();
+            active.insert(
+                input.project_id.clone(),
+                ActiveRun {
+                    cancel: cancel_tx,
+                    agent,
+                    workspace_roots,
+                    // Kept for the receiver's lifetime. The capability check above
+                    // exposes live injection only when the active provider allows it.
+                    inject: Some(inject_tx),
+                },
+            );
+            SendRoute::Start {
+                reservation: RunReservation {
+                    active: state.active.clone(),
+                    project_id: input.project_id.clone(),
+                },
+                cancel: cancel_rx,
+                inject_rx,
             }
-            return Ok(user_message);
         }
-        let (cancel_tx, cancel_rx) = tokio::sync::watch::channel(false);
-        let (inject_tx, inject_rx) = tokio::sync::mpsc::unbounded_channel();
-        active.insert(
-            input.project_id.clone(),
-            ActiveRun {
-                cancel: cancel_tx,
-                agent,
-                workspace_roots,
-                // Kept for the receiver's lifetime. The capability check above
-                // exposes live injection only when the active provider allows it.
-                inject: Some(inject_tx),
-            },
-        );
-        (
-            RunReservation {
-                active: state.active.clone(),
-                project_id: input.project_id.clone(),
-            },
-            cancel_rx,
-            inject_rx,
-        )
+    };
+
+    let SendRoute::Start {
+        reservation,
+        cancel,
+        inject_rx,
+    } = route
+    else {
+        let SendRoute::Inject(inject) = route else {
+            unreachable!();
+        };
+        let user_message =
+            user_message_for_send(&app, &state, &input, agent_name, &model, &permission, true)?;
+        age_items_after_accepted_message(&app, &state.tables, &input.project_id).await;
+        emit_message_receipt(&app, &input.project_id, &user_message.id, "sent");
+
+        if inject
+            .send(InjectedMessage {
+                body: input.body.clone(),
+                turn_id: user_message.id.clone(),
+            })
+            .is_err()
+        {
+            // The run tore down after the row became visible. Hand that same
+            // row to the retry queue and report this send as accepted;
+            // returning the busy error as well would enqueue it twice.
+            let _ = app.emit(
+                "run:inject_failed",
+                serde_json::json!({
+                    "projectId": input.project_id,
+                    "messageId": user_message.id,
+                    "body": input.body,
+                }),
+            );
+        }
+        return Ok(user_message);
     };
 
     let user_message =
         user_message_for_send(&app, &state, &input, agent_name, &model, &permission, false)?;
+    age_items_after_accepted_message(&app, &state.tables, &input.project_id).await;
     emit_message_receipt(&app, &input.project_id, &user_message.id, "sent");
     // The run exists from this moment: the slot is claimed and the spawn below
     // cannot be refused. This is what starts the transcript's status line —
@@ -9447,6 +9519,31 @@ mod tests {
             .await
             .expect("completed-item store drains");
         let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn a_new_item_appends_after_the_greatest_position_not_the_row_count() {
+        let row = |id: &str, position: u32| ProjectItemRow {
+            id: id.into(),
+            project_id: "project-a".into(),
+            title: id.into(),
+            status: "planning".into(),
+            position,
+            reference: String::new(),
+        };
+        let rows = [row("one", 2), row("two", 2), row("three", 7)];
+
+        assert_eq!(next_item_position(rows.iter()), 8);
+        assert_eq!(next_item_position(std::iter::empty()), 0);
+
+        let saturated = [row("last", u32::MAX)];
+        assert_eq!(next_item_position(saturated.iter()), u32::MAX);
+
+        let projects = vec![project_row("a", "A"), project_row("b", "B")];
+        let mut projects = projects;
+        projects[0].position = 4;
+        projects[1].position = 9;
+        assert_eq!(next_project_position(&projects), 10);
     }
 
     #[tokio::test]

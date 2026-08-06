@@ -308,6 +308,14 @@ describe("openItemCount", () => {
     expect(workspace.itemsFor("worktable")).toHaveLength(5);
     expect(workspace.openItemCount("worktable")).toBe(4);
   });
+
+  it("does not count canceled work as still open", async () => {
+    const workspace = await mountWorkspace();
+
+    await workspace.actions.setItemStatus("worktable-1", "canceled");
+
+    expect(workspace.openItemCount("worktable")).toBe(3);
+  });
 });
 
 describe("createProject", () => {
