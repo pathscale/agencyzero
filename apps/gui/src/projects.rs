@@ -112,6 +112,9 @@ pub struct ProjectItemDto {
     /// The pull request or issue this shipped as, without the `#`. `None`
     /// until something has shipped, which is most of a row's life.
     pub reference: Option<String>,
+    /// ISO 8601 time of the latest persisted content/status mutation.
+    /// Empty for rows created before activity tracking shipped.
+    pub updated_at: String,
 }
 
 impl From<ProjectItemRow> for ProjectItemDto {
@@ -125,7 +128,47 @@ impl From<ProjectItemRow> for ProjectItemDto {
             // Absent rather than empty: "no pull request yet" is a different
             // fact from "a pull request named the empty string".
             reference: (!row.reference.is_empty()).then_some(row.reference),
+            updated_at: String::new(),
         }
+    }
+}
+
+const ITEM_ACTIVITY_PREFIX: &str = "item-activity:";
+
+fn item_activity_key(item_id: &str) -> String {
+    format!("{ITEM_ACTIVITY_PREFIX}{item_id}")
+}
+
+fn item_dto(row: ProjectItemRow, tables: &Tables) -> ProjectItemDto {
+    let updated_at = tables
+        .kv_get(&item_activity_key(&row.id))
+        .unwrap_or_default();
+    ProjectItemDto {
+        updated_at,
+        ..ProjectItemDto::from(row)
+    }
+}
+
+async fn touch_item(tables: &Tables, item_id: &str) {
+    if let Err(error) = tables.kv_put(&item_activity_key(item_id), now()).await {
+        crate::log!(
+            crate::log::Level::Warn,
+            "items",
+            "could not timestamp {item_id}: {error}"
+        );
+    }
+}
+
+async fn clear_item_activity(tables: &Tables, item_id: &str) {
+    let key = item_activity_key(item_id);
+    if tables.kv.select(key.clone()).is_some()
+        && let Err(error) = tables.kv.delete(key).await
+    {
+        crate::log!(
+            crate::log::Level::Warn,
+            "items",
+            "could not clear timestamp for {item_id}: {error}"
+        );
     }
 }
 
@@ -1012,7 +1055,7 @@ pub fn list_items(project_id: String, state: State<'_, AppState>) -> Vec<Project
         .execute()
         .unwrap_or_default()
         .into_iter()
-        .map(ProjectItemDto::from)
+        .map(|row| item_dto(row, &state.tables))
         .collect();
     rows.sort_by_key(|item| item.order);
     rows
@@ -1046,7 +1089,7 @@ fn next_project_position(rows: &[ProjectRow]) -> u32 {
 /// # Errors
 /// Returns a message for an empty title or a store failure.
 #[tauri::command]
-pub fn create_item(
+pub async fn create_item(
     app: AppHandle,
     project_id: String,
     title: String,
@@ -1082,7 +1125,8 @@ pub fn create_item(
         .project_item
         .insert(row.clone())
         .map_err(|error| error.to_string())?;
-    let dto = ProjectItemDto::from(row);
+    touch_item(&state.tables, &row.id).await;
+    let dto = item_dto(row, &state.tables);
     let _ = app.emit("item:created", dto.clone());
     let mut study =
         crate::study::Record::manual(dto.project_id.clone(), "items.add", "item", dto.id.clone());
@@ -1138,8 +1182,9 @@ async fn write_item_status(
             .delete(id.to_string())
             .await
             .map_err(|error| error.to_string())?;
+        clear_item_activity(tables, id).await;
         row.status = status.to_string();
-        return Ok(ItemStatusWrite::Deleted(ProjectItemDto::from(row)));
+        return Ok(ItemStatusWrite::Deleted(item_dto(row, tables)));
     }
 
     tables
@@ -1156,7 +1201,8 @@ async fn write_item_status(
         .project_item
         .select(id.to_string())
         .ok_or_else(|| format!("no item {id}"))?;
-    Ok(ItemStatusWrite::Updated(ProjectItemDto::from(row)))
+    touch_item(tables, id).await;
+    Ok(ItemStatusWrite::Updated(item_dto(row, tables)))
 }
 
 const FINISHED_RETIRE_PREFIX: &str = "finished-retire-turns:";
@@ -1245,6 +1291,7 @@ async fn age_finished_items(
             .delete(item_id.to_string())
             .await
             .map_err(|error| error.to_string())?;
+        clear_item_activity(tables, item_id).await;
         clear_finished_retirement(tables, item_id).await?;
         retired.push(ProjectItemDto::from(row));
     }
@@ -1362,7 +1409,8 @@ pub async fn update_item(
         .project_item
         .select(id.clone())
         .ok_or_else(|| format!("no item {id}"))?;
-    let dto = ProjectItemDto::from(row);
+    touch_item(&state.tables, &id).await;
+    let dto = item_dto(row, &state.tables);
     let _ = app.emit("item:updated", dto.clone());
     let mut study = crate::study::Record::manual(
         dto.project_id.clone(),
@@ -1416,7 +1464,8 @@ async fn link_item_issue_inner(
         .project_item
         .select(id.to_string())
         .ok_or_else(|| format!("no item {id}"))?;
-    let dto = ProjectItemDto::from(row);
+    touch_item(tables, id).await;
+    let dto = item_dto(row, tables);
     let _ = app.emit("item:updated", dto.clone());
     Ok(dto)
 }
@@ -1462,6 +1511,7 @@ pub async fn delete_item(
         .delete(id.clone())
         .await
         .map_err(|error| error.to_string())?;
+    clear_item_activity(&state.tables, &id).await;
     let _ = app.emit(
         "item:deleted",
         serde_json::json!({ "id": id, "projectId": row.project_id }),
@@ -2082,11 +2132,12 @@ async fn apply_directive(
             }
             match tables.project_item.insert(row.clone()) {
                 Ok(_) => {
+                    touch_item(tables, &row.id).await;
                     let said = match handle {
                         Some(handle) => format!("{handle} -> {} {:?}", row.id, row.title),
                         None => format!("{} {:?}", row.id, row.title),
                     };
-                    let _ = app.emit("item:created", ProjectItemDto::from(row));
+                    let _ = app.emit("item:created", item_dto(row, tables));
                     Outcome::Done(said)
                 }
                 Err(error) => Outcome::Refused {
@@ -2118,6 +2169,7 @@ async fn apply_directive(
                 .unwrap_or_else(|| project_id.to_string());
             match tables.project_item.delete(resolved.clone()).await {
                 Ok(()) => {
+                    clear_item_activity(tables, &resolved).await;
                     if let Err(error) = clear_finished_retirement(tables, &resolved).await {
                         crate::log!(
                             crate::log::Level::Warn,
@@ -2241,7 +2293,8 @@ async fn apply_directive(
             {
                 Ok(()) => {
                     if let Some(updated) = tables.project_item.select(resolved.clone()) {
-                        let _ = app.emit("item:updated", ProjectItemDto::from(updated));
+                        touch_item(tables, &resolved).await;
+                        let _ = app.emit("item:updated", item_dto(updated, tables));
                     }
                     Outcome::Done(format!("{resolved} <- #{number}"))
                 }
@@ -5800,12 +5853,24 @@ pub async fn delete_project(
         .delete_by_project(id.clone())
         .await
         .map_err(|error| failed("the transcript", &error))?;
+    let deleting_item_ids: Vec<String> = state
+        .tables
+        .project_item
+        .select_by_project_id(id.clone())
+        .execute()
+        .unwrap_or_default()
+        .into_iter()
+        .map(|item| item.id)
+        .collect();
     state
         .tables
         .project_item
         .delete_by_project(id.clone())
         .await
         .map_err(|error| failed("the items", &error))?;
+    for item_id in deleting_item_ids {
+        clear_item_activity(&state.tables, &item_id).await;
+    }
     state
         .tables
         .project
@@ -6496,7 +6561,8 @@ pub async fn send_message(
         {
             Ok(()) => {
                 if let Some(updated) = state.tables.project_item.select(item.to_string()) {
-                    let _ = app.emit("item:updated", ProjectItemDto::from(updated));
+                    touch_item(&state.tables, item).await;
+                    let _ = app.emit("item:updated", item_dto(updated, &state.tables));
                 }
             }
             Err(error) => crate::log!(
@@ -9456,6 +9522,41 @@ mod tests {
         assert_eq!(sessions[0].agent, "codex");
         assert_eq!(sessions[0].session_id, "session-current");
 
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[tokio::test]
+    async fn item_activity_is_persisted_without_inventing_legacy_times() {
+        let dir = std::env::temp_dir().join(format!(
+            "az-item-activity-{}-{}",
+            std::process::id(),
+            chrono::Utc::now().timestamp_nanos_opt().unwrap_or_default()
+        ));
+        let tables = Tables::open(&dir).await.expect("item store opens");
+        let row = ProjectItemRow {
+            id: "item-time".into(),
+            project_id: "project-time".into(),
+            title: "time sorting".into(),
+            status: "active".into(),
+            position: 0,
+            reference: String::new(),
+        };
+        tables
+            .project_item
+            .insert(row.clone())
+            .expect("legacy-shaped item inserts");
+        assert!(
+            item_dto(row.clone(), &tables).updated_at.is_empty(),
+            "a pre-tracking row must not receive a fabricated timestamp"
+        );
+
+        touch_item(&tables, &row.id).await;
+        let tracked = item_dto(row.clone(), &tables).updated_at;
+        assert!(!tracked.is_empty(), "a real mutation records its time");
+        tables.shutdown().await.expect("activity drains");
+
+        let reopened = Tables::open(&dir).await.expect("item store reopens");
+        assert_eq!(item_dto(row, &reopened).updated_at, tracked);
         let _ = std::fs::remove_dir_all(dir);
     }
 

@@ -173,6 +173,8 @@ export interface ProjectItem {
   order: number;
   /** A legacy PR number, or `issue:<canonical GitHub URL>`. */
   reference: string | null;
+  /** Latest tracked content/status mutation; absent for pre-tracking rows. */
+  updatedAt?: string;
 }
 
 /**
@@ -781,6 +783,9 @@ export interface UiPrefs {
   colorMode: "dark" | "light";
   /** Whether the project's right-hand workspace panel is visible. */
   projectPanelVisible: boolean;
+  /** The compact two-toggle sort state for project item lists. */
+  itemSortBy: "status" | "time";
+  itemSortDirection: "asc" | "desc";
   /**
    * The last "Extra Thinking" choice, so a new tab starts where the last one
    * was left. On by default, like the composer control it seeds.

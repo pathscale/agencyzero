@@ -16,6 +16,8 @@ const DEFAULTS: UiPrefs = {
   uiSize: "large",
   colorMode: "dark",
   projectPanelVisible: true,
+  itemSortBy: "status",
+  itemSortDirection: "asc",
   lastExtraThinking: true,
   // Settings starts collapsed: working directories are set once and then left
   // alone, while the other three change while you watch.
