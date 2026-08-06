@@ -390,23 +390,28 @@ export function RunStatusLine(props: {
     return seconds < 60 ? `${seconds}s` : `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
   };
 
-  /*
-   * The turn's tokens as the agent reports them, on the same definition as the
-   * header total: everything processed, cache included. So the two read in the
-   * same unit and the running figure lands inside the total it will join.
-   *
-   * Real once the first API request completes, estimated from streamed
-   * characters until then and for agents that report no mid-turn usage at all.
-   * The `~` marks the estimate and only the estimate.
+  /** Current prompt size, never summed across the model calls in this turn. */
+  const contextText = () => {
+    const context = props.status.contextTokens;
+    return context !== null && context > 0
+      ? tx("{count} ctx", { count: compactCount(context) })
+      : null;
+  };
+
+  /**
+   * Cumulative billable traffic across this turn's model calls. A tool-heavy
+   * turn can legitimately process many times its current context because the
+   * prompt is read again after each tool result.
    */
-  const usageText = () => {
+  const processedText = () => {
     const live = props.status.liveTokens;
-    if (live !== null && live > 0) return `${compactCount(live)} tok`;
+    if (live !== null && live > 0) {
+      return tx("{count} processed", { count: compactCount(live) });
+    }
     const tokens = props.streamedChars / 4;
     if (tokens < 1) return null;
-    return tokens < 1000
-      ? `~${Math.round(tokens)} tokens`
-      : `~${(tokens / 1000).toFixed(1)}k tokens`;
+    const count = tokens < 1000 ? String(Math.round(tokens)) : `${(tokens / 1000).toFixed(1)}k`;
+    return tx("~{count} output", { count });
   };
 
   const isSynced = () => props.status.persistedChars >= props.streamedChars;
@@ -447,7 +452,21 @@ export function RunStatusLine(props: {
       </Show>
       <span class="min-w-0 truncate">
         {elapsedText()}
-        <Show when={usageText()}>
+        <Show when={contextText()}>
+          {(context) => (
+            <>
+              {" · "}
+              <span
+                title={tx(
+                  "Current conversation size for the latest model call. This is window occupancy, not cumulative billing traffic.",
+                )}
+              >
+                {context()}
+              </span>
+            </>
+          )}
+        </Show>
+        <Show when={processedText()}>
           {(usage) => (
             <>
               {" · "}
@@ -456,7 +475,7 @@ export function RunStatusLine(props: {
                   props.status.liveTokens === null
                     ? tx("Estimated from the characters streamed so far")
                     : tx(
-                        "Tokens this turn has processed, cache included. The reply's own output joins it in the header when the run finishes.",
+                        "Cumulative billable token traffic across this turn's model calls: fresh input, repeated cached input, cache writes, and generated output reported so far.",
                       )
                 }
               >
@@ -599,17 +618,39 @@ function AgentBubble(props: {
  */
 export function MessageCost(props: { message: Message }): JSX.Element {
   const { state } = useWorkspace();
-  const cost = createMemo<{ usd: number | null; estimated: boolean; tokens: number } | null>(() => {
+  const cost = createMemo<{
+    usd: number | null;
+    estimated: boolean;
+    tokens: number;
+    calculatedUsd: number | null;
+    mismatch: boolean;
+  } | null>(() => {
     const usage = props.message.usage;
     if (!usage) return null;
     const tokens =
       typeof usage.tokens === "number" && Number.isFinite(usage.tokens) ? usage.tokens : 0;
-    if (typeof usage.costUsd === "number" && Number.isFinite(usage.costUsd)) {
-      return { usd: usage.costUsd, estimated: false, tokens };
-    }
     const table = state.pricing;
-    const usd = table ? estimateTurnCost(table, props.message.model, usage) : null;
-    return usd === null && tokens === 0 ? null : { usd, estimated: usd !== null, tokens };
+    const calculatedUsd = table ? estimateTurnCost(table, props.message.model, usage) : null;
+    if (typeof usage.costUsd === "number" && Number.isFinite(usage.costUsd)) {
+      const delta = calculatedUsd === null ? 0 : Math.abs(usage.costUsd - calculatedUsd);
+      const mismatch = calculatedUsd !== null && delta > 0.01 && delta / usage.costUsd > 0.05;
+      return {
+        usd: usage.costUsd,
+        estimated: false,
+        tokens,
+        calculatedUsd,
+        mismatch,
+      };
+    }
+    return calculatedUsd === null && tokens === 0
+      ? null
+      : {
+          usd: calculatedUsd,
+          estimated: calculatedUsd !== null,
+          tokens,
+          calculatedUsd: null,
+          mismatch: false,
+        };
   });
 
   return (
@@ -621,7 +662,12 @@ export function MessageCost(props: { message: Message }): JSX.Element {
               ? undefined
               : value().estimated
                 ? tx("Estimated from token counts — this agent does not report a cost.")
-                : tx("Reported by the agent.")
+                : value().calculatedUsd === null
+                  ? tx("Reported by the agent.")
+                  : tx("Reported by the agent: {reported}. Token-derived check: {calculated}.", {
+                      reported: costLabel(value().usd!),
+                      calculated: costLabel(value().calculatedUsd!),
+                    })
           }
           class="inline-flex shrink-0 items-center font-mono text-[10.5px]"
         >
@@ -636,6 +682,12 @@ export function MessageCost(props: { message: Message }): JSX.Element {
               {value().estimated
                 ? tx("est. {cost}", { cost: costLabel(value().usd!) })
                 : costLabel(value().usd!)}
+            </span>
+          </Show>
+          <Show when={value().mismatch && value().calculatedUsd !== null}>
+            <span class="font-semibold text-warning">
+              {" · "}
+              {tx("calc {cost}", { cost: costLabel(value().calculatedUsd!) })}
             </span>
           </Show>
           <Show when={value().tokens > 0}>

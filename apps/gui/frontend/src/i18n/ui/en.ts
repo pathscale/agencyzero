@@ -376,6 +376,13 @@ const en = {
   "Estimated from the characters streamed so far": "Estimated from the characters streamed so far",
   "Tokens this turn has processed, cache included. The reply's own output joins it in the header when the run finishes.":
     "Tokens this turn has processed, cache included. The reply's own output joins it in the header when the run finishes.",
+  "{count} ctx": "{count} ctx",
+  "{count} processed": "{count} processed",
+  "~{count} output": "~{count} output",
+  "Current conversation size for the latest model call. This is window occupancy, not cumulative billing traffic.":
+    "Current conversation size for the latest model call. This is window occupancy, not cumulative billing traffic.",
+  "Cumulative billable token traffic across this turn's model calls: fresh input, repeated cached input, cache writes, and generated output reported so far.":
+    "Cumulative billable token traffic across this turn's model calls: fresh input, repeated cached input, cache writes, and generated output reported so far.",
   "recent text not yet saved": "recent text not yet saved",
   "Everything streamed so far is saved to the store":
     "Everything streamed so far is saved to the store",
@@ -533,6 +540,9 @@ const en = {
   "Estimated from token counts — this agent does not report a cost.":
     "Estimated from token counts — this agent does not report a cost.",
   "Reported by the agent.": "Reported by the agent.",
+  "Reported by the agent: {reported}. Token-derived check: {calculated}.":
+    "Reported by the agent: {reported}. Token-derived check: {calculated}.",
+  "calc {cost}": "calc {cost}",
   Dismiss: "Dismiss",
   "Estimated cost of the next turn (≈{ctx}k context + prompt + reply). A projection, not a charge — the real cost is shown on the turn.":
     "Estimated cost of the next turn (≈{ctx}k context + prompt + reply). A projection, not a charge — the real cost is shown on the turn.",

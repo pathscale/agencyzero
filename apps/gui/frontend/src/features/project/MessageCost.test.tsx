@@ -54,8 +54,20 @@ function mount(value: Message) {
 describe("per-message cost and tokens", () => {
   it("puts Claude's processed tokens beside its reported cost", async () => {
     const { container, booted } = mount(message("claude"));
-    expect(container).toHaveTextContent("$2.89 · 340.5k tok");
+    await waitFor(() => expect(container).toHaveTextContent("$2.89 · calc $1.39 · 340.5k tok"));
     await booted();
+  });
+
+  it("keeps a matching Claude token-derived check quiet", async () => {
+    const matching = message("claude");
+    matching.usage!.costUsd = 1.3875;
+    const { container, getByTitle, booted } = mount(matching);
+    await waitFor(() => expect(container).toHaveTextContent("$1.39 · 340.5k tok"));
+    expect(container).not.toHaveTextContent("calc $1.39");
+    await booted();
+    expect(
+      getByTitle("Reported by the agent: $1.39. Token-derived check: $1.39."),
+    ).toBeInTheDocument();
   });
 
   it("puts Codex's processed tokens beside its estimated cost", async () => {
