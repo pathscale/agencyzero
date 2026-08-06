@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { Message, PricingTable } from "~/types";
 import {
   compactEstimate,
+  compactedContextTokens,
   compactionCost,
   costLabel,
   estimate,
@@ -158,9 +159,20 @@ describe("estimate", () => {
     expect(cold.contextCost).toBeGreaterThan(warm.contextCost);
   });
 
-  it("includes both the learning and summary passes in Claude compaction", () => {
-    const onePass = compactionCost(table, "opus", 500_000, false);
-    expect(compactionCost(table, "opus", 500_000)).toBeCloseTo(onePass * 2, 10);
+  it("matches locally observed Claude compaction costs", () => {
+    // Actual completed wrapped compacts in this install, versus the
+    // pre-compact processed context. The fitted curve stays within 1%.
+    expect(compactionCost(table, "opus", 622_244)).toBeCloseTo(6.5101765, 1);
+    expect(compactionCost(table, "opus", 867_486)).toBeCloseTo(9.130281, 1);
+    expect(compactionCost(table, "opus", 32_793)).toBeCloseTo(0.36802375, 1);
+    expect(compactionCost(table, "opus", 167_354)).toBeCloseTo(1.77105, 1);
+  });
+
+  it("projects the retained compact segment from the measured result", () => {
+    expect(compactedContextTokens(0)).toBe(0);
+    expect(compactedContextTokens(32_793)).toBe(8_000);
+    expect(compactedContextTokens(167_354)).toBe(8_000);
+    expect(compactedContextTokens(622_244)).toBe(12_445);
   });
 
   it("quotes extra thinking at the model output rate per thousand", () => {
@@ -168,16 +180,17 @@ describe("estimate", () => {
   });
 
   it("prices a typed /compact as the compaction pass, not a turn", () => {
-    // The whole cost is the compaction; no drafted prompt is sent, so there is
-    // no input or output turn cost and it is all attributed to context.
+    // No drafted prompt is sent. The cost is split between rewriting the
+    // eligible context and generating the retained summary/learning output.
     const est = compactEstimate(table, "opus", 500_000);
     expect(est.total).toBeCloseTo(compactionCost(table, "opus", 500_000), 10);
     expect(est.inputCost).toBe(0);
-    expect(est.outputCost).toBe(0);
-    expect(est.contextCost).toBe(est.total);
+    expect(est.outputCost).toBeGreaterThan(0);
+    expect(est.outputTokens).toBe(10_000);
+    expect(est.contextCost + est.outputCost).toBe(est.total);
     // Severity comes from the same thresholds a turn uses: this 500k session's
-    // ~$0.70 compaction clears the warn line without hitting high.
-    expect(est.severity).toBe("warning");
+    // ~$5.25 compaction is correctly flagged high instead of the old ~$0.70.
+    expect(est.severity).toBe("high");
   });
 });
 

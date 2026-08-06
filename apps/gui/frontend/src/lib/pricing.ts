@@ -120,23 +120,40 @@ export function estimate(
 }
 
 /**
- * The cost of running `/compact` once: read the whole conversation (warm, so
- * cache-read) and write a summary. Makes "compacting has a cost" concrete, and
- * lets the alert say whether a compaction pays for itself against the per-turn
- * context cost it removes.
+ * Project the compacted segment Claude carries into the resumed conversation.
+ *
+ * A locally observed 167,354-token session resumed with an 8,629-token compact
+ * segment. Larger completed runs' cost curves indicate that summary work then
+ * grows at roughly 2%, so use the observed 8k floor before that curve wins.
+ * AgencyZero's standing prompt and live project metadata are additional.
  */
-export function compactionCost(
-  table: PricingTable,
-  model: string,
-  contextTokens: number,
-  learnsFirst = true,
-): number {
+export function compactedContextTokens(contextTokens: number): number {
+  if (contextTokens <= 0) return 0;
+  return Math.max(8_000, Math.ceil(contextTokens * 0.02));
+}
+
+/** Billable generated-work proxy fitted from completed compact costs. */
+function compactionOutputTokens(contextTokens: number): number {
+  if (contextTokens <= 0) return 0;
+  return Math.max(1_600, Math.ceil(contextTokens * 0.02));
+}
+
+/**
+ * Project the complete wrapped `/compact` operation.
+ *
+ * Local completed runs at 33k, 622k and 872k processed tokens cost $0.368,
+ * $6.510 and $9.130 on Opus. They fit a cold one-hour cache rewrite of the
+ * eligible context plus generated summary/learning work at roughly 2% of the
+ * context (with a 1.6k floor). The old formula treated both passes as cheap
+ * cache reads with a fixed 4k output and missed the large runs by about 8-10x.
+ */
+export function compactionCost(table: PricingTable, model: string, contextTokens: number): number {
   const price = priceFor(table, model);
   if (!price) return 0;
-  const SUMMARY_TOKENS = 4_000;
-  const onePass =
-    (contextTokens * price.cacheRead) / 1_000_000 + (SUMMARY_TOKENS * price.output) / 1_000_000;
-  return onePass * (learnsFirst ? 2 : 1);
+  const generated = compactionOutputTokens(contextTokens);
+  return (
+    (contextTokens * price.input * table.cacheWriteMultiple + generated * price.output) / 1_000_000
+  );
 }
 
 /**
@@ -154,18 +171,24 @@ export function compactEstimate(
   contextTokens: number,
 ): CostEstimate {
   const priced = priceFor(table, model) !== undefined;
-  const total = compactionCost(table, model, contextTokens);
+  const price = priceFor(table, model);
+  const outputTokens = compactionOutputTokens(contextTokens);
+  const contextCost = price
+    ? (contextTokens * price.input * table.cacheWriteMultiple) / 1_000_000
+    : 0;
+  const outputCost = price ? (outputTokens * price.output) / 1_000_000 : 0;
+  const total = contextCost + outputCost;
   const severity: Severity =
     total >= table.highUsd ? "high" : total >= table.warnUsd ? "warning" : "low";
   return {
     priced,
-    contextCost: total,
+    contextCost,
     inputCost: 0,
-    outputCost: 0,
+    outputCost,
     total,
     contextTokens,
     inputTokens: 0,
-    outputTokens: 0,
+    outputTokens,
     severity,
     coldContext: false,
   };

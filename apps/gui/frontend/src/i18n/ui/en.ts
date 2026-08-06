@@ -539,6 +539,8 @@ const en = {
   "This turn is projected at {cost}.": "This turn is projected at {cost}.",
   "Compacting this session is projected at {cost}.":
     "Compacting this session is projected at {cost}.",
+  "Projected retained context: about {kept} tokens from {before}, before standing rules.":
+    "Projected retained context: about {kept} tokens from {before}, before standing rules.",
   "It reads the whole conversation and writes a summary, including the learning pass. It runs against the session, so the drafted text is not sent.":
     "It reads the whole conversation and writes a summary, including the learning pass. It runs against the session, so the drafted text is not sent.",
   "Most of it ({cost}) is the conversation being resent every turn — not this message.":
