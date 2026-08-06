@@ -12,7 +12,7 @@ import { describeError, log } from "~/lib/log";
 import { tx } from "~/stores/i18n";
 import { prefs, togglePanelSection } from "~/stores/prefs";
 import { useNow, useWorkspace } from "~/stores/workspace";
-import type { Project, ProjectItem } from "~/types";
+import type { Project, ProjectItem, RunningTask } from "~/types";
 
 /**
  * The project's right-hand column: Items · Running · Task log · Agent I/O ·
@@ -1263,53 +1263,46 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
 }
 
 function RunningList(props: { projectId: string }): JSX.Element {
-  const { state, actions, isLive } = useWorkspace();
+  const { state } = useWorkspace();
   const now = useNow();
   const tasks = () => state.running[props.projectId] ?? [];
 
   return (
     <div class="az-scroll flex max-h-[230px] flex-col gap-2 px-3 pt-3 pb-3">
-      <For each={tasks()}>
-        {(task) => (
-          <div class="rounded-[11px] border border-primary/22 bg-base-300 px-3 py-2.5">
-            {/*
-             * Wrapped rather than truncated. This panel answers "what is it
-             * doing right now", and a truncated command answers it for the
-             * first forty characters. The task log below can be clicked open
-             * because its rows are history; a running row is the present, so
-             * it shows the whole thing.
-             */}
-            <div class="whitespace-pre-wrap break-words font-mono text-[12px] text-az-strong">
-              {task.label}
-            </div>
-            <div class="mt-2 flex items-center gap-2 text-[11px]">
-              <span class="font-mono text-az-muted">{task.name}</span>
-              <span class="text-primary">{elapsed(task.startedAt, now())}</span>
-              <div class="flex-1" />
-              <button
-                type="button"
-                /*
-                 * `isLive` too: per-tool cancellation has no Rust side yet,
-                 * so on the real backend this routes to the mock — which
-                 * fakes a `task:completed` while the tool keeps running.
-                 * Greyed out until it can be true, per the house convention.
-                 */
-                disabled={!task.isCancelable || !task.toolCallId || !isLive("cancelTask")}
-                onClick={() => task.toolCallId && void actions.cancelTask(task.toolCallId)}
-                class="rounded-md border border-primary/16 px-2 py-0.5 text-az-body transition-colors hover:border-error hover:text-error disabled:opacity-40"
-              >
-                {tx("Stop")}
-              </button>
-            </div>
-          </div>
-        )}
-      </For>
+      <For each={tasks()}>{(task) => <RunningTaskCard task={task} now={now()} />}</For>
 
       <Show when={tasks().length === 0}>
         <p class="rounded-[11px] border border-primary/12 border-dashed p-3 text-center text-[11.5px] text-az-muted">
           {tx("Nothing running")}
         </p>
       </Show>
+    </div>
+  );
+}
+
+export function RunningTaskCard(props: { task: RunningTask; now: number }): JSX.Element {
+  const { actions, isLive } = useWorkspace();
+
+  return (
+    <div class="rounded-[11px] border border-primary/22 bg-base-300 px-3 py-2.5">
+      {/* A running row is the present, so show the whole command rather than a
+          truncated label that hides what the provider is actually doing. */}
+      <div class="whitespace-pre-wrap break-words font-mono text-[12px] text-az-strong">
+        {props.task.label}
+      </div>
+      <div class="mt-2 flex items-center gap-2 text-[11px]">
+        <span class="font-mono text-az-muted">{props.task.name}</span>
+        <span class="text-primary">{elapsed(props.task.startedAt, props.now)}</span>
+        <div class="flex-1" />
+        <button
+          type="button"
+          disabled={!props.task.isCancelable || !isLive("cancelRun")}
+          onClick={() => void actions.cancelRun(props.task.projectId)}
+          class="rounded-md border border-primary/16 px-2 py-0.5 text-az-body transition-colors hover:border-error hover:text-error disabled:opacity-40"
+        >
+          {tx("Stop")}
+        </button>
+      </div>
     </div>
   );
 }
