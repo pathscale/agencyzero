@@ -436,35 +436,10 @@ export function ProjectTab(props: { tab: Tab; project: Project }): JSX.Element {
           </div>
         </Panel>
 
-        {/*
-          This control acts on the boundary, so it lives on the boundary. It is
-          outside the conversation header and remains reachable when the panel
-          is closed. The button and panel animate independently: the button's
-          tone describes state while the panel's width/opacity show the change.
-        */}
-        <button
-          type="button"
-          onClick={() => setPrefs("projectPanelVisible", (visible) => !visible)}
-          aria-pressed={prefs.projectPanelVisible}
-          aria-label={tx(
-            prefs.projectPanelVisible ? "Hide the project sidebar" : "Show the project sidebar",
-          )}
-          title={tx(
-            prefs.projectPanelVisible ? "Hide the project sidebar" : "Show the project sidebar",
-          )}
-          class={`absolute top-1/2 -right-3.5 z-20 flex size-7 -translate-y-1/2 items-center justify-center rounded-full border bg-base-100 shadow-md transition-[color,background-color,border-color,transform] duration-200 motion-reduce:transition-none ${
-            prefs.projectPanelVisible
-              ? "border-primary/30 text-primary hover:scale-105"
-              : "border-az-hairline text-az-muted hover:scale-105 hover:text-base-content"
-          }`}
-        >
-          <Icon
-            name="layout-grid"
-            class={`text-[13px] transition-transform duration-200 motion-reduce:transition-none ${
-              prefs.projectPanelVisible ? "rotate-0" : "rotate-90"
-            }`}
-          />
-        </button>
+        <ProjectPanelToggle
+          visible={prefs.projectPanelVisible}
+          onToggle={() => setPrefs("projectPanelVisible", (visible) => !visible)}
+        />
       </div>
 
       <div
@@ -478,6 +453,37 @@ export function ProjectTab(props: { tab: Tab; project: Project }): JSX.Element {
         <ProjectPanel project={props.project} />
       </div>
     </div>
+  );
+}
+
+/**
+ * The sidebar handle starts at the conversation boundary and grows only into
+ * the gap on its right. Its flat edge therefore never covers the conversation
+ * scrollbar. The arrow points toward the action: right closes the visible
+ * sidebar, left restores the hidden one.
+ */
+export function ProjectPanelToggle(props: { visible: boolean; onToggle: () => void }): JSX.Element {
+  const label = () => tx(props.visible ? "Hide the project sidebar" : "Show the project sidebar");
+  return (
+    <button
+      type="button"
+      onClick={props.onToggle}
+      aria-pressed={props.visible}
+      aria-label={label()}
+      title={label()}
+      class={`absolute top-1/2 left-full z-20 flex h-10 w-5 -translate-y-1/2 items-center justify-center rounded-r-full border border-l-0 bg-base-100 shadow-[3px_0_8px_rgb(0_0_0_/_0.22)] transition-[color,background-color,border-color,transform] duration-200 motion-reduce:transition-none ${
+        props.visible
+          ? "border-primary/30 text-primary hover:translate-x-px"
+          : "border-az-hairline text-az-muted hover:translate-x-px hover:text-base-content"
+      }`}
+    >
+      <Icon
+        name="chevron-right"
+        class={`text-[14px] transition-transform duration-200 motion-reduce:transition-none ${
+          props.visible ? "rotate-0" : "rotate-180"
+        }`}
+      />
+    </button>
   );
 }
 
