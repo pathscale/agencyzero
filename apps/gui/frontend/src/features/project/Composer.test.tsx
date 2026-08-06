@@ -179,6 +179,13 @@ describe("Composer", () => {
     await live.booted();
   });
 
+  it("shows the live next-turn estimate for a Claude picker alias", async () => {
+    const screen = mount({ model: "sonnet" });
+    await screen.booted();
+
+    expect(screen.getByText(/^est \$/)).toBeTruthy();
+  });
+
   it("treats Shift+Enter as a newline rather than a send", () => {
     const { field, onSend } = mount();
     type(field, "first line");

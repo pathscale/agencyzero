@@ -511,10 +511,10 @@ export function createMockApi(): AgencyZeroApi {
     pricingTable: () =>
       settle({
         rows: [
-          { key: "claude-opus", input: 5.0, output: 25.0, cacheRead: 0.5 },
-          { key: "claude-fable", input: 10.0, output: 50.0, cacheRead: 1.0 },
-          { key: "claude-sonnet", input: 3.0, output: 15.0, cacheRead: 0.3 },
-          { key: "claude-haiku", input: 1.0, output: 5.0, cacheRead: 0.1 },
+          { key: "opus", input: 5.0, output: 25.0, cacheRead: 0.5 },
+          { key: "fable", input: 10.0, output: 50.0, cacheRead: 1.0 },
+          { key: "sonnet", input: 3.0, output: 15.0, cacheRead: 0.3 },
+          { key: "haiku", input: 1.0, output: 5.0, cacheRead: 0.1 },
           { key: "gpt-5.4-mini", input: 0.75, output: 4.5, cacheRead: 0.075 },
           { key: "gpt-5.6-sol", input: 5.0, output: 30.0, cacheRead: 0.5 },
           { key: "gpt-5.6-terra", input: 2.0, output: 12.0, cacheRead: 0.2 },

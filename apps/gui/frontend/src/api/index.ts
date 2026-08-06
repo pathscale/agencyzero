@@ -14,7 +14,16 @@ export type { AgencyZeroApi, AppEvent, AppEvents, TaskLogPage, Unlisten } from "
  * capability probe returns command names, and this is what turns them back into
  * the methods a caller reaches for.
  */
-const COMMAND_FOR: Partial<Record<keyof AgencyZeroApi, string>> = {
+/*
+ * Complete by type, not convention. A missing entry silently routes that
+ * method to the mock in a hybrid build. That made Reset session a successful
+ * no-op and fed the composer the mock price table, where Codex happened to
+ * price while Claude did not. `on` is the only API method that is not a Tauri
+ * command; it is wired to both event buses below.
+ */
+type CommandMethod = Exclude<keyof AgencyZeroApi, "on">;
+
+const COMMAND_FOR: Record<CommandMethod, string> = {
   listProjects: "list_projects",
   createProject: "create_project",
   deleteProject: "delete_project",
@@ -51,6 +60,7 @@ const COMMAND_FOR: Partial<Record<keyof AgencyZeroApi, string>> = {
   claudeUsage: "claude_usage",
   listAgentStatus: "list_agent_status",
   listModels: "list_models",
+  pricingTable: "pricing_table",
   listTableSizes: "list_table_sizes",
   openExternal: "open_external",
   getDataLocation: "get_data_location",
@@ -66,8 +76,12 @@ const COMMAND_FOR: Partial<Record<keyof AgencyZeroApi, string>> = {
   setCheckpoints: "set_checkpoints",
   getProjectConcise: "get_project_concise",
   setProjectConcise: "set_project_concise",
+  getProjectVerbosity: "get_project_verbosity",
+  setProjectVerbosity: "set_project_verbosity",
   getProjectNotes: "get_project_notes",
   setProjectNotes: "set_project_notes",
+  resetProjectSession: "reset_project_session",
+  adoptSession: "adopt_session",
   listRunningTasks: "list_running_tasks",
   cancelTask: "cancel_task",
   listTaskLog: "list_task_log",
@@ -153,7 +167,7 @@ export async function selectApi(): Promise<BackendChoice> {
 
   const tauri = createTauriApi();
   const live = new Set(
-    (Object.keys(COMMAND_FOR) as (keyof AgencyZeroApi)[]).filter((method) => {
+    (Object.keys(COMMAND_FOR) as CommandMethod[]).filter((method) => {
       const command = COMMAND_FOR[method];
       return command !== undefined && implemented.has(command);
     }),
