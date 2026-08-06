@@ -6138,6 +6138,162 @@ pub fn list_rate_limits(state: State<'_, AppState>) -> Vec<RateLimitReport> {
         .unwrap_or_default()
 }
 
+/// Discover importable provider sessions without copying transcript content.
+///
+/// # Errors
+/// Returns a message only when the home directory itself cannot be resolved.
+#[tauri::command]
+pub async fn discover_chat_imports() -> Result<Vec<crate::chat_import::SourceStatus>, String> {
+    tokio::task::spawn_blocking(crate::chat_import::discover)
+        .await
+        .map_err(|error| format!("chat discovery stopped unexpectedly: {error}"))?
+}
+
+/// Copy one allowlisted provider transcript into a new AgencyZero project.
+///
+/// The webview supplies a source and native session id, never a path. The
+/// importer resolves that pair beneath fixed local provider roots, preventing
+/// this command from becoming an arbitrary-file reader.
+///
+/// # Errors
+/// Returns parser, validation or persistence failures. A repeated import opens
+/// the project created by the first import instead of duplicating the chat.
+#[tauri::command]
+pub async fn import_chat_session(
+    app: AppHandle,
+    source: String,
+    session_id: String,
+    state: State<'_, AppState>,
+) -> Result<ProjectDto, String> {
+    let import_key = format!("imported-chat:{source}:{session_id}");
+    if let Some(project_id) = state.tables.kv_get(&import_key)
+        && let Some(row) = state.tables.project.select(project_id)
+    {
+        return Ok(with_session(ProjectDto::from(row), &state.tables));
+    }
+
+    let parse_source = source.clone();
+    let parse_session = session_id.clone();
+    let chat = tokio::task::spawn_blocking(move || {
+        crate::chat_import::load(&parse_source, &parse_session)
+    })
+    .await
+    .map_err(|error| format!("chat import stopped unexpectedly: {error}"))??;
+    if chat.messages.is_empty() {
+        return Err("the selected session contains no importable user or agent messages".into());
+    }
+    let project_id = id("proj");
+    let agent = if source == "codex" {
+        Agent::Codex
+    } else {
+        Agent::Claude
+    };
+    let order = u32::try_from(list_projects(state.clone()).len()).unwrap_or(0);
+    let last_activity_at = chat
+        .messages
+        .last()
+        .map(|message| message.at.clone())
+        .filter(|at| !at.is_empty())
+        .unwrap_or_else(now);
+    let dirs = chat
+        .cwd
+        .as_deref()
+        .filter(|cwd| std::path::Path::new(cwd).is_dir())
+        .map(|cwd| serde_json::to_string(&vec![cwd]).unwrap_or_else(|_| "[]".into()))
+        .unwrap_or_else(|| "[]".into());
+    let row = ProjectRow {
+        id: project_id.clone(),
+        name: chat.title,
+        status: "active".into(),
+        position: order,
+        dirs,
+        pinned: false,
+        moderator_enabled: false,
+        forked_from: String::new(),
+        last_activity_at,
+    };
+    state
+        .tables
+        .kv_put(&import_key, project_id.clone())
+        .await
+        .map_err(|error| error.to_string())?;
+    if let Err(error) = state.tables.project.insert(row.clone()) {
+        let _ = state.tables.kv.delete(import_key).await;
+        return Err(error.to_string());
+    }
+
+    let fallback_at = chrono::Utc::now();
+    let mut imported = Vec::with_capacity(chat.messages.len());
+    for (index, message) in chat.messages.into_iter().enumerate() {
+        let message_id = id("msg");
+        let at = if message.at.is_empty() {
+            fallback_at + chrono::Duration::milliseconds(i64::try_from(index).unwrap_or(i64::MAX))
+        } else {
+            chrono::DateTime::parse_from_rfc3339(&message.at)
+                .map(|at| at.with_timezone(&chrono::Utc))
+                .unwrap_or(
+                    fallback_at
+                        + chrono::Duration::milliseconds(i64::try_from(index).unwrap_or(i64::MAX)),
+                )
+        };
+        let stored = MessageRow {
+            id: message_id,
+            project_id: project_id.clone(),
+            item_id: String::new(),
+            author: if message.role == "assistant" {
+                "agent".into()
+            } else {
+                "user".into()
+            },
+            agent: agent_wire_name(agent).into(),
+            moderation: String::new(),
+            model: message.model,
+            permission: String::new(),
+            usage: String::new(),
+            stop: "imported".into(),
+            exit_code: 0,
+            body: body_head(&message.text),
+            created_at: at.to_rfc3339(),
+        };
+        match persist_message_body(&state.tables, stored, &message.text) {
+            Ok(dto) => imported.push(dto),
+            Err(error) => {
+                let _ = state
+                    .tables
+                    .message_chunk
+                    .delete_by_project(project_id.clone())
+                    .await;
+                let _ = state
+                    .tables
+                    .message
+                    .delete_by_project(project_id.clone())
+                    .await;
+                let _ = state.tables.project.delete(project_id.clone()).await;
+                let _ = state.tables.kv.delete(import_key.clone()).await;
+                return Err(format!("the import was rolled back: {error}"));
+            }
+        }
+    }
+    if let Err(error) = state
+        .tables
+        .kv_put(&agent_session_key(&project_id, agent), chat.session_id)
+        .await
+    {
+        crate::log!(
+            crate::log::Level::Warn,
+            "imports",
+            "{project_id}: transcript imported but its provider session could not be adopted: {error}"
+        );
+    }
+
+    let project = with_session(ProjectDto::from(row), &state.tables);
+    let _ = app.emit("project:created", &project);
+    for message in imported {
+        let _ = app.emit("message:appended", message);
+    }
+    Ok(project)
+}
+
 // — mutations ——————————————————————————————————————————————————————
 
 /// Create a project from its first message, and run the agent on it.

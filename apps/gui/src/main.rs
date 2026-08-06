@@ -1,6 +1,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod agents;
+mod chat_import;
 mod db;
 mod directives;
 mod experimental;
@@ -98,6 +99,8 @@ const IMPLEMENTED: &[&str] = &[
     "set_io_persist",
     "list_quota",
     "list_rate_limits",
+    "discover_chat_imports",
+    "import_chat_session",
     "create_project",
     "send_message",
     "get_settings",
@@ -1137,6 +1140,8 @@ fn main() {
             projects::list_running_tasks,
             projects::list_task_log,
             projects::list_rate_limits,
+            projects::discover_chat_imports,
+            projects::import_chat_session,
             projects::clear_task_log,
             projects::delete_project,
             projects::set_project_pinned,

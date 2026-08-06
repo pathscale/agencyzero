@@ -5,6 +5,7 @@ import type {
   AgentStatus,
   AvailableUpdate,
   BuildInfo,
+  ChatImportSource,
   ClaudeUsage,
   CostSummary,
   CreatedProject,
@@ -303,6 +304,10 @@ export interface AgencyZeroApi {
   getCostSummary(): Promise<CostSummary>;
   /** Ledger + cache aggregation for the Analytics view. */
   getUsageAnalytics(): Promise<UsageAnalytics>;
+  /** Discover local provider sessions without copying transcript content. */
+  discoverChatImports(): Promise<ChatImportSource[]>;
+  /** Copy one discovered provider session into a new AgencyZero project. */
+  importChatSession(source: string, sessionId: string): Promise<Project>;
   /** Which commit this binary is and when it was compiled. */
   getBuildInfo(): Promise<BuildInfo>;
   /**

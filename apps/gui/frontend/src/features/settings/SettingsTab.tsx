@@ -29,6 +29,7 @@ import type {
   AgentState,
   AgentStatus,
   BuildInfo,
+  ChatImportSource,
   CostSummary,
   EnvPolicy,
   Model,
@@ -726,6 +727,8 @@ export function SettingsTab(): JSX.Element {
                 </Show>
               </Section>
 
+              <ChatImportSettings />
+
               <StudySettings />
 
               <Section
@@ -899,6 +902,116 @@ export function SettingsTab(): JSX.Element {
         </Show>
       </div>
     </div>
+  );
+}
+
+/** Discover provider-owned local transcripts and copy only an explicit choice. */
+function ChatImportSettings(): JSX.Element {
+  const { actions, isLive } = useWorkspace();
+  const [sources, setSources] = createSignal<ChatImportSource[]>([]);
+  const [selected, setSelected] = createSignal<Record<string, string>>({});
+  const [busy, setBusy] = createSignal<string | null>(null);
+  const [note, setNote] = createSignal<string | null>(null);
+  const available = () => isLive("discoverChatImports") && isLive("importChatSession");
+
+  const refresh = async (): Promise<void> => {
+    if (!available()) return;
+    setSources(await actions.discoverChatImports());
+  };
+
+  onMount(() => {
+    void refresh().catch((cause) => setNote(describeError(cause)));
+  });
+
+  const importOne = async (source: string, sessionId: string): Promise<void> => {
+    const key = `${source}:${sessionId}`;
+    setBusy(key);
+    setNote(null);
+    try {
+      const project = await actions.importChatSession(source, sessionId);
+      setNote(tx("Imported as {name}", { name: project.name }));
+      actions.openProject(project.id);
+    } catch (cause) {
+      setNote(describeError(cause));
+    } finally {
+      setBusy(null);
+    }
+  };
+  const choice = (source: ChatImportSource) =>
+    selected()[source.source] ?? source.sessions[0]?.id ?? "";
+
+  return (
+    <Section
+      icon="messages-square"
+      title={tx("Import chats")}
+      hint={tx("copy local provider transcripts into new AgencyZero projects")}
+      pending={available() ? undefined : tx("requires the native import backend")}
+    >
+      <Show
+        when={sources().length > 0}
+        fallback={
+          <Row label={tx("Local sources")} hint={tx("checking known provider stores")} isLast>
+            <span class="text-[11.5px] text-az-muted">{tx("No sessions discovered")}</span>
+          </Row>
+        }
+      >
+        <For each={sources()}>
+          {(source, sourceIndex) => (
+            <Row
+              label={source.label}
+              hint={source.note}
+              isLast={sourceIndex() === sources().length - 1}
+            >
+              <div class="flex max-w-[390px] flex-col items-end gap-1.5">
+                <Show
+                  when={source.sessions.length > 0}
+                  fallback={
+                    <span class="text-[11px] text-az-faint">
+                      {source.available ? tx("No importable sessions") : tx("Not installed")}
+                    </span>
+                  }
+                >
+                  <div class="flex w-full items-center gap-2">
+                    <select
+                      value={choice(source)}
+                      aria-label={tx("Choose a session from {source}", { source: source.label })}
+                      onChange={(event) =>
+                        setSelected((current) => ({
+                          ...current,
+                          [source.source]: event.currentTarget.value,
+                        }))
+                      }
+                      class="min-w-0 flex-1 rounded-lg border border-az-hairline bg-az-inset px-2 py-[4px] text-[11px] text-az-body outline-none"
+                    >
+                      <For each={source.sessions}>
+                        {(session) => (
+                          <option value={session.id}>
+                            {session.title} · {session.messages}
+                          </option>
+                        )}
+                      </For>
+                    </select>
+                    <button
+                      type="button"
+                      disabled={!choice(source) || busy() === `${source.source}:${choice(source)}`}
+                      onClick={() => void importOne(source.source, choice(source))}
+                      class="shrink-0 rounded-lg border border-az-hairline-strong px-2.5 py-[4px] text-[11px] text-primary transition-colors hover:border-primary disabled:opacity-40"
+                    >
+                      {busy() === `${source.source}:${choice(source)}`
+                        ? tx("Importing…")
+                        : tx("Import")}
+                    </button>
+                  </div>
+                </Show>
+              </div>
+            </Row>
+          )}
+        </For>
+      </Show>
+      <Show when={note()}>
+        {(message) => <p class="px-3.5 py-2 text-[11.5px] text-az-muted">{message()}</p>}
+      </Show>
+    </Section>
   );
 }
 

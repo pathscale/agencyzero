@@ -1896,6 +1896,13 @@ function createWorkspace() {
     clearApprovalRules: (projectId: string) => client().clearApprovalRules(projectId),
     getCostSummary: () => client().getCostSummary(),
     getUsageAnalytics: () => client().getUsageAnalytics(),
+    discoverChatImports: () => client().discoverChatImports(),
+    async importChatSession(source: string, sessionId: string) {
+      const project = await client().importChatSession(source, sessionId);
+      upsertProject(project);
+      await loadProject(project.id);
+      return project;
+    },
     getBuildInfo: () => client().getBuildInfo(),
     checkForUpdate,
     installUpdate: () => client().installUpdate(),
