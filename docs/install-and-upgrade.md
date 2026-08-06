@@ -9,9 +9,10 @@ out for decision; recommendations marked.
 - The bundle is built to `target/release/bundle/macos/AgencyZero.app` and run
   from there. Tauri ad-hoc signs it, which satisfies Gatekeeper on the machine
   that built it and nowhere else.
-- `Restart into Build on Disk` (menu + Settings) already restarts the running
-  instance into whatever binary sits at the app's own path — the second half
-  of every upgrade.
+- `Restart into Build on Disk` (menu + Settings) drains the running instance,
+  hands its path to a one-shot restart angel, and exits. The angel waits for the
+  old PID to release the store before launching whatever binary is now at that
+  path. This is the second half of every upgrade.
 - The build stamp (version · commit · compile time, in About and Settings)
   makes "which build am I actually in" answerable after any restart.
 - The Dev instance (`tauri.dev.conf.json`, own identifier) means an upgrade
@@ -44,10 +45,10 @@ exists; the middle step is the work.
 that: reads the freshly built bundle's `Info.plist`/binary build stamp,
 refuses if it is not newer than the running one (the stale-build class of
 bug, closed at the door); moves the installed app aside as a `.bak` (one
-generation of rollback); `ditto`s the new bundle in; then the existing drain
-+ `app.restart()`. Replacing a running `.app` is safe on macOS — the process
-keeps its inodes — and the restart lands in the new copy. Surfaced next to
-Restart in Settings.
+generation of rollback); `ditto`s the new bundle in; then uses the existing
+drain + restart angel handoff. Replacing a running `.app` is safe on macOS:
+the process keeps its inodes, and the angel launches the new copy only after
+the old process exits. Surfaced next to Restart in Settings.
 
 **2. An install script the agent runs with approval.** `scripts/install.sh`
 doing the same ditto+stamp check, invoked inside a session. Cheaper to build,

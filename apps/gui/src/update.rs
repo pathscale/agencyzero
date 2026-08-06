@@ -80,7 +80,8 @@ pub(crate) async fn install_update(
         .await
         .map_err(|e| e.to_string())?;
 
-    // Same drain as the quit path, for the same reason.
-    state.drain_tables_once().await?;
-    app.restart();
+    // Same drain-and-angel handoff as Restart into Build on Disk. The updater
+    // has replaced the path already; the angel launches that new binary only
+    // after this process has released the single-writer store.
+    crate::restart_after_drain(&app, &state).await
 }
