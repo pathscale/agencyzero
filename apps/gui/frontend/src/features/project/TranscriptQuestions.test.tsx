@@ -36,7 +36,7 @@ describe("transcript questions", () => {
     );
     const card = question.parentElement?.parentElement;
 
-    expect(screen.getByText("Question")).toBeInTheDocument();
+    expect(screen.getByText("Question #1")).toBeInTheDocument();
     expect(card).toHaveClass("border-error");
     expect(card).not.toHaveClass("opacity-45");
     expect(

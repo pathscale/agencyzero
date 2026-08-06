@@ -117,6 +117,15 @@ export function TranscriptPane(props: {
    * it is the action the conversation is waiting on, so it stays at the tail.
    */
   const questionsFor = () => state.questions[props.project.id] ?? [];
+  const questionNumber = (id: string): number => {
+    const ordered = [...questionsFor()].sort((left, right) =>
+      left.createdAt === right.createdAt
+        ? left.id.localeCompare(right.id)
+        : left.createdAt.localeCompare(right.createdAt),
+    );
+    const index = ordered.findIndex((question) => question.id === id);
+    return index >= 0 ? index + 1 : 0;
+  };
   const openQuestions = () => questionsFor().filter((question) => !question.answered);
   const turnLabels = createMemo(() => agentTurnLabels(props.messages));
   const timeline = createMemo(() => {
@@ -202,7 +211,12 @@ export function TranscriptPane(props: {
           {(entry) => (
             <Switch>
               <Match when={entry.kind === "question" && entry}>
-                {(item) => <QuestionCard question={item().question} />}
+                {(item) => (
+                  <QuestionCard
+                    question={item().question}
+                    number={questionNumber(item().question.id)}
+                  />
+                )}
               </Match>
               <Match when={entry.kind === "message" && entry.message.author === "user" && entry}>
                 {(item) => (
@@ -211,6 +225,11 @@ export function TranscriptPane(props: {
                     replyQuestion={questionsFor().find(
                       (question) => question.id === item().message.replyToQuestionId,
                     )}
+                    replyQuestionNumber={
+                      item().message.replyToQuestionId
+                        ? questionNumber(item().message.replyToQuestionId!)
+                        : undefined
+                    }
                     receipt={state.messageReceipts[props.project.id]?.[item().message.id]}
                   />
                 )}
@@ -301,7 +320,9 @@ export function TranscriptPane(props: {
             always the last authored content rather than floating above the
             reply that introduced it. Once answered, it moves into `timeline`
             immediately above the owner's response. */}
-        <For each={openQuestions()}>{(question) => <QuestionCard question={question} />}</For>
+        <For each={openQuestions()}>
+          {(question) => <QuestionCard question={question} number={questionNumber(question.id)} />}
+        </For>
       </Show>
     </div>
   );
@@ -314,7 +335,7 @@ export function TranscriptPane(props: {
  * scan as a question at a glance. Reply stages a durable association in the
  * composer; dismiss remains a separate explicit action.
  */
-function QuestionCard(props: { question: Question }): JSX.Element {
+function QuestionCard(props: { question: Question; number: number }): JSX.Element {
   const { actions } = useWorkspace();
   // The left rule's colour, by urgency. That is the whole visual weight — no
   // fill, no label chip.
@@ -353,7 +374,9 @@ function QuestionCard(props: { question: Question }): JSX.Element {
       <div class="flex min-w-0 flex-1 flex-col gap-1.5">
         <div class="flex items-center gap-1.5">
           <Icon name="message-square-dashed" class={`text-[13px] ${iconTone()}`} />
-          <span class="font-semibold text-[11px] text-az-strong">{tx("Question")}</span>
+          <span class="font-semibold text-[11px] text-az-strong">
+            {tx("Question #{number}", { number: props.number })}
+          </span>
           <span class="text-[10.5px] text-az-muted">· {urgency()}</span>
         </div>
         <Show when={props.question.issueUrl}>
@@ -760,6 +783,7 @@ export function MessageCost(props: { message: Message }): JSX.Element {
 function UserBubble(props: {
   message: Message;
   replyQuestion?: Question;
+  replyQuestionNumber?: number;
   receipt?: MessageReceiptState;
 }): JSX.Element {
   return (
@@ -770,9 +794,13 @@ function UserBubble(props: {
       >
         <Show when={props.replyQuestion}>
           {(question) => (
-            <div class="mb-2 flex max-w-full items-center gap-1.5 border-primary/35 border-l-2 pl-2 text-[10.5px] text-primary">
-              <span class="shrink-0 font-semibold">{tx("Reply")}</span>
-              <span class="min-w-0 truncate opacity-85">{question().text}</span>
+            <div
+              title={question().text}
+              class="mb-2 flex w-fit items-center border-primary/35 border-l-2 pl-2 text-[10.5px] text-primary"
+            >
+              <span class="shrink-0 font-semibold">
+                {tx("Reply to #{number}", { number: props.replyQuestionNumber ?? "?" })}
+              </span>
             </div>
           )}
         </Show>

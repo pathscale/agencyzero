@@ -97,6 +97,7 @@ export type ComposerProps = {
   onSend: (body: string, study: StudyTurnMetadata, replyQuestionId?: string) => Promise<void>;
   /** Question whose durable id will accompany the next sent owner message. */
   replyQuestion?: Question;
+  replyQuestionNumber?: number;
   onCancelQuestionReply?: () => void;
   /** Context readout, shown as a chip in the composer's top-right corner. */
   usage?: string;
@@ -162,6 +163,7 @@ export function AttachmentPills(props: {
 /** Trusted reply metadata, staged like an attachment but never editable prose. */
 export function QuestionReplyPill(props: {
   question?: Question;
+  number?: number;
   onRemove?: () => void;
 }): JSX.Element {
   return (
@@ -169,11 +171,12 @@ export function QuestionReplyPill(props: {
       {(question) => (
         <span
           title={question().text}
-          class="flex w-fit max-w-full items-center gap-1.5 rounded-full border border-primary/35 bg-primary/10 py-1 pr-1.5 pl-2.5 text-[11.5px]"
+          class="flex w-fit items-center gap-1.5 rounded-full border border-primary/35 bg-primary/10 py-1 pr-1.5 pl-2.5 text-[11.5px]"
         >
           <Icon name="message-square-dashed" class="shrink-0 text-[11px] text-primary" />
-          <span class="shrink-0 font-semibold text-primary">{tx("Reply")}</span>
-          <span class="min-w-0 truncate text-az-body">{question().text}</span>
+          <span class="shrink-0 font-semibold text-primary">
+            {tx("Reply to #{number}", { number: props.number ?? "?" })}
+          </span>
           <Show when={props.onRemove}>
             <button
               type="button"
@@ -730,6 +733,7 @@ export function Composer(props: ComposerProps): JSX.Element {
           />
           <QuestionReplyPill
             question={props.replyQuestion}
+            number={props.replyQuestionNumber}
             onRemove={props.onCancelQuestionReply}
           />
           <textarea

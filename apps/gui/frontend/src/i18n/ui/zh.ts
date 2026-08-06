@@ -459,6 +459,8 @@ const zh = {
   Critical: "紧急",
   Blocking: "阻塞",
   Question: "问题",
+  "Question #{number}": "问题 #{number}",
+  "Reply to #{number}": "回复 #{number}",
   "When free": "有空时",
   Answered: "已回答",
   "Mark answered": "标记为已回答",
