@@ -518,7 +518,7 @@ function AgentBubble(props: { message: Message; onRetry?: () => void }): JSX.Ele
 }
 
 /**
- * What this turn cost, beside its timestamp.
+ * What this turn cost and processed, beside its timestamp.
  *
  * Claude reports a real `costUsd`, shown plainly. Codex reports tokens but no
  * cost, so its figure is estimated from the price table and labelled "est." —
@@ -526,18 +526,20 @@ function AgentBubble(props: { message: Message; onRetry?: () => void }): JSX.Ele
  * be worse than none. Absent when there is no usage yet or the model has no
  * price on file.
  */
-function MessageCost(props: { message: Message }): JSX.Element {
+export function MessageCost(props: { message: Message }): JSX.Element {
   const { state } = useWorkspace();
-  const cost = createMemo<{ usd: number; estimated: boolean } | null>(() => {
+  const cost = createMemo<{ usd: number; estimated: boolean; tokens: number } | null>(() => {
     const usage = props.message.usage;
     if (!usage) return null;
+    const tokens =
+      typeof usage.tokens === "number" && Number.isFinite(usage.tokens) ? usage.tokens : 0;
     if (typeof usage.costUsd === "number" && Number.isFinite(usage.costUsd)) {
-      return { usd: usage.costUsd, estimated: false };
+      return { usd: usage.costUsd, estimated: false, tokens };
     }
     const table = state.pricing;
     if (!table) return null;
     const usd = estimateTurnCost(table, props.message.model, usage);
-    return usd === null ? null : { usd, estimated: true };
+    return usd === null ? null : { usd, estimated: true, tokens };
   });
 
   return (
@@ -549,15 +551,23 @@ function MessageCost(props: { message: Message }): JSX.Element {
               ? tx("Estimated from token counts — this agent does not report a cost.")
               : tx("Reported by the agent.")
           }
-          class={`shrink-0 font-mono text-[10.5px] ${
-            props.message.agent === "claude" && !value().estimated && value().usd > 2
-              ? "font-semibold text-error"
-              : "text-az-faint"
-          }`}
+          class="inline-flex shrink-0 items-center font-mono text-[10.5px]"
         >
-          {value().estimated
-            ? tx("est. {cost}", { cost: costLabel(value().usd) })
-            : costLabel(value().usd)}
+          <span
+            class={
+              props.message.agent === "claude" && !value().estimated && value().usd > 2
+                ? "font-semibold text-error"
+                : "text-az-faint"
+            }
+          >
+            {value().estimated
+              ? tx("est. {cost}", { cost: costLabel(value().usd) })
+              : costLabel(value().usd)}
+          </span>
+          <span class="text-az-faint">{" · "}</span>
+          <span class="text-az-faint">
+            {compactCount(value().tokens)} {tx("tok")}
+          </span>
         </span>
       )}
     </Show>
