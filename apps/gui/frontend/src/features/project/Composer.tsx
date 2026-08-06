@@ -5,6 +5,7 @@ import { PERMISSION_ORDER, permissionLabel } from "~/lib/labels";
 import { describeError, log } from "~/lib/log";
 import {
   compactEstimate,
+  compactedContextTokens,
   compactionCost,
   costLabel,
   estimate,
@@ -578,6 +579,15 @@ export function Composer(props: ComposerProps): JSX.Element {
                       {tx(
                         "It reads the whole conversation and writes a summary, including the learning pass. It runs against the session, so the drafted text is not sent.",
                       )}
+                      <div class="mt-1 text-az-muted">
+                        {tx(
+                          "Projected retained context: about {kept} tokens from {before}, before standing rules.",
+                          {
+                            kept: compactedContextTokens(est().contextTokens).toLocaleString(),
+                            before: est().contextTokens.toLocaleString(),
+                          },
+                        )}
+                      </div>
                     </div>
                   }
                 >

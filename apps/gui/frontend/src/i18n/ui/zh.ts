@@ -521,6 +521,8 @@ const zh = {
     "下一轮的预计成本（约 {ctx}k 上下文 + 提示 + 回复）。这是预估而非实际扣费，真实成本会在该轮显示。",
   "This turn is projected at {cost}.": "本轮预计花费 {cost}。",
   "Compacting this session is projected at {cost}.": "压缩本会话预计花费 {cost}。",
+  "Projected retained context: about {kept} tokens from {before}, before standing rules.":
+    "预计保留上下文：在常驻规则之外，从 {before} 个 token 压缩至约 {kept} 个 token。",
   "It reads the whole conversation and writes a summary, including the learning pass. It runs against the session, so the drafted text is not sent.":
     "它会读取整个会话并写出摘要，包括学习环节。它针对会话运行，因此草稿文本不会被发送。",
   "Most of it ({cost}) is the conversation being resent every turn — not this message.":
