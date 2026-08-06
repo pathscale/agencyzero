@@ -305,6 +305,8 @@ pub struct MessageDto {
     pub id: String,
     pub project_id: String,
     pub item_id: Option<String>,
+    /// Tracked question this owner message answers, when it was associated.
+    pub reply_to_question_id: Option<String>,
     pub author: String,
     pub agent: String,
     pub moderation: Option<serde_json::Value>,
@@ -323,6 +325,7 @@ impl From<MessageRow> for MessageDto {
             id: row.id,
             project_id: row.project_id,
             item_id: (!row.item_id.is_empty()).then_some(row.item_id),
+            reply_to_question_id: None,
             author: row.author,
             agent: row.agent,
             moderation: serde_json::from_str(&row.moderation).ok(),
@@ -348,6 +351,8 @@ pub struct SendMessageInput {
     /// retried in a fresh resumed turn. Reusing it keeps recovery from drawing
     /// the same words twice in the transcript.
     pub retry_message_id: Option<String>,
+    /// Trusted composer metadata, never parsed from editable message prose.
+    pub reply_question_id: Option<String>,
     pub item_id: Option<String>,
     pub agent: Option<String>,
     pub model: Option<String>,
@@ -1492,6 +1497,15 @@ pub async fn reorder_items(
 
 #[tauri::command]
 pub fn list_messages(project_id: String, state: State<'_, AppState>) -> Vec<MessageDto> {
+    let reply_targets: std::collections::HashMap<String, String> = state
+        .tables
+        .question_reply
+        .select_by_project_id(project_id.clone())
+        .execute()
+        .unwrap_or_default()
+        .into_iter()
+        .map(|reply| (reply.message_id, reply.question_id))
+        .collect();
     let mut rows: Vec<MessageDto> = state
         .tables
         .message
@@ -1505,6 +1519,7 @@ pub fn list_messages(project_id: String, state: State<'_, AppState>) -> Vec<Mess
             let id = row.id.clone();
             let mut dto = MessageDto::from(row);
             dto.body = full_body(&state.tables, &id, &dto.body);
+            dto.reply_to_question_id = reply_targets.get(&id).cloned();
             dto
         })
         .collect();
@@ -2849,12 +2864,17 @@ async fn deliver_injection(
     io: &std::sync::Arc<AgentIo>,
     control: &agent_abstraction::RunControl,
     project_id: &str,
-    message_id: &str,
-    body: String,
+    injected: InjectedMessage,
 ) -> bool {
+    let InjectedMessage {
+        body,
+        original_body,
+        reply_question_id,
+        turn_id: message_id,
+    } = injected;
     match control.send(&body).await {
         Ok(()) => {
-            emit_message_receipt(app, project_id, message_id, "read");
+            emit_message_receipt(app, project_id, &message_id, "read");
             note_io(
                 app,
                 io,
@@ -2877,7 +2897,8 @@ async fn deliver_injection(
                 serde_json::json!({
                     "projectId": project_id,
                     "messageId": message_id,
-                    "body": body,
+                    "body": original_body,
+                    "replyQuestionId": reply_question_id,
                 }),
             );
             false
@@ -2909,7 +2930,7 @@ fn emit_message_receipt(app: &AppHandle, project_id: &str, message_id: &str, sta
 /// an IPC input, not authority to make an unrelated transcript row stand in
 /// for new words. A successful retry returns the existing row without another
 /// study event, GUI note, or `message:appended` echo.
-fn user_message_for_send(
+async fn user_message_for_send(
     app: &AppHandle,
     state: &AppState,
     input: &SendMessageInput,
@@ -2918,10 +2939,26 @@ fn user_message_for_send(
     permission: &str,
     followup: bool,
 ) -> Result<MessageDto, String> {
-    if let Some(message) = retry_user_message(&state.tables, input)? {
-        answer_questions_after_reply(app, state, &input.project_id);
+    if let Some(mut message) = retry_user_message(&state.tables, input)? {
+        let linked = reply_for_message(&state.tables, &message.id);
+        if let (Some(requested), Some(linked)) = (input.reply_question_id.as_deref(), &linked)
+            && requested != linked
+        {
+            return Err("the queued message answers a different question".into());
+        }
+        message.reply_to_question_id = linked;
+        if let Some(question_id) = message.reply_to_question_id.as_deref() {
+            crate::questions::answer_for_reply(app, &state.tables, &input.project_id, question_id)
+                .await;
+        }
         return Ok(message);
     }
+
+    let reply_target = crate::questions::reply_target(
+        &state.tables,
+        &input.project_id,
+        input.reply_question_id.as_deref(),
+    )?;
 
     let row = MessageRow {
         id: id("msg"),
@@ -2945,13 +2982,39 @@ fn user_message_for_send(
         .map_err(|error| error.to_string())?;
     store_body(&state.tables, &row.id, &input.project_id, &input.body);
 
-    answer_questions_after_reply(app, state, &input.project_id);
-
     // The emitted DTO carries the whole body, not just the stored head: the
     // caller has it in hand and the reader would otherwise have to round-trip
     // the chunks it just wrote.
     let mut message = MessageDto::from(row);
     message.body = input.body.clone();
+    if let Some(question) = reply_target {
+        let relation = crate::db::schema::question_reply::QuestionReplyRow {
+            id: id("qreply"),
+            project_id: input.project_id.clone(),
+            question_id: question.id.clone(),
+            message_id: message.id.clone(),
+            created_at: message.created_at.clone(),
+        };
+        match state.tables.question_reply.insert(relation) {
+            Ok(_) => {
+                message.reply_to_question_id = Some(question.id.clone());
+                crate::questions::answer_for_reply(
+                    app,
+                    &state.tables,
+                    &input.project_id,
+                    &question.id,
+                )
+                .await;
+            }
+            Err(error) => crate::log!(
+                crate::log::Level::Error,
+                "questions",
+                "{}: accepted message {} but could not link its question: {error}",
+                input.project_id,
+                message.id
+            ),
+        }
+    }
     record_study_turn(
         &state.tables,
         &input.project_id,
@@ -2978,18 +3041,34 @@ fn user_message_for_send(
     Ok(message)
 }
 
-/// Persist the question transition without holding up message acceptance.
+fn reply_for_message(tables: &crate::db::tables::Tables, message_id: &str) -> Option<String> {
+    tables
+        .question_reply
+        .select_by_message_id(message_id.to_owned())
+        .execute()
+        .ok()?
+        .into_iter()
+        .next()
+        .map(|reply| reply.question_id)
+}
+
+/// Expand trusted reply metadata only on the provider-facing copy.
 ///
-/// The frontend clears its red indicator as soon as `send_message` returns.
-/// This task makes that state durable and emits the canonical rows immediately
-/// afterwards, rather than waiting for the agent's reply to finish.
-fn answer_questions_after_reply(app: &AppHandle, state: &AppState, project_id: &str) {
-    let app = app.clone();
-    let tables = state.tables.clone();
-    let project_id = project_id.to_string();
-    tauri::async_runtime::spawn(async move {
-        crate::questions::answer_open_for_reply(&app, &tables, &project_id).await;
-    });
+/// The transcript keeps the owner's words untouched. The agent receives an
+/// explicit target even when several questions are standing, in the same way
+/// attachment pills become paths only after the composer submits them.
+fn agent_prompt_for_message(
+    tables: &crate::db::tables::Tables,
+    body: &str,
+    question_id: Option<&str>,
+) -> String {
+    let Some(question) = question_id.and_then(|id| tables.question.select(id.to_owned())) else {
+        return body.to_owned();
+    };
+    format!(
+        "Reply to tracked question `{}`:\n{}\n\nOwner's reply:\n{}",
+        question.id, question.text, body
+    )
 }
 
 /// Resolve a retry without changing the transcript. Kept independent of the
@@ -3694,6 +3773,8 @@ pub struct ActiveRun {
 /// A live follow-up and the persisted user-message row that owns it.
 pub struct InjectedMessage {
     body: String,
+    original_body: String,
+    reply_question_id: Option<String>,
     turn_id: String,
 }
 
@@ -5526,6 +5607,18 @@ pub async fn delete_project(
         .map_err(|error| failed("the task log", &error))?;
     state
         .tables
+        .question_reply
+        .delete_by_project(id.clone())
+        .await
+        .map_err(|error| failed("the question reply links", &error))?;
+    state
+        .tables
+        .question
+        .delete_by_project(id.clone())
+        .await
+        .map_err(|error| failed("the questions", &error))?;
+    state
+        .tables
         .message
         .delete_by_project(id.clone())
         .await
@@ -5862,6 +5955,7 @@ pub async fn create_project(
             project_id,
             body: input.first_message,
             retry_message_id: None,
+            reply_question_id: None,
             item_id: None,
             agent: input.agent,
             model: input.model,
@@ -6106,13 +6200,21 @@ pub async fn send_message(
             unreachable!();
         };
         let user_message =
-            user_message_for_send(&app, &state, &input, agent_name, &model, &permission, true)?;
+            user_message_for_send(&app, &state, &input, agent_name, &model, &permission, true)
+                .await?;
+        let provider_body = agent_prompt_for_message(
+            &state.tables,
+            &input.body,
+            user_message.reply_to_question_id.as_deref(),
+        );
         age_items_after_accepted_message(&app, &state.tables, &input.project_id).await;
         emit_message_receipt(&app, &input.project_id, &user_message.id, "sent");
 
         if inject
             .send(InjectedMessage {
-                body: input.body.clone(),
+                body: provider_body,
+                original_body: input.body.clone(),
+                reply_question_id: user_message.reply_to_question_id.clone(),
                 turn_id: user_message.id.clone(),
             })
             .is_err()
@@ -6126,6 +6228,7 @@ pub async fn send_message(
                     "projectId": input.project_id,
                     "messageId": user_message.id,
                     "body": input.body,
+                    "replyQuestionId": user_message.reply_to_question_id,
                 }),
             );
         }
@@ -6133,7 +6236,12 @@ pub async fn send_message(
     };
 
     let user_message =
-        user_message_for_send(&app, &state, &input, agent_name, &model, &permission, false)?;
+        user_message_for_send(&app, &state, &input, agent_name, &model, &permission, false).await?;
+    let provider_body = agent_prompt_for_message(
+        &state.tables,
+        &input.body,
+        user_message.reply_to_question_id.as_deref(),
+    );
     age_items_after_accepted_message(&app, &state.tables, &input.project_id).await;
     emit_message_receipt(&app, &input.project_id, &user_message.id, "sent");
     // The run exists from this moment: the slot is claimed and the spawn below
@@ -6241,7 +6349,7 @@ pub async fn send_message(
             inject_rx,
             project_id,
             turn_id,
-            input.body,
+            provider_body,
             agent,
             model,
             permission,
@@ -6871,8 +6979,7 @@ async fn drive_run(
                 &injection_io,
                 &injection_control,
                 &injection_project_id,
-                &injected.turn_id,
-                injected.body,
+                injected,
             )
             .await;
             if !delivered {
@@ -9114,6 +9221,7 @@ mod tests {
             project_id: "proj-steer".into(),
             body: "change course".into(),
             retry_message_id: Some("msg-visible".into()),
+            reply_question_id: None,
             item_id: None,
             agent: Some("codex".into()),
             model: Some("gpt-5.6-sol".into()),

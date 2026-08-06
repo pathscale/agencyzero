@@ -117,6 +117,8 @@ export interface AgencyZeroApi {
     body: string;
     /** Existing transcript row being retried after a rejected live steer. */
     retryMessageId?: string;
+    /** Trusted association staged by the question card's Reply control. */
+    replyQuestionId?: string;
     itemId?: string | null;
     agent?: Agent;
     model?: string;
@@ -389,7 +391,12 @@ export interface AppEvents {
    * them back so the store can queue them for a fresh turn the agent will
    * actually hear.
    */
-  "run:inject_failed": { projectId: string; messageId: string; body: string };
+  "run:inject_failed": {
+    projectId: string;
+    messageId: string;
+    body: string;
+    replyQuestionId?: string;
+  };
   "run:text": { projectId: string; delta: string };
   "run:thinking": { projectId: string; text: string };
   /**

@@ -93,20 +93,40 @@ export function TranscriptPane(props: {
   const timeline = createMemo(() => {
     const questions = questionsFor()
       .filter((question) => question.answered)
-      .map((q) => ({
-        kind: "question" as const,
-        at: q.createdAt,
-        question: q,
-      }));
+      .map((q) => {
+        const reply = props.messages.find((message) => message.replyToQuestionId === q.id);
+        return {
+          kind: "question" as const,
+          at: reply?.createdAt ?? q.createdAt,
+          question: q,
+        };
+      });
     const messages = props.messages.map((message, index) => ({
       kind: "message" as const,
       at: message.createdAt,
       message,
       index,
     }));
-    // Stable sort by timestamp; ties keep insertion order (messages before a
-    // question created in the same millisecond, which reads as ask-then-turn).
-    return [...messages, ...questions].sort((a, b) => (a.at < b.at ? -1 : a.at > b.at ? 1 : 0));
+    return [...messages, ...questions].sort((a, b) => {
+      if (a.at !== b.at) return a.at < b.at ? -1 : 1;
+      // A linked ask shares its reply's timestamp and sits immediately above
+      // it, even after reload. Unrelated ties retain insertion order.
+      if (
+        a.kind === "question" &&
+        b.kind === "message" &&
+        b.message.replyToQuestionId === a.question.id
+      ) {
+        return -1;
+      }
+      if (
+        a.kind === "message" &&
+        b.kind === "question" &&
+        a.message.replyToQuestionId === b.question.id
+      ) {
+        return 1;
+      }
+      return 0;
+    });
   });
 
   // Follow the tail as content arrives: new messages, streaming deltas, the
@@ -159,6 +179,9 @@ export function TranscriptPane(props: {
                 {(item) => (
                   <UserBubble
                     message={item().message}
+                    replyQuestion={questionsFor().find(
+                      (question) => question.id === item().message.replyToQuestionId,
+                    )}
                     receipt={state.messageReceipts[props.project.id]?.[item().message.id]}
                   />
                 )}
@@ -258,9 +281,8 @@ export function TranscriptPane(props: {
  * A question, inline in the chat thread, not a dialog.
  *
  * It must read as part of the conversation, while carrying enough identity to
- * scan as a question at a glance. A small label and urgency sit beside the
- * accent rule. The answer remains the next message typed; the only button
- * dismisses the prompt.
+ * scan as a question at a glance. Reply stages a durable association in the
+ * composer; dismiss remains a separate explicit action.
  */
 function QuestionCard(props: { question: Question }): JSX.Element {
   const { actions } = useWorkspace();
@@ -313,20 +335,26 @@ function QuestionCard(props: { question: Question }): JSX.Element {
           {props.question.text}
         </span>
       </div>
-      {/* Dismiss, not "mark answered": answering is just typing the reply (a
-          `<ps>` directive or plain prose) in the composer, and this × removes
-          the prompt once it is dealt with. Only shown while open; an answered
-          one has already been dismissed or dimmed. */}
       <Show when={!answered()}>
-        <button
-          type="button"
-          onClick={() => void actions.answerQuestion(props.question.id, true)}
-          aria-label={tx("Dismiss this question")}
-          title={tx("Dismiss — answer by typing your reply in the composer")}
-          class="shrink-0 rounded p-0.5 text-az-faint transition-colors hover:bg-white/5 hover:text-az-body"
-        >
-          <Icon name="x" class="text-[13px]" />
-        </button>
+        <div class="flex shrink-0 items-center gap-1">
+          <button
+            type="button"
+            onClick={() => actions.selectQuestionReply(props.question.projectId, props.question.id)}
+            aria-label={tx("Reply to this question")}
+            class="rounded-full border border-primary/30 bg-primary/10 px-2 py-0.5 font-semibold text-[10.5px] text-primary transition-colors hover:bg-primary/18"
+          >
+            {tx("Reply")}
+          </button>
+          <button
+            type="button"
+            onClick={() => void actions.answerQuestion(props.question.id, true)}
+            aria-label={tx("Dismiss this question")}
+            title={tx("Dismiss this question")}
+            class="rounded p-0.5 text-az-faint transition-colors hover:bg-white/5 hover:text-az-body"
+          >
+            <Icon name="x" class="text-[13px]" />
+          </button>
+        </div>
       </Show>
     </div>
   );
@@ -615,13 +643,25 @@ export function MessageCost(props: { message: Message }): JSX.Element {
  * initials placeholder that shipped as-is and read as a mystery glyph. The
  * right-aligned bubble already says whose words these are.
  */
-function UserBubble(props: { message: Message; receipt?: MessageReceiptState }): JSX.Element {
+function UserBubble(props: {
+  message: Message;
+  replyQuestion?: Question;
+  receipt?: MessageReceiptState;
+}): JSX.Element {
   return (
     <div class="flex max-w-[76%] flex-col items-end gap-[7px] self-end">
       <div
         data-selectable
         class="whitespace-pre-wrap rounded-[16px_16px_6px_16px] bg-base-300 px-[15px] py-[11px] text-[13.5px] text-az-title leading-[1.55]"
       >
+        <Show when={props.replyQuestion}>
+          {(question) => (
+            <div class="mb-2 flex max-w-full items-center gap-1.5 border-primary/35 border-l-2 pl-2 text-[10.5px] text-primary">
+              <span class="shrink-0 font-semibold">{tx("Reply")}</span>
+              <span class="min-w-0 truncate opacity-85">{question().text}</span>
+            </div>
+          )}
+        </Show>
         {props.message.body}
       </div>
       <div class="flex items-center gap-1.5">

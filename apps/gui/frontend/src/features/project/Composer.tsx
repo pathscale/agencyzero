@@ -15,7 +15,7 @@ import { parseSlash } from "~/lib/slash";
 import { tx, type UiMessage } from "~/stores/i18n";
 import { prefs, setPrefs } from "~/stores/prefs";
 import { useWorkspace } from "~/stores/workspace";
-import type { Agent, Permission, StudyTurnMetadata } from "~/types";
+import type { Agent, Permission, Question, StudyTurnMetadata } from "~/types";
 
 const PERMISSION_HINTS = {
   read_only: "Reads only. The crate default.",
@@ -92,7 +92,10 @@ export type ComposerProps = {
    * Resolves on success. The draft is held until then, so an IPC, database or
    * backend failure cannot swallow a prompt someone spent minutes writing.
    */
-  onSend: (body: string, study: StudyTurnMetadata) => Promise<void>;
+  onSend: (body: string, study: StudyTurnMetadata, replyQuestionId?: string) => Promise<void>;
+  /** Question whose durable id will accompany the next sent owner message. */
+  replyQuestion?: Question;
+  onCancelQuestionReply?: () => void;
   /** Context readout, shown as a chip in the composer's top-right corner. */
   usage?: string;
   /**
@@ -150,6 +153,37 @@ export function AttachmentPills(props: {
           )}
         </For>
       </div>
+    </Show>
+  );
+}
+
+/** Trusted reply metadata, staged like an attachment but never editable prose. */
+export function QuestionReplyPill(props: {
+  question?: Question;
+  onRemove?: () => void;
+}): JSX.Element {
+  return (
+    <Show when={props.question}>
+      {(question) => (
+        <span
+          title={question().text}
+          class="flex w-fit max-w-full items-center gap-1.5 rounded-full border border-primary/35 bg-primary/10 py-1 pr-1.5 pl-2.5 text-[11.5px]"
+        >
+          <Icon name="message-square-dashed" class="shrink-0 text-[11px] text-primary" />
+          <span class="shrink-0 font-semibold text-primary">{tx("Reply")}</span>
+          <span class="min-w-0 truncate text-az-body">{question().text}</span>
+          <Show when={props.onRemove}>
+            <button
+              type="button"
+              onClick={() => props.onRemove?.()}
+              aria-label={tx("Remove question reply")}
+              class="flex size-[16px] shrink-0 items-center justify-center rounded-full text-az-faint transition-colors hover:bg-white/10 hover:text-base-content"
+            >
+              <Icon name="x" class="text-[11px]" />
+            </button>
+          </Show>
+        </span>
+      )}
     </Show>
   );
 }
@@ -460,15 +494,21 @@ export function Composer(props: ComposerProps): JSX.Element {
       }
       const authored = draft();
       const parsedAuthored = advancedPrompt ?? compileAdvancedPrompt(authored, props.modelOptions);
-      await props.onSend(body, {
+      const study = {
         authoredCharacterCount: [...authored].length,
         authoredLineCount:
           authored.length === 0 ? 0 : authored.replaceAll("\r\n", "\n").split("\n").length,
         attachmentCount: attachments().length,
         userAuthoredPs: parsedAuthored.segments.some((segment) => segment.type === "directive"),
-      });
+      };
+      if (props.replyQuestion) {
+        await props.onSend(body, study, props.replyQuestion.id);
+      } else {
+        await props.onSend(body, study);
+      }
       remember("");
       setAttachments([]);
+      props.onCancelQuestionReply?.();
       resize();
     } catch (cause) {
       setErrorFor(
@@ -659,6 +699,10 @@ export function Composer(props: ComposerProps): JSX.Element {
             onRemove={(path) =>
               setAttachments((current) => current.filter((existing) => existing !== path))
             }
+          />
+          <QuestionReplyPill
+            question={props.replyQuestion}
+            onRemove={props.onCancelQuestionReply}
           />
           <textarea
             ref={field}

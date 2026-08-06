@@ -44,6 +44,7 @@ const DEFAULTS: UiPrefs = {
   taskPlacement: "panel",
   seenSections: [],
   composerDrafts: {},
+  replyQuestionIds: {},
 };
 
 /**

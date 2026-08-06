@@ -40,6 +40,13 @@ export function ProjectTab(props: { tab: Tab; project: Project }): JSX.Element {
   const now = useNow();
 
   const messages = () => state.messages[props.project.id] ?? [];
+  const replyQuestion = createMemo(() => {
+    const selected = prefs.replyQuestionIds[props.project.id];
+    if (!selected) return undefined;
+    return (state.questions[props.project.id] ?? []).find(
+      (question) => question.id === selected && !question.answered,
+    );
+  });
   const contextOwner = createMemo(() =>
     [...messages()]
       .reverse()
@@ -448,7 +455,11 @@ export function ProjectTab(props: { tab: Tab; project: Project }): JSX.Element {
             onPermissionChange={(permission) =>
               actions.setTabModel(props.tab.key, props.tab.agent, props.tab.model, permission)
             }
-            onSend={(body, study) => actions.send(props.project.id, body, study)}
+            replyQuestion={replyQuestion()}
+            onCancelQuestionReply={() => actions.clearQuestionReply(props.project.id)}
+            onSend={(body, study, replyQuestionId) =>
+              actions.send(props.project.id, body, study, replyQuestionId)
+            }
           />
         </div>
       </Panel>

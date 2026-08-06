@@ -402,10 +402,22 @@ export function createMockApi(): AgencyZeroApi {
       // The task manager is reserved with no project row, exactly like Rust:
       // its messages hang off the fixed id and nothing else is touched.
       const project = input.projectId === "home-task-manager" ? null : findProject(input.projectId);
+      const openQuestions = questions.filter(
+        (question) => question.projectId === input.projectId && !question.answered,
+      );
+      const replyQuestion = input.replyQuestionId
+        ? openQuestions.find((question) => question.id === input.replyQuestionId)
+        : openQuestions.length === 1
+          ? openQuestions[0]
+          : undefined;
+      if (input.replyQuestionId && !replyQuestion) {
+        throw new Error(`question ${input.replyQuestionId} is not open in this project`);
+      }
       const message: Message = {
         id: nextId("message"),
         projectId: input.projectId,
         itemId: input.itemId ?? null,
+        replyToQuestionId: replyQuestion?.id,
         author: "user",
         agent: input.agent ?? settings.defaultAgent,
         moderation: null,
@@ -426,6 +438,10 @@ export function createMockApi(): AgencyZeroApi {
         messageId: message.id,
         status: "sent",
       });
+      if (replyQuestion) {
+        replyQuestion.answered = true;
+        emit("question:updated", replyQuestion);
+      }
       if (project) {
         project.lastActivityAt = message.createdAt;
         emit("project:updated", project);

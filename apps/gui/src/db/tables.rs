@@ -22,6 +22,7 @@ use crate::db::schema::project::{ProjectPersistenceEngine, ProjectWorkTable};
 use crate::db::schema::project_item::{ProjectItemPersistenceEngine, ProjectItemWorkTable};
 use crate::db::schema::pull_request::{PullRequestPersistenceEngine, PullRequestWorkTable};
 use crate::db::schema::question::{QuestionPersistenceEngine, QuestionWorkTable};
+use crate::db::schema::question_reply::{QuestionReplyPersistenceEngine, QuestionReplyWorkTable};
 use crate::db::schema::study_event::{StudyEventPersistenceEngine, StudyEventWorkTable};
 use crate::db::schema::task_log::{TaskLogPersistenceEngine, TaskLogWorkTable};
 use crate::db::schema::usage_cache::{UsageCachePersistenceEngine, UsageCacheWorkTable};
@@ -64,6 +65,8 @@ pub struct Tables {
     pub pull_request: Arc<PullRequestWorkTable>,
     /// One row per question an agent raised. See `schema/question.rs`.
     pub question: Arc<QuestionWorkTable>,
+    /// Which owner message answered which tracked question.
+    pub question_reply: Arc<QuestionReplyWorkTable>,
     /// Content-free records from an explicitly enabled deployment study.
     pub study_event: Arc<StudyEventWorkTable>,
 }
@@ -116,6 +119,7 @@ impl Tables {
             approval_rule: open!(ApprovalRulePersistenceEngine, ApprovalRuleWorkTable),
             pull_request: open!(PullRequestPersistenceEngine, PullRequestWorkTable),
             question: open!(QuestionPersistenceEngine, QuestionWorkTable),
+            question_reply: open!(QuestionReplyPersistenceEngine, QuestionReplyWorkTable),
             study_event: open!(StudyEventPersistenceEngine, StudyEventWorkTable),
         })
     }
@@ -655,10 +659,11 @@ impl Tables {
             drain("approval_rule", self.approval_rule.wait_for_ops()),
             drain("pull_request", self.pull_request.wait_for_ops()),
             drain("study_event", self.study_event.wait_for_ops()),
+            drain("question_reply", self.question_reply.wait_for_ops()),
         );
         let errors: Vec<String> = [
             results.0, results.1, results.2, results.3, results.4, results.5, results.6, results.7,
-            results.8, results.9,
+            results.8, results.9, results.10,
         ]
         .into_iter()
         .filter_map(Result::err)

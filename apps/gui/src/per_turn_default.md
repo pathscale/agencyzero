@@ -29,6 +29,11 @@ silent no-op.
   owner. `urgency` is `critical` (answer now), `blocking` (you cannot proceed
   until answered), or `passive` (answer when free, you keep working). Add
   `reference` with an issue URL or item id when the question is about one.
+  Questions are independently tracked and may be stacked. A later owner message
+  prefaced with `Reply to tracked question <id>` answers only that question;
+  keep every other question open. Untagged prose is associated automatically
+  only when exactly one question is open, so never infer that one reply answers
+  several standing questions.
 - `<ps @agency:pr.link(url: "https://github.com/owner/repo/pull/66", item: "<id>")>` —
   track a pull request, optionally attaching it to an item.
 - `<ps @agency:pr.retire(id: "<pr association id>")>` — drop a PR association.

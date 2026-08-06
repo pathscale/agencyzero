@@ -13,6 +13,7 @@ pub mod project;
 pub mod project_item;
 pub mod pull_request;
 pub mod question;
+pub mod question_reply;
 pub mod study_event;
 pub mod task_log;
 pub mod usage_cache;
