@@ -91,7 +91,8 @@ describe("the project side panel", () => {
     await waitFor(() => expect(workspace.state.boot.status).toBe("ready"), { timeout: 5_000 });
 
     fireEvent.click(screen.getAllByLabelText(/Fork .* into a fresh chat/)[0]);
-    const context = await screen.findByLabelText("Item context");
+    const context = await screen.findByLabelText("Description / sub-items");
+    expect((context as HTMLTextAreaElement).value).toContain("Details / sub-items");
     fireEvent.input(context, {
       target: { value: "Preserve the owner decision and run the focused tests." },
     });
@@ -105,5 +106,54 @@ describe("the project side panel", () => {
     expect(await workspace.actions.getItemContext(fork?.forkedFrom?.itemId ?? "missing")).toContain(
       "owner decision",
     );
+  });
+
+  it("edits a persistent description from the item row without starting a fork", async () => {
+    let workspace!: Workspace;
+
+    function Gate() {
+      workspace = useWorkspace();
+      return (
+        <Show when={workspace.state.boot.status === "ready"}>
+          <ProjectPanel project={{ ...PROJECT, id: "worktable" }} />
+        </Show>
+      );
+    }
+
+    const screen = render(() => (
+      <WorkspaceProvider>
+        <Gate />
+      </WorkspaceProvider>
+    ));
+    await waitFor(() => expect(workspace.state.boot.status).toBe("ready"), { timeout: 5_000 });
+
+    const clickDescription = () =>
+      fireEvent.click(
+        screen.getAllByRole("button", {
+          name: /^Edit the description for /,
+        })[0],
+      );
+    clickDescription();
+    const description = await screen.findByLabelText("Description / sub-items");
+    expect((description as HTMLTextAreaElement).value).toBe("");
+    fireEvent.input(description, {
+      target: { value: "- [ ] Profile prompt cache\n- [ ] Verify cost" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save description" }));
+
+    await waitFor(async () =>
+      expect(await workspace.actions.getItemContext("worktable-1")).toContain(
+        "Profile prompt cache",
+      ),
+    );
+    clickDescription();
+    expect(screen.queryByLabelText("Description / sub-items")).toBeNull();
+    clickDescription();
+    await waitFor(() =>
+      expect(
+        (screen.getByLabelText("Description / sub-items") as HTMLTextAreaElement).value,
+      ).toContain("Profile prompt cache"),
+    );
+    expect(workspace.state.projects.some((project) => project.forkedFrom?.itemId)).toBe(false);
   });
 });

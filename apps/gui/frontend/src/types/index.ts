@@ -189,6 +189,8 @@ export interface ProjectItem {
   updatedAt?: string;
   /** Preserved as a fork anchor but hidden from ordinary item lists. */
   archived?: boolean;
+  /** Detailed work-start context, omitted from ordinary compact agent snapshots. */
+  context?: string;
 }
 
 /**

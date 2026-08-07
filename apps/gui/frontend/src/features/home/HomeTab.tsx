@@ -1,4 +1,5 @@
 import { createMemo, createSignal, For, type JSX, Show } from "solid-js";
+import { NOTES_BUDGET } from "~/api/client";
 import { EditableTitle } from "~/components/EditableTitle";
 import { Icon } from "~/components/Icon";
 import { Panel, SectionPanel } from "~/components/Panel";
@@ -7,6 +8,7 @@ import { ApprovalCard } from "~/features/project/ApprovalCard";
 import { AttachmentPills } from "~/features/project/Composer";
 import { AgentIoList } from "~/features/project/ProjectPanel";
 import { relativeTime } from "~/lib/format";
+import { defaultItemDescription } from "~/lib/itemDescription";
 import { AGENT_LABELS, nextStatus, statusSuffix } from "~/lib/labels";
 import { describeError, log } from "~/lib/log";
 import { compileAdvancedPrompt } from "~/lib/promptEditor";
@@ -40,6 +42,7 @@ const STATUS_TONE: Record<ProjectItem["status"], string> = {
 export function HomeTab(): JSX.Element {
   const { state, actions, itemsFor, tabStatus } = useWorkspace();
   const [query, setQuery] = createSignal("");
+  const [descriptionItemId, setDescriptionItemId] = createSignal<string | null>(null);
 
   // Item forks are dedicated child chats, reachable beneath their parent item.
   // Showing them here as peers would turn one project into a pile of apparent
@@ -110,7 +113,15 @@ export function HomeTab(): JSX.Element {
         </div>
 
         <div class="az-scroll flex min-h-0 flex-1 flex-col gap-2.5 px-3.5 pb-3.5">
-          <For each={matches()}>{(project) => <ProjectGroup project={project} />}</For>
+          <For each={matches()}>
+            {(project) => (
+              <ProjectGroup
+                project={project}
+                descriptionItemId={descriptionItemId()}
+                onDescriptionItemChange={setDescriptionItemId}
+              />
+            )}
+          </For>
           <Show when={matches().length === 0}>
             <p class="px-2 py-6 text-center text-[12.5px] text-az-muted">
               {tx("Nothing matches “{query}”", { query: query() })}
@@ -593,10 +604,18 @@ function GroupItemRow(props: {
   onOpen: () => void;
   /** Cycles through every owner-visible status, from the marker. */
   onAdvance: () => void;
+  descriptionOpen: boolean;
+  onDescriptionItemChange: (itemId: string | null) => void;
 }): JSX.Element {
   const { state, actions } = useWorkspace();
   const [editing, setEditing] = createSignal(false);
   const [title, setTitle] = createSignal("");
+  const [descriptionDraft, setDescriptionDraft] = createSignal<{
+    context: string;
+    saved: string;
+  } | null>(null);
+  const [forkDraft, setForkDraft] = createSignal<string | null>(null);
+  const [busy, setBusy] = createSignal(false);
   const fork = () => state.projects.find((project) => project.forkedFrom?.itemId === props.item.id);
 
   const save = async (): Promise<void> => {
@@ -607,6 +626,67 @@ function GroupItemRow(props: {
       await actions.updateItem(props.item.id, value);
     } catch (cause) {
       log.error(`could not rename the item: ${describeError(cause)}`);
+    }
+  };
+
+  const toggleDescription = async (): Promise<void> => {
+    if (props.descriptionOpen) {
+      setDescriptionDraft(null);
+      props.onDescriptionItemChange(null);
+      return;
+    }
+    try {
+      const context = await actions.getItemContext(props.item.id);
+      setDescriptionDraft({ context, saved: context });
+      props.onDescriptionItemChange(props.item.id);
+    } catch (cause) {
+      log.error(`could not load the item description: ${describeError(cause)}`);
+    }
+  };
+
+  const saveDescription = async (): Promise<void> => {
+    const draft = descriptionDraft();
+    if (!draft) return;
+    setBusy(true);
+    try {
+      const saved = await actions.setItemContext(props.item.id, draft.context);
+      setDescriptionDraft({ context: saved, saved });
+    } catch (cause) {
+      log.error(`could not save the item description: ${describeError(cause)}`);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const openFork = async (): Promise<void> => {
+    const child = fork();
+    if (child) {
+      actions.openProject(child.id);
+      return;
+    }
+    setBusy(true);
+    try {
+      const context = await actions.getItemContext(props.item.id);
+      setForkDraft(context || defaultItemDescription(props.item));
+    } catch (cause) {
+      log.error(`could not load the item description: ${describeError(cause)}`);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const startFork = async (): Promise<void> => {
+    const context = forkDraft();
+    if (context === null) return;
+    setBusy(true);
+    try {
+      await actions.setItemContext(props.item.id, context);
+      await actions.forkItem(props.item.id);
+      setForkDraft(null);
+    } catch (cause) {
+      log.error(`could not start the item fork: ${describeError(cause)}`);
+    } finally {
+      setBusy(false);
     }
   };
 
@@ -637,93 +717,261 @@ function GroupItemRow(props: {
         />
       }
     >
-      <div class="group flex items-baseline gap-2.5 px-3.5 py-2.5 transition-colors hover:bg-white/4">
-        {/*
-         * The marker is the status control here too, matching the project
-         * panel: a status change is deliberate, so it gets its own small
-         * target rather than riding on a click meant to read the row.
-         */}
-        <button
-          type="button"
-          onClick={(event) => {
-            event.stopPropagation();
-            props.onAdvance();
+      <div>
+        <div
+          onFocusIn={() => {
+            if (!props.descriptionOpen) props.onDescriptionItemChange(null);
           }}
-          aria-label={tx("Change the status of {name}", { name: props.item.title })}
-          title={tx("{status} — click to change", { status: statusSuffix(props.item.status) })}
-          class="flex size-7 shrink-0 items-center justify-center rounded-full transition-colors hover:bg-primary/12 focus-visible:bg-primary/12"
+          class={`group flex items-center gap-2.5 px-3.5 py-2.5 transition-colors hover:bg-white/4 ${
+            props.descriptionOpen ? "bg-white/[0.025]" : ""
+          }`}
         >
-          <ItemMarker status={props.item.status} />
-        </button>
-        <Show when={fork()}>
-          {(child) => (
-            <button
-              type="button"
-              onClick={(event) => {
-                event.stopPropagation();
-                actions.openProject(child().id);
-              }}
-              aria-label={tx("Open the fork for {name}", { name: props.item.title })}
-              title={tx("Open this item's lower-token fork")}
-              class="flex h-6 shrink-0 items-center justify-center gap-1 rounded-md border border-primary/38 bg-primary/12 px-1.5 font-semibold text-[10.5px] text-primary transition-colors hover:border-primary/70 hover:bg-primary/22"
+          {/*
+           * The marker is the status control here too, matching the project
+           * panel: a status change is deliberate, so it gets its own small
+           * target rather than riding on a click meant to read the row.
+           */}
+          <button
+            type="button"
+            onClick={(event) => {
+              event.stopPropagation();
+              props.onAdvance();
+            }}
+            aria-label={tx("Change the status of {name}", { name: props.item.title })}
+            title={tx("{status} — click to change", { status: statusSuffix(props.item.status) })}
+            class="flex size-7 shrink-0 items-center justify-center rounded-full transition-colors hover:bg-primary/12 focus-visible:bg-primary/12"
+          >
+            <ItemMarker status={props.item.status} />
+          </button>
+          <button
+            type="button"
+            onClick={props.onFold}
+            onDblClick={props.onOpen}
+            class="flex min-w-0 flex-1 items-baseline gap-2.5 text-left"
+          >
+            <span
+              class={`min-w-0 flex-1 text-[12.5px] ${
+                props.item.status === "active"
+                  ? "text-az-strong"
+                  : props.item.status === "finished"
+                    ? "text-az-muted"
+                    : "text-az-body"
+              }`}
             >
-              <Icon name="git-fork" class="text-[12px]" />
-              {tx("Forked")}
-            </button>
-          )}
-        </Show>
-        <button
-          type="button"
-          onClick={props.onFold}
-          onDblClick={props.onOpen}
-          class="flex min-w-0 flex-1 items-baseline gap-2.5 text-left"
-        >
-          <span
-            class={`min-w-0 flex-1 text-[12.5px] ${
-              props.item.status === "active"
-                ? "text-az-strong"
-                : props.item.status === "finished"
-                  ? "text-az-muted"
-                  : "text-az-body"
+              {props.item.title}
+            </span>
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setTitle(props.item.title);
+              setEditing(true);
+            }}
+            aria-label={tx("Edit {name}", { name: props.item.title })}
+            title={tx("Edit this item")}
+            class="shrink-0 rounded-md p-0.5 text-az-faint opacity-0 transition-[color,opacity] hover:text-az-body group-hover:opacity-100"
+          >
+            <Icon name="pencil" class="text-[11px]" />
+          </button>
+          <button
+            type="button"
+            onClick={() =>
+              void actions
+                .deleteItem(props.item.id)
+                .catch((cause) => log.error(`could not delete the item: ${describeError(cause)}`))
+            }
+            aria-label={tx("Delete {name}", { name: props.item.title })}
+            title={tx("Delete this item")}
+            class="shrink-0 rounded-md p-0.5 text-az-faint opacity-0 transition-[color,opacity] hover:text-error group-hover:opacity-100"
+          >
+            <Icon name="x" class="text-[12px]" />
+          </button>
+          <button
+            type="button"
+            onClick={() => void toggleDescription()}
+            aria-label={tx("Edit the description for {name}", { name: props.item.title })}
+            aria-expanded={props.descriptionOpen}
+            aria-controls={`home-item-description-${props.item.id}`}
+            title={tx("Description / sub-items")}
+            class={`flex size-6 shrink-0 items-center justify-center rounded-md border transition-colors hover:border-primary/70 hover:bg-primary/20 ${
+              props.descriptionOpen || props.item.context?.trim()
+                ? "border-primary/45 bg-primary/14 text-primary"
+                : "border-primary/20 bg-primary/5 text-az-muted"
             }`}
           >
-            {props.item.title}
+            <Icon name="list-checks" class="text-[12px]" />
+          </button>
+          <button
+            type="button"
+            onClick={() => void openFork()}
+            disabled={busy()}
+            aria-label={
+              fork()
+                ? tx("Open the fork for {name}", { name: props.item.title })
+                : tx("Fork {name} into a fresh chat", { name: props.item.title })
+            }
+            title={
+              fork()
+                ? tx("Open this item's lower-token fork")
+                : tx("Start a fresh fork to avoid resending this project's long chat")
+            }
+            class={`flex h-6 shrink-0 items-center justify-center gap-1 rounded-md border font-semibold text-primary transition-colors hover:border-primary/70 hover:bg-primary/22 disabled:opacity-35 ${
+              fork()
+                ? "border-primary/38 bg-primary/12 px-1.5 text-[10.5px]"
+                : "size-6 border-primary/28 bg-primary/7"
+            }`}
+          >
+            <Icon name="git-fork" class="text-[12px]" />
+            <Show when={fork()}>{tx("Forked")}</Show>
+          </button>
+          <span class={`shrink-0 text-[11.5px] ${STATUS_TONE[props.item.status]}`}>
+            {statusSuffix(props.item.status)}
           </span>
-        </button>
-        <button
-          type="button"
-          onClick={() => {
-            setTitle(props.item.title);
-            setEditing(true);
-          }}
-          aria-label={tx("Edit {name}", { name: props.item.title })}
-          title={tx("Edit this item")}
-          class="shrink-0 rounded-md p-0.5 text-az-faint opacity-0 transition-[color,opacity] hover:text-az-body group-hover:opacity-100"
-        >
-          <Icon name="pencil" class="text-[11px]" />
-        </button>
-        <button
-          type="button"
-          onClick={() =>
-            void actions
-              .deleteItem(props.item.id)
-              .catch((cause) => log.error(`could not delete the item: ${describeError(cause)}`))
-          }
-          aria-label={tx("Delete {name}", { name: props.item.title })}
-          title={tx("Delete this item")}
-          class="shrink-0 rounded-md p-0.5 text-az-faint opacity-0 transition-[color,opacity] hover:text-error group-hover:opacity-100"
-        >
-          <Icon name="x" class="text-[12px]" />
-        </button>
-        <span class={`shrink-0 text-[11.5px] ${STATUS_TONE[props.item.status]}`}>
-          {statusSuffix(props.item.status)}
-        </span>
+        </div>
+        <Show when={props.descriptionOpen ? descriptionDraft() : null}>
+          {(draft) => (
+            <section
+              id={`home-item-description-${props.item.id}`}
+              class="flex flex-col gap-2 border-primary/24 border-t bg-az-inset px-3.5 py-3 shadow-[inset_2px_0_0_color-mix(in_srgb,var(--color-primary)_55%,transparent)]"
+            >
+              <div class="flex items-center justify-between gap-3">
+                <span class="font-semibold text-[11.5px] text-az-body">
+                  {tx("Description / sub-items")}
+                </span>
+                <span class="font-mono text-[10px] text-az-faint">
+                  {draft().context.length} / {NOTES_BUDGET}
+                </span>
+              </div>
+              <textarea
+                autofocus
+                value={draft().context}
+                maxLength={NOTES_BUDGET}
+                onInput={(event) =>
+                  setDescriptionDraft({ ...draft(), context: event.currentTarget.value })
+                }
+                aria-label={tx("Description / sub-items")}
+                placeholder={tx(
+                  "Describe constraints, acceptance criteria, decisions, and useful pointers…",
+                )}
+                class="az-scroll min-h-[138px] resize-y rounded-lg border border-primary/22 bg-base-300 px-3 py-2.5 text-[12px] text-az-body leading-[1.5] outline-none placeholder:text-az-faint focus:border-primary/55"
+              />
+              <div class="flex items-center justify-between gap-3">
+                <span class="text-[10.5px] text-az-muted">
+                  {tx("Use one Markdown bullet or checklist line per sub-item.")}
+                </span>
+                <div class="flex shrink-0 items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => setDescriptionDraft(null)}
+                    class="rounded-md px-2.5 py-1 text-[11px] text-az-muted hover:bg-white/6 hover:text-az-body"
+                  >
+                    {tx("Close")}
+                  </button>
+                  <button
+                    type="button"
+                    disabled={busy() || draft().context === draft().saved}
+                    onClick={() => void saveDescription()}
+                    class="rounded-md border border-primary/40 bg-primary/15 px-2.5 py-1 font-semibold text-[11px] text-primary hover:bg-primary/24 disabled:opacity-35"
+                  >
+                    {tx("Save description")}
+                  </button>
+                </div>
+              </div>
+            </section>
+          )}
+        </Show>
+        <Show when={forkDraft() !== null}>
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={`home-fork-title-${props.item.id}`}
+            class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-8 backdrop-blur-[2px]"
+            onClick={(event) => event.currentTarget === event.target && setForkDraft(null)}
+            onKeyDown={(event) => event.key === "Escape" && setForkDraft(null)}
+          >
+            <section class="az-ring flex max-h-full w-full max-w-[620px] flex-col overflow-hidden rounded-[17px] bg-base-200 shadow-[0_24px_80px_rgba(0,0,0,.65)]">
+              <header class="flex items-start gap-3 border-az-hairline-soft border-b px-5 py-4">
+                <div class="flex size-9 shrink-0 items-center justify-center rounded-[11px] border border-primary/28 bg-primary/10 text-primary">
+                  <Icon name="git-fork" class="text-[17px]" />
+                </div>
+                <div class="min-w-0 flex-1">
+                  <h2
+                    id={`home-fork-title-${props.item.id}`}
+                    class="font-semibold text-[14.5px] text-az-title"
+                  >
+                    {tx("Prepare item fork")}
+                  </h2>
+                  <p class="mt-0.5 truncate text-[12px] text-az-muted">{props.item.title}</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setForkDraft(null)}
+                  aria-label={tx("Cancel")}
+                  class="rounded-lg p-1.5 text-az-muted hover:bg-white/6 hover:text-base-content"
+                >
+                  <Icon name="x" class="text-[15px]" />
+                </button>
+              </header>
+              <div class="flex min-h-0 flex-col gap-2 px-5 py-4">
+                <div class="flex items-center justify-between gap-3">
+                  <label
+                    for={`home-fork-description-${props.item.id}`}
+                    class="font-semibold text-[12.5px] text-az-body"
+                  >
+                    {tx("Description / sub-items")}
+                  </label>
+                  <span class="font-mono text-[10.5px] text-az-faint">
+                    {forkDraft()?.length ?? 0} / {NOTES_BUDGET}
+                  </span>
+                </div>
+                <textarea
+                  id={`home-fork-description-${props.item.id}`}
+                  autofocus
+                  value={forkDraft() ?? ""}
+                  maxLength={NOTES_BUDGET}
+                  onInput={(event) => setForkDraft(event.currentTarget.value)}
+                  placeholder={tx(
+                    "Describe constraints, acceptance criteria, decisions, and useful pointers…",
+                  )}
+                  class="az-scroll min-h-[220px] resize-y rounded-xl border border-primary/24 bg-az-inset px-3.5 py-3 text-[12.5px] text-az-body leading-[1.55] outline-none placeholder:text-az-faint focus:border-primary/55"
+                />
+                <p class="text-[11px] text-az-muted leading-[1.5]">
+                  {tx(
+                    "Sent when this item starts in a fresh fork or focused run. Ordinary compact item snapshots omit it.",
+                  )}{" "}
+                  {tx("Use one Markdown bullet or checklist line per sub-item.")}
+                </p>
+              </div>
+              <footer class="flex items-center justify-end gap-2 border-az-hairline-soft border-t px-5 py-3.5">
+                <button
+                  type="button"
+                  onClick={() => setForkDraft(null)}
+                  class="rounded-lg border border-az-hairline px-3 py-1.5 text-[12px] text-az-body hover:border-primary/35"
+                >
+                  {tx("Cancel")}
+                </button>
+                <button
+                  type="button"
+                  disabled={busy()}
+                  onClick={() => void startFork()}
+                  class="rounded-lg border border-primary/45 bg-primary/18 px-3 py-1.5 font-semibold text-[12px] text-primary hover:bg-primary/25 disabled:opacity-40"
+                >
+                  {tx("Start fork")}
+                </button>
+              </footer>
+            </section>
+          </div>
+        </Show>
       </div>
     </Show>
   );
 }
 
-function ProjectGroup(props: { project: Project }): JSX.Element {
+function ProjectGroup(props: {
+  project: Project;
+  descriptionItemId: string | null;
+  onDescriptionItemChange: (itemId: string | null) => void;
+}): JSX.Element {
   const { state, actions, itemsFor } = useWorkspace();
 
   const [confirming, setConfirming] = createSignal(false);
@@ -929,6 +1177,8 @@ function ProjectGroup(props: { project: Project }): JSX.Element {
             {(item) => (
               <GroupItemRow
                 item={item}
+                descriptionOpen={props.descriptionItemId === item.id}
+                onDescriptionItemChange={props.onDescriptionItemChange}
                 onFold={foldSoon}
                 onOpen={openNow}
                 onAdvance={() => {

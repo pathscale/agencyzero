@@ -7,6 +7,7 @@ import { PillMenu } from "~/components/PillMenu";
 import { ItemMarker } from "~/components/StatusDot";
 import { copyText } from "~/features/project/MessageBody";
 import { clockTime, elapsed, taskMeta } from "~/lib/format";
+import { defaultItemDescription } from "~/lib/itemDescription";
 import { sortItems } from "~/lib/itemSort";
 import { nextStatus, statusLabel, statusSuffix } from "~/lib/labels";
 import { describeError, log } from "~/lib/log";
@@ -911,9 +912,17 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
   const [adding, setAdding] = createSignal(false);
   const [title, setTitle] = createSignal("");
   const [forkingId, setForkingId] = createSignal<string | null>(null);
-  const [forkDraft, setForkDraft] = createSignal<{ item: ProjectItem; context: string } | null>(
-    null,
-  );
+  const [contextDraft, setContextDraft] = createSignal<{
+    item: ProjectItem;
+    context: string;
+    startFork: boolean;
+  } | null>(null);
+  const [descriptionDraft, setDescriptionDraft] = createSignal<{
+    item: ProjectItem;
+    context: string;
+    saved: string;
+  } | null>(null);
+  const [savingDescriptionId, setSavingDescriptionId] = createSignal<string | null>(null);
   const forkFor = (itemId: string) =>
     state.projects.find((project) => project.forkedFrom?.itemId === itemId);
   /**
@@ -1025,7 +1034,7 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
     setForkingId(item.id);
     try {
       const context = await actions.getItemContext(item.id);
-      setForkDraft({ item, context });
+      setContextDraft({ item, context: context || defaultItemDescription(item), startFork: true });
     } catch (cause) {
       log.error(`could not load the item context: ${describeError(cause)}`);
     } finally {
@@ -1033,16 +1042,43 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
     }
   }
 
-  async function confirmFork(): Promise<void> {
-    const draft = forkDraft();
+  async function toggleDescription(item: ProjectItem): Promise<void> {
+    if (descriptionDraft()?.item.id === item.id) {
+      setDescriptionDraft(null);
+      return;
+    }
+    try {
+      const context = await actions.getItemContext(item.id);
+      setDescriptionDraft({ item, context, saved: context });
+    } catch (cause) {
+      log.error(`could not load the item description: ${describeError(cause)}`);
+    }
+  }
+
+  async function saveDescription(): Promise<void> {
+    const draft = descriptionDraft();
+    if (!draft) return;
+    setSavingDescriptionId(draft.item.id);
+    try {
+      const saved = await actions.setItemContext(draft.item.id, draft.context);
+      setDescriptionDraft({ ...draft, context: saved, saved });
+    } catch (cause) {
+      log.error(`could not save the item description: ${describeError(cause)}`);
+    } finally {
+      setSavingDescriptionId(null);
+    }
+  }
+
+  async function saveContext(): Promise<void> {
+    const draft = contextDraft();
     if (!draft) return;
     setForkingId(draft.item.id);
     try {
       await actions.setItemContext(draft.item.id, draft.context);
-      await actions.forkItem(draft.item.id);
-      setForkDraft(null);
+      if (draft.startFork) await actions.forkItem(draft.item.id);
+      setContextDraft(null);
     } catch (cause) {
-      log.error(`could not fork the item: ${describeError(cause)}`);
+      log.error(`could not save the item description: ${describeError(cause)}`);
     } finally {
       setForkingId(null);
     }
@@ -1067,7 +1103,7 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
   return (
     <div class="az-scroll flex min-h-0 flex-1 flex-col gap-0.5 px-2 pt-1.5 pb-2.5">
       <Show when={props.items.length > 3}>
-        <div class="sticky top-0 z-10 flex items-center gap-2 rounded-[9px] border border-az-hairline bg-az-inset px-2.5 py-1.5">
+        <div class="mb-1 flex items-center gap-2 border-az-hairline-soft border-b bg-az-inset px-2.5 py-1.5">
           <Icon name="search" class="shrink-0 text-[12px] text-primary/70" />
           <input
             type="text"
@@ -1113,259 +1149,335 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
               />
             }
           >
-            <div
-              data-item-id={item.id}
-              tabIndex={-1}
-              /*
-               * The row is `relative` and the action cluster below is absolute,
-               * so the buttons take ZERO layout width. They used to be a normal
-               * flex sibling: even at opacity-0 they held ~120px of a 322px
-               * column, so every title wrapped into a four-word ribbon. Now the
-               * title owns the whole width and the controls float over its right
-               * end only on hover.
-               */
-              class={`group relative flex items-center rounded-[9px] outline-none transition-colors ${
-                state.itemReveal?.id === item.id
-                  ? "ring-1 ring-primary/70 ring-offset-1 ring-offset-base-200"
-                  : ""
-              } ${item.archived ? "border border-primary/18 border-dashed opacity-75" : ""} ${
-                item.status === "active"
-                  ? "bg-base-300 shadow-[inset_2px_0_0_var(--color-primary)]"
-                  : // Zebra striping so a long list reads row by row; the hover
-                    // still lifts on top of whichever stripe is underneath. The
-                    // odd stripe is deliberately not faint: barely-visible
-                    // striping reads as a rendering smudge, not a pattern.
-                    index() % 2 === 1
-                    ? "bg-white/[0.055] hover:bg-white/[0.08]"
-                    : "hover:bg-white/5"
-              }`}
-            >
-              <div class="flex min-w-0 flex-1 items-center gap-1">
-                {/*
-                 * The marker is the status control, and the only one.
-                 *
-                 * The whole row used to be a button titled "Change status", so
-                 * reading a list meant hovering a row that offered to mutate it
-                 * and clicking one by accident cycled it. A status change is a
-                 * deliberate act: it gets the smallest target that can carry it,
-                 * and the title beside it goes back to being text.
-                 */}
-                <button
-                  type="button"
-                  onClick={() => advance(item)}
-                  aria-label={tx("Change the status of {name}", { name: item.title })}
-                  title={`${statusSuffix(item.status)} — click for ${statusLabel(nextStatus(item.status))}`}
-                  class="ml-1.5 flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-full transition-colors hover:bg-primary/12 focus-visible:bg-primary/12"
-                >
-                  <ItemMarker status={item.status} />
-                </button>
-                <div
-                  data-selectable
-                  class="flex min-w-0 flex-1 items-baseline gap-2 px-2.5 py-1 text-left"
-                >
-                  <span
-                    title={item.title}
-                    class={`line-clamp-2 min-w-0 flex-1 text-[12.5px] leading-[1.35] ${
-                      item.status === "active" || item.status === "planning"
-                        ? "text-base-content"
-                        : item.status === "finished"
-                          ? "text-az-muted"
-                          : "text-az-body"
-                    }`}
+            <div class="rounded-[9px]">
+              <div
+                data-item-id={item.id}
+                tabIndex={-1}
+                onFocusIn={() => {
+                  if (descriptionDraft() && descriptionDraft()?.item.id !== item.id) {
+                    setDescriptionDraft(null);
+                  }
+                }}
+                /*
+                 * The row is `relative` and the action cluster below is absolute,
+                 * so the buttons take ZERO layout width. They used to be a normal
+                 * flex sibling: even at opacity-0 they held ~120px of a 322px
+                 * column, so every title wrapped into a four-word ribbon. Now the
+                 * title owns the whole width and the controls float over its right
+                 * end only on hover.
+                 */
+                class={`group relative flex items-center outline-none transition-colors ${
+                  descriptionDraft()?.item.id === item.id ? "rounded-t-[9px]" : "rounded-[9px]"
+                } ${
+                  state.itemReveal?.id === item.id
+                    ? "ring-1 ring-primary/70 ring-offset-1 ring-offset-base-200"
+                    : ""
+                } ${item.archived ? "border border-primary/18 border-dashed opacity-75" : ""} ${
+                  item.status === "active"
+                    ? "bg-base-300 shadow-[inset_2px_0_0_var(--color-primary)]"
+                    : // Zebra striping so a long list reads row by row; the hover
+                      // still lifts on top of whichever stripe is underneath. The
+                      // odd stripe is deliberately not faint: barely-visible
+                      // striping reads as a rendering smudge, not a pattern.
+                      index() % 2 === 1
+                      ? "bg-white/[0.055] hover:bg-white/[0.08]"
+                      : "hover:bg-white/5"
+                }`}
+              >
+                <div class="flex min-w-0 flex-1 items-center gap-1">
+                  {/*
+                   * The marker is the status control, and the only one.
+                   *
+                   * The whole row used to be a button titled "Change status", so
+                   * reading a list meant hovering a row that offered to mutate it
+                   * and clicking one by accident cycled it. A status change is a
+                   * deliberate act: it gets the smallest target that can carry it,
+                   * and the title beside it goes back to being text.
+                   */}
+                  <button
+                    type="button"
+                    onClick={() => advance(item)}
+                    aria-label={tx("Change the status of {name}", { name: item.title })}
+                    title={`${statusSuffix(item.status)} — click for ${statusLabel(nextStatus(item.status))}`}
+                    class="ml-1.5 flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-full transition-colors hover:bg-primary/12 focus-visible:bg-primary/12"
                   >
-                    {item.title}
-                  </span>
-                  <span
-                    class={`shrink-0 text-[11px] ${
-                      item.status === "active"
-                        ? "font-semibold text-primary"
-                        : item.status === "shipped"
-                          ? "font-semibold text-warning"
-                          : item.status === "planning"
-                            ? "text-info"
-                            : item.status === "finished"
-                              ? "text-success"
-                              : "text-az-muted"
-                    }`}
-                  >
-                    {/*
+                    <ItemMarker status={item.status} />
+                  </button>
+                  <div class="flex min-w-0 flex-1 items-center gap-2 px-2.5 py-1 text-left">
+                    <span
+                      data-selectable
+                      title={item.title}
+                      class={`line-clamp-2 min-w-0 flex-1 text-[12.5px] leading-[1.35] ${
+                        item.status === "active" || item.status === "planning"
+                          ? "text-base-content"
+                          : item.status === "finished"
+                            ? "text-az-muted"
+                            : "text-az-body"
+                      }`}
+                    >
+                      {item.title}
+                    </span>
+                    <span
+                      class={`shrink-0 text-[11px] ${
+                        item.status === "active"
+                          ? "font-semibold text-primary"
+                          : item.status === "shipped"
+                            ? "font-semibold text-warning"
+                            : item.status === "planning"
+                              ? "text-info"
+                              : item.status === "finished"
+                                ? "text-success"
+                                : "text-az-muted"
+                      }`}
+                    >
+                      {/*
                     A shipped row shows its pull request instead of the word,
                     because the number is the thing you need to go and check.
                     Amber rather than green: shipped is a claim awaiting your
                     verdict, and colouring it as done is exactly the mistake
                     this state exists to prevent.
                   */}
-                    <Show
-                      when={item.reference}
-                      fallback={item.archived ? tx("archived") : statusSuffix(item.status)}
-                    >
-                      {(reference) => (
-                        <Show
-                          when={issueUrl(reference())}
-                          fallback={
-                            /*
+                      <Show
+                        when={item.reference}
+                        fallback={item.archived ? tx("archived") : statusSuffix(item.status)}
+                      >
+                        {(reference) => (
+                          <Show
+                            when={issueUrl(reference())}
+                            fallback={
+                              /*
                         And it opens. The number is there to be checked, so
                         reading it and then going to find the pull request by
                         hand is the one thing it should not cost. Plain text
                         when the project has no pull request by that number,
                         rather than a link that goes nowhere.
                       */
-                            <Show
-                              when={prUrl(reference())}
-                              fallback={
-                                <>
-                                  {tx("(PR #")}
-                                  {reference()})
-                                </>
-                              }
-                            >
-                              {(url) => (
-                                <button
-                                  type="button"
-                                  onClick={() => void actions.openExternal(url())}
-                                  title={tx("Open {url}", { url: url() })}
-                                  class="cursor-pointer underline decoration-dotted underline-offset-2 hover:text-primary"
-                                >
-                                  {tx("(PR #")}
-                                  {reference()})
-                                </button>
-                              )}
-                            </Show>
-                          }
-                        >
-                          {(url) => (
-                            <button
-                              type="button"
-                              onClick={() => void actions.openExternal(url())}
-                              title={tx("Open {url}", { url: url() })}
-                              class="cursor-pointer underline decoration-dotted underline-offset-2 hover:text-primary"
-                            >
-                              {tx("(issue #")}
-                              {issueNumber(url())})
-                            </button>
-                          )}
-                        </Show>
-                      )}
-                    </Show>
-                  </span>
+                              <Show
+                                when={prUrl(reference())}
+                                fallback={
+                                  <>
+                                    {tx("(PR #")}
+                                    {reference()})
+                                  </>
+                                }
+                              >
+                                {(url) => (
+                                  <button
+                                    type="button"
+                                    onClick={() => void actions.openExternal(url())}
+                                    title={tx("Open {url}", { url: url() })}
+                                    class="cursor-pointer underline decoration-dotted underline-offset-2 hover:text-primary"
+                                  >
+                                    {tx("(PR #")}
+                                    {reference()})
+                                  </button>
+                                )}
+                              </Show>
+                            }
+                          >
+                            {(url) => (
+                              <button
+                                type="button"
+                                onClick={() => void actions.openExternal(url())}
+                                title={tx("Open {url}", { url: url() })}
+                                class="cursor-pointer underline decoration-dotted underline-offset-2 hover:text-primary"
+                              >
+                                {tx("(issue #")}
+                                {issueNumber(url())})
+                              </button>
+                            )}
+                          </Show>
+                        )}
+                      </Show>
+                    </span>
+                  </div>
                 </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => void openFork(item)}
-                disabled={forkingId() === item.id}
-                title={
-                  forkFor(item.id)
-                    ? tx("Open this item's lower-token fork")
-                    : tx("Start a fresh fork to avoid resending this project's long chat")
-                }
-                aria-label={
-                  forkFor(item.id)
-                    ? tx("Open the fork for {name}", { name: item.title })
-                    : tx("Fork {name} into a fresh chat", { name: item.title })
-                }
-                class={`relative z-10 mr-1 flex size-6 shrink-0 items-center justify-center rounded-md border transition-colors hover:border-primary/70 hover:bg-primary/20 disabled:opacity-30 ${
-                  forkFor(item.id)
-                    ? "border-primary/55 bg-primary/18 text-primary"
-                    : "border-primary/30 bg-primary/8 text-primary/80"
-                }`}
-              >
-                <Icon name="git-fork" class="text-[13px]" />
-              </button>
-              {/*
-               * Absolutely positioned over the row's right end, only ink when
-               * hovered or busy. Out of the layout flow entirely so the title
-               * gets the full column width; a translucent gradient underlay
-               * keeps the icons legible where they overlap a long title. These
-               * act on the row, they are not part of reading it.
-               */}
-              <div class="absolute inset-y-0 right-8 flex items-center justify-end gap-1 rounded-r-[9px] bg-gradient-to-l from-60% from-base-300 to-transparent pr-2 pl-6 opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100">
-                <Show when={item.status !== "finished"}>
-                  <button
-                    type="button"
-                    onClick={() => run(item)}
-                    // Not gated on isLive: the mock serves sendMessage the same
-                    // as the composer does, so the preview can exercise this.
-                    disabled={isRunning()}
-                    title={
-                      isRunning()
-                        ? tx("A run is already in flight on this project")
-                        : tx("Send this item to the agent, on this project's session")
-                    }
-                    aria-label={tx("Run {name}", { name: item.title })}
-                    class="shrink-0 rounded-md p-1 text-az-faint transition-colors hover:bg-primary/12 hover:text-primary disabled:opacity-30"
-                  >
-                    <Icon name="play" class="text-[12px]" />
-                  </button>
-                </Show>
-                {/* Revealed on hover: the controls all the time would be louder
-                than the titles they act on. */}
                 <button
                   type="button"
-                  onClick={() => {
-                    const current = issueUrl(item.reference ?? "") ?? "";
-                    const url = window.prompt(tx("GitHub issue URL"), current)?.trim();
-                    if (!url) return;
-                    void actions
-                      .setItemIssue(item.id, url)
-                      .catch((cause) =>
-                        log.error(`could not link the issue: ${describeError(cause)}`),
-                      );
-                  }}
-                  aria-label={tx("Link a GitHub issue to {name}", { name: item.title })}
-                  title={tx("Link a GitHub issue")}
-                  class="shrink-0 rounded-md p-1 text-az-faint opacity-0 transition-[color,opacity] hover:text-primary group-hover:opacity-100"
+                  onClick={() => void toggleDescription(item)}
+                  title={tx("Description / sub-items")}
+                  aria-label={tx("Edit the description for {name}", { name: item.title })}
+                  aria-expanded={descriptionDraft()?.item.id === item.id}
+                  aria-controls={`item-description-${item.id}`}
+                  class={`relative z-10 flex size-6 shrink-0 items-center justify-center rounded-md border transition-colors hover:border-primary/70 hover:bg-primary/20 ${
+                    descriptionDraft()?.item.id === item.id || item.context?.trim()
+                      ? "border-primary/45 bg-primary/14 text-primary"
+                      : "border-primary/20 bg-primary/5 text-az-muted"
+                  }`}
                 >
-                  <Icon name="git-pull-request" class="text-[11px]" />
+                  <Icon name="list-checks" class="text-[13px]" />
                 </button>
                 <button
                   type="button"
-                  onClick={() => {
-                    setEditTitle(item.title);
-                    setEditingId(item.id);
-                  }}
-                  aria-label={tx("Edit {name}", { name: item.title })}
-                  title={tx("Edit this item")}
-                  class="shrink-0 rounded-md p-1 text-az-faint opacity-0 transition-[color,opacity] hover:text-az-body group-hover:opacity-100"
-                >
-                  <Icon name="pencil" class="text-[11px]" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() =>
-                    void actions
-                      .deleteItem(item.id)
-                      .catch((cause) =>
-                        log.error(`could not delete the item: ${describeError(cause)}`),
-                      )
+                  onClick={() => void openFork(item)}
+                  disabled={forkingId() === item.id}
+                  title={
+                    forkFor(item.id)
+                      ? tx("Open this item's lower-token fork")
+                      : tx("Start a fresh fork to avoid resending this project's long chat")
                   }
-                  aria-label={tx("Delete {name}", { name: item.title })}
-                  title={tx("Delete this item")}
-                  class="shrink-0 rounded-md p-1 text-az-faint opacity-0 transition-[color,opacity] hover:text-error group-hover:opacity-100"
+                  aria-label={
+                    forkFor(item.id)
+                      ? tx("Open the fork for {name}", { name: item.title })
+                      : tx("Fork {name} into a fresh chat", { name: item.title })
+                  }
+                  class={`relative z-10 mr-1 flex size-6 shrink-0 items-center justify-center rounded-md border transition-colors hover:border-primary/70 hover:bg-primary/20 disabled:opacity-30 ${
+                    forkFor(item.id)
+                      ? "border-primary/55 bg-primary/18 text-primary"
+                      : "border-primary/30 bg-primary/8 text-primary/80"
+                  }`}
                 >
-                  <Icon name="x" class="text-[12px]" />
+                  <Icon name="git-fork" class="text-[13px]" />
                 </button>
-                <div class="flex shrink-0 flex-col opacity-0 transition-opacity group-hover:opacity-100">
+                {/*
+                 * Absolutely positioned over the row's right end, only ink when
+                 * hovered or busy. Out of the layout flow entirely so the title
+                 * gets the full column width; a translucent gradient underlay
+                 * keeps the icons legible where they overlap a long title. These
+                 * act on the row, they are not part of reading it.
+                 */}
+                <div class="absolute inset-y-0 right-16 flex items-center justify-end gap-1 rounded-r-[9px] bg-gradient-to-l from-60% from-base-300 to-transparent pr-2 pl-6 opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100">
+                  <Show when={item.status !== "finished"}>
+                    <button
+                      type="button"
+                      onClick={() => run(item)}
+                      // Not gated on isLive: the mock serves sendMessage the same
+                      // as the composer does, so the preview can exercise this.
+                      disabled={isRunning()}
+                      title={
+                        isRunning()
+                          ? tx("A run is already in flight on this project")
+                          : tx("Send this item to the agent, on this project's session")
+                      }
+                      aria-label={tx("Run {name}", { name: item.title })}
+                      class="shrink-0 rounded-md p-1 text-az-faint transition-colors hover:bg-primary/12 hover:text-primary disabled:opacity-30"
+                    >
+                      <Icon name="play" class="text-[12px]" />
+                    </button>
+                  </Show>
+                  {/* Revealed on hover: the controls all the time would be louder
+                than the titles they act on. */}
                   <button
                     type="button"
-                    onClick={() => move(index(), -1)}
-                    disabled={filtering() || index() === 0}
-                    aria-label={tx("Move {name} up", { name: item.title })}
-                    class="rounded-sm px-0.5 text-az-faint transition-colors hover:text-az-body disabled:opacity-25"
+                    onClick={() => {
+                      const current = issueUrl(item.reference ?? "") ?? "";
+                      const url = window.prompt(tx("GitHub issue URL"), current)?.trim();
+                      if (!url) return;
+                      void actions
+                        .setItemIssue(item.id, url)
+                        .catch((cause) =>
+                          log.error(`could not link the issue: ${describeError(cause)}`),
+                        );
+                    }}
+                    aria-label={tx("Link a GitHub issue to {name}", { name: item.title })}
+                    title={tx("Link a GitHub issue")}
+                    class="shrink-0 rounded-md p-1 text-az-faint opacity-0 transition-[color,opacity] hover:text-primary group-hover:opacity-100"
                   >
-                    <Icon name="chevron-up" class="text-[10px]" />
+                    <Icon name="git-pull-request" class="text-[11px]" />
                   </button>
                   <button
                     type="button"
-                    onClick={() => move(index(), 1)}
-                    disabled={filtering() || index() === props.items.length - 1}
-                    aria-label={tx("Move {name} down", { name: item.title })}
-                    class="rounded-sm px-0.5 text-az-faint transition-colors hover:text-az-body disabled:opacity-25"
+                    onClick={() => {
+                      setEditTitle(item.title);
+                      setEditingId(item.id);
+                    }}
+                    aria-label={tx("Edit {name}", { name: item.title })}
+                    title={tx("Edit this item")}
+                    class="shrink-0 rounded-md p-1 text-az-faint opacity-0 transition-[color,opacity] hover:text-az-body group-hover:opacity-100"
                   >
-                    <Icon name="chevron-down" class="text-[10px]" />
+                    <Icon name="pencil" class="text-[11px]" />
                   </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      void actions
+                        .deleteItem(item.id)
+                        .catch((cause) =>
+                          log.error(`could not delete the item: ${describeError(cause)}`),
+                        )
+                    }
+                    aria-label={tx("Delete {name}", { name: item.title })}
+                    title={tx("Delete this item")}
+                    class="shrink-0 rounded-md p-1 text-az-faint opacity-0 transition-[color,opacity] hover:text-error group-hover:opacity-100"
+                  >
+                    <Icon name="x" class="text-[12px]" />
+                  </button>
+                  <div class="flex shrink-0 flex-col opacity-0 transition-opacity group-hover:opacity-100">
+                    <button
+                      type="button"
+                      onClick={() => move(index(), -1)}
+                      disabled={filtering() || index() === 0}
+                      aria-label={tx("Move {name} up", { name: item.title })}
+                      class="rounded-sm px-0.5 text-az-faint transition-colors hover:text-az-body disabled:opacity-25"
+                    >
+                      <Icon name="chevron-up" class="text-[10px]" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => move(index(), 1)}
+                      disabled={filtering() || index() === props.items.length - 1}
+                      aria-label={tx("Move {name} down", { name: item.title })}
+                      class="rounded-sm px-0.5 text-az-faint transition-colors hover:text-az-body disabled:opacity-25"
+                    >
+                      <Icon name="chevron-down" class="text-[10px]" />
+                    </button>
+                  </div>
                 </div>
               </div>
+              <Show when={descriptionDraft()?.item.id === item.id ? descriptionDraft() : null}>
+                {(draft) => (
+                  <section
+                    id={`item-description-${item.id}`}
+                    class="flex flex-col gap-2 rounded-b-[9px] border-primary/24 border-t bg-az-inset px-3 py-2.5 shadow-[inset_2px_0_0_color-mix(in_srgb,var(--color-primary)_55%,transparent)]"
+                  >
+                    <div class="flex items-center justify-between gap-3">
+                      <span class="font-semibold text-[11.5px] text-az-body">
+                        {tx("Description / sub-items")}
+                      </span>
+                      <span class="font-mono text-[10px] text-az-faint">
+                        {draft().context.length} / {NOTES_BUDGET}
+                      </span>
+                    </div>
+                    <textarea
+                      autofocus
+                      value={draft().context}
+                      maxLength={NOTES_BUDGET}
+                      onInput={(event) =>
+                        setDescriptionDraft({ ...draft(), context: event.currentTarget.value })
+                      }
+                      aria-label={tx("Description / sub-items")}
+                      placeholder={tx(
+                        "Describe constraints, acceptance criteria, decisions, and useful pointers…",
+                      )}
+                      class="az-scroll min-h-[138px] resize-y rounded-lg border border-primary/22 bg-base-300 px-3 py-2.5 text-[12px] text-az-body leading-[1.5] outline-none placeholder:text-az-faint focus:border-primary/55"
+                    />
+                    <div class="flex items-center justify-between gap-3">
+                      <span class="text-[10.5px] text-az-muted">
+                        {tx("Use one Markdown bullet or checklist line per sub-item.")}
+                      </span>
+                      <div class="flex shrink-0 items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => setDescriptionDraft(null)}
+                          class="rounded-md px-2.5 py-1 text-[11px] text-az-muted hover:bg-white/6 hover:text-az-body"
+                        >
+                          {tx("Close")}
+                        </button>
+                        <button
+                          type="button"
+                          disabled={
+                            savingDescriptionId() === item.id || draft().context === draft().saved
+                          }
+                          onClick={() => void saveDescription()}
+                          class="rounded-md border border-primary/40 bg-primary/15 px-2.5 py-1 font-semibold text-[11px] text-primary hover:bg-primary/24 disabled:opacity-35"
+                        >
+                          {tx("Save description")}
+                        </button>
+                      </div>
+                    </div>
+                  </section>
+                )}
+              </Show>
             </div>
           </Show>
         )}
@@ -1399,15 +1511,15 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
         />
       </Show>
 
-      <Show when={forkDraft()}>
+      <Show when={contextDraft()}>
         {(draft) => (
           <div
             role="dialog"
             aria-modal="true"
-            aria-labelledby="item-fork-context-title"
+            aria-labelledby="item-context-title"
             class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-8 backdrop-blur-[2px]"
-            onClick={(event) => event.currentTarget === event.target && setForkDraft(null)}
-            onKeyDown={(event) => event.key === "Escape" && setForkDraft(null)}
+            onClick={(event) => event.currentTarget === event.target && setContextDraft(null)}
+            onKeyDown={(event) => event.key === "Escape" && setContextDraft(null)}
           >
             <section class="az-ring flex max-h-full w-full max-w-[620px] flex-col overflow-hidden rounded-[17px] bg-base-200 shadow-[0_24px_80px_rgba(0,0,0,.65)]">
               <header class="flex items-start gap-3 border-az-hairline-soft border-b px-5 py-4">
@@ -1415,17 +1527,14 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
                   <Icon name="git-fork" class="text-[17px]" />
                 </div>
                 <div class="min-w-0 flex-1">
-                  <h2
-                    id="item-fork-context-title"
-                    class="font-semibold text-[14.5px] text-az-title"
-                  >
-                    {tx("Prepare item fork")}
+                  <h2 id="item-context-title" class="font-semibold text-[14.5px] text-az-title">
+                    {draft().startFork ? tx("Prepare item fork") : tx("Edit item description")}
                   </h2>
                   <p class="mt-0.5 truncate text-[12px] text-az-muted">{draft().item.title}</p>
                 </div>
                 <button
                   type="button"
-                  onClick={() => setForkDraft(null)}
+                  onClick={() => setContextDraft(null)}
                   aria-label={tx("Cancel")}
                   class="rounded-lg p-1.5 text-az-muted hover:bg-white/6 hover:text-base-content"
                 >
@@ -1434,20 +1543,24 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
               </header>
               <div class="flex min-h-0 flex-col gap-2 px-5 py-4">
                 <div class="flex items-center justify-between gap-3">
-                  <label for="item-fork-context" class="font-semibold text-[12.5px] text-az-body">
-                    {tx("Item context")}
+                  <label for="item-description" class="font-semibold text-[12.5px] text-az-body">
+                    {tx("Description / sub-items")}
                   </label>
                   <span class="font-mono text-[10.5px] text-az-faint">
                     {draft().context.length} / {NOTES_BUDGET}
                   </span>
                 </div>
                 <textarea
-                  id="item-fork-context"
+                  id="item-description"
                   autofocus
                   value={draft().context}
                   maxLength={NOTES_BUDGET}
                   onInput={(event) =>
-                    setForkDraft({ item: draft().item, context: event.currentTarget.value })
+                    setContextDraft({
+                      item: draft().item,
+                      context: event.currentTarget.value,
+                      startFork: draft().startFork,
+                    })
                   }
                   placeholder={tx(
                     "Describe constraints, acceptance criteria, decisions, and useful pointers…",
@@ -1457,13 +1570,14 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
                 <p class="text-[11px] text-az-muted leading-[1.5]">
                   {tx(
                     "Sent when this item starts in a fresh fork or focused run. Ordinary compact item snapshots omit it.",
-                  )}
+                  )}{" "}
+                  {tx("Use one Markdown bullet or checklist line per sub-item.")}
                 </p>
               </div>
               <footer class="flex items-center justify-end gap-2 border-az-hairline-soft border-t px-5 py-3.5">
                 <button
                   type="button"
-                  onClick={() => setForkDraft(null)}
+                  onClick={() => setContextDraft(null)}
                   class="rounded-lg border border-az-hairline px-3 py-1.5 text-[12px] text-az-body hover:border-primary/35"
                 >
                   {tx("Cancel")}
@@ -1471,10 +1585,10 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
                 <button
                   type="button"
                   disabled={forkingId() === draft().item.id}
-                  onClick={() => void confirmFork()}
+                  onClick={() => void saveContext()}
                   class="rounded-lg border border-primary/45 bg-primary/18 px-3 py-1.5 font-semibold text-[12px] text-primary hover:bg-primary/25 disabled:opacity-40"
                 >
-                  {tx("Start fork")}
+                  {draft().startFork ? tx("Start fork") : tx("Save description")}
                 </button>
               </footer>
             </section>

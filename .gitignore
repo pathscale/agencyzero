@@ -5,6 +5,8 @@
 # Built by apps/gui/frontend (rsbuild -> ../dist), served by Tauri.
 /apps/gui/dist
 node_modules
+/output/pdf/
+/docs/agencyzero-overview.md
 
 # Scratch working notes, never committed
 *.local.md

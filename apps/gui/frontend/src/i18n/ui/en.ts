@@ -827,6 +827,16 @@ const en = {
   "Fork {name} into a fresh chat": "Fork {name} into a fresh chat",
   "Prepare item fork": "Prepare item fork",
   "Item context": "Item context",
+  "Description / sub-items": "Description / sub-items",
+  "Details / sub-items": "Details / sub-items",
+  "Complete the work": "Complete the work",
+  "Report verification and anything still open": "Report verification and anything still open",
+  "Use one Markdown bullet or checklist line per sub-item.":
+    "Use one Markdown bullet or checklist line per sub-item.",
+  "Edit item description": "Edit item description",
+  "Edit the description for {name}": "Edit the description for {name}",
+  "Add description": "Add description",
+  "Save description": "Save description",
   "Describe constraints, acceptance criteria, decisions, and useful pointers…":
     "Describe constraints, acceptance criteria, decisions, and useful pointers…",
   "Sent when this item starts in a fresh fork or focused run. Ordinary compact item snapshots omit it.":

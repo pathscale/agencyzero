@@ -119,6 +119,8 @@ pub struct ProjectItemDto {
     pub updated_at: String,
     /// Hidden from ordinary lists but retained as a durable fork anchor.
     pub archived: bool,
+    /// Owner-authored detail used only when focused work starts.
+    pub context: String,
 }
 
 #[derive(Serialize, Clone)]
@@ -141,6 +143,7 @@ impl From<ProjectItemRow> for ProjectItemDto {
             reference: (!row.reference.is_empty()).then_some(row.reference),
             updated_at: String::new(),
             archived: false,
+            context: String::new(),
         }
     }
 }
@@ -214,6 +217,7 @@ fn item_dto(row: ProjectItemRow, tables: &Tables) -> ProjectItemDto {
     ProjectItemDto {
         updated_at,
         archived: item_is_archived(tables, &row.id),
+        context: item_context(tables, &row.id),
         ..ProjectItemDto::from(row)
     }
 }
@@ -1963,6 +1967,7 @@ pub fn get_item_context(item_id: String, state: State<'_, AppState>) -> Result<S
 /// Replace one item's focused-work context, bounded to the handoff budget.
 #[tauri::command]
 pub async fn set_item_context(
+    app: AppHandle,
     item_id: String,
     context: String,
     state: State<'_, AppState>,
@@ -1979,6 +1984,9 @@ pub async fn set_item_context(
         .await
         .map_err(|error| error.to_string())?;
     touch_item(&state.tables, &item_id).await;
+    if let Some(item) = state.tables.project_item.select(item_id.clone()) {
+        let _ = app.emit("item:updated", item_dto(item, &state.tables));
+    }
     Ok(kept)
 }
 

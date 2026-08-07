@@ -431,9 +431,11 @@ export function createMockApi(): AgencyZeroApi {
     },
 
     setItemContext: (id, context) => {
-      findItem(id);
+      const item = findItem(id);
       const kept = context.trim().slice(0, NOTES_BUDGET);
       itemContexts.set(id, kept);
+      item.context = kept;
+      emit("item:updated", item);
       return settle(kept);
     },
 

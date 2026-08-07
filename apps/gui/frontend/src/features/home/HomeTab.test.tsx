@@ -23,6 +23,25 @@ async function mountHome() {
 }
 
 describe("Home item rows", () => {
+  it("expands one item description and closes it when another item receives focus", async () => {
+    const screen = await mountHome();
+
+    fireEvent.click(screen.getAllByRole("button", { name: /^Edit the description for / })[0]);
+    expect(await screen.findByLabelText("Description / sub-items")).toBeTruthy();
+
+    fireEvent.focusIn(screen.getAllByRole("button", { name: /^Change the status of / })[1]);
+    await waitFor(() => expect(screen.queryByLabelText("Description / sub-items")).toBeNull());
+  });
+
+  it("prefills the description dialog before starting a Home item fork", async () => {
+    const screen = await mountHome();
+
+    fireEvent.click(screen.getAllByRole("button", { name: /^Fork .* into a fresh chat$/ })[0]);
+    const description = await screen.findByLabelText("Description / sub-items");
+    expect((description as HTMLTextAreaElement).value).toContain("Details / sub-items");
+    expect(screen.getByRole("button", { name: "Start fork" })).toBeTruthy();
+  });
+
   it("keeps item forks nested instead of adding top-level project groups", async () => {
     const screen = await mountHome();
     const title = "Phase B — engine observability (API break)";
@@ -33,6 +52,8 @@ describe("Home item rows", () => {
     await waitFor(() => expect(screen.getAllByText(title)).toHaveLength(1));
     const open = screen.getByRole("button", { name: `Open the fork for ${title}` });
     expect(open).toBeTruthy();
+    expect(open).toHaveTextContent("Forked");
+    expect(open.nextElementSibling?.textContent).toMatch(/active|planning|pending|new|shipped/i);
 
     screen.workspace.actions.focus("home");
     fireEvent.click(open);
