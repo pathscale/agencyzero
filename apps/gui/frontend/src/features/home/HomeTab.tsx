@@ -10,6 +10,7 @@ import { relativeTime } from "~/lib/format";
 import { AGENT_LABELS, nextStatus, statusSuffix } from "~/lib/labels";
 import { describeError, log } from "~/lib/log";
 import { compileAdvancedPrompt } from "~/lib/promptEditor";
+import { usageTotals } from "~/lib/stats";
 import { tx } from "~/stores/i18n";
 import { prefs, setPrefs, togglePanelSection } from "~/stores/prefs";
 import { TASK_MANAGER_ID, useWorkspace } from "~/stores/workspace";
@@ -673,7 +674,7 @@ function GroupItemRow(props: {
 }
 
 function ProjectGroup(props: { project: Project }): JSX.Element {
-  const { actions, itemsFor } = useWorkspace();
+  const { state, actions, itemsFor } = useWorkspace();
 
   const [confirming, setConfirming] = createSignal(false);
   const [isDeleting, setIsDeleting] = createSignal(false);
@@ -698,8 +699,11 @@ function ProjectGroup(props: { project: Project }): JSX.Element {
   const items = () => itemsFor(props.project.id);
   const openCount = () => items().filter((item) => item.status !== "finished").length;
   const activeCount = () => items().filter((item) => item.status === "active").length;
+  const turnCount = () => usageTotals(state.messages[props.project.id] ?? []).turns;
   const summary = () =>
-    activeCount() ? `${openCount()} open · ${activeCount()} active` : `${openCount()} open`;
+    activeCount()
+      ? `${openCount()} open · ${turnCount()} turns · ${activeCount()} active`
+      : `${openCount()} open · ${turnCount()} turns`;
 
   const collapsed = () => prefs.collapsedGroups.includes(props.project.id);
 

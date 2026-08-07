@@ -23,6 +23,12 @@ async function mountHome() {
 }
 
 describe("Home item rows", () => {
+  it("shows each project's turn count after its open-item count", async () => {
+    const screen = await mountHome();
+
+    expect(screen.getByText("4 open · 2 turns · 1 active")).toBeTruthy();
+  });
+
   /*
    * The owner's request, verbatim: "Ability to manually edit a task item" —
    * on Home, where the harvested lists are actually read. The pencil swaps
