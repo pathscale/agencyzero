@@ -19,6 +19,18 @@ const TOKEN_CLASSES = [
   { key: "cacheWrite", tone: "bg-warning" },
 ] as const;
 
+const ANALYTICS_TABS = [
+  { key: "efficiency", label: "Efficiency" },
+  { key: "largest", label: "Largest turn" },
+  { key: "value", label: "Value" },
+  { key: "sessions", label: "Sessions" },
+  { key: "daily", label: "Daily" },
+  { key: "projects", label: "Projects" },
+  { key: "models", label: "Models" },
+] as const;
+
+type AnalyticsTabKey = (typeof ANALYTICS_TABS)[number]["key"];
+
 /** Compact token count, e.g. 610000 becomes "610.0K", 2820000 becomes "2.8M". */
 function tokens(value: number): string {
   if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`;
@@ -50,6 +62,32 @@ export function AnalyticsTab(): JSX.Element {
   const { actions } = useWorkspace();
   const [data, setData] = createSignal<UsageAnalytics | null>(null);
   const [refreshing, setRefreshing] = createSignal(false);
+  const [activeTab, setActiveTab] = createSignal<AnalyticsTabKey>("efficiency");
+
+  const selectTabFromKeyboard = (
+    event: KeyboardEvent & { currentTarget: HTMLButtonElement },
+    index: number,
+  ): void => {
+    const last = ANALYTICS_TABS.length - 1;
+    const next =
+      event.key === "ArrowRight"
+        ? (index + 1) % ANALYTICS_TABS.length
+        : event.key === "ArrowLeft"
+          ? (index + last) % ANALYTICS_TABS.length
+          : event.key === "Home"
+            ? 0
+            : event.key === "End"
+              ? last
+              : null;
+    if (next === null) return;
+
+    event.preventDefault();
+    setActiveTab(ANALYTICS_TABS[next].key);
+    event.currentTarget.parentElement
+      ?.querySelectorAll<HTMLButtonElement>('[role="tab"]')
+      .item(next)
+      .focus();
+  };
 
   const refresh = async (): Promise<void> => {
     if (refreshing()) return;
@@ -67,27 +105,7 @@ export function AnalyticsTab(): JSX.Element {
 
   return (
     <div class="az-scroll flex min-w-0 flex-1 justify-center rounded-panel border border-az-hairline bg-az-sunken">
-      <div class="flex w-full max-w-[820px] flex-col gap-3 px-6 pt-5.5 pb-7">
-        <div class="flex items-center justify-between gap-3 pb-0.5">
-          <div class="flex items-baseline gap-2.5">
-            <h1 class="font-semibold text-[18px] text-az-title tracking-[-.01em]">
-              {tx("Analytics")}
-            </h1>
-            <span class="text-[11.5px] text-az-muted">
-              {tx("token usage, summed from the usage ledger")}
-            </span>
-          </div>
-          <button
-            type="button"
-            onClick={() => void refresh()}
-            disabled={refreshing()}
-            class="flex items-center gap-1.5 rounded-md border border-primary/25 bg-primary/8 px-2.5 py-1 font-medium text-[11px] text-primary transition-colors hover:bg-primary/14 disabled:cursor-wait disabled:opacity-55"
-          >
-            <Icon name="refresh-cw" class={`text-[12px] ${refreshing() ? "animate-spin" : ""}`} />
-            {tx("Refresh")}
-          </button>
-        </div>
-
+      <div class="flex w-full max-w-[1120px] flex-col gap-2.5 px-6 pt-5.5 pb-7">
         <Show
           when={data()}
           fallback={
@@ -98,22 +116,75 @@ export function AnalyticsTab(): JSX.Element {
         >
           {(usage) => (
             <>
-              <StatTiles usage={usage()} />
-              <Show when={usage().importedTurns > 0}>
-                <p class="-mt-1 text-[10.5px] text-az-muted">
-                  {tx("imported usage coverage", {
-                    recovered: usage().reconstructedTurns,
-                    total: usage().importedTurns,
-                  })}
-                </p>
-              </Show>
-              <CacheEfficiency usage={usage()} />
-              <LargestTurn usage={usage()} />
-              <AgentValue agents={usage().agents} />
-              <SessionBreakdown sessions={usage().sessions} />
-              <DaySeries days={usage().days} />
-              <ProjectBreakdown projects={usage().projects} total={usage().totalUsd} />
-              <ModelBreakdown models={usage().models} />
+              <HeadlineRow usage={usage()} refreshing={refreshing()} onRefresh={refresh} />
+
+              <div
+                role="tablist"
+                aria-label={tx("Analytics sections")}
+                class="flex items-center gap-1 overflow-x-auto rounded-lg border border-az-hairline bg-base-200/55 p-1"
+              >
+                <For each={ANALYTICS_TABS}>
+                  {(tab, index) => {
+                    const selected = () => activeTab() === tab.key;
+                    return (
+                      <button
+                        id={`analytics-tab-${tab.key}`}
+                        type="button"
+                        role="tab"
+                        aria-selected={selected()}
+                        aria-controls={`analytics-panel-${tab.key}`}
+                        tabIndex={selected() ? 0 : -1}
+                        onClick={() => setActiveTab(tab.key)}
+                        onKeyDown={(event) => selectTabFromKeyboard(event, index())}
+                        class={`shrink-0 rounded-md px-3 py-1.5 font-medium text-[11.5px] transition-colors ${
+                          selected()
+                            ? "bg-base-100 text-az-title shadow-sm"
+                            : "text-az-muted hover:bg-base-100/55 hover:text-az-strong"
+                        }`}
+                      >
+                        {tx(tab.label)}
+                      </button>
+                    );
+                  }}
+                </For>
+              </div>
+
+              <div
+                id={`analytics-panel-${activeTab()}`}
+                role="tabpanel"
+                aria-labelledby={`analytics-tab-${activeTab()}`}
+                class="min-w-0"
+              >
+                <Show when={activeTab() === "efficiency"}>
+                  <Show when={usage().importedTurns > 0}>
+                    <p class="mb-2 text-[10.5px] text-az-muted">
+                      {tx("imported usage coverage", {
+                        recovered: usage().reconstructedTurns,
+                        total: usage().importedTurns,
+                      })}
+                    </p>
+                  </Show>
+                  <CacheEfficiency usage={usage()} />
+                </Show>
+                <Show when={activeTab() === "largest"}>
+                  <LargestTurn usage={usage()} />
+                </Show>
+                <Show when={activeTab() === "value"}>
+                  <AgentValue agents={usage().agents} />
+                </Show>
+                <Show when={activeTab() === "sessions"}>
+                  <SessionBreakdown sessions={usage().sessions} />
+                </Show>
+                <Show when={activeTab() === "daily"}>
+                  <DaySeries days={usage().days} />
+                </Show>
+                <Show when={activeTab() === "projects"}>
+                  <ProjectBreakdown projects={usage().projects} total={usage().totalUsd} />
+                </Show>
+                <Show when={activeTab() === "models"}>
+                  <ModelBreakdown models={usage().models} />
+                </Show>
+              </div>
             </>
           )}
         </Show>
@@ -259,8 +330,12 @@ function ProjectBreakdown(props: { projects: UsageProject[]; total: number }): J
   );
 }
 
-/** The six headline totals, in a responsive grid of tiles. */
-function StatTiles(props: { usage: UsageAnalytics }): JSX.Element {
+/** Every total in one scannable row instead of a wall of summary cards. */
+function HeadlineRow(props: {
+  usage: UsageAnalytics;
+  refreshing: boolean;
+  onRefresh: () => Promise<void>;
+}): JSX.Element {
   // Every headline number carries a colour, none left flat grey. Cost,
   // processed and turns are the figures the owner scans for, so they take the
   // accent; the four token components take the same hues as the day-series
@@ -292,15 +367,35 @@ function StatTiles(props: { usage: UsageAnalytics }): JSX.Element {
   ]);
 
   return (
-    <div class="grid grid-cols-2 gap-2.5 sm:grid-cols-3">
-      <For each={tiles()}>
-        {(tile) => (
-          <div class="rounded-xl border border-az-hairline bg-base-100 px-3.5 py-3">
-            <div class="text-[11px] text-az-muted">{tile.label}</div>
-            <div class={`mt-1 font-bold font-mono text-[20px] ${tile.tone}`}>{tile.value}</div>
-          </div>
-        )}
-      </For>
+    <div class="overflow-x-auto rounded-xl border border-az-hairline bg-base-100">
+      <div class="grid min-w-[930px] grid-cols-[132px_repeat(7,minmax(0,1fr))_42px] items-stretch">
+        <div class="flex flex-col justify-center px-3.5 py-2.5">
+          <h1 class="font-semibold text-[16px] text-az-title tracking-[-.01em]">
+            {tx("Analytics")}
+          </h1>
+          <span class="truncate text-[9.5px] text-az-muted">{tx("usage ledger")}</span>
+        </div>
+        <For each={tiles()}>
+          {(tile) => (
+            <div class="flex min-w-0 flex-col justify-center border-az-hairline border-l px-2.5 py-2.5">
+              <div class="truncate text-[9.5px] text-az-muted">{tile.label}</div>
+              <div class={`mt-0.5 truncate font-bold font-mono text-[15px] ${tile.tone}`}>
+                {tile.value}
+              </div>
+            </div>
+          )}
+        </For>
+        <button
+          type="button"
+          aria-label={tx("Refresh")}
+          title={tx("Refresh")}
+          onClick={() => void props.onRefresh()}
+          disabled={props.refreshing}
+          class="flex items-center justify-center border-az-hairline border-l text-primary transition-colors hover:bg-primary/8 disabled:cursor-wait disabled:opacity-55"
+        >
+          <Icon name="refresh-cw" class={`text-[13px] ${props.refreshing ? "animate-spin" : ""}`} />
+        </button>
+      </div>
     </div>
   );
 }

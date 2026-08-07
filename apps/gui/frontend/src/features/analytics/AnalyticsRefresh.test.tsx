@@ -45,6 +45,22 @@ describe("analytics refresh", () => {
     await waitFor(() => expect(getUsageAnalytics).toHaveBeenCalledTimes(2));
   });
 
+  it("keeps the headline compact and exposes each report as a tab", async () => {
+    const screen = render(() => <AnalyticsTab />);
+    await waitFor(() => expect(screen.getByRole("tablist")).toBeInTheDocument());
+
+    expect(screen.getAllByRole("tab")).toHaveLength(7);
+    expect(screen.getByRole("tab", { name: "Efficiency" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+
+    fireEvent.click(screen.getByRole("tab", { name: "Models" }));
+    expect(screen.getByRole("tab", { name: "Models" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("tabpanel")).toHaveAccessibleName("Models");
+    expect(screen.getByText("Per model")).toBeInTheDocument();
+  });
+
   it("labels inferred Sol cache writes and uses them in the efficiency ratio", async () => {
     getUsageAnalytics.mockResolvedValue({
       ...EMPTY_USAGE,
