@@ -1,4 +1,4 @@
-import { render } from "@solidjs/testing-library";
+import { fireEvent, render } from "@solidjs/testing-library";
 import { describe, expect, it } from "vitest";
 import { InlineText, MessageBody, splitBlocks } from "~/features/project/MessageBody";
 
@@ -24,6 +24,30 @@ describe("MessageBody", () => {
   it("renders `code` as code", () => {
     const { container } = render(() => <MessageBody body="the nits in `into_values`" />);
     expect(container.querySelector("code")).toHaveTextContent("into_values");
+  });
+
+  it("turns a full item id into a compact in-app link", () => {
+    const id = "item-ea97826a-9d9a-4e3e-879b-ae2660c8d789";
+    let revealed = "";
+    const listener = (event: Event) => {
+      revealed = (event as CustomEvent<{ id: string }>).detail.id;
+    };
+    window.addEventListener("agencyzero:item-reference", listener);
+    const screen = render(() => <MessageBody body={`Resume ${id} next.`} />);
+
+    const link = screen.getByRole("button", { name: `Open item ${id}` });
+    expect(link).toHaveTextContent("Item-...ae2660c8d789");
+    fireEvent.click(link);
+    expect(revealed).toBe(id);
+
+    window.removeEventListener("agencyzero:item-reference", listener);
+  });
+
+  it("keeps item ids inside code inert", () => {
+    const id = "item-ea97826a-9d9a-4e3e-879b-ae2660c8d789";
+    const screen = render(() => <MessageBody body={`Inspect \`${id}\`.`} />);
+    expect(screen.queryByRole("button", { name: `Open item ${id}` })).not.toBeInTheDocument();
+    expect(screen.container.querySelector("code")).toHaveTextContent(id);
   });
 
   it("handles both marks in one line, in order", () => {

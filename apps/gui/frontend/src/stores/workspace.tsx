@@ -12,6 +12,7 @@ import {
 import { createStore, produce, reconcile } from "solid-js/store";
 import type { AgencyZeroApi, AppEvents, Unlisten } from "~/api";
 import { selectApi } from "~/api";
+import { ITEM_REFERENCE_EVENT } from "~/lib/itemReference";
 import { PERMISSION_ORDER } from "~/lib/labels";
 import { describeError, installGlobalErrorLogging, log } from "~/lib/log";
 import { usageTotals } from "~/lib/stats";
@@ -78,6 +79,8 @@ export function shortModelName(name: string): string {
 type WorkspaceState = {
   projects: Project[];
   items: Record<string, ProjectItem[]>;
+  /** Latest chat item-link request; ProjectPanel consumes it after mounting. */
+  itemReveal: { id: string; revision: number } | null;
   messages: Record<string, Message[]>;
   /** Agent-turn counts for Home, available without hydrating every transcript. */
   turnCounts: Record<string, number>;
@@ -352,6 +355,7 @@ function createWorkspace() {
   const [state, setState] = createStore<WorkspaceState>({
     projects: [],
     items: {},
+    itemReveal: null,
     messages: {},
     turnCounts: {},
     messageReceipts: {},
@@ -393,6 +397,7 @@ function createWorkspace() {
 
   /** Monotonic ticket for settings writes; see `saveSettings`. */
   let settingsWrite = 0;
+  let itemRevealRevision = 0;
   /** Last project (or Home) focused before a utility tab covered it. */
   let lastPortableActiveKey = "home";
 
@@ -1511,6 +1516,31 @@ function createWorkspace() {
     focus(projectId);
   }
 
+  /** Route a compact transcript item link to its owning project and row. */
+  function revealItem(itemId: string): boolean {
+    const item = Object.values(state.items)
+      .flat()
+      .find((candidate) => candidate.id === itemId);
+    if (!item) {
+      log.warn(`could not reveal unknown item ${itemId}`);
+      return false;
+    }
+    batch(() => {
+      setPrefs("projectPanelVisible", true);
+      setPrefs("panelSections", "items", true);
+      openProject(item.projectId);
+      setState("itemReveal", { id: item.id, revision: ++itemRevealRevision });
+    });
+    return true;
+  }
+
+  const onItemReference = (event: Event): void => {
+    const id = (event as CustomEvent<{ id?: unknown }>).detail?.id;
+    if (typeof id === "string") revealItem(id);
+  };
+  window.addEventListener(ITEM_REFERENCE_EVENT, onItemReference);
+  onCleanup(() => window.removeEventListener(ITEM_REFERENCE_EVENT, onItemReference));
+
   /** The gear opens Settings as a real tab you can leave open — never a modal. */
   function openSettings(): void {
     if (!state.tabs.some((tab) => tab.kind === "settings")) {
@@ -2015,6 +2045,7 @@ function createWorkspace() {
     moveTab,
     commitTabOrder,
     openProject,
+    revealItem,
     openSettings,
     openOnboarding,
     deferOnboarding,

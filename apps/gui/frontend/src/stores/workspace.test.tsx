@@ -1,7 +1,7 @@
 import { render, waitFor } from "@solidjs/testing-library";
 import { beforeEach, describe, expect, it } from "vitest";
 import { SETTINGS } from "~/api/fixtures";
-import { setPrefs } from "~/stores/prefs";
+import { prefs, setPrefs } from "~/stores/prefs";
 import {
   isLimitLive,
   monotonicUsage,
@@ -120,6 +120,28 @@ describe("startup", () => {
     const workspace = await mountWorkspace();
     expect(workspace.permissionsFor("claude")).toContain("ask");
     expect(workspace.permissionsFor("codex")).toContain("ask");
+  });
+});
+
+describe("item reference routing", () => {
+  it("opens the owning project and reveals its Items panel", async () => {
+    const workspace = await mountWorkspace();
+    setPrefs("projectPanelVisible", false);
+    setPrefs("panelSections", "items", false);
+
+    expect(workspace.actions.revealItem("cafe-0")).toBe(true);
+    expect(workspace.state.activeKey).toBe("cafe");
+    expect(workspace.state.itemReveal?.id).toBe("cafe-0");
+    expect(prefs.projectPanelVisible).toBe(true);
+    expect(prefs.panelSections.items).toBe(true);
+  });
+
+  it("leaves navigation unchanged for an unknown item", async () => {
+    const workspace = await mountWorkspace();
+    const before = workspace.state.activeKey;
+
+    expect(workspace.actions.revealItem("item-missing")).toBe(false);
+    expect(workspace.state.activeKey).toBe(before);
   });
 });
 
