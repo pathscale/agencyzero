@@ -584,6 +584,21 @@ export function createMockApi(): AgencyZeroApi {
       });
     },
     setDataLocation: () => settle(undefined),
+    getStoreBackupStatus: () =>
+      settle({
+        backups: [
+          {
+            id: "fixture-backup",
+            createdAt: new Date(Date.now() - 86_400_000).toISOString(),
+            bytes: 4_530_000,
+          },
+        ],
+        lastOperation: null,
+      }),
+    createStoreBackup: () =>
+      Promise.reject(new Error("the fixture backend has no durable store to back up")),
+    restoreStoreBackup: () =>
+      Promise.reject(new Error("the fixture backend has no durable store to restore")),
     /*
      * Cancelled, always. A browser has no native picker to open, and answering
      * with a plausible path would have the fixtures pretending to a filesystem

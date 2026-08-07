@@ -117,6 +117,24 @@ poisoned accounting the store had when it was taken. It protects against
 torn writes and bad sessions, not against rule 1 violations — those are
 prevented at the insert, and repaired by rebuild, never by copy.
 
+## Manual verified backups
+
+Settings can create a timestamped backup beside the active store and restore
+the latest one. Both actions restart the app because the restart angel performs
+the filesystem operation only after WorkTable has drained and the GUI has
+released the exclusive lock.
+
+A manual backup is copied into a unique staging directory and compared byte for
+byte with the closed source before it is published as `db.backup-<id>`. Restore
+copies and verifies the selected backup first, then swaps it into place. The
+store it displaced is retained whole as `db.pre-restore-<id>`, so restore never
+destroys the state it replaces.
+
+The same limitation as the rolling snapshot applies: byte verification proves
+the copy is complete, not that old WorkTable page accounting was healthy. Use a
+row-by-row rebuild for a condemned table rather than restoring a file copy of
+it.
+
 ## Recovering data by hand
 
 `wt-migrate <source> <target>` carries a store forward out of band: source

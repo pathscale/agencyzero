@@ -81,3 +81,16 @@ describe("chat imports", () => {
     await waitFor(() => expect(screen.getByText("Imported 2 chats from Claude Code")).toBeTruthy());
   });
 });
+
+describe("store backups", () => {
+  it("shows the latest verified backup and confirms before restore", async () => {
+    const screen = await mountSettings();
+
+    await waitFor(() => expect(screen.getByText(/1 verified backup/)).toBeTruthy());
+    expect(screen.getByRole("button", { name: "Back up & restart" })).toBeEnabled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Restore latest" }));
+    expect(screen.getByText("Restore this backup?")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Restore" })).toBeTruthy();
+  });
+});

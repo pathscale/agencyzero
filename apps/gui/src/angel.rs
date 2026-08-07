@@ -10,6 +10,8 @@ use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
 
+use crate::store_backup;
+
 const FLAG: &str = "--agencyzero-angel";
 const PARENT_EXIT_TIMEOUT: Duration = Duration::from_secs(30);
 const POLL_EVERY: Duration = Duration::from_millis(50);
@@ -18,6 +20,14 @@ const POLL_EVERY: Duration = Duration::from_millis(50);
 struct Request {
     parent_pid: u32,
     target: PathBuf,
+    action: Action,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) enum Action {
+    Relaunch,
+    Backup { store: PathBuf, backup: PathBuf },
+    Restore { store: PathBuf, backup: PathBuf },
 }
 
 /// Run angel mode when the private flag is present.
@@ -55,11 +65,37 @@ fn parse(args: impl IntoIterator<Item = OsString>) -> Option<Result<Request, Str
         if !target.is_absolute() {
             return Err("angel mode requires an absolute relaunch target".to_string());
         }
+        let action = match args.next() {
+            None => Action::Relaunch,
+            Some(flag) if flag == "--backup" || flag == "--restore" => {
+                let store =
+                    PathBuf::from(args.next().ok_or_else(|| {
+                        "angel maintenance is missing the store path".to_string()
+                    })?);
+                let backup =
+                    PathBuf::from(args.next().ok_or_else(|| {
+                        "angel maintenance is missing the backup path".to_string()
+                    })?);
+                if !store_backup::is_backup_path(&store, &backup) {
+                    return Err("angel maintenance requires an allowlisted sibling backup".into());
+                }
+                if flag == "--backup" {
+                    Action::Backup { store, backup }
+                } else {
+                    Action::Restore { store, backup }
+                }
+            }
+            Some(_) => return Err("angel mode received an unsupported action".into()),
+        };
         if args.next().is_some() {
             return Err("angel mode received unexpected trailing arguments".to_string());
         }
 
-        Ok(Request { parent_pid, target })
+        Ok(Request {
+            parent_pid,
+            target,
+            action,
+        })
     })();
     Some(parsed)
 }
@@ -77,7 +113,49 @@ fn run(request: Request) -> Result<(), String> {
         std::thread::sleep(POLL_EVERY);
     }
 
-    Command::new(&request.target)
+    let operation = match &request.action {
+        Action::Relaunch => None,
+        Action::Backup { store, backup } => Some(
+            store_backup::create(store, backup)
+                .map(|()| store_backup::OperationResult {
+                    kind: "backup".into(),
+                    ok: true,
+                    message: format!("Verified backup created at {}", backup.display()),
+                })
+                .unwrap_or_else(|error| store_backup::OperationResult {
+                    kind: "backup".into(),
+                    ok: false,
+                    message: format!("Backup failed: {error}"),
+                }),
+        ),
+        Action::Restore { store, backup } => Some(
+            store_backup::restore(store, backup)
+                .map(|rollback| store_backup::OperationResult {
+                    kind: "restore".into(),
+                    ok: true,
+                    message: format!(
+                        "Verified backup restored; the displaced store is at {}",
+                        rollback.display()
+                    ),
+                })
+                .unwrap_or_else(|error| store_backup::OperationResult {
+                    kind: "restore".into(),
+                    ok: false,
+                    message: format!("Restore failed: {error}"),
+                }),
+        ),
+    };
+
+    let mut replacement = Command::new(&request.target);
+    // An ordinary later restart must not keep reporting an operation from an
+    // earlier process through inherited environment state.
+    replacement.env_remove(store_backup::RESULT_ENV);
+    if let Some(operation) = operation
+        && let Ok(encoded) = serde_json::to_string(&operation)
+    {
+        replacement.env(store_backup::RESULT_ENV, encoded);
+    }
+    replacement
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null())
@@ -102,13 +180,31 @@ fn process_exists(_pid: u32) -> bool {
 }
 
 /// Start the one-shot supervisor before asking Tauri to exit.
-pub(crate) fn spawn() -> Result<(), String> {
+pub(crate) fn spawn(action: Action) -> Result<(), String> {
     let executable = std::env::current_exe()
         .map_err(|error| format!("could not locate the running executable: {error}"))?;
-    Command::new(&executable)
+    if let Action::Backup { store, backup } | Action::Restore { store, backup } = &action
+        && !store_backup::is_backup_path(store, backup)
+    {
+        return Err(
+            "could not start maintenance with a non-absolute or unrelated backup path".into(),
+        );
+    }
+    let mut command = Command::new(&executable);
+    command
         .arg(FLAG)
         .arg(std::process::id().to_string())
-        .arg(&executable)
+        .arg(&executable);
+    match action {
+        Action::Relaunch => {}
+        Action::Backup { store, backup } => {
+            command.arg("--backup").arg(store).arg(backup);
+        }
+        Action::Restore { store, backup } => {
+            command.arg("--restore").arg(store).arg(backup);
+        }
+    }
+    command
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null())
@@ -143,12 +239,39 @@ mod tests {
             Some(Ok(Request {
                 parent_pid: 42,
                 target: PathBuf::from("/Applications/AgencyZero.app/az-gui"),
+                action: Action::Relaunch,
             }))
         );
         assert!(
             parse(os(&["az-gui", FLAG, "nope", "/tmp/az-gui"]))
                 .unwrap()
                 .is_err()
+        );
+        assert!(
+            parse(os(&[
+                "az-gui",
+                FLAG,
+                "42",
+                "/tmp/az-gui",
+                "--backup",
+                "/tmp/db",
+                "/tmp/db.backup-20260807"
+            ]))
+            .unwrap()
+            .is_ok()
+        );
+        assert!(
+            parse(os(&[
+                "az-gui",
+                FLAG,
+                "42",
+                "/tmp/az-gui",
+                "--restore",
+                "/tmp/db",
+                "/outside/db.backup-20260807"
+            ]))
+            .unwrap()
+            .is_err()
         );
         assert!(
             parse(os(&["az-gui", FLAG, "42", "relative"]))
@@ -198,7 +321,12 @@ mod tests {
         let parent_pid = parent.id();
         let reaper = std::thread::spawn(move || parent.wait().expect("parent reaps"));
 
-        run(Request { parent_pid, target }).expect("angel hands off");
+        run(Request {
+            parent_pid,
+            target,
+            action: Action::Relaunch,
+        })
+        .expect("angel hands off");
         reaper.join().expect("reaper finishes");
         // A full workspace test run can leave the spawned shell waiting for a
         // scheduler slice longer than the focused test does. The angel handoff

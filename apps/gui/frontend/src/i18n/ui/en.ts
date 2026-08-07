@@ -689,6 +689,17 @@ const en = {
   "no session id": "no session id",
   processed: "processed",
   turns: "turns",
+  Backups: "Backups",
+  "closed-store copies verified byte for byte": "closed-store copies verified byte for byte",
+  "Back up & restart": "Back up & restart",
+  "Restore latest": "Restore latest",
+  "Restore this backup?": "Restore this backup?",
+  Restore: "Restore",
+  "No verified backups yet": "No verified backups yet",
+  "{count} verified backup(s) · latest {age} · {size}":
+    "{count} verified backup(s) · latest {age} · {size}",
+  "The app drains and restarts so the store is never copied while open.":
+    "The app drains and restarts so the store is never copied while open.",
 } as const;
 
 export default en;

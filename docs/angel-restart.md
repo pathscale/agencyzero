@@ -29,6 +29,25 @@ relaunching the app much later.
   identically.
 - The same path handles manual restart and updater restart.
 
-This supervisor protects the GUI handoff only. It does not preserve active
-agent runs across a restart; that remains the job of the run sidecar described
-in [xpc-sidecar.md](xpc-sidecar.md).
+## Closed-store maintenance
+
+The same supervisor owns manual backup and restore. These are not ordinary file
+copies from the GUI:
+
+1. The GUI refuses while an agent run is live.
+2. Every WorkTable persistence worker drains.
+3. The angel starts, the GUI exits, and the angel waits for the process and its
+   store lock to disappear.
+4. Backup copies into a unique staging directory, compares every file byte for
+   byte, and only then publishes the timestamped sibling directory.
+5. Restore copies and verifies the selected backup before moving the current
+   store. The displaced store is retained under a unique `pre-restore` name.
+6. The angel relaunches the GUI and passes the maintenance result through the
+   replacement process's environment for Settings to report.
+
+The webview supplies only an opaque backup id. Native code resolves it against
+the current store's allowlisted sibling names, so an arbitrary path cannot be
+turned into a restore source.
+
+The supervisor does not preserve active agent runs across a restart; that
+remains the job of the run sidecar described in [xpc-sidecar.md](xpc-sidecar.md).
