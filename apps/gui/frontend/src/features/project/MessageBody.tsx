@@ -1,6 +1,7 @@
 import { PromptSyntaxParser } from "promptsyntax";
 import { createSignal, For, type JSX, Show } from "solid-js";
 import { Icon } from "~/components/Icon";
+import { isItemId, itemReferenceLabel, revealItemReference } from "~/lib/itemReference";
 import { describeError, log } from "~/lib/log";
 import { tx } from "~/stores/i18n";
 
@@ -432,17 +433,45 @@ export function InlineText(props: { text: string }): JSX.Element {
 }
 
 /** Splits on `**bold**` and `` `code` `` while keeping the delimiters' order. */
+const ITEM_REFERENCE_SPLIT =
+  /(item-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/gi;
+
+function renderItemReferences(text: string): JSX.Element {
+  return text
+    .split(ITEM_REFERENCE_SPLIT)
+    .filter(Boolean)
+    .map((part) =>
+      isItemId(part) ? (
+        <button
+          type="button"
+          class="inline cursor-pointer font-medium text-az-link underline decoration-az-link/45 decoration-dotted underline-offset-2 hover:text-primary"
+          title={part}
+          aria-label={`Open item ${part}`}
+          onClick={() => revealItemReference(part)}
+        >
+          {itemReferenceLabel(part)}
+        </button>
+      ) : (
+        part
+      ),
+    );
+}
+
 function renderInline(text: string): JSX.Element[] {
   const parts = text.split(/(\*\*[^*]+\*\*|`[^`]+`)/g);
 
   return parts.filter(Boolean).map((part) => {
     if (part.startsWith("**") && part.endsWith("**")) {
-      return <strong class="font-semibold text-az-strong">{part.slice(2, -2)}</strong>;
+      return (
+        <strong class="font-semibold text-az-strong">
+          {renderItemReferences(part.slice(2, -2))}
+        </strong>
+      );
     }
     if (part.startsWith("`") && part.endsWith("`")) {
       return <InlineCode>{part.slice(1, -1)}</InlineCode>;
     }
-    return <>{part}</>;
+    return <>{renderItemReferences(part)}</>;
   });
 }
 

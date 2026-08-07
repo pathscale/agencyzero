@@ -926,6 +926,18 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
   });
   const filtering = () => query().trim().length > 0;
 
+  createEffect(() => {
+    const target = state.itemReveal;
+    target?.revision;
+    if (!target || !props.items.some((item) => item.id === target.id)) return;
+    setQuery("");
+    queueMicrotask(() => {
+      const row = document.querySelector<HTMLElement>(`[data-item-id="${target.id}"]`);
+      row?.scrollIntoView?.({ block: "nearest", behavior: "smooth" });
+      row?.focus({ preventScroll: true });
+    });
+  });
+
   /** The item whose title is being rewritten in place, if any. */
   const [editingId, setEditingId] = createSignal<string | null>(null);
   const [editTitle, setEditTitle] = createSignal("");
@@ -1047,6 +1059,8 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
             }
           >
             <div
+              data-item-id={item.id}
+              tabIndex={-1}
               /*
                * The row is `relative` and the action cluster below is absolute,
                * so the buttons take ZERO layout width. They used to be a normal
@@ -1055,7 +1069,11 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
                * title owns the whole width and the controls float over its right
                * end only on hover.
                */
-              class={`group relative flex items-center rounded-[9px] transition-colors ${
+              class={`group relative flex items-center rounded-[9px] outline-none transition-colors ${
+                state.itemReveal?.id === item.id
+                  ? "ring-1 ring-primary/70 ring-offset-1 ring-offset-base-200"
+                  : ""
+              } ${
                 item.status === "active"
                   ? "bg-base-300 shadow-[inset_2px_0_0_var(--color-primary)]"
                   : // Zebra striping so a long list reads row by row; the hover
