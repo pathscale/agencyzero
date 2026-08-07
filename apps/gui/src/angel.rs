@@ -65,28 +65,29 @@ fn parse(args: impl IntoIterator<Item = OsString>) -> Option<Result<Request, Str
         if !target.is_absolute() {
             return Err("angel mode requires an absolute relaunch target".to_string());
         }
-        let action = match args.next() {
-            None => Action::Relaunch,
-            Some(flag) if flag == "--backup" || flag == "--restore" => {
-                let store =
-                    PathBuf::from(args.next().ok_or_else(|| {
+        let action =
+            match args.next() {
+                None => Action::Relaunch,
+                Some(flag) if flag == "--backup" || flag == "--restore" => {
+                    let store = PathBuf::from(args.next().ok_or_else(|| {
                         "angel maintenance is missing the store path".to_string()
                     })?);
-                let backup =
-                    PathBuf::from(args.next().ok_or_else(|| {
+                    let backup = PathBuf::from(args.next().ok_or_else(|| {
                         "angel maintenance is missing the backup path".to_string()
                     })?);
-                if !store_backup::is_backup_path(&store, &backup) {
-                    return Err("angel maintenance requires an allowlisted sibling backup".into());
+                    if !store.is_absolute() || !store_backup::is_package_path(&backup) {
+                        return Err(
+                            "angel maintenance requires absolute store and .azbackup paths".into(),
+                        );
+                    }
+                    if flag == "--backup" {
+                        Action::Backup { store, backup }
+                    } else {
+                        Action::Restore { store, backup }
+                    }
                 }
-                if flag == "--backup" {
-                    Action::Backup { store, backup }
-                } else {
-                    Action::Restore { store, backup }
-                }
-            }
-            Some(_) => return Err("angel mode received an unsupported action".into()),
-        };
+                Some(_) => return Err("angel mode received an unsupported action".into()),
+            };
         if args.next().is_some() {
             return Err("angel mode received unexpected trailing arguments".to_string());
         }
@@ -146,6 +147,15 @@ fn run(request: Request) -> Result<(), String> {
         ),
     };
 
+    // A successful backup is the profile handoff point: Experimental stays
+    // closed so the owner can open Normal and select the package there. A
+    // failed backup relaunches so Settings can report why no package appeared.
+    if matches!(&request.action, Action::Backup { .. })
+        && operation.as_ref().is_some_and(|operation| operation.ok)
+    {
+        return Ok(());
+    }
+
     let mut replacement = Command::new(&request.target);
     // An ordinary later restart must not keep reporting an operation from an
     // earlier process through inherited environment state.
@@ -184,11 +194,9 @@ pub(crate) fn spawn(action: Action) -> Result<(), String> {
     let executable = std::env::current_exe()
         .map_err(|error| format!("could not locate the running executable: {error}"))?;
     if let Action::Backup { store, backup } | Action::Restore { store, backup } = &action
-        && !store_backup::is_backup_path(store, backup)
+        && (!store.is_absolute() || !store_backup::is_package_path(backup))
     {
-        return Err(
-            "could not start maintenance with a non-absolute or unrelated backup path".into(),
-        );
+        return Err("could not start maintenance with a non-absolute store or package path".into());
     }
     let mut command = Command::new(&executable);
     command
@@ -255,7 +263,7 @@ mod tests {
                 "/tmp/az-gui",
                 "--backup",
                 "/tmp/db",
-                "/tmp/db.backup-20260807"
+                "/tmp/AgencyZero-backup-20260807.azbackup"
             ]))
             .unwrap()
             .is_ok()
@@ -268,7 +276,20 @@ mod tests {
                 "/tmp/az-gui",
                 "--restore",
                 "/tmp/db",
-                "/outside/db.backup-20260807"
+                "/outside/moved.azbackup"
+            ]))
+            .unwrap()
+            .is_ok()
+        );
+        assert!(
+            parse(os(&[
+                "az-gui",
+                FLAG,
+                "42",
+                "/tmp/az-gui",
+                "--restore",
+                "relative/db",
+                "/outside/moved.azbackup"
             ]))
             .unwrap()
             .is_err()
@@ -288,6 +309,58 @@ mod tests {
     #[test]
     fn the_current_process_is_observably_alive() {
         assert!(process_exists(std::process::id()));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_successful_backup_leaves_the_source_profile_closed() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let dir = std::env::temp_dir().join(format!(
+            "az-angel-backup-test-{}-{}",
+            std::process::id(),
+            uuid::Uuid::new_v4()
+        ));
+        let store = dir.join("db");
+        std::fs::create_dir_all(&store).expect("store creates");
+        std::fs::write(store.join("raw.wt.data"), b"closed-store bytes")
+            .expect("store file writes");
+        let backup = dir.join("handoff.azbackup");
+        let marker = dir.join("unexpected-relaunch");
+        let target = dir.join("replacement.sh");
+        std::fs::write(
+            &target,
+            format!("#!/bin/sh\ntouch '{}'\n", marker.display()),
+        )
+        .expect("replacement script writes");
+        let mut permissions = std::fs::metadata(&target)
+            .expect("replacement script exists")
+            .permissions();
+        permissions.set_mode(0o700);
+        std::fs::set_permissions(&target, permissions).expect("replacement becomes executable");
+
+        let mut parent = Command::new("/bin/sh")
+            .args(["-c", "true"])
+            .spawn()
+            .expect("short-lived parent starts");
+        let parent_pid = parent.id();
+        let reaper = std::thread::spawn(move || parent.wait().expect("parent reaps"));
+        run(Request {
+            parent_pid,
+            target,
+            action: Action::Backup {
+                store,
+                backup: backup.clone(),
+            },
+        })
+        .expect("backup handoff succeeds");
+        reaper.join().expect("reaper finishes");
+
+        assert!(backup.is_file());
+        std::thread::sleep(Duration::from_millis(100));
+        assert!(!marker.exists(), "successful backup relaunched its profile");
+
+        let _ = std::fs::remove_dir_all(dir);
     }
 
     #[cfg(unix)]

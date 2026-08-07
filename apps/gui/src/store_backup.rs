@@ -1,17 +1,43 @@
-//! Closed-store backup and restore operations for the restart angel.
+//! Profile-agnostic backup packages for the restart angel.
 //!
 //! WorkTable owns memory-mapped indexes and asynchronous persistence workers.
-//! Copying its directory while the GUI is alive can preserve a mixture of old
-//! and new pages, even after a best-effort flush. These operations therefore run
-//! only in angel mode, after the drained parent has exited and released the
-//! store lock.
+//! The store is therefore archived only after the drained GUI exits. Rows are
+//! never decoded or re-encoded: the ZIP contains one small
+//! JSON manifest plus the untouched WorkTable files under `store/`.
 
-use std::io::Read;
-use std::path::{Path, PathBuf};
+use std::collections::BTreeMap;
+use std::io::{Read, Write};
+use std::path::{Component, Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
+use zip::write::SimpleFileOptions;
 
 pub(crate) const RESULT_ENV: &str = "AZ_STORE_MAINTENANCE_RESULT";
+const PACKAGE_PREFIX: &str = "AgencyZero-backup-";
+const PACKAGE_SUFFIX: &str = ".azbackup";
+const PACKAGE_FORMAT: u32 = 1;
+const MANIFEST_FILE: &str = "manifest.json";
+const STORE_PREFIX: &str = "store/";
+const MAX_MANIFEST_BYTES: u64 = 4 * 1024 * 1024;
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct Manifest {
+    format_version: u32,
+    app_version: String,
+    schema_fingerprint: String,
+    created_at: String,
+    files: Vec<ManifestFile>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ManifestFile {
+    path: String,
+    bytes: u64,
+    sha256: String,
+}
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -27,6 +53,9 @@ pub(crate) struct StoreBackup {
     pub id: String,
     pub created_at: String,
     pub bytes: u64,
+    pub app_version: String,
+    pub compatible: bool,
+    pub incompatibility: Option<String>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -36,60 +65,44 @@ pub(crate) struct StoreBackupStatus {
     pub last_operation: Option<OperationResult>,
 }
 
-fn store_name(store: &Path) -> Result<&str, String> {
-    store
-        .file_name()
-        .and_then(|name| name.to_str())
-        .filter(|name| !name.is_empty())
-        .ok_or_else(|| "the store path has no usable directory name".to_string())
-}
-
-fn sibling(store: &Path, suffix: &str) -> Result<PathBuf, String> {
+fn sibling(store: &Path, name: &str) -> Result<PathBuf, String> {
     let parent = store
         .parent()
         .ok_or_else(|| "the store path has no parent directory".to_string())?;
-    Ok(parent.join(format!("{}{suffix}", store_name(store)?)))
+    Ok(parent.join(name))
 }
 
-fn backup_prefix(store: &Path) -> Result<String, String> {
-    Ok(format!("{}.backup-", store_name(store)?))
-}
-
+#[cfg(test)]
 pub(crate) fn new_backup_path(store: &Path) -> Result<PathBuf, String> {
+    sibling(store, &new_backup_file_name())
+}
+
+pub(crate) fn new_backup_file_name() -> String {
     let stamp = chrono::Utc::now().format("%Y%m%dT%H%M%S%.3fZ");
-    sibling(store, &format!(".backup-{stamp}-{}", uuid::Uuid::new_v4()))
+    format!(
+        "{PACKAGE_PREFIX}{stamp}-{}{PACKAGE_SUFFIX}",
+        uuid::Uuid::new_v4()
+    )
 }
 
-pub(crate) fn resolve_backup(store: &Path, id: &str) -> Result<PathBuf, String> {
-    if id.is_empty()
-        || id == "."
-        || id == ".."
-        || Path::new(id).components().count() != 1
-        || id.contains(std::path::MAIN_SEPARATOR)
-    {
-        return Err("the backup id is invalid".into());
-    }
-    sibling(store, &format!(".backup-{id}"))
-}
-
-pub(crate) fn is_backup_path(store: &Path, backup: &Path) -> bool {
-    let (Some(parent), Some(candidate_parent), Ok(prefix), Some(name)) = (
-        store.parent(),
-        backup.parent(),
-        backup_prefix(store),
-        backup.file_name().and_then(|name| name.to_str()),
+pub(crate) fn is_package_path(package: &Path) -> bool {
+    let (Some(parent), Some(name)) = (
+        package.parent(),
+        package.file_name().and_then(|name| name.to_str()),
     ) else {
         return false;
     };
-    backup.is_absolute()
-        && store.is_absolute()
-        && parent == candidate_parent
-        && name.starts_with(&prefix)
-        && name.len() > prefix.len()
+    package.is_absolute()
+        && parent.is_absolute()
+        && name.ends_with(PACKAGE_SUFFIX)
+        && name.len() > PACKAGE_SUFFIX.len()
+}
+
+pub(crate) fn check_restore(package: &Path) -> Result<(), String> {
+    validate_archive(package).map(|_| ())
 }
 
 pub(crate) fn status(store: &Path) -> Result<StoreBackupStatus, String> {
-    let prefix = backup_prefix(store)?;
     let mut backups = Vec::new();
     let parent = store
         .parent()
@@ -100,28 +113,40 @@ pub(crate) fn status(store: &Path) -> Result<StoreBackupStatus, String> {
             let entry = entry.map_err(|error| error.to_string())?;
             let name = entry.file_name();
             let Some(name) = name.to_str() else { continue };
-            let Some(id) = name.strip_prefix(&prefix) else {
+            let Some(id) = name
+                .strip_prefix(PACKAGE_PREFIX)
+                .and_then(|name| name.strip_suffix(PACKAGE_SUFFIX))
+            else {
                 continue;
             };
             if id.is_empty()
                 || !entry
                     .file_type()
                     .map_err(|error| error.to_string())?
-                    .is_dir()
+                    .is_file()
             {
                 continue;
             }
-            let metadata = entry.metadata().map_err(|error| error.to_string())?;
-            let created_at = metadata
-                .modified()
-                .ok()
-                .map(chrono::DateTime::<chrono::Utc>::from)
-                .unwrap_or_else(chrono::Utc::now)
-                .to_rfc3339();
+
+            let manifest = read_manifest(&entry.path());
+            let compatibility = manifest.as_ref().map_err(Clone::clone).and_then(compatible);
+            let (created_at, app_version, bytes) = manifest
+                .as_ref()
+                .map(|manifest| {
+                    (
+                        manifest.created_at.clone(),
+                        manifest.app_version.clone(),
+                        manifest.files.iter().map(|file| file.bytes).sum(),
+                    )
+                })
+                .unwrap_or_else(|_| ("unknown".into(), "unknown".into(), 0));
             backups.push(StoreBackup {
                 id: id.to_string(),
                 created_at,
-                bytes: directory_bytes(&entry.path())?,
+                bytes,
+                app_version,
+                compatible: compatibility.is_ok(),
+                incompatibility: compatibility.err(),
             });
         }
     }
@@ -136,141 +161,296 @@ pub(crate) fn status(store: &Path) -> Result<StoreBackupStatus, String> {
     })
 }
 
-fn directory_bytes(path: &Path) -> Result<u64, String> {
-    let mut total = 0_u64;
-    for entry in std::fs::read_dir(path).map_err(|error| error.to_string())? {
-        let entry = entry.map_err(|error| error.to_string())?;
-        let kind = entry.file_type().map_err(|error| error.to_string())?;
-        if kind.is_dir() {
-            total = total
-                .checked_add(directory_bytes(&entry.path())?)
-                .ok_or_else(|| "backup size overflowed u64".to_string())?;
-        } else if kind.is_file() {
-            total = total
-                .checked_add(entry.metadata().map_err(|error| error.to_string())?.len())
-                .ok_or_else(|| "backup size overflowed u64".to_string())?;
-        } else {
-            return Err(format!(
-                "the store contains an unsupported filesystem entry: {}",
-                entry.path().display()
-            ));
-        }
+fn compatible(manifest: &Manifest) -> Result<(), String> {
+    if manifest.format_version != PACKAGE_FORMAT {
+        return Err(format!(
+            "backup format {} is not supported by this build (expected {PACKAGE_FORMAT})",
+            manifest.format_version
+        ));
     }
-    Ok(total)
+    let package_version = semver::Version::parse(&manifest.app_version)
+        .map_err(|error| format!("backup carries an invalid AgencyZero version: {error}"))?;
+    let current_version = semver::Version::parse(az_core::VERSION)
+        .map_err(|error| format!("this build carries an invalid version: {error}"))?;
+    if package_version != current_version {
+        return Err(format!(
+            "backup requires AgencyZero {package_version}; this build is {current_version}"
+        ));
+    }
+    if manifest.schema_fingerprint != crate::db::tables::SCHEMA_FINGERPRINT {
+        return Err("backup schema does not exactly match this build".into());
+    }
+    Ok(())
 }
 
-fn copy_dir_all(from: &Path, to: &Path) -> Result<(), String> {
-    std::fs::create_dir(to).map_err(|error| {
-        format!(
-            "could not create backup directory {}: {error}",
-            to.display()
+fn read_manifest(package: &Path) -> Result<Manifest, String> {
+    let file = std::fs::File::open(package)
+        .map_err(|error| format!("could not open backup package: {error}"))?;
+    let mut archive = zip::ZipArchive::new(file)
+        .map_err(|error| format!("backup package is not a readable ZIP: {error}"))?;
+    let mut entry = archive
+        .by_name(MANIFEST_FILE)
+        .map_err(|_| "backup package has no manifest.json".to_string())?;
+    if entry.size() > MAX_MANIFEST_BYTES {
+        return Err("backup manifest is unreasonably large".into());
+    }
+    let mut raw = String::new();
+    entry
+        .read_to_string(&mut raw)
+        .map_err(|error| format!("could not read backup manifest: {error}"))?;
+    serde_json::from_str(&raw).map_err(|error| format!("backup manifest is invalid: {error}"))
+}
+
+fn safe_relative(path: &str) -> bool {
+    !path.is_empty()
+        && !path.contains('\\')
+        && Path::new(path)
+            .components()
+            .all(|component| matches!(component, Component::Normal(_)))
+}
+
+fn store_files(store: &Path) -> Result<Vec<(String, PathBuf)>, String> {
+    fn walk(root: &Path, current: &Path, files: &mut Vec<(String, PathBuf)>) -> Result<(), String> {
+        for entry in std::fs::read_dir(current).map_err(|error| error.to_string())? {
+            let entry = entry.map_err(|error| error.to_string())?;
+            let kind = entry.file_type().map_err(|error| error.to_string())?;
+            if kind.is_dir() {
+                walk(root, &entry.path(), files)?;
+            } else if kind.is_file() {
+                let relative = entry
+                    .path()
+                    .strip_prefix(root)
+                    .map_err(|error| error.to_string())?
+                    .components()
+                    .map(|component| match component {
+                        Component::Normal(name) => name
+                            .to_str()
+                            .map(ToOwned::to_owned)
+                            .ok_or_else(|| "the store contains a non-UTF-8 path".to_string()),
+                        _ => Err("the store contains an unsafe relative path".to_string()),
+                    })
+                    .collect::<Result<Vec<_>, _>>()?
+                    .join("/");
+                files.push((relative, entry.path()));
+            } else {
+                return Err(format!(
+                    "the store contains an unsupported filesystem entry: {}",
+                    entry.path().display()
+                ));
+            }
+        }
+        Ok(())
+    }
+
+    if !store.is_dir() {
+        return Err(format!("the store does not exist at {}", store.display()));
+    }
+    let mut files = Vec::new();
+    walk(store, store, &mut files)?;
+    files.sort_by(|left, right| left.0.cmp(&right.0));
+    Ok(files)
+}
+
+fn hex(digest: impl AsRef<[u8]>) -> String {
+    digest
+        .as_ref()
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect()
+}
+
+fn write_archive(store: &Path, package: &Path) -> Result<(), String> {
+    let output = std::fs::File::create(package)
+        .map_err(|error| format!("could not create backup package: {error}"))?;
+    let mut archive = zip::ZipWriter::new(output);
+    let options = SimpleFileOptions::default()
+        // DEFLATE is the one compressed ZIP method supported by the built-in
+        // archive tools on Windows, macOS and ordinary Linux desktops.
+        .compression_method(zip::CompressionMethod::Deflated)
+        .unix_permissions(0o600);
+    let mut records = Vec::new();
+
+    for (relative, source) in store_files(store)? {
+        archive
+            .start_file(format!("{STORE_PREFIX}{relative}"), options)
+            .map_err(|error| format!("could not add {relative} to backup: {error}"))?;
+        let mut source = std::fs::File::open(&source)
+            .map_err(|error| format!("could not read {}: {error}", source.display()))?;
+        let mut digest = Sha256::new();
+        let mut bytes = 0_u64;
+        let mut buffer = [0_u8; 64 * 1024];
+        loop {
+            let read = source
+                .read(&mut buffer)
+                .map_err(|error| error.to_string())?;
+            if read == 0 {
+                break;
+            }
+            digest.update(&buffer[..read]);
+            archive
+                .write_all(&buffer[..read])
+                .map_err(|error| format!("could not write backup data: {error}"))?;
+            bytes = bytes
+                .checked_add(read as u64)
+                .ok_or_else(|| "backup size overflowed u64".to_string())?;
+        }
+        records.push(ManifestFile {
+            path: relative,
+            bytes,
+            sha256: hex(digest.finalize()),
+        });
+    }
+
+    let manifest = Manifest {
+        format_version: PACKAGE_FORMAT,
+        app_version: az_core::VERSION.into(),
+        schema_fingerprint: crate::db::tables::SCHEMA_FINGERPRINT.into(),
+        created_at: chrono::Utc::now().to_rfc3339(),
+        files: records,
+    };
+    archive
+        .start_file(MANIFEST_FILE, options)
+        .map_err(|error| format!("could not add backup manifest: {error}"))?;
+    archive
+        .write_all(
+            &serde_json::to_vec_pretty(&manifest)
+                .map_err(|error| format!("could not encode backup manifest: {error}"))?,
         )
-    })?;
-    for entry in std::fs::read_dir(from).map_err(|error| error.to_string())? {
-        let entry = entry.map_err(|error| error.to_string())?;
-        let target = to.join(entry.file_name());
-        let kind = entry.file_type().map_err(|error| error.to_string())?;
-        if kind.is_dir() {
-            copy_dir_all(&entry.path(), &target)?;
-        } else if kind.is_file() {
-            std::fs::copy(entry.path(), &target)
-                .map_err(|error| format!("could not copy {}: {error}", entry.path().display()))?;
-        } else {
-            return Err(format!(
-                "the store contains an unsupported filesystem entry: {}",
-                entry.path().display()
-            ));
+        .map_err(|error| format!("could not write backup manifest: {error}"))?;
+    archive
+        .finish()
+        .map_err(|error| format!("could not finish backup ZIP: {error}"))?;
+    Ok(())
+}
+
+fn checksum_reader(reader: &mut impl Read) -> Result<(u64, String), String> {
+    let mut digest = Sha256::new();
+    let mut bytes = 0_u64;
+    let mut buffer = [0_u8; 64 * 1024];
+    loop {
+        let read = reader
+            .read(&mut buffer)
+            .map_err(|error| error.to_string())?;
+        if read == 0 {
+            break;
+        }
+        digest.update(&buffer[..read]);
+        bytes = bytes
+            .checked_add(read as u64)
+            .ok_or_else(|| "backup size overflowed u64".to_string())?;
+    }
+    Ok((bytes, hex(digest.finalize())))
+}
+
+fn validate_archive(package: &Path) -> Result<Manifest, String> {
+    let manifest = read_manifest(package)?;
+    compatible(&manifest)?;
+    let mut expected = BTreeMap::new();
+    for file in &manifest.files {
+        if !safe_relative(&file.path) || expected.insert(file.path.clone(), file).is_some() {
+            return Err("backup manifest contains a duplicate or unsafe path".into());
+        }
+    }
+
+    let file = std::fs::File::open(package).map_err(|error| error.to_string())?;
+    let mut archive = zip::ZipArchive::new(file).map_err(|error| error.to_string())?;
+    let mut manifest_count = 0;
+    for index in 0..archive.len() {
+        let mut entry = archive.by_index(index).map_err(|error| error.to_string())?;
+        let name = entry.name().to_string();
+        if entry.enclosed_name().is_none() || entry.is_dir() {
+            return Err("backup ZIP contains an unsafe or unexpected entry".into());
+        }
+        if name == MANIFEST_FILE {
+            manifest_count += 1;
+            continue;
+        }
+        let Some(relative) = name.strip_prefix(STORE_PREFIX) else {
+            return Err(format!("backup ZIP contains unexpected entry {name}"));
+        };
+        let Some(record) = expected.remove(relative) else {
+            return Err(format!("backup ZIP contains unmanifested entry {name}"));
+        };
+        let (bytes, sha256) = checksum_reader(&mut entry)?;
+        if bytes != record.bytes || sha256 != record.sha256 {
+            return Err(format!("backup integrity check failed for {relative}"));
+        }
+    }
+    if manifest_count != 1 || !expected.is_empty() {
+        return Err("backup ZIP is missing its manifest or a declared store file".into());
+    }
+    Ok(manifest)
+}
+
+fn verify_store(store: &Path, manifest: &Manifest) -> Result<(), String> {
+    let actual = store_files(store)?;
+    if actual.len() != manifest.files.len() {
+        return Err("restored store has a different file count".into());
+    }
+    for ((path, file), record) in actual.iter().zip(&manifest.files) {
+        if path != &record.path {
+            return Err("restored store has a different directory layout".into());
+        }
+        let mut file = std::fs::File::open(file).map_err(|error| error.to_string())?;
+        let (bytes, sha256) = checksum_reader(&mut file)?;
+        if bytes != record.bytes || sha256 != record.sha256 {
+            return Err(format!("restored store verification failed for {path}"));
         }
     }
     Ok(())
 }
 
-fn files_equal(left: &Path, right: &Path) -> Result<bool, String> {
-    const CHUNK: usize = 64 * 1024;
-    let mut left = std::fs::File::open(left).map_err(|error| error.to_string())?;
-    let mut right = std::fs::File::open(right).map_err(|error| error.to_string())?;
-    let mut left_buffer = [0_u8; CHUNK];
-    let mut right_buffer = [0_u8; CHUNK];
-    loop {
-        let left_read = left
-            .read(&mut left_buffer)
-            .map_err(|error| error.to_string())?;
-        let right_read = right
-            .read(&mut right_buffer)
-            .map_err(|error| error.to_string())?;
-        if left_read != right_read || left_buffer[..left_read] != right_buffer[..right_read] {
-            return Ok(false);
-        }
-        if left_read == 0 {
-            return Ok(true);
-        }
-    }
+fn load_store_tables(store: &Path) -> Result<(), String> {
+    let runtime = tokio::runtime::Runtime::new()
+        .map_err(|error| format!("could not start backup validation: {error}"))?;
+    let tables = runtime
+        .block_on(crate::db::tables::Tables::open(store))
+        .map_err(|error| format!("restored WorkTable store would not open: {error}"))?;
+    runtime
+        .block_on(tables.shutdown())
+        .map_err(|error| format!("restored WorkTable store would not drain: {error}"))?;
+    drop(tables);
+    Ok(())
 }
 
-fn entries(path: &Path) -> Result<Vec<std::ffi::OsString>, String> {
-    let mut names = std::fs::read_dir(path)
-        .map_err(|error| error.to_string())?
-        .map(|entry| {
-            entry
-                .map(|entry| entry.file_name())
-                .map_err(|error| error.to_string())
-        })
-        .collect::<Result<Vec<_>, _>>()?;
-    names.sort();
-    Ok(names)
+#[cfg(not(test))]
+fn validate_store_loads(store: &Path) -> Result<(), String> {
+    load_store_tables(store)
 }
 
-fn verify_copy(source: &Path, copy: &Path) -> Result<(), String> {
-    let source_entries = entries(source)?;
-    let copy_entries = entries(copy)?;
-    if source_entries != copy_entries {
-        return Err("the backup verification found a different directory layout".into());
-    }
-    for name in source_entries {
-        let source_entry = source.join(&name);
-        let copy_entry = copy.join(&name);
-        let source_kind = std::fs::symlink_metadata(&source_entry)
-            .map_err(|error| error.to_string())?
-            .file_type();
-        let copy_kind = std::fs::symlink_metadata(&copy_entry)
-            .map_err(|error| error.to_string())?
-            .file_type();
-        if source_kind.is_dir() && copy_kind.is_dir() {
-            verify_copy(&source_entry, &copy_entry)?;
-        } else if source_kind.is_file() && copy_kind.is_file() {
-            if !files_equal(&source_entry, &copy_entry)? {
-                return Err(format!(
-                    "the backup verification found different bytes in {}",
-                    source_entry.display()
-                ));
-            }
-        } else {
-            return Err(format!(
-                "the backup verification found a mismatched entry at {}",
-                source_entry.display()
-            ));
-        }
-    }
+// Package unit tests use minimal byte fixtures rather than constructing all
+// WorkTable tables. Production restores always execute the loader above.
+#[cfg(test)]
+fn validate_store_loads(_store: &Path) -> Result<(), String> {
     Ok(())
 }
 
 fn staging_path(store: &Path, label: &str) -> Result<PathBuf, String> {
-    sibling(store, &format!(".{label}-{}", uuid::Uuid::new_v4()))
+    let name = store
+        .file_name()
+        .and_then(|name| name.to_str())
+        .ok_or_else(|| "the store path has no UTF-8 directory name".to_string())?;
+    sibling(store, &format!("{name}.{label}-{}", uuid::Uuid::new_v4()))
+}
+
+fn package_staging_path(package: &Path) -> Result<PathBuf, String> {
+    let parent = package
+        .parent()
+        .ok_or_else(|| "the backup target has no parent directory".to_string())?;
+    Ok(parent.join(format!(
+        ".AgencyZero-backup-staging-{}",
+        uuid::Uuid::new_v4()
+    )))
 }
 
 pub(crate) fn create(store: &Path, backup: &Path) -> Result<(), String> {
-    if !store.is_dir() {
-        return Err(format!("the store does not exist at {}", store.display()));
-    }
-    if !is_backup_path(store, backup) || backup.exists() {
+    if !store.is_absolute() || !is_package_path(backup) || backup.exists() {
         return Err("the backup target is invalid or already exists".into());
     }
-    // Must not begin with `.backup-`: a crash can leave staging behind, and
-    // the catalogue must never offer a half-copy as restorable.
-    let staging = staging_path(store, "maintenance-backup-staging")?;
+    let staging = package_staging_path(backup)?;
     let result = (|| {
-        copy_dir_all(store, &staging)?;
-        verify_copy(store, &staging)?;
+        write_archive(store, &staging)?;
+        validate_archive(&staging)?;
         std::fs::rename(&staging, backup).map_err(|error| {
             format!(
                 "could not publish verified backup {}: {error}",
@@ -280,24 +460,46 @@ pub(crate) fn create(store: &Path, backup: &Path) -> Result<(), String> {
         Ok(())
     })();
     if result.is_err() {
-        let _ = std::fs::remove_dir_all(&staging);
+        let _ = std::fs::remove_file(&staging);
     }
     result
 }
 
 pub(crate) fn restore(store: &Path, backup: &Path) -> Result<PathBuf, String> {
-    if !store.is_dir() {
+    if !store.is_absolute() || !store.is_dir() {
         return Err(format!("the store does not exist at {}", store.display()));
     }
-    if !is_backup_path(store, backup) || !backup.is_dir() {
+    if !is_package_path(backup) || !backup.is_file() {
         return Err("the selected backup is invalid or missing".into());
     }
 
+    let manifest = validate_archive(backup)?;
     let staging = staging_path(store, "restore-staging")?;
     let rollback = staging_path(store, "pre-restore")?;
     let result = (|| {
-        copy_dir_all(backup, &staging)?;
-        verify_copy(backup, &staging)?;
+        std::fs::create_dir(&staging).map_err(|error| error.to_string())?;
+        let file = std::fs::File::open(backup).map_err(|error| error.to_string())?;
+        let mut archive = zip::ZipArchive::new(file).map_err(|error| error.to_string())?;
+        for record in &manifest.files {
+            let mut entry = archive
+                .by_name(&format!("{STORE_PREFIX}{}", record.path))
+                .map_err(|error| format!("could not read {}: {error}", record.path))?;
+            let target = staging.join(&record.path);
+            if let Some(parent) = target.parent() {
+                std::fs::create_dir_all(parent).map_err(|error| error.to_string())?;
+            }
+            let mut output = std::fs::File::create(&target)
+                .map_err(|error| format!("could not create {}: {error}", target.display()))?;
+            std::io::copy(&mut entry, &mut output)
+                .map_err(|error| format!("could not extract {}: {error}", record.path))?;
+        }
+        verify_store(&staging, &manifest)?;
+        // Loading every table catches damaged indexes and invalid row shapes
+        // before the current profile's store is moved out of the way. Verify
+        // again afterwards so validation itself cannot silently change bytes.
+        validate_store_loads(&staging)?;
+        verify_store(&staging, &manifest)?;
+
         std::fs::rename(store, &rollback).map_err(|error| {
             format!(
                 "could not preserve the current store at {}: {error}",
@@ -328,7 +530,7 @@ pub(crate) fn restore(store: &Path, backup: &Path) -> Result<PathBuf, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::io::Write;
+    use std::io::{Seek, SeekFrom};
 
     fn scratch(label: &str) -> PathBuf {
         let path = std::env::temp_dir().join(format!(
@@ -342,52 +544,133 @@ mod tests {
 
     fn write(path: &Path, body: &[u8]) {
         std::fs::create_dir_all(path.parent().expect("parent")).expect("parent creates");
-        let mut file = std::fs::File::create(path).expect("file creates");
-        file.write_all(body).expect("file writes");
+        std::fs::write(path, body).expect("file writes");
     }
 
-    #[test]
-    fn a_backup_is_byte_verified_and_listed() {
-        let root = scratch("create");
+    fn sample_store(root: &Path) -> PathBuf {
         let store = root.join("db");
         write(&store.join("message/.wt.data"), b"transcript");
         write(&store.join("message/primary.wt.idx"), b"index");
+        store
+    }
+
+    #[test]
+    fn a_backup_is_one_verified_profile_agnostic_archive() {
+        let root = scratch("create");
+        let store = sample_store(&root);
         let backup = new_backup_path(&store).expect("target");
 
         create(&store, &backup).expect("backup succeeds");
-        verify_copy(&store, &backup).expect("copy verifies");
+        assert!(backup.is_file());
+        assert_eq!(validate_archive(&backup).expect("valid").files.len(), 2);
         let found = status(&store).expect("status");
         assert_eq!(found.backups.len(), 1);
         assert_eq!(found.backups[0].bytes, 15);
+        assert_eq!(found.backups[0].app_version, az_core::VERSION);
+        assert!(found.backups[0].compatible);
 
         let _ = std::fs::remove_dir_all(root);
     }
 
     #[test]
-    fn verification_rejects_changed_bytes() {
-        let root = scratch("verify");
-        let source = root.join("source");
-        let copy = root.join("copy");
-        write(&source.join("table/.wt.data"), b"good");
-        write(&copy.join("table/.wt.data"), b"evil");
+    fn semantic_preflight_opens_and_drains_a_real_worktable_store() {
+        let root = scratch("semantic");
+        let store = root.join("db");
+        let runtime = tokio::runtime::Runtime::new().expect("runtime starts");
+        let tables = runtime
+            .block_on(crate::db::tables::Tables::open(&store))
+            .expect("real store opens");
+        runtime
+            .block_on(tables.stamp_schema())
+            .expect("schema stamps");
+        runtime.block_on(tables.shutdown()).expect("store drains");
+        drop(tables);
+        drop(runtime);
 
-        assert!(verify_copy(&source, &copy).is_err());
+        load_store_tables(&store).expect("restore preflight accepts the real store");
+
         let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn integrity_check_rejects_changed_archive_bytes() {
+        let root = scratch("integrity");
+        let store = sample_store(&root);
+        let backup = new_backup_path(&store).expect("target");
+        create(&store, &backup).expect("backup succeeds");
+
+        let data_start = {
+            let file = std::fs::File::open(&backup).unwrap();
+            let mut archive = zip::ZipArchive::new(file).unwrap();
+            archive
+                .by_name("store/message/.wt.data")
+                .unwrap()
+                .data_start()
+        };
+        let mut file = std::fs::OpenOptions::new()
+            .write(true)
+            .open(&backup)
+            .unwrap();
+        file.seek(SeekFrom::Start(data_start)).unwrap();
+        file.write_all(b"X").unwrap();
+        drop(file);
+        write(&store.join("message/.wt.data"), b"current-store-stays");
+
+        assert!(validate_archive(&backup).is_err());
+        assert!(restore(&store, &backup).is_err());
+        assert_eq!(
+            std::fs::read(store.join("message/.wt.data")).unwrap(),
+            b"current-store-stays"
+        );
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn different_versions_and_other_schemas_are_refused() {
+        let files = Vec::new();
+        let base = Manifest {
+            format_version: PACKAGE_FORMAT,
+            app_version: az_core::VERSION.into(),
+            schema_fingerprint: crate::db::tables::SCHEMA_FINGERPRINT.into(),
+            created_at: chrono::Utc::now().to_rfc3339(),
+            files,
+        };
+        let mut newer = base.clone();
+        newer.app_version = "999.0.0".into();
+        assert!(
+            compatible(&newer)
+                .unwrap_err()
+                .contains("requires AgencyZero")
+        );
+
+        let mut older = base.clone();
+        older.app_version = "0.0.1".into();
+        assert!(
+            compatible(&older)
+                .unwrap_err()
+                .contains("requires AgencyZero")
+        );
+
+        let mut other_schema = base;
+        other_schema.schema_fingerprint = "different".into();
+        assert!(compatible(&other_schema).unwrap_err().contains("schema"));
     }
 
     #[test]
     fn restore_keeps_the_displaced_store_as_a_rollback() {
         let root = scratch("restore");
-        let store = root.join("db");
-        write(&store.join("kv/.wt.data"), b"before");
+        let store = sample_store(&root);
         let backup = new_backup_path(&store).expect("target");
         create(&store, &backup).expect("backup succeeds");
-        write(&store.join("kv/.wt.data"), b"after");
+        write(&store.join("message/.wt.data"), b"after");
 
         let rollback = restore(&store, &backup).expect("restore succeeds");
-        assert_eq!(std::fs::read(store.join("kv/.wt.data")).unwrap(), b"before");
         assert_eq!(
-            std::fs::read(rollback.join("kv/.wt.data")).unwrap(),
+            std::fs::read(store.join("message/.wt.data")).unwrap(),
+            b"transcript"
+        );
+        assert_eq!(
+            std::fs::read(rollback.join("message/.wt.data")).unwrap(),
             b"after"
         );
 
@@ -395,10 +678,31 @@ mod tests {
     }
 
     #[test]
-    fn a_backup_id_cannot_escape_the_store_parent() {
-        let store = Path::new("/tmp/agencyzero/db");
-        assert!(resolve_backup(store, "../elsewhere").is_err());
-        assert!(resolve_backup(store, "/absolute").is_err());
-        assert!(resolve_backup(store, "known").is_ok());
+    fn a_package_moves_between_profile_roots_without_changing() {
+        let root = scratch("profiles");
+        let experimental = root.join("experimental");
+        let normal = root.join("normal");
+        let shared = root.join("shared");
+        std::fs::create_dir(&shared).expect("shared directory creates");
+        let source_store = sample_store(&experimental);
+        let target_store = sample_store(&normal);
+        write(&target_store.join("message/.wt.data"), b"normal-before");
+        let package = shared.join("experimental-to-normal.azbackup");
+        create(&source_store, &package).expect("backup succeeds");
+        let package_bytes = std::fs::read(&package).expect("package reads");
+
+        assert!(check_restore(&package).is_ok());
+        let rollback = restore(&target_store, &package).expect("cross-profile restore succeeds");
+        assert_eq!(
+            std::fs::read(target_store.join("message/.wt.data")).unwrap(),
+            b"transcript"
+        );
+        assert_eq!(
+            std::fs::read(rollback.join("message/.wt.data")).unwrap(),
+            b"normal-before"
+        );
+        assert_eq!(std::fs::read(&package).unwrap(), package_bytes);
+
+        let _ = std::fs::remove_dir_all(root);
     }
 }

@@ -83,14 +83,14 @@ describe("chat imports", () => {
 });
 
 describe("store backups", () => {
-  it("shows the latest verified backup and confirms before restore", async () => {
+  it("offers portable save and restore pickers with confirmation", async () => {
     const screen = await mountSettings();
 
-    await waitFor(() => expect(screen.getByText(/1 verified backup/)).toBeTruthy());
-    expect(screen.getByRole("button", { name: "Back up & restart" })).toBeEnabled();
+    await waitFor(() => expect(screen.getByText(/Portable .azbackup package/)).toBeTruthy());
+    expect(screen.getByRole("button", { name: "Back up & close" })).toBeEnabled();
 
-    fireEvent.click(screen.getByRole("button", { name: "Restore latest" }));
-    expect(screen.getByText("Restore this backup?")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Choose & restore…" }));
+    expect(screen.getByText("Choose a backup to restore?")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Restore" })).toBeTruthy();
   });
 });

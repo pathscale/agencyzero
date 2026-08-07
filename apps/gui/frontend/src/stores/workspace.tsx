@@ -2031,13 +2031,13 @@ function createWorkspace() {
     getStoreBackupStatus() {
       return client().getStoreBackupStatus();
     },
-    /** Success exits and relaunches, so only failures return to the caller. */
+    /** Success exits and stays closed; failures relaunch to report the result. */
     createStoreBackup() {
       return client().createStoreBackup();
     },
-    /** The backend resolves this opaque id inside the current store's parent. */
-    restoreStoreBackup(id: string) {
-      return client().restoreStoreBackup(id);
+    /** The native picker selects the package; the webview never receives its path. */
+    restoreStoreBackup() {
+      return client().restoreStoreBackup();
     },
     /** The native folder panel, for a project's working directories. */
     chooseProjectDirectory() {
