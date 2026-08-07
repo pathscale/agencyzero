@@ -144,6 +144,7 @@ impl From<ProjectItemRow> for ProjectItemDto {
 
 const ITEM_ACTIVITY_PREFIX: &str = "item-activity:";
 const ITEM_AGENT_PREFIX: &str = "item-agent:";
+const ITEM_FORK_HANDOFF_PREFIX: &str = "item-fork-handoff:";
 
 fn item_activity_key(item_id: &str) -> String {
     format!("{ITEM_ACTIVITY_PREFIX}{item_id}")
@@ -151,6 +152,26 @@ fn item_activity_key(item_id: &str) -> String {
 
 fn item_agent_key(item_id: &str) -> String {
     format!("{ITEM_AGENT_PREFIX}{item_id}")
+}
+
+fn item_fork_handoff_key(project_id: &str) -> String {
+    format!("{ITEM_FORK_HANDOFF_PREFIX}{project_id}")
+}
+
+fn fork_parent_project_id(row: &ProjectRow) -> Option<String> {
+    serde_json::from_str::<serde_json::Value>(&row.forked_from)
+        .ok()?
+        .get("projectId")?
+        .as_str()
+        .map(ToString::to_string)
+}
+
+fn fork_source_item_id(row: &ProjectRow) -> Option<String> {
+    serde_json::from_str::<serde_json::Value>(&row.forked_from)
+        .ok()?
+        .get("itemId")?
+        .as_str()
+        .map(ToString::to_string)
 }
 
 fn item_dto(row: ProjectItemRow, tables: &Tables) -> ProjectItemDto {
@@ -1672,10 +1693,15 @@ pub async fn create_item(
     if title.is_empty() {
         return Err("an item needs a title".into());
     }
-    if project_id != crate::tasks::TASK_MANAGER_ID
-        && state.tables.project.select(project_id.clone()).is_none()
-    {
-        return Err(format!("no project {project_id}"));
+    if project_id != crate::tasks::TASK_MANAGER_ID {
+        let project = state
+            .tables
+            .project
+            .select(project_id.clone())
+            .ok_or_else(|| format!("no project {project_id}"))?;
+        if fork_source_item_id(&project).is_some() {
+            return Err("an item fork cannot own sub-items; update its parent item instead".into());
+        }
     }
     let siblings = state
         .tables
@@ -1705,6 +1731,90 @@ pub async fn create_item(
     study.latency = Some(started.elapsed());
     crate::study::record(&state.tables, study);
     Ok(dto)
+}
+
+/// Open one item's work in a fresh, linked project.
+///
+/// The child owns its transcript and provider session, while its parent owns
+/// the item and working configuration. Repeating the action reopens the same
+/// child so an accidental double click cannot create competing workers.
+///
+/// # Errors
+/// Returns a message when the item or parent project is missing, or persistence
+/// fails before the child can be made visible.
+#[tauri::command]
+pub async fn fork_item(
+    app: AppHandle,
+    item_id: String,
+    state: State<'_, AppState>,
+) -> Result<ProjectDto, String> {
+    let item = state
+        .tables
+        .project_item
+        .select(item_id.clone())
+        .ok_or_else(|| format!("no item {item_id}"))?;
+    let parent = state
+        .tables
+        .project
+        .select(item.project_id.clone())
+        .ok_or_else(|| format!("no project {}", item.project_id))?;
+    let projects = state
+        .tables
+        .project
+        .select_all()
+        .execute()
+        .unwrap_or_default();
+
+    if let Some(existing) = projects
+        .iter()
+        .find(|project| fork_source_item_id(project).as_deref() == Some(item_id.as_str()))
+        .cloned()
+    {
+        return Ok(with_session(ProjectDto::from(existing), &state.tables));
+    }
+
+    let handoff = crate::workers::build_item_handoff(&state.tables, &item_id, "", "")?;
+    let handoff_bytes = handoff.bytes();
+    let project_id = id("proj");
+    let row = ProjectRow {
+        id: project_id.clone(),
+        name: item.title.clone(),
+        status: "active".into(),
+        position: next_project_position(&projects),
+        // Kept as a creation-time fallback for older readers. Invocation scope
+        // resolves the parent's current roots on every child turn below.
+        dirs: parent.dirs.clone(),
+        pinned: false,
+        moderator_enabled: parent.moderator_enabled,
+        forked_from: serde_json::json!({
+            "projectId": parent.id,
+            "itemId": item.id,
+        })
+        .to_string(),
+        last_activity_at: now(),
+    };
+    state
+        .tables
+        .project
+        .insert(row.clone())
+        .map_err(|error| error.to_string())?;
+    if let Err(error) = state
+        .tables
+        .kv_put(&item_fork_handoff_key(&project_id), handoff.text)
+        .await
+    {
+        let _ = state.tables.project.delete(project_id.clone()).await;
+        return Err(format!("could not save the fork handoff: {error}"));
+    }
+
+    let project = with_session(ProjectDto::from(row), &state.tables);
+    crate::log!(
+        crate::log::Level::Info,
+        "projects",
+        "created item fork {project_id} for {item_id} with {handoff_bytes} handoff bytes"
+    );
+    let _ = app.emit("project:created", &project);
+    Ok(project)
 }
 
 enum ItemStatusWrite {
@@ -7773,6 +7883,11 @@ fn invocation_scope(
         tables
             .project
             .select(project_id.to_string())
+            .and_then(|child| {
+                fork_parent_project_id(&child)
+                    .and_then(|parent_id| tables.project.select(parent_id))
+                    .or(Some(child))
+            })
             .and_then(|row| serde_json::from_str::<Vec<String>>(&row.dirs).ok())
             .unwrap_or_default()
     };
@@ -7829,9 +7944,16 @@ fn invocation_scope(
 #[tauri::command]
 pub async fn send_message(
     app: AppHandle,
-    input: SendMessageInput,
+    mut input: SendMessageInput,
     state: State<'_, AppState>,
 ) -> Result<MessageDto, String> {
+    if input.item_id.is_none() {
+        input.item_id = state
+            .tables
+            .project
+            .select(input.project_id.clone())
+            .and_then(|project| fork_source_item_id(&project));
+    }
     let agent = parse_agent(input.agent.as_deref())?;
     crate::agents::require_executable(agent)?;
     let agent_name = agent_wire_name(agent);
@@ -8518,8 +8640,14 @@ async fn drive_run(
      * theirs, the format is ours.
      */
     let is_task_manager = project_id == crate::tasks::TASK_MANAGER_ID;
-    let handoff = provider_handoff(&tables, &project_id, &turn_id, agent);
-    let handoff_bytes = handoff.len();
+    let provider_handoff = provider_handoff(&tables, &project_id, &turn_id, agent);
+    let item_fork_handoff = resume
+        .as_deref()
+        .is_none_or(str::is_empty)
+        .then(|| tables.kv_get(&item_fork_handoff_key(&project_id)))
+        .flatten()
+        .unwrap_or_default();
+    let handoff_bytes = provider_handoff.len() + item_fork_handoff.len();
     let settings = global_settings(&tables);
     let announce_start = app
         .state::<crate::AppState>()
@@ -8594,11 +8722,14 @@ async fn drive_run(
                 )
             })
             .unwrap_or_default();
-        let handoff = if handoff.is_empty() {
-            String::new()
-        } else {
-            format!("{handoff}\n\nCurrent request:\n")
-        };
+        let handoff = [item_fork_handoff, provider_handoff]
+            .into_iter()
+            .filter(|part| !part.trim().is_empty())
+            .collect::<Vec<_>>()
+            .join("\n\n");
+        let handoff = (!handoff.is_empty())
+            .then(|| format!("{handoff}\n\nCurrent request:\n"))
+            .unwrap_or_default();
         format!("{handoff}{prompt}\n\n{snapshot}{receipts_line}{usage_line}")
     };
 

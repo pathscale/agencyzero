@@ -41,7 +41,14 @@ export function HomeTab(): JSX.Element {
   const { state, actions, itemsFor, tabStatus } = useWorkspace();
   const [query, setQuery] = createSignal("");
 
-  const ordered = createMemo(() => [...state.projects].sort((a, b) => a.order - b.order));
+  // Item forks are dedicated child chats, reachable beneath their parent item.
+  // Showing them here as peers would turn one project into a pile of apparent
+  // top-level projects and erase the hierarchy that makes routing obvious.
+  const ordered = createMemo(() =>
+    state.projects
+      .filter((project) => project.forkedFrom === null)
+      .sort((a, b) => a.order - b.order),
+  );
 
   /**
    * Search spans both layers: typing an item title surfaces the project that
@@ -60,7 +67,7 @@ export function HomeTab(): JSX.Element {
   const pinned = createMemo(() => ordered().filter((project) => project.pinned));
 
   const recent = createMemo(() =>
-    [...state.projects].sort((a, b) => b.lastActivityAt.localeCompare(a.lastActivityAt)),
+    [...ordered()].sort((a, b) => b.lastActivityAt.localeCompare(a.lastActivityAt)),
   );
 
   return (

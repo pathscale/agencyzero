@@ -896,6 +896,9 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
   const { state, actions } = useWorkspace();
   const [adding, setAdding] = createSignal(false);
   const [title, setTitle] = createSignal("");
+  const [forkingId, setForkingId] = createSignal<string | null>(null);
+  const forkFor = (itemId: string) =>
+    state.projects.find((project) => project.forkedFrom?.itemId === itemId);
   /**
    * The pull request a shipped row names, when this project has one by that
    * number. The item stores the number alone, deliberately: it is the match
@@ -991,6 +994,22 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
         `If the task turns out to be obsolete rather than done, strike it ` +
         `instead:\n- [-] ${item.title}`,
     );
+  }
+
+  async function openFork(item: ProjectItem): Promise<void> {
+    const existing = forkFor(item.id);
+    if (existing) {
+      actions.openProject(existing.id);
+      return;
+    }
+    setForkingId(item.id);
+    try {
+      await actions.forkItem(item.id);
+    } catch (cause) {
+      log.error(`could not fork the item: ${describeError(cause)}`);
+    } finally {
+      setForkingId(null);
+    }
   }
 
   /**
@@ -1200,6 +1219,24 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
                * act on the row, they are not part of reading it.
                */}
               <div class="absolute inset-y-0 right-0 flex items-center justify-end gap-1 rounded-r-[9px] bg-gradient-to-l from-60% from-base-300 to-transparent pr-2 pl-6 opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100">
+                <button
+                  type="button"
+                  onClick={() => void openFork(item)}
+                  disabled={forkingId() === item.id}
+                  title={
+                    forkFor(item.id) ? tx("Open this item's fork") : tx("Fork into a fresh chat")
+                  }
+                  aria-label={
+                    forkFor(item.id)
+                      ? tx("Open the fork for {name}", { name: item.title })
+                      : tx("Fork {name} into a fresh chat", { name: item.title })
+                  }
+                  class={`shrink-0 rounded-md p-1 transition-colors hover:bg-primary/12 hover:text-primary disabled:opacity-30 ${
+                    forkFor(item.id) ? "text-primary" : "text-az-faint"
+                  }`}
+                >
+                  <Icon name="message-square-dashed" class="text-[12px]" />
+                </button>
                 <Show when={item.status !== "finished"}>
                   <button
                     type="button"

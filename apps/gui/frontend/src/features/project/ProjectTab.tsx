@@ -38,6 +38,15 @@ export function ProjectTab(props: { tab: Tab; project: Project }): JSX.Element {
   const { state, actions, promptModels, effortsFor, permissionsFor, capabilitiesFor, isLive } =
     useWorkspace();
   const now = useNow();
+  const forkInfo = createMemo(() => {
+    const link = props.project.forkedFrom;
+    if (!link?.itemId) return null;
+    const parent = state.projects.find((project) => project.id === link.projectId);
+    const item = (state.items[link.projectId] ?? []).find(
+      (candidate) => candidate.id === link.itemId,
+    );
+    return { parent, item, parentId: link.projectId, itemId: link.itemId };
+  });
 
   const messages = () => state.messages[props.project.id] ?? [];
   const replyQuestion = createMemo(() => {
@@ -209,13 +218,37 @@ export function ProjectTab(props: { tab: Tab; project: Project }): JSX.Element {
             is `shrink-0` and sits to the right of a spacer, so no label can push
             the name around or take width from it.
           */}
-            <EditableTitle
-              value={props.project.name}
-              onRename={(name) => actions.renameProject(props.project.id, name)}
-              label={tx("Rename project")}
-              class="min-w-0 flex-1 font-semibold text-[14.5px] text-az-title"
-              inputClass="font-semibold text-[14.5px]"
-            />
+            <Show
+              when={forkInfo()}
+              fallback={
+                <EditableTitle
+                  value={props.project.name}
+                  onRename={(name) => actions.renameProject(props.project.id, name)}
+                  label={tx("Rename project")}
+                  class="min-w-0 flex-1 font-semibold text-[14.5px] text-az-title"
+                  inputClass="font-semibold text-[14.5px]"
+                />
+              }
+            >
+              {(fork) => (
+                <div class="flex min-w-0 flex-1 items-center gap-2">
+                  <span class="shrink-0 rounded-full border border-primary/30 bg-primary/10 px-2 py-0.5 font-semibold text-[10.5px] text-primary uppercase tracking-wide">
+                    {tx("Fork")}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!actions.revealItem(fork().itemId)) actions.openProject(fork().parentId);
+                    }}
+                    title={tx("Return to the parent item")}
+                    class="min-w-0 truncate font-semibold text-[14.5px] text-az-title underline decoration-primary/35 decoration-dotted underline-offset-4 transition-colors hover:text-primary"
+                  >
+                    {fork().parent?.name ?? tx("Parent project")} ·{" "}
+                    {fork().item?.title ?? props.project.name}
+                  </button>
+                </div>
+              )}
+            </Show>
             {/*
             Turns and cost live here rather than under the prompt. They describe
             the conversation as a whole, which is what this label already names,
@@ -451,22 +484,26 @@ export function ProjectTab(props: { tab: Tab; project: Project }): JSX.Element {
           </div>
         </Panel>
 
-        <ProjectPanelToggle
-          visible={prefs.projectPanelVisible}
-          onToggle={() => setPrefs("projectPanelVisible", (visible) => !visible)}
-        />
+        <Show when={!forkInfo()}>
+          <ProjectPanelToggle
+            visible={prefs.projectPanelVisible}
+            onToggle={() => setPrefs("projectPanelVisible", (visible) => !visible)}
+          />
+        </Show>
       </div>
 
-      <div
-        aria-hidden={!prefs.projectPanelVisible}
-        class={`min-h-0 flex-none overflow-hidden transition-[width,margin,opacity,transform] duration-200 ease-out motion-reduce:transition-none ${
-          prefs.projectPanelVisible
-            ? "ml-4 w-[322px] translate-x-0 opacity-100"
-            : "pointer-events-none ml-0 w-0 translate-x-3 opacity-0"
-        }`}
-      >
-        <ProjectPanel project={props.project} />
-      </div>
+      <Show when={!forkInfo()}>
+        <div
+          aria-hidden={!prefs.projectPanelVisible}
+          class={`min-h-0 flex-none overflow-hidden transition-[width,margin,opacity,transform] duration-200 ease-out motion-reduce:transition-none ${
+            prefs.projectPanelVisible
+              ? "ml-4 w-[322px] translate-x-0 opacity-100"
+              : "pointer-events-none ml-0 w-0 translate-x-3 opacity-0"
+          }`}
+        >
+          <ProjectPanel project={props.project} />
+        </div>
+      </Show>
     </div>
   );
 }

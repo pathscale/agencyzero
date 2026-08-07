@@ -130,7 +130,13 @@ export interface Project {
   pinned: boolean;
   /** Per-session override of `GlobalSettings.moderator.enabled`. */
   moderatorEnabled: boolean;
-  forkedFrom: { projectId: string; messageId: string } | null;
+  forkedFrom: {
+    projectId: string;
+    /** Legacy transcript fork cutoff. */
+    messageId?: string;
+    /** Parent-owned item whose work this dedicated child chat performs. */
+    itemId?: string;
+  } | null;
   /**
    * The agent's own session id, from `Event::Started`. Null until the first run
    * reveals one — this is the handle a later turn resumes with, so it belongs to

@@ -94,7 +94,7 @@ Return these sections, even when empty:\n\
 3. Verification\n\
 4. Remaining risks or blockers\n\
 5. Questions for the owner\n\
-Keep the handback concise. The coordinator receives this result, not your transcript.";
+Keep the handback concise. The parent project receives this result; your transcript remains in this fork.";
 
     let body = format!(
         "# Item worker handoff v1\n\n\
@@ -236,8 +236,8 @@ mod tests {
         assert!(
             handoff
                 .text
-                .contains("The coordinator receives this result")
+                .contains("The parent project receives this result")
         );
-        assert!(!handoff.text.contains("coordinator transcript"));
+        assert!(handoff.text.contains("transcript remains in this fork"));
     }
 }
