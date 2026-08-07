@@ -23,6 +23,16 @@ async function mountHome() {
 }
 
 describe("Home item rows", () => {
+  it("keeps item forks nested instead of adding top-level project groups", async () => {
+    const screen = await mountHome();
+    const title = "Phase B — engine observability (API break)";
+    expect(screen.getAllByText(title)).toHaveLength(1);
+
+    await screen.workspace.actions.forkItem("worktable-1");
+
+    await waitFor(() => expect(screen.getAllByText(title)).toHaveLength(1));
+  });
+
   it("shows each project's turn count after its open-item count", async () => {
     const screen = await mountHome();
 

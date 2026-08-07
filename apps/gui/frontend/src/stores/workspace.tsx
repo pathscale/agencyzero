@@ -1829,6 +1829,41 @@ function createWorkspace() {
     });
   }
 
+  /** Create or reopen the dedicated child chat attached to one parent item. */
+  async function forkItem(itemId: string): Promise<Project> {
+    const item = Object.values(state.items)
+      .flat()
+      .find((candidate) => candidate.id === itemId);
+    if (!item) throw new Error(`unknown item: ${itemId}`);
+    const parentTab = state.tabs.find((tab) => tab.projectId === item.projectId);
+    const project = await client().forkItem(itemId);
+    batch(() => {
+      upsertProject(project);
+      setState("items", project.id, state.items[project.id] ?? []);
+      if (!state.tabs.some((tab) => tab.key === project.id)) {
+        const tab = projectTab(project);
+        setState("tabs", (tabs) => [
+          ...tabs,
+          parentTab
+            ? {
+                ...tab,
+                agent: parentTab.agent,
+                model: parentTab.model,
+                effort: parentTab.effort,
+                extraThinking: parentTab.extraThinking,
+                permission: parentTab.permission,
+              }
+            : tab,
+        ]);
+      }
+      focus(project.id);
+    });
+    void loadProject(project.id).catch((cause) =>
+      log.error(`could not load item fork ${project.id}: ${describeError(cause)}`),
+    );
+    return project;
+  }
+
   /**
    * The status line's anchor: a run exists for this project from now until
    * `run:stopped`. Create-if-missing because every event arm calls this — the
@@ -2056,6 +2091,7 @@ function createWorkspace() {
     setTabModel,
     setTabExtraThinking,
     createProject,
+    forkItem,
     send,
     sendTaskPrompt,
     async resetTaskManager() {

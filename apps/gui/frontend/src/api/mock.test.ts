@@ -77,6 +77,16 @@ describe("projects", () => {
       expect.stringContaining("Phase A"),
     ]);
   });
+
+  it("creates one dedicated child project for an item", async () => {
+    const fork = await api.forkItem("worktable-1");
+    const reopened = await api.forkItem("worktable-1");
+
+    expect(fork.name).toBe("Phase B — engine observability (API break)");
+    expect(fork.forkedFrom).toEqual({ projectId: "worktable", itemId: "worktable-1" });
+    expect(reopened.id).toBe(fork.id);
+    expect(await api.listMessages(fork.id)).toEqual([]);
+  });
 });
 
 describe("items", () => {

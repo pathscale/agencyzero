@@ -43,7 +43,8 @@ worktable!(
         pinned: bool,
         // Per-session override of the global moderator setting.
         moderator_enabled: bool,
-        // `{projectId, messageId}` when this is a fork, else empty.
+        // Parent linkage when this is a fork. Item forks carry
+        // `{projectId, itemId}`; legacy conversation forks may carry a message id.
         forked_from: String,
         // ISO 8601, orders the Recent list.
         last_activity_at: String,

@@ -19,9 +19,7 @@ describe("Codex account usage", () => {
 
   it("uses one countdown-first chip format for both providers", () => {
     const reset = new Date(NOW + 2 * 86_400_000 + 3 * 3_600_000).toISOString();
-    expect(providerUsageLabel("Codex", 72, reset, NOW)).toBe("Codex · resets in 2d 3h · 72% used");
-    expect(providerUsageLabel("Claude", 72, reset, NOW)).toBe(
-      "Claude · resets in 2d 3h · 72% used",
-    );
+    expect(providerUsageLabel("Codex", 72, reset, NOW)).toBe("Codex · Reset: 2d 3h · 72% used");
+    expect(providerUsageLabel("Claude", 72, reset, NOW)).toBe("Claude · Reset: 2d 3h · 72% used");
   });
 });

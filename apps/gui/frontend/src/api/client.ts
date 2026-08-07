@@ -83,6 +83,8 @@ export interface AgencyZeroApi {
   setProjectModerator(id: string, enabled: boolean): Promise<Project>;
   /** Requires the provider's fork capability; unsupported providers return an error. */
   forkProject(projectId: string, messageId: string): Promise<Project>;
+  /** Create or reopen the dedicated child project attached to one item. */
+  forkItem(itemId: string): Promise<Project>;
   addDir(projectId: string, path: string): Promise<Project>;
   removeDir(projectId: string, path: string): Promise<Project>;
 

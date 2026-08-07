@@ -444,6 +444,31 @@ describe("createProject", () => {
   });
 });
 
+describe("item forks", () => {
+  it("opens one linked child chat and inherits the parent tab selection", async () => {
+    const workspace = await mountWorkspace();
+    const parent = workspace.state.tabs.find((tab) => tab.projectId === "worktable");
+    expect(parent).toBeDefined();
+
+    const fork = await workspace.actions.forkItem("worktable-1");
+    const reopened = await workspace.actions.forkItem("worktable-1");
+    const tab = workspace.state.tabs.find((candidate) => candidate.projectId === fork.id);
+
+    expect(reopened.id).toBe(fork.id);
+    expect(workspace.state.activeKey).toBe(fork.id);
+    expect(fork.forkedFrom).toEqual({ projectId: "worktable", itemId: "worktable-1" });
+    expect(tab).toMatchObject({
+      agent: parent?.agent,
+      model: parent?.model,
+      effort: parent?.effort,
+      permission: parent?.permission,
+    });
+    expect(
+      workspace.state.tabs.filter((candidate) => candidate.projectId === fork.id),
+    ).toHaveLength(1);
+  });
+});
+
 describe("task correlation", () => {
   /*
    * Labels are not identities. Two `cargo test` calls, two reads of the same

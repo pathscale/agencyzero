@@ -34,6 +34,7 @@ const COMMAND_FOR: Record<CommandMethod, string> = {
   setProjectPinned: "set_project_pinned",
   setProjectModerator: "set_project_moderator",
   forkProject: "fork_project",
+  forkItem: "fork_item",
   addDir: "add_dir",
   removeDir: "remove_dir",
   listItems: "list_items",

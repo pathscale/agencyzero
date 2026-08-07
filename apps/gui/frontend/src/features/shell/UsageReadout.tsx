@@ -40,5 +40,5 @@ export function providerUsageLabel(
 ): string {
   const reset = countdown(resetsAt, now);
   const usage = usedPercent === null ? "usage not reported" : `${Math.round(usedPercent)}% used`;
-  return [agent, reset ? `resets in ${reset}` : null, usage].filter(Boolean).join(" · ");
+  return [agent, reset ? `Reset: ${reset}` : null, usage].filter(Boolean).join(" · ");
 }

@@ -271,6 +271,28 @@ export function createMockApi(): AgencyZeroApi {
       return settle(fork);
     },
 
+    async forkItem(itemId) {
+      const sourceItem = findItem(itemId);
+      const existing = projects.find((project) => project.forkedFrom?.itemId === itemId);
+      if (existing) return settle(existing);
+      const source = findProject(sourceItem.projectId);
+      const fork: Project = {
+        ...clone(source),
+        id: nextId("project"),
+        name: sourceItem.title,
+        order: projects.length,
+        pinned: false,
+        forkedFrom: { projectId: source.id, itemId },
+        sessionId: null,
+        sessions: {},
+        lastActivityAt: new Date().toISOString(),
+      };
+      projects.push(fork);
+      logTotals[fork.id] = 0;
+      emit("project:created", fork);
+      return settle(fork);
+    },
+
     addDir: (projectId, path) => {
       const project = findProject(projectId);
       if (!project.dirs.includes(path)) project.dirs.push(path);

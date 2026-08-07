@@ -810,6 +810,13 @@ const en = {
     "Install or sign in to {agent} before sending prompts",
   "The task manager cannot send prompts until its selected agent is installed, compatible, and signed in.":
     "The task manager cannot send prompts until its selected agent is installed, compatible, and signed in.",
+  Fork: "Fork",
+  "Open this item's fork": "Open this item's fork",
+  "Fork into a fresh chat": "Fork into a fresh chat",
+  "Open the fork for {name}": "Open the fork for {name}",
+  "Fork {name} into a fresh chat": "Fork {name} into a fresh chat",
+  "Return to the parent item": "Return to the parent item",
+  "Parent project": "Parent project",
 } as const;
 
 export default en;

@@ -20,10 +20,6 @@ mod store_backup;
 mod study;
 mod tasks;
 mod update;
-#[allow(
-    dead_code,
-    reason = "the bounded handoff lands before worker dispatch wiring"
-)]
 mod workers;
 
 use std::ffi::OsString;
@@ -64,6 +60,7 @@ const IMPLEMENTED: &[&str] = &[
     "get_home_snapshot",
     "list_items",
     "create_item",
+    "fork_item",
     "set_item_status",
     "update_item",
     "set_item_issue",
@@ -1408,6 +1405,7 @@ fn main() {
             projects::get_home_snapshot,
             projects::list_items,
             projects::create_item,
+            projects::fork_item,
             projects::set_item_status,
             projects::update_item,
             projects::set_item_issue,

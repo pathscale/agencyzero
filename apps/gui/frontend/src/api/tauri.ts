@@ -50,6 +50,7 @@ export function createTauriApi(): AgencyZeroApi {
     setProjectPinned: (id, pinned) => call("set_project_pinned", { id, pinned }),
     setProjectModerator: (id, enabled) => call("set_project_moderator", { id, enabled }),
     forkProject: (projectId, messageId) => call("fork_project", { projectId, messageId }),
+    forkItem: (itemId) => call("fork_item", { itemId }),
     addDir: (projectId, path) => call("add_dir", { projectId, path }),
     removeDir: (projectId, path) => call("remove_dir", { projectId, path }),
 

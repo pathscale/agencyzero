@@ -784,6 +784,13 @@ const zh = {
   "Install or sign in to {agent} before sending prompts": "发送提示前，请安装或登录 {agent}",
   "The task manager cannot send prompts until its selected agent is installed, compatible, and signed in.":
     "安装兼容版本的所选智能体并登录之前，任务管理器无法发送提示。",
+  Fork: "分支",
+  "Open this item's fork": "打开此条目的分支",
+  "Fork into a fresh chat": "在全新聊天中建立分支",
+  "Open the fork for {name}": "打开 {name} 的分支",
+  "Fork {name} into a fresh chat": "将 {name} 分支到全新聊天",
+  "Return to the parent item": "返回父条目",
+  "Parent project": "父项目",
 } satisfies Record<keyof typeof en, string>;
 
 export default zh;
