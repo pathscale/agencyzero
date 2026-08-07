@@ -533,8 +533,8 @@ async fn delete_imported_usage(tables: &Tables, message_id: &str) {
 
 /// Repair analytics for projects imported by earlier builds.
 ///
-/// Called once at boot before the window can request Analytics. Rows already
-/// reconstructed are primary-key hits and do no work.
+/// Called before Analytics is assembled. Rows already reconstructed are
+/// primary-key hits and a durable marker makes later refreshes constant-time.
 pub async fn backfill_imported_usage(tables: &Tables) -> usize {
     const MARKER: &str = "analytics-import-backfill:v1";
     if tables.kv_get(MARKER).as_deref() == Some("complete") {
@@ -5075,6 +5075,14 @@ fn effective_ledger_cost(
 /// Infallible today; `Result` for signature stability.
 #[tauri::command]
 pub async fn get_usage_analytics(state: State<'_, AppState>) -> Result<UsageAnalyticsDto, String> {
+    let reconstructed = backfill_imported_usage(&state.tables).await;
+    if reconstructed > 0 {
+        crate::log!(
+            crate::log::Level::Info,
+            "analytics",
+            "reconstructed usage for {reconstructed} imported turn(s)"
+        );
+    }
     let ledger = state
         .tables
         .usage_ledger

@@ -1659,16 +1659,6 @@ fn main() {
             // launch was closed on top of becomes an `interrupted` row now,
             // so the transcript already holds it when the tab first renders.
             tauri::async_runtime::block_on(projects::recover_partial_replies(&tables));
-            let reconstructed =
-                tauri::async_runtime::block_on(projects::backfill_imported_usage(&tables));
-            if reconstructed > 0 {
-                crate::log!(
-                    log::Level::Info,
-                    "analytics",
-                    "reconstructed usage for {reconstructed} imported turn(s)"
-                );
-            }
-
             app.manage(AppState {
                 tables: Arc::new(tables),
                 running: Arc::default(),
