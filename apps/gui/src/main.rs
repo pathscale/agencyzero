@@ -20,6 +20,11 @@ mod store_backup;
 mod study;
 mod tasks;
 mod update;
+#[allow(
+    dead_code,
+    reason = "the bounded handoff lands before worker dispatch wiring"
+)]
+mod workers;
 
 use std::ffi::OsString;
 use std::path::PathBuf;
