@@ -63,6 +63,7 @@ pub const SURFACE: Surface = Surface {
     verbs: &[
         "items.state",
         "items.add",
+        "items.describe",
         "items.retire",
         "ask",
         "pr.link",
@@ -118,6 +119,8 @@ pub enum Directive {
         title: String,
         status: String,
     },
+    /// Replace the owner-visible description for an existing item.
+    ItemDescribe { id: String, description: String },
     /// Track a pull request, and optionally attach it to an item.
     ///
     /// A URL creates the PR row. A number is enough only when an item is also
@@ -164,6 +167,7 @@ impl Directive {
         match self {
             Self::ItemState { .. } => "items.state",
             Self::ItemAdd { .. } => "items.add",
+            Self::ItemDescribe { .. } => "items.describe",
             Self::ItemRetire { .. } => "items.retire",
             Self::Ask { .. } => "ask",
             Self::PrLink { .. } => "pr.link",
@@ -285,6 +289,11 @@ fn from_reference(reference: &Reference) -> Option<Directive> {
                 .unwrap_or_else(|| "new".to_string())
                 .to_ascii_lowercase(),
         });
+    }
+    if verb.eq_ignore_ascii_case("items.describe") {
+        let id = arg(args, "id")?;
+        let description = arg(args, "description")?;
+        return (!id.is_empty()).then_some(Directive::ItemDescribe { id, description });
     }
     if verb.eq_ignore_ascii_case("items.retire") {
         let id = arg(args, "id")?;
@@ -470,6 +479,20 @@ mod tests {
                 status: "planning".into(),
             })
         );
+    }
+
+    #[test]
+    fn an_item_description_names_an_existing_item() {
+        assert_eq!(
+            parse(
+                r#"<ps @agency:items.describe(id: "item-a3f9", description: "Define the durable outcome and its acceptance checks.")>"#
+            ),
+            Some(Directive::ItemDescribe {
+                id: "item-a3f9".into(),
+                description: "Define the durable outcome and its acceptance checks.".into(),
+            })
+        );
+        assert!(parse(r#"<ps @agency:items.describe(description: "Missing id")>"#).is_none());
     }
 
     #[test]

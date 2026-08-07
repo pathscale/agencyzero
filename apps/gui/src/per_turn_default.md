@@ -19,6 +19,8 @@ silent no-op.
 - `<ps @agency:items.add(ref: "t1", title: "<one line>", status: "planning")>` —
   open a new item. `ref` is your temporary handle, echoed back beside the real
   id.
+- `<ps @agency:items.describe(id: "<id>", description: "<concise context>")>` —
+  replace an existing item's description. An empty description clears it.
 - `<ps @agency:items.retire(id: "<id>")>` — remove a row that should not exist.
 - When the owner says to cancel or stop working on an item, retire it. A pause,
   hold, or "not now" keeps the row.

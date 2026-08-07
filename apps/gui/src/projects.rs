@@ -3174,6 +3174,32 @@ async fn apply_directive(
                 },
             }
         }
+        Directive::ItemDescribe { id, description } => {
+            let known: Vec<&str> = rows.iter().map(|row| row.id.as_str()).collect();
+            let resolved = match crate::directives::resolve(&known, &id) {
+                Ok(found) => found.to_string(),
+                Err(code) => {
+                    return Outcome::Refused {
+                        what: format!("items.describe({id})"),
+                        code,
+                    };
+                }
+            };
+            let kept = crate::notes::clamp(description.trim());
+            match tables.kv_put(&item_context_key(&resolved), kept).await {
+                Ok(()) => {
+                    touch_item(tables, &resolved).await;
+                    if let Some(updated) = tables.project_item.select(resolved.clone()) {
+                        let _ = app.emit("item:updated", item_dto(updated, tables));
+                    }
+                    Outcome::Done(format!("{resolved} description updated"))
+                }
+                Err(error) => Outcome::Refused {
+                    what: format!("items.describe({resolved})"),
+                    code: format!("WRITE_FAILED: {error}"),
+                },
+            }
+        }
         Directive::ItemAdd {
             handle,
             project,
@@ -3658,7 +3684,9 @@ fn study_target_before(
     };
 
     match directive {
-        Directive::ItemState { id, .. } | Directive::ItemRetire { id } => StudyTarget {
+        Directive::ItemState { id, .. }
+        | Directive::ItemDescribe { id, .. }
+        | Directive::ItemRetire { id } => StudyTarget {
             kind: "item",
             id: resolve(id),
             before_add: std::collections::HashSet::new(),

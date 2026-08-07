@@ -17,6 +17,7 @@ standing_promotion:
   verbs:
     - agency:items.state
     - agency:items.add
+    - agency:items.describe
     - agency:items.retire
     - agency:ask
     - agency:pr.link
@@ -42,6 +43,7 @@ standing_promotion:
   arguments:
     agency:items.state: [id, status, pr]
     agency:items.add: [project, ref, title, status]
+    agency:items.describe: [id, description]
     agency:items.retire: [id]
     # `text` is the question. `urgency` is critical | blocking | passive; a
     # missing or unknown value defaults to blocking. `reference` is optional
