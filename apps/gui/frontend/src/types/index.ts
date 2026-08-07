@@ -143,6 +143,12 @@ export interface Project {
   lastActivityAt: string;
 }
 
+/** The lightweight, all-project state Home needs before the first paint. */
+export interface HomeSnapshot {
+  items: ProjectItem[];
+  turnCounts: Record<string, number>;
+}
+
 /**
  * One line of the raw exchange with the agent, for the I/O panel.
  *

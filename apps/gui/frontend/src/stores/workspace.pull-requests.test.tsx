@@ -1,9 +1,12 @@
 import { render, waitFor } from "@solidjs/testing-library";
 import { describe, expect, it, vi } from "vitest";
+import { SETTINGS } from "~/api/fixtures";
+import { setPrefs } from "~/stores/prefs";
 import { useWorkspace, type Workspace, WorkspaceProvider } from "~/stores/workspace";
 
 const calls = vi.hoisted(() => ({
   discover: vi.fn(async () => undefined),
+  listMessages: vi.fn(),
   refresh: vi.fn(async () => undefined),
 }));
 
@@ -15,6 +18,8 @@ vi.mock("~/api", async (importOriginal) => {
     ...actual,
     selectApi: async () => {
       const api = createMockApi();
+      calls.listMessages.mockImplementation(api.listMessages.bind(api));
+      api.listMessages = calls.listMessages;
       api.discoverPullRequests = calls.discover;
       api.refreshPullRequest = calls.refresh;
       return {
@@ -28,6 +33,8 @@ vi.mock("~/api", async (importOriginal) => {
 
 describe("pull-request loading", () => {
   it("does not query GitHub while hydrating the workspace", async () => {
+    SETTINGS.workspaceTabs = null;
+    setPrefs("openTabKeys", ["cafe"]);
     let workspace!: Workspace;
 
     function Probe() {
@@ -44,5 +51,9 @@ describe("pull-request loading", () => {
     await waitFor(() => expect(workspace.state.boot.status).toBe("ready"), { timeout: 5_000 });
     expect(calls.discover).not.toHaveBeenCalled();
     expect(calls.refresh).not.toHaveBeenCalled();
+    expect(calls.listMessages.mock.calls.map(([projectId]) => projectId).sort()).toEqual([
+      "cafe",
+      "home-task-manager",
+    ]);
   });
 });

@@ -24,6 +24,7 @@ function TranscriptHarness() {
 
 describe("transcript questions", () => {
   it("keeps an open question at the bottom and labels it as a question", async () => {
+    setPrefs("openTabKeys", ["cafe"]);
     const screen = render(() => (
       <WorkspaceProvider>
         <TranscriptHarness />
@@ -47,6 +48,7 @@ describe("transcript questions", () => {
 
   it("stages the exact question when Reply is clicked", async () => {
     setPrefs("replyQuestionIds", {});
+    setPrefs("openTabKeys", ["cafe"]);
     const screen = render(() => (
       <WorkspaceProvider>
         <TranscriptHarness />

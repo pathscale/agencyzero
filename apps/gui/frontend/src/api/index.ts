@@ -25,6 +25,7 @@ type CommandMethod = Exclude<keyof AgencyZeroApi, "on">;
 
 const COMMAND_FOR: Record<CommandMethod, string> = {
   listProjects: "list_projects",
+  getHomeSnapshot: "get_home_snapshot",
   createProject: "create_project",
   deleteProject: "delete_project",
   renameProject: "rename_project",
