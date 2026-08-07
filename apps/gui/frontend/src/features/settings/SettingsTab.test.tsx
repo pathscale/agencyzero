@@ -84,14 +84,12 @@ describe("chat imports", () => {
 });
 
 describe("store backups", () => {
-  it("offers portable save and restore pickers with confirmation", async () => {
+  it("requires a native backup selection before offering restore", async () => {
     const screen = await mountSettings();
 
     await waitFor(() => expect(screen.getByText(/Portable .azbackup package/)).toBeTruthy());
     expect(screen.getByRole("button", { name: "Back up & close" })).toBeEnabled();
-
-    fireEvent.click(screen.getByRole("button", { name: "Restore from backup…" }));
-    expect(screen.getByText("Choose a backup to restore?")).toBeTruthy();
-    expect(screen.getByText("Select backup file…").closest("button")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Select backup file…" })).toBeEnabled();
+    expect(screen.queryByRole("button", { name: "Restore" })).toBeNull();
   });
 });

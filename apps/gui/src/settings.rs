@@ -83,6 +83,16 @@ pub struct GlobalSettings {
     /// install; [`Default`] uses `Some(false)` for a genuinely empty store.
     #[serde(default)]
     pub onboarding_completed: Option<bool>,
+    /// Stable webview preferences captured into the store for portable backup.
+    ///
+    /// The webview still owns and validates this shape. Keeping it as JSON
+    /// avoids coupling Rust to presentation-only choices while ensuring the
+    /// raw-store backup includes them alongside the typed global settings.
+    #[serde(default = "empty_object")]
+    pub ui_preferences: Value,
+    /// Opaque capture id used by the webview to apply a restored snapshot once.
+    #[serde(default)]
+    pub ui_preferences_revision: String,
     /// How a PR review is shaped: the model each reviewer uses, and the prompt.
     #[serde(default)]
     pub review: Review,
@@ -149,6 +159,10 @@ Output:
 /// than `false` — an absent flag on an older settings row must read as on.
 fn default_true() -> bool {
     true
+}
+
+fn empty_object() -> Value {
+    serde_json::json!({})
 }
 
 fn default_agent_restart_policy() -> String {
@@ -382,6 +396,8 @@ impl Default for GlobalSettings {
             agent_restart_policy: "disabled".into(),
             workspace_tabs: None,
             onboarding_completed: Some(false),
+            ui_preferences: empty_object(),
+            ui_preferences_revision: String::new(),
             review: Review::default(),
         }
     }
@@ -438,6 +454,9 @@ pub fn normalize(settings: &mut GlobalSettings) {
     if settings.onboarding_completed.is_none() {
         settings.onboarding_completed = Some(true);
     }
+    if !settings.ui_preferences.is_object() {
+        settings.ui_preferences = empty_object();
+    }
     if !matches!(
         settings.agent_restart_policy.as_str(),
         "disabled" | "restart" | "restart_and_update"
@@ -489,6 +508,8 @@ mod tests {
         assert_eq!(back.agent_restart_policy, "disabled");
         assert!(back.workspace_tabs.is_none());
         assert_eq!(back.onboarding_completed, Some(false));
+        assert_eq!(back.ui_preferences, serde_json::json!({}));
+        assert!(back.ui_preferences_revision.is_empty());
         assert!(json.contains("defaultAgent"), "must be camelCase: {json}");
     }
 
@@ -530,6 +551,8 @@ mod tests {
         assert_eq!(loaded.agent_restart_policy, "disabled");
         assert!(loaded.workspace_tabs.is_none());
         assert_eq!(loaded.onboarding_completed, None);
+        assert_eq!(loaded.ui_preferences, serde_json::json!({}));
+        assert!(loaded.ui_preferences_revision.is_empty());
         assert_eq!(
             loaded.moderator.model, "haiku",
             "absent blocks use defaults"

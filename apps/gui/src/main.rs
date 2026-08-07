@@ -47,6 +47,7 @@ const IMPLEMENTED: &[&str] = &[
     "set_data_location",
     "get_store_backup_status",
     "create_store_backup",
+    "select_store_backup",
     "restore_store_backup",
     "choose_data_directory",
     "choose_project_directory",
@@ -156,6 +157,9 @@ pub(crate) struct AppState {
     /// Without one lock, two Import clicks can both observe "unknown" before
     /// either writes the native session id and create duplicate projects.
     chat_imports: tokio::sync::Mutex<()>,
+    /// Native-picker restore selection. The webview receives only its display
+    /// name; the absolute path never crosses the trust boundary.
+    pending_restore: tokio::sync::Mutex<Option<std::path::PathBuf>>,
     /// Coalesces per-chip polling into one whole-project GitHub refresh.
     pr_refreshes: Arc<prs::ActiveRefreshes>,
     /// Makes every quit, restart, updater, and signal share one drain. The
@@ -704,19 +708,22 @@ async fn create_store_backup(app: AppHandle, state: State<'_, AppState>) -> Resu
     Ok(())
 }
 
-/// Choose and validate a profile-agnostic package, then atomically replace the
-/// closed store through the restart angel.
-///
-/// The displaced store is retained under a generated `pre-restore` name. The
-/// webview supplies no path: only the native file picker can select the package.
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct StoreBackupSelection {
+    file_name: String,
+}
+
+/// Choose and validate a profile-agnostic package without exposing its path.
 #[tauri::command]
-async fn restore_store_backup(app: AppHandle, state: State<'_, AppState>) -> Result<(), String> {
+async fn select_store_backup(
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> Result<Option<StoreBackupSelection>, String> {
     if state.location.source == "ephemeral" {
         return Err("an ephemeral session has no durable store to restore".into());
     }
-    if state.live_run_count() != 0 {
-        return Err("stop active agent runs before restoring the store".into());
-    }
+    *state.pending_restore.lock().await = None;
     let (tx, rx) = tokio::sync::oneshot::channel();
     app.dialog()
         .file()
@@ -729,12 +736,43 @@ async fn restore_store_backup(app: AppHandle, state: State<'_, AppState>) -> Res
         .await
         .map_err(|_| "the restore file dialog closed without answering".to_string())?
     else {
-        return Ok(());
+        return Ok(None);
     };
     let backup = picked.into_path().map_err(|error| error.to_string())?;
     if !store_backup::is_package_path(&backup) {
         return Err("choose an absolute .azbackup package".into());
     }
+    if !backup.is_file() {
+        return Err("the selected backup no longer exists".into());
+    }
+    store_backup::check_restore(&backup)?;
+    let file_name = backup
+        .file_name()
+        .and_then(|name| name.to_str())
+        .ok_or_else(|| "the selected backup has no readable file name".to_string())?
+        .to_string();
+    *state.pending_restore.lock().await = Some(backup);
+    Ok(Some(StoreBackupSelection { file_name }))
+}
+
+/// Atomically replace the closed store with the owner-selected package.
+///
+/// The displaced store is retained under a generated `pre-restore` name. The
+/// webview supplies no path: only the preceding native picker can select it.
+#[tauri::command]
+async fn restore_store_backup(app: AppHandle, state: State<'_, AppState>) -> Result<(), String> {
+    if state.location.source == "ephemeral" {
+        return Err("an ephemeral session has no durable store to restore".into());
+    }
+    if state.live_run_count() != 0 {
+        return Err("stop active agent runs before restoring the store".into());
+    }
+    let backup = state
+        .pending_restore
+        .lock()
+        .await
+        .clone()
+        .ok_or_else(|| "select a backup file before restoring".to_string())?;
     if !backup.is_file() {
         return Err("the selected backup no longer exists".into());
     }
@@ -1350,6 +1388,7 @@ fn main() {
             set_data_location,
             get_store_backup_status,
             create_store_backup,
+            select_store_backup,
             restore_store_backup,
             choose_data_directory,
             choose_project_directory,
@@ -1630,6 +1669,7 @@ fn main() {
                 receipts: Arc::default(),
                 settings_write: tokio::sync::Mutex::new(()),
                 chat_imports: tokio::sync::Mutex::new(()),
+                pending_restore: tokio::sync::Mutex::new(None),
                 pr_refreshes: Arc::default(),
                 exit_drain_started: std::sync::atomic::AtomicBool::new(false),
                 exit_drain_succeeded: std::sync::atomic::AtomicBool::new(false),

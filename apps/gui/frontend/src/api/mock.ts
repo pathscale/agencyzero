@@ -610,6 +610,8 @@ export function createMockApi(): AgencyZeroApi {
       }),
     createStoreBackup: () =>
       Promise.reject(new Error("the fixture backend has no durable store to back up")),
+    selectStoreBackup: () =>
+      Promise.reject(new Error("the fixture backend has no durable store to restore")),
     restoreStoreBackup: () =>
       Promise.reject(new Error("the fixture backend has no durable store to restore")),
     /*

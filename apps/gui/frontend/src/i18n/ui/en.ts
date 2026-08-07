@@ -765,6 +765,10 @@ const en = {
   "Create first project": "Create first project",
   Continue: "Continue",
   "Help and setup": "Help and setup",
+  "Restoring from backup?": "Restoring from backup?",
+  "Select an AgencyZero backup, then restore it before continuing setup.":
+    "Select an AgencyZero backup, then restore it before continuing setup.",
+  Restore: "Restore",
 } as const;
 
 export default en;

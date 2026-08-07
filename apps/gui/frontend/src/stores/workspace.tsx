@@ -16,7 +16,14 @@ import { PERMISSION_ORDER } from "~/lib/labels";
 import { describeError, installGlobalErrorLogging, log } from "~/lib/log";
 import { usageTotals } from "~/lib/stats";
 import { applyTheme } from "~/lib/theme";
-import { prefs, setPrefs } from "~/stores/prefs";
+import {
+  markPortablePrefsCurrent,
+  portablePrefsSnapshot,
+  prefs,
+  preparePortablePrefsRestore,
+  restorePortablePrefs,
+  setPrefs,
+} from "~/stores/prefs";
 import type {
   Agent,
   AgentIoEntry,
@@ -787,6 +794,7 @@ function createWorkspace() {
       // Before the first paint of anything themed: the stylesheet's defaults are
       // the designed palette, so a saved theme arriving late would show as a
       // flash of the old colours on every launch.
+      restorePortablePrefs(settings.uiPreferences, settings.uiPreferencesRevision);
       applyTheme(settings.theme);
 
       batch(() => {
@@ -2149,14 +2157,31 @@ function createWorkspace() {
     },
     /** Success exits and stays closed; failures relaunch to report the result. */
     async createStoreBackup() {
-      // A backup begins by closing this process. Make the tab arrangement part
-      // of the store before the close can race the reactive autosave.
-      await persistWorkspaceTabs();
+      // A backup begins by closing this process. Capture both the portable tab
+      // arrangement and webview-owned preferences in the store before that
+      // close can race either source.
+      const revision = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      await saveSettings({
+        workspaceTabs: portableWorkspaceTabs(),
+        uiPreferences: portablePrefsSnapshot(),
+        uiPreferencesRevision: revision,
+      });
+      markPortablePrefsCurrent(revision);
       return client().createStoreBackup();
     },
-    /** The native picker selects the package; the webview never receives its path. */
-    restoreStoreBackup() {
-      return client().restoreStoreBackup();
+    /** Pick and validate a restore package; only its display name crosses IPC. */
+    selectStoreBackup() {
+      return client().selectStoreBackup();
+    },
+    /** Restore the package already held by the native backend. */
+    async restoreStoreBackup() {
+      preparePortablePrefsRestore();
+      try {
+        return await client().restoreStoreBackup();
+      } catch (cause) {
+        markPortablePrefsCurrent(state.settings?.uiPreferencesRevision ?? "");
+        throw cause;
+      }
     },
     /** The native folder panel, for a project's working directories. */
     chooseProjectDirectory() {

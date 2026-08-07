@@ -36,6 +36,7 @@ import type {
   ModelSelection,
   ModelSource,
   Permission,
+  StoreBackupSelection,
   StoreBackupStatus,
   StudySummary,
   TableSize,
@@ -1444,7 +1445,7 @@ function StoreBackupControls(): JSX.Element {
   const { actions, isLive } = useWorkspace();
   const [status, setStatus] = createSignal<StoreBackupStatus | null>(null);
   const [error, setError] = createSignal("");
-  const [confirming, setConfirming] = createSignal(false);
+  const [selection, setSelection] = createSignal<StoreBackupSelection | null>(null);
 
   onMount(() => {
     void actions
@@ -1462,10 +1463,19 @@ function StoreBackupControls(): JSX.Element {
     void actions.createStoreBackup().catch((cause) => setError(describeError(cause)));
   };
 
+  const selectBackup = (): void => {
+    setError("");
+    void actions
+      .selectStoreBackup()
+      .then((picked) => {
+        if (picked) setSelection(picked);
+      })
+      .catch((cause) => setError(describeError(cause)));
+  };
+
   const restore = (): void => {
     setError("");
     void actions.restoreStoreBackup().catch((cause) => {
-      setConfirming(false);
       setError(describeError(cause));
     });
   };
@@ -1502,29 +1512,31 @@ function StoreBackupControls(): JSX.Element {
           {tx("Back up & close")}
         </button>
         <Show
-          when={confirming()}
+          when={selection()}
           fallback={
             <button
               type="button"
-              disabled={!isLive("restoreStoreBackup")}
-              onClick={() => setConfirming(true)}
+              disabled={!isLive("selectStoreBackup")}
+              onClick={selectBackup}
               class="rounded-lg border border-az-hairline-strong px-3 py-[5px] text-[12px] text-az-muted transition-colors hover:border-warning hover:text-warning disabled:cursor-not-allowed disabled:opacity-40"
             >
-              {tx("Restore from backup…")}
+              {tx("Select backup file…")}
             </button>
           }
         >
-          <span class="text-[11px] text-warning">{tx("Choose a backup to restore?")}</span>
+          <code class="max-w-[160px] truncate font-mono text-[10.5px] text-az-body">
+            {selection()?.fileName}
+          </code>
           <button
             type="button"
             onClick={restore}
             class="rounded-lg border border-warning/50 px-2.5 py-[4px] font-semibold text-[11.5px] text-warning hover:border-warning"
           >
-            {tx("Select backup file…")}
+            {tx("Restore")}
           </button>
           <button
             type="button"
-            onClick={() => setConfirming(false)}
+            onClick={() => setSelection(null)}
             class="rounded-lg px-2 py-[4px] text-[11.5px] text-az-muted hover:text-base-content"
           >
             {tx("Cancel")}

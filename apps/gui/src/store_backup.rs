@@ -822,7 +822,15 @@ mod tests {
         std::fs::create_dir(&shared).expect("shared directory creates");
         let source_store = sample_store(&experimental);
         let target_store = sample_store(&normal);
+        write(
+            &source_store.join("kv/.wt.data"),
+            br#"{"settings":{"theme":"source","uiPreferences":{"uiSize":"large"}}}"#,
+        );
         write(&target_store.join("message/.wt.data"), b"normal-before");
+        write(
+            &target_store.join("kv/.wt.data"),
+            br#"{"settings":{"theme":"target"}}"#,
+        );
         let package = shared.join("experimental-to-normal.azbackup");
         create(&source_store, &package).expect("backup succeeds");
         let package_bytes = std::fs::read(&package).expect("package reads");
@@ -836,6 +844,11 @@ mod tests {
         assert_eq!(
             std::fs::read(rollback.join("message/.wt.data")).unwrap(),
             b"normal-before"
+        );
+        assert_eq!(
+            std::fs::read(target_store.join("kv/.wt.data")).unwrap(),
+            br#"{"settings":{"theme":"source","uiPreferences":{"uiSize":"large"}}}"#,
+            "global and webview preferences travel inside the raw kv table"
         );
         assert_eq!(std::fs::read(&package).unwrap(), package_bytes);
 

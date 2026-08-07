@@ -1,8 +1,9 @@
 import { createEffect } from "solid-js";
 import { createStore } from "solid-js/store";
-import type { UiPrefs } from "~/types";
+import type { PortableUiPrefs, UiPrefs } from "~/types";
 
 const STORAGE_KEY = "agencyzero:ui-prefs";
+const PORTABLE_REVISION_KEY = "agencyzero:portable-ui-prefs-revision";
 
 export const UI_SCALES: Record<UiPrefs["uiSize"], number> = {
   normal: 1,
@@ -66,30 +67,32 @@ const DEFAULTS: UiPrefs = {
  */
 const RESET_ONCE: (keyof UiPrefs["panelSections"])[] = ["io"];
 
+function normalize(stored: Partial<UiPrefs>): UiPrefs {
+  const seen = new Set(stored.seenSections ?? []);
+  const sections = { ...DEFAULTS.panelSections, ...stored.panelSections };
+  for (const section of RESET_ONCE) {
+    if (!seen.has(section)) sections[section] = DEFAULTS.panelSections[section];
+  }
+
+  return {
+    ...DEFAULTS,
+    ...stored,
+    uiSize: stored.uiSize && stored.uiSize in UI_SCALES ? stored.uiSize : DEFAULTS.uiSize,
+    colorMode:
+      stored.colorMode === "light" || stored.colorMode === "dark"
+        ? stored.colorMode
+        : DEFAULTS.colorMode,
+    panelSections: sections,
+    seenSections: [...new Set([...seen, ...RESET_ONCE])],
+  };
+}
+
 function load(): UiPrefs {
   if (typeof localStorage === "undefined") return DEFAULTS;
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return DEFAULTS;
-    const stored = JSON.parse(raw) as Partial<UiPrefs> & { seenSections?: string[] };
-
-    const seen = new Set(stored.seenSections ?? []);
-    const sections = { ...DEFAULTS.panelSections, ...stored.panelSections };
-    for (const section of RESET_ONCE) {
-      if (!seen.has(section)) sections[section] = DEFAULTS.panelSections[section];
-    }
-
-    return {
-      ...DEFAULTS,
-      ...stored,
-      uiSize: stored.uiSize && stored.uiSize in UI_SCALES ? stored.uiSize : DEFAULTS.uiSize,
-      colorMode:
-        stored.colorMode === "light" || stored.colorMode === "dark"
-          ? stored.colorMode
-          : DEFAULTS.colorMode,
-      panelSections: sections,
-      seenSections: [...new Set([...seen, ...RESET_ONCE])],
-    };
+    return normalize(JSON.parse(raw) as Partial<UiPrefs>);
   } catch {
     // A prefs file we can't read is not worth failing a launch over.
     return DEFAULTS;
@@ -127,6 +130,37 @@ createEffect(() => {
 });
 
 export { prefs, setPrefs };
+
+/** Snapshot only durable choices; drafts and staged replies are live owner content. */
+export function portablePrefsSnapshot(): PortableUiPrefs {
+  const snapshot = JSON.parse(JSON.stringify(prefs)) as UiPrefs;
+  const { composerDrafts: _drafts, replyQuestionIds: _replies, ...portable } = snapshot;
+  return portable;
+}
+
+/** Apply a restored preference snapshot without replacing local unfinished text. */
+export function restorePortablePrefs(stored: Partial<PortableUiPrefs>, revision: string): void {
+  if (!revision || Object.keys(stored).length === 0) return;
+  if (localStorage.getItem(PORTABLE_REVISION_KEY) === revision) return;
+  setPrefs(
+    normalize({
+      ...stored,
+      composerDrafts: prefs.composerDrafts,
+      replyQuestionIds: prefs.replyQuestionIds,
+    }),
+  );
+  localStorage.setItem(PORTABLE_REVISION_KEY, revision);
+}
+
+/** Mark the local snapshot current after capturing it into this same store. */
+export function markPortablePrefsCurrent(revision: string): void {
+  if (revision) localStorage.setItem(PORTABLE_REVISION_KEY, revision);
+}
+
+/** Force a selected backup's snapshot to apply after the restore relaunch. */
+export function preparePortablePrefsRestore(): void {
+  localStorage.removeItem(PORTABLE_REVISION_KEY);
+}
 
 export function togglePanelSection(section: keyof UiPrefs["panelSections"]): void {
   setPrefs("panelSections", section, (open) => !open);

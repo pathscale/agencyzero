@@ -14,7 +14,7 @@ import { AGENT_LABELS, agentStateLabel, permissionLabel } from "~/lib/labels";
 import { describeError } from "~/lib/log";
 import { tx } from "~/stores/i18n";
 import { useWorkspace } from "~/stores/workspace";
-import type { Agent, ChatImportSource, Permission } from "~/types";
+import type { Agent, ChatImportSource, Permission, StoreBackupSelection } from "~/types";
 
 const LAST_STEP = 4;
 const PROJECT_AGENTS: Agent[] = ["claude", "codex"];
@@ -43,6 +43,7 @@ export function WelcomeFlow(): JSX.Element {
   const [securityConfirmed, setSecurityConfirmed] = createSignal(false);
   const [sources, setSources] = createSignal<ChatImportSource[]>([]);
   const [importsLoaded, setImportsLoaded] = createSignal(false);
+  const [restoreSelection, setRestoreSelection] = createSignal<StoreBackupSelection | null>(null);
 
   const visible = () =>
     state.boot.status === "ready" &&
@@ -117,6 +118,30 @@ export function WelcomeFlow(): JSX.Element {
     } catch (cause) {
       setNote(describeError(cause));
     } finally {
+      setBusy(false);
+    }
+  };
+
+  const selectBackup = async (): Promise<void> => {
+    setBusy(true);
+    setNote(null);
+    try {
+      const picked = await actions.selectStoreBackup();
+      if (picked) setRestoreSelection(picked);
+    } catch (cause) {
+      setNote(describeError(cause));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const restoreBackup = async (): Promise<void> => {
+    setBusy(true);
+    setNote(null);
+    try {
+      await actions.restoreStoreBackup();
+    } catch (cause) {
+      setNote(describeError(cause));
       setBusy(false);
     }
   };
@@ -264,6 +289,43 @@ export function WelcomeFlow(): JSX.Element {
                   </div>
                 </div>
               </SetupRow>
+              <div class="mt-4 flex items-center justify-between gap-5 rounded-xl border border-primary/22 bg-primary/7 px-4 py-3.5">
+                <div class="min-w-0">
+                  <p class="font-medium text-[12.5px] text-az-strong">
+                    {tx("Restoring from backup?")}
+                  </p>
+                  <p class="mt-0.5 text-[10.5px] text-az-muted">
+                    {tx("Select an AgencyZero backup, then restore it before continuing setup.")}
+                  </p>
+                </div>
+                <div class="flex shrink-0 items-center gap-2">
+                  <Show when={restoreSelection()}>
+                    {(picked) => (
+                      <code class="max-w-[190px] truncate font-mono text-[10.5px] text-az-body">
+                        {picked().fileName}
+                      </code>
+                    )}
+                  </Show>
+                  <button
+                    type="button"
+                    disabled={busy() || !isLive("selectStoreBackup")}
+                    onClick={() => void selectBackup()}
+                    class="rounded-lg border border-az-hairline-strong px-3 py-1.5 text-[11.5px] text-az-body hover:border-primary hover:text-primary disabled:opacity-40"
+                  >
+                    {tx("Select backup file…")}
+                  </button>
+                  <Show when={restoreSelection()}>
+                    <button
+                      type="button"
+                      disabled={busy()}
+                      onClick={() => void restoreBackup()}
+                      class="rounded-lg border border-warning/50 px-3 py-1.5 font-semibold text-[11.5px] text-warning hover:border-warning disabled:opacity-40"
+                    >
+                      {tx("Restore")}
+                    </button>
+                  </Show>
+                </div>
+              </div>
             </Show>
 
             <Show when={step() === 1}>

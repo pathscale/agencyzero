@@ -132,6 +132,14 @@ unmodified WorkTable files under `store/`; no rows are decoded or re-encoded.
 The manifest records the package format, AgencyZero version, exact schema
 fingerprint, and each file's byte length and SHA-256.
 
+Immediately before the store drains, the frontend snapshots stable webview
+preferences into the existing global-settings JSON row. That carries interface
+scale, colour mode, panel layout, sorting, and per-project expanded/collapsed UI
+choices alongside every database-backed global and project setting. Unsent
+composer drafts and a staged question reply remain local live content rather
+than preferences. This adds no WorkTable table or column, so it does not require
+a backup schema-version change.
+
 Restore requires the exact app version and schema, and refuses an unknown
 package format or any missing/changed file. It extracts into staging and opens
 every WorkTable table there before moving the current store. The store it
