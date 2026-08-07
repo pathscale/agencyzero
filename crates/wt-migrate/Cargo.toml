@@ -7,7 +7,7 @@ publish.workspace = true
 
 [dependencies]
 libc = "0.2"
-worktable = { git = "https://github.com/pathscale/WorkTable", rev = "9e5f58a050f20da16ada520c6fc04f2fa0fb1e3b" }
+worktable = "=1.0.0-beta.8"
 # The `worktable!` and `worktable_version!` macros emit code that names these by
 # bare path rather than through a re-export, so a consumer of the macros has to
 # declare them too. Kept identical to the block in agency-tools and apps/gui: the

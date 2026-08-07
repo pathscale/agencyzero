@@ -81,6 +81,15 @@ pub struct PullRequestRecoveryReport {
     pub projects: usize,
 }
 
+/// Result of rebuilding pull requests while omitting rows whose indexed bytes
+/// no longer validate.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PullRequestSalvageReport {
+    pub rows: usize,
+    pub projects: usize,
+    pub skipped: Vec<String>,
+}
+
 /// `project_item` as it shipped before `reference` was added.
 ///
 /// `worktable_version!` rather than `worktable!`: a historical shape exists to
@@ -824,6 +833,31 @@ pub async fn recover_pull_request_index(
     source: &Path,
     target: &Path,
 ) -> eyre::Result<PullRequestRecoveryReport> {
+    let report = rebuild_pull_request_index(source, target, false).await?;
+    Ok(PullRequestRecoveryReport {
+        rows: report.rows,
+        projects: report.projects,
+    })
+}
+
+/// Rebuild the pull-request table while omitting primary-index entries whose
+/// row bytes are corrupt.
+///
+/// The source is never modified. Every surviving row is validated and written
+/// into a brand-new table, and the skipped primary keys are returned for an
+/// operator to inspect before swapping anything into place.
+pub async fn salvage_pull_request_index(
+    source: &Path,
+    target: &Path,
+) -> eyre::Result<PullRequestSalvageReport> {
+    rebuild_pull_request_index(source, target, true).await
+}
+
+async fn rebuild_pull_request_index(
+    source: &Path,
+    target: &Path,
+    skip_corrupt: bool,
+) -> eyre::Result<PullRequestSalvageReport> {
     use app_schema::pull_request::{
         PullRequestPersistenceEngine, PullRequestRow, PullRequestWorkTable,
     };
@@ -842,19 +876,50 @@ pub async fn recover_pull_request_index(
     let primary_index = primary.parse_indexset().await?;
     let mut data_file = tokio::fs::File::open(table_path.join(".wt.data")).await?;
     let mut rows = BTreeMap::new();
+    let mut skipped = Vec::new();
     for (id, link) in primary_index.iter() {
-        worktable::data_bucket::seek_by_link(&mut data_file, *link).await?;
+        if let Err(error) = worktable::data_bucket::seek_by_link(&mut data_file, *link).await {
+            if skip_corrupt {
+                skipped.push(id.clone());
+                continue;
+            }
+            return Err(error);
+        }
         let mut bytes = vec![0u8; link.length as usize];
-        data_file.read_exact(&mut bytes).await?;
-        let stored = rkyv::from_bytes::<StoredPullRequest, rkyv::rancor::Error>(&bytes)
-            .map_err(|error| eyre::eyre!("pull request {id} failed row validation: {error}"))?;
+        if let Err(error) = data_file.read_exact(&mut bytes).await {
+            if skip_corrupt {
+                skipped.push(id.clone());
+                continue;
+            }
+            return Err(error.into());
+        }
+        let stored = match rkyv::from_bytes::<StoredPullRequest, rkyv::rancor::Error>(&bytes) {
+            Ok(stored) => stored,
+            Err(_) if skip_corrupt => {
+                skipped.push(id.clone());
+                continue;
+            }
+            Err(error) => {
+                return Err(eyre::eyre!(
+                    "pull request {id} at {link:?} failed row validation: {error}"
+                ));
+            }
+        };
         if stored.is_deleted() || stored.is_ghosted() || stored.is_vacuumed() {
+            if skip_corrupt {
+                skipped.push(id.clone());
+                continue;
+            }
             return Err(eyre::eyre!(
                 "pull request {id} points to a deleted, ghosted, or vacuumed row"
             ));
         }
         let row = stored.get_inner();
         if row.id != *id {
+            if skip_corrupt {
+                skipped.push(id.clone());
+                continue;
+            }
             return Err(eyre::eyre!("primary key {id} points to row {}", row.id));
         }
         rows.insert(id.clone(), row);
@@ -918,9 +983,10 @@ pub async fn recover_pull_request_index(
         .await
         .map_err(|error| eyre::eyre!("could not close rebuilt pull_request: {error}"))?;
 
-    Ok(PullRequestRecoveryReport {
+    Ok(PullRequestSalvageReport {
         rows: recovered,
         projects: expected_by_project.len(),
+        skipped,
     })
 }
 
@@ -1221,6 +1287,104 @@ mod recovery_tests {
                 .len(),
             2
         );
+        rebuilt.close().await.expect("rebuilt table closes");
+    }
+
+    #[tokio::test]
+    async fn pull_request_salvage_reports_and_omits_a_corrupt_row() {
+        let root = tempfile::tempdir().expect("temporary recovery store");
+        let source = root.path().join("source");
+        let strict_target = root.path().join("strict-target");
+        let salvage_target = root.path().join("salvage-target");
+        let config = DiskConfig::new_with_table_name(
+            source.to_string_lossy().into_owned(),
+            PullRequestWorkTable::name_snake_case(),
+            PullRequestWorkTable::version(),
+        );
+        let engine = PullRequestPersistenceEngine::new(config)
+            .await
+            .expect("engine");
+        let table = PullRequestWorkTable::load(engine).await.expect("table");
+        table
+            .insert(pull_request("pr-good-1", "proj-1"))
+            .expect("first row");
+        table
+            .insert(pull_request("pr-corrupt", "proj-1"))
+            .expect("corrupt row");
+        table
+            .insert(pull_request("pr-good-2", "proj-2"))
+            .expect("third row");
+        table.close().await.expect("source closes cleanly");
+
+        let table_path = source.join("pull_request");
+        let mut primary = <SpaceIndexUnsized<String, { INNER_PAGE_SIZE as u32 }> as SpaceIndexOps<
+            String,
+        >>::primary_from_table_files_path(
+            table_path.to_string_lossy().into_owned(),
+            PullRequestWorkTable::version(),
+        )
+        .await
+        .expect("primary index");
+        let primary_index = primary.parse_indexset().await.expect("primary rows");
+        let corrupt_link = primary_index
+            .iter()
+            .find_map(|(id, link)| (id == "pr-corrupt").then_some(*link))
+            .expect("corrupt row link");
+        drop(primary);
+
+        let data_path = source.join("pull_request/.wt.data");
+        let page_id: u32 = corrupt_link.page_id.into();
+        let byte_offset = u64::from(page_id) * PAGE_SIZE as u64
+            + GENERAL_HEADER_SIZE as u64
+            + u64::from(corrupt_link.offset);
+        {
+            use std::io::{Seek, SeekFrom, Write};
+
+            let mut file = std::fs::OpenOptions::new()
+                .write(true)
+                .open(data_path)
+                .expect("data file");
+            file.seek(SeekFrom::Start(byte_offset)).expect("row offset");
+            file.write_all(&vec![0; corrupt_link.length as usize])
+                .expect("corrupt row bytes");
+            file.sync_all().expect("corruption reaches disk");
+        }
+
+        let _ = recover_pull_request_index(&source, &strict_target)
+            .await
+            .expect_err("strict recovery refuses the corrupt row");
+        let report = salvage_pull_request_index(&source, &salvage_target)
+            .await
+            .expect("salvage keeps valid rows");
+        assert_eq!(
+            report,
+            PullRequestSalvageReport {
+                rows: 2,
+                projects: 2,
+                skipped: vec!["pr-corrupt".into()],
+            }
+        );
+
+        let config = DiskConfig::new_with_table_name(
+            salvage_target.to_string_lossy().into_owned(),
+            PullRequestWorkTable::name_snake_case(),
+            PullRequestWorkTable::version(),
+        );
+        let engine = PullRequestPersistenceEngine::new(config)
+            .await
+            .expect("rebuilt engine");
+        let rebuilt = PullRequestWorkTable::load(engine)
+            .await
+            .expect("rebuilt table");
+        let mut ids: Vec<String> = rebuilt
+            .select_all()
+            .execute()
+            .expect("rebuilt rows")
+            .into_iter()
+            .map(|row| row.id)
+            .collect();
+        ids.sort();
+        assert_eq!(ids, vec!["pr-good-1", "pr-good-2"]);
         rebuilt.close().await.expect("rebuilt table closes");
     }
 }
