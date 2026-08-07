@@ -17,6 +17,7 @@ pub(crate) const RESULT_ENV: &str = "AZ_STORE_MAINTENANCE_RESULT";
 const PACKAGE_PREFIX: &str = "AgencyZero-backup-";
 const PACKAGE_SUFFIX: &str = ".azbackup";
 const PACKAGE_FORMAT: u32 = 1;
+const SCHEMA_VERSION: u32 = 1;
 const MANIFEST_FILE: &str = "manifest.json";
 const STORE_PREFIX: &str = "store/";
 const MAX_MANIFEST_BYTES: u64 = 4 * 1024 * 1024;
@@ -26,9 +27,19 @@ const MAX_MANIFEST_BYTES: u64 = 4 * 1024 * 1024;
 struct Manifest {
     format_version: u32,
     app_version: String,
+    /// Logical compatibility line for the rows inside the archive.
+    ///
+    /// Backups created before this field shipped are schema 1 too. Keeping the
+    /// default makes a 0.2.30 package readable without weakening validation.
+    #[serde(default = "schema_version_one")]
+    schema_version: u32,
     schema_fingerprint: String,
     created_at: String,
     files: Vec<ManifestFile>,
+}
+
+const fn schema_version_one() -> u32 {
+    SCHEMA_VERSION
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -168,13 +179,10 @@ fn compatible(manifest: &Manifest) -> Result<(), String> {
             manifest.format_version
         ));
     }
-    let package_version = semver::Version::parse(&manifest.app_version)
-        .map_err(|error| format!("backup carries an invalid AgencyZero version: {error}"))?;
-    let current_version = semver::Version::parse(az_core::VERSION)
-        .map_err(|error| format!("this build carries an invalid version: {error}"))?;
-    if package_version != current_version {
+    if manifest.schema_version != SCHEMA_VERSION {
         return Err(format!(
-            "backup requires AgencyZero {package_version}; this build is {current_version}"
+            "backup schema version {} is not supported by this build (expected {SCHEMA_VERSION})",
+            manifest.schema_version
         ));
     }
     if manifest.schema_fingerprint != crate::db::tables::SCHEMA_FINGERPRINT {
@@ -304,6 +312,7 @@ fn write_archive(store: &Path, package: &Path) -> Result<(), String> {
     let manifest = Manifest {
         format_version: PACKAGE_FORMAT,
         app_version: az_core::VERSION.into(),
+        schema_version: SCHEMA_VERSION,
         schema_fingerprint: crate::db::tables::SCHEMA_FINGERPRINT.into(),
         created_at: chrono::Utc::now().to_rfc3339(),
         files: records,
@@ -626,34 +635,50 @@ mod tests {
     }
 
     #[test]
-    fn different_versions_and_other_schemas_are_refused() {
+    fn app_versions_are_metadata_but_other_schemas_are_refused() {
         let files = Vec::new();
         let base = Manifest {
             format_version: PACKAGE_FORMAT,
             app_version: az_core::VERSION.into(),
+            schema_version: SCHEMA_VERSION,
             schema_fingerprint: crate::db::tables::SCHEMA_FINGERPRINT.into(),
             created_at: chrono::Utc::now().to_rfc3339(),
             files,
         };
         let mut newer = base.clone();
         newer.app_version = "999.0.0".into();
-        assert!(
-            compatible(&newer)
-                .unwrap_err()
-                .contains("requires AgencyZero")
-        );
+        compatible(&newer).expect("app version does not define store compatibility");
 
         let mut older = base.clone();
         older.app_version = "0.0.1".into();
+        compatible(&older).expect("app version does not define store compatibility");
+
+        let mut other_schema_version = base.clone();
+        other_schema_version.schema_version += 1;
         assert!(
-            compatible(&older)
+            compatible(&other_schema_version)
                 .unwrap_err()
-                .contains("requires AgencyZero")
+                .contains("schema version")
         );
 
         let mut other_schema = base;
         other_schema.schema_fingerprint = "different".into();
         assert!(compatible(&other_schema).unwrap_err().contains("schema"));
+    }
+
+    #[test]
+    fn a_manifest_without_schema_version_is_schema_one() {
+        let manifest: Manifest = serde_json::from_value(serde_json::json!({
+            "formatVersion": PACKAGE_FORMAT,
+            "appVersion": "0.2.30",
+            "schemaFingerprint": crate::db::tables::SCHEMA_FINGERPRINT,
+            "createdAt": "2026-08-07T00:00:00Z",
+            "files": []
+        }))
+        .expect("legacy manifest parses");
+
+        assert_eq!(manifest.schema_version, SCHEMA_VERSION);
+        compatible(&manifest).expect("legacy schema-one backup stays compatible");
     }
 
     #[test]
