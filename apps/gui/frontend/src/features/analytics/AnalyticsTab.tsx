@@ -91,6 +91,13 @@ export function AnalyticsTab(): JSX.Element {
           {(usage) => (
             <>
               <StatTiles usage={usage()} />
+              <Show when={usage().reconstructedTurns > 0}>
+                <p class="-mt-1 text-[10.5px] text-az-muted">
+                  {tx("includes reconstructed imported turns", {
+                    count: usage().reconstructedTurns,
+                  })}
+                </p>
+              </Show>
               <CacheEfficiency usage={usage()} />
               <LargestTurn usage={usage()} />
               <AgentValue agents={usage().agents} />

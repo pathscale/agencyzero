@@ -136,6 +136,38 @@ fn title_from_text(first: &str, fallback: &str) -> String {
     }
 }
 
+fn claude_usage(message: &serde_json::Value) -> String {
+    let Some(usage) = message.get("usage") else {
+        return String::new();
+    };
+    let count = |key: &str| usage.get(key).and_then(serde_json::Value::as_u64);
+    let input = count("input_tokens");
+    let cache_reads = count("cache_read_input_tokens");
+    let cache_writes = count("cache_creation_input_tokens");
+    let output = count("output_tokens");
+    if input.is_none() && cache_reads.is_none() && cache_writes.is_none() && output.is_none() {
+        return String::new();
+    }
+    let context = input
+        .unwrap_or(0)
+        .saturating_add(cache_reads.unwrap_or(0))
+        .saturating_add(cache_writes.unwrap_or(0));
+    serde_json::json!({
+        "tokens": context.saturating_add(output.unwrap_or(0)),
+        "inputTokens": input,
+        "outputTokens": output,
+        "contextTokens": context,
+        "contextWindow": null,
+        "cacheReads": cache_reads,
+        "cacheWrites": cache_writes,
+        "reasoningTokens": null,
+        "costUsd": null,
+        "premiumRequests": null,
+        "durationMs": null
+    })
+    .to_string()
+}
+
 fn parse_claude(path: &Path) -> Result<ImportedChat, String> {
     let file = File::open(path).map_err(|error| error.to_string())?;
     let mut messages: Vec<ImportedMessage> = Vec::new();
@@ -183,11 +215,15 @@ fn parse_claude(path: &Path) -> Result<ImportedChat, String> {
             .and_then(serde_json::Value::as_str)
             .map(str::to_string)
             .unwrap_or_else(|| format!("line-{}", messages.len()));
+        let usage = value.get("message").map(claude_usage).unwrap_or_default();
         if let Some(index) = positions.get(&key).copied() {
             let existing = &mut messages[index];
             if !existing.text.contains(&text) {
                 existing.text.push_str("\n\n");
                 existing.text.push_str(&text);
+            }
+            if !usage.is_empty() {
+                existing.usage = usage;
             }
             continue;
         }
@@ -206,7 +242,7 @@ fn parse_claude(path: &Path) -> Result<ImportedChat, String> {
                 .and_then(serde_json::Value::as_str)
                 .unwrap_or("claude")
                 .to_string(),
-            usage: String::new(),
+            usage,
         });
     }
     let title = title_from(&messages, "Imported Claude chat");
@@ -744,7 +780,7 @@ mod tests {
             concat!(
                 "{\"type\":\"user\",\"uuid\":\"u1\",\"sessionId\":\"session-1\",\"timestamp\":\"2026-08-07T00:00:00Z\",\"message\":{\"role\":\"user\",\"content\":\"hello\"}}\n",
                 "{\"type\":\"assistant\",\"sessionId\":\"session-1\",\"timestamp\":\"2026-08-07T00:00:01Z\",\"message\":{\"id\":\"a1\",\"role\":\"assistant\",\"model\":\"opus\",\"content\":[{\"type\":\"thinking\",\"thinking\":\"hidden\"}]}}\n",
-                "{\"type\":\"assistant\",\"sessionId\":\"session-1\",\"timestamp\":\"2026-08-07T00:00:01Z\",\"message\":{\"id\":\"a1\",\"role\":\"assistant\",\"model\":\"opus\",\"content\":[{\"type\":\"text\",\"text\":\"world\"}]}}\n"
+                "{\"type\":\"assistant\",\"sessionId\":\"session-1\",\"timestamp\":\"2026-08-07T00:00:01Z\",\"message\":{\"id\":\"a1\",\"role\":\"assistant\",\"model\":\"opus\",\"content\":[{\"type\":\"text\",\"text\":\"world\"}],\"usage\":{\"input_tokens\":2,\"cache_creation_input_tokens\":100,\"cache_read_input_tokens\":50,\"output_tokens\":8}}}\n"
             ),
         )
         .expect("fixture writes");
@@ -752,6 +788,13 @@ mod tests {
         assert_eq!(parsed.session_id, "session-1");
         assert_eq!(parsed.messages.len(), 2);
         assert_eq!(parsed.messages[1].text, "world");
+        let usage: serde_json::Value =
+            serde_json::from_str(&parsed.messages[1].usage).expect("usage serializes");
+        assert_eq!(usage["inputTokens"], 2);
+        assert_eq!(usage["cacheReads"], 50);
+        assert_eq!(usage["cacheWrites"], 100);
+        assert_eq!(usage["outputTokens"], 8);
+        assert_eq!(usage["contextTokens"], 152);
         let _ = std::fs::remove_dir_all(dir);
     }
 

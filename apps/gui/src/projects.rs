@@ -415,6 +415,281 @@ fn record_turn_usage(
     }
 }
 
+fn imported_usage_id(message_id: &str) -> String {
+    format!("imported:{message_id}")
+}
+
+fn imported_usage(raw: &str) -> Option<agent_abstraction::Usage> {
+    let dto: UsageDto = serde_json::from_str(raw).ok()?;
+    let mut usage = agent_abstraction::Usage::default();
+    usage.input_tokens = dto.input_tokens;
+    usage.output_tokens = dto.output_tokens;
+    usage.cache_read_tokens = dto.cache_reads;
+    usage.cache_write_tokens = dto.cache_writes;
+    usage.reasoning_tokens = dto.reasoning_tokens;
+    usage.context_tokens = dto.context_tokens;
+    usage.context_window = dto.context_window;
+    usage.cost_usd = dto.cost_usd;
+    usage.premium_requests = dto.premium_requests;
+    usage.duration_ms = dto.duration_ms;
+    has_accountable_usage(&usage).then_some(usage)
+}
+
+/// Materialize one imported assistant message in the durable analytics tables.
+///
+/// The ledger id is derived from the message id, so import-time recording and
+/// boot repair converge on the same rows. Each missing relation is repaired
+/// independently after an interrupted write; an existing ledger is never
+/// counted twice.
+async fn record_imported_usage(
+    tables: &Tables,
+    row: &MessageRow,
+    agent: Agent,
+    session_id: &str,
+) -> Result<bool, String> {
+    let Some(usage) = imported_usage(&row.usage) else {
+        return Ok(false);
+    };
+    let count = |value: Option<u64>| {
+        value
+            .and_then(|tokens| i64::try_from(tokens).ok())
+            .unwrap_or(0)
+    };
+    let ledger_id = imported_usage_id(&row.id);
+    let day: String = row.created_at.chars().take(10).collect();
+    let ledger = crate::db::schema::usage_ledger::UsageLedgerRow {
+        id: ledger_id.clone(),
+        at: row.created_at.clone(),
+        day: day.clone(),
+        project_id: row.project_id.clone(),
+        model: row.model.clone(),
+        #[expect(
+            clippy::cast_possible_truncation,
+            reason = "a turn costing more than 9 trillion dollars is not a rounding concern"
+        )]
+        cost_micro: (usage.cost_usd.unwrap_or(0.0) * 1_000_000.0).round() as i64,
+        input_tokens: count(usage.input_tokens),
+        output_tokens: count(usage.output_tokens),
+    };
+    let cache = crate::db::schema::usage_cache::UsageCacheRow {
+        id: ledger_id.clone(),
+        day,
+        project_id: row.project_id.clone(),
+        model: row.model.clone(),
+        cache_read_tokens: count(usage.cache_read_tokens),
+        cache_write_tokens: count(usage.cache_write_tokens),
+        input_tokens: count(usage.input_tokens),
+        at: row.created_at.clone(),
+    };
+    let session = crate::db::schema::usage_session::UsageSessionRow {
+        id: ledger_id.clone(),
+        project_id: row.project_id.clone(),
+        agent: agent_wire_name(agent).to_string(),
+        session_id: session_id.to_string(),
+        model: row.model.clone(),
+        at: row.created_at.clone(),
+    };
+
+    let mut inserted_ledger = false;
+    let mut inserted_cache = false;
+    let mut inserted_session = false;
+    if tables.usage_ledger.select(ledger_id.clone()).is_none() {
+        tables
+            .usage_ledger
+            .insert(ledger)
+            .map_err(|error| error.to_string())?;
+        inserted_ledger = true;
+    }
+    if tables.usage_cache.select(ledger_id.clone()).is_none() {
+        if let Err(error) = tables.usage_cache.insert(cache) {
+            if inserted_ledger {
+                let _ = tables.usage_ledger.delete(ledger_id).await;
+            }
+            return Err(error.to_string());
+        }
+        inserted_cache = true;
+    }
+    if tables.usage_session.select(ledger_id.clone()).is_none() {
+        if let Err(error) = tables.usage_session.insert(session) {
+            if inserted_cache {
+                let _ = tables.usage_cache.delete(ledger_id.clone()).await;
+            }
+            if inserted_ledger {
+                let _ = tables.usage_ledger.delete(ledger_id).await;
+            }
+            return Err(error.to_string());
+        }
+        inserted_session = true;
+    }
+    Ok(inserted_ledger || inserted_cache || inserted_session)
+}
+
+async fn delete_imported_usage(tables: &Tables, message_id: &str) {
+    let ledger_id = imported_usage_id(message_id);
+    let _ = tables.usage_session.delete(ledger_id.clone()).await;
+    let _ = tables.usage_cache.delete(ledger_id.clone()).await;
+    let _ = tables.usage_ledger.delete(ledger_id).await;
+}
+
+/// Repair analytics for projects imported by earlier builds.
+///
+/// Called once at boot before the window can request Analytics. Rows already
+/// reconstructed are primary-key hits and do no work.
+pub async fn backfill_imported_usage(tables: &Tables) -> usize {
+    const MARKER: &str = "analytics-import-backfill:v1";
+    if tables.kv_get(MARKER).as_deref() == Some("complete") {
+        return 0;
+    }
+    let mut rows = match tables.message.select_all().execute() {
+        Ok(rows) => rows,
+        Err(error) => {
+            crate::log!(
+                crate::log::Level::Warn,
+                "analytics",
+                "could not scan imported messages for usage reconstruction: {error}"
+            );
+            return 0;
+        }
+    };
+    let mut failed = false;
+    let imports = match tables.kv.select_all().execute() {
+        Ok(rows) => rows,
+        Err(error) => {
+            crate::log!(
+                crate::log::Level::Warn,
+                "analytics",
+                "could not scan imported session ownership: {error}"
+            );
+            return 0;
+        }
+    };
+    for import in imports
+        .into_iter()
+        .filter(|row| row.key.starts_with("imported-chat:"))
+    {
+        let Some(identity) = import.key.strip_prefix("imported-chat:") else {
+            continue;
+        };
+        let Some((source, session_id)) = identity.split_once(':') else {
+            continue;
+        };
+        let mut stored: Vec<_> = rows
+            .iter_mut()
+            .filter(|row| {
+                row.project_id == import.value && row.author == "agent" && row.stop == "imported"
+            })
+            .collect();
+        if stored.iter().all(|row| !row.usage.is_empty()) {
+            continue;
+        }
+        stored.sort_by(|left, right| left.created_at.cmp(&right.created_at));
+        let source = source.to_string();
+        let session_id = session_id.to_string();
+        let loaded =
+            tokio::task::spawn_blocking(move || crate::chat_import::load(&source, &session_id))
+                .await;
+        let chat = match loaded {
+            Ok(Ok(chat)) => chat,
+            Ok(Err(error)) => {
+                crate::log!(
+                    crate::log::Level::Warn,
+                    "analytics",
+                    "{}: could not reload imported transcript usage: {error}",
+                    import.value
+                );
+                continue;
+            }
+            Err(error) => {
+                crate::log!(
+                    crate::log::Level::Warn,
+                    "analytics",
+                    "{}: imported transcript reload stopped unexpectedly: {error}",
+                    import.value
+                );
+                continue;
+            }
+        };
+        let recovered: Vec<_> = chat
+            .messages
+            .into_iter()
+            .filter(|message| message.role == "assistant")
+            .collect();
+        if stored.len() != recovered.len() {
+            crate::log!(
+                crate::log::Level::Warn,
+                "analytics",
+                "{}: imported transcript has {} stored and {} source assistant turns; usage was not guessed",
+                import.value,
+                stored.len(),
+                recovered.len()
+            );
+            continue;
+        }
+        for (row, recovered) in stored.into_iter().zip(recovered) {
+            if !row.usage.is_empty() || recovered.usage.is_empty() {
+                continue;
+            }
+            if let Err(error) = tables
+                .message
+                .update_finalize_by_id(
+                    FinalizeByIdQuery {
+                        usage: recovered.usage.clone(),
+                        stop: row.stop.clone(),
+                        exit_code: row.exit_code,
+                    },
+                    row.id.clone(),
+                )
+                .await
+            {
+                failed = true;
+                crate::log!(
+                    crate::log::Level::Warn,
+                    "analytics",
+                    "{}: could not persist reconstructed transcript usage: {error}",
+                    import.value
+                );
+                continue;
+            }
+            row.usage = recovered.usage;
+        }
+    }
+
+    let mut inserted = 0;
+    for row in rows
+        .into_iter()
+        .filter(|row| row.author == "agent" && row.stop == "imported" && !row.usage.is_empty())
+    {
+        let Ok(agent) = parse_agent(Some(&row.agent)) else {
+            continue;
+        };
+        let session = tables
+            .kv_get(&agent_session_key(&row.project_id, agent))
+            .unwrap_or_default();
+        match record_imported_usage(tables, &row, agent, &session).await {
+            Ok(true) => inserted += 1,
+            Ok(false) => {}
+            Err(error) => {
+                failed = true;
+                crate::log!(
+                    crate::log::Level::Warn,
+                    "analytics",
+                    "{}: could not reconstruct imported usage for {}: {error}",
+                    row.project_id,
+                    row.id
+                );
+            }
+        }
+    }
+    if !failed && let Err(error) = tables.kv_put(MARKER, "complete".into()).await {
+        crate::log!(
+            crate::log::Level::Warn,
+            "analytics",
+            "could not mark imported usage reconstruction complete: {error}"
+        );
+    }
+    inserted
+}
+
 impl From<&agent_abstraction::Usage> for UsageDto {
     fn from(usage: &agent_abstraction::Usage) -> Self {
         UsageDto {
@@ -4760,6 +5035,8 @@ pub struct UsageAnalyticsDto {
     /// The single heaviest turn, or absent when the ledger is empty.
     pub largest_turn: Option<UsageLargestTurnDto>,
     pub turns: usize,
+    /// Imported provider turns reconstructed from transcript usage metadata.
+    pub reconstructed_turns: usize,
 }
 
 fn effective_ledger_cost(
@@ -5092,6 +5369,10 @@ pub async fn get_usage_analytics(state: State<'_, AppState>) -> Result<UsageAnal
         total_processed_tokens: total_input + total_output + total_read + total_write,
         largest_turn: largest,
         turns: ledger.len(),
+        reconstructed_turns: ledger
+            .iter()
+            .filter(|row| row.id.starts_with("imported:"))
+            .count(),
     })
 }
 
@@ -6859,6 +7140,29 @@ pub async fn discover_chat_imports(
     Ok(sources)
 }
 
+async fn rollback_chat_import(
+    tables: &Tables,
+    project_id: &str,
+    import_key: &str,
+    agent: Agent,
+    messages: &[MessageRow],
+) {
+    for message in messages {
+        delete_imported_usage(tables, &message.id).await;
+    }
+    let _ = tables.kv.delete(agent_session_key(project_id, agent)).await;
+    let _ = tables
+        .message_chunk
+        .delete_by_project(project_id.to_string())
+        .await;
+    let _ = tables
+        .message
+        .delete_by_project(project_id.to_string())
+        .await;
+    let _ = tables.project.delete(project_id.to_string()).await;
+    let _ = tables.kv.delete(import_key.to_string()).await;
+}
+
 /// Copy one allowlisted provider transcript into a new AgencyZero project.
 ///
 /// The webview supplies a source and native session id, never a path. The
@@ -6932,6 +7236,7 @@ pub async fn import_chat_session(
     if chat.messages.is_empty() {
         return Err("the selected session contains no importable user or agent messages".into());
     }
+    let provider_session_id = chat.session_id.clone();
     let project_id = id("proj");
     let order = u32::try_from(list_projects(state.clone()).len()).unwrap_or(0);
     let last_activity_at = chat
@@ -6969,6 +7274,7 @@ pub async fn import_chat_session(
 
     let fallback_at = chrono::Utc::now();
     let mut imported = Vec::with_capacity(chat.messages.len());
+    let mut stored_rows = Vec::with_capacity(chat.messages.len());
     for (index, message) in chat.messages.into_iter().enumerate() {
         let message_id = id("msg");
         let at = if message.at.is_empty() {
@@ -7000,35 +7306,40 @@ pub async fn import_chat_session(
             body: body_head(&message.text),
             created_at: at.to_rfc3339(),
         };
-        match persist_message_body(&state.tables, stored, &message.text) {
-            Ok(dto) => imported.push(dto),
+        match persist_message_body(&state.tables, stored.clone(), &message.text) {
+            Ok(dto) => {
+                stored_rows.push(stored);
+                imported.push(dto);
+            }
             Err(error) => {
-                let _ = state
-                    .tables
-                    .message_chunk
-                    .delete_by_project(project_id.clone())
+                rollback_chat_import(&state.tables, &project_id, &import_key, agent, &stored_rows)
                     .await;
-                let _ = state
-                    .tables
-                    .message
-                    .delete_by_project(project_id.clone())
-                    .await;
-                let _ = state.tables.project.delete(project_id.clone()).await;
-                let _ = state.tables.kv.delete(import_key.clone()).await;
                 return Err(format!("the import was rolled back: {error}"));
             }
         }
     }
     if let Err(error) = state
         .tables
-        .kv_put(&agent_session_key(&project_id, agent), chat.session_id)
+        .kv_put(
+            &agent_session_key(&project_id, agent),
+            provider_session_id.clone(),
+        )
         .await
     {
-        crate::log!(
-            crate::log::Level::Warn,
-            "imports",
-            "{project_id}: transcript imported but its provider session could not be adopted: {error}"
-        );
+        rollback_chat_import(&state.tables, &project_id, &import_key, agent, &stored_rows).await;
+        return Err(format!("the import was rolled back: {error}"));
+    }
+    for stored in &stored_rows {
+        if stored.author != "agent" {
+            continue;
+        }
+        if let Err(error) =
+            record_imported_usage(&state.tables, stored, agent, &provider_session_id).await
+        {
+            rollback_chat_import(&state.tables, &project_id, &import_key, agent, &stored_rows)
+                .await;
+            return Err(format!("the import was rolled back: {error}"));
+        }
     }
 
     let project = with_session(ProjectDto::from(row), &state.tables);
@@ -10723,6 +11034,87 @@ mod tests {
         assert_eq!(sessions[0].agent, "codex");
         assert_eq!(sessions[0].session_id, "session-current");
 
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[tokio::test]
+    async fn imported_usage_backfill_is_complete_and_idempotent() {
+        let dir = std::env::temp_dir().join(format!(
+            "az-imported-usage-{}-{}",
+            std::process::id(),
+            chrono::Utc::now().timestamp_nanos_opt().unwrap_or_default()
+        ));
+        let tables = Tables::open(&dir).await.expect("import usage store opens");
+        tables
+            .message
+            .insert(MessageRow {
+                id: "message-imported".into(),
+                project_id: "project-imported".into(),
+                item_id: String::new(),
+                author: "agent".into(),
+                agent: "claude".into(),
+                moderation: String::new(),
+                model: "claude-opus-4-1".into(),
+                permission: String::new(),
+                usage: serde_json::json!({
+                    "tokens": 160,
+                    "inputTokens": 10,
+                    "outputTokens": 10,
+                    "contextTokens": 150,
+                    "contextWindow": null,
+                    "cacheReads": 100,
+                    "cacheWrites": 40,
+                    "reasoningTokens": null,
+                    "costUsd": null,
+                    "premiumRequests": null,
+                    "durationMs": null
+                })
+                .to_string(),
+                stop: "imported".into(),
+                exit_code: 0,
+                body: "Imported response".into(),
+                created_at: "2026-08-07T01:02:03Z".into(),
+            })
+            .expect("imported message inserts");
+        tables
+            .kv_put(
+                &agent_session_key("project-imported", Agent::Claude),
+                "session-imported".into(),
+            )
+            .await
+            .expect("provider session persists");
+
+        assert_eq!(backfill_imported_usage(&tables).await, 1);
+        assert_eq!(backfill_imported_usage(&tables).await, 0);
+
+        let ledger = tables
+            .usage_ledger
+            .select_all()
+            .execute()
+            .expect("ledger reads");
+        assert_eq!(ledger.len(), 1);
+        assert_eq!(ledger[0].id, "imported:message-imported");
+        assert_eq!(ledger[0].project_id, "project-imported");
+        assert_eq!(ledger[0].input_tokens, 10);
+        assert_eq!(ledger[0].output_tokens, 10);
+        let cache = tables
+            .usage_cache
+            .select_all()
+            .execute()
+            .expect("cache split reads");
+        assert_eq!(cache.len(), 1);
+        assert_eq!(cache[0].cache_read_tokens, 100);
+        assert_eq!(cache[0].cache_write_tokens, 40);
+        let sessions = tables
+            .usage_session
+            .select_all()
+            .execute()
+            .expect("session attribution reads");
+        assert_eq!(sessions.len(), 1);
+        assert_eq!(sessions[0].session_id, "session-imported");
+        assert_eq!(sessions[0].agent, "claude");
+
+        tables.shutdown().await.expect("import usage store drains");
         let _ = std::fs::remove_dir_all(dir);
     }
 

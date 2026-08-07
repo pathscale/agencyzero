@@ -668,6 +668,7 @@ const en = {
   finished: "finished",
   "effective cost": "effective cost",
   "includes local estimates": "includes local estimates",
+  "includes reconstructed imported turns": "includes {{count}} reconstructed imported turns",
   "Import chats": "Import chats",
   "Import all": "Import all",
   "Importing all…": "Importing all…",

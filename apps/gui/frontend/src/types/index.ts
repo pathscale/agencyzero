@@ -780,6 +780,7 @@ export interface UsageAnalytics {
   totalProcessedTokens: number;
   largestTurn: UsageLargestTurn | null;
   turns: number;
+  reconstructedTurns: number;
 }
 
 /**

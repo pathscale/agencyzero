@@ -26,6 +26,7 @@ const EMPTY_USAGE: UsageAnalytics = {
   totalProcessedTokens: 0,
   largestTurn: null,
   turns: 0,
+  reconstructedTurns: 0,
 };
 
 describe("analytics refresh", () => {

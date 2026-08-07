@@ -939,6 +939,7 @@ export function createMockApi(): AgencyZeroApi {
           costUsd: 0.61,
         },
         turns: 341,
+        reconstructedTurns: 28,
       }),
     discoverChatImports: () =>
       settle([
