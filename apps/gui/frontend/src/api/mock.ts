@@ -934,7 +934,7 @@ export function createMockApi(): AgencyZeroApi {
           source: "claude-code",
           label: "Claude Code",
           available: true,
-          note: "1 importable local session",
+          note: "2 importable local sessions",
           sessions: [
             {
               id: "fixture-session",
@@ -942,6 +942,13 @@ export function createMockApi(): AgencyZeroApi {
               updatedAt: "2026-08-07T00:00:00Z",
               messages: 12,
               importable: true,
+            },
+            {
+              id: "cloud-only",
+              title: "Cloud-only session",
+              updatedAt: new Date().toISOString(),
+              messages: 8,
+              importable: false,
             },
             {
               id: "fixture-session-2",

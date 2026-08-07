@@ -948,6 +948,8 @@ function ChatImportSettings(): JSX.Element {
   const [busy, setBusy] = createSignal<string | null>(null);
   const [note, setNote] = createSignal<string | null>(null);
   const available = () => isLive("discoverChatImports") && isLive("importChatSession");
+  const importableSessions = (source: ChatImportSource) =>
+    source.sessions.filter((session) => session.importable);
 
   const refresh = async (): Promise<void> => {
     if (!available()) return;
@@ -979,7 +981,7 @@ function ChatImportSettings(): JSX.Element {
     try {
       // Sequential on purpose: selected rollouts can be large, and importing
       // all of them concurrently would multiply both memory and store writes.
-      for (const session of source.sessions) {
+      for (const session of importableSessions(source)) {
         await actions.importChatSession(source.source, session.id);
         imported += 1;
       }
@@ -1001,7 +1003,7 @@ function ChatImportSettings(): JSX.Element {
     }
   };
   const choice = (source: ChatImportSource) =>
-    selected()[source.source] ?? source.sessions[0]?.id ?? "";
+    selected()[source.source] ?? importableSessions(source)[0]?.id ?? "";
 
   return (
     <Section
@@ -1027,7 +1029,7 @@ function ChatImportSettings(): JSX.Element {
             >
               <div class="flex max-w-[480px] flex-col items-end gap-1.5">
                 <Show
-                  when={source.sessions.length > 0}
+                  when={importableSessions(source).length > 0}
                   fallback={
                     <span class="text-[11px] text-az-faint">
                       {source.available ? tx("No importable sessions") : tx("Not installed")}
@@ -1046,7 +1048,7 @@ function ChatImportSettings(): JSX.Element {
                       }
                       class="h-9 min-w-0 flex-1 rounded-lg border border-az-hairline bg-az-inset px-2 text-[12px] text-az-body outline-none"
                     >
-                      <For each={source.sessions}>
+                      <For each={importableSessions(source)}>
                         {(session) => (
                           <option value={session.id}>
                             {session.title}

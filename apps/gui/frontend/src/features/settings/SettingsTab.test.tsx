@@ -76,6 +76,7 @@ describe("chat imports", () => {
     )) as HTMLSelectElement;
 
     expect(picker.classList).toContain("h-9");
+    expect(Array.from(picker.options).map((option) => option.value)).not.toContain("cloud-only");
     fireEvent.click(screen.getByRole("button", { name: "Import all" }));
 
     await waitFor(() => expect(screen.getByText("Imported 2 chats from Claude Code")).toBeTruthy());

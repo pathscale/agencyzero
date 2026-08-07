@@ -6,6 +6,7 @@ import {
   elapsed,
   formatBytes,
   isRetryableStop,
+  isSuccessfulStop,
   isTransientStop,
   relativeTime,
   taskMeta,
@@ -89,12 +90,20 @@ describe("isRetryableStop", () => {
   it("does not offer Retry after completion or a deliberate cancellation", () => {
     expect(isRetryableStop("completed")).toBe(false);
     expect(isRetryableStop("canceled")).toBe(false);
+    expect(isRetryableStop("imported")).toBe(false);
   });
 
   it("keeps Retry for failures and interrupted runs", () => {
     expect(isRetryableStop("error")).toBe(true);
     expect(isRetryableStop("interrupted")).toBe(true);
     expect(isRetryableStop("API Error: 503 Service unavailable")).toBe(true);
+  });
+});
+
+describe("isSuccessfulStop", () => {
+  it("renders imported replies as successful completed history", () => {
+    expect(isSuccessfulStop("imported")).toBe(true);
+    expect(isSuccessfulStop("error")).toBe(false);
   });
 });
 

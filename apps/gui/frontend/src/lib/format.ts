@@ -115,7 +115,12 @@ export function isTransientStop(stop: string): boolean {
 
 /** Whether replaying the last user prompt is a valid recovery action. */
 export function isRetryableStop(stop: string): boolean {
-  return stop !== "completed" && stop !== "canceled" && stop !== "continued";
+  return !isSuccessfulStop(stop) && stop !== "canceled";
+}
+
+/** Stop reasons that represent a complete visible reply rather than a failed run. */
+export function isSuccessfulStop(stop: string): boolean {
+  return stop === "completed" || stop === "continued" || stop === "imported";
 }
 
 /** "resets 14:20" on the rate-limit pill. */

@@ -15,7 +15,7 @@ import {
 import { Icon } from "~/components/Icon";
 import { ApprovalCard } from "~/features/project/ApprovalCard";
 import { CopyMessageButton, InlineText, MessageBody } from "~/features/project/MessageBody";
-import { isRetryableStop, isTransientStop, relativeTime } from "~/lib/format";
+import { isRetryableStop, isSuccessfulStop, isTransientStop, relativeTime } from "~/lib/format";
 import { AGENT_LABELS } from "~/lib/labels";
 import { costLabel, estimateTurnCost } from "~/lib/pricing";
 import { compactCount } from "~/lib/stats";
@@ -592,7 +592,7 @@ function AgentBubble(props: {
    * partial, and an unexplained short reply reads as the agent being unhelpful
    * rather than as the turn having failed.
    */
-  const failed = () => props.message.stop !== "completed" && props.message.stop !== "continued";
+  const failed = () => !isSuccessfulStop(props.message.stop);
   // A cancellation is already an owner decision or an app restart. Offering
   // Retry there replays a prompt the owner may have intentionally stopped and
   // makes a normally completed pre-update reply look unfinished after restart.
