@@ -49,11 +49,12 @@ describe("analytics refresh", () => {
     const screen = render(() => <AnalyticsTab />);
     await waitFor(() => expect(screen.getByRole("tablist")).toBeInTheDocument());
 
-    expect(screen.getAllByRole("tab")).toHaveLength(7);
-    expect(screen.getByRole("tab", { name: "Efficiency" })).toHaveAttribute(
-      "aria-selected",
-      "true",
-    );
+    expect(screen.getAllByRole("tab")).toHaveLength(5);
+    expect(screen.getByRole("tab", { name: "Value" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.queryByRole("tab", { name: "Efficiency" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: "Largest turn" })).not.toBeInTheDocument();
+    expect(screen.getByText("Efficiency")).toBeInTheDocument();
+    expect(screen.getByText("Largest single turn")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("tab", { name: "Models" }));
     expect(screen.getByRole("tab", { name: "Models" })).toHaveAttribute("aria-selected", "true");
@@ -70,8 +71,22 @@ describe("analytics refresh", () => {
 
     const screen = render(() => <AnalyticsTab />);
 
-    await waitFor(() => expect(screen.getByText("4.0")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText("4.0 : 1")).toBeInTheDocument());
     expect(screen.getByText("~2.0K")).toBeInTheDocument();
     expect(screen.getByText(/Sol cache writes inferred/)).toBeInTheDocument();
+  });
+
+  it("signals a 19:1 cache reuse ratio as healthy", async () => {
+    getUsageAnalytics.mockResolvedValue({
+      ...EMPTY_USAGE,
+      totalCacheReadTokens: 19_000,
+      totalCacheWriteTokens: 1_000,
+    });
+
+    const screen = render(() => <AnalyticsTab />);
+
+    const value = await screen.findByText("19.0 : 1");
+    expect(value).toHaveClass("text-success");
+    expect(screen.getByText("Healthy cache reuse")).toBeInTheDocument();
   });
 });

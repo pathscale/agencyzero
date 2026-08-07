@@ -20,8 +20,6 @@ const TOKEN_CLASSES = [
 ] as const;
 
 const ANALYTICS_TABS = [
-  { key: "efficiency", label: "Efficiency" },
-  { key: "largest", label: "Largest turn" },
   { key: "value", label: "Value" },
   { key: "sessions", label: "Sessions" },
   { key: "daily", label: "Daily" },
@@ -62,7 +60,7 @@ export function AnalyticsTab(): JSX.Element {
   const { actions } = useWorkspace();
   const [data, setData] = createSignal<UsageAnalytics | null>(null);
   const [refreshing, setRefreshing] = createSignal(false);
-  const [activeTab, setActiveTab] = createSignal<AnalyticsTabKey>("efficiency");
+  const [activeTab, setActiveTab] = createSignal<AnalyticsTabKey>("value");
 
   const selectTabFromKeyboard = (
     event: KeyboardEvent & { currentTarget: HTMLButtonElement },
@@ -155,20 +153,6 @@ export function AnalyticsTab(): JSX.Element {
                 aria-labelledby={`analytics-tab-${activeTab()}`}
                 class="min-w-0"
               >
-                <Show when={activeTab() === "efficiency"}>
-                  <Show when={usage().importedTurns > 0}>
-                    <p class="mb-2 text-[10.5px] text-az-muted">
-                      {tx("imported usage coverage", {
-                        recovered: usage().reconstructedTurns,
-                        total: usage().importedTurns,
-                      })}
-                    </p>
-                  </Show>
-                  <CacheEfficiency usage={usage()} />
-                </Show>
-                <Show when={activeTab() === "largest"}>
-                  <LargestTurn usage={usage()} />
-                </Show>
                 <Show when={activeTab() === "value"}>
                   <AgentValue agents={usage().agents} />
                 </Show>
@@ -330,161 +314,144 @@ function ProjectBreakdown(props: { projects: UsageProject[]; total: number }): J
   );
 }
 
-/** Every total in one scannable row instead of a wall of summary cards. */
+function efficiencyRatio(usage: UsageAnalytics): number {
+  return (
+    usage.totalCacheReadTokens /
+    Math.max(1, effectiveCacheWrites(usage.totalCacheWriteTokens, usage.estimatedCacheWriteTokens))
+  );
+}
+
+function efficiencySignal(usage: UsageAnalytics): { label: string; tone: string } {
+  const hasCacheData =
+    usage.totalCacheReadTokens > 0 ||
+    effectiveCacheWrites(usage.totalCacheWriteTokens, usage.estimatedCacheWriteTokens) > 0;
+  if (!hasCacheData) return { label: tx("No cache data"), tone: "text-az-muted" };
+  const ratio = efficiencyRatio(usage);
+  if (ratio >= 10) return { label: tx("Healthy cache reuse"), tone: "text-success" };
+  if (ratio >= 3) return { label: tx("Mixed cache reuse"), tone: "text-warning" };
+  return { label: tx("Weak cache reuse"), tone: "text-error" };
+}
+
+/** Every total in a compact grid that wraps instead of clipping. */
 function HeadlineRow(props: {
   usage: UsageAnalytics;
   refreshing: boolean;
   onRefresh: () => Promise<void>;
 }): JSX.Element {
-  // Every headline number carries a colour, none left flat grey. Cost,
-  // processed and turns are the figures the owner scans for, so they take the
-  // accent; the four token components take the same hues as the day-series
-  // legend so the tiles and the bars read as one system.
-  const tiles = createMemo(() => [
-    {
-      label: tx("Total cost"),
-      value: `${props.usage.estimatedCostUsd > 0 ? "~" : ""}${dollars(props.usage.totalUsd)}`,
-      tone: "text-primary",
-    },
-    { label: tx("Input"), value: tokens(props.usage.totalInputTokens), tone: "text-primary" },
-    { label: tx("Output"), value: tokens(props.usage.totalOutputTokens), tone: "text-success" },
-    {
-      label: tx("Cache read"),
-      value: tokens(props.usage.totalCacheReadTokens),
-      tone: "text-info",
-    },
-    {
-      label: tx("Cache write"),
-      value: cacheWrites(props.usage.totalCacheWriteTokens, props.usage.estimatedCacheWriteTokens),
-      tone: "text-warning",
-    },
-    {
-      label: tx("Processed"),
-      value: tokens(props.usage.totalProcessedTokens),
-      tone: "text-primary",
-    },
-    { label: tx("Turns"), value: `${props.usage.turns}`, tone: "text-accent" },
-  ]);
+  const tiles = createMemo(() => {
+    const largest = props.usage.largestTurn;
+    const efficiency = efficiencySignal(props.usage);
+    const hasCacheData =
+      props.usage.totalCacheReadTokens > 0 ||
+      effectiveCacheWrites(
+        props.usage.totalCacheWriteTokens,
+        props.usage.estimatedCacheWriteTokens,
+      ) > 0;
+    return [
+      {
+        label: tx("Total cost"),
+        value: `${props.usage.estimatedCostUsd > 0 ? "~" : ""}${dollars(props.usage.totalUsd)}`,
+        tone: "text-primary",
+      },
+      {
+        label: tx("Processed"),
+        value: tokens(props.usage.totalProcessedTokens),
+        tone: "text-primary",
+      },
+      { label: tx("Turns"), value: `${props.usage.turns}`, tone: "text-accent" },
+      { label: tx("Sessions"), value: `${props.usage.sessions.length}`, tone: "text-info" },
+      { label: tx("Projects"), value: `${props.usage.projects.length}`, tone: "text-info" },
+      {
+        label: tx("Efficiency"),
+        value: hasCacheData ? `${efficiencyRatio(props.usage).toFixed(1)} : 1` : "—",
+        tone: efficiency.tone,
+        detail: efficiency.label,
+        title: tx(
+          "Cache reuse signal: 10:1 or higher is healthy, 3:1 to 10:1 is mixed, and below 3:1 is weak. This does not measure total spend.",
+        ),
+      },
+      {
+        label: tx("Largest single turn"),
+        value: largest ? tokens(largest.processedTokens) : "—",
+        tone: largest ? "text-warning" : "text-az-muted",
+        detail: largest ? `${largest.model} · ${dollars(largest.costUsd)}` : tx("No turns yet"),
+        title: largest
+          ? `${tokens(largest.processedTokens)} ${tx("tokens processed")} · ${largest.model} · ${dollars(largest.costUsd)}`
+          : undefined,
+      },
+      { label: tx("Input"), value: tokens(props.usage.totalInputTokens), tone: "text-primary" },
+      { label: tx("Output"), value: tokens(props.usage.totalOutputTokens), tone: "text-success" },
+      {
+        label: tx("Cache read"),
+        value: tokens(props.usage.totalCacheReadTokens),
+        tone: "text-info",
+      },
+      {
+        label: tx("Cache write"),
+        value: cacheWrites(
+          props.usage.totalCacheWriteTokens,
+          props.usage.estimatedCacheWriteTokens,
+        ),
+        tone: "text-warning",
+        detail:
+          props.usage.estimatedCacheWriteTokens > 0
+            ? tx("Sol cache write estimate", {
+                tokens: tokens(props.usage.estimatedCacheWriteTokens),
+              })
+            : undefined,
+      },
+    ];
+  });
 
   return (
-    <div class="overflow-x-auto rounded-xl border border-az-hairline bg-base-100">
-      <div class="grid min-w-[930px] grid-cols-[132px_repeat(7,minmax(0,1fr))_42px] items-stretch">
-        <div class="flex flex-col justify-center px-3.5 py-2.5">
+    <div class="rounded-xl border border-az-hairline bg-base-100 p-2">
+      <div class="mb-1.5 flex min-w-0 items-center gap-3 px-1.5 py-0.5">
+        <div class="min-w-0 flex-1">
           <h1 class="font-semibold text-[16px] text-az-title tracking-[-.01em]">
             {tx("Analytics")}
           </h1>
-          <span class="truncate text-[9.5px] text-az-muted">{tx("usage ledger")}</span>
+          <div class="flex flex-wrap items-center gap-x-2 text-[9.5px] text-az-muted">
+            <span>{tx("usage ledger")}</span>
+            <Show when={props.usage.importedTurns > 0}>
+              <span>
+                {tx("imported usage coverage", {
+                  recovered: props.usage.reconstructedTurns,
+                  total: props.usage.importedTurns,
+                })}
+              </span>
+            </Show>
+          </div>
         </div>
-        <For each={tiles()}>
-          {(tile) => (
-            <div class="flex min-w-0 flex-col justify-center border-az-hairline border-l px-2.5 py-2.5">
-              <div class="truncate text-[9.5px] text-az-muted">{tile.label}</div>
-              <div class={`mt-0.5 truncate font-bold font-mono text-[15px] ${tile.tone}`}>
-                {tile.value}
-              </div>
-            </div>
-          )}
-        </For>
         <button
           type="button"
           aria-label={tx("Refresh")}
           title={tx("Refresh")}
           onClick={() => void props.onRefresh()}
           disabled={props.refreshing}
-          class="flex items-center justify-center border-az-hairline border-l text-primary transition-colors hover:bg-primary/8 disabled:cursor-wait disabled:opacity-55"
+          class="flex size-8 shrink-0 items-center justify-center rounded-lg text-primary transition-colors hover:bg-primary/8 disabled:cursor-wait disabled:opacity-55"
         >
           <Icon name="refresh-cw" class={`text-[13px] ${props.refreshing ? "animate-spin" : ""}`} />
         </button>
       </div>
-    </div>
-  );
-}
-
-/**
- * The read to write ratio, the key metric.
- *
- * Cache reads are far cheaper than fresh input, so a high read to write ratio
- * is what tells you the prompt cache is being hit rather than rebuilt. A ratio
- * that collapses is a cache miss, and it is where the money goes.
- */
-function CacheEfficiency(props: { usage: UsageAnalytics }): JSX.Element {
-  const ratio = createMemo(
-    () =>
-      props.usage.totalCacheReadTokens /
-      Math.max(
-        1,
-        effectiveCacheWrites(
-          props.usage.totalCacheWriteTokens,
-          props.usage.estimatedCacheWriteTokens,
-        ),
-      ),
-  );
-
-  return (
-    <div class="rounded-xl border border-az-hairline bg-base-100 px-4 py-4">
-      <div class="flex items-baseline gap-3">
-        <span class="font-mono font-semibold text-[28px] text-az-strong">
-          {ratio().toFixed(1)}
-          <span class="ml-1 font-normal text-[13px] text-az-muted">{tx(": 1")}</span>
-        </span>
-        <span class="font-medium text-[12.5px] text-az-title">
-          {tx("cache read : write ratio")}
-        </span>
+      <div class="grid grid-cols-2 gap-1.5 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
+        <For each={tiles()}>
+          {(tile) => (
+            <div
+              class="flex min-w-0 flex-col justify-center rounded-lg border border-az-hairline bg-az-inset px-2.5 py-2"
+              title={tile.title}
+            >
+              <div class="truncate text-[9.5px] text-az-muted">{tile.label}</div>
+              <div class={`mt-0.5 truncate font-bold font-mono text-[15px] ${tile.tone}`}>
+                {tile.value}
+              </div>
+              <Show when={tile.detail}>
+                <div class="mt-0.5 truncate text-[9px] text-az-faint">{tile.detail}</div>
+              </Show>
+            </div>
+          )}
+        </For>
       </div>
-      <p class="mt-1.5 text-[11px] text-az-muted leading-[1.55]">
-        {tx(
-          "reads are roughly 10% the price of input, so a high read:write ratio means caching is working; a low one means the cache is being rebuilt (a miss) instead of hit.",
-        )}
-      </p>
-      <Show when={props.usage.estimatedCacheWriteTokens > 0}>
-        <p class="mt-1 text-[10.5px] text-az-faint">
-          {tx("Sol cache write estimate", {
-            tokens: tokens(props.usage.estimatedCacheWriteTokens),
-          })}
-        </p>
-      </Show>
     </div>
-  );
-}
-
-/**
- * The single heaviest turn, spelled out.
- *
- * This is the panel that answers "is one request enormous?" directly: it names
- * the biggest turn and its decomposition. If this number is small but the bill
- * is large, the spend is many ordinary turns, not one runaway request — and the
- * lever is fewer/cheaper turns, not compaction. If it is large, the context is
- * bloated and compaction is the lever.
- */
-function LargestTurn(props: { usage: UsageAnalytics }): JSX.Element {
-  return (
-    <Show when={props.usage.largestTurn}>
-      {(turn) => (
-        <div class="rounded-xl border border-az-hairline bg-base-100 px-4 py-3.5">
-          <div class="flex items-baseline justify-between gap-3">
-            <span class="font-medium text-[12.5px] text-az-title">{tx("Largest single turn")}</span>
-            <span class="font-mono text-[11px] text-az-muted">{turn().model}</span>
-          </div>
-          <div class="mt-1 flex items-baseline gap-2">
-            <span class="font-mono font-semibold text-[24px] text-az-strong">
-              {tokens(turn().processedTokens)}
-            </span>
-            <span class="text-[12px] text-az-muted">{tx("tokens processed")}</span>
-            <span class="ml-auto font-mono text-[13px] text-az-title">
-              {dollars(turn().costUsd)}
-            </span>
-          </div>
-          <div class="mt-1.5 font-mono text-[11px] text-az-muted">
-            {tx("in")} {tokens(turn().inputTokens)} · {tx("read")} {tokens(turn().cacheReadTokens)}{" "}
-            · {tx("write")} {tokens(turn().cacheWriteTokens)} · {tx("out")}{" "}
-            {tokens(turn().outputTokens)}
-            <Show when={turn().estimatedCacheWriteTokens > 0}>
-              {` · ${tx("estimated write")} ~${tokens(turn().estimatedCacheWriteTokens)}`}
-            </Show>
-          </div>
-        </div>
-      )}
-    </Show>
   );
 }
 

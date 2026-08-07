@@ -588,6 +588,13 @@ const zh = {
   "Analytics sections": "分析分区",
   "usage ledger": "用量账本",
   Efficiency: "效率",
+  "No cache data": "暂无缓存数据",
+  "Healthy cache reuse": "缓存复用良好",
+  "Mixed cache reuse": "缓存复用一般",
+  "Weak cache reuse": "缓存复用较弱",
+  "Cache reuse signal: 10:1 or higher is healthy, 3:1 to 10:1 is mixed, and below 3:1 is weak. This does not measure total spend.":
+    "缓存复用信号：10:1 及以上为良好，3:1 至 10:1 为一般，低于 3:1 为较弱。此指标不代表总支出。",
+  "No turns yet": "暂无轮次",
   "Largest turn": "最大单轮",
   Value: "价值",
   Sessions: "会话",
