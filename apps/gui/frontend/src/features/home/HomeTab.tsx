@@ -697,7 +697,8 @@ function ProjectGroup(props: { project: Project }): JSX.Element {
   };
 
   const items = () => itemsFor(props.project.id);
-  const openCount = () => items().filter((item) => item.status !== "finished").length;
+  const openCount = () =>
+    items().filter((item) => item.status !== "finished" && item.status !== "canceled").length;
   const activeCount = () => items().filter((item) => item.status === "active").length;
   const turnCount = () => usageTotals(state.messages[props.project.id] ?? []).turns;
   const summary = () =>

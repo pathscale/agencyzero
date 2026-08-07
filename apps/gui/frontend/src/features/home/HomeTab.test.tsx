@@ -29,6 +29,14 @@ describe("Home item rows", () => {
     expect(screen.getByText("4 open · 2 turns · 1 active")).toBeTruthy();
   });
 
+  it("does not count canceled work as open in the group summary", async () => {
+    const screen = await mountHome();
+
+    await screen.workspace.actions.setItemStatus("worktable-0", "canceled");
+
+    await waitFor(() => expect(screen.getByText("3 open · 2 turns")).toBeTruthy());
+  });
+
   /*
    * The owner's request, verbatim: "Ability to manually edit a task item" —
    * on Home, where the harvested lists are actually read. The pencil swaps
