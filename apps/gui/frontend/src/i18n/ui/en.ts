@@ -669,6 +669,9 @@ const en = {
   "effective cost": "effective cost",
   "includes local estimates": "includes local estimates",
   "Import chats": "Import chats",
+  "Import all": "Import all",
+  "Importing all…": "Importing all…",
+  "Imported {count} chats from {source}": "Imported {count} chats from {source}",
   "copy local provider transcripts into new AgencyZero projects":
     "copy local provider transcripts into new AgencyZero projects",
   "requires the native import backend": "requires the native import backend",

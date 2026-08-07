@@ -925,6 +925,13 @@ export function createMockApi(): AgencyZeroApi {
               messages: 12,
               importable: true,
             },
+            {
+              id: "fixture-session-2",
+              title: "Another fixture conversation",
+              updatedAt: "2026-08-06T00:00:00Z",
+              messages: 8,
+              importable: true,
+            },
           ],
         },
       ]),

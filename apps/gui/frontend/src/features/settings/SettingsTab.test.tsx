@@ -67,3 +67,17 @@ describe("PS deployment study settings", () => {
     expect(toggle.checked).toBe(false);
   });
 });
+
+describe("chat imports", () => {
+  it("offers a taller session picker and imports every session from one source", async () => {
+    const screen = await mountSettings();
+    const picker = (await screen.findByLabelText(
+      "Choose a session from Claude Code",
+    )) as HTMLSelectElement;
+
+    expect(picker.classList).toContain("h-9");
+    fireEvent.click(screen.getByRole("button", { name: "Import all" }));
+
+    await waitFor(() => expect(screen.getByText("Imported 2 chats from Claude Code")).toBeTruthy());
+  });
+});

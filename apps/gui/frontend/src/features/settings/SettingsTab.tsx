@@ -964,6 +964,34 @@ function ChatImportSettings(): JSX.Element {
       setBusy(null);
     }
   };
+  const importAll = async (source: ChatImportSource): Promise<void> => {
+    setBusy(`${source.source}:*`);
+    setNote(null);
+    let imported = 0;
+    try {
+      // Sequential on purpose: selected rollouts can be large, and importing
+      // all of them concurrently would multiply both memory and store writes.
+      for (const session of source.sessions) {
+        await actions.importChatSession(source.source, session.id);
+        imported += 1;
+      }
+      setNote(
+        tx("Imported {count} chats from {source}", {
+          count: imported,
+          source: source.label,
+        }),
+      );
+    } catch (cause) {
+      setNote(
+        `${tx("Imported {count} chats from {source}", {
+          count: imported,
+          source: source.label,
+        })} · ${describeError(cause)}`,
+      );
+    } finally {
+      setBusy(null);
+    }
+  };
   const choice = (source: ChatImportSource) =>
     selected()[source.source] ?? source.sessions[0]?.id ?? "";
 
@@ -989,7 +1017,7 @@ function ChatImportSettings(): JSX.Element {
               hint={source.note}
               isLast={sourceIndex() === sources().length - 1}
             >
-              <div class="flex max-w-[390px] flex-col items-end gap-1.5">
+              <div class="flex max-w-[480px] flex-col items-end gap-1.5">
                 <Show
                   when={source.sessions.length > 0}
                   fallback={
@@ -1008,7 +1036,7 @@ function ChatImportSettings(): JSX.Element {
                           [source.source]: event.currentTarget.value,
                         }))
                       }
-                      class="min-w-0 flex-1 rounded-lg border border-az-hairline bg-az-inset px-2 py-[4px] text-[11px] text-az-body outline-none"
+                      class="h-9 min-w-0 flex-1 rounded-lg border border-az-hairline bg-az-inset px-2 text-[12px] text-az-body outline-none"
                     >
                       <For each={source.sessions}>
                         {(session) => (
@@ -1021,13 +1049,21 @@ function ChatImportSettings(): JSX.Element {
                     </select>
                     <button
                       type="button"
-                      disabled={!choice(source) || busy() === `${source.source}:${choice(source)}`}
+                      disabled={!choice(source) || busy() !== null}
                       onClick={() => void importOne(source.source, choice(source))}
-                      class="shrink-0 rounded-lg border border-az-hairline-strong px-2.5 py-[4px] text-[11px] text-primary transition-colors hover:border-primary disabled:opacity-40"
+                      class="h-9 shrink-0 rounded-lg border border-az-hairline-strong px-2.5 text-[11px] text-primary transition-colors hover:border-primary disabled:opacity-40"
                     >
                       {busy() === `${source.source}:${choice(source)}`
                         ? tx("Importing…")
                         : tx("Import")}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={busy() !== null}
+                      onClick={() => void importAll(source)}
+                      class="h-9 shrink-0 rounded-lg border border-primary/45 px-2.5 font-medium text-[11px] text-primary transition-colors hover:border-primary hover:bg-primary/10 disabled:opacity-40"
+                    >
+                      {busy() === `${source.source}:*` ? tx("Importing all…") : tx("Import all")}
                     </button>
                   </div>
                 </Show>
