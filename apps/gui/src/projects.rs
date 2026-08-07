@@ -415,6 +415,154 @@ fn record_turn_usage(
     }
 }
 
+/// One provider invocation, measured before policy chooses between modes.
+///
+/// Kept separate from the cost ledger: retries can share one owner message,
+/// failed starts can have no usage, and the handoff/session lineage is useful
+/// even when a provider reports no price.
+struct RunMeasurement {
+    id: String,
+    turn_id: String,
+    project_id: String,
+    item_id: String,
+    agent: Agent,
+    mode: &'static str,
+    parent_session_id: String,
+    handoff_bytes: usize,
+    request_bytes: usize,
+    system_bytes: usize,
+    parent_context_tokens: u64,
+    started_at: String,
+    started: std::time::Instant,
+}
+
+#[derive(Serialize, Deserialize, Debug, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+struct SessionRunRecord {
+    id: String,
+    turn_id: String,
+    project_id: String,
+    item_id: String,
+    agent: String,
+    kind: String,
+    mode: String,
+    parent_session_id: String,
+    session_id: String,
+    handoff_bytes: i64,
+    request_bytes: i64,
+    system_bytes: i64,
+    parent_context_tokens: i64,
+    context_tokens: i64,
+    context_window: i64,
+    input_tokens: i64,
+    output_tokens: i64,
+    cache_read_tokens: i64,
+    cache_write_tokens: i64,
+    cost_micro: i64,
+    duration_ms: i64,
+    status: String,
+    started_at: String,
+    finished_at: String,
+}
+
+fn session_run_key(id: &str) -> String {
+    format!("session-run:{id}")
+}
+
+impl RunMeasurement {
+    async fn finish(
+        &self,
+        tables: &Tables,
+        session_id: &str,
+        status: &str,
+        usage: &agent_abstraction::Usage,
+    ) {
+        let count = |value: Option<u64>| {
+            value
+                .and_then(|tokens| i64::try_from(tokens).ok())
+                .unwrap_or(0)
+        };
+        let bytes = |value: usize| i64::try_from(value).unwrap_or(i64::MAX);
+        let duration_ms = i64::try_from(self.started.elapsed().as_millis()).unwrap_or(i64::MAX);
+        #[expect(
+            clippy::cast_possible_truncation,
+            reason = "a run costing more than 9 trillion dollars is not a measurement concern"
+        )]
+        let cost_micro = (usage.cost_usd.unwrap_or(0.0) * 1_000_000.0).round() as i64;
+        let row = SessionRunRecord {
+            id: self.id.clone(),
+            turn_id: self.turn_id.clone(),
+            project_id: self.project_id.clone(),
+            item_id: self.item_id.clone(),
+            agent: agent_wire_name(self.agent).to_string(),
+            kind: "coordinator".into(),
+            mode: self.mode.into(),
+            parent_session_id: self.parent_session_id.clone(),
+            session_id: session_id.to_string(),
+            handoff_bytes: bytes(self.handoff_bytes),
+            request_bytes: bytes(self.request_bytes),
+            system_bytes: bytes(self.system_bytes),
+            parent_context_tokens: i64::try_from(self.parent_context_tokens).unwrap_or(i64::MAX),
+            context_tokens: count(usage.context_tokens),
+            context_window: count(usage.context_window),
+            input_tokens: count(usage.input_tokens),
+            output_tokens: count(usage.output_tokens),
+            cache_read_tokens: count(usage.cache_read_tokens),
+            cache_write_tokens: count(usage.cache_write_tokens),
+            cost_micro,
+            duration_ms,
+            status: status.to_string(),
+            started_at: self.started_at.clone(),
+            finished_at: now(),
+        };
+        let encoded = match serde_json::to_string(&row) {
+            Ok(encoded) => encoded,
+            Err(error) => {
+                crate::log!(
+                    crate::log::Level::Warn,
+                    "run",
+                    "{}: could not encode session-run measurement: {error}",
+                    self.project_id
+                );
+                return;
+            }
+        };
+        if let Err(error) = tables.kv_put(&session_run_key(&self.id), encoded).await {
+            crate::log!(
+                crate::log::Level::Warn,
+                "run",
+                "{}: could not record session-run measurement: {error}",
+                self.project_id
+            );
+        }
+    }
+}
+
+/// Effective context visible immediately before a resumed invocation.
+///
+/// Current projects own one active provider session per agent. The terminal
+/// message is therefore the same value the composer shows before dispatch. A
+/// fresh run deliberately records zero: old transcript rows still exist, but
+/// none of that provider context will be resumed.
+fn parent_context_tokens(tables: &Tables, project_id: &str, agent: Agent, resumed: bool) -> u64 {
+    if !resumed {
+        return 0;
+    }
+    tables
+        .message
+        .select_by_project_id(project_id.to_string())
+        .execute()
+        .unwrap_or_default()
+        .into_iter()
+        .filter(|row| row.author == "agent" && row.agent == agent_wire_name(agent))
+        .filter_map(|row| {
+            let usage = serde_json::from_str::<UsageDto>(&row.usage).ok()?;
+            Some((row.created_at, usage.context_tokens.unwrap_or(0)))
+        })
+        .max_by(|a, b| a.0.cmp(&b.0))
+        .map_or(0, |(_, tokens)| tokens)
+}
+
 fn imported_usage_id(message_id: &str) -> String {
     format!("imported:{message_id}")
 }
@@ -8371,6 +8519,7 @@ async fn drive_run(
      */
     let is_task_manager = project_id == crate::tasks::TASK_MANAGER_ID;
     let handoff = provider_handoff(&tables, &project_id, &turn_id, agent);
+    let handoff_bytes = handoff.len();
     let settings = global_settings(&tables);
     let announce_start = app
         .state::<crate::AppState>()
@@ -8597,6 +8746,34 @@ async fn drive_run(
         memory_dir.display()
     ));
 
+    let system_bytes = system.len();
+    let parent_session_id = resume.clone().unwrap_or_default();
+    let mut observed_session = parent_session_id.clone();
+    let measurement = RunMeasurement {
+        id: id("run"),
+        turn_id: turn_id.clone(),
+        project_id: project_id.clone(),
+        item_id: item_id.clone().unwrap_or_default(),
+        agent,
+        mode: if parent_session_id.is_empty() {
+            "fresh"
+        } else {
+            "resume"
+        },
+        parent_context_tokens: parent_context_tokens(
+            &tables,
+            &project_id,
+            agent,
+            !parent_session_id.is_empty(),
+        ),
+        parent_session_id,
+        handoff_bytes,
+        request_bytes: prompt_echo.len(),
+        system_bytes,
+        started_at: now(),
+        started: std::time::Instant::now(),
+    };
+
     /*
      * What the provider last said about usage, told to the agent.
      *
@@ -8625,6 +8802,14 @@ async fn drive_run(
     let request = match crate::experimental::apply(request, agent, &model) {
         Ok(request) => request,
         Err(error) => {
+            measurement
+                .finish(
+                    &tables,
+                    &observed_session,
+                    "configuration_error",
+                    &agent_abstraction::Usage::default(),
+                )
+                .await;
             crate::log!(crate::log::Level::Error, "run", "{project_id}: {error}");
             emit_run_stopped(&app, &project_id, agent, &model, &permission, error, None);
             return;
@@ -8684,6 +8869,14 @@ async fn drive_run(
     let mut run = match agent_abstraction::stream(request.request()) {
         Ok(run) => run,
         Err(error) => {
+            measurement
+                .finish(
+                    &tables,
+                    &observed_session,
+                    "start_error",
+                    &agent_abstraction::Usage::default(),
+                )
+                .await;
             // The one failure the window used to swallow entirely: no run, no
             // reply, no error, just a prompt that appeared to do nothing.
             crate::log!(
@@ -9482,6 +9675,7 @@ async fn drive_run(
                 );
             }
             Event::Started { session, model } => {
+                observed_session.clone_from(&session);
                 note_io(
                     &app,
                     &io,
@@ -9596,6 +9790,9 @@ async fn drive_run(
      */
     let project_gone = !is_task_manager && tables.project.select(project_id.clone()).is_none();
     if project_gone {
+        measurement
+            .finish(&tables, &observed_session, "project_deleted", &turn_usage)
+            .await;
         crate::log!(
             crate::log::Level::Warn,
             "run",
@@ -9647,6 +9844,9 @@ async fn drive_run(
                 // be flattened into "error".
                 other => format!("{other:?}"),
             };
+            measurement
+                .finish(&tables, &observed_session, &stop, &outcome.usage)
+                .await;
             crate::log!(
                 crate::log::Level::Info,
                 "run",
@@ -9851,6 +10051,9 @@ async fn drive_run(
         // The normal shape of a stop: `cancel()` reports `Cancelled` unless
         // the run happened to finish first (then it is the `Ok` arm above).
         Err(error) if cancelled => {
+            measurement
+                .finish(&tables, &observed_session, "canceled", &turn_usage)
+                .await;
             crate::log!(
                 crate::log::Level::Info,
                 "run",
@@ -9957,6 +10160,9 @@ async fn drive_run(
             );
         }
         Err(error) => {
+            measurement
+                .finish(&tables, &observed_session, &error.to_string(), &turn_usage)
+                .await;
             crate::log!(
                 crate::log::Level::Error,
                 "run",
@@ -11275,6 +11481,98 @@ mod tests {
         assert_eq!(sessions[0].agent, "codex");
         assert_eq!(sessions[0].session_id, "session-current");
 
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[tokio::test]
+    async fn session_run_records_lineage_handoff_and_provider_measurements() {
+        let dir = std::env::temp_dir().join(format!(
+            "az-session-run-{}-{}",
+            std::process::id(),
+            uuid::Uuid::new_v4()
+        ));
+        let tables = Tables::open(&dir).await.expect("session run store opens");
+        tables
+            .message
+            .insert(MessageRow {
+                id: "answer-before-dispatch".into(),
+                project_id: "project-current".into(),
+                item_id: "item-current".into(),
+                author: "agent".into(),
+                agent: "claude".into(),
+                moderation: String::new(),
+                model: "claude-sonnet".into(),
+                permission: "edit".into(),
+                usage: serde_json::to_string(&UsageDto {
+                    context_tokens: Some(200_000),
+                    ..UsageDto::default()
+                })
+                .expect("usage serializes"),
+                stop: "completed".into(),
+                exit_code: 0,
+                body: "prior answer".into(),
+                created_at: "2026-08-08T00:00:00Z".into(),
+            })
+            .expect("prior answer inserts");
+
+        assert_eq!(
+            parent_context_tokens(&tables, "project-current", Agent::Claude, true),
+            200_000
+        );
+        assert_eq!(
+            parent_context_tokens(&tables, "project-current", Agent::Claude, false),
+            0,
+            "a fresh dispatch does not inherit old provider context"
+        );
+
+        let measurement = RunMeasurement {
+            id: "run-current".into(),
+            turn_id: "turn-current".into(),
+            project_id: "project-current".into(),
+            item_id: "item-current".into(),
+            agent: Agent::Claude,
+            mode: "resume",
+            parent_session_id: "session-parent".into(),
+            handoff_bytes: 1_024,
+            request_bytes: 2_048,
+            system_bytes: 4_096,
+            parent_context_tokens: 200_000,
+            started_at: "2026-08-08T00:00:01Z".into(),
+            started: std::time::Instant::now(),
+        };
+        let mut usage = agent_abstraction::Usage::default();
+        usage.context_tokens = Some(210_000);
+        usage.context_window = Some(1_000_000);
+        usage.input_tokens = Some(25);
+        usage.output_tokens = Some(500);
+        usage.cache_read_tokens = Some(190_000);
+        usage.cache_write_tokens = Some(20_000);
+        usage.cost_usd = Some(0.42);
+        measurement
+            .finish(&tables, "session-child", "completed", &usage)
+            .await;
+
+        let encoded = tables
+            .kv_get(&session_run_key("run-current"))
+            .expect("session run reads");
+        let row: SessionRunRecord = serde_json::from_str(&encoded).expect("session run decodes");
+        assert_eq!(row.turn_id, "turn-current");
+        assert_eq!(row.item_id, "item-current");
+        assert_eq!(row.kind, "coordinator");
+        assert_eq!(row.mode, "resume");
+        assert_eq!(row.parent_session_id, "session-parent");
+        assert_eq!(row.session_id, "session-child");
+        assert_eq!(row.handoff_bytes, 1_024);
+        assert_eq!(row.request_bytes, 2_048);
+        assert_eq!(row.system_bytes, 4_096);
+        assert_eq!(row.parent_context_tokens, 200_000);
+        assert_eq!(row.context_tokens, 210_000);
+        assert_eq!(row.cache_read_tokens, 190_000);
+        assert_eq!(row.cache_write_tokens, 20_000);
+        assert_eq!(row.cost_micro, 420_000);
+        assert_eq!(row.status, "completed");
+
+        tables.shutdown().await.expect("tables drain");
         let _ = std::fs::remove_dir_all(dir);
     }
 
