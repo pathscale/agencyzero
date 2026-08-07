@@ -608,6 +608,13 @@ const en = {
   "Analytics sections": "Analytics sections",
   "usage ledger": "usage ledger",
   Efficiency: "Efficiency",
+  "No cache data": "No cache data",
+  "Healthy cache reuse": "Healthy cache reuse",
+  "Mixed cache reuse": "Mixed cache reuse",
+  "Weak cache reuse": "Weak cache reuse",
+  "Cache reuse signal: 10:1 or higher is healthy, 3:1 to 10:1 is mixed, and below 3:1 is weak. This does not measure total spend.":
+    "Cache reuse signal: 10:1 or higher is healthy, 3:1 to 10:1 is mixed, and below 3:1 is weak. This does not measure total spend.",
+  "No turns yet": "No turns yet",
   "Largest turn": "Largest turn",
   Value: "Value",
   Sessions: "Sessions",
