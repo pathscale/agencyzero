@@ -19,7 +19,7 @@ import {
 } from "~/lib/stats";
 import { tx } from "~/stores/i18n";
 import { prefs, setPrefs } from "~/stores/prefs";
-import { QUEUE_REASONS, useNow, useWorkspace } from "~/stores/workspace";
+import { QUEUE_REASONS, reviewRunKey, useNow, useWorkspace } from "~/stores/workspace";
 import type { Agent, Project, PullRequest, Tab } from "~/types";
 
 /**
@@ -637,24 +637,16 @@ function PrChip(props: { pr: PullRequest }): JSX.Element {
  * returns, and a run is only offered where the command is live.
  */
 export function ReviewButtons(props: { pr: PullRequest }): JSX.Element {
-  const { actions, isLive } = useWorkspace();
-  const [pending, setPending] = createSignal<ReadonlySet<Agent>>(new Set());
+  const { actions, isLive, state } = useWorkspace();
 
-  const isPending = (agent: Agent): boolean => pending().has(agent);
+  const isPending = (agent: Agent): boolean =>
+    Boolean(state.reviewing[reviewRunKey(props.pr.url, agent)]);
 
   const review = (agent: Agent): void => {
     if (isPending(agent)) return;
-    setPending((current) => new Set(current).add(agent));
     void actions
       .reviewPullRequest(props.pr.projectId, props.pr.url, agent)
-      .catch((cause) => log.error(`the review failed: ${describeError(cause)}`))
-      .finally(() =>
-        setPending((current) => {
-          const next = new Set(current);
-          next.delete(agent);
-          return next;
-        }),
-      );
+      .catch((cause) => log.error(`the review failed: ${describeError(cause)}`));
   };
 
   const REVIEWERS = [
@@ -675,7 +667,13 @@ export function ReviewButtons(props: { pr: PullRequest }): JSX.Element {
               onClick={() => review(reviewer.agent)}
               title={tx("Review with {agent}", { agent: AGENT_LABELS[reviewer.agent] })}
               aria-label={tx("Review with {agent}", { agent: AGENT_LABELS[reviewer.agent] })}
-              class="flex size-[22px] shrink-0 items-center justify-center rounded-md text-az-faint transition-colors hover:bg-white/5 hover:text-az-body disabled:opacity-40"
+              aria-busy={isPending(reviewer.agent)}
+              data-state={isPending(reviewer.agent) ? "running" : "idle"}
+              class={`flex size-[22px] shrink-0 items-center justify-center rounded-md transition-colors ${
+                isPending(reviewer.agent)
+                  ? "bg-success/15 text-success ring-1 ring-success/45 ring-inset disabled:opacity-100"
+                  : "text-az-faint hover:bg-white/5 hover:text-az-body"
+              }`}
             >
               <Icon
                 name={isPending(reviewer.agent) ? "history" : reviewer.icon}

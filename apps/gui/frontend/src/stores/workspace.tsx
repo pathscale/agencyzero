@@ -92,6 +92,8 @@ type WorkspaceState = {
    * nobody can deliver.
    */
   pendingApprovals: Record<string, PendingApproval>;
+  /** Headless PR reviews currently running, keyed by provider and PR URL. */
+  reviewing: Record<string, boolean>;
   settings: GlobalSettings | null;
   agents: AgentStatus[];
   /** Every agent's catalogue, for the Settings picker. Empty until boot ends. */
@@ -231,6 +233,11 @@ export function monotonicUsage(
   return Math.max(current, incoming);
 }
 
+/** A stable workspace key so review progress survives tab component remounts. */
+export function reviewRunKey(url: string, agent: Agent): string {
+  return `${agent}\0${url}`;
+}
+
 /**
  * Why a prompt is waiting instead of being sent.
  *
@@ -342,6 +349,7 @@ function createWorkspace() {
     agentIo: {},
     rateLimits: {},
     pendingApprovals: {},
+    reviewing: {},
     taskManagerSession: null,
     settings: null,
     agents: [],
@@ -1964,8 +1972,21 @@ function createWorkspace() {
     deleteItem: (id: string) => client().deleteItem(id),
     chooseAttachments: () => client().chooseAttachments(),
     dismissPullRequest: (id: string) => client().dismissPullRequest(id),
-    reviewPullRequest: (projectId: string, url: string, agent: Agent) =>
-      client().reviewPullRequest(projectId, url, agent),
+    async reviewPullRequest(projectId: string, url: string, agent: Agent) {
+      const key = reviewRunKey(url, agent);
+      if (state.reviewing[key]) return;
+      setState("reviewing", key, true);
+      try {
+        await client().reviewPullRequest(projectId, url, agent);
+      } finally {
+        setState(
+          "reviewing",
+          produce((reviewing) => {
+            delete reviewing[key];
+          }),
+        );
+      }
+    },
     refreshPullRequest: (id: string) => client().refreshPullRequest(id),
     answerQuestion: (id: string, answered = true) => client().answerQuestion(id, answered),
     selectQuestionReply(projectId: string, questionId: string) {

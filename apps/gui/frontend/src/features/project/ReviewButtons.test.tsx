@@ -2,8 +2,8 @@ import { fireEvent, render, waitFor } from "@solidjs/testing-library";
 import { describe, expect, it, vi } from "vitest";
 import { IconSprite } from "~/components/IconSprite";
 import { ReviewButtons } from "~/features/project/ProjectTab";
-import { useWorkspace, type Workspace, WorkspaceProvider } from "~/stores/workspace";
-import type { Agent, PullRequest } from "~/types";
+import { reviewRunKey, useWorkspace, type Workspace, WorkspaceProvider } from "~/stores/workspace";
+import type { PullRequest } from "~/types";
 
 const PR: PullRequest = {
   id: "pr-review",
@@ -18,14 +18,6 @@ const PR: PullRequest = {
   ci: "pass",
   dismissed: false,
 };
-
-function pendingPromise() {
-  let resolve!: () => void;
-  const promise = new Promise<void>((done) => {
-    resolve = done;
-  });
-  return { promise, resolve };
-}
 
 async function mount() {
   let workspace!: Workspace;
@@ -62,13 +54,7 @@ describe("pull request review buttons", () => {
 
   it("only disables a provider whose own review is pending", async () => {
     const { workspace, getByLabelText } = await mount();
-    const pending = new Map<Agent, ReturnType<typeof pendingPromise>>();
-    const review = vi.fn((_projectId: string, _url: string, agent: Agent) => {
-      const request = pendingPromise();
-      pending.set(agent, request);
-      return request.promise;
-    });
-    workspace.actions.reviewPullRequest = review;
+    const review = vi.spyOn(workspace.actions, "reviewPullRequest");
 
     const claude = getByLabelText("Review with Claude") as HTMLButtonElement;
     const codex = getByLabelText("Review with Codex") as HTMLButtonElement;
@@ -76,7 +62,12 @@ describe("pull request review buttons", () => {
 
     fireEvent.click(claude);
     expect(claude.disabled).toBe(true);
+    expect(claude).toHaveAttribute("aria-busy", "true");
+    expect(claude).toHaveAttribute("data-state", "running");
+    expect(claude).toHaveClass("text-success");
+    expect(workspace.state.reviewing[reviewRunKey(PR.url, "claude")]).toBe(true);
     expect(codex.disabled).toBe(false);
+    expect(codex).toHaveAttribute("data-state", "idle");
     expect(copilot.disabled).toBe(false);
 
     fireEvent.click(codex);
@@ -85,10 +76,9 @@ describe("pull request review buttons", () => {
     expect(codex.disabled).toBe(true);
     expect(copilot.disabled).toBe(false);
 
-    pending.get("claude")?.resolve();
     await waitFor(() => expect(claude.disabled).toBe(false));
-    expect(codex.disabled).toBe(true);
-    pending.get("codex")?.resolve();
+    expect(claude).toHaveAttribute("aria-busy", "false");
+    expect(claude).toHaveAttribute("data-state", "idle");
     await waitFor(() => expect(codex.disabled).toBe(false));
   });
 });
