@@ -486,6 +486,152 @@ mod restart_tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
+    /// Pull-request refreshes run in background tasks and can overlap on the
+    /// same row. The 0.2.25 incident consumed primary-index event ids without
+    /// queueing the corresponding events, so the persistence analyzer refused
+    /// to drain a later event across the gap. Exercise that exact table and
+    /// mutation shape concurrently, then require both a clean drain and reopen.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn concurrent_pull_request_refreshes_drain_without_event_gaps() {
+        use crate::db::schema::pull_request::{PrFactsByIdQuery, PullRequestRow};
+
+        const TASKS: usize = 16;
+        const UPDATES_PER_TASK: usize = 64;
+        let dir = std::env::temp_dir().join(format!("az-pr-event-gap-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+
+        {
+            let tables = Tables::open(&dir).await.expect("should open");
+            let id = "pr-event-gap".to_string();
+            tables
+                .pull_request
+                .insert(PullRequestRow {
+                    id: id.clone(),
+                    project_id: "project".into(),
+                    url: "https://github.com/pathscale/agencyzero/pull/122".into(),
+                    repo: "pathscale/agencyzero".into(),
+                    number: 122,
+                    branch: "test".into(),
+                    state: "OPEN".into(),
+                    additions: 0,
+                    deletions: 0,
+                    ci: "pending".into(),
+                    dismissed: false,
+                    updated_at: "initial".into(),
+                })
+                .expect("should insert");
+            tables
+                .pull_request
+                .wait_for_ops()
+                .await
+                .expect("initial insert should drain");
+
+            let mut tasks = Vec::with_capacity(TASKS);
+            for task in 0..TASKS {
+                let table = tables.pull_request.clone();
+                let id = id.clone();
+                tasks.push(tokio::spawn(async move {
+                    for update in 0..UPDATES_PER_TASK {
+                        table
+                            .update_pr_facts_by_id(
+                                PrFactsByIdQuery {
+                                    branch: format!("task-{task}"),
+                                    state: "OPEN".into(),
+                                    additions: update as u32,
+                                    deletions: task as u32,
+                                    ci: "pending".into(),
+                                    updated_at: format!("{task}-{update}"),
+                                },
+                                id.clone(),
+                            )
+                            .await
+                            .expect("concurrent update should succeed");
+                    }
+                }));
+            }
+            for task in tasks {
+                task.await.expect("update task should join");
+            }
+
+            tables.shutdown().await.expect("all tables should drain");
+        }
+
+        let reopened = Tables::open(&dir).await.expect("should reopen");
+        assert!(
+            reopened
+                .pull_request
+                .select("pr-event-gap".to_string())
+                .is_some(),
+            "the concurrently refreshed row should remain readable"
+        );
+        reopened
+            .shutdown()
+            .await
+            .expect("reopened tables should drain");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A rejected duplicate must not consume CDC ids that a later operation
+    /// needs to drain across. The incident's primary-index gap skipped exactly
+    /// two ids, the shape an attempted indexed replacement can emit.
+    #[tokio::test]
+    async fn rejected_duplicate_pull_request_insert_does_not_create_an_event_gap() {
+        use crate::db::schema::pull_request::{PrFactsByIdQuery, PullRequestRow};
+
+        let dir = std::env::temp_dir().join(format!("az-pr-duplicate-gap-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let tables = Tables::open(&dir).await.expect("should open");
+        let row = PullRequestRow {
+            id: "pr-duplicate-gap".into(),
+            project_id: "project".into(),
+            url: "https://github.com/pathscale/agencyzero/pull/122".into(),
+            repo: "pathscale/agencyzero".into(),
+            number: 122,
+            branch: "test".into(),
+            state: "OPEN".into(),
+            additions: 0,
+            deletions: 0,
+            ci: "pending".into(),
+            dismissed: false,
+            updated_at: "initial".into(),
+        };
+        tables
+            .pull_request
+            .insert(row.clone())
+            .expect("first insert");
+        tables
+            .pull_request
+            .wait_for_ops()
+            .await
+            .expect("first insert should drain");
+
+        assert!(
+            tables.pull_request.insert(row).is_err(),
+            "the duplicate should be rejected"
+        );
+        tables
+            .pull_request
+            .update_pr_facts_by_id(
+                PrFactsByIdQuery {
+                    branch: "updated-branch-name".into(),
+                    state: "MERGED".into(),
+                    additions: 10,
+                    deletions: 2,
+                    ci: "pass".into(),
+                    updated_at: "updated".into(),
+                },
+                "pr-duplicate-gap".to_string(),
+            )
+            .await
+            .expect("update should succeed");
+
+        tables
+            .shutdown()
+            .await
+            .expect("duplicate rejection must not poison the drain");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     /// The durability guarantee, stated as the failure it prevents.
     ///
     /// No `shutdown` on purpose: that is the drain, and a test that calls it

@@ -155,6 +155,8 @@ pub(crate) struct AppState {
     /// Without one lock, two Import clicks can both observe "unknown" before
     /// either writes the native session id and create duplicate projects.
     chat_imports: tokio::sync::Mutex<()>,
+    /// Coalesces per-chip polling into one whole-project GitHub refresh.
+    pr_refreshes: Arc<prs::ActiveRefreshes>,
     /// Makes every quit, restart, updater, and signal share one drain. The
     /// normal UI path drains asynchronously before asking Tauri to exit; the
     /// native exit callback is only a fallback for exits that bypass IPC.
@@ -202,6 +204,23 @@ impl AppState {
                 Err("the persistence drain already failed or is still in progress; quit remains blocked to protect the store".into())
             };
         }
+        // No new PR refresh can register after `exit_drain_started` became
+        // true. Let one already in flight finish before asking WorkTable if it
+        // is idle, otherwise that refresh can submit a new operation after the
+        // pull-request table has already reported drained.
+        let refresh_deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(15);
+        loop {
+            if self.pr_refreshes.is_empty()? {
+                break;
+            }
+            if tokio::time::Instant::now() >= refresh_deadline {
+                return Err(
+                    "a pull-request refresh did not finish before the persistence drain".into(),
+                );
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        }
+
         let result = self.tables.shutdown().await;
         if result.is_ok() {
             self.exit_drain_succeeded
@@ -1609,6 +1628,7 @@ fn main() {
                 receipts: Arc::default(),
                 settings_write: tokio::sync::Mutex::new(()),
                 chat_imports: tokio::sync::Mutex::new(()),
+                pr_refreshes: Arc::default(),
                 exit_drain_started: std::sync::atomic::AtomicBool::new(false),
                 exit_drain_succeeded: std::sync::atomic::AtomicBool::new(false),
                 agent_restart_scheduled: std::sync::atomic::AtomicBool::new(false),
