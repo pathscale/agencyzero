@@ -668,6 +668,10 @@ const en = {
   finished: "finished",
   "effective cost": "effective cost",
   "includes local estimates": "includes local estimates",
+  "Sol cache write estimate":
+    "~{{tokens}} of Sol cache writes inferred from cache growth between adjacent turns; the latest turn remains unknown",
+  "estimated write": "estimated write",
+  "estimated from adjacent cache reads": "estimated from adjacent cache reads",
   "imported usage coverage":
     "usage recovered for {{recovered}} of {{total}} imported assistant turns",
   "Import chats": "Import chats",

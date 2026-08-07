@@ -692,6 +692,7 @@ export interface UsageDay {
   outputTokens: number;
   cacheReadTokens: number;
   cacheWriteTokens: number;
+  estimatedCacheWriteTokens: number;
   turns: number;
 }
 
@@ -703,6 +704,7 @@ export interface UsageModel {
   outputTokens: number;
   cacheReadTokens: number;
   cacheWriteTokens: number;
+  estimatedCacheWriteTokens: number;
   turns: number;
 }
 
@@ -715,6 +717,7 @@ export interface UsageProject {
   outputTokens: number;
   cacheReadTokens: number;
   cacheWriteTokens: number;
+  estimatedCacheWriteTokens: number;
   turns: number;
 }
 
@@ -730,6 +733,7 @@ export interface UsageSession {
   outputTokens: number;
   cacheReadTokens: number;
   cacheWriteTokens: number;
+  estimatedCacheWriteTokens: number;
   processedTokens: number;
   turns: number;
   lastAt: string;
@@ -760,6 +764,7 @@ export interface UsageLargestTurn {
   inputTokens: number;
   cacheReadTokens: number;
   cacheWriteTokens: number;
+  estimatedCacheWriteTokens: number;
   outputTokens: number;
   processedTokens: number;
   costUsd: number;
@@ -777,6 +782,8 @@ export interface UsageAnalytics {
   totalOutputTokens: number;
   totalCacheReadTokens: number;
   totalCacheWriteTokens: number;
+  /** Inferred Codex cache growth; overlaps input and is not added to processed tokens. */
+  estimatedCacheWriteTokens: number;
   totalProcessedTokens: number;
   largestTurn: UsageLargestTurn | null;
   turns: number;

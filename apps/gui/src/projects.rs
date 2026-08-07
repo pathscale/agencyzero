@@ -4920,6 +4920,7 @@ pub struct UsageDayDto {
     pub output_tokens: i64,
     pub cache_read_tokens: i64,
     pub cache_write_tokens: i64,
+    pub estimated_cache_write_tokens: i64,
     pub turns: usize,
 }
 
@@ -4933,6 +4934,7 @@ pub struct UsageModelDto {
     pub output_tokens: i64,
     pub cache_read_tokens: i64,
     pub cache_write_tokens: i64,
+    pub estimated_cache_write_tokens: i64,
     pub turns: usize,
 }
 
@@ -4947,6 +4949,7 @@ pub struct UsageProjectDto {
     pub output_tokens: i64,
     pub cache_read_tokens: i64,
     pub cache_write_tokens: i64,
+    pub estimated_cache_write_tokens: i64,
     pub turns: usize,
 }
 
@@ -4968,6 +4971,7 @@ pub struct UsageSessionDto {
     pub output_tokens: i64,
     pub cache_read_tokens: i64,
     pub cache_write_tokens: i64,
+    pub estimated_cache_write_tokens: i64,
     pub processed_tokens: i64,
     pub turns: usize,
     pub last_at: String,
@@ -5003,6 +5007,7 @@ pub struct UsageLargestTurnDto {
     pub input_tokens: i64,
     pub cache_read_tokens: i64,
     pub cache_write_tokens: i64,
+    pub estimated_cache_write_tokens: i64,
     pub output_tokens: i64,
     pub processed_tokens: i64,
     pub cost_usd: f64,
@@ -5030,6 +5035,9 @@ pub struct UsageAnalyticsDto {
     pub total_output_tokens: i64,
     pub total_cache_read_tokens: i64,
     pub total_cache_write_tokens: i64,
+    /// Cache growth inferred for Codex from adjacent turns in one native
+    /// session. Kept separate because Codex reports cache writes as zero.
+    pub estimated_cache_write_tokens: i64,
     /// input + output + cache read + cache write, across every priced turn.
     pub total_processed_tokens: i64,
     /// The single heaviest turn, or absent when the ledger is empty.
@@ -5040,6 +5048,72 @@ pub struct UsageAnalyticsDto {
     /// Imported assistant messages, including those whose provider recorded no
     /// recoverable usage metadata.
     pub imported_turns: usize,
+}
+
+/// Infer Codex cache growth from two observations of the same native session.
+///
+/// Codex reports cache reads and total input but currently emits zero writes.
+/// A larger cached prefix on the following turn is direct evidence that the
+/// preceding turn populated more reusable context. The last turn remains
+/// unknown, cache shrinkage is a miss rather than a negative write, and a
+/// model/session boundary is never crossed. Input plus output is a conservative
+/// ceiling on how much new reusable conversation could have appeared between
+/// the observations.
+fn estimate_codex_cache_writes(
+    sessions: &[crate::db::schema::usage_session::UsageSessionRow],
+    cache: &[crate::db::schema::usage_cache::UsageCacheRow],
+    ledger: &[crate::db::schema::usage_ledger::UsageLedgerRow],
+) -> std::collections::HashMap<String, i64> {
+    let cache_by_id: std::collections::HashMap<_, _> =
+        cache.iter().map(|row| (row.id.as_str(), row)).collect();
+    let ledger_by_id: std::collections::HashMap<_, _> =
+        ledger.iter().map(|row| (row.id.as_str(), row)).collect();
+    let mut groups: std::collections::HashMap<(String, String, String), Vec<_>> =
+        std::collections::HashMap::new();
+    for row in sessions
+        .iter()
+        .filter(|row| row.agent == "codex" && !row.session_id.is_empty())
+    {
+        groups
+            .entry((
+                row.project_id.clone(),
+                row.session_id.clone(),
+                row.model.clone(),
+            ))
+            .or_default()
+            .push(row);
+    }
+
+    let mut estimates = std::collections::HashMap::new();
+    for rows in groups.values_mut() {
+        rows.sort_by(|left, right| left.at.cmp(&right.at).then_with(|| left.id.cmp(&right.id)));
+        for pair in rows.windows(2) {
+            let current = pair[0];
+            let next = pair[1];
+            let (Some(current_cache), Some(next_cache), Some(current_ledger)) = (
+                cache_by_id.get(current.id.as_str()),
+                cache_by_id.get(next.id.as_str()),
+                ledger_by_id.get(current.id.as_str()),
+            ) else {
+                continue;
+            };
+            if current_cache.cache_write_tokens != 0 {
+                continue;
+            }
+            let growth = next_cache
+                .cache_read_tokens
+                .saturating_sub(current_cache.cache_read_tokens);
+            let ceiling = current_ledger
+                .input_tokens
+                .saturating_add(current_ledger.output_tokens)
+                .max(0);
+            let estimated = growth.min(ceiling);
+            if estimated > 0 {
+                estimates.insert(current.id.clone(), estimated);
+            }
+        }
+    }
+    estimates
 }
 
 fn effective_ledger_cost(
@@ -5167,6 +5241,7 @@ pub async fn get_usage_analytics(state: State<'_, AppState>) -> Result<UsageAnal
         .collect();
     let cache_by_id: std::collections::HashMap<_, _> =
         cache.iter().map(|row| (row.id.as_str(), row)).collect();
+    let estimated_writes = estimate_codex_cache_writes(&usage_sessions, &cache, &ledger);
     let mut total_usd = 0.0;
     let mut estimated_cost_usd = 0.0;
     let mut total_input = 0i64;
@@ -5174,6 +5249,7 @@ pub async fn get_usage_analytics(state: State<'_, AppState>) -> Result<UsageAnal
 
     for row in &ledger {
         let split = cache_by_id.get(row.id.as_str()).copied();
+        let estimated_write = estimated_writes.get(&row.id).copied().unwrap_or(0);
         let (cost_usd, estimated) = effective_ledger_cost(row, split);
         total_usd += cost_usd;
         if estimated {
@@ -5191,6 +5267,7 @@ pub async fn get_usage_analytics(state: State<'_, AppState>) -> Result<UsageAnal
         day.cost_usd += cost_usd;
         day.input_tokens += row.input_tokens;
         day.output_tokens += row.output_tokens;
+        day.estimated_cache_write_tokens += estimated_write;
         day.turns += 1;
 
         let model = by_model
@@ -5202,6 +5279,7 @@ pub async fn get_usage_analytics(state: State<'_, AppState>) -> Result<UsageAnal
         model.cost_usd += cost_usd;
         model.input_tokens += row.input_tokens;
         model.output_tokens += row.output_tokens;
+        model.estimated_cache_write_tokens += estimated_write;
         model.turns += 1;
 
         let project = by_project
@@ -5217,6 +5295,7 @@ pub async fn get_usage_analytics(state: State<'_, AppState>) -> Result<UsageAnal
         project.cost_usd += cost_usd;
         project.input_tokens += row.input_tokens;
         project.output_tokens += row.output_tokens;
+        project.estimated_cache_write_tokens += estimated_write;
         project.turns += 1;
 
         if let Some(owner) = session_by_ledger.get(row.id.as_str()) {
@@ -5247,6 +5326,7 @@ pub async fn get_usage_analytics(state: State<'_, AppState>) -> Result<UsageAnal
                 session.cache_read_tokens += split.cache_read_tokens;
                 session.cache_write_tokens += split.cache_write_tokens;
             }
+            session.estimated_cache_write_tokens += estimated_write;
             session.processed_tokens = session.input_tokens
                 + session.output_tokens
                 + session.cache_read_tokens
@@ -5298,6 +5378,7 @@ pub async fn get_usage_analytics(state: State<'_, AppState>) -> Result<UsageAnal
     // Fold the cache split onto the per-day and per-model rows.
     let mut total_read = 0i64;
     let mut total_write = 0i64;
+    let total_estimated_write = estimated_writes.values().copied().sum();
     for (day_key, day) in &mut by_day {
         if let Some((read, write)) = cache_by_day.get(day_key) {
             day.cache_read_tokens = *read;
@@ -5353,6 +5434,7 @@ pub async fn get_usage_analytics(state: State<'_, AppState>) -> Result<UsageAnal
             row.input_tokens
         };
         let processed = input + read + write + row.output_tokens;
+        let estimated_write = estimated_writes.get(&row.id).copied().unwrap_or(0);
         let bigger = largest
             .as_ref()
             .is_none_or(|current| processed > current.processed_tokens);
@@ -5363,6 +5445,7 @@ pub async fn get_usage_analytics(state: State<'_, AppState>) -> Result<UsageAnal
                 input_tokens: input,
                 cache_read_tokens: read,
                 cache_write_tokens: write,
+                estimated_cache_write_tokens: estimated_write,
                 output_tokens: row.output_tokens,
                 processed_tokens: processed,
                 cost_usd: effective_ledger_cost(row, cache_by_id.get(row.id.as_str()).copied()).0,
@@ -5391,6 +5474,7 @@ pub async fn get_usage_analytics(state: State<'_, AppState>) -> Result<UsageAnal
         total_output_tokens: total_output,
         total_cache_read_tokens: total_read,
         total_cache_write_tokens: total_write,
+        estimated_cache_write_tokens: total_estimated_write,
         total_processed_tokens: total_input + total_output + total_read + total_write,
         largest_turn: largest,
         turns: ledger.len(),
@@ -10241,6 +10325,80 @@ mod tests {
 
         assert!(estimated);
         assert!((cost - 0.013).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn codex_cache_writes_are_inferred_only_between_comparable_session_turns() {
+        let ledger_row =
+            |id: &str, input: i64, output: i64| crate::db::schema::usage_ledger::UsageLedgerRow {
+                id: id.into(),
+                at: id.into(),
+                day: "2026-08-07".into(),
+                project_id: "project-a".into(),
+                model: "gpt-5.6-sol".into(),
+                cost_micro: 0,
+                input_tokens: input,
+                output_tokens: output,
+            };
+        let cache_row =
+            |id: &str, read: i64, write: i64| crate::db::schema::usage_cache::UsageCacheRow {
+                id: id.into(),
+                at: id.into(),
+                day: "2026-08-07".into(),
+                project_id: "project-a".into(),
+                model: "gpt-5.6-sol".into(),
+                cache_read_tokens: read,
+                cache_write_tokens: write,
+                input_tokens: 0,
+            };
+        let session_row = |id: &str, agent: &str, session: &str| {
+            crate::db::schema::usage_session::UsageSessionRow {
+                id: id.into(),
+                project_id: "project-a".into(),
+                agent: agent.into(),
+                session_id: session.into(),
+                model: "gpt-5.6-sol".into(),
+                at: id.into(),
+            }
+        };
+        let ledger = vec![
+            ledger_row("a", 50, 10),
+            ledger_row("b", 40, 5),
+            ledger_row("c", 30, 5),
+            ledger_row("d", 30, 5),
+        ];
+        let cache = vec![
+            cache_row("a", 100, 0),
+            cache_row("b", 180, 0),
+            cache_row("c", 10, 7),
+            cache_row("d", 30, 0),
+        ];
+        let sessions = vec![
+            session_row("a", "codex", "session-1"),
+            session_row("b", "codex", "session-1"),
+            session_row("c", "codex", "session-2"),
+            session_row("d", "codex", "session-2"),
+        ];
+
+        let estimated = estimate_codex_cache_writes(&sessions, &cache, &ledger);
+
+        assert_eq!(
+            estimated.get("a"),
+            Some(&60),
+            "growth is capped by known input plus output"
+        );
+        assert!(!estimated.contains_key("b"), "the latest turn is unknown");
+        assert!(
+            !estimated.contains_key("c"),
+            "a provider-reported write is never replaced"
+        );
+        assert!(!estimated.contains_key("d"), "the latest turn is unknown");
+
+        let mut claude = sessions[..2].to_vec();
+        for row in &mut claude {
+            row.agent = "claude".into();
+        }
+        assert!(estimate_codex_cache_writes(&claude, &cache, &ledger).is_empty());
     }
 
     #[test]
