@@ -48,6 +48,7 @@ describe("analytics refresh", () => {
   it("keeps the headline compact and exposes each report as a tab", async () => {
     const screen = render(() => <AnalyticsTab />);
     await waitFor(() => expect(screen.getByRole("tablist")).toBeInTheDocument());
+    expect(screen.getByRole("tablist")).toHaveClass("shrink-0");
 
     expect(screen.getAllByRole("tab")).toHaveLength(5);
     expect(screen.getByRole("tab", { name: "Value" })).toHaveAttribute("aria-selected", "true");

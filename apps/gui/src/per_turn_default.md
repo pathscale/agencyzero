@@ -47,6 +47,8 @@ silent no-op.
 An id may be shortened to any unique prefix. Repeating a state you already
 reported is free. Never address a row by its title.
 
+Write full item IDs as plain text, not code, so AgencyZero makes them clickable.
+
 ## Obligations
 
 - **Report every pull request you open with `pr.link`, in the same turn.** A PR

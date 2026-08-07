@@ -119,7 +119,7 @@ export function AnalyticsTab(): JSX.Element {
               <div
                 role="tablist"
                 aria-label={tx("Analytics sections")}
-                class="flex items-center gap-1 overflow-x-auto rounded-lg border border-az-hairline bg-base-200/55 p-1"
+                class="flex shrink-0 items-center gap-1 overflow-x-auto rounded-lg border border-az-hairline bg-base-200/55 p-1"
               >
                 <For each={ANALYTICS_TABS}>
                   {(tab, index) => {

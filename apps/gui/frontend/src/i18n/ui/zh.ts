@@ -801,6 +801,16 @@ const zh = {
   "Fork {name} into a fresh chat": "将 {name} 分支到全新聊天",
   "Prepare item fork": "准备条目分支",
   "Item context": "条目上下文",
+  "Description / sub-items": "描述 / 子条目",
+  "Details / sub-items": "详细信息 / 子条目",
+  "Complete the work": "完成工作",
+  "Report verification and anything still open": "报告验证结果和任何未完成事项",
+  "Use one Markdown bullet or checklist line per sub-item.":
+    "每个子条目使用一行 Markdown 项目符号或检查清单。",
+  "Edit item description": "编辑条目描述",
+  "Edit the description for {name}": "编辑 {name} 的描述",
+  "Add description": "添加描述",
+  "Save description": "保存描述",
   "Describe constraints, acceptance criteria, decisions, and useful pointers…":
     "描述约束、验收标准、已有决定和有用的参考信息…",
   "Sent when this item starts in a fresh fork or focused run. Ordinary compact item snapshots omit it.":
