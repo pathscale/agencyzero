@@ -18,6 +18,50 @@ use crate::db::schema::pull_request::{
 };
 use crate::db::tables::Tables;
 
+/// One in-flight GitHub refresh per project.
+///
+/// The frontend has one refresh affordance per PR chip, while the backend
+/// deliberately refreshes the whole project in one GraphQL request. Without a
+/// single-flight guard, ten chips start ten identical whole-project refreshes
+/// at once and multiply every persistence mutation by ten.
+#[derive(Default)]
+pub(crate) struct ActiveRefreshes {
+    projects: std::sync::Mutex<std::collections::HashSet<String>>,
+}
+
+impl ActiveRefreshes {
+    fn begin(self: &std::sync::Arc<Self>, project_id: &str) -> Option<RefreshLease> {
+        let mut projects = self.projects.lock().ok()?;
+        if !projects.insert(project_id.to_string()) {
+            return None;
+        }
+        Some(RefreshLease {
+            active: self.clone(),
+            project_id: project_id.to_string(),
+        })
+    }
+
+    pub(crate) fn is_empty(&self) -> Result<bool, String> {
+        self.projects
+            .lock()
+            .map(|projects| projects.is_empty())
+            .map_err(|_| "the pull-request refresh tracker is unavailable".to_string())
+    }
+}
+
+struct RefreshLease {
+    active: std::sync::Arc<ActiveRefreshes>,
+    project_id: String,
+}
+
+impl Drop for RefreshLease {
+    fn drop(&mut self) {
+        if let Ok(mut projects) = self.active.projects.lock() {
+            projects.remove(&self.project_id);
+        }
+    }
+}
+
 #[derive(Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct PullRequestDto {
@@ -277,7 +321,30 @@ fn ci_word(state: Option<&str>) -> String {
 ///
 /// `gh` keeps doing the authentication. Nothing here reads or stores a token.
 pub fn refresh_project(app: AppHandle, project_id: String) {
+    let lease = {
+        let state = app.state::<AppState>();
+        if state
+            .exit_drain_started
+            .load(std::sync::atomic::Ordering::Acquire)
+        {
+            return;
+        }
+        let Some(lease) = state.pr_refreshes.begin(&project_id) else {
+            return;
+        };
+        // Close the race where shutdown begins after the first check but
+        // before this refresh registers itself.
+        if state
+            .exit_drain_started
+            .load(std::sync::atomic::Ordering::Acquire)
+        {
+            drop(lease);
+            return;
+        }
+        lease
+    };
     tauri::async_runtime::spawn(async move {
+        let _lease = lease;
         let state = app.state::<AppState>();
         let known = canonical_rows(
             state
@@ -681,7 +748,9 @@ pub fn refresh_pull_request(app: AppHandle, id: String) {
 
 #[cfg(test)]
 mod tests {
-    use super::{canonical_rows, pr_urls, same_pr_identity};
+    use std::sync::Arc;
+
+    use super::{ActiveRefreshes, canonical_rows, pr_urls, same_pr_identity};
     use crate::db::schema::pull_request::PullRequestRow;
 
     fn row(id: &str, state: &str, dismissed: bool) -> PullRequestRow {
@@ -755,6 +824,23 @@ mod tests {
 
         assert_eq!(canonical.len(), 1);
         assert_eq!(canonical[0].id, "current");
+    }
+
+    #[test]
+    fn project_refreshes_are_single_flight_and_release_on_drop() {
+        let active = Arc::new(ActiveRefreshes::default());
+        let first = active.begin("project").expect("first refresh starts");
+        assert!(active.begin("project").is_none(), "duplicate is coalesced");
+        assert!(
+            active.begin("another-project").is_some(),
+            "independent projects may refresh together"
+        );
+
+        drop(first);
+        assert!(
+            active.begin("project").is_some(),
+            "the next polling interval can refresh after completion"
+        );
     }
 
     #[test]
