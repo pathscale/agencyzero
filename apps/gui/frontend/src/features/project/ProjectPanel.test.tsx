@@ -46,4 +46,28 @@ describe("the project side panel", () => {
     expect(panel.classList).toContain("az-scroll");
     expect(panel.classList).toContain("min-h-0");
   });
+
+  it("keeps the lower-token fork action visible without waiting for hover", async () => {
+    let workspace!: Workspace;
+
+    function Gate() {
+      workspace = useWorkspace();
+      return (
+        <Show when={workspace.state.boot.status === "ready"}>
+          <ProjectPanel project={{ ...PROJECT, id: "worktable" }} />
+        </Show>
+      );
+    }
+
+    const screen = render(() => (
+      <WorkspaceProvider>
+        <Gate />
+      </WorkspaceProvider>
+    ));
+    await waitFor(() => expect(workspace.state.boot.status).toBe("ready"), { timeout: 5_000 });
+
+    const fork = screen.getAllByLabelText(/Fork .* into a fresh chat/)[0];
+    expect(fork.classList).not.toContain("opacity-0");
+    expect(fork.getAttribute("title")).toContain("avoid resending");
+  });
 });

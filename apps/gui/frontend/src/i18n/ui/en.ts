@@ -812,7 +812,10 @@ const en = {
     "The task manager cannot send prompts until its selected agent is installed, compatible, and signed in.",
   Fork: "Fork",
   "Open this item's fork": "Open this item's fork",
+  "Open this item's lower-token fork": "Open this item's lower-token fork",
   "Fork into a fresh chat": "Fork into a fresh chat",
+  "Start a fresh fork to avoid resending this project's long chat":
+    "Start a fresh fork to avoid resending this project's long chat",
   "Open the fork for {name}": "Open the fork for {name}",
   "Fork {name} into a fresh chat": "Fork {name} into a fresh chat",
   "Return to the parent item": "Return to the parent item",

@@ -241,21 +241,23 @@ export function ProjectTab(props: { tab: Tab; project: Project }): JSX.Element {
                       if (!actions.revealItem(fork().itemId)) actions.openProject(fork().parentId);
                     }}
                     title={tx("Return to the parent item")}
-                    class="min-w-0 truncate font-semibold text-[14.5px] text-az-title underline decoration-primary/35 decoration-dotted underline-offset-4 transition-colors hover:text-primary"
+                    class="inline-flex min-w-0 items-center gap-1.5 font-semibold text-[14.5px] text-primary transition-colors hover:text-primary/80"
                   >
-                    {fork().parent?.name ?? tx("Parent project")} ·{" "}
-                    {fork().item?.title ?? props.project.name}
+                    <span class="truncate">
+                      {fork().parent?.name ?? tx("Parent project")} ·{" "}
+                      {fork().item?.title ?? props.project.name}
+                    </span>
+                    <Icon name="arrow-up" class="shrink-0 -rotate-90 text-[12px]" />
                   </button>
                 </div>
               )}
             </Show>
             {/*
-            Turns and cost live here rather than under the prompt. They describe
-            the conversation as a whole, which is what this label already names,
-            and moving them up leaves the composer row for the controls that act
-            on the next message.
+            Conversation totals float at the chat's top-right. Absolute
+            positioning keeps the title row available to the project name while
+            leaving next-turn controls in the composer.
           */}
-            <span class="flex min-w-0 shrink items-center gap-2 overflow-hidden rounded-full border border-az-hairline bg-base-300 px-2.5 py-0.5 font-mono text-[11px] text-az-muted">
+            <span class="absolute top-[62px] right-4 z-20 flex min-w-0 max-w-[calc(100%-2rem)] items-center gap-2 overflow-hidden rounded-full border border-primary/18 bg-base-300/94 px-2.5 py-0.5 font-mono text-[11px] text-az-muted shadow-md backdrop-blur-sm">
               {/* No leading agent label: the 7-day readout at the end already says
                 "Claude 7d …", so a "Claude ·" prefix here was the same word
                 twice. The turn count leads instead. */}

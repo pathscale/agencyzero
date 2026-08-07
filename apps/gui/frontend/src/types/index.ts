@@ -187,6 +187,8 @@ export interface ProjectItem {
   reference: string | null;
   /** Latest tracked content/status mutation; absent for pre-tracking rows. */
   updatedAt?: string;
+  /** Preserved as a fork anchor but hidden from ordinary item lists. */
+  archived?: boolean;
 }
 
 /**
