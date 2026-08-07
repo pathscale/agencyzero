@@ -40,6 +40,7 @@ struct WorkerHandoffInput {
     item_reference: String,
     objective: String,
     acceptance: String,
+    item_context: String,
     roots: Vec<String>,
     notes: String,
     memory_pointers: Vec<String>,
@@ -61,6 +62,7 @@ fn truncate_utf8(value: &str, max_bytes: usize) -> String {
 fn render_handoff(input: WorkerHandoffInput) -> WorkerHandoff {
     let objective = truncate_utf8(&input.objective, MAX_OBJECTIVE_BYTES);
     let acceptance = truncate_utf8(&input.acceptance, MAX_ACCEPTANCE_BYTES);
+    let item_context = truncate_utf8(&input.item_context, MAX_NOTES_BYTES);
     let notes = truncate_utf8(&input.notes, MAX_NOTES_BYTES);
     let roots = input
         .roots
@@ -105,6 +107,7 @@ Keep the handback concise. The parent project receives this result; your transcr
          - Item reference: {}\n\n\
          ## Objective (owner-authored dispatch input)\n{}\n\n\
          ## Acceptance criteria (owner-authored dispatch input)\n{}\n\n\
+         ## Item context (owner-authored, sent at work start)\n{}\n\n\
          ## Workspace roots (AgencyZero project configuration)\n{}\n\n\
          ## Durable operating notes (AgencyZero project memory)\n{}\n\n\
          ## Durable memory pointers\n{}\n\n\
@@ -127,6 +130,11 @@ Keep the handback concise. The parent project receives this result; your transcr
             "Complete the named item and report verification."
         } else {
             &acceptance
+        },
+        if item_context.is_empty() {
+            "none"
+        } else {
+            &item_context
         },
         if roots.is_empty() { "- none" } else { &roots },
         if notes.is_empty() { "none" } else { &notes },
@@ -191,6 +199,7 @@ pub(crate) fn build_item_handoff(
         .filter(|pr| !pr.dismissed)
         .map(|pr| pr.url)
         .collect();
+    let item_context = crate::projects::item_context(tables, &item.id);
 
     Ok(render_handoff(WorkerHandoffInput {
         project_id: project.id,
@@ -201,6 +210,7 @@ pub(crate) fn build_item_handoff(
         item_reference: item.reference,
         objective: objective.to_string(),
         acceptance: acceptance.to_string(),
+        item_context,
         roots,
         notes,
         memory_pointers: memory_pointers(&memory_dir),
@@ -223,6 +233,7 @@ mod tests {
             item_reference: String::new(),
             objective: "x".repeat(20_000),
             acceptance: "y".repeat(20_000),
+            item_context: "The owner wants the preview editable before dispatch.".into(),
             roots: vec!["/repo".into()],
             notes: "z".repeat(20_000),
             memory_pointers: vec!["/memory/decision.md".into()],
@@ -233,6 +244,7 @@ mod tests {
         assert!(handoff.text.contains("[truncated at 4000 bytes]"));
         assert!(handoff.text.contains("AgencyZero durable state"));
         assert!(handoff.text.contains("Handback contract"));
+        assert!(handoff.text.contains("preview editable before dispatch"));
         assert!(
             handoff
                 .text

@@ -14,6 +14,33 @@ describe("MessageBody", () => {
     expect(container.querySelectorAll("p")).toHaveLength(1);
   });
 
+  it("renders newline-separated bullets as a real list", () => {
+    const body = [
+      "Release scope:",
+      "",
+      "- Split the Turn bar.",
+      "- Add editable `Item context`.",
+      "- Preserve handbacks.",
+    ].join("\n");
+    const { container } = render(() => <MessageBody body={body} />);
+
+    expect(container.querySelectorAll("ul > li")).toHaveLength(3);
+    expect([...container.querySelectorAll("li")].map((item) => item.textContent)).toEqual([
+      "Split the Turn bar.",
+      "Add editable Item context.",
+      "Preserve handbacks.",
+    ]);
+    expect(container.querySelector("li code")).toHaveTextContent("Item context");
+  });
+
+  it("renders numbered lines as an ordered list with their starting number", () => {
+    const { container } = render(() => <MessageBody body={"3. Third\n4. Fourth"} />);
+    const list = container.querySelector("ol");
+
+    expect(list?.getAttribute("start")).toBe("3");
+    expect(container.querySelectorAll("ol > li")).toHaveLength(2);
+  });
+
   it("renders **bold** as emphasis and leaves the delimiters out", () => {
     const { container } = render(() => <MessageBody body="**Phase A** ships as 0.9.3" />);
     const strong = container.querySelector("strong");

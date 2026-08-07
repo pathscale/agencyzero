@@ -73,6 +73,7 @@ export async function copyText(text: string): Promise<boolean> {
 type Block =
   | { kind: "code"; text: string; lang: string }
   | { kind: "prose"; text: string }
+  | { kind: "list"; ordered: boolean; start: number; items: string[] }
   | {
       kind: "table";
       header: string[];
@@ -149,7 +150,7 @@ function tableAlignments(cells: string[]): ("left" | "center" | "right" | null)[
  * stays prose. Everything that is not a table falls back to a prose block, which
  * keeps the paragraph-splitting downstream exactly as it was.
  */
-function extractTables(text: string): Block[] {
+function extractProseStructures(text: string): Block[] {
   const lines = text.split("\n");
   const blocks: Block[] = [];
   let prose: string[] = [];
@@ -178,6 +179,24 @@ function extractTables(text: string): Block[] {
         i = j - 1;
         continue;
       }
+    }
+
+    const firstItem = /^\s*(?:(\d+)[.)]|[-*+])\s+(.+)$/.exec(line);
+    if (firstItem) {
+      flush();
+      const ordered = firstItem[1] !== undefined;
+      const start = ordered ? Number(firstItem[1]) : 1;
+      const items = [firstItem[2]];
+      let j = i + 1;
+      while (j < lines.length) {
+        const item = /^\s*(?:(\d+)[.)]|[-*+])\s+(.+)$/.exec(lines[j]);
+        if (!item || (item[1] !== undefined) !== ordered) break;
+        items.push(item[2]);
+        j += 1;
+      }
+      blocks.push({ kind: "list", ordered, start, items });
+      i = j - 1;
+      continue;
     }
     prose.push(line);
   }
@@ -211,7 +230,7 @@ export function splitBlocks(body: string): Block[] {
   const flushProse = () => {
     const text = prose.join("\n");
     // Tables live only outside fences, so this prose path is where they surface.
-    if (text.trim().length > 0) blocks.push(...extractTables(text));
+    if (text.trim().length > 0) blocks.push(...extractProseStructures(text));
     prose = [];
   };
 
@@ -280,6 +299,19 @@ export function MessageBody(props: { body: string; class?: string }): JSX.Elemen
             <CodeBlock text={block.text} lang={block.lang} />
           ) : block.kind === "table" ? (
             <TableBlock header={block.header} rows={block.rows} align={block.align} />
+          ) : block.kind === "list" ? (
+            <Show
+              when={block.ordered}
+              fallback={
+                <ul class="list-outside list-disc space-y-1 pl-5">
+                  <For each={block.items}>{(item) => <li>{renderInline(item)}</li>}</For>
+                </ul>
+              }
+            >
+              <ol start={block.start} class="list-outside list-decimal space-y-1 pl-5">
+                <For each={block.items}>{(item) => <li>{renderInline(item)}</li>}</For>
+              </ol>
+            </Show>
           ) : (
             <For
               each={block.text

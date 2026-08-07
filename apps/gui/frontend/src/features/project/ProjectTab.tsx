@@ -257,61 +257,58 @@ export function ProjectTab(props: { tab: Tab; project: Project }): JSX.Element {
             positioning keeps the title row available to the project name while
             leaving next-turn controls in the composer.
           */}
-            <span class="absolute top-full right-3 z-20 flex min-w-0 max-w-[calc(100%-1.5rem)] items-center gap-2 overflow-hidden rounded-b-lg border border-primary/18 bg-base-300/94 px-3 py-1 font-mono text-[11px] text-az-muted shadow-md backdrop-blur-sm">
-              {/* No leading agent label: the 7-day readout at the end already says
+            <Show when={totals().turns > 0}>
+              <span class="absolute top-full right-3 z-20 flex min-w-0 max-w-[calc(100%-1.5rem)] items-center gap-2 overflow-hidden rounded-b-lg border border-primary/38 border-t-0 bg-base-200 px-3 py-1 font-mono text-[11px] text-az-muted shadow-[0_7px_18px_rgba(0,0,0,0.38)]">
+                {/* No leading agent label: the 7-day readout at the end already says
                 "Claude 7d …", so a "Claude ·" prefix here was the same word
                 twice. The turn count leads instead. */}
-              <Show when={totals().turns > 0}>
-                <span class="font-semibold text-az-body">
-                  {tx("Turn")} {totals().turns}
-                </span>
-                <span class="text-az-faint">·</span>
-                {/* The session's summed consumption — where the tokens went. The
+                <Show when={totals().turns > 0}>
+                  <span class="font-semibold text-az-body">
+                    {tx("Turn")} {totals().turns}
+                  </span>
+                  <span class="text-az-faint">·</span>
+                  {/* The session's summed consumption — where the tokens went. The
                   context readout under the composer answers a different
                   question (how full the window is), so both exist. Coloured
                   accent, not flat grey: these are the numbers worth reading. */}
-                <span title={costTitle()} class="font-semibold text-accent">
-                  {compactCount(totals().tokens)} {tx("tok")}
-                </span>
-                <span class="text-az-faint">·</span>
-                {/* A leading ~ marks a partial total (some turns reported no
+                  <span title={costTitle()} class="font-semibold text-accent">
+                    {compactCount(totals().tokens)} {tx("tok")}
+                  </span>
+                  <span class="text-az-faint">·</span>
+                  {/* A leading ~ marks a partial total (some turns reported no
                   usage) without stealing a whole word from a tight header — the
                   hover still explains it. */}
+                  <span
+                    title={
+                      totals().reported < totals().turns
+                        ? tx("Some turns reported no usage")
+                        : costTitle()
+                    }
+                    class="font-semibold text-accent"
+                  >
+                    {costs().missing > 0 || costs().estimated ? "~" : ""}
+                    {costLabel(costs().usd)}
+                  </span>
+                </Show>
+              </span>
+            </Show>
+
+            <Show when={providerUsage()}>
+              {(usage) => (
                 <span
-                  title={
-                    totals().reported < totals().turns
-                      ? tx("Some turns reported no usage")
-                      : costTitle()
-                  }
-                  class="font-semibold text-accent"
+                  class={`min-w-0 max-w-[300px] shrink truncate rounded-md border px-2.5 py-1 font-mono font-semibold text-[10.5px] ${
+                    usage().severity === "high"
+                      ? "border-error/32 bg-error/10 text-error"
+                      : usage().severity === "mid"
+                        ? "border-warning/32 bg-warning/10 text-warning"
+                        : "border-primary/20 bg-az-inset text-az-body"
+                  }`}
+                  title={usage().title}
                 >
-                  {costs().missing > 0 || costs().estimated ? "~" : ""}
-                  {costLabel(costs().usd)}
+                  {usage().label}
                 </span>
-              </Show>
-              <Show when={providerUsage()}>
-                {(usage) => (
-                  <>
-                    <span class="text-az-faint">·</span>
-                    {/* The 7-day window is the number that decides whether you can
-                      keep working today, so it is not left flat grey: it warms
-                      toward warning as it fills and goes error past 90%. */}
-                    <span
-                      class={`font-semibold ${
-                        usage().severity === "high"
-                          ? "text-error"
-                          : usage().severity === "mid"
-                            ? "text-warning"
-                            : "text-az-body"
-                      }`}
-                      title={usage().title}
-                    >
-                      {usage().label}
-                    </span>
-                  </>
-                )}
-              </Show>
-            </span>
+              )}
+            </Show>
 
             <Show when={likelyCacheBreak()}>
               <span

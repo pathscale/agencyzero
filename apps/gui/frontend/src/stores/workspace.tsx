@@ -272,6 +272,8 @@ export type QueueReason = "busy" | "compacting";
 export type QueuedPrompt = {
   body: string;
   reason: QueueReason;
+  /** Focused item whose full context belongs on this work-start turn. */
+  itemId?: string;
   /** Reuse this visible transcript row instead of appending the words twice. */
   messageId?: string;
   /** Question association that must survive waiting and retry. */
@@ -1011,7 +1013,23 @@ function createWorkspace() {
   }
 
   function projectTab(project: Project, transcript = state.messages[project.id] ?? []): Tab {
-    const selection = projectSelection(project, transcript);
+    const parent = project.forkedFrom?.itemId
+      ? state.projects.find((candidate) => candidate.id === project.forkedFrom?.projectId)
+      : undefined;
+    const parentTab = parent
+      ? state.tabs.find((candidate) => candidate.projectId === parent.id)
+      : undefined;
+    const selection = parentTab
+      ? {
+          agent: parentTab.agent,
+          model: parentTab.model,
+          permission: parentTab.permission,
+          effort: parentTab.effort,
+          extraThinking: parentTab.extraThinking,
+        }
+      : parent
+        ? projectSelection(parent, state.messages[parent.id] ?? [])
+        : projectSelection(project, transcript);
     return {
       key: project.id,
       kind: "project",
@@ -1019,8 +1037,9 @@ function createWorkspace() {
       label: project.name,
       agent: selection.agent,
       model: selection.model,
-      effort: defaultEffort(),
-      extraThinking: prefs.lastExtraThinking,
+      effort: "effort" in selection ? selection.effort : defaultEffort(),
+      extraThinking:
+        "extraThinking" in selection ? selection.extraThinking : prefs.lastExtraThinking,
       permission: selection.permission,
       status: "quiet",
     };
@@ -1744,20 +1763,27 @@ function createWorkspace() {
     permission: Permission,
     effort?: string,
   ): void {
-    const index = state.tabs.findIndex((tab) => tab.key === key);
-    if (index < 0) return;
+    const selectedProject = state.projects.find((project) => project.id === key);
+    const ownerKey = selectedProject?.forkedFrom?.itemId
+      ? selectedProject.forkedFrom.projectId
+      : key;
     // The selection is frontend state. A sent message records it durably, and
     // reopening the project restores it from that ordered conversation.
     const nextPermission = compatiblePermission(state.agents, agent, permission);
     // Effort only when the caller sent one: the model and permission pills
     // must not clobber a level someone picked a moment ago.
-    setState(
-      "tabs",
-      index,
-      effort === undefined
-        ? { agent, model, permission: nextPermission }
-        : { agent, model, permission: nextPermission, effort },
-    );
+    state.tabs.forEach((tab, index) => {
+      const project = state.projects.find((candidate) => candidate.id === tab.projectId);
+      const tabOwner = project?.forkedFrom?.itemId ? project.forkedFrom.projectId : tab.key;
+      if (tabOwner !== ownerKey) return;
+      setState(
+        "tabs",
+        index,
+        effort === undefined
+          ? { agent, model, permission: nextPermission }
+          : { agent, model, permission: nextPermission, effort },
+      );
+    });
   }
 
   /**
@@ -1766,9 +1792,15 @@ function createWorkspace() {
    * the composer greys the control out for the other agents.
    */
   function setTabExtraThinking(key: string, enabled: boolean): void {
-    const index = state.tabs.findIndex((tab) => tab.key === key);
-    if (index < 0) return;
-    setState("tabs", index, { extraThinking: enabled });
+    const selectedProject = state.projects.find((project) => project.id === key);
+    const ownerKey = selectedProject?.forkedFrom?.itemId
+      ? selectedProject.forkedFrom.projectId
+      : key;
+    state.tabs.forEach((tab, index) => {
+      const project = state.projects.find((candidate) => candidate.id === tab.projectId);
+      const tabOwner = project?.forkedFrom?.itemId ? project.forkedFrom.projectId : tab.key;
+      if (tabOwner === ownerKey) setState("tabs", index, { extraThinking: enabled });
+    });
     setPrefs("lastExtraThinking", enabled);
   }
 
@@ -1929,6 +1961,7 @@ function createWorkspace() {
     study?: StudyTurnMetadata,
     retryMessageId?: string,
     replyQuestionId?: string,
+    itemId?: string,
   ): Promise<void> => {
     const tab = state.tabs.find((candidate) => candidate.projectId === projectId);
     requireReadyAgent(tab?.agent ?? defaultAgent());
@@ -1937,6 +1970,7 @@ function createWorkspace() {
       body,
       retryMessageId,
       replyQuestionId,
+      itemId,
       agent: tab?.agent,
       model: tab?.model,
       permission: tab?.permission,
@@ -1969,10 +2003,11 @@ function createWorkspace() {
     study?: StudyTurnMetadata,
     messageId?: string,
     replyQuestionId?: string,
+    itemId?: string,
   ): void {
     setState("queued", projectId, (waiting = []) => [
       ...waiting,
-      { body, reason, study, messageId, replyQuestionId },
+      { body, reason, study, messageId, replyQuestionId, itemId },
     ]);
   }
 
@@ -1981,6 +2016,7 @@ function createWorkspace() {
     body: string,
     study?: StudyTurnMetadata,
     replyQuestionId?: string,
+    itemId?: string,
   ): Promise<void> => {
     const tab = state.tabs.find((candidate) => candidate.projectId === projectId);
     requireReadyAgent(tab?.agent ?? defaultAgent());
@@ -1991,7 +2027,7 @@ function createWorkspace() {
      * that a message vanishing into it looks like the app dropping it.
      */
     if (state.compacting[projectId]) {
-      enqueue(projectId, body, "compacting", study, undefined, replyQuestionId);
+      enqueue(projectId, body, "compacting", study, undefined, replyQuestionId, itemId);
       return;
     }
 
@@ -2001,7 +2037,7 @@ function createWorkspace() {
       runningAgent !== undefined &&
       !capabilitiesFor(runningAgent)?.liveFollowUp
     ) {
-      enqueue(projectId, body, "busy", study, undefined, replyQuestionId);
+      enqueue(projectId, body, "busy", study, undefined, replyQuestionId, itemId);
       return;
     }
 
@@ -2014,11 +2050,11 @@ function createWorkspace() {
      * back.
      */
     try {
-      await dispatch(projectId, body, study, undefined, replyQuestionId);
+      await dispatch(projectId, body, study, undefined, replyQuestionId, itemId);
     } catch (cause) {
       const reason = queueReason(cause);
       if (reason) {
-        enqueue(projectId, body, reason, study, undefined, replyQuestionId);
+        enqueue(projectId, body, reason, study, undefined, replyQuestionId, itemId);
         return;
       }
       throw cause;
@@ -2039,7 +2075,14 @@ function createWorkspace() {
     if (isBusy(projectId)) return; // a newer run took the slot; its stop will re-cue
     setState("queued", projectId, waiting.slice(1));
     try {
-      await dispatch(projectId, next.body, next.study, next.messageId, next.replyQuestionId);
+      await dispatch(
+        projectId,
+        next.body,
+        next.study,
+        next.messageId,
+        next.replyQuestionId,
+        next.itemId,
+      );
     } catch (cause) {
       setState("queued", projectId, (rest = []) => [next, ...rest]);
       if (attempt < 4) {
@@ -2118,6 +2161,8 @@ function createWorkspace() {
     reorderItems: (projectId: string, ids: string[]) => client().reorderItems(projectId, ids),
     setItemStatus: (id: string, status: ProjectStatus) => client().setItemStatus(id, status),
     updateItem: (id: string, title: string) => client().updateItem(id, title),
+    getItemContext: (id: string) => client().getItemContext(id),
+    setItemContext: (id: string, context: string) => client().setItemContext(id, context),
     setItemIssue: (id: string, url: string) => client().setItemIssue(id, url),
     deleteItem: (id: string) => client().deleteItem(id),
     chooseAttachments: () => client().chooseAttachments(),

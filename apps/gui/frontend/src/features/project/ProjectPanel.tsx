@@ -31,11 +31,17 @@ export function ProjectPanel(props: { project: Project }): JSX.Element {
   const io = () => state.agentIo[props.project.id] ?? [];
   const panelItems = createMemo(() => {
     const visible = itemsFor(props.project.id);
+    const archivedForkAnchors = (state.items[props.project.id] ?? []).filter(
+      (item) =>
+        item.archived && state.projects.some((project) => project.forkedFrom?.itemId === item.id),
+    );
     const reveal = state.itemReveal?.id;
     const archived = reveal
       ? (state.items[props.project.id] ?? []).find((item) => item.id === reveal && item.archived)
       : undefined;
-    return archived ? [...visible, archived].sort((a, b) => a.order - b.order) : visible;
+    const nested = [...visible, ...archivedForkAnchors];
+    if (archived && !nested.some((item) => item.id === archived.id)) nested.push(archived);
+    return nested.sort((a, b) => a.order - b.order);
   });
 
   return (
@@ -905,6 +911,9 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
   const [adding, setAdding] = createSignal(false);
   const [title, setTitle] = createSignal("");
   const [forkingId, setForkingId] = createSignal<string | null>(null);
+  const [forkDraft, setForkDraft] = createSignal<{ item: ProjectItem; context: string } | null>(
+    null,
+  );
   const forkFor = (itemId: string) =>
     state.projects.find((project) => project.forkedFrom?.itemId === itemId);
   /**
@@ -1001,6 +1010,9 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
         `list updates itself:\n- [x] ${item.title}\n` +
         `If the task turns out to be obsolete rather than done, strike it ` +
         `instead:\n- [-] ${item.title}`,
+      undefined,
+      undefined,
+      item.id,
     );
   }
 
@@ -1012,7 +1024,23 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
     }
     setForkingId(item.id);
     try {
-      await actions.forkItem(item.id);
+      const context = await actions.getItemContext(item.id);
+      setForkDraft({ item, context });
+    } catch (cause) {
+      log.error(`could not load the item context: ${describeError(cause)}`);
+    } finally {
+      setForkingId(null);
+    }
+  }
+
+  async function confirmFork(): Promise<void> {
+    const draft = forkDraft();
+    if (!draft) return;
+    setForkingId(draft.item.id);
+    try {
+      await actions.setItemContext(draft.item.id, draft.context);
+      await actions.forkItem(draft.item.id);
+      setForkDraft(null);
     } catch (cause) {
       log.error(`could not fork the item: ${describeError(cause)}`);
     } finally {
@@ -1100,7 +1128,7 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
                 state.itemReveal?.id === item.id
                   ? "ring-1 ring-primary/70 ring-offset-1 ring-offset-base-200"
                   : ""
-              } ${
+              } ${item.archived ? "border border-primary/18 border-dashed opacity-75" : ""} ${
                 item.status === "active"
                   ? "bg-base-300 shadow-[inset_2px_0_0_var(--color-primary)]"
                   : // Zebra striping so a long list reads row by row; the hover
@@ -1167,7 +1195,10 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
                     verdict, and colouring it as done is exactly the mistake
                     this state exists to prevent.
                   */}
-                    <Show when={item.reference} fallback={statusSuffix(item.status)}>
+                    <Show
+                      when={item.reference}
+                      fallback={item.archived ? tx("archived") : statusSuffix(item.status)}
+                    >
                       {(reference) => (
                         <Show
                           when={issueUrl(reference())}
@@ -1239,7 +1270,7 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
                     : "border-primary/30 bg-primary/8 text-primary/80"
                 }`}
               >
-                <Icon name="message-square-dashed" class="text-[13px]" />
+                <Icon name="git-fork" class="text-[13px]" />
               </button>
               {/*
                * Absolutely positioned over the row's right end, only ink when
@@ -1366,6 +1397,89 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
           onBlur={() => void create()}
           class="mt-1 rounded-[9px] border border-primary/40 bg-base-300 px-2.5 py-2 text-[12px] text-az-body focus:outline-none"
         />
+      </Show>
+
+      <Show when={forkDraft()}>
+        {(draft) => (
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="item-fork-context-title"
+            class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-8 backdrop-blur-[2px]"
+            onClick={(event) => event.currentTarget === event.target && setForkDraft(null)}
+            onKeyDown={(event) => event.key === "Escape" && setForkDraft(null)}
+          >
+            <section class="az-ring flex max-h-full w-full max-w-[620px] flex-col overflow-hidden rounded-[17px] bg-base-200 shadow-[0_24px_80px_rgba(0,0,0,.65)]">
+              <header class="flex items-start gap-3 border-az-hairline-soft border-b px-5 py-4">
+                <div class="flex size-9 shrink-0 items-center justify-center rounded-[11px] border border-primary/28 bg-primary/10 text-primary">
+                  <Icon name="git-fork" class="text-[17px]" />
+                </div>
+                <div class="min-w-0 flex-1">
+                  <h2
+                    id="item-fork-context-title"
+                    class="font-semibold text-[14.5px] text-az-title"
+                  >
+                    {tx("Prepare item fork")}
+                  </h2>
+                  <p class="mt-0.5 truncate text-[12px] text-az-muted">{draft().item.title}</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setForkDraft(null)}
+                  aria-label={tx("Cancel")}
+                  class="rounded-lg p-1.5 text-az-muted hover:bg-white/6 hover:text-base-content"
+                >
+                  <Icon name="x" class="text-[15px]" />
+                </button>
+              </header>
+              <div class="flex min-h-0 flex-col gap-2 px-5 py-4">
+                <div class="flex items-center justify-between gap-3">
+                  <label for="item-fork-context" class="font-semibold text-[12.5px] text-az-body">
+                    {tx("Item context")}
+                  </label>
+                  <span class="font-mono text-[10.5px] text-az-faint">
+                    {draft().context.length} / {NOTES_BUDGET}
+                  </span>
+                </div>
+                <textarea
+                  id="item-fork-context"
+                  autofocus
+                  value={draft().context}
+                  maxLength={NOTES_BUDGET}
+                  onInput={(event) =>
+                    setForkDraft({ item: draft().item, context: event.currentTarget.value })
+                  }
+                  placeholder={tx(
+                    "Describe constraints, acceptance criteria, decisions, and useful pointers…",
+                  )}
+                  class="az-scroll min-h-[220px] resize-y rounded-xl border border-primary/24 bg-az-inset px-3.5 py-3 text-[12.5px] text-az-body leading-[1.55] outline-none placeholder:text-az-faint focus:border-primary/55"
+                />
+                <p class="text-[11px] text-az-muted leading-[1.5]">
+                  {tx(
+                    "Sent when this item starts in a fresh fork or focused run. Ordinary compact item snapshots omit it.",
+                  )}
+                </p>
+              </div>
+              <footer class="flex items-center justify-end gap-2 border-az-hairline-soft border-t px-5 py-3.5">
+                <button
+                  type="button"
+                  onClick={() => setForkDraft(null)}
+                  class="rounded-lg border border-az-hairline px-3 py-1.5 text-[12px] text-az-body hover:border-primary/35"
+                >
+                  {tx("Cancel")}
+                </button>
+                <button
+                  type="button"
+                  disabled={forkingId() === draft().item.id}
+                  onClick={() => void confirmFork()}
+                  class="rounded-lg border border-primary/45 bg-primary/18 px-3 py-1.5 font-semibold text-[12px] text-primary hover:bg-primary/25 disabled:opacity-40"
+                >
+                  {tx("Start fork")}
+                </button>
+              </footer>
+            </section>
+          </div>
+        )}
       </Show>
     </div>
   );

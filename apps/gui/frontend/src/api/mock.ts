@@ -96,6 +96,7 @@ export function createMockApi(): AgencyZeroApi {
    * pre-written rules would show the panel in a state no fresh install reaches.
    */
   const notes = new Map<string, string>();
+  const itemContexts = new Map<string, string>();
   /*
    * Which projects sample their knowledge as the context fills. Off everywhere
    * to start, as on a real install — and the mock never runs an agent, so
@@ -198,6 +199,7 @@ export function createMockApi(): AgencyZeroApi {
 
     async deleteProject(id) {
       const index = projects.findIndex((project) => project.id === id);
+      const forkItemId = index >= 0 ? projects[index].forkedFrom?.itemId : undefined;
       if (index >= 0) projects.splice(index, 1);
 
       // Every collection this project owns goes with it. Leaving messages or a
@@ -212,6 +214,15 @@ export function createMockApi(): AgencyZeroApi {
       drop(running);
       drop(taskLog);
       delete logTotals[id];
+
+      if (forkItemId && !projects.some((project) => project.forkedFrom?.itemId === forkItemId)) {
+        const anchor = items.findIndex((item) => item.id === forkItemId && item.archived);
+        if (anchor >= 0) {
+          const [removed] = items.splice(anchor, 1);
+          itemContexts.delete(forkItemId);
+          emit("item:deleted", { id: forkItemId, projectId: removed.projectId });
+        }
+      }
 
       emit("project:deleted", { id });
       return settle(undefined);
@@ -395,6 +406,7 @@ export function createMockApi(): AgencyZeroApi {
         return settle(undefined);
       }
       const [removed] = items.splice(index, 1);
+      itemContexts.delete(id);
       emit("item:deleted", { id, projectId: removed.projectId });
       return settle(undefined);
     },
@@ -411,6 +423,18 @@ export function createMockApi(): AgencyZeroApi {
       item.title = title;
       emit("item:updated", item);
       return settle(item);
+    },
+
+    getItemContext: (id) => {
+      findItem(id);
+      return settle(itemContexts.get(id) ?? "");
+    },
+
+    setItemContext: (id, context) => {
+      findItem(id);
+      const kept = context.trim().slice(0, NOTES_BUDGET);
+      itemContexts.set(id, kept);
+      return settle(kept);
     },
 
     async setItemIssue(id, url) {

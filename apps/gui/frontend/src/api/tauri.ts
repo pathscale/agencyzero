@@ -59,6 +59,8 @@ export function createTauriApi(): AgencyZeroApi {
     deleteItem: (id) => call("delete_item", { id }),
     setItemStatus: (id, status) => call("set_item_status", { id, status }),
     updateItem: (id, title) => call("update_item", { id, title }),
+    getItemContext: (id) => call("get_item_context", { itemId: id }),
+    setItemContext: (id, context) => call("set_item_context", { itemId: id, context }),
     setItemIssue: (id, url) => call("set_item_issue", { id, url }),
     reorderItems: (projectId, ids) => call("reorder_items", { projectId, ids }),
 
