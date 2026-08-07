@@ -23,6 +23,7 @@ const EMPTY_USAGE: UsageAnalytics = {
   totalOutputTokens: 0,
   totalCacheReadTokens: 0,
   totalCacheWriteTokens: 0,
+  estimatedCacheWriteTokens: 0,
   totalProcessedTokens: 0,
   largestTurn: null,
   turns: 0,
@@ -42,5 +43,19 @@ describe("analytics refresh", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
     await waitFor(() => expect(getUsageAnalytics).toHaveBeenCalledTimes(2));
+  });
+
+  it("labels inferred Sol cache writes and uses them in the efficiency ratio", async () => {
+    getUsageAnalytics.mockResolvedValue({
+      ...EMPTY_USAGE,
+      totalCacheReadTokens: 8_192,
+      estimatedCacheWriteTokens: 2_048,
+    });
+
+    const screen = render(() => <AnalyticsTab />);
+
+    await waitFor(() => expect(screen.getByText("4.0")).toBeInTheDocument());
+    expect(screen.getByText("~2.0K")).toBeInTheDocument();
+    expect(screen.getByText(/Sol cache writes inferred/)).toBeInTheDocument();
   });
 });

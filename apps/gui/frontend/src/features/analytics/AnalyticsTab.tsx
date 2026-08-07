@@ -30,6 +30,14 @@ function dollars(value: number): string {
   return `$${value.toFixed(2)}`;
 }
 
+function effectiveCacheWrites(reported: number, estimated: number): number {
+  return reported + estimated;
+}
+
+function cacheWrites(reported: number, estimated: number): string {
+  return `${estimated > 0 ? "~" : ""}${tokens(effectiveCacheWrites(reported, estimated))}`;
+}
+
 /**
  * Token usage over time, opened by the gauge as a real tab you can leave open.
  *
@@ -193,6 +201,11 @@ function SessionBreakdown(props: { sessions: UsageSession[] }): JSX.Element {
                   <span class="ml-auto text-az-strong">
                     {tokens(session.processedTokens)} {tx("processed")}
                   </span>
+                  <Show when={session.estimatedCacheWriteTokens > 0}>
+                    <span class="text-warning" title={tx("estimated from adjacent cache reads")}>
+                      ~{tokens(session.estimatedCacheWriteTokens)} {tx("write")}
+                    </span>
+                  </Show>
                 </div>
               </div>
             )}
@@ -233,7 +246,8 @@ function ProjectBreakdown(props: { projects: UsageProject[]; total: number }): J
                   <span>
                     {tx("in")} {tokens(project.inputTokens)} · {tx("out")}{" "}
                     {tokens(project.outputTokens)} · {tx("read")} {tokens(project.cacheReadTokens)}{" "}
-                    · {tx("write")} {tokens(project.cacheWriteTokens)}
+                    · {tx("write")}{" "}
+                    {cacheWrites(project.cacheWriteTokens, project.estimatedCacheWriteTokens)}
                   </span>
                 </div>
               </div>
@@ -266,7 +280,7 @@ function StatTiles(props: { usage: UsageAnalytics }): JSX.Element {
     },
     {
       label: tx("Cache write"),
-      value: tokens(props.usage.totalCacheWriteTokens),
+      value: cacheWrites(props.usage.totalCacheWriteTokens, props.usage.estimatedCacheWriteTokens),
       tone: "text-warning",
     },
     {
@@ -300,7 +314,15 @@ function StatTiles(props: { usage: UsageAnalytics }): JSX.Element {
  */
 function CacheEfficiency(props: { usage: UsageAnalytics }): JSX.Element {
   const ratio = createMemo(
-    () => props.usage.totalCacheReadTokens / Math.max(1, props.usage.totalCacheWriteTokens),
+    () =>
+      props.usage.totalCacheReadTokens /
+      Math.max(
+        1,
+        effectiveCacheWrites(
+          props.usage.totalCacheWriteTokens,
+          props.usage.estimatedCacheWriteTokens,
+        ),
+      ),
   );
 
   return (
@@ -319,6 +341,13 @@ function CacheEfficiency(props: { usage: UsageAnalytics }): JSX.Element {
           "reads are roughly 10% the price of input, so a high read:write ratio means caching is working; a low one means the cache is being rebuilt (a miss) instead of hit.",
         )}
       </p>
+      <Show when={props.usage.estimatedCacheWriteTokens > 0}>
+        <p class="mt-1 text-[10.5px] text-az-faint">
+          {tx("Sol cache write estimate", {
+            tokens: tokens(props.usage.estimatedCacheWriteTokens),
+          })}
+        </p>
+      </Show>
     </div>
   );
 }
@@ -354,6 +383,9 @@ function LargestTurn(props: { usage: UsageAnalytics }): JSX.Element {
             {tx("in")} {tokens(turn().inputTokens)} · {tx("read")} {tokens(turn().cacheReadTokens)}{" "}
             · {tx("write")} {tokens(turn().cacheWriteTokens)} · {tx("out")}{" "}
             {tokens(turn().outputTokens)}
+            <Show when={turn().estimatedCacheWriteTokens > 0}>
+              {` · ${tx("estimated write")} ~${tokens(turn().estimatedCacheWriteTokens)}`}
+            </Show>
           </div>
         </div>
       )}
@@ -461,7 +493,7 @@ function ModelBreakdown(props: { models: UsageModel[] }): JSX.Element {
               <span class="text-right font-mono text-az-body">{tokens(model.outputTokens)}</span>
               <span class="text-right font-mono text-az-body">{tokens(model.cacheReadTokens)}</span>
               <span class="text-right font-mono text-az-body">
-                {tokens(model.cacheWriteTokens)}
+                {cacheWrites(model.cacheWriteTokens, model.estimatedCacheWriteTokens)}
               </span>
             </div>
           )}
