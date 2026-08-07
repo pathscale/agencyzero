@@ -150,6 +150,10 @@ pub(crate) struct AppState {
     /// The live run per project: at most one, and how to stop it, see
     /// [`projects::ActiveRuns`].
     active: Arc<projects::ActiveRuns>,
+    /// Which project/agent pairs have produced a provider event since this app
+    /// process started. Process-local on purpose: relaunching arms the first
+    /// message again, while ordinary resumed turns stay quiet.
+    pub(crate) startup_visibility: projects::StartupVisibility,
     /// Serializes `set_settings`. The update is a read-merge-write over one
     /// record, and Tauri runs commands concurrently: two quick patches could
     /// both read the same prior record and the slower write would silently
@@ -1665,6 +1669,7 @@ fn main() {
                 io: Arc::default(),
                 approvals: Arc::default(),
                 active: Arc::default(),
+                startup_visibility: projects::StartupVisibility::default(),
                 limits: Arc::default(),
                 receipts: Arc::default(),
                 settings_write: tokio::sync::Mutex::new(()),

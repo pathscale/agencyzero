@@ -4689,6 +4689,37 @@ pub struct InjectedMessage {
 
 pub type ActiveRuns = std::sync::Mutex<std::collections::HashMap<String, ActiveRun>>;
 
+/// One-time liveness acknowledgement state for this AgencyZero process.
+///
+/// A project/agent pair begins armed after launch. Its first provider event
+/// proves the run really started and disarms later turns. Resetting or adopting
+/// a provider session arms the pair again. Failed starts emit no event and do
+/// not consume the acknowledgement.
+#[derive(Default)]
+pub struct StartupVisibility {
+    acknowledged: std::sync::Mutex<std::collections::HashSet<(String, String)>>,
+}
+
+impl StartupVisibility {
+    fn should_announce(&self, project_id: &str, agent: Agent) -> bool {
+        self.acknowledged.lock().map_or(true, |acknowledged| {
+            !acknowledged.contains(&(project_id.to_string(), agent_wire_name(agent).to_string()))
+        })
+    }
+
+    fn acknowledge(&self, project_id: &str, agent: Agent) {
+        if let Ok(mut acknowledged) = self.acknowledged.lock() {
+            acknowledged.insert((project_id.to_string(), agent_wire_name(agent).to_string()));
+        }
+    }
+
+    fn reset(&self, project_id: &str, agent: Agent) {
+        if let Ok(mut acknowledged) = self.acknowledged.lock() {
+            acknowledged.remove(&(project_id.to_string(), agent_wire_name(agent).to_string()));
+        }
+    }
+}
+
 /*
  * The two refusals that mean "hold this, do not hand it back".
  *
@@ -6394,6 +6425,7 @@ pub async fn reset_task_manager(app: AppHandle, state: State<'_, AppState>) -> R
         .kv_put(&agent_session_key(id, agent), String::new())
         .await
         .map_err(|error| error.to_string())?;
+    state.startup_visibility.reset(id, agent);
 
     crate::log!(
         crate::log::Level::Info,
@@ -6501,6 +6533,7 @@ pub async fn reset_project_session(
         .kv_put(&partial_reply_key(&project_id), String::new())
         .await
         .map_err(|error| error.to_string())?;
+    state.startup_visibility.reset(&project_id, agent);
 
     crate::log!(
         crate::log::Level::Info,
@@ -6583,6 +6616,7 @@ pub async fn adopt_session(
         .kv_put(&partial_reply_key(&project_id), String::new())
         .await
         .map_err(|error| error.to_string())?;
+    state.startup_visibility.reset(&project_id, agent);
 
     crate::log!(
         crate::log::Level::Info,
@@ -8338,6 +8372,10 @@ async fn drive_run(
     let is_task_manager = project_id == crate::tasks::TASK_MANAGER_ID;
     let handoff = provider_handoff(&tables, &project_id, &turn_id, agent);
     let settings = global_settings(&tables);
+    let announce_start = app
+        .state::<crate::AppState>()
+        .startup_visibility
+        .should_announce(&project_id, agent);
     let per_turn_instructions = settings
         .per_turn_injection
         .then(|| {
@@ -8345,6 +8383,7 @@ async fn drive_run(
             crate::per_turn::instructions(
                 &config_dir,
                 settings.agent_finished_retention_turns.clamp(1, 3),
+                announce_start,
             )
         })
         .filter(|instructions| !instructions.trim().is_empty());
@@ -8863,6 +8902,9 @@ async fn drive_run(
         };
         if !opening_message_read {
             emit_message_receipt(&app, &project_id, &turn_id, "read");
+            app.state::<crate::AppState>()
+                .startup_visibility
+                .acknowledge(&project_id, agent);
             opening_message_read = true;
         }
         let is_text = matches!(&event, Event::Text(_));
@@ -10241,6 +10283,21 @@ async fn checkpoint_if_due(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn startup_visibility_rearms_after_reset_without_repeating_on_later_turns() {
+        let visibility = StartupVisibility::default();
+
+        assert!(visibility.should_announce("project-a", Agent::Codex));
+        // A failed start emits no event, so asking again remains a first send.
+        assert!(visibility.should_announce("project-a", Agent::Codex));
+        visibility.acknowledge("project-a", Agent::Codex);
+        assert!(!visibility.should_announce("project-a", Agent::Codex));
+        assert!(visibility.should_announce("project-a", Agent::Claude));
+
+        visibility.reset("project-a", Agent::Codex);
+        assert!(visibility.should_announce("project-a", Agent::Codex));
+    }
 
     #[test]
     fn import_discovery_excludes_owned_and_duplicate_native_sessions() {
