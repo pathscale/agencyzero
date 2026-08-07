@@ -119,6 +119,13 @@ pub struct ProjectItemDto {
     pub updated_at: String,
 }
 
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct HomeSnapshotDto {
+    pub items: Vec<ProjectItemDto>,
+    pub turn_counts: std::collections::BTreeMap<String, u64>,
+}
+
 impl From<ProjectItemRow> for ProjectItemDto {
     fn from(row: ProjectItemRow) -> Self {
         ProjectItemDto {
@@ -1148,6 +1155,44 @@ pub fn list_projects(state: State<'_, AppState>) -> Vec<ProjectDto> {
         .collect();
     rows.sort_by_key(|project| project.order);
     rows
+}
+
+/// Everything Home needs from project-owned tables, read in two bulk scans.
+///
+/// Closed projects do not need their transcripts, task logs, PRs, questions,
+/// and I/O buffers hydrated merely to show Home. Keeping this command compact
+/// turns hundreds of per-project IPC round trips into one startup request.
+#[tauri::command]
+pub fn get_home_snapshot(state: State<'_, AppState>) -> HomeSnapshotDto {
+    let mut items: Vec<ProjectItemDto> = state
+        .tables
+        .project_item
+        .select_all()
+        .execute()
+        .unwrap_or_default()
+        .into_iter()
+        .map(|row| item_dto(row, &state.tables))
+        .collect();
+    items.sort_by(|a, b| {
+        a.project_id
+            .cmp(&b.project_id)
+            .then_with(|| a.order.cmp(&b.order))
+    });
+
+    let mut turn_counts = std::collections::BTreeMap::new();
+    for message in state
+        .tables
+        .message
+        .select_all()
+        .execute()
+        .unwrap_or_default()
+    {
+        if message.author == "agent" && message.stop != "continued" {
+            *turn_counts.entry(message.project_id).or_insert(0) += 1;
+        }
+    }
+
+    HomeSnapshotDto { items, turn_counts }
 }
 
 #[tauri::command]

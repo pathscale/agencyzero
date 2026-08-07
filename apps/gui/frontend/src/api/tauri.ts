@@ -41,6 +41,7 @@ async function call<T>(command: string, args?: Record<string, unknown>): Promise
 export function createTauriApi(): AgencyZeroApi {
   return {
     listProjects: () => call("list_projects"),
+    getHomeSnapshot: () => call("get_home_snapshot"),
     createProject: (input) => call("create_project", { input }),
     deleteProject: (id) => call("delete_project", { id }),
     renameProject: (id, name) => call("rename_project", { id, name }),

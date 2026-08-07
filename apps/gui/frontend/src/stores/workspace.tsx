@@ -14,6 +14,7 @@ import type { AgencyZeroApi, AppEvents, Unlisten } from "~/api";
 import { selectApi } from "~/api";
 import { PERMISSION_ORDER } from "~/lib/labels";
 import { describeError, installGlobalErrorLogging, log } from "~/lib/log";
+import { usageTotals } from "~/lib/stats";
 import { applyTheme } from "~/lib/theme";
 import { prefs, setPrefs } from "~/stores/prefs";
 import type {
@@ -71,6 +72,8 @@ type WorkspaceState = {
   projects: Project[];
   items: Record<string, ProjectItem[]>;
   messages: Record<string, Message[]>;
+  /** Agent-turn counts for Home, available without hydrating every transcript. */
+  turnCounts: Record<string, number>;
   /** Live sent/read acknowledgements, keyed by project and message id. */
   messageReceipts: Record<string, Record<string, MessageReceipt>>;
   running: Record<string, RunningTask[]>;
@@ -340,6 +343,7 @@ function createWorkspace() {
     projects: [],
     items: {},
     messages: {},
+    turnCounts: {},
     messageReceipts: {},
     running: {},
     taskLog: {},
@@ -383,6 +387,8 @@ function createWorkspace() {
   /** Events that arrived while snapshots were still loading — see `init`. */
   let buffered: (() => void)[] = [];
   let isHydrating = true;
+  const hydratedProjects = new Set<string>();
+  const projectLoads = new Map<string, Promise<void>>();
 
   function drainEventBuffer(): void {
     isHydrating = false;
@@ -653,7 +659,7 @@ function createWorkspace() {
    * so neither belongs on boot or tab open. Authored `pr.link` discovers a PR;
    * the existing chip's refresh affordance is the explicit way to ask again.
    */
-  async function loadProject(projectId: string): Promise<void> {
+  async function fetchProject(projectId: string): Promise<void> {
     const backend = client();
     const [items, messages, running, log, io, prs, questions] = await Promise.all([
       backend.listItems(projectId),
@@ -669,6 +675,7 @@ function createWorkspace() {
     batch(() => {
       setState("items", projectId, reconcile(items));
       setState("messages", projectId, reconcile(messages));
+      setState("turnCounts", projectId, usageTotals(messages).turns);
       setState("running", projectId, reconcile(running));
       setState("taskLog", projectId, reconcile(log.entries));
       setState("logTotals", projectId, log.total);
@@ -686,6 +693,23 @@ function createWorkspace() {
         }
       }
     });
+  }
+
+  /** One snapshot request per project, shared by boot and a simultaneous tab open. */
+  function loadProject(projectId: string): Promise<void> {
+    if (hydratedProjects.has(projectId)) return Promise.resolve();
+    const pending = projectLoads.get(projectId);
+    if (pending) return pending;
+
+    const load = fetchProject(projectId)
+      .then(() => {
+        hydratedProjects.add(projectId);
+      })
+      .finally(() => {
+        projectLoads.delete(projectId);
+      });
+    projectLoads.set(projectId, load);
+    return load;
   }
 
   /**
@@ -721,19 +745,39 @@ function createWorkspace() {
       await subscribe(backend);
 
       log.info("boot: hydrating");
-      const [projects, settings, agents, models, pricing, dataLocation, workspaceRoot, rateLimits] =
-        await Promise.all([
-          backend.listProjects(),
-          backend.getSettings(),
-          backend.listAgentStatus(false),
-          // Compiled catalogues only. Discovery spawns a CLI per agent, which is
-          // too slow to sit in front of the first paint; Settings can ask for it.
-          backend.listModels(false),
-          backend.pricingTable(),
-          backend.getDataLocation(),
-          backend.getWorkspaceRoot(),
-          backend.listRateLimits(),
-        ]);
+      const [
+        projects,
+        homeSnapshot,
+        settings,
+        agents,
+        models,
+        pricing,
+        dataLocation,
+        workspaceRoot,
+        rateLimits,
+      ] = await Promise.all([
+        backend.listProjects(),
+        backend.getHomeSnapshot(),
+        backend.getSettings(),
+        backend.listAgentStatus(false),
+        // Compiled catalogues only. Discovery spawns a CLI per agent, which is
+        // too slow to sit in front of the first paint; Settings can ask for it.
+        backend.listModels(false),
+        backend.pricingTable(),
+        backend.getDataLocation(),
+        backend.getWorkspaceRoot(),
+        backend.listRateLimits(),
+      ]);
+
+      const itemsByProject = homeSnapshot.items.reduce<Record<string, ProjectItem[]>>(
+        (indexed, item) => {
+          const projectItems = indexed[item.projectId] ?? [];
+          projectItems.push(item);
+          indexed[item.projectId] = projectItems;
+          return indexed;
+        },
+        {},
+      );
 
       // Before the first paint of anything themed: the stylesheet's defaults are
       // the designed palette, so a saved theme arriving late would show as a
@@ -742,6 +786,8 @@ function createWorkspace() {
 
       batch(() => {
         setState("projects", reconcile(projects));
+        setState("items", reconcile(itemsByProject));
+        setState("turnCounts", reconcile(homeSnapshot.turnCounts));
         setState("settings", settings);
         setState("agents", reconcile(agents));
         setState("models", reconcile(models));
@@ -780,9 +826,12 @@ function createWorkspace() {
         setState("activeKey", lastPortableActiveKey);
       });
 
-      log.info(`boot: loading ${projects.length} project(s)`);
+      const openProjectIds = state.tabs.flatMap((tab) =>
+        tab.projectId === null ? [] : [tab.projectId],
+      );
+      log.info(`boot: loading ${openProjectIds.length} open project(s); ${projects.length} total`);
       await Promise.all([
-        ...projects.map((project) => loadProject(project.id)),
+        ...openProjectIds.map(loadProject),
         /*
          * The task manager rides along: it has no project row, so it is not
          * in `projects`, but its transcript, harvested items and I/O live
@@ -1034,7 +1083,13 @@ function createWorkspace() {
     await bind("message:appended", (message) => {
       batch(() => {
         if (message.author === "agent") setState("streaming", message.projectId, "");
+        const isNew = !(state.messages[message.projectId] ?? []).some(
+          (existing) => existing.id === message.id,
+        );
         appendMessage(message);
+        if (isNew && message.author === "agent" && message.stop !== "continued") {
+          setState("turnCounts", message.projectId, (count = 0) => count + 1);
+        }
       });
     });
     await bind("message:receipt", ({ projectId, messageId, status }) => {
@@ -1424,6 +1479,9 @@ function createWorkspace() {
     if (!state.tabs.some((tab) => tab.key === projectId)) {
       setState("tabs", (tabs) => [...tabs, projectTab(project)]);
     }
+    void loadProject(projectId).catch((cause) =>
+      log.error(`could not load ${projectId}: ${describeError(cause)}`),
+    );
     focus(projectId);
   }
 

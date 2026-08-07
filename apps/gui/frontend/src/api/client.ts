@@ -11,6 +11,7 @@ import type {
   CreatedProject,
   DataLocationView,
   GlobalSettings,
+  HomeSnapshot,
   Message,
   PendingApproval,
   Permission,
@@ -57,6 +58,8 @@ export const NOTES_BUDGET = 4_000;
 export interface AgencyZeroApi {
   // — Projects ————————————————————————————————————————————————
   listProjects(): Promise<Project[]>;
+  /** All item rows and conversation turn counts, without hydrating transcripts. */
+  getHomeSnapshot(): Promise<HomeSnapshot>;
   /** The name and the initial items are parsed out of the agent's first reply. */
   createProject(input: {
     firstMessage: string;

@@ -134,6 +134,16 @@ export function createMockApi(): AgencyZeroApi {
   return {
     listProjects: () => settle([...projects].sort((a, b) => a.order - b.order)),
 
+    getHomeSnapshot: () => {
+      const turnCounts = messages.reduce<Record<string, number>>((counts, message) => {
+        if (message.author === "agent" && message.stop !== "continued") {
+          counts[message.projectId] = (counts[message.projectId] ?? 0) + 1;
+        }
+        return counts;
+      }, {});
+      return settle({ items, turnCounts });
+    },
+
     async createProject(input): Promise<CreatedProject> {
       // The real command gets the name and the opening items back from the
       // agent's first reply. With no agent, the first line of what was typed

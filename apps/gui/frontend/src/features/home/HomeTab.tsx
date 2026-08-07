@@ -10,7 +10,6 @@ import { relativeTime } from "~/lib/format";
 import { AGENT_LABELS, nextStatus, statusSuffix } from "~/lib/labels";
 import { describeError, log } from "~/lib/log";
 import { compileAdvancedPrompt } from "~/lib/promptEditor";
-import { usageTotals } from "~/lib/stats";
 import { tx } from "~/stores/i18n";
 import { prefs, setPrefs, togglePanelSection } from "~/stores/prefs";
 import { TASK_MANAGER_ID, useWorkspace } from "~/stores/workspace";
@@ -700,7 +699,7 @@ function ProjectGroup(props: { project: Project }): JSX.Element {
   const openCount = () =>
     items().filter((item) => item.status !== "finished" && item.status !== "canceled").length;
   const activeCount = () => items().filter((item) => item.status === "active").length;
-  const turnCount = () => usageTotals(state.messages[props.project.id] ?? []).turns;
+  const turnCount = () => state.turnCounts[props.project.id] ?? 0;
   const summary = () =>
     activeCount()
       ? `${openCount()} open · ${turnCount()} turns · ${activeCount()} active`
