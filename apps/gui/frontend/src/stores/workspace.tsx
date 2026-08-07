@@ -770,9 +770,11 @@ function createWorkspace() {
       // After ready, not during: an update nobody has asked to install must
       // never delay first paint, and a failed check is a log line, not a
       // boot error.
-      void checkForUpdate().catch((cause) =>
-        log.warn(`update check failed: ${describeError(cause)}`),
-      );
+      if (state.settings?.automaticUpdateChecks) {
+        void checkForUpdate().catch((cause) =>
+          log.warn(`update check failed: ${describeError(cause)}`),
+        );
+      }
     } catch (cause) {
       // A half-loaded workspace is not something to render as if it were whole.
       log.error(`boot failed: ${describeError(cause)}`);

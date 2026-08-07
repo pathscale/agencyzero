@@ -82,6 +82,17 @@ const en = {
   "version · commit · compiled — a * after the commit means uncommitted edits":
     "version · commit · compiled — a * after the commit means uncommitted edits",
   Update: "Update",
+  "signed manifest; installing refuses while runs are active":
+    "signed manifest; installing refuses while runs are active",
+  "Check for updates at launch": "Check for updates at launch",
+  "checks only; an update is never installed automatically":
+    "checks only; an update is never installed automatically",
+  "Agent restart authority": "Agent restart authority",
+  "disabled by default; applies only after the agent's turn finishes":
+    "disabled by default; applies only after the agent's turn finishes",
+  Disabled: "Disabled",
+  "Restart only": "Restart only",
+  "Restart & update": "Restart & update",
   "checked at launch against the published manifest; installing refuses while runs are active":
     "checked at launch against the published manifest; installing refuses while runs are active",
   Restart: "Restart",

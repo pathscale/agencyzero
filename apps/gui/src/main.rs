@@ -155,6 +155,10 @@ pub(crate) struct AppState {
     /// Treating both as success let a second close request exit after the first
     /// one had proved persistence was unsafe.
     exit_drain_succeeded: std::sync::atomic::AtomicBool,
+    /// At most one agent-authored lifecycle request may wait for the current
+    /// run to finish. This is process-local on purpose: a crash must not leave
+    /// a stale restart command to execute on the next launch.
+    agent_restart_scheduled: std::sync::atomic::AtomicBool,
     /// Kept so `set_data_location` can write the pointer beside the settings.
     config_dir: std::path::PathBuf,
     /// Kept so `get_data_location` can re-resolve the pointer against the same
@@ -169,6 +173,13 @@ pub(crate) struct AppState {
 }
 
 impl AppState {
+    pub(crate) fn live_run_count(&self) -> usize {
+        self.active
+            .lock()
+            .map(|active| active.len())
+            .unwrap_or_default()
+    }
+
     async fn drain_tables_once(&self) -> Result<(), String> {
         if self
             .exit_drain_started
@@ -190,6 +201,74 @@ impl AppState {
         }
         result
     }
+}
+
+/// Schedule one owner-authorized lifecycle action after all runs are quiet.
+///
+/// The directive is applied from inside the run it belongs to, so executing it
+/// immediately would tear down the process before that run releases its slot
+/// and persists its final events. A short stable-idle window also lets a queued
+/// owner message acquire the slot first; in that case the restart waits again.
+/// Nothing is persisted and the angel remains unaware of networks, settings,
+/// or Prompt Syntax.
+pub(crate) fn schedule_agent_restart(app: &AppHandle, mode: &str) -> Result<(), String> {
+    if !matches!(mode, "disk" | "update") {
+        return Err("unsupported restart mode".into());
+    }
+    let state = app.state::<AppState>();
+    state
+        .agent_restart_scheduled
+        .compare_exchange(
+            false,
+            true,
+            std::sync::atomic::Ordering::AcqRel,
+            std::sync::atomic::Ordering::Acquire,
+        )
+        .map_err(|_| "a lifecycle action is already scheduled".to_string())?;
+
+    let handle = app.clone();
+    let mode = mode.to_string();
+    tauri::async_runtime::spawn(async move {
+        let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(600);
+        loop {
+            if tokio::time::Instant::now() >= deadline {
+                let state = handle.state::<AppState>();
+                state
+                    .agent_restart_scheduled
+                    .store(false, std::sync::atomic::Ordering::Release);
+                let message = "agent restart expired while other runs remained active";
+                crate::log!(log::Level::Warn, "boot", "{message}");
+                let _ = handle.emit("app:restart-failed", message);
+                return;
+            }
+            if handle.state::<AppState>().live_run_count() == 0 {
+                // Require a stable quiet interval. The frontend starts queued
+                // turns after 250 ms, so 500 ms observes that handoff.
+                tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+                if handle.state::<AppState>().live_run_count() == 0 {
+                    break;
+                }
+            } else {
+                tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+            }
+        }
+
+        let result = if mode == "update" {
+            crate::update::install_update_now(&handle).await
+        } else {
+            let state = handle.state::<AppState>();
+            restart_after_drain(&handle, &state).await
+        };
+        if let Err(error) = result {
+            let state = handle.state::<AppState>();
+            state
+                .agent_restart_scheduled
+                .store(false, std::sync::atomic::Ordering::Release);
+            crate::log!(log::Level::Error, "boot", "agent restart failed: {error}");
+            let _ = handle.emit("app:restart-failed", error);
+        }
+    });
+    Ok(())
 }
 
 /// Which commands Rust answers. See [`IMPLEMENTED`].
@@ -1415,6 +1494,7 @@ fn main() {
                 settings_write: tokio::sync::Mutex::new(()),
                 exit_drain_started: std::sync::atomic::AtomicBool::new(false),
                 exit_drain_succeeded: std::sync::atomic::AtomicBool::new(false),
+                agent_restart_scheduled: std::sync::atomic::AtomicBool::new(false),
                 config_dir,
                 data_dir,
                 location,

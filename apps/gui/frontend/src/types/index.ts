@@ -556,6 +556,10 @@ export interface GlobalSettings {
    * config directory overrides the built-in text.
    */
   perTurnInjection: boolean;
+  /** Check the signed release manifest after launch. Never auto-installs. */
+  automaticUpdateChecks: boolean;
+  /** Agent lifecycle authority, disabled until the owner delegates it. */
+  agentRestartPolicy: "disabled" | "restart" | "restart_and_update";
   /** How a PR review is shaped: the prompt, and the model per reviewer agent. */
   review: ReviewSettings;
 }

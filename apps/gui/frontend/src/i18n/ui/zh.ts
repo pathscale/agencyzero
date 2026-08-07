@@ -79,6 +79,15 @@ const zh = {
   "version · commit · compiled — a * after the commit means uncommitted edits":
     "版本 · 提交 · 编译时间 — 提交后带 * 表示有未提交修改",
   Update: "更新",
+  "signed manifest; installing refuses while runs are active": "使用签名清单；有任务运行时不会安装",
+  "Check for updates at launch": "启动时检查更新",
+  "checks only; an update is never installed automatically": "仅检查；绝不会自动安装更新",
+  "Agent restart authority": "代理重启权限",
+  "disabled by default; applies only after the agent's turn finishes":
+    "默认禁用；仅在代理回合结束后执行",
+  Disabled: "禁用",
+  "Restart only": "仅重启",
+  "Restart & update": "重启并更新",
   "checked at launch against the published manifest; installing refuses while runs are active":
     "启动时对照已发布清单检查；有任务运行时不会安装",
   Restart: "重启",

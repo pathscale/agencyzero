@@ -2145,7 +2145,8 @@ fn state_snapshot(
          <ps @agency:ask(text: \"<your question>\", urgency: \"blocking\")>\n\
          <ps @agency:pr.link(url: \"https://github.com/owner/repo/pull/66\", item: \"<id>\")>\n\
          <ps @agency:pr.retire(id: \"<pr association id>\")>\n\
-         <ps @agency:issue.link(url: \"https://github.com/owner/repo/issues/42\", item: \"<id>\")>",
+         <ps @agency:issue.link(url: \"https://github.com/owner/repo/issues/42\", item: \"<id>\")>\n\
+         <ps @agency:app.restart(mode: \"disk\")>",
     );
     out
 }
@@ -2645,6 +2646,33 @@ async fn apply_directive(
                 },
             }
         }
+        Directive::AppRestart { mode } => {
+            let policy = global_settings(tables).agent_restart_policy;
+            let allowed = matches!(
+                (policy.as_str(), mode.as_str()),
+                ("restart", "disk") | ("restart_and_update", "disk" | "update")
+            );
+            if !allowed {
+                return Outcome::Refused {
+                    what: format!("app.restart({mode})"),
+                    code: "OWNER_AUTHORITY_REQUIRED".into(),
+                };
+            }
+            match crate::schedule_agent_restart(app, &mode) {
+                Ok(()) => Outcome::Done(format!(
+                    "application {} scheduled after active runs finish",
+                    if mode == "update" {
+                        "update and restart"
+                    } else {
+                        "restart"
+                    }
+                )),
+                Err(error) => Outcome::Refused {
+                    what: format!("app.restart({mode})"),
+                    code: format!("SCHEDULE_FAILED: {error}"),
+                },
+            }
+        }
     }
 }
 
@@ -2763,6 +2791,11 @@ fn study_target_before(
             // The question's own id is minted on apply, so there is nothing to
             // point at beforehand — a fresh row, like items.add.
             kind: "question",
+            id: String::new(),
+            before_add: std::collections::HashSet::new(),
+        },
+        Directive::AppRestart { .. } => StudyTarget {
+            kind: "application",
             id: String::new(),
             before_add: std::collections::HashSet::new(),
         },
@@ -6664,7 +6697,15 @@ pub async fn import_chat_session(
     session_id: String,
     state: State<'_, AppState>,
 ) -> Result<ProjectDto, String> {
-    let import_key = format!("imported-chat:{source}:{session_id}");
+    // Desktop Work/Codex and CLI/IDE are two views over the same native thread
+    // ids. Canonicalize their import identity so changing the source filter
+    // cannot create a duplicate AgencyZero project.
+    let import_source = if matches!(source.as_str(), "codex" | "chatgpt-desktop") {
+        "codex"
+    } else {
+        source.as_str()
+    };
+    let import_key = format!("imported-chat:{import_source}:{session_id}");
     if let Some(project_id) = state.tables.kv_get(&import_key)
         && let Some(row) = state.tables.project.select(project_id)
     {
@@ -6682,7 +6723,7 @@ pub async fn import_chat_session(
         return Err("the selected session contains no importable user or agent messages".into());
     }
     let project_id = id("proj");
-    let agent = if source == "codex" {
+    let agent = if matches!(source.as_str(), "codex" | "chatgpt-desktop") {
         Agent::Codex
     } else {
         Agent::Claude
@@ -6748,7 +6789,7 @@ pub async fn import_chat_session(
             moderation: String::new(),
             model: message.model,
             permission: String::new(),
-            usage: String::new(),
+            usage: message.usage,
             stop: "imported".into(),
             exit_code: 0,
             body: body_head(&message.text),

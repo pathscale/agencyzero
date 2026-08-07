@@ -39,6 +39,10 @@ silent no-op.
 - `<ps @agency:pr.retire(id: "<pr association id>")>` — drop a PR association.
 - `<ps @agency:issue.link(url: "https://github.com/owner/repo/issues/42", item: "<id>")>` —
   attach a GitHub issue to an item.
+- `<ps @agency:app.restart(mode: "disk")>` — request a restart after the current
+  turn finishes. Use `mode: "update"` to install a signed published update
+  first. Both are refused unless the owner explicitly enables that authority in
+  Settings; never treat a refusal as permission to work around the policy.
 
 An id may be shortened to any unique prefix. Repeating a state you already
 reported is free. Never address a row by its title.
