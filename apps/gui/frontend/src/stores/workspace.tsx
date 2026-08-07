@@ -2027,6 +2027,18 @@ function createWorkspace() {
       const picked = await client().chooseDataDirectory();
       if (picked) await actions.setDataLocation(picked);
     },
+    /** Read the on-disk backup catalogue and the result from the last angel run. */
+    getStoreBackupStatus() {
+      return client().getStoreBackupStatus();
+    },
+    /** Success exits and relaunches, so only failures return to the caller. */
+    createStoreBackup() {
+      return client().createStoreBackup();
+    },
+    /** The backend resolves this opaque id inside the current store's parent. */
+    restoreStoreBackup(id: string) {
+      return client().restoreStoreBackup(id);
+    },
     /** The native folder panel, for a project's working directories. */
     chooseProjectDirectory() {
       return client().chooseProjectDirectory();

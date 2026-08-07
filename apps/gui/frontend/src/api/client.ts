@@ -23,6 +23,7 @@ import type {
   QuotaReport,
   RateLimit,
   RunningTask,
+  StoreBackupStatus,
   StudySummary,
   StudyTurnMetadata,
   TableSize,
@@ -182,6 +183,12 @@ export interface AgencyZeroApi {
    * relocated out from under its open handles.
    */
   setDataLocation(path: string | null): Promise<void>;
+  /** Manual verified backups created while the store is closed by the angel. */
+  getStoreBackupStatus(): Promise<StoreBackupStatus>;
+  /** Drain, exit, create and verify a backup, then relaunch. */
+  createStoreBackup(): Promise<void>;
+  /** Drain, exit, restore one opaque sibling-backup id, then relaunch. */
+  restoreStoreBackup(id: string): Promise<void>;
   /**
    * Open the OS directory picker, to choose the location above.
    *

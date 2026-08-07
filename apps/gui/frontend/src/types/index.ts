@@ -379,6 +379,27 @@ export interface DataLocationView extends DataLocation {
   pending: DataLocation | null;
 }
 
+/** One closed-store, byte-verified manual backup beside the active database. */
+export interface StoreBackup {
+  /** Opaque native id. The frontend never supplies a filesystem path to restore. */
+  id: string;
+  /** ISO 8601 filesystem timestamp. */
+  createdAt: string;
+  bytes: number;
+}
+
+/** What the maintenance angel did immediately before this process launched. */
+export interface StoreBackupOperation {
+  kind: "backup" | "restore";
+  ok: boolean;
+  message: string;
+}
+
+export interface StoreBackupStatus {
+  backups: StoreBackup[];
+  lastOperation: StoreBackupOperation | null;
+}
+
 /** Whether an id names one model or points at whichever is current. */
 export type ModelKind = "alias" | "pinned";
 

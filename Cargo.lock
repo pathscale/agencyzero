@@ -23,7 +23,7 @@ checksum = "320119579fcad9c21884f5c4861d16174d0e06250625266f50fe6898340abefa"
 
 [[package]]
 name = "agency-tools"
-version = "0.2.23"
+version = "0.2.24"
 dependencies = [
  "derive_more 2.1.1",
  "dirs",
@@ -40,7 +40,8 @@ dependencies = [
 [[package]]
 name = "agent-abstraction"
 version = "0.4.15"
-source = "git+https://github.com/pathscale/RustAgentAbstraction?rev=ed1eea259d598a11193da04d65a1247496635b8a#ed1eea259d598a11193da04d65a1247496635b8a"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f59076d009c52e9e18bdce1045399c0d55dbfafd6d42a1b2d50e843a0fd9fb5c"
 dependencies = [
  "fs2",
  "libc",
@@ -189,25 +190,25 @@ checksum = "f2032f911046de80f0a198e0901378627c33f59ea0ac00e363d481118bd70a53"
 
 [[package]]
 name = "az-agent"
-version = "0.2.23"
+version = "0.2.24"
 dependencies = [
  "az-core",
 ]
 
 [[package]]
 name = "az-agent-proxy"
-version = "0.2.23"
+version = "0.2.24"
 dependencies = [
  "az-core",
 ]
 
 [[package]]
 name = "az-core"
-version = "0.2.23"
+version = "0.2.24"
 
 [[package]]
 name = "az-gui"
-version = "0.2.23"
+version = "0.2.24"
 dependencies = [
  "agent-abstraction",
  "agent-experimental",
@@ -234,7 +235,7 @@ dependencies = [
 
 [[package]]
 name = "az-mcp-proxy"
-version = "0.2.23"
+version = "0.2.24"
 dependencies = [
  "az-core",
 ]
@@ -5706,7 +5707,7 @@ dependencies = [
 
 [[package]]
 name = "wt-migrate"
-version = "0.2.23"
+version = "0.2.24"
 dependencies = [
  "derive_more 2.1.1",
  "eyre",

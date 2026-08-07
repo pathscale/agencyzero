@@ -36,6 +36,7 @@ import type {
   ModelSelection,
   ModelSource,
   Permission,
+  StoreBackupStatus,
   StudySummary,
   TableSize,
   TaskManagerSettings,
@@ -722,7 +723,7 @@ export function SettingsTab(): JSX.Element {
                       >
                         <TableSizes />
                       </Row>
-                      <Row label={tx("Change it")} isLast>
+                      <Row label={tx("Change it")}>
                         <div class="flex items-center gap-2">
                           <button
                             type="button"
@@ -748,6 +749,13 @@ export function SettingsTab(): JSX.Element {
                             {tx("Use the default")}
                           </button>
                         </div>
+                      </Row>
+                      <Row
+                        label={tx("Backups")}
+                        hint={tx("closed-store copies verified byte for byte")}
+                        isLast
+                      >
+                        <StoreBackupControls />
                       </Row>
                     </>
                   )}
@@ -1422,6 +1430,119 @@ function TableSizes(): JSX.Element {
         </div>
       )}
     </Show>
+  );
+}
+
+/**
+ * Backup and restore deliberately restart the app. The angel waits until this
+ * process has drained and released the store, then copies and byte-verifies it
+ * while closed. Only an opaque id comes back through the webview for restore;
+ * native code resolves the allowlisted sibling path.
+ */
+function StoreBackupControls(): JSX.Element {
+  const { actions, isLive } = useWorkspace();
+  const [status, setStatus] = createSignal<StoreBackupStatus | null>(null);
+  const [error, setError] = createSignal("");
+  const [confirming, setConfirming] = createSignal(false);
+
+  onMount(() => {
+    void actions
+      .getStoreBackupStatus()
+      .then(setStatus)
+      .catch((cause) => {
+        const message = describeError(cause);
+        setError(message);
+        log.error(`could not list store backups: ${message}`);
+      });
+  });
+
+  const latest = () => status()?.backups[0] ?? null;
+  const summary = () => {
+    const current = status();
+    const backup = latest();
+    if (!current || !backup) return tx("No verified backups yet");
+    return tx("{count} verified backup(s) · latest {age} · {size}", {
+      count: current.backups.length,
+      age: relativeTime(backup.createdAt),
+      size: formatBytes(backup.bytes),
+    });
+  };
+
+  const backup = (): void => {
+    setError("");
+    void actions.createStoreBackup().catch((cause) => setError(describeError(cause)));
+  };
+
+  const restore = (): void => {
+    const backup = latest();
+    if (!backup) return;
+    setError("");
+    void actions.restoreStoreBackup(backup.id).catch((cause) => {
+      setConfirming(false);
+      setError(describeError(cause));
+    });
+  };
+
+  return (
+    <div class="flex max-w-[390px] flex-col items-end gap-1.5">
+      <span class="text-right text-[11px] text-az-muted">{summary()}</span>
+      <span class="text-right text-[10.5px] text-az-faint">
+        {tx("The app drains and restarts so the store is never copied while open.")}
+      </span>
+      <Show when={status()?.lastOperation}>
+        {(operation) => (
+          <span
+            class={`text-right text-[10.5px] ${operation().ok ? "text-success" : "text-error"}`}
+          >
+            {operation().message}
+          </span>
+        )}
+      </Show>
+      <Show when={error()}>
+        <span role="alert" class="text-right text-[10.5px] text-error">
+          {error()}
+        </span>
+      </Show>
+      <div class="flex items-center gap-2">
+        <button
+          type="button"
+          disabled={!isLive("createStoreBackup")}
+          onClick={backup}
+          class="rounded-lg border border-primary/50 px-3 py-[5px] text-[12px] text-primary transition-colors hover:border-primary disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          {tx("Back up & restart")}
+        </button>
+        <Show
+          when={confirming()}
+          fallback={
+            <button
+              type="button"
+              disabled={!latest() || !isLive("restoreStoreBackup")}
+              onClick={() => setConfirming(true)}
+              class="rounded-lg border border-az-hairline-strong px-3 py-[5px] text-[12px] text-az-muted transition-colors hover:border-warning hover:text-warning disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              {tx("Restore latest")}
+            </button>
+          }
+        >
+          <span class="text-[11px] text-warning">{tx("Restore this backup?")}</span>
+          <button
+            type="button"
+            onClick={restore}
+            class="rounded-lg border border-warning/50 px-2.5 py-[4px] font-semibold text-[11.5px] text-warning hover:border-warning"
+          >
+            {tx("Restore")}
+          </button>
+          <button
+            type="button"
+            onClick={() => setConfirming(false)}
+            class="rounded-lg px-2 py-[4px] text-[11.5px] text-az-muted hover:text-base-content"
+          >
+            {tx("Cancel")}
+          </button>
+        </Show>
+      </div>
+    </div>
   );
 }
 

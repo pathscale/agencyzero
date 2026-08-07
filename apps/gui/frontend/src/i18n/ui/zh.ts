@@ -668,6 +668,17 @@ const zh = {
   "no session id": "无会话 ID",
   processed: "已处理",
   turns: "轮",
+  Backups: "备份",
+  "closed-store copies verified byte for byte": "关闭存储后逐字节验证的副本",
+  "Back up & restart": "备份并重启",
+  "Restore latest": "恢复最新备份",
+  "Restore this backup?": "恢复此备份？",
+  Restore: "恢复",
+  "No verified backups yet": "尚无已验证备份",
+  "{count} verified backup(s) · latest {age} · {size}":
+    "{count} 个已验证备份 · 最新 {age} · {size}",
+  "The app drains and restarts so the store is never copied while open.":
+    "应用会先排空写入并重启，确保存储不会在打开时被复制。",
 } satisfies Record<keyof typeof en, string>;
 
 export default zh;

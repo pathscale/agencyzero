@@ -16,6 +16,7 @@ mod prs;
 mod questions;
 mod quota;
 mod settings;
+mod store_backup;
 mod study;
 mod tasks;
 mod update;
@@ -44,6 +45,9 @@ const IMPLEMENTED: &[&str] = &[
     "greet",
     "get_data_location",
     "set_data_location",
+    "get_store_backup_status",
+    "create_store_backup",
+    "restore_store_backup",
     "choose_data_directory",
     "choose_project_directory",
     "get_workspace_root",
@@ -621,6 +625,72 @@ fn set_data_location(path: Option<String>, state: State<'_, AppState>) -> Result
         .map_err(|error| error.to_string())
 }
 
+/// Manual, verified backups beside the current store, newest first.
+///
+/// The last angel operation arrives through the replacement process's
+/// environment. It is deliberately process-local: the backup directory is the
+/// durable fact, while the message only explains the restart that just happened.
+#[tauri::command]
+fn get_store_backup_status(
+    state: State<'_, AppState>,
+) -> Result<store_backup::StoreBackupStatus, String> {
+    store_backup::status(&state.location.path)
+}
+
+/// Drain, exit, and let the restart angel copy and byte-verify the closed store.
+///
+/// # Errors
+/// Refuses ephemeral sessions and active agent runs, and leaves the GUI open if
+/// the drain or angel spawn fails.
+#[tauri::command]
+async fn create_store_backup(app: AppHandle, state: State<'_, AppState>) -> Result<(), String> {
+    if state.location.source == "ephemeral" {
+        return Err("an ephemeral session has no durable store to back up".into());
+    }
+    if state.live_run_count() != 0 {
+        return Err("stop active agent runs before backing up the store".into());
+    }
+    let backup = store_backup::new_backup_path(&state.location.path)?;
+    state.drain_tables_once().await?;
+    angel::spawn(angel::Action::Backup {
+        store: state.location.path.clone(),
+        backup,
+    })?;
+    app.exit(0);
+    Ok(())
+}
+
+/// Drain, exit, validate the selected sibling backup, and atomically replace
+/// the closed store through the restart angel.
+///
+/// The displaced store is retained under a generated `pre-restore` name. The
+/// webview supplies only an opaque backup id; path resolution stays native and
+/// allowlisted to the current store's siblings.
+#[tauri::command]
+async fn restore_store_backup(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    id: String,
+) -> Result<(), String> {
+    if state.location.source == "ephemeral" {
+        return Err("an ephemeral session has no durable store to restore".into());
+    }
+    if state.live_run_count() != 0 {
+        return Err("stop active agent runs before restoring the store".into());
+    }
+    let backup = store_backup::resolve_backup(&state.location.path, &id)?;
+    if !backup.is_dir() {
+        return Err("the selected backup no longer exists".into());
+    }
+    state.drain_tables_once().await?;
+    angel::spawn(angel::Action::Restore {
+        store: state.location.path.clone(),
+        backup,
+    })?;
+    app.exit(0);
+    Ok(())
+}
+
 /// Restart into whatever binary sits at this app's own path on disk.
 ///
 /// The self-hosting keystone: after `cargo tauri build` lands a new bundle at
@@ -650,7 +720,7 @@ async fn relaunch_app(app: AppHandle, state: State<'_, AppState>) -> Result<(), 
 /// the single-writer store at the same time.
 pub(crate) async fn restart_after_drain(app: &AppHandle, state: &AppState) -> Result<(), String> {
     state.drain_tables_once().await?;
-    angel::spawn()?;
+    angel::spawn(angel::Action::Relaunch)?;
     app.exit(0);
     Ok(())
 }
@@ -1219,6 +1289,9 @@ fn main() {
             list_capabilities,
             get_data_location,
             set_data_location,
+            get_store_backup_status,
+            create_store_backup,
+            restore_store_backup,
             choose_data_directory,
             choose_project_directory,
             get_workspace_root,
