@@ -6,13 +6,16 @@
 
 use std::collections::HashMap;
 use std::fs::File;
-use std::io::{BufRead, BufReader};
+use std::io::{BufRead, BufReader, Read};
 use std::path::{Path, PathBuf};
 
 use serde::Serialize;
 
 const MAX_DISCOVERED_FILES: usize = 500;
 const MAX_VISIBLE_SESSIONS: usize = 100;
+/// Discovery reads only enough of a rollout to identify its owner and preview.
+/// Selected imports still stream the complete file.
+const CODEX_DISCOVERY_BYTES: u64 = 128 * 1024;
 
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -40,6 +43,8 @@ pub struct ImportedMessage {
     pub text: String,
     pub at: String,
     pub model: String,
+    /// Already in the webview's camelCase usage shape; empty when unavailable.
+    pub usage: String,
 }
 
 #[derive(Clone, Debug)]
@@ -49,6 +54,8 @@ pub struct ImportedChat {
     pub title: String,
     pub cwd: Option<String>,
     pub messages: Vec<ImportedMessage>,
+    /// Native producer recorded in the rollout metadata, when one exists.
+    pub originator: String,
 }
 
 fn home() -> Result<PathBuf, String> {
@@ -115,6 +122,10 @@ fn title_from(messages: &[ImportedMessage], fallback: &str) -> String {
         .find(|line| !line.trim().is_empty())
         .unwrap_or(fallback)
         .trim();
+    title_from_text(first, fallback)
+}
+
+fn title_from_text(first: &str, fallback: &str) -> String {
     let title: String = first.chars().take(72).collect();
     if first.chars().count() > 72 {
         format!("{title}…")
@@ -195,6 +206,7 @@ fn parse_claude(path: &Path) -> Result<ImportedChat, String> {
                 .and_then(serde_json::Value::as_str)
                 .unwrap_or("claude")
                 .to_string(),
+            usage: String::new(),
         });
     }
     let title = title_from(&messages, "Imported Claude chat");
@@ -204,18 +216,66 @@ fn parse_claude(path: &Path) -> Result<ImportedChat, String> {
         title,
         cwd,
         messages,
+        originator: String::new(),
     })
+}
+
+fn codex_usage(value: &serde_json::Value) -> String {
+    let Some(info) = value.get("info") else {
+        return String::new();
+    };
+    let Some(last) = info.get("last_token_usage") else {
+        return String::new();
+    };
+    let count = |key: &str| last.get(key).and_then(serde_json::Value::as_u64);
+    let input = count("input_tokens");
+    let cache_reads = count("cached_input_tokens");
+    let cache_writes = count("cache_write_input_tokens");
+    let uncached = input.map(|tokens| {
+        tokens.saturating_sub(
+            cache_reads
+                .unwrap_or(0)
+                .saturating_add(cache_writes.unwrap_or(0)),
+        )
+    });
+    let output = count("output_tokens");
+    let tokens = count("total_tokens").unwrap_or_else(|| {
+        uncached.unwrap_or(0)
+            + cache_reads.unwrap_or(0)
+            + cache_writes.unwrap_or(0)
+            + output.unwrap_or(0)
+    });
+    serde_json::json!({
+        "tokens": tokens,
+        "inputTokens": uncached,
+        "outputTokens": output,
+        "contextTokens": info
+            .get("total_token_usage")
+            .and_then(|usage| usage.get("total_tokens"))
+            .and_then(serde_json::Value::as_u64),
+        "contextWindow": info.get("model_context_window").and_then(serde_json::Value::as_u64),
+        "cacheReads": cache_reads,
+        "cacheWrites": cache_writes,
+        "reasoningTokens": count("reasoning_output_tokens"),
+        "costUsd": null,
+        "premiumRequests": null,
+        "durationMs": null
+    })
+    .to_string()
 }
 
 fn parse_codex(path: &Path) -> Result<ImportedChat, String> {
     let file = File::open(path).map_err(|error| error.to_string())?;
     let mut messages = Vec::new();
+    let mut fallback_messages = Vec::new();
     let mut session_id = path
         .file_stem()
         .and_then(|value| value.to_str())
         .unwrap_or("unknown")
         .to_string();
     let mut cwd = None;
+    let mut originator = String::new();
+    let mut current_model = "codex".to_string();
     for line in BufReader::new(file).lines().map_while(Result::ok) {
         let Ok(value) = serde_json::from_str::<serde_json::Value>(&line) else {
             continue;
@@ -233,6 +293,63 @@ fn parse_codex(path: &Path) -> Result<ImportedChat, String> {
                 .and_then(|payload| payload.get("cwd"))
                 .and_then(serde_json::Value::as_str)
                 .map(str::to_string);
+            originator = value
+                .get("payload")
+                .and_then(|payload| payload.get("originator"))
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or("")
+                .to_string();
+            continue;
+        }
+        if value.get("type").and_then(serde_json::Value::as_str) == Some("turn_context") {
+            if let Some(model) = value
+                .get("payload")
+                .and_then(|payload| payload.get("model"))
+                .and_then(serde_json::Value::as_str)
+                .filter(|model| !model.is_empty())
+            {
+                current_model = model.to_string();
+            }
+            continue;
+        }
+        if value.get("type").and_then(serde_json::Value::as_str) == Some("event_msg") {
+            let payload = &value["payload"];
+            let kind = payload
+                .get("type")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or("");
+            if matches!(kind, "user_message" | "agent_message") {
+                let text = payload
+                    .get("message")
+                    .and_then(serde_json::Value::as_str)
+                    .unwrap_or("")
+                    .trim()
+                    .to_string();
+                if !text.is_empty() {
+                    messages.push(ImportedMessage {
+                        role: if kind == "agent_message" {
+                            "assistant".into()
+                        } else {
+                            "user".into()
+                        },
+                        text,
+                        at: value
+                            .get("timestamp")
+                            .and_then(serde_json::Value::as_str)
+                            .unwrap_or("")
+                            .to_string(),
+                        model: current_model.clone(),
+                        usage: String::new(),
+                    });
+                }
+            } else if kind == "token_count"
+                && let Some(message) = messages
+                    .iter_mut()
+                    .rev()
+                    .find(|message| message.role == "assistant")
+            {
+                message.usage = codex_usage(payload);
+            }
             continue;
         }
         if value.get("type").and_then(serde_json::Value::as_str) != Some("response_item")
@@ -256,7 +373,7 @@ fn parse_codex(path: &Path) -> Result<ImportedChat, String> {
         if text.is_empty() {
             continue;
         }
-        messages.push(ImportedMessage {
+        fallback_messages.push(ImportedMessage {
             role: role.to_string(),
             text,
             at: value
@@ -264,8 +381,15 @@ fn parse_codex(path: &Path) -> Result<ImportedChat, String> {
                 .and_then(serde_json::Value::as_str)
                 .unwrap_or("")
                 .to_string(),
-            model: "codex".into(),
+            model: current_model.clone(),
+            usage: String::new(),
         });
+    }
+    // Modern rollouts persist the exact visible UI messages as events. They
+    // exclude the developer/environment payloads that response records carry.
+    // Older rollouts without those events retain the response-item fallback.
+    if messages.is_empty() {
+        messages = fallback_messages;
     }
     let title = title_from(&messages, "Imported Codex chat");
     Ok(ImportedChat {
@@ -274,6 +398,7 @@ fn parse_codex(path: &Path) -> Result<ImportedChat, String> {
         title,
         cwd,
         messages,
+        originator,
     })
 }
 
@@ -321,6 +446,121 @@ fn status_for_jsonl(source: &str, label: &str, root: PathBuf) -> SourceStatus {
         note: format!("{} importable local session(s)", sessions.len()),
         sessions,
     }
+}
+
+/// Identify a Codex rollout without loading its potentially enormous tool and
+/// image records. The session metadata and first visible owner message are at
+/// the head of modern rollouts; 128 KiB is ample for both and bounds Settings'
+/// discovery work independently of session size.
+fn summarize_codex(path: &Path) -> Option<(SessionSummary, String)> {
+    let file = File::open(path).ok()?;
+    let mut session_id = path.file_stem()?.to_str()?.to_string();
+    let mut originator = String::new();
+    let mut updated_at = String::new();
+    let mut title = String::new();
+
+    for line in BufReader::new(file)
+        .take(CODEX_DISCOVERY_BYTES)
+        .lines()
+        .map_while(Result::ok)
+    {
+        let Ok(value) = serde_json::from_str::<serde_json::Value>(&line) else {
+            continue;
+        };
+        if value.get("type").and_then(serde_json::Value::as_str) == Some("session_meta") {
+            let payload = &value["payload"];
+            if let Some(id) = payload
+                .get("id")
+                .or_else(|| payload.get("session_id"))
+                .and_then(serde_json::Value::as_str)
+            {
+                session_id = id.to_string();
+            }
+            originator = payload
+                .get("originator")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or("")
+                .to_string();
+            updated_at = value
+                .get("timestamp")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or("")
+                .to_string();
+            continue;
+        }
+        if value.get("type").and_then(serde_json::Value::as_str) == Some("event_msg")
+            && value
+                .get("payload")
+                .and_then(|payload| payload.get("type"))
+                .and_then(serde_json::Value::as_str)
+                == Some("user_message")
+        {
+            title = value
+                .get("payload")
+                .and_then(|payload| payload.get("message"))
+                .and_then(serde_json::Value::as_str)
+                .map(|text| title_from_text(text, "Imported Codex chat"))
+                .unwrap_or_default();
+            break;
+        }
+    }
+    if title.is_empty() {
+        return None;
+    }
+    Some((
+        SessionSummary {
+            id: session_id,
+            title,
+            updated_at,
+            // Exact counts require scanning the entire rollout. Discovery is
+            // intentionally constant-work; the selected import reads it once.
+            messages: 0,
+            importable: true,
+        },
+        originator,
+    ))
+}
+
+fn codex_statuses(root: PathBuf) -> (SourceStatus, SourceStatus) {
+    if !root.is_dir() {
+        let unavailable = |source: &str, label: &str| SourceStatus {
+            source: source.into(),
+            label: label.into(),
+            available: false,
+            note: format!("No local store at {}", root.display()),
+            sessions: Vec::new(),
+        };
+        return (
+            unavailable("chatgpt-desktop", "ChatGPT Desktop · Work/Codex"),
+            unavailable("codex", "Codex CLI / IDE"),
+        );
+    }
+    let (desktop, cli): (Vec<_>, Vec<_>) = collect(&root, "jsonl")
+        .into_iter()
+        .filter_map(|path| summarize_codex(&path))
+        .partition(|(_, originator)| originator == "Codex Desktop");
+    let finish = |source: &str, label: &str, mut found: Vec<(SessionSummary, String)>| {
+        found.sort_by(|left, right| right.0.updated_at.cmp(&left.0.updated_at));
+        let sessions: Vec<_> = found
+            .into_iter()
+            .map(|(summary, _)| summary)
+            .take(MAX_VISIBLE_SESSIONS)
+            .collect();
+        SourceStatus {
+            source: source.into(),
+            label: label.into(),
+            available: true,
+            note: format!(
+                "{} local session(s); message counts load only for the selected import",
+                sessions.len()
+            ),
+            sessions,
+        }
+    };
+    (
+        finish("chatgpt-desktop", "ChatGPT Desktop · Work/Codex", desktop),
+        finish("codex", "Codex CLI / IDE", cli),
+    )
 }
 
 fn claude_desktop_status(home: &Path) -> SourceStatus {
@@ -387,21 +627,10 @@ fn claude_desktop_status(home: &Path) -> SourceStatus {
 pub fn discover() -> Result<Vec<SourceStatus>, String> {
     let home = home()?;
     let claude_code = status_for_jsonl("claude-code", "Claude Code", home.join(".claude/projects"));
-    let codex = status_for_jsonl("codex", "Codex", home.join(".codex/sessions"));
+    let codex_root = home.join(".codex/sessions");
+    let (chatgpt_desktop, codex) = codex_statuses(codex_root);
     let claude_desktop = claude_desktop_status(&home);
-    let openai_root = home.join("Library/Application Support/ChatGPT");
-    let openai_desktop = SourceStatus {
-        source: "openai-desktop".into(),
-        label: "OpenAI Desktop".into(),
-        available: openai_root.is_dir(),
-        note: if openai_root.is_dir() {
-            "The installed desktop store exposes no stable local transcript format".into()
-        } else {
-            format!("No local store at {}", openai_root.display())
-        },
-        sessions: Vec::new(),
-    };
-    Ok(vec![claude_desktop, claude_code, openai_desktop, codex])
+    Ok(vec![claude_desktop, claude_code, chatgpt_desktop, codex])
 }
 
 fn find_session(root: &Path, extension: &str, id: &str) -> Option<PathBuf> {
@@ -445,6 +674,17 @@ pub fn load(source: &str, id: &str) -> Result<ImportedChat, String> {
                 .ok_or_else(|| format!("Codex session {id} was not found"))?;
             parse_codex(&path)
         }
+        "chatgpt-desktop" => {
+            let root = home.join(".codex/sessions");
+            let path = find_session(&root, "jsonl", id)
+                .ok_or_else(|| format!("ChatGPT Desktop session {id} was not found"))?;
+            let mut chat = parse_codex(&path)?;
+            if chat.originator != "Codex Desktop" {
+                return Err("the selected session was not created by ChatGPT Desktop".into());
+            }
+            chat.source = "chatgpt-desktop".into();
+            Ok(chat)
+        }
         "claude-desktop" => {
             let metadata_root =
                 home.join("Library/Application Support/Claude/claude-code-sessions");
@@ -470,9 +710,6 @@ pub fn load(source: &str, id: &str) -> Result<ImportedChat, String> {
                 .to_string();
             Ok(chat)
         }
-        "openai-desktop" => Err(
-            "OpenAI Desktop exposes no stable local transcript format on this installation".into(),
-        ),
         _ => Err(format!("unknown chat source {source}")),
     }
 }
@@ -539,6 +776,59 @@ mod tests {
         assert_eq!(parsed.messages.len(), 2);
         assert_eq!(parsed.messages[0].text, "question");
         assert_eq!(parsed.messages[1].text, "answer");
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn desktop_import_uses_visible_events_and_keeps_token_metadata() {
+        let dir = std::env::temp_dir().join(format!(
+            "az-desktop-import-{}-{}",
+            std::process::id(),
+            uuid::Uuid::new_v4()
+        ));
+        std::fs::create_dir_all(&dir).expect("scratch creates");
+        let path = dir.join("rollout-desktop-session.jsonl");
+        std::fs::write(
+            &path,
+            concat!(
+                "{\"type\":\"session_meta\",\"timestamp\":\"2026-08-07T00:00:00Z\",\"payload\":{\"id\":\"desktop-session\",\"cwd\":\"/tmp\",\"originator\":\"Codex Desktop\"}}\n",
+                "{\"type\":\"response_item\",\"timestamp\":\"2026-08-07T00:00:00Z\",\"payload\":{\"type\":\"message\",\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"hidden environment payload\"}]}}\n",
+                "{\"type\":\"turn_context\",\"payload\":{\"model\":\"gpt-5.6-sol\",\"effort\":\"low\"}}\n",
+                "{\"type\":\"event_msg\",\"timestamp\":\"2026-08-07T00:00:01Z\",\"payload\":{\"type\":\"user_message\",\"message\":\"visible question\"}}\n",
+                "{\"type\":\"event_msg\",\"timestamp\":\"2026-08-07T00:00:02Z\",\"payload\":{\"type\":\"agent_message\",\"message\":\"visible answer\"}}\n",
+                "{\"type\":\"event_msg\",\"timestamp\":\"2026-08-07T00:00:03Z\",\"payload\":{\"type\":\"token_count\",\"info\":{\"last_token_usage\":{\"input_tokens\":100,\"cached_input_tokens\":60,\"cache_write_input_tokens\":10,\"output_tokens\":20,\"reasoning_output_tokens\":5,\"total_tokens\":120},\"total_token_usage\":{\"total_tokens\":500},\"model_context_window\":258000}}}\n"
+            ),
+        )
+        .expect("fixture writes");
+
+        let parsed = parse_codex(&path).expect("desktop rollout parses");
+        assert_eq!(parsed.originator, "Codex Desktop");
+        assert_eq!(parsed.messages.len(), 2);
+        assert_eq!(parsed.messages[0].text, "visible question");
+        assert_eq!(parsed.messages[1].text, "visible answer");
+        assert_eq!(parsed.messages[1].model, "gpt-5.6-sol");
+        assert!(
+            !parsed
+                .messages
+                .iter()
+                .any(|message| message.text.contains("hidden"))
+        );
+        let usage: serde_json::Value =
+            serde_json::from_str(&parsed.messages[1].usage).expect("usage serializes");
+        assert_eq!(usage["inputTokens"], 30);
+        assert_eq!(usage["cacheReads"], 60);
+        assert_eq!(usage["cacheWrites"], 10);
+        assert_eq!(usage["contextTokens"], 500);
+        assert_eq!(usage["contextWindow"], 258_000);
+
+        let (summary, originator) = summarize_codex(&path).expect("desktop preview exists");
+        assert_eq!(originator, "Codex Desktop");
+        assert_eq!(summary.id, "desktop-session");
+        assert_eq!(summary.title, "visible question");
+        assert_eq!(
+            summary.messages, 0,
+            "discovery does not scan the whole file"
+        );
         let _ = std::fs::remove_dir_all(dir);
     }
 }

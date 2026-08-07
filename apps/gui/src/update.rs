@@ -10,7 +10,7 @@
 //! the first published bundle, not after it.
 
 use serde::Serialize;
-use tauri::{AppHandle, State};
+use tauri::{AppHandle, Manager, State};
 use tauri_plugin_updater::UpdaterExt;
 
 use crate::AppState;
@@ -52,11 +52,18 @@ pub(crate) async fn install_update(
     app: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
-    let live = state
-        .active
-        .lock()
-        .map(|active| active.len())
-        .unwrap_or_default();
+    install_update_now_with_state(&app, &state).await
+}
+
+/// Internal half used by an owner-authorized agent restart request after the
+/// originating run has released its slot.
+pub(crate) async fn install_update_now(app: &AppHandle) -> Result<(), String> {
+    let state = app.state::<AppState>();
+    install_update_now_with_state(app, &state).await
+}
+
+async fn install_update_now_with_state(app: &AppHandle, state: &AppState) -> Result<(), String> {
+    let live = state.live_run_count();
     if live > 0 {
         return Err(format!(
             "{live} run(s) still active; stop them before upgrading"
@@ -83,5 +90,5 @@ pub(crate) async fn install_update(
     // Same drain-and-angel handoff as Restart into Build on Disk. The updater
     // has replaced the path already; the angel launches that new binary only
     // after this process has released the single-writer store.
-    crate::restart_after_drain(&app, &state).await
+    crate::restart_after_drain(app, state).await
 }

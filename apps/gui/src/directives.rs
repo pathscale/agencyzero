@@ -68,11 +68,13 @@ pub const SURFACE: Surface = Surface {
         "pr.link",
         "pr.retire",
         "issue.link",
+        "app.restart",
     ],
     reserved: &[],
     bound: "any project in this installation's store, named by id or by name; \
             items.add may create an explicitly named project inside that store; \
-            no reach outside it, and no other namespace is live",
+            app.restart may affect this application process only when enabled by the owner; \
+            no other reach outside the store, and no other namespace is live",
 };
 
 /// Every stored item status is agent-settable.
@@ -141,6 +143,10 @@ pub enum Directive {
     PrRetire { id: String },
     /// Associate one item with a GitHub issue URL.
     IssueLink { url: String, item: String },
+    /// Restart into the current binary, or install a signed update and then
+    /// restart. Execution is separately gated by the owner's persisted policy;
+    /// merely knowing this verb never grants lifecycle authority.
+    AppRestart { mode: String },
     /// Remove a row, by id.
     ///
     /// The cleanup verb, and the reason it exists is that the old one deleted
@@ -163,6 +169,7 @@ impl Directive {
             Self::PrLink { .. } => "pr.link",
             Self::PrRetire { .. } => "pr.retire",
             Self::IssueLink { .. } => "issue.link",
+            Self::AppRestart { .. } => "app.restart",
         }
     }
 }
@@ -319,6 +326,11 @@ fn from_reference(reference: &Reference) -> Option<Directive> {
         let url = arg(args, "url")?;
         let item = arg(args, "item")?;
         return (!url.is_empty() && !item.is_empty()).then_some(Directive::IssueLink { url, item });
+    }
+    if verb.eq_ignore_ascii_case("app.restart") {
+        let mode = arg(args, "mode")?.to_ascii_lowercase();
+        return matches!(mode.as_str(), "disk" | "update")
+            .then_some(Directive::AppRestart { mode });
     }
     None
 }
@@ -506,6 +518,23 @@ mod tests {
                 item: "item-a3f9".into(),
             })
         );
+    }
+
+    #[test]
+    fn an_app_restart_names_one_closed_mode() {
+        assert_eq!(
+            parse(r#"<ps @agency:app.restart(mode: "disk")>"#),
+            Some(Directive::AppRestart {
+                mode: "disk".into()
+            })
+        );
+        assert_eq!(
+            parse(r#"<ps @agency:app.restart(mode: "update")>"#),
+            Some(Directive::AppRestart {
+                mode: "update".into()
+            })
+        );
+        assert!(parse(r#"<ps @agency:app.restart(mode: "shell")>"#).is_none());
     }
 
     /// Casual capitalisation compiles to the canonical verb; a confusable does

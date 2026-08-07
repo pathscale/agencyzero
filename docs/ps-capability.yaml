@@ -22,6 +22,7 @@ standing_promotion:
     - agency:pr.link
     - agency:pr.retire
     - agency:issue.link
+    - agency:app.restart
 
   # 13.2.2 Verbs and values reserved to principals above the agent.
   reserved: []
@@ -29,11 +30,14 @@ standing_promotion:
   # 13.2.3 The capability bound. `items.add(project: ...)` can write outside
   # the project a turn came from, and item ids resolve installation-wide.
   # An explicit add may also create a bare project when it names one that does
-  # not exist. Declared here rather than left implicit.
+  # not exist. The process lifecycle verb is separately gated by an owner
+  # setting and can affect only this application. Declared here rather than
+  # left implicit.
   bound: >-
     any project in this installation's store, named by id or by name;
     items.add may create an explicitly named project inside that store;
-    no reach outside it, and no other namespace is live
+    app.restart may affect this application process only when enabled by the owner;
+    no other reach outside the store, and no other namespace is live
 
   arguments:
     agency:items.state: [id, status, pr]
@@ -46,6 +50,9 @@ standing_promotion:
     agency:pr.link: [url, number, item]
     agency:pr.retire: [id]
     agency:issue.link: [url, item]
+    # mode is disk | update. Both require an explicit owner policy; update uses
+    # the signed application updater before the tiny relaunch angel is spawned.
+    agency:app.restart: [mode]
 
   semantics:
     pr_urls_in_prose: inert
@@ -58,7 +65,8 @@ standing_promotion:
   trace:
     per_directive_outcome: true
     failure_codes:
-      [ENTITY_NOT_FOUND, ENTITY_AMBIGUOUS, SYNTAX_INVALID, STATUS_INVALID, WRITE_FAILED]
+      [ENTITY_NOT_FOUND, ENTITY_AMBIGUOUS, SYNTAX_INVALID, STATUS_INVALID, WRITE_FAILED,
+      OWNER_AUTHORITY_REQUIRED, SCHEDULE_FAILED]
     surfaced_to: [agent, agent_io_panel]
     # Not yet: outcomes are text lines rather than traced events carrying the
     # segment and its provenance type. Stated because an unmet obligation that

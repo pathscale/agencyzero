@@ -58,6 +58,17 @@ pub struct GlobalSettings {
     /// [`crate::per_turn`].
     #[serde(default = "default_true")]
     pub per_turn_injection: bool,
+    /// Check the signed release manifest after launch. Manual checks and
+    /// installs remain available when this is off; the application never
+    /// installs an update merely because a check found one.
+    #[serde(default = "default_true")]
+    pub automatic_update_checks: bool,
+    /// Which lifecycle action an agent-authored Prompt Syntax directive may
+    /// schedule after its current turn finishes. The default is deliberately
+    /// `"disabled"`: restarting or replacing the running binary is owner
+    /// authority until the owner explicitly delegates it.
+    #[serde(default = "default_agent_restart_policy")]
+    pub agent_restart_policy: String,
     /// How a PR review is shaped: the model each reviewer uses, and the prompt.
     #[serde(default)]
     pub review: Review,
@@ -89,6 +100,10 @@ pub const DEFAULT_REVIEW_PROMPT: &str = "Review this pull request for correctnes
 /// than `false` — an absent flag on an older settings row must read as on.
 fn default_true() -> bool {
     true
+}
+
+fn default_agent_restart_policy() -> String {
+    "disabled".into()
 }
 
 /// The opt-in boundary for the PromptSyntax deployment study.
@@ -314,6 +329,8 @@ impl Default for GlobalSettings {
             theme: Theme::default(),
             study_analytics: StudyAnalytics::default(),
             per_turn_injection: true,
+            automatic_update_checks: true,
+            agent_restart_policy: "disabled".into(),
             review: Review::default(),
         }
     }
@@ -367,6 +384,12 @@ pub fn normalize_task_manager(settings: &mut GlobalSettings) {
 pub fn normalize(settings: &mut GlobalSettings) {
     normalize_task_manager(settings);
     settings.agent_finished_retention_turns = settings.agent_finished_retention_turns.clamp(1, 3);
+    if !matches!(
+        settings.agent_restart_policy.as_str(),
+        "disabled" | "restart" | "restart_and_update"
+    ) {
+        settings.agent_restart_policy = "disabled".into();
+    }
 }
 
 /// Merge a partial patch into a stored record.
@@ -408,6 +431,8 @@ mod tests {
         );
         assert!(back.study_analytics.session_id.is_empty());
         assert_eq!(back.agent_finished_retention_turns, 1);
+        assert!(back.automatic_update_checks);
+        assert_eq!(back.agent_restart_policy, "disabled");
         assert!(json.contains("defaultAgent"), "must be camelCase: {json}");
     }
 
@@ -423,6 +448,8 @@ mod tests {
         assert_eq!(loaded.task_manager.permission, "ask");
         assert!(!loaded.study_analytics.enabled);
         assert_eq!(loaded.agent_finished_retention_turns, 1);
+        assert!(loaded.automatic_update_checks);
+        assert_eq!(loaded.agent_restart_policy, "disabled");
         assert_eq!(
             loaded.moderator.model, "haiku",
             "absent blocks use defaults"

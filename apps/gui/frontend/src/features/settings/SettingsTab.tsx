@@ -523,11 +523,38 @@ export function SettingsTab(): JSX.Element {
                 </Row>
                 <Row
                   label={tx("Update")}
-                  hint={tx(
-                    "checked at launch against the published manifest; installing refuses while runs are active",
-                  )}
+                  hint={tx("signed manifest; installing refuses while runs are active")}
                 >
                   <UpdateControl />
+                </Row>
+                <Row
+                  label={tx("Check for updates at launch")}
+                  hint={tx("checks only; an update is never installed automatically")}
+                >
+                  <SettingToggle
+                    label={tx("Check for updates at launch")}
+                    checked={current().automaticUpdateChecks}
+                    onChange={(automaticUpdateChecks) =>
+                      void actions.saveSettings({ automaticUpdateChecks })
+                    }
+                  />
+                </Row>
+                <Row
+                  label={tx("Agent restart authority")}
+                  hint={tx("disabled by default; applies only after the agent's turn finishes")}
+                >
+                  <PillMenu<"disabled" | "restart" | "restart_and_update">
+                    label={tx("Agent restart authority")}
+                    value={current().agentRestartPolicy}
+                    options={[
+                      { value: "disabled", label: tx("Disabled") },
+                      { value: "restart", label: tx("Restart only") },
+                      { value: "restart_and_update", label: tx("Restart & update") },
+                    ]}
+                    onChange={(agentRestartPolicy) =>
+                      void actions.saveSettings({ agentRestartPolicy })
+                    }
+                  />
                 </Row>
                 <Row
                   label={tx("Restart")}
@@ -986,7 +1013,8 @@ function ChatImportSettings(): JSX.Element {
                       <For each={source.sessions}>
                         {(session) => (
                           <option value={session.id}>
-                            {session.title} · {session.messages}
+                            {session.title}
+                            {session.messages > 0 ? ` · ${session.messages}` : ""}
                           </option>
                         )}
                       </For>
