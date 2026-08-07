@@ -5037,6 +5037,9 @@ pub struct UsageAnalyticsDto {
     pub turns: usize,
     /// Imported provider turns reconstructed from transcript usage metadata.
     pub reconstructed_turns: usize,
+    /// Imported assistant messages, including those whose provider recorded no
+    /// recoverable usage metadata.
+    pub imported_turns: usize,
 }
 
 fn effective_ledger_cost(
@@ -5096,6 +5099,15 @@ pub async fn get_usage_analytics(state: State<'_, AppState>) -> Result<UsageAnal
         .select_all()
         .execute()
         .unwrap_or_default();
+    let imported_turns = state
+        .tables
+        .message
+        .select_all()
+        .execute()
+        .unwrap_or_default()
+        .into_iter()
+        .filter(|row| row.author == "agent" && row.stop == "imported")
+        .count();
 
     // Cache read/write summed by day and by model, so the ledger loop can fold
     // them in without a nested scan.
@@ -5373,6 +5385,7 @@ pub async fn get_usage_analytics(state: State<'_, AppState>) -> Result<UsageAnal
             .iter()
             .filter(|row| row.id.starts_with("imported:"))
             .count(),
+        imported_turns,
     })
 }
 

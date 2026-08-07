@@ -940,6 +940,7 @@ export function createMockApi(): AgencyZeroApi {
         },
         turns: 341,
         reconstructedTurns: 28,
+        importedTurns: 31,
       }),
     discoverChatImports: () =>
       settle([

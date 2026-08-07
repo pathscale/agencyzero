@@ -781,6 +781,7 @@ export interface UsageAnalytics {
   largestTurn: UsageLargestTurn | null;
   turns: number;
   reconstructedTurns: number;
+  importedTurns: number;
 }
 
 /**
