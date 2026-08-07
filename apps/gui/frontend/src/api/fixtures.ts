@@ -611,6 +611,7 @@ export const SETTINGS: GlobalSettings = {
   perTurnInjection: true,
   automaticUpdateChecks: true,
   agentRestartPolicy: "disabled",
+  workspaceTabs: null,
   review: { prompt: "", models: {} },
   notifications: {
     onHold: true,

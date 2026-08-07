@@ -692,9 +692,9 @@ const en = {
   Backups: "Backups",
   "closed-store copies verified byte for byte": "closed-store copies verified byte for byte",
   "Back up & close": "Back up & close",
-  "Choose & restore…": "Choose & restore…",
+  "Restore from backup…": "Restore from backup…",
   "Choose a backup to restore?": "Choose a backup to restore?",
-  Restore: "Restore",
+  "Select backup file…": "Select backup file…",
   "Portable .azbackup package · version and integrity checked":
     "Portable .azbackup package · version and integrity checked",
   "The app drains and restarts so the store is never copied while open.":
