@@ -786,7 +786,10 @@ const zh = {
     "安装兼容版本的所选智能体并登录之前，任务管理器无法发送提示。",
   Fork: "分支",
   "Open this item's fork": "打开此条目的分支",
+  "Open this item's lower-token fork": "打开此条目的低令牌分支",
   "Fork into a fresh chat": "在全新聊天中建立分支",
+  "Start a fresh fork to avoid resending this project's long chat":
+    "启动全新分支，避免重复发送此项目的长聊天记录",
   "Open the fork for {name}": "打开 {name} 的分支",
   "Fork {name} into a fresh chat": "将 {name} 分支到全新聊天",
   "Return to the parent item": "返回父条目",

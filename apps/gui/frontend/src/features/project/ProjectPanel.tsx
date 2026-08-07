@@ -29,6 +29,14 @@ export function ProjectPanel(props: { project: Project }): JSX.Element {
   const running = () => state.running[props.project.id] ?? [];
   const log = () => state.taskLog[props.project.id] ?? [];
   const io = () => state.agentIo[props.project.id] ?? [];
+  const panelItems = createMemo(() => {
+    const visible = itemsFor(props.project.id);
+    const reveal = state.itemReveal?.id;
+    const archived = reveal
+      ? (state.items[props.project.id] ?? []).find((item) => item.id === reveal && item.archived)
+      : undefined;
+    return archived ? [...visible, archived].sort((a, b) => a.order - b.order) : visible;
+  });
 
   return (
     <div class="az-scroll flex h-full min-h-0 w-[322px] flex-none flex-col gap-2.5">
@@ -42,7 +50,7 @@ export function ProjectPanel(props: { project: Project }): JSX.Element {
         class={prefs.panelSections.items ? "flex min-h-0 flex-1 flex-col" : "flex-none"}
         contentClass="flex min-h-0 flex-1 flex-col"
       >
-        <ItemList projectId={props.project.id} items={itemsFor(props.project.id)} />
+        <ItemList projectId={props.project.id} items={panelItems()} />
       </SectionPanel>
 
       <SectionPanel
@@ -1211,6 +1219,28 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
                   </span>
                 </div>
               </div>
+              <button
+                type="button"
+                onClick={() => void openFork(item)}
+                disabled={forkingId() === item.id}
+                title={
+                  forkFor(item.id)
+                    ? tx("Open this item's lower-token fork")
+                    : tx("Start a fresh fork to avoid resending this project's long chat")
+                }
+                aria-label={
+                  forkFor(item.id)
+                    ? tx("Open the fork for {name}", { name: item.title })
+                    : tx("Fork {name} into a fresh chat", { name: item.title })
+                }
+                class={`relative z-10 mr-1 flex size-6 shrink-0 items-center justify-center rounded-md border transition-colors hover:border-primary/70 hover:bg-primary/20 disabled:opacity-30 ${
+                  forkFor(item.id)
+                    ? "border-primary/55 bg-primary/18 text-primary"
+                    : "border-primary/30 bg-primary/8 text-primary/80"
+                }`}
+              >
+                <Icon name="message-square-dashed" class="text-[13px]" />
+              </button>
               {/*
                * Absolutely positioned over the row's right end, only ink when
                * hovered or busy. Out of the layout flow entirely so the title
@@ -1218,25 +1248,7 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
                * keeps the icons legible where they overlap a long title. These
                * act on the row, they are not part of reading it.
                */}
-              <div class="absolute inset-y-0 right-0 flex items-center justify-end gap-1 rounded-r-[9px] bg-gradient-to-l from-60% from-base-300 to-transparent pr-2 pl-6 opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100">
-                <button
-                  type="button"
-                  onClick={() => void openFork(item)}
-                  disabled={forkingId() === item.id}
-                  title={
-                    forkFor(item.id) ? tx("Open this item's fork") : tx("Fork into a fresh chat")
-                  }
-                  aria-label={
-                    forkFor(item.id)
-                      ? tx("Open the fork for {name}", { name: item.title })
-                      : tx("Fork {name} into a fresh chat", { name: item.title })
-                  }
-                  class={`shrink-0 rounded-md p-1 transition-colors hover:bg-primary/12 hover:text-primary disabled:opacity-30 ${
-                    forkFor(item.id) ? "text-primary" : "text-az-faint"
-                  }`}
-                >
-                  <Icon name="message-square-dashed" class="text-[12px]" />
-                </button>
+              <div class="absolute inset-y-0 right-8 flex items-center justify-end gap-1 rounded-r-[9px] bg-gradient-to-l from-60% from-base-300 to-transparent pr-2 pl-6 opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100">
                 <Show when={item.status !== "finished"}>
                   <button
                     type="button"

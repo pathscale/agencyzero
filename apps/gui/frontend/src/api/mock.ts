@@ -389,6 +389,11 @@ export function createMockApi(): AgencyZeroApi {
     async deleteItem(id) {
       const index = items.findIndex((item) => item.id === id);
       if (index < 0) return settle(undefined);
+      if (projects.some((project) => project.forkedFrom?.itemId === id)) {
+        items[index].archived = true;
+        emit("item:updated", items[index]);
+        return settle(undefined);
+      }
       const [removed] = items.splice(index, 1);
       emit("item:deleted", { id, projectId: removed.projectId });
       return settle(undefined);

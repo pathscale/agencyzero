@@ -467,6 +467,20 @@ describe("item forks", () => {
       workspace.state.tabs.filter((candidate) => candidate.projectId === fork.id),
     ).toHaveLength(1);
   });
+
+  it("hides an archived fork anchor without removing its durable row", async () => {
+    const workspace = await mountWorkspace();
+    await workspace.actions.forkItem("worktable-1");
+    await workspace.actions.deleteItem("worktable-1");
+
+    await waitFor(() => {
+      expect(
+        workspace.state.items.worktable.find((item) => item.id === "worktable-1")?.archived,
+      ).toBe(true);
+    });
+    expect(workspace.itemsFor("worktable").some((item) => item.id === "worktable-1")).toBe(false);
+    expect(workspace.actions.revealItem("worktable-1")).toBe(true);
+  });
 });
 
 describe("task correlation", () => {

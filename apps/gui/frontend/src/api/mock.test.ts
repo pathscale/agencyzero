@@ -121,6 +121,14 @@ describe("items", () => {
     const remaining = await api.listItems("worktable");
     expect(remaining.map((item: ProjectItem) => item.id)).not.toContain("worktable-1");
   });
+
+  it("archives an item instead of deleting the anchor of a fork", async () => {
+    await api.forkItem("worktable-1");
+    await api.deleteItem("worktable-1");
+
+    const kept = (await api.listItems("worktable")).find((item) => item.id === "worktable-1");
+    expect(kept?.archived).toBe(true);
+  });
 });
 
 describe("moderation", () => {

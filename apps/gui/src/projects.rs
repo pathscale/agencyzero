@@ -117,6 +117,8 @@ pub struct ProjectItemDto {
     /// ISO 8601 time of the latest persisted content/status mutation.
     /// Empty for rows created before activity tracking shipped.
     pub updated_at: String,
+    /// Hidden from ordinary lists but retained as a durable fork anchor.
+    pub archived: bool,
 }
 
 #[derive(Serialize, Clone)]
@@ -138,6 +140,7 @@ impl From<ProjectItemRow> for ProjectItemDto {
             // fact from "a pull request named the empty string".
             reference: (!row.reference.is_empty()).then_some(row.reference),
             updated_at: String::new(),
+            archived: false,
         }
     }
 }
@@ -145,6 +148,7 @@ impl From<ProjectItemRow> for ProjectItemDto {
 const ITEM_ACTIVITY_PREFIX: &str = "item-activity:";
 const ITEM_AGENT_PREFIX: &str = "item-agent:";
 const ITEM_FORK_HANDOFF_PREFIX: &str = "item-fork-handoff:";
+const ITEM_ARCHIVED_PREFIX: &str = "item-archived:";
 
 fn item_activity_key(item_id: &str) -> String {
     format!("{ITEM_ACTIVITY_PREFIX}{item_id}")
@@ -156,6 +160,24 @@ fn item_agent_key(item_id: &str) -> String {
 
 fn item_fork_handoff_key(project_id: &str) -> String {
     format!("{ITEM_FORK_HANDOFF_PREFIX}{project_id}")
+}
+
+fn item_archived_key(item_id: &str) -> String {
+    format!("{ITEM_ARCHIVED_PREFIX}{item_id}")
+}
+
+fn item_is_archived(tables: &Tables, item_id: &str) -> bool {
+    tables.kv.select(item_archived_key(item_id)).is_some()
+}
+
+fn item_has_fork(tables: &Tables, item_id: &str) -> bool {
+    tables
+        .project
+        .select_all()
+        .execute()
+        .unwrap_or_default()
+        .iter()
+        .any(|project| fork_source_item_id(project).as_deref() == Some(item_id))
 }
 
 fn fork_parent_project_id(row: &ProjectRow) -> Option<String> {
@@ -180,8 +202,18 @@ fn item_dto(row: ProjectItemRow, tables: &Tables) -> ProjectItemDto {
         .unwrap_or_default();
     ProjectItemDto {
         updated_at,
+        archived: item_is_archived(tables, &row.id),
         ..ProjectItemDto::from(row)
     }
+}
+
+async fn archive_item(tables: &Tables, row: ProjectItemRow) -> Result<ProjectItemDto, String> {
+    tables
+        .kv_put(&item_archived_key(&row.id), "true".into())
+        .await
+        .map_err(|error| error.to_string())?;
+    clear_finished_retirement(tables, &row.id).await?;
+    Ok(item_dto(row, tables))
 }
 
 async fn touch_item(tables: &Tables, item_id: &str) {
@@ -223,6 +255,16 @@ async fn clear_item_assignment(tables: &Tables, item_id: &str) {
 async fn clear_item_metadata(tables: &Tables, item_id: &str) {
     clear_item_activity(tables, item_id).await;
     clear_item_assignment(tables, item_id).await;
+    let archived = item_archived_key(item_id);
+    if tables.kv.select(archived.clone()).is_some()
+        && let Err(error) = tables.kv.delete(archived).await
+    {
+        crate::log!(
+            crate::log::Level::Warn,
+            "items",
+            "could not clear archive marker for {item_id}: {error}"
+        );
+    }
 }
 
 async fn assign_item_agent(tables: &Tables, item_id: &str, agent: &str) {
@@ -1976,14 +2018,25 @@ pub(crate) async fn finish_shipped_items_for_pr(
         .into_iter()
         .filter(|row| row.status == "shipped" && row.reference == reference)
         .collect();
-    let delete_finished = global_settings(tables).completed_items == "delete";
+    let wants_delete = global_settings(tables).completed_items == "delete";
     let mut finished = 0;
 
     for row in rows {
-        if !delete_finished {
+        let archive_finished = wants_delete && item_has_fork(tables, &row.id);
+        let delete_finished = wants_delete && !archive_finished;
+        if !wants_delete {
             schedule_finished_retirement(tables, &row.id).await?;
         }
         let written = write_item_status(tables, &row.id, "finished", delete_finished, None).await?;
+        let written = if archive_finished {
+            let kept = tables
+                .project_item
+                .select(row.id.clone())
+                .ok_or_else(|| format!("no item {}", row.id))?;
+            ItemStatusWrite::Updated(archive_item(tables, kept).await?)
+        } else {
+            written
+        };
         written.emit(app);
         finished += 1;
     }
@@ -1999,7 +2052,7 @@ async fn age_finished_items_by(
     tables: &crate::db::tables::Tables,
     project_id: &str,
     midturn: bool,
-) -> Result<Vec<ProjectItemDto>, String> {
+) -> Result<Vec<ItemStatusWrite>, String> {
     // Finished rows written by older builds, and rows completed through the
     // GUI before that path scheduled retirement, have no marker at all. Such a
     // row would otherwise be immortal because the loop below only sees marker
@@ -2011,7 +2064,7 @@ async fn age_finished_items_by(
         .execute()
         .unwrap_or_default()
         .into_iter()
-        .filter(|row| row.status == "finished")
+        .filter(|row| row.status == "finished" && !item_is_archived(tables, &row.id))
         .collect();
     for row in finished {
         if tables.kv.select(finished_retire_key(&row.id)).is_none() {
@@ -2032,6 +2085,10 @@ async fn age_finished_items_by(
             continue;
         }
         if row.status != "finished" {
+            clear_finished_retirement(tables, item_id).await?;
+            continue;
+        }
+        if item_is_archived(tables, item_id) {
             clear_finished_retirement(tables, item_id).await?;
             continue;
         }
@@ -2058,14 +2115,18 @@ async fn age_finished_items_by(
                 .map_err(|error| error.to_string())?;
             continue;
         }
-        tables
-            .project_item
-            .delete(item_id.to_string())
-            .await
-            .map_err(|error| error.to_string())?;
-        clear_item_metadata(tables, item_id).await;
-        clear_finished_retirement(tables, item_id).await?;
-        retired.push(ProjectItemDto::from(row));
+        if item_has_fork(tables, item_id) {
+            retired.push(ItemStatusWrite::Updated(archive_item(tables, row).await?));
+        } else {
+            tables
+                .project_item
+                .delete(item_id.to_string())
+                .await
+                .map_err(|error| error.to_string())?;
+            clear_item_metadata(tables, item_id).await;
+            clear_finished_retirement(tables, item_id).await?;
+            retired.push(ItemStatusWrite::Deleted(ProjectItemDto::from(row)));
+        }
     }
     Ok(retired)
 }
@@ -2073,14 +2134,14 @@ async fn age_finished_items_by(
 async fn age_finished_items(
     tables: &crate::db::tables::Tables,
     project_id: &str,
-) -> Result<Vec<ProjectItemDto>, String> {
+) -> Result<Vec<ItemStatusWrite>, String> {
     age_finished_items_by(tables, project_id, false).await
 }
 
 async fn age_finished_items_after_midturn(
     tables: &crate::db::tables::Tables,
     project_id: &str,
-) -> Result<Vec<ProjectItemDto>, String> {
+) -> Result<Vec<ItemStatusWrite>, String> {
     age_finished_items_by(tables, project_id, true).await
 }
 
@@ -2102,14 +2163,7 @@ async fn age_items_after_accepted_message(
         age_finished_items(tables, project_id).await
     };
     match result {
-        Ok(retired) => {
-            for item in retired {
-                let _ = app.emit(
-                    "item:deleted",
-                    serde_json::json!({ "id": item.id, "projectId": item.project_id }),
-                );
-            }
-        }
+        Ok(retired) => retired.into_iter().for_each(|item| item.emit(app)),
         Err(error) => crate::log!(
             crate::log::Level::Warn,
             "items",
@@ -2161,14 +2215,26 @@ pub async fn set_item_status(
         );
         return Err(format!("not an item status: {status}"));
     }
-    let delete_finished =
+    let wants_delete =
         status == "finished" && global_settings(&state.tables).completed_items == "delete";
-    if status == "finished" && !delete_finished {
+    let archive_finished = wants_delete && item_has_fork(&state.tables, &id);
+    let delete_finished = wants_delete && !archive_finished;
+    if status == "finished" && !wants_delete {
         schedule_finished_retirement(&state.tables, &id).await?;
     } else {
         clear_finished_retirement(&state.tables, &id).await?;
     }
     let written = write_item_status(&state.tables, &id, &status, delete_finished, None).await?;
+    let written = if archive_finished {
+        let row = state
+            .tables
+            .project_item
+            .select(id.clone())
+            .ok_or_else(|| format!("no item {id}"))?;
+        ItemStatusWrite::Updated(archive_item(&state.tables, row).await?)
+    } else {
+        written
+    };
     written.emit(&app);
     let dto = written.item().clone();
     let mut study = crate::study::Record::manual(
@@ -2289,7 +2355,7 @@ pub async fn set_item_issue(
     Ok(dto)
 }
 
-/// Remove one item.
+/// Remove one item, or archive it when a fork depends on its identity.
 ///
 /// # Errors
 /// Returns a message when the item does not exist or the delete fails.
@@ -2305,6 +2371,14 @@ pub async fn delete_item(
         .project_item
         .select(id.clone())
         .ok_or_else(|| format!("no item {id}"))?;
+    if item_has_fork(&state.tables, &id) {
+        let dto = archive_item(&state.tables, row.clone()).await?;
+        let _ = app.emit("item:updated", dto);
+        let mut study = crate::study::Record::manual(row.project_id, "items.archive", "item", id);
+        study.latency = Some(started.elapsed());
+        crate::study::record(&state.tables, study);
+        return Ok(());
+    }
     state
         .tables
         .project_item
@@ -2650,7 +2724,11 @@ fn state_snapshot(
         .execute()
         .unwrap_or_default()
         .into_iter()
-        .filter(|row| row.status != "finished" && row.status != "canceled")
+        .filter(|row| {
+            row.status != "finished"
+                && row.status != "canceled"
+                && !item_is_archived(tables, &row.id)
+        })
         .collect();
     items.sort_by_key(|row| row.position);
 
@@ -12847,6 +12925,80 @@ mod tests {
         projects[0].position = 4;
         projects[1].position = 9;
         assert_eq!(next_project_position(&projects), 10);
+    }
+
+    #[tokio::test]
+    async fn a_finished_item_with_a_fork_archives_instead_of_deleting() {
+        let dir = std::env::temp_dir().join(format!(
+            "az-project-fork-anchor-{}-{}",
+            std::process::id(),
+            chrono::Utc::now().timestamp_nanos_opt().unwrap_or_default()
+        ));
+        let tables = crate::db::tables::Tables::open(&dir)
+            .await
+            .expect("fork-anchor store opens");
+        for row in [
+            ProjectRow {
+                id: "project-a".into(),
+                name: "Parent".into(),
+                status: "active".into(),
+                position: 0,
+                dirs: "[]".into(),
+                pinned: false,
+                moderator_enabled: false,
+                forked_from: String::new(),
+                last_activity_at: now(),
+            },
+            ProjectRow {
+                id: "fork-a".into(),
+                name: "Fork".into(),
+                status: "active".into(),
+                position: 1,
+                dirs: "[]".into(),
+                pinned: false,
+                moderator_enabled: false,
+                forked_from: serde_json::json!({
+                    "projectId": "project-a",
+                    "itemId": "item-anchor",
+                })
+                .to_string(),
+                last_activity_at: now(),
+            },
+        ] {
+            tables.project.insert(row).expect("project inserts");
+        }
+        tables
+            .project_item
+            .insert(ProjectItemRow {
+                id: "item-anchor".into(),
+                project_id: "project-a".into(),
+                title: "Keep me".into(),
+                status: "finished".into(),
+                position: 0,
+                reference: String::new(),
+            })
+            .expect("item inserts");
+        schedule_finished_retirement(&tables, "item-anchor")
+            .await
+            .expect("retirement schedules");
+
+        let retired = age_finished_items(&tables, "project-a")
+            .await
+            .expect("finished anchor ages");
+
+        assert_eq!(retired.len(), 1);
+        assert!(retired[0].item().archived);
+        assert!(
+            tables
+                .project_item
+                .select("item-anchor".to_string())
+                .is_some(),
+            "the fork's parent item remains durable"
+        );
+        assert!(item_is_archived(&tables, "item-anchor"));
+
+        tables.shutdown().await.expect("fork-anchor store drains");
+        let _ = std::fs::remove_dir_all(dir);
     }
 
     #[tokio::test]

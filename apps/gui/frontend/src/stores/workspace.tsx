@@ -670,7 +670,9 @@ function createWorkspace() {
     // Sorted here, not trusted from the array: a reorder arrives as
     // `item:updated` events that change `order` in place, and the array's
     // insertion order never moves.
-    return [...(state.items[projectId] ?? [])].sort((a, b) => a.order - b.order);
+    return (state.items[projectId] ?? [])
+      .filter((item) => !item.archived)
+      .sort((a, b) => a.order - b.order);
   }
 
   /** The Items badge counts what is left to do, so terminal items drop out. */
