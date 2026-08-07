@@ -31,7 +31,9 @@ hardens into procedure moves here; the reasoning stays in memory.
 
 ## Versioning
 
-- Patch only: `0.1.28` to `0.1.29`, never `0.1` to `0.2`.
+- Patch only by default: `0.3.0` to `0.3.1`, never cross a release line silently.
+  A minor or major milestone requires the owner to name it explicitly, as the
+  owner did for `0.3.0`.
 - Bump on every commit that should ship. Release fires on a version change alone, so an
   unbumped commit reaches nobody.
 
