@@ -43,6 +43,19 @@ pub fn instructions(config_dir: &std::path::Path, agent_finished_retention_turns
         )
 }
 
+/// Whether an instruction block already teaches every live authoring verb.
+///
+/// The dynamic state snapshot can omit its fallback declaration and examples
+/// only when the stable system prefix carries the whole surface. Checking the
+/// effective text keeps a custom override that does not teach Prompt Syntax
+/// safe: it still gets the fallback beside the live ids.
+#[must_use]
+pub fn covers_surface(instructions: &str) -> bool {
+    crate::directives::SURFACE.verbs.iter().all(|verb| {
+        instructions.contains(&format!("@{}:{verb}", crate::directives::SURFACE.namespace))
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -56,6 +69,12 @@ mod tests {
         assert!(EMBEDDED.contains("Report every pull request"));
         assert!(EMBEDDED.contains("Finish delivered work"));
         assert!(EMBEDDED.contains("@agency:ask"));
+        assert!(covers_surface(EMBEDDED));
+    }
+
+    #[test]
+    fn an_unrelated_override_does_not_suppress_the_snapshot_fallback() {
+        assert!(!covers_surface("Keep answers concise."));
     }
 
     #[test]

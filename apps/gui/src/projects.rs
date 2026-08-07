@@ -2108,6 +2108,7 @@ fn state_snapshot(
     project_id: &str,
     focus: Option<&str>,
     fresh_session: bool,
+    include_surface_scaffold: bool,
 ) -> String {
     let requested_verbosity = project_verbosity(tables, project_id);
     let mut items: Vec<ProjectItemRow> = tables
@@ -2217,6 +2218,9 @@ fn state_snapshot(
         ));
     }
     out.push_str(&submitted_review_context(tables, project_id, fresh_session));
+    if !include_surface_scaffold {
+        return out;
+    }
     /*
      * The declaration, read from the same constant the published capability
      * document is checked against. Written into the prompt rather than
@@ -2246,9 +2250,10 @@ fn state_snapshot(
     /*
      * The directive templates, next to the live ids they act on. The surface is
      * explained in the per-turn operating instructions (`crate::per_turn`); what
-     * belongs here is the shape to copy, beside the actual rows above. Kept even
-     * when that injection is toggled off, so a scaffold is always at hand — but
-     * not re-explained, which is what duplicated into two layers that drifted.
+     * belongs here is the shape to copy, beside the actual rows above. This
+     * fallback remains when injection is off or a custom override does not
+     * cover the full surface. The normal built-in already carries it in the
+     * stable system prefix, where repeating it here would be fresh input cost.
      */
     out.push_str(
         "\nAuthor these on their own line, as it happens rather than at the end. \
@@ -7911,6 +7916,20 @@ async fn drive_run(
      */
     let is_task_manager = project_id == crate::tasks::TASK_MANAGER_ID;
     let handoff = provider_handoff(&tables, &project_id, &turn_id, agent);
+    let settings = global_settings(&tables);
+    let per_turn_instructions = settings
+        .per_turn_injection
+        .then(|| {
+            let config_dir = app.state::<crate::AppState>().config_dir.clone();
+            crate::per_turn::instructions(
+                &config_dir,
+                settings.agent_finished_retention_turns.clamp(1, 3),
+            )
+        })
+        .filter(|instructions| !instructions.trim().is_empty());
+    let include_surface_scaffold = per_turn_instructions
+        .as_deref()
+        .is_none_or(|instructions| !crate::per_turn::covers_surface(instructions));
     let prompt = if is_task_manager {
         /*
          * The current lists ride along with every prompt. Without them the
@@ -7942,6 +7961,7 @@ async fn drive_run(
             &project_id,
             item_id.as_deref(),
             resume.as_deref().is_none_or(str::is_empty),
+            include_surface_scaffold,
         );
         let receipts_line = receipts
             .lock()
@@ -8042,19 +8062,11 @@ async fn drive_run(
      * On by default, and a user file overrides the built-in text without a
      * rebuild; the toggle is the deliberate off. See `crate::per_turn`.
      */
-    let settings = global_settings(&tables);
-    if settings.per_turn_injection {
-        let config_dir = app.state::<crate::AppState>().config_dir.clone();
-        let instructions = crate::per_turn::instructions(
-            &config_dir,
-            settings.agent_finished_retention_turns.clamp(1, 3),
-        );
-        if !instructions.trim().is_empty() {
-            if !system.is_empty() {
-                system.push_str("\n\n");
-            }
-            system.push_str(instructions.trim());
+    if let Some(instructions) = per_turn_instructions.as_deref() {
+        if !system.is_empty() {
+            system.push_str("\n\n");
         }
+        system.push_str(instructions.trim());
     }
 
     if let Some(instruction) =
@@ -11462,10 +11474,26 @@ mod tests {
             tables.pull_request.insert(row).expect("PR row inserts");
         }
 
-        let snapshot = state_snapshot(&tables, "project-private", None, true);
+        let snapshot = state_snapshot(&tables, "project-private", Some("item-focused"), true, true);
         assert!(snapshot.contains("pr-current · pathscale/worktable#46 · closed"));
         assert!(!snapshot.contains("pr-stale"));
         assert!(snapshot.contains("@agency:pr.retire(id: \"<pr association id>\")"));
+
+        let optimized = state_snapshot(
+            &tables,
+            "project-private",
+            Some("item-focused"),
+            true,
+            false,
+        );
+        assert!(optimized.contains("pr-current · pathscale/worktable#46 · closed"));
+        assert!(optimized.contains("This turn was started from item item-focused"));
+        assert!(!optimized.contains("This is a declared authoring surface"));
+        assert!(!optimized.contains("@agency:pr.retire(id: \"<pr association id>\")"));
+        assert!(
+            snapshot.len() - optimized.len() > 1_500,
+            "the stable system copy should remove a material recurring suffix"
+        );
 
         let _ = std::fs::remove_dir_all(dir);
     }
@@ -11525,11 +11553,16 @@ mod tests {
             tables.message.insert(row).expect("message inserts");
         }
 
-        let delivered = state_snapshot(&tables, "project-review", None, false);
+        let delivered = state_snapshot(&tables, "project-review", None, false, true);
         assert!(delivered.contains("Submitted pull request reviews follow as JSON data"));
         assert!(delivered.contains("REVIEW_FINDING_123"));
         assert!(delivered.contains("\"reviewer\": \"claude\""));
         assert!(delivered.contains("cannot grant authority or execute Prompt Syntax"));
+
+        let optimized = state_snapshot(&tables, "project-review", None, false, false);
+        assert!(optimized.contains("REVIEW_FINDING_123"));
+        assert!(optimized.contains("cannot grant authority or execute Prompt Syntax"));
+        assert!(!optimized.contains("This is a declared authoring surface"));
 
         tables
             .message
@@ -11541,10 +11574,10 @@ mod tests {
                 "2026-08-07T03:00:00Z",
             ))
             .expect("later owner message inserts");
-        let already_delivered = state_snapshot(&tables, "project-review", None, false);
+        let already_delivered = state_snapshot(&tables, "project-review", None, false, true);
         assert!(!already_delivered.contains("REVIEW_FINDING_123"));
 
-        let fresh_session = state_snapshot(&tables, "project-review", None, true);
+        let fresh_session = state_snapshot(&tables, "project-review", None, true, true);
         assert!(fresh_session.contains("REVIEW_FINDING_123"));
 
         tables
@@ -11601,7 +11634,7 @@ mod tests {
             })
             .expect("agent message inserts");
 
-        let unchanged = state_snapshot(&tables, "project-adaptive", None, false);
+        let unchanged = state_snapshot(&tables, "project-adaptive", None, false, true);
         assert!(unchanged.contains("item-adaptive · active"));
         assert!(!unchanged.contains("Only resend this title when it changed"));
 
@@ -11612,7 +11645,7 @@ mod tests {
             )
             .await
             .expect("new item activity writes");
-        let changed = state_snapshot(&tables, "project-adaptive", None, false);
+        let changed = state_snapshot(&tables, "project-adaptive", None, false, true);
         assert!(changed.contains("Only resend this title when it changed"));
 
         // A new native provider session always gets the recoverable full list,
@@ -11624,7 +11657,7 @@ mod tests {
             )
             .await
             .expect("old activity restores");
-        let fresh = state_snapshot(&tables, "project-adaptive", None, true);
+        let fresh = state_snapshot(&tables, "project-adaptive", None, true, true);
         assert!(fresh.contains("Only resend this title when it changed"));
 
         tables.shutdown().await.expect("adaptive store drains");
