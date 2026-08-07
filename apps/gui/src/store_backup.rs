@@ -6,8 +6,12 @@
 //! JSON manifest plus the untouched WorkTable files under `store/`.
 
 use std::collections::BTreeMap;
+use std::fs::OpenOptions;
 use std::io::{Read, Write};
 use std::path::{Component, Path, PathBuf};
+
+#[cfg(unix)]
+use std::os::unix::fs::OpenOptionsExt;
 
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -21,6 +25,9 @@ const SCHEMA_VERSION: u32 = 1;
 const MANIFEST_FILE: &str = "manifest.json";
 const STORE_PREFIX: &str = "store/";
 const MAX_MANIFEST_BYTES: u64 = 4 * 1024 * 1024;
+const MAX_STORE_FILES: usize = 10_000;
+const MAX_STORE_FILE_BYTES: u64 = 8 * 1024 * 1024 * 1024;
+const MAX_STORE_BYTES: u64 = 16 * 1024 * 1024 * 1024;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -268,7 +275,12 @@ fn hex(digest: impl AsRef<[u8]>) -> String {
 }
 
 fn write_archive(store: &Path, package: &Path) -> Result<(), String> {
-    let output = std::fs::File::create(package)
+    let mut output = OpenOptions::new();
+    output.write(true).create_new(true);
+    #[cfg(unix)]
+    output.mode(0o600);
+    let output = output
+        .open(package)
         .map_err(|error| format!("could not create backup package: {error}"))?;
     let mut archive = zip::ZipWriter::new(output);
     let options = SimpleFileOptions::default()
@@ -332,7 +344,7 @@ fn write_archive(store: &Path, package: &Path) -> Result<(), String> {
     Ok(())
 }
 
-fn checksum_reader(reader: &mut impl Read) -> Result<(u64, String), String> {
+fn checksum_reader(reader: &mut impl Read, limit: u64) -> Result<(u64, String), String> {
     let mut digest = Sha256::new();
     let mut bytes = 0_u64;
     let mut buffer = [0_u8; 64 * 1024];
@@ -343,17 +355,50 @@ fn checksum_reader(reader: &mut impl Read) -> Result<(u64, String), String> {
         if read == 0 {
             break;
         }
-        digest.update(&buffer[..read]);
-        bytes = bytes
+        let next = bytes
             .checked_add(read as u64)
             .ok_or_else(|| "backup size overflowed u64".to_string())?;
+        if next > limit {
+            return Err(format!(
+                "backup entry exceeds its declared or supported size of {limit} bytes"
+            ));
+        }
+        digest.update(&buffer[..read]);
+        bytes = next;
     }
     Ok((bytes, hex(digest.finalize())))
+}
+
+fn validate_manifest_limits(manifest: &Manifest) -> Result<(), String> {
+    if manifest.files.len() > MAX_STORE_FILES {
+        return Err(format!(
+            "backup declares too many store files (maximum {MAX_STORE_FILES})"
+        ));
+    }
+    let mut total = 0_u64;
+    for file in &manifest.files {
+        if file.bytes > MAX_STORE_FILE_BYTES {
+            return Err(format!(
+                "backup entry {} exceeds the {} byte per-file limit",
+                file.path, MAX_STORE_FILE_BYTES
+            ));
+        }
+        total = total
+            .checked_add(file.bytes)
+            .ok_or_else(|| "backup total size overflowed u64".to_string())?;
+        if total > MAX_STORE_BYTES {
+            return Err(format!(
+                "backup exceeds the {MAX_STORE_BYTES} byte uncompressed-size limit"
+            ));
+        }
+    }
+    Ok(())
 }
 
 fn validate_archive(package: &Path) -> Result<Manifest, String> {
     let manifest = read_manifest(package)?;
     compatible(&manifest)?;
+    validate_manifest_limits(&manifest)?;
     let mut expected = BTreeMap::new();
     for file in &manifest.files {
         if !safe_relative(&file.path) || expected.insert(file.path.clone(), file).is_some() {
@@ -363,6 +408,12 @@ fn validate_archive(package: &Path) -> Result<Manifest, String> {
 
     let file = std::fs::File::open(package).map_err(|error| error.to_string())?;
     let mut archive = zip::ZipArchive::new(file).map_err(|error| error.to_string())?;
+    if archive.len() > MAX_STORE_FILES + 1 {
+        return Err(format!(
+            "backup ZIP contains too many entries (maximum {})",
+            MAX_STORE_FILES + 1
+        ));
+    }
     let mut manifest_count = 0;
     for index in 0..archive.len() {
         let mut entry = archive.by_index(index).map_err(|error| error.to_string())?;
@@ -380,7 +431,10 @@ fn validate_archive(package: &Path) -> Result<Manifest, String> {
         let Some(record) = expected.remove(relative) else {
             return Err(format!("backup ZIP contains unmanifested entry {name}"));
         };
-        let (bytes, sha256) = checksum_reader(&mut entry)?;
+        if entry.size() > record.bytes || entry.size() > MAX_STORE_FILE_BYTES {
+            return Err(format!("backup entry {relative} exceeds its declared size"));
+        }
+        let (bytes, sha256) = checksum_reader(&mut entry, record.bytes)?;
         if bytes != record.bytes || sha256 != record.sha256 {
             return Err(format!("backup integrity check failed for {relative}"));
         }
@@ -401,7 +455,7 @@ fn verify_store(store: &Path, manifest: &Manifest) -> Result<(), String> {
             return Err("restored store has a different directory layout".into());
         }
         let mut file = std::fs::File::open(file).map_err(|error| error.to_string())?;
-        let (bytes, sha256) = checksum_reader(&mut file)?;
+        let (bytes, sha256) = checksum_reader(&mut file, record.bytes)?;
         if bytes != record.bytes || sha256 != record.sha256 {
             return Err(format!("restored store verification failed for {path}"));
         }
@@ -490,7 +544,7 @@ pub(crate) fn restore(store: &Path, backup: &Path) -> Result<PathBuf, String> {
         let file = std::fs::File::open(backup).map_err(|error| error.to_string())?;
         let mut archive = zip::ZipArchive::new(file).map_err(|error| error.to_string())?;
         for record in &manifest.files {
-            let mut entry = archive
+            let entry = archive
                 .by_name(&format!("{STORE_PREFIX}{}", record.path))
                 .map_err(|error| format!("could not read {}: {error}", record.path))?;
             let target = staging.join(&record.path);
@@ -499,8 +553,18 @@ pub(crate) fn restore(store: &Path, backup: &Path) -> Result<PathBuf, String> {
             }
             let mut output = std::fs::File::create(&target)
                 .map_err(|error| format!("could not create {}: {error}", target.display()))?;
-            std::io::copy(&mut entry, &mut output)
+            let limit = record
+                .bytes
+                .checked_add(1)
+                .ok_or_else(|| "backup entry size overflowed u64".to_string())?;
+            let copied = std::io::copy(&mut entry.take(limit), &mut output)
                 .map_err(|error| format!("could not extract {}: {error}", record.path))?;
+            if copied != record.bytes {
+                return Err(format!(
+                    "backup entry {} extracted {copied} bytes, expected {}",
+                    record.path, record.bytes
+                ));
+            }
         }
         verify_store(&staging, &manifest)?;
         // Loading every table catches damaged indexes and invalid row shapes
@@ -540,6 +604,8 @@ pub(crate) fn restore(store: &Path, backup: &Path) -> Result<PathBuf, String> {
 mod tests {
     use super::*;
     use std::io::{Seek, SeekFrom};
+    #[cfg(unix)]
+    use std::os::unix::fs::PermissionsExt;
 
     fn scratch(label: &str) -> PathBuf {
         let path = std::env::temp_dir().join(format!(
@@ -571,6 +637,16 @@ mod tests {
 
         create(&store, &backup).expect("backup succeeds");
         assert!(backup.is_file());
+        #[cfg(unix)]
+        assert_eq!(
+            std::fs::metadata(&backup)
+                .expect("backup metadata")
+                .permissions()
+                .mode()
+                & 0o777,
+            0o600,
+            "the archive itself contains private transcripts"
+        );
         assert_eq!(validate_archive(&backup).expect("valid").files.len(), 2);
         let found = status(&store).expect("status");
         assert_eq!(found.backups.len(), 1);
@@ -664,6 +740,41 @@ mod tests {
         let mut other_schema = base;
         other_schema.schema_fingerprint = "different".into();
         assert!(compatible(&other_schema).unwrap_err().contains("schema"));
+    }
+
+    #[test]
+    fn manifest_limits_reject_oversized_entries_and_totals() {
+        let base = Manifest {
+            format_version: PACKAGE_FORMAT,
+            app_version: az_core::VERSION.into(),
+            schema_version: SCHEMA_VERSION,
+            schema_fingerprint: crate::db::tables::SCHEMA_FINGERPRINT.into(),
+            created_at: chrono::Utc::now().to_rfc3339(),
+            files: vec![ManifestFile {
+                path: "message/.wt.data".into(),
+                bytes: MAX_STORE_FILE_BYTES + 1,
+                sha256: String::new(),
+            }],
+        };
+        assert!(
+            validate_manifest_limits(&base)
+                .unwrap_err()
+                .contains("per-file limit")
+        );
+
+        let mut total = base;
+        total.files = (0..3)
+            .map(|index| ManifestFile {
+                path: format!("table-{index}/.wt.data"),
+                bytes: MAX_STORE_FILE_BYTES,
+                sha256: String::new(),
+            })
+            .collect();
+        assert!(
+            validate_manifest_limits(&total)
+                .unwrap_err()
+                .contains("uncompressed-size limit")
+        );
     }
 
     #[test]

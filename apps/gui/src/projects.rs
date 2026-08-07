@@ -25,7 +25,9 @@
 
 use agent_abstraction::{Agent, Decision, Event, Permission, Request, Stop};
 use serde::{Deserialize, Serialize};
+use std::process::Stdio;
 use tauri::{AppHandle, Emitter, Manager, State};
+use tokio::io::{AsyncRead, AsyncReadExt};
 // `execute` on a select builder is a trait method.
 use worktable::prelude::*;
 
@@ -7470,6 +7472,95 @@ pub async fn send_message(
 /// # Errors
 /// When the agent is unknown, or the review result cannot be persisted. Fetch
 /// and provider failures are themselves persisted as visible review messages.
+const REVIEW_DIFF_CAP: usize = 200_000;
+const REVIEW_STDERR_CAP: usize = 16_384;
+const REVIEW_DIFF_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(60);
+
+async fn read_capped<R: AsyncRead + Unpin>(
+    mut reader: R,
+    cap: usize,
+    stop_at_cap: bool,
+) -> std::io::Result<(Vec<u8>, bool)> {
+    let mut collected = Vec::with_capacity(cap.min(64 * 1024));
+    let mut buffer = [0_u8; 16 * 1024];
+    let mut truncated = false;
+    loop {
+        let read = reader.read(&mut buffer).await?;
+        if read == 0 {
+            break;
+        }
+        let remaining = cap.saturating_sub(collected.len());
+        let keep = remaining.min(read);
+        collected.extend_from_slice(&buffer[..keep]);
+        if keep < read || collected.len() == cap {
+            truncated = true;
+            if stop_at_cap {
+                break;
+            }
+        }
+    }
+    Ok((collected, truncated))
+}
+
+struct PullRequestDiff {
+    stdout: Vec<u8>,
+    stderr: Vec<u8>,
+    success: bool,
+    truncated: bool,
+}
+
+async fn fetch_pull_request_diff(url: &str) -> Result<PullRequestDiff, String> {
+    let mut child = tokio::process::Command::new("gh")
+        .args(["pr", "diff", url])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .kill_on_drop(true)
+        .spawn()
+        .map_err(|error| format!("could not run the GitHub CLI to fetch the diff: {error}"))?;
+    let stdout = child
+        .stdout
+        .take()
+        .ok_or_else(|| "GitHub CLI stdout was not available".to_string())?;
+    let stderr = child
+        .stderr
+        .take()
+        .ok_or_else(|| "GitHub CLI stderr was not available".to_string())?;
+    let stderr_task = tokio::spawn(read_capped(stderr, REVIEW_STDERR_CAP, false));
+
+    let collect = async move {
+        let (stdout, truncated) = read_capped(stdout, REVIEW_DIFF_CAP, true)
+            .await
+            .map_err(|error| error.to_string())?;
+        let success = if truncated {
+            child
+                .kill()
+                .await
+                .map_err(|error| format!("could not stop the oversized GitHub diff: {error}"))?;
+            false
+        } else {
+            child
+                .wait()
+                .await
+                .map_err(|error| error.to_string())?
+                .success()
+        };
+        let (stderr, _) = stderr_task
+            .await
+            .map_err(|error| format!("GitHub stderr reader failed: {error}"))?
+            .map_err(|error| error.to_string())?;
+        Ok(PullRequestDiff {
+            stdout,
+            stderr,
+            success,
+            truncated,
+        })
+    };
+
+    tokio::time::timeout(REVIEW_DIFF_TIMEOUT, collect)
+        .await
+        .map_err(|_| "GitHub CLI timed out after 60 seconds while fetching the diff".to_string())?
+}
+
 #[tauri::command]
 pub async fn review_pull_request(
     app: AppHandle,
@@ -7517,13 +7608,16 @@ pub async fn review_pull_request(
     // stdout; we paste it in so the review is of the actual change. A failure
     // here (gh missing, not logged in, no access) is surfaced as the review
     // body instead of a silent empty run.
-    let diff = match tokio::process::Command::new("gh")
-        .args(["pr", "diff", &url])
-        .output()
-        .await
-    {
-        Ok(output) if output.status.success() => {
-            String::from_utf8_lossy(&output.stdout).to_string()
+    let diff = match fetch_pull_request_diff(&url).await {
+        Ok(output) if output.success || output.truncated => {
+            let diff = String::from_utf8_lossy(&output.stdout);
+            if output.truncated {
+                format!(
+                    "{diff}\n\n[diff truncated after {REVIEW_DIFF_CAP} bytes; gh was stopped at the limit]"
+                )
+            } else {
+                diff.into_owned()
+            }
         }
         Ok(output) => {
             let detail = String::from_utf8_lossy(&output.stderr);
@@ -7546,27 +7640,12 @@ pub async fn review_pull_request(
                 &state.tables,
                 &review,
                 format!(
-                    "could not run the GitHub CLI to fetch the diff: {error}. Install `gh` and \
-                 run `gh auth login`, then try the review again."
+                    "could not fetch the pull request diff: {error}. Install `gh`, run \
+                 `gh auth login`, and check the network connection before trying again."
                 ),
                 1,
             );
         }
-    };
-
-    // A diff can be large; a review does not need every line of a huge one, and
-    // an unbounded paste risks blowing the reviewer's context. Cap it and say
-    // so, rather than truncate silently.
-    const DIFF_CAP: usize = 200_000;
-    let diff = if diff.len() > DIFF_CAP {
-        let kept = split_boundary(&diff, DIFF_CAP);
-        format!(
-            "{}\n\n[diff truncated at {DIFF_CAP} bytes of {} total; review what is shown]",
-            &diff[..kept],
-            diff.len()
-        )
-    } else {
-        diff
     };
 
     let prompt =
@@ -10138,6 +10217,21 @@ mod tests {
         assert_eq!(parse_review_agent(Some("codex")), Ok(Agent::Codex));
         assert_eq!(parse_review_agent(Some("copilot")), Ok(Agent::Copilot));
         assert!(parse_review_agent(Some("unknown")).is_err());
+    }
+
+    #[tokio::test]
+    async fn review_diff_reader_keeps_only_its_cap() {
+        use tokio::io::AsyncWriteExt;
+
+        let (mut writer, reader) = tokio::io::duplex(64);
+        let write = tokio::spawn(async move {
+            writer.write_all(b"abcdef").await.unwrap();
+        });
+        let (body, truncated) = read_capped(reader, 3, true).await.unwrap();
+        write.await.unwrap();
+
+        assert_eq!(body, b"abc");
+        assert!(truncated);
     }
 
     #[test]
