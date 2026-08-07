@@ -41,6 +41,8 @@ describe("WelcomeFlow", () => {
     screen.getByRole("button", { name: "Help and setup" }).click();
 
     expect(await screen.findByRole("dialog", { name: "Welcome to AgencyZero" })).toBeVisible();
+    expect(screen.getByText("Restoring from backup?")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Select backup file…" })).toBeVisible();
   });
 
   it("shows on a new store and defers without marking setup complete", async () => {

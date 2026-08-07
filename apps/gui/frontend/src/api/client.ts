@@ -24,6 +24,7 @@ import type {
   QuotaReport,
   RateLimit,
   RunningTask,
+  StoreBackupSelection,
   StoreBackupStatus,
   StudySummary,
   StudyTurnMetadata,
@@ -190,7 +191,9 @@ export interface AgencyZeroApi {
   getStoreBackupStatus(): Promise<StoreBackupStatus>;
   /** Choose a destination, drain, create and verify a backup, then close. */
   createStoreBackup(): Promise<void>;
-  /** Choose a package, validate it, drain, restore it, then relaunch. */
+  /** Choose and validate a package natively without exposing its path. */
+  selectStoreBackup(): Promise<StoreBackupSelection | null>;
+  /** Drain, restore the selected package, then relaunch. */
   restoreStoreBackup(): Promise<void>;
   /**
    * Open the OS directory picker, to choose the location above.

@@ -409,6 +409,11 @@ export interface StoreBackupStatus {
   lastOperation: StoreBackupOperation | null;
 }
 
+/** Native-picked restore package; its absolute path never enters the webview. */
+export interface StoreBackupSelection {
+  fileName: string;
+}
+
 /** Whether an id names one model or points at whichever is current. */
 export type ModelKind = "alias" | "pinned";
 
@@ -594,6 +599,10 @@ export interface GlobalSettings {
   workspaceTabs: WorkspaceTabs | null;
   /** False only for a genuinely new store until its welcome flow completes. */
   onboardingCompleted: boolean;
+  /** Stable webview preferences copied into the store for portable backups. */
+  uiPreferences: Partial<PortableUiPrefs>;
+  /** Capture id used to apply a restored preference snapshot exactly once. */
+  uiPreferencesRevision: string;
   /** How a PR review is shaped: the prompt, and the model per reviewer agent. */
   review: ReviewSettings;
 }
@@ -933,6 +942,9 @@ export interface UiPrefs {
   /** Persisted so the second appearance can offer the permanent opt-out. */
   costWarningDismissals: number;
 }
+
+/** Preferences that travel with a backup; unfinished owner text stays local. */
+export type PortableUiPrefs = Omit<UiPrefs, "composerDrafts" | "replyQuestionIds">;
 
 /**
  * One quota window, in the provider's own terms.

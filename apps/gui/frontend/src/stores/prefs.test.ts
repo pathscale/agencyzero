@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { prefs, setPrefs, UI_SCALES } from "~/stores/prefs";
+import {
+  portablePrefsSnapshot,
+  prefs,
+  preparePortablePrefsRestore,
+  restorePortablePrefs,
+  setPrefs,
+  UI_SCALES,
+} from "~/stores/prefs";
 
 describe("interface size", () => {
   it("offers the three ordered scales requested by the picker", () => {
@@ -39,5 +46,36 @@ describe("workspace layout", () => {
 
     setPrefs("projectPanelVisible", true);
     setPrefs("expandedComposerKeys", []);
+  });
+
+  it("backs up stable preferences and leaves unfinished owner text local", () => {
+    setPrefs("uiSize", "extra-large");
+    setPrefs("expandedComposerKeys", ["project:abc"]);
+    setPrefs("composerDrafts", "project:abc", "unfinished message");
+    setPrefs("replyQuestionIds", "project:abc", "question-1");
+
+    const snapshot = portablePrefsSnapshot();
+    expect(snapshot.uiSize).toBe("extra-large");
+    expect(snapshot.expandedComposerKeys).toEqual(["project:abc"]);
+    expect(snapshot).not.toHaveProperty("composerDrafts");
+    expect(snapshot).not.toHaveProperty("replyQuestionIds");
+
+    preparePortablePrefsRestore();
+    restorePortablePrefs({ uiSize: "normal", expandedComposerKeys: [] }, "backup-1");
+    expect(prefs.uiSize).toBe("normal");
+    expect(prefs.expandedComposerKeys).toEqual([]);
+    expect(prefs.composerDrafts["project:abc"]).toBe("unfinished message");
+    expect(prefs.replyQuestionIds["project:abc"]).toBe("question-1");
+
+    setPrefs("uiSize", "extra-large");
+    restorePortablePrefs({ uiSize: "normal" }, "backup-1");
+    expect(prefs.uiSize).toBe("extra-large");
+
+    preparePortablePrefsRestore();
+    restorePortablePrefs({ uiSize: "normal" }, "backup-1");
+    expect(prefs.uiSize).toBe("normal");
+
+    setPrefs("composerDrafts", "project:abc", "");
+    setPrefs("replyQuestionIds", "project:abc", "");
   });
 });

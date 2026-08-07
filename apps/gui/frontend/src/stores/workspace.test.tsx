@@ -593,6 +593,29 @@ describe("the data location", () => {
   });
 });
 
+describe("backup portability", () => {
+  it("writes stable webview preferences into the store before backup starts", async () => {
+    const workspace = await mountWorkspace();
+    setPrefs("uiSize", "extra-large");
+    setPrefs("expandedComposerKeys", ["project:worktable"]);
+    setPrefs("composerDrafts", "project:worktable", "do not treat as a preference");
+
+    await expect(workspace.actions.createStoreBackup()).rejects.toThrow(
+      "the fixture backend has no durable store to back up",
+    );
+
+    expect(workspace.state.settings?.uiPreferences.uiSize).toBe("extra-large");
+    expect(workspace.state.settings?.uiPreferences.expandedComposerKeys).toEqual([
+      "project:worktable",
+    ]);
+    expect(workspace.state.settings?.uiPreferences).not.toHaveProperty("composerDrafts");
+
+    setPrefs("uiSize", "large");
+    setPrefs("expandedComposerKeys", []);
+    setPrefs("composerDrafts", "project:worktable", "");
+  });
+});
+
 describe("delivery receipts", () => {
   /*
    * The first receipt for a project arrives before any receipt record exists,

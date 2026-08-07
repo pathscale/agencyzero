@@ -90,6 +90,7 @@ export function createTauriApi(): AgencyZeroApi {
     setDataLocation: (path) => call("set_data_location", { path }),
     getStoreBackupStatus: () => call("get_store_backup_status"),
     createStoreBackup: () => call("create_store_backup"),
+    selectStoreBackup: () => call("select_store_backup"),
     restoreStoreBackup: () => call("restore_store_backup"),
     chooseDataDirectory: () => call("choose_data_directory"),
     chooseProjectDirectory: () => call("choose_project_directory"),

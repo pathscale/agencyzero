@@ -613,6 +613,8 @@ export const SETTINGS: GlobalSettings = {
   agentRestartPolicy: "disabled",
   workspaceTabs: null,
   onboardingCompleted: true,
+  uiPreferences: {},
+  uiPreferencesRevision: "",
   review: { prompt: "", models: {} },
   notifications: {
     onHold: true,

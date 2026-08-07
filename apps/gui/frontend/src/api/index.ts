@@ -68,6 +68,7 @@ const COMMAND_FOR: Record<CommandMethod, string> = {
   setDataLocation: "set_data_location",
   getStoreBackupStatus: "get_store_backup_status",
   createStoreBackup: "create_store_backup",
+  selectStoreBackup: "select_store_backup",
   restoreStoreBackup: "restore_store_backup",
   chooseDataDirectory: "choose_data_directory",
   chooseProjectDirectory: "choose_project_directory",
