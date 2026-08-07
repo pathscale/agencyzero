@@ -745,6 +745,26 @@ const zh = {
   "Select an AgencyZero backup, then restore it before continuing setup.":
     "选择 AgencyZero 备份，然后在继续设置前恢复。",
   Restore: "恢复",
+  "No compatible project agent is ready": "没有可用的兼容项目智能体",
+  "AgencyZero cannot send prompts until Claude or Codex is installed, compatible, and signed in.":
+    "安装兼容版本的 Claude 或 Codex 并登录之前，AgencyZero 无法发送提示。",
+  "Skip - I promise to install them later": "跳过 - 我保证稍后安装",
+  "Agent setup deferred": "已推迟智能体设置",
+  "Install an agent from Settings before sending your first prompt.":
+    "发送第一条提示前，请从设置中安装智能体。",
+  "Prompt controls will remain disabled": "提示控件将保持禁用",
+  "You can browse AgencyZero, but return to Settings and run the agent checks after installing Claude or Codex.":
+    "你可以浏览 AgencyZero，但安装 Claude 或 Codex 后，请返回设置并再次运行智能体检查。",
+  "AgencyZero will open Home. Install and confirm Claude or Codex in Settings before starting a project.":
+    "AgencyZero 将打开首页。开始项目前，请在设置中安装并确认 Claude 或 Codex。",
+  "Finish setup": "完成设置",
+  "{agent} is not ready. Install or sign in from Settings, then run the agent checks again.":
+    "{agent} 尚未就绪。请从设置中安装或登录，然后再次运行智能体检查。",
+  "Agent setup required": "需要设置智能体",
+  "Open Settings": "打开设置",
+  "Install or sign in to {agent} before sending prompts": "发送提示前，请安装或登录 {agent}",
+  "The task manager cannot send prompts until its selected agent is installed, compatible, and signed in.":
+    "安装兼容版本的所选智能体并登录之前，任务管理器无法发送提示。",
 } satisfies Record<keyof typeof en, string>;
 
 export default zh;

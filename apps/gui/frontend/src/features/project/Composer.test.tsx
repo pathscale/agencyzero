@@ -1,6 +1,7 @@
 import { fireEvent, render, waitFor } from "@solidjs/testing-library";
 import { createSignal } from "solid-js";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { AGENT_STATUS } from "~/api/fixtures";
 import { Composer } from "~/features/project/Composer";
 import { prefs, setPrefs } from "~/stores/prefs";
 import { useWorkspace, type Workspace, WorkspaceProvider } from "~/stores/workspace";
@@ -60,7 +61,24 @@ function type(field: HTMLTextAreaElement, value: string) {
   field.dispatchEvent(new Event("input", { bubbles: true }));
 }
 
+afterEach(() => {
+  AGENT_STATUS.find((status) => status.agent === "claude")!.state = "connected";
+});
+
 describe("Composer", () => {
+  it("keeps the draft and disables Send when the selected agent is unavailable", async () => {
+    AGENT_STATUS.find((status) => status.agent === "claude")!.state = "missing";
+    const { field, onSend, booted, getByRole, getByLabelText } = mount();
+    await booted();
+
+    type(field, "Please do not disappear");
+
+    expect(getByRole("alert")).toHaveTextContent("Agent setup required");
+    expect(getByLabelText("Send")).toBeDisabled();
+    expect(field.value).toBe("Please do not disappear");
+    expect(onSend).not.toHaveBeenCalled();
+  });
+
   it("puts the cursor in the prompt when the tab opens", () => {
     const { field } = mount({ autofocus: true });
     expect(document.activeElement).toBe(field);

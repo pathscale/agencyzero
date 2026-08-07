@@ -769,6 +769,27 @@ const en = {
   "Select an AgencyZero backup, then restore it before continuing setup.":
     "Select an AgencyZero backup, then restore it before continuing setup.",
   Restore: "Restore",
+  "No compatible project agent is ready": "No compatible project agent is ready",
+  "AgencyZero cannot send prompts until Claude or Codex is installed, compatible, and signed in.":
+    "AgencyZero cannot send prompts until Claude or Codex is installed, compatible, and signed in.",
+  "Skip - I promise to install them later": "Skip - I promise to install them later",
+  "Agent setup deferred": "Agent setup deferred",
+  "Install an agent from Settings before sending your first prompt.":
+    "Install an agent from Settings before sending your first prompt.",
+  "Prompt controls will remain disabled": "Prompt controls will remain disabled",
+  "You can browse AgencyZero, but return to Settings and run the agent checks after installing Claude or Codex.":
+    "You can browse AgencyZero, but return to Settings and run the agent checks after installing Claude or Codex.",
+  "AgencyZero will open Home. Install and confirm Claude or Codex in Settings before starting a project.":
+    "AgencyZero will open Home. Install and confirm Claude or Codex in Settings before starting a project.",
+  "Finish setup": "Finish setup",
+  "{agent} is not ready. Install or sign in from Settings, then run the agent checks again.":
+    "{agent} is not ready. Install or sign in from Settings, then run the agent checks again.",
+  "Agent setup required": "Agent setup required",
+  "Open Settings": "Open Settings",
+  "Install or sign in to {agent} before sending prompts":
+    "Install or sign in to {agent} before sending prompts",
+  "The task manager cannot send prompts until its selected agent is installed, compatible, and signed in.":
+    "The task manager cannot send prompts until its selected agent is installed, compatible, and signed in.",
 } as const;
 
 export default en;

@@ -7046,6 +7046,8 @@ pub async fn create_project(
     input: CreateProjectInput,
     state: State<'_, AppState>,
 ) -> Result<CreatedProject, String> {
+    let agent = parse_agent(input.agent.as_deref())?;
+    crate::agents::require_executable(agent)?;
     let project_id = id("proj");
     let order = u32::try_from(list_projects(state.clone()).len()).unwrap_or(0);
 
@@ -7223,6 +7225,7 @@ pub async fn send_message(
     state: State<'_, AppState>,
 ) -> Result<MessageDto, String> {
     let agent = parse_agent(input.agent.as_deref())?;
+    crate::agents::require_executable(agent)?;
     let agent_name = agent_wire_name(agent);
     let model = input.model.clone().unwrap_or_default();
     let permission = input
