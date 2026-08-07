@@ -790,6 +790,12 @@ const zh = {
   "Fork into a fresh chat": "在全新聊天中建立分支",
   "Start a fresh fork to avoid resending this project's long chat":
     "启动全新分支，避免重复发送此项目的长聊天记录",
+  "Fork item-sized work into a fresh child chat to avoid resending this long conversation.":
+    "将条目规模的工作分支到全新子聊天，避免重复发送这段长对话。",
+  "Turn warning threshold": "单次回复警告阈值",
+  "warn when the projected cost of one turn reaches this amount":
+    "当单次回复的预计成本达到此金额时发出警告",
+  "Projected turn warning threshold": "预计单次回复警告阈值",
   "Open the fork for {name}": "打开 {name} 的分支",
   "Fork {name} into a fresh chat": "将 {name} 分支到全新聊天",
   "Return to the parent item": "返回父条目",

@@ -1775,8 +1775,9 @@ function RelaunchButton(): JSX.Element {
  * than a bill, which is exactly what makes it comparable week to week.
  */
 function CostSection(): JSX.Element {
-  const { actions } = useWorkspace();
+  const { state, actions } = useWorkspace();
   const [summary, setSummary] = createSignal<CostSummary | null>(null);
+  const warningUsd = () => state.settings?.costWarningUsd ?? 0.75;
 
   // Asked once per visit: the ledger only grows when a run finishes, and
   // Settings is not a screen left open while runs happen.
@@ -1865,6 +1866,28 @@ function CostSection(): JSX.Element {
         )}
       >
         {figure(summary()?.totalUsd)}
+      </Row>
+      <Row
+        label={tx("Turn warning threshold")}
+        hint={tx("warn when the projected cost of one turn reaches this amount")}
+      >
+        <div class="flex min-w-[260px] items-center gap-3">
+          <input
+            type="range"
+            min="0.25"
+            max="20"
+            step="0.25"
+            value={warningUsd()}
+            aria-label={tx("Projected turn warning threshold")}
+            onChange={(event) =>
+              void actions.saveSettings({ costWarningUsd: Number(event.currentTarget.value) })
+            }
+            class="h-1.5 min-w-0 flex-1 cursor-pointer accent-primary"
+          />
+          <output class="w-14 shrink-0 text-right font-mono text-[12.5px] text-az-strong">
+            ${warningUsd().toFixed(2)}
+          </output>
+        </div>
       </Row>
       <Row
         label={tx("Cost warnings")}

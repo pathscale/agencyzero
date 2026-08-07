@@ -604,6 +604,7 @@ export const SETTINGS: GlobalSettings = {
   },
   envPolicy: "minimal",
   forwardProxyVars: false,
+  costWarningUsd: 0.75,
   completedItems: "resolve",
   agentFinishedRetentionTurns: 1,
   theme: { accent: "", softness: 0, wash: 10, textBrightness: 0 },

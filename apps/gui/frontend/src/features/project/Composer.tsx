@@ -300,11 +300,20 @@ export function Composer(props: ComposerProps): JSX.Element {
   const costEstimate = createMemo(() => {
     const table = state.pricing;
     if (!table) return null;
+    const warnUsd = state.settings?.costWarningUsd ?? table.warnUsd;
+    const effectiveTable = {
+      ...table,
+      warnUsd,
+      // A custom warning above the built-in $2 danger threshold must still
+      // mean what the slider says. Keep "high" above warning rather than
+      // letting it reopen the card before the chosen threshold.
+      highUsd: Math.max(table.highUsd, warnUsd * 2),
+    };
     if (isCompactCommand()) {
-      return compactEstimate(table, estimateModel(), props.contextTokens ?? 0);
+      return compactEstimate(effectiveTable, estimateModel(), props.contextTokens ?? 0);
     }
     return estimate(
-      table,
+      effectiveTable,
       estimateModel(),
       draft(),
       props.contextTokens ?? 0,
@@ -714,6 +723,11 @@ export function Composer(props: ComposerProps): JSX.Element {
                       <li>
                         {tx(
                           "Or start a fresh session if the history no longer helps the next task.",
+                        )}
+                      </li>
+                      <li>
+                        {tx(
+                          "Fork item-sized work into a fresh child chat to avoid resending this long conversation.",
                         )}
                       </li>
                     </ul>

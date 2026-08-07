@@ -211,7 +211,7 @@ export function ProjectTab(props: { tab: Tab; project: Project }): JSX.Element {
     <div class="flex min-h-0 min-w-0 flex-1">
       <div class="relative flex min-h-0 min-w-0 flex-1">
         <Panel class="relative flex min-w-0 flex-1 flex-col">
-          <header class="flex flex-none items-center gap-3 border-az-hairline-soft border-b px-4 py-3">
+          <header class="relative flex flex-none items-center gap-3 border-az-hairline-soft border-b px-4 py-3">
             <Icon name="messages-square" class="text-[16px] text-az-muted" />
             {/*
             The name owns the row and truncates on its own. Everything after it
@@ -257,7 +257,7 @@ export function ProjectTab(props: { tab: Tab; project: Project }): JSX.Element {
             positioning keeps the title row available to the project name while
             leaving next-turn controls in the composer.
           */}
-            <span class="absolute top-[62px] right-4 z-20 flex min-w-0 max-w-[calc(100%-2rem)] items-center gap-2 overflow-hidden rounded-full border border-primary/18 bg-base-300/94 px-2.5 py-0.5 font-mono text-[11px] text-az-muted shadow-md backdrop-blur-sm">
+            <span class="absolute top-full right-3 z-20 flex min-w-0 max-w-[calc(100%-1.5rem)] items-center gap-2 overflow-hidden rounded-b-lg border border-primary/18 bg-base-300/94 px-3 py-1 font-mono text-[11px] text-az-muted shadow-md backdrop-blur-sm">
               {/* No leading agent label: the 7-day readout at the end already says
                 "Claude 7d …", so a "Claude ·" prefix here was the same word
                 twice. The turn count leads instead. */}

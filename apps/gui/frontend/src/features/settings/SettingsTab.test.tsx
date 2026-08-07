@@ -93,3 +93,17 @@ describe("store backups", () => {
     expect(screen.queryByRole("button", { name: "Restore" })).toBeNull();
   });
 });
+
+describe("cost warning settings", () => {
+  it("persists a per-turn warning threshold across the full slider range", async () => {
+    const screen = await mountSettings();
+    const slider = screen.getByLabelText("Projected turn warning threshold") as HTMLInputElement;
+
+    expect(slider.min).toBe("0.25");
+    expect(slider.max).toBe("20");
+    expect(slider.value).toBe("0.75");
+
+    fireEvent.change(slider, { target: { value: "1.25" } });
+    await waitFor(() => expect(screen.workspace.state.settings?.costWarningUsd).toBe(1.25));
+  });
+});

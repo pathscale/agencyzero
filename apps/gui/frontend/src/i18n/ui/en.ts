@@ -816,6 +816,12 @@ const en = {
   "Fork into a fresh chat": "Fork into a fresh chat",
   "Start a fresh fork to avoid resending this project's long chat":
     "Start a fresh fork to avoid resending this project's long chat",
+  "Fork item-sized work into a fresh child chat to avoid resending this long conversation.":
+    "Fork item-sized work into a fresh child chat to avoid resending this long conversation.",
+  "Turn warning threshold": "Turn warning threshold",
+  "warn when the projected cost of one turn reaches this amount":
+    "warn when the projected cost of one turn reaches this amount",
+  "Projected turn warning threshold": "Projected turn warning threshold",
   "Open the fork for {name}": "Open the fork for {name}",
   "Fork {name} into a fresh chat": "Fork {name} into a fresh chat",
   "Return to the parent item": "Return to the parent item",

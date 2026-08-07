@@ -36,6 +36,9 @@ pub struct GlobalSettings {
     pub env_policy: String,
     pub forward_proxy_vars: bool,
     pub notifications: Notifications,
+    /// Projected per-turn USD at which the composer starts warning. The hard
+    /// danger threshold remains part of the price table.
+    pub cost_warning_usd: f64,
     /// What a session's `- [x]` does to an existing item: `"resolve"` marks
     /// it finished and keeps the row (the default — history stays readable),
     /// `"delete"` removes it outright for owners who want the list to be only
@@ -387,6 +390,7 @@ impl Default for GlobalSettings {
             env_policy: "minimal".into(),
             forward_proxy_vars: false,
             notifications: Notifications::default(),
+            cost_warning_usd: 0.75,
             completed_items: "resolve".into(),
             agent_finished_retention_turns: 1,
             theme: Theme::default(),
@@ -451,6 +455,11 @@ pub fn normalize_task_manager(settings: &mut GlobalSettings) {
 pub fn normalize(settings: &mut GlobalSettings) {
     normalize_task_manager(settings);
     settings.agent_finished_retention_turns = settings.agent_finished_retention_turns.clamp(1, 3);
+    settings.cost_warning_usd = if settings.cost_warning_usd.is_finite() {
+        settings.cost_warning_usd.clamp(0.25, 20.0)
+    } else {
+        0.75
+    };
     if settings.onboarding_completed.is_none() {
         settings.onboarding_completed = Some(true);
     }
@@ -616,5 +625,19 @@ mod tests {
         assert_eq!(settings.task_manager.agent, "codex");
         assert_eq!(settings.task_manager.model, "gpt-5.6-luna");
         assert_eq!(settings.task_manager.effort, "low");
+    }
+
+    #[test]
+    fn cost_warning_threshold_stays_inside_the_settings_slider_range() {
+        let mut settings = GlobalSettings {
+            cost_warning_usd: 100.0,
+            ..GlobalSettings::default()
+        };
+        normalize(&mut settings);
+        assert_eq!(settings.cost_warning_usd, 20.0);
+
+        settings.cost_warning_usd = 0.01;
+        normalize(&mut settings);
+        assert_eq!(settings.cost_warning_usd, 0.25);
     }
 }
