@@ -1435,9 +1435,8 @@ function TableSizes(): JSX.Element {
 
 /**
  * Backup and restore deliberately restart the app. The angel waits until this
- * process has drained and released the store, then copies and byte-verifies it
- * while closed. Only an opaque id comes back through the webview for restore;
- * native code resolves the allowlisted sibling path.
+ * process has drained and released the store, then archives and byte-verifies
+ * it while closed. Save and restore paths come only from native OS pickers.
  */
 function StoreBackupControls(): JSX.Element {
   const { actions, isLive } = useWorkspace();
@@ -1456,28 +1455,14 @@ function StoreBackupControls(): JSX.Element {
       });
   });
 
-  const latest = () => status()?.backups[0] ?? null;
-  const summary = () => {
-    const current = status();
-    const backup = latest();
-    if (!current || !backup) return tx("No verified backups yet");
-    return tx("{count} verified backup(s) · latest {age} · {size}", {
-      count: current.backups.length,
-      age: relativeTime(backup.createdAt),
-      size: formatBytes(backup.bytes),
-    });
-  };
-
   const backup = (): void => {
     setError("");
     void actions.createStoreBackup().catch((cause) => setError(describeError(cause)));
   };
 
   const restore = (): void => {
-    const backup = latest();
-    if (!backup) return;
     setError("");
-    void actions.restoreStoreBackup(backup.id).catch((cause) => {
+    void actions.restoreStoreBackup().catch((cause) => {
       setConfirming(false);
       setError(describeError(cause));
     });
@@ -1485,7 +1470,9 @@ function StoreBackupControls(): JSX.Element {
 
   return (
     <div class="flex max-w-[390px] flex-col items-end gap-1.5">
-      <span class="text-right text-[11px] text-az-muted">{summary()}</span>
+      <span class="text-right text-[11px] text-az-muted">
+        {tx("Portable .azbackup package · version and integrity checked")}
+      </span>
       <span class="text-right text-[10.5px] text-az-faint">
         {tx("The app drains and restarts so the store is never copied while open.")}
       </span>
@@ -1510,22 +1497,22 @@ function StoreBackupControls(): JSX.Element {
           onClick={backup}
           class="rounded-lg border border-primary/50 px-3 py-[5px] text-[12px] text-primary transition-colors hover:border-primary disabled:cursor-not-allowed disabled:opacity-40"
         >
-          {tx("Back up & restart")}
+          {tx("Back up & close")}
         </button>
         <Show
           when={confirming()}
           fallback={
             <button
               type="button"
-              disabled={!latest() || !isLive("restoreStoreBackup")}
+              disabled={!isLive("restoreStoreBackup")}
               onClick={() => setConfirming(true)}
               class="rounded-lg border border-az-hairline-strong px-3 py-[5px] text-[12px] text-az-muted transition-colors hover:border-warning hover:text-warning disabled:cursor-not-allowed disabled:opacity-40"
             >
-              {tx("Restore latest")}
+              {tx("Choose & restore…")}
             </button>
           }
         >
-          <span class="text-[11px] text-warning">{tx("Restore this backup?")}</span>
+          <span class="text-[11px] text-warning">{tx("Choose a backup to restore?")}</span>
           <button
             type="button"
             onClick={restore}

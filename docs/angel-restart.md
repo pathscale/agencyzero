@@ -38,16 +38,21 @@ copies from the GUI:
 2. Every WorkTable persistence worker drains.
 3. The angel starts, the GUI exits, and the angel waits for the process and its
    store lock to disappear.
-4. Backup copies into a unique staging directory, compares every file byte for
-   byte, and only then publishes the timestamped sibling directory.
-5. Restore copies and verifies the selected backup before moving the current
-   store. The displaced store is retained under a unique `pre-restore` name.
-6. The angel relaunches the GUI and passes the maintenance result through the
+4. Backup writes one profile-neutral, DEFLATE-compressed ZIP containing the raw
+   `store/` files and `manifest.json`, then verifies every declared SHA-256.
+5. Restore checks package format, exact app version, schema fingerprint and
+   file hashes, then opens every WorkTable table in staging before moving the
+   current store. The displaced store is retained under a unique `pre-restore`
+   name.
+6. A successful backup leaves the source profile closed. A backup failure or
+   restore relaunches the GUI and passes the maintenance result through the
    replacement process's environment for Settings to report.
 
-The webview supplies only an opaque backup id. Native code resolves it against
-the current store's allowlisted sibling names, so an arbitrary path cannot be
-turned into a restore source.
+The webview supplies no backup path. A native Save panel chooses the destination
+and a native Open panel chooses the restore source; the angel accepts only
+absolute `.azbackup` package paths and revalidates the archive after the GUI has
+exited. The ZIP carries no profile identity and moves unchanged between
+Experimental and Normal.
 
 The supervisor does not preserve active agent runs across a restart; that
 remains the job of the run sidecar described in [xpc-sidecar.md](xpc-sidecar.md).

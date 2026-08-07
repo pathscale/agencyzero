@@ -119,16 +119,26 @@ prevented at the insert, and repaired by rebuild, never by copy.
 
 ## Manual verified backups
 
-Settings can create a timestamped backup beside the active store and restore
-the latest one. Both actions restart the app because the restart angel performs
-the filesystem operation only after WorkTable has drained and the GUI has
-released the exclusive lock.
+Settings opens a native Save panel for backup and a native Open panel for
+restore. Both actions close the app because the restart angel performs the
+filesystem operation only after WorkTable has drained and the GUI has released
+the exclusive lock. A successful backup stays closed for the profile handoff;
+a failed backup or completed restore relaunches that profile. Cancelling either
+panel leaves the app running untouched.
 
-A manual backup is copied into a unique staging directory and compared byte for
-byte with the closed source before it is published as `db.backup-<id>`. Restore
-copies and verifies the selected backup first, then swaps it into place. The
-store it displaced is retained whole as `db.pre-restore-<id>`, so restore never
-destroys the state it replaces.
+A manual backup is one ordinary DEFLATE ZIP named
+`AgencyZero-backup-<id>.azbackup`. It contains a small `manifest.json` and the raw,
+unmodified WorkTable files under `store/`; no rows are decoded or re-encoded.
+The manifest records the package format, AgencyZero version, exact schema
+fingerprint, and each file's byte length and SHA-256.
+
+Restore requires the exact app version and schema, and refuses an unknown
+package format or any missing/changed file. It extracts into staging and opens
+every WorkTable table there before moving the current store. The store it
+displaced is retained whole as `db.pre-restore-<id>`, so restore never destroys
+the state it replaces. The package carries no profile id or source path. Save
+it anywhere both profiles can reach, then select that same file from Normal;
+the webview never receives or supplies either filesystem path.
 
 The same limitation as the rolling snapshot applies: byte verification proves
 the copy is complete, not that old WorkTable page accounting was healthy. Use a

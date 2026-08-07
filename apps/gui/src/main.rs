@@ -625,7 +625,7 @@ fn set_data_location(path: Option<String>, state: State<'_, AppState>) -> Result
         .map_err(|error| error.to_string())
 }
 
-/// Manual, verified backups beside the current store, newest first.
+/// Manual, verified backups still present beside the current store, newest first.
 ///
 /// The last angel operation arrives through the replacement process's
 /// environment. It is deliberately process-local: the backup directory is the
@@ -637,7 +637,8 @@ fn get_store_backup_status(
     store_backup::status(&state.location.path)
 }
 
-/// Drain, exit, and let the restart angel copy and byte-verify the closed store.
+/// Choose a profile-agnostic package, then let the restart angel archive and
+/// byte-verify the closed store.
 ///
 /// # Errors
 /// Refuses ephemeral sessions and active agent runs, and leaves the GUI open if
@@ -650,43 +651,81 @@ async fn create_store_backup(app: AppHandle, state: State<'_, AppState>) -> Resu
     if state.live_run_count() != 0 {
         return Err("stop active agent runs before backing up the store".into());
     }
-    let backup = store_backup::new_backup_path(&state.location.path)?;
+    let (tx, rx) = tokio::sync::oneshot::channel();
+    app.dialog()
+        .file()
+        .set_title("Save AgencyZero backup")
+        .set_file_name(store_backup::new_backup_file_name())
+        .add_filter("AgencyZero backup", &["azbackup"])
+        .save_file(move |picked| {
+            let _ = tx.send(picked);
+        });
+    let Some(picked) = rx
+        .await
+        .map_err(|_| "the backup save dialog closed without answering".to_string())?
+    else {
+        return Ok(());
+    };
+    let mut backup = picked.into_path().map_err(|error| error.to_string())?;
+    if backup.extension().and_then(|extension| extension.to_str()) != Some("azbackup") {
+        backup.set_extension("azbackup");
+    }
+    if !store_backup::is_package_path(&backup) {
+        return Err("choose an absolute .azbackup destination".into());
+    }
+    if backup.exists() {
+        return Err("the selected backup file already exists; choose a new name".into());
+    }
+    let store = std::fs::canonicalize(&state.location.path)
+        .map_err(|error| format!("could not resolve the active store: {error}"))?;
     state.drain_tables_once().await?;
-    angel::spawn(angel::Action::Backup {
-        store: state.location.path.clone(),
-        backup,
-    })?;
+    angel::spawn(angel::Action::Backup { store, backup })?;
     app.exit(0);
     Ok(())
 }
 
-/// Drain, exit, validate the selected sibling backup, and atomically replace
-/// the closed store through the restart angel.
+/// Choose and validate a profile-agnostic package, then atomically replace the
+/// closed store through the restart angel.
 ///
 /// The displaced store is retained under a generated `pre-restore` name. The
-/// webview supplies only an opaque backup id; path resolution stays native and
-/// allowlisted to the current store's siblings.
+/// webview supplies no path: only the native file picker can select the package.
 #[tauri::command]
-async fn restore_store_backup(
-    app: AppHandle,
-    state: State<'_, AppState>,
-    id: String,
-) -> Result<(), String> {
+async fn restore_store_backup(app: AppHandle, state: State<'_, AppState>) -> Result<(), String> {
     if state.location.source == "ephemeral" {
         return Err("an ephemeral session has no durable store to restore".into());
     }
     if state.live_run_count() != 0 {
         return Err("stop active agent runs before restoring the store".into());
     }
-    let backup = store_backup::resolve_backup(&state.location.path, &id)?;
-    if !backup.is_dir() {
+    let (tx, rx) = tokio::sync::oneshot::channel();
+    app.dialog()
+        .file()
+        .set_title("Choose an AgencyZero backup to restore")
+        .add_filter("AgencyZero backup", &["azbackup"])
+        .pick_file(move |picked| {
+            let _ = tx.send(picked);
+        });
+    let Some(picked) = rx
+        .await
+        .map_err(|_| "the restore file dialog closed without answering".to_string())?
+    else {
+        return Ok(());
+    };
+    let backup = picked.into_path().map_err(|error| error.to_string())?;
+    if !store_backup::is_package_path(&backup) {
+        return Err("choose an absolute .azbackup package".into());
+    }
+    if !backup.is_file() {
         return Err("the selected backup no longer exists".into());
     }
+    // Checked again inside the angel after the parent exits. This first pass
+    // keeps an incompatible package from draining the live app merely to
+    // discover that it cannot be restored.
+    store_backup::check_restore(&backup)?;
+    let store = std::fs::canonicalize(&state.location.path)
+        .map_err(|error| format!("could not resolve the active store: {error}"))?;
     state.drain_tables_once().await?;
-    angel::spawn(angel::Action::Restore {
-        store: state.location.path.clone(),
-        backup,
-    })?;
+    angel::spawn(angel::Action::Restore { store, backup })?;
     app.exit(0);
     Ok(())
 }

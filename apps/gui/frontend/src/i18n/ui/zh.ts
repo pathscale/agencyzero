@@ -670,13 +670,12 @@ const zh = {
   turns: "轮",
   Backups: "备份",
   "closed-store copies verified byte for byte": "关闭存储后逐字节验证的副本",
-  "Back up & restart": "备份并重启",
-  "Restore latest": "恢复最新备份",
-  "Restore this backup?": "恢复此备份？",
+  "Back up & close": "备份并关闭",
+  "Choose & restore…": "选择并恢复…",
+  "Choose a backup to restore?": "选择要恢复的备份？",
   Restore: "恢复",
-  "No verified backups yet": "尚无已验证备份",
-  "{count} verified backup(s) · latest {age} · {size}":
-    "{count} 个已验证备份 · 最新 {age} · {size}",
+  "Portable .azbackup package · version and integrity checked":
+    "便携式 .azbackup 包 · 已检查版本与完整性",
   "The app drains and restarts so the store is never copied while open.":
     "应用会先排空写入并重启，确保存储不会在打开时被复制。",
 } satisfies Record<keyof typeof en, string>;

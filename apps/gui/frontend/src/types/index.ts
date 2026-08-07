@@ -379,13 +379,16 @@ export interface DataLocationView extends DataLocation {
   pending: DataLocation | null;
 }
 
-/** One closed-store, byte-verified manual backup beside the active database. */
+/** One closed-store, byte-verified package discovered beside the active database. */
 export interface StoreBackup {
-  /** Opaque native id. The frontend never supplies a filesystem path to restore. */
+  /** Opaque display id. Restore paths come only from the native file picker. */
   id: string;
   /** ISO 8601 filesystem timestamp. */
   createdAt: string;
   bytes: number;
+  appVersion: string;
+  compatible: boolean;
+  incompatibility: string | null;
 }
 
 /** What the maintenance angel did immediately before this process launched. */
