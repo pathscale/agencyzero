@@ -647,7 +647,7 @@ const zh = {
   finished: "已完成",
   "effective cost": "有效成本",
   "includes local estimates": "包含本地估算",
-  "includes reconstructed imported turns": "包含 {{count}} 个从导入会话重建的轮次",
+  "imported usage coverage": "已恢复 {{recovered}} / {{total}} 个导入的助手轮次用量",
   "Import chats": "导入聊天",
   "Import all": "全部导入",
   "Importing all…": "正在全部导入…",

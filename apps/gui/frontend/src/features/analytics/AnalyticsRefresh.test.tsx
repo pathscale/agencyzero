@@ -27,6 +27,7 @@ const EMPTY_USAGE: UsageAnalytics = {
   largestTurn: null,
   turns: 0,
   reconstructedTurns: 0,
+  importedTurns: 0,
 };
 
 describe("analytics refresh", () => {
