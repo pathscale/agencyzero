@@ -147,6 +147,10 @@ pub(crate) struct AppState {
     /// both read the same prior record and the slower write would silently
     /// drop the faster one's field on disk.
     settings_write: tokio::sync::Mutex<()>,
+    /// Serializes provider-session ownership checks with project creation.
+    /// Without one lock, two Import clicks can both observe "unknown" before
+    /// either writes the native session id and create duplicate projects.
+    chat_imports: tokio::sync::Mutex<()>,
     /// Makes every quit, restart, updater, and signal share one drain. The
     /// normal UI path drains asynchronously before asking Tauri to exit; the
     /// native exit callback is only a fallback for exits that bypass IPC.
@@ -1492,6 +1496,7 @@ fn main() {
                 limits: Arc::default(),
                 receipts: Arc::default(),
                 settings_write: tokio::sync::Mutex::new(()),
+                chat_imports: tokio::sync::Mutex::new(()),
                 exit_drain_started: std::sync::atomic::AtomicBool::new(false),
                 exit_drain_succeeded: std::sync::atomic::AtomicBool::new(false),
                 agent_restart_scheduled: std::sync::atomic::AtomicBool::new(false),

@@ -6674,11 +6674,68 @@ pub fn list_rate_limits(state: State<'_, AppState>) -> Vec<RateLimitReport> {
 ///
 /// # Errors
 /// Returns a message only when the home directory itself cannot be resolved.
+fn owned_provider_sessions(
+    tables: &crate::db::tables::Tables,
+    agent: Agent,
+) -> std::collections::HashSet<String> {
+    let mut project_ids: Vec<String> = tables
+        .project
+        .select_all()
+        .execute()
+        .unwrap_or_default()
+        .into_iter()
+        .map(|project| project.id)
+        .collect();
+    project_ids.push(crate::tasks::TASK_MANAGER_ID.into());
+    project_ids
+        .into_iter()
+        .filter_map(|project_id| tables.kv_get(&agent_session_key(&project_id, agent)))
+        .filter(|session| !session.is_empty())
+        .collect()
+}
+
+fn exclude_owned_imports(
+    sources: &mut [crate::chat_import::SourceStatus],
+    claude: &std::collections::HashSet<String>,
+    codex: &std::collections::HashSet<String>,
+) {
+    // Seed each provider's seen set with sessions already attached to a
+    // project, then extend it as discovery rows are accepted. This removes
+    // duplicates both within one provider store and across its desktop/CLI
+    // views before Import all ever sees them.
+    let mut seen_claude = claude.clone();
+    let mut seen_codex = codex.clone();
+    for source in sources {
+        let seen = match source.source.as_str() {
+            "claude-code" | "claude-desktop" => &mut seen_claude,
+            "codex" | "chatgpt-desktop" => &mut seen_codex,
+            _ => continue,
+        };
+        let discovered = source.sessions.len();
+        source
+            .sessions
+            .retain(|session| seen.insert(session.id.clone()));
+        if source.available {
+            source.note = format!(
+                "{} new local session(s); {} already owned or duplicated",
+                source.sessions.len(),
+                discovered.saturating_sub(source.sessions.len())
+            );
+        }
+    }
+}
+
 #[tauri::command]
-pub async fn discover_chat_imports() -> Result<Vec<crate::chat_import::SourceStatus>, String> {
-    tokio::task::spawn_blocking(crate::chat_import::discover)
+pub async fn discover_chat_imports(
+    state: State<'_, AppState>,
+) -> Result<Vec<crate::chat_import::SourceStatus>, String> {
+    let claude = owned_provider_sessions(&state.tables, Agent::Claude);
+    let codex = owned_provider_sessions(&state.tables, Agent::Codex);
+    let mut sources = tokio::task::spawn_blocking(crate::chat_import::discover)
         .await
-        .map_err(|error| format!("chat discovery stopped unexpectedly: {error}"))?
+        .map_err(|error| format!("chat discovery stopped unexpectedly: {error}"))??;
+    exclude_owned_imports(&mut sources, &claude, &codex);
+    Ok(sources)
 }
 
 /// Copy one allowlisted provider transcript into a new AgencyZero project.
@@ -6697,6 +6754,38 @@ pub async fn import_chat_session(
     session_id: String,
     state: State<'_, AppState>,
 ) -> Result<ProjectDto, String> {
+    let _import_guard = state.chat_imports.lock().await;
+    let agent = if matches!(source.as_str(), "codex" | "chatgpt-desktop") {
+        Agent::Codex
+    } else {
+        Agent::Claude
+    };
+    // Re-check at execution time, not only in discovery. The UI may be stale,
+    // two imports may race, or a caller may invoke the command directly. A
+    // native provider session remains a single AgencyZero project in all of
+    // those cases.
+    let projects: Vec<ProjectRow> = state
+        .tables
+        .project
+        .select_all()
+        .execute()
+        .unwrap_or_default();
+    if let Some(owner) = projects.iter().find(|project| {
+        state
+            .tables
+            .kv_get(&agent_session_key(&project.id, agent))
+            .is_some_and(|owned| owned == session_id)
+    }) {
+        return Ok(with_session(ProjectDto::from(owner.clone()), &state.tables));
+    }
+    if state
+        .tables
+        .kv_get(&agent_session_key(crate::tasks::TASK_MANAGER_ID, agent))
+        .is_some_and(|owned| owned == session_id)
+    {
+        return Err("that provider session already belongs to the Home Task Manager".into());
+    }
+
     // Desktop Work/Codex and CLI/IDE are two views over the same native thread
     // ids. Canonicalize their import identity so changing the source filter
     // cannot create a duplicate AgencyZero project.
@@ -6723,11 +6812,6 @@ pub async fn import_chat_session(
         return Err("the selected session contains no importable user or agent messages".into());
     }
     let project_id = id("proj");
-    let agent = if matches!(source.as_str(), "codex" | "chatgpt-desktop") {
-        Agent::Codex
-    } else {
-        Agent::Claude
-    };
     let order = u32::try_from(list_projects(state.clone()).len()).unwrap_or(0);
     let last_activity_at = chat
         .messages
@@ -9528,6 +9612,48 @@ async fn checkpoint_if_due(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn import_discovery_excludes_owned_and_duplicate_native_sessions() {
+        let session = |id: &str| crate::chat_import::SessionSummary {
+            id: id.into(),
+            title: id.into(),
+            updated_at: String::new(),
+            messages: 0,
+            importable: true,
+        };
+        let source = |name: &str, ids: &[&str]| crate::chat_import::SourceStatus {
+            source: name.into(),
+            label: name.into(),
+            available: true,
+            note: String::new(),
+            sessions: ids.iter().map(|id| session(id)).collect(),
+        };
+        let mut sources = vec![
+            source("claude-desktop", &["claude-owned", "claude-shared"]),
+            source("claude-code", &["claude-shared", "claude-new"]),
+            source("chatgpt-desktop", &["codex-owned", "codex-shared"]),
+            source("codex", &["codex-shared", "codex-new"]),
+        ];
+
+        exclude_owned_imports(
+            &mut sources,
+            &std::collections::HashSet::from(["claude-owned".into()]),
+            &std::collections::HashSet::from(["codex-owned".into()]),
+        );
+
+        let ids = |index: usize| {
+            sources[index]
+                .sessions
+                .iter()
+                .map(|session| session.id.as_str())
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(ids(0), ["claude-shared"]);
+        assert_eq!(ids(1), ["claude-new"]);
+        assert_eq!(ids(2), ["codex-shared"]);
+        assert_eq!(ids(3), ["codex-new"]);
+    }
 
     /// The stored value round-trips and anything unknown is the safe default,
     /// so a record written by a newer build never silently blanks the snapshot.

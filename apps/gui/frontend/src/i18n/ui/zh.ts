@@ -648,6 +648,9 @@ const zh = {
   "effective cost": "有效成本",
   "includes local estimates": "包含本地估算",
   "Import chats": "导入聊天",
+  "Import all": "全部导入",
+  "Importing all…": "正在全部导入…",
+  "Imported {count} chats from {source}": "已从 {source} 导入 {count} 个聊天",
   "copy local provider transcripts into new AgencyZero projects":
     "将本地提供商对话复制到新的 AgencyZero 项目",
   "requires the native import backend": "需要原生导入后端",
