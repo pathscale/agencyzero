@@ -487,10 +487,11 @@ export function ProjectPanelToggle(props: { visible: boolean; onToggle: () => vo
       aria-pressed={props.visible}
       aria-label={label()}
       title={label()}
-      class="absolute top-1/2 left-full z-20 flex h-9 w-3 -translate-y-1/2 items-center justify-center rounded-r-md border border-primary/40 border-l-0 bg-primary/20 text-primary transition-[color,background-color,border-color,transform] duration-200 hover:translate-x-px hover:border-primary/60 hover:bg-primary/30 motion-reduce:transition-none"
+      class="absolute top-1/2 left-full z-20 flex h-9 w-1.5 -translate-y-1/2 items-center justify-center rounded-r-md border border-primary/40 border-l-0 bg-primary/20 text-primary transition-[color,background-color,border-color,transform] duration-200 hover:translate-x-px hover:border-primary/60 hover:bg-primary/30 motion-reduce:transition-none"
     >
       <Icon
         name="chevron-right"
+        stroke-width="3.5"
         class={`text-[10px] transition-transform duration-200 motion-reduce:transition-none ${
           props.visible ? "rotate-0" : "rotate-180"
         }`}

@@ -20,8 +20,9 @@ describe("the project panel toggle", () => {
     expect(button.classList).toContain("bg-primary/20");
     expect(button.classList).toContain("text-primary");
     expect(button.classList).toContain("h-9");
-    expect(button.classList).toContain("w-3");
+    expect(button.classList).toContain("w-1.5");
     expect(button.querySelector("svg")?.classList).toContain("text-[10px]");
+    expect(button.querySelector("svg")).toHaveAttribute("stroke-width", "3.5");
     expect(button.classList).not.toContain("rounded-r-full");
     expect(button.classList).not.toContain("shadow-[3px_0_8px_rgb(0_0_0_/_0.22)]");
     expect(button.className).not.toContain("-right-");
