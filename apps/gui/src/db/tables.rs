@@ -35,6 +35,72 @@ use crate::db::schema::usage_cache::{UsageCachePersistenceEngine, UsageCacheWork
 use crate::db::schema::usage_ledger::{UsageLedgerPersistenceEngine, UsageLedgerWorkTable};
 use crate::db::schema::usage_session::{UsageSessionPersistenceEngine, UsageSessionWorkTable};
 
+/// The app's own descriptor ceiling, raised before any persisted table opens.
+///
+/// A full store currently retains roughly 63 data/index descriptors. macOS
+/// launches GUI processes with a soft limit of 256 even when the hard limit is
+/// unlimited, so four test stores—or a live store plus migration/validation
+/// work—can exhaust the process despite the machine having ample capacity.
+/// Raising a limit allocates nothing; it only leaves room for later opens.
+#[cfg(unix)]
+const TARGET_OPEN_FILES: libc::rlim_t = 512;
+
+/// Measured upper bound for one fully-open AgencyZero WorkTable store.
+///
+/// The current schema retains about 63 data/index descriptors. Keep a small
+/// allowance for format growth and fail a regression test if this ceiling is
+/// crossed instead of silently consuming the process reserve.
+const MAX_FILES_PER_STORE: usize = 68;
+
+/// Derived rather than hand-kept: 512 - 100 leaves room for six 68-file stores.
+const RESERVED_OPEN_FILES: usize = 100;
+const MAX_OPEN_STORES: usize =
+    (TARGET_OPEN_FILES as usize - RESERVED_OPEN_FILES) / MAX_FILES_PER_STORE;
+
+fn open_store_gate() -> &'static std::sync::Arc<tokio::sync::Semaphore> {
+    static GATE: std::sync::OnceLock<std::sync::Arc<tokio::sync::Semaphore>> =
+        std::sync::OnceLock::new();
+    GATE.get_or_init(|| std::sync::Arc::new(tokio::sync::Semaphore::new(MAX_OPEN_STORES)))
+}
+
+/// Ensure WorkTable has at least 100 descriptors of practical headroom.
+///
+/// This belongs at `Tables::open`, not only GUI startup: store-backup readers,
+/// migration paths, and unit tests all open tables without necessarily running
+/// the desktop entry point first.
+#[cfg(unix)]
+fn raise_open_file_limit() -> std::io::Result<libc::rlim_t> {
+    let mut limits = libc::rlimit {
+        rlim_cur: 0,
+        rlim_max: 0,
+    };
+    // SAFETY: `limits` is a valid writable rlimit and RLIMIT_NOFILE is the
+    // platform constant for this process's file-descriptor ceiling.
+    if unsafe { libc::getrlimit(libc::RLIMIT_NOFILE, &raw mut limits) } != 0 {
+        return Err(std::io::Error::last_os_error());
+    }
+    if limits.rlim_cur < TARGET_OPEN_FILES {
+        let requested = libc::rlimit {
+            rlim_cur: TARGET_OPEN_FILES.min(limits.rlim_max),
+            rlim_max: limits.rlim_max,
+        };
+        // SAFETY: the requested soft limit never exceeds the hard limit read
+        // immediately above, and this changes only the current process.
+        if requested.rlim_cur > limits.rlim_cur
+            && unsafe { libc::setrlimit(libc::RLIMIT_NOFILE, &raw const requested) } != 0
+        {
+            return Err(std::io::Error::last_os_error());
+        }
+        limits.rlim_cur = requested.rlim_cur;
+    }
+    Ok(limits.rlim_cur)
+}
+
+#[cfg(not(unix))]
+fn raise_open_file_limit() -> std::io::Result<u64> {
+    Ok(u64::MAX)
+}
+
 /// Every persisted table, opened once at startup.
 ///
 /// The three entity tables are declared and opened ahead of the commands that
@@ -46,6 +112,9 @@ use crate::db::schema::usage_session::{UsageSessionPersistenceEngine, UsageSessi
     reason = "the entity tables land before the read path that reads them"
 )]
 pub struct Tables {
+    /// Caps parallel full-store opens so the 512-descriptor process limit
+    /// always retains at least 100 handles for the runtime and ordinary I/O.
+    _open_store_permit: tokio::sync::OwnedSemaphorePermit,
     /// Store root retained only to consume pre-0.2 JSON checkpoints once.
     pub data_dir: std::path::PathBuf,
     pub kv: Arc<KvWorkTable>,
@@ -90,6 +159,18 @@ impl Tables {
     /// write appear to succeed and vanish on the next launch, which is a worse
     /// failure than refusing to start.
     pub async fn open(dir: &Path) -> Result<Tables, Box<dyn std::error::Error + Send + Sync>> {
+        let open_file_limit = raise_open_file_limit()?;
+        if open_file_limit < 356 {
+            return Err(format!(
+                "open-file limit {open_file_limit} leaves fewer than 100 descriptors above the 256-descriptor failure boundary"
+            )
+            .into());
+        }
+        let open_store_permit = open_store_gate()
+            .clone()
+            .acquire_owned()
+            .await
+            .map_err(|_| "the full-store descriptor gate closed")?;
         std::fs::create_dir_all(dir)?;
         let data_dir = dir.to_path_buf();
         let dir = dir.to_string_lossy().to_string();
@@ -116,6 +197,7 @@ impl Tables {
         }
 
         Ok(Tables {
+            _open_store_permit: open_store_permit,
             data_dir,
             kv: open!(KvPersistenceEngine, KvWorkTable),
             project: open!(ProjectPersistenceEngine, ProjectWorkTable),
@@ -388,6 +470,56 @@ mod tests {
 #[cfg(test)]
 mod restart_tests {
     use super::*;
+
+    #[test]
+    fn store_open_raises_the_process_limit_well_above_the_old_failure_boundary() {
+        let limit = raise_open_file_limit().expect("the process can raise its descriptor limit");
+        assert!(
+            limit >= 512,
+            "expected at least 512 descriptors, got {limit}"
+        );
+        assert!(limit - 256 >= 100, "the old boundary needs 100 spare");
+        assert!(
+            MAX_OPEN_STORES * MAX_FILES_PER_STORE + 100 <= limit as usize,
+            "parallel full stores must preserve 100 descriptors"
+        );
+    }
+
+    fn persisted_file_count(root: &std::path::Path) -> usize {
+        let Ok(entries) = std::fs::read_dir(root) else {
+            return 0;
+        };
+        entries
+            .flatten()
+            .map(|entry| {
+                let path = entry.path();
+                if path.is_dir() {
+                    persisted_file_count(&path)
+                } else {
+                    usize::from(path.is_file())
+                }
+            })
+            .sum()
+    }
+
+    #[tokio::test]
+    async fn one_full_store_stays_within_the_parallel_gate_budget() {
+        let dir = std::env::temp_dir().join(format!(
+            "az-fd-budget-{}-{}",
+            std::process::id(),
+            uuid::Uuid::new_v4()
+        ));
+        let tables = Tables::open(&dir).await.expect("budget store opens");
+        let used = persisted_file_count(&dir);
+        eprintln!("one full store owns {used} data/index files under a 512-descriptor limit");
+        assert!(
+            used <= MAX_FILES_PER_STORE,
+            "one store retained {used} descriptors; budget is {MAX_FILES_PER_STORE}"
+        );
+        tables.shutdown().await.expect("budget store drains");
+        drop(tables);
+        let _ = std::fs::remove_dir_all(dir);
+    }
 
     /// The guard that would have caught the worst bug of the project.
     ///
