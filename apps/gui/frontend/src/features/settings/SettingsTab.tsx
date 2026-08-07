@@ -1508,7 +1508,7 @@ function StoreBackupControls(): JSX.Element {
               onClick={() => setConfirming(true)}
               class="rounded-lg border border-az-hairline-strong px-3 py-[5px] text-[12px] text-az-muted transition-colors hover:border-warning hover:text-warning disabled:cursor-not-allowed disabled:opacity-40"
             >
-              {tx("Choose & restore…")}
+              {tx("Restore from backup…")}
             </button>
           }
         >
@@ -1518,7 +1518,7 @@ function StoreBackupControls(): JSX.Element {
             onClick={restore}
             class="rounded-lg border border-warning/50 px-2.5 py-[4px] font-semibold text-[11.5px] text-warning hover:border-warning"
           >
-            {tx("Restore")}
+            {tx("Select backup file…")}
           </button>
           <button
             type="button"

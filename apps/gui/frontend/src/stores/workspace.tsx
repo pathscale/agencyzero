@@ -369,6 +369,8 @@ function createWorkspace() {
 
   /** Monotonic ticket for settings writes; see `saveSettings`. */
   let settingsWrite = 0;
+  /** Last project (or Home) focused before a utility tab covered it. */
+  let lastPortableActiveKey = "home";
 
   /** Events that arrived while snapshots were still loading — see `init`. */
   let buffered: (() => void)[] = [];
@@ -436,17 +438,76 @@ function createWorkspace() {
     return current;
   };
 
+  /**
+   * Settings autosave, and each response replaces the whole record, so two
+   * quick changes racing must not let the slower response revert local state.
+   * The backend separately serializes the read-merge-write itself.
+   */
+  async function saveSettings(patch: Parameters<AgencyZeroApi["setSettings"]>[0]): Promise<void> {
+    const ticket = ++settingsWrite;
+    const next = await client().setSettings(patch);
+    if (ticket !== settingsWrite) return;
+    batch(() => {
+      setState("settings", next);
+      reconcileTabModels(next);
+    });
+    if (patch.taskManager) {
+      const taskManager = await client().getTaskManager();
+      if (ticket === settingsWrite) setState("taskManagerSession", taskManager.sessionId);
+    }
+    // The record is the only source for the palette, so the document follows
+    // whatever came back rather than what was optimistically sent.
+    applyTheme(next.theme);
+  }
+
+  function portableWorkspaceTabs() {
+    const openProjectKeys = state.tabs
+      .filter((tab) => tab.kind === "project")
+      .map((tab) => tab.key);
+    const active = state.tabs.find((tab) => tab.key === state.activeKey);
+    if (active?.kind === "project" || active?.kind === "home") {
+      lastPortableActiveKey = active.key;
+    }
+    if (lastPortableActiveKey !== "home" && !openProjectKeys.includes(lastPortableActiveKey)) {
+      lastPortableActiveKey = "home";
+    }
+    return { openProjectKeys, activeProjectKey: lastPortableActiveKey };
+  }
+
+  function sameWorkspaceTabs(
+    left: GlobalSettings["workspaceTabs"],
+    right: NonNullable<GlobalSettings["workspaceTabs"]>,
+  ): boolean {
+    if (!left) return false;
+    return (
+      left.activeProjectKey === right.activeProjectKey &&
+      left.openProjectKeys.length === right.openProjectKeys.length &&
+      left.openProjectKeys.every((key, index) => key === right.openProjectKeys[index])
+    );
+  }
+
+  /** Persist the current project strip and wait until it is in WorkTable. */
+  async function persistWorkspaceTabs(): Promise<void> {
+    if (!state.settings) return;
+    const workspaceTabs = portableWorkspaceTabs();
+    if (sameWorkspaceTabs(state.settings.workspaceTabs, workspaceTabs)) return;
+    await saveSettings({ workspaceTabs });
+  }
+
   /*
    * The strip persists itself: whichever project tabs are open is written
-   * through to prefs, so the next launch restores the arrangement. Guarded on
-   * boot being ready — before hydration the strip is just Home, and writing
-   * that through would erase the very list boot is about to restore.
+   * through to both the legacy webview preference and the WorkTable settings
+   * row. The latter travels with backups; the former is the one-time fallback
+   * for settings rows written before portable tabs existed. Guarded on boot
+   * being ready, because before hydration the strip is only Home.
    */
   createEffect(() => {
     if (state.boot.status !== "ready") return;
-    setPrefs(
-      "openTabKeys",
-      state.tabs.filter((tab) => tab.kind === "project").map((tab) => tab.key),
+    const workspaceTabs = portableWorkspaceTabs();
+    setPrefs("openTabKeys", workspaceTabs.openProjectKeys);
+    setPrefs("lastTabKey", workspaceTabs.activeProjectKey);
+    void persistWorkspaceTabs().catch((cause) =>
+      log.warn(`could not persist open project tabs: ${describeError(cause)}`),
     );
   });
 
@@ -738,15 +799,20 @@ function createWorkspace() {
          * close; the strip is the user's arrangement, and it should survive
          * the process. Everything else is one click away on Home.
          */
-        const remembered = new Set(prefs.openTabKeys);
+        const portableTabs = settings.workspaceTabs;
+        const rememberedKeys = portableTabs?.openProjectKeys ?? prefs.openTabKeys;
+        const projectsById = new Map(projects.map((project) => [project.id, project]));
         setState("tabs", [
           HOME_TAB,
-          ...projects
-            .filter((project) => remembered.has(project.id))
+          ...Array.from(new Set(rememberedKeys))
+            .map((key) => projectsById.get(key))
+            .filter((project): project is Project => Boolean(project))
             .map((project) => projectTab(project)),
         ]);
-        const restored = state.tabs.some((tab) => tab.key === prefs.lastTabKey);
-        setState("activeKey", restored ? prefs.lastTabKey : "home");
+        const rememberedActive = portableTabs?.activeProjectKey ?? prefs.lastTabKey;
+        const restored = state.tabs.some((tab) => tab.key === rememberedActive);
+        lastPortableActiveKey = restored ? rememberedActive : "home";
+        setState("activeKey", lastPortableActiveKey);
       });
 
       log.info(`boot: loading ${projects.length} project(s)`);
@@ -1972,28 +2038,8 @@ function createWorkspace() {
         setState("logTotals", projectId, 0);
       });
     },
-    /**
-     * Settings autosave, and each response replaces the whole record — so two
-     * quick changes racing means the slower one wins and silently reverts the
-     * other. Writes are numbered and a stale response is dropped.
-     */
-    async saveSettings(patch: Parameters<AgencyZeroApi["setSettings"]>[0]) {
-      const ticket = ++settingsWrite;
-      const next = await client().setSettings(patch);
-      if (ticket !== settingsWrite) return;
-      batch(() => {
-        setState("settings", next);
-        reconcileTabModels(next);
-      });
-      if (patch.taskManager) {
-        const taskManager = await client().getTaskManager();
-        if (ticket === settingsWrite) setState("taskManagerSession", taskManager.sessionId);
-      }
-      // The record is the only source for the palette, so the document follows
-      // whatever came back rather than what was optimistically sent — a
-      // rejected or clamped theme shows as the value that was actually stored.
-      applyTheme(next.theme);
-    },
+    /** Persist a partial settings patch without accepting stale responses. */
+    saveSettings,
     getStudySummary: () => client().getStudySummary(),
     exportStudyEvents: () => client().exportStudyEvents(),
     clearStudyEvents: () => client().clearStudyEvents(),
@@ -2032,7 +2078,10 @@ function createWorkspace() {
       return client().getStoreBackupStatus();
     },
     /** Success exits and stays closed; failures relaunch to report the result. */
-    createStoreBackup() {
+    async createStoreBackup() {
+      // A backup begins by closing this process. Make the tab arrangement part
+      // of the store before the close can race the reactive autosave.
+      await persistWorkspaceTabs();
       return client().createStoreBackup();
     },
     /** The native picker selects the package; the webview never receives its path. */

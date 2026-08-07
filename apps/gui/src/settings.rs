@@ -69,6 +69,13 @@ pub struct GlobalSettings {
     /// authority until the owner explicitly delegates it.
     #[serde(default = "default_agent_restart_policy")]
     pub agent_restart_policy: String,
+    /// The project-tab arrangement that travels with a store backup.
+    ///
+    /// `None` identifies a settings row written before this field existed, so
+    /// the frontend can migrate its old webview-local preference once rather
+    /// than mistaking the absence for an intentionally empty strip.
+    #[serde(default)]
+    pub workspace_tabs: Option<WorkspaceTabs>,
     /// How a PR review is shaped: the model each reviewer uses, and the prompt.
     #[serde(default)]
     pub review: Review,
@@ -88,6 +95,18 @@ pub struct Review {
     /// Model per reviewer agent (`claude` / `codex` / `copilot`); empty is the
     /// agent's default.
     pub models: BTreeMap<String, String>,
+}
+
+/// The portable part of the tab strip.
+///
+/// Utility tabs are deliberately excluded: Settings and Analytics describe
+/// this particular window, while project tabs describe the workspace the
+/// owner expects a backup to restore.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase", default)]
+pub struct WorkspaceTabs {
+    pub open_project_keys: Vec<String>,
+    pub active_project_key: String,
 }
 
 /// The built-in review instruction, used when the setting is blank.
@@ -331,6 +350,7 @@ impl Default for GlobalSettings {
             per_turn_injection: true,
             automatic_update_checks: true,
             agent_restart_policy: "disabled".into(),
+            workspace_tabs: None,
             review: Review::default(),
         }
     }
@@ -433,6 +453,7 @@ mod tests {
         assert_eq!(back.agent_finished_retention_turns, 1);
         assert!(back.automatic_update_checks);
         assert_eq!(back.agent_restart_policy, "disabled");
+        assert!(back.workspace_tabs.is_none());
         assert!(json.contains("defaultAgent"), "must be camelCase: {json}");
     }
 
@@ -450,6 +471,7 @@ mod tests {
         assert_eq!(loaded.agent_finished_retention_turns, 1);
         assert!(loaded.automatic_update_checks);
         assert_eq!(loaded.agent_restart_policy, "disabled");
+        assert!(loaded.workspace_tabs.is_none());
         assert_eq!(
             loaded.moderator.model, "haiku",
             "absent blocks use defaults"

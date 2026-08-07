@@ -671,9 +671,9 @@ const zh = {
   Backups: "备份",
   "closed-store copies verified byte for byte": "关闭存储后逐字节验证的副本",
   "Back up & close": "备份并关闭",
-  "Choose & restore…": "选择并恢复…",
+  "Restore from backup…": "从备份恢复…",
   "Choose a backup to restore?": "选择要恢复的备份？",
-  Restore: "恢复",
+  "Select backup file…": "选择备份文件…",
   "Portable .azbackup package · version and integrity checked":
     "便携式 .azbackup 包 · 已检查版本与完整性",
   "The app drains and restarts so the store is never copied while open.":

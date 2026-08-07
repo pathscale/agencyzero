@@ -89,8 +89,8 @@ describe("store backups", () => {
     await waitFor(() => expect(screen.getByText(/Portable .azbackup package/)).toBeTruthy());
     expect(screen.getByRole("button", { name: "Back up & close" })).toBeEnabled();
 
-    fireEvent.click(screen.getByRole("button", { name: "Choose & restore…" }));
+    fireEvent.click(screen.getByRole("button", { name: "Restore from backup…" }));
     expect(screen.getByText("Choose a backup to restore?")).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Restore" })).toBeTruthy();
+    expect(screen.getByText("Select backup file…").closest("button")).toBeTruthy();
   });
 });

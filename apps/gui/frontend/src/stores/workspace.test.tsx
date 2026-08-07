@@ -1,5 +1,6 @@
 import { render, waitFor } from "@solidjs/testing-library";
 import { beforeEach, describe, expect, it } from "vitest";
+import { SETTINGS } from "~/api/fixtures";
 import { setPrefs } from "~/stores/prefs";
 import {
   isLimitLive,
@@ -47,6 +48,7 @@ async function mountWorkspace(): Promise<Workspace> {
 const keys = (workspace: Workspace) => workspace.state.tabs.map((tab) => tab.key);
 
 beforeEach(() => {
+  SETTINGS.workspaceTabs = null;
   setPrefs("lastTabKey", "home");
   // These scenarios predate tab restore, so they remember everything open.
   setPrefs("openTabKeys", ["worktable", "cafe", "agencyzero"]);
@@ -66,6 +68,47 @@ describe("startup", () => {
     setPrefs("openTabKeys", ["cafe"]);
     const workspace = await mountWorkspace();
     expect(keys(workspace)).toEqual(["home", "cafe"]);
+  });
+
+  it("prefers the portable backup state and restores its project order and focus", async () => {
+    SETTINGS.workspaceTabs = {
+      openProjectKeys: ["agencyzero", "cafe"],
+      activeProjectKey: "cafe",
+    };
+    setPrefs("openTabKeys", ["worktable"]);
+    setPrefs("lastTabKey", "worktable");
+
+    const workspace = await mountWorkspace();
+
+    expect(keys(workspace)).toEqual(["home", "agencyzero", "cafe"]);
+    expect(workspace.state.activeKey).toBe("cafe");
+  });
+
+  it("migrates the old webview preference into backup-backed settings", async () => {
+    setPrefs("openTabKeys", ["cafe"]);
+    setPrefs("lastTabKey", "cafe");
+
+    const workspace = await mountWorkspace();
+
+    await waitFor(() =>
+      expect(workspace.state.settings?.workspaceTabs).toEqual({
+        openProjectKeys: ["cafe"],
+        activeProjectKey: "cafe",
+      }),
+    );
+  });
+
+  it("persists project focus without replacing it when Settings covers the strip", async () => {
+    const workspace = await mountWorkspace();
+    workspace.actions.focus("agencyzero");
+
+    await waitFor(() =>
+      expect(workspace.state.settings?.workspaceTabs?.activeProjectKey).toBe("agencyzero"),
+    );
+
+    workspace.actions.openSettings();
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    expect(workspace.state.settings?.workspaceTabs?.activeProjectKey).toBe("agencyzero");
   });
 
   it("falls back to the mock backend when there is no Rust to talk to", async () => {

@@ -584,8 +584,17 @@ export interface GlobalSettings {
   automaticUpdateChecks: boolean;
   /** Agent lifecycle authority, disabled until the owner delegates it. */
   agentRestartPolicy: "disabled" | "restart" | "restart_and_update";
+  /** Project tabs included in store backups. Null identifies an older record. */
+  workspaceTabs: WorkspaceTabs | null;
   /** How a PR review is shaped: the prompt, and the model per reviewer agent. */
   review: ReviewSettings;
+}
+
+/** The portable part of the workspace tab strip. */
+export interface WorkspaceTabs {
+  openProjectKeys: string[];
+  /** An open project key, or `home` when no project was active. */
+  activeProjectKey: string;
 }
 
 /** The PR-review side-channel's configuration. */
