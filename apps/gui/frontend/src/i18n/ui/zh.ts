@@ -785,6 +785,7 @@ const zh = {
   "The task manager cannot send prompts until its selected agent is installed, compatible, and signed in.":
     "安装兼容版本的所选智能体并登录之前，任务管理器无法发送提示。",
   Fork: "分支",
+  Forked: "已分支",
   "Open this item's fork": "打开此条目的分支",
   "Open this item's lower-token fork": "打开此条目的低令牌分支",
   "Fork into a fresh chat": "在全新聊天中建立分支",
@@ -798,6 +799,14 @@ const zh = {
   "Projected turn warning threshold": "预计单次回复警告阈值",
   "Open the fork for {name}": "打开 {name} 的分支",
   "Fork {name} into a fresh chat": "将 {name} 分支到全新聊天",
+  "Prepare item fork": "准备条目分支",
+  "Item context": "条目上下文",
+  "Describe constraints, acceptance criteria, decisions, and useful pointers…":
+    "描述约束、验收标准、已有决定和有用的参考信息…",
+  "Sent when this item starts in a fresh fork or focused run. Ordinary compact item snapshots omit it.":
+    "仅在此条目通过新分支或聚焦运行开始时发送；普通精简条目快照不会包含它。",
+  "Start fork": "启动分支",
+  archived: "已归档",
   "Return to the parent item": "返回父条目",
   "Parent project": "父项目",
 } satisfies Record<keyof typeof en, string>;

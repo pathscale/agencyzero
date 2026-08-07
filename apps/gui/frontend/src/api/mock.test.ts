@@ -129,6 +129,16 @@ describe("items", () => {
     const kept = (await api.listItems("worktable")).find((item) => item.id === "worktable-1");
     expect(kept?.archived).toBe(true);
   });
+
+  it("removes an archived anchor when its last fork is deleted", async () => {
+    const fork = await api.forkItem("worktable-1");
+    await api.deleteItem("worktable-1");
+
+    await api.deleteProject(fork.id);
+
+    const remaining = await api.listItems("worktable");
+    expect(remaining.some((item) => item.id === "worktable-1")).toBe(false);
+  });
 });
 
 describe("moderation", () => {

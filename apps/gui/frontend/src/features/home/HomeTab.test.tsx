@@ -28,9 +28,15 @@ describe("Home item rows", () => {
     const title = "Phase B — engine observability (API break)";
     expect(screen.getAllByText(title)).toHaveLength(1);
 
-    await screen.workspace.actions.forkItem("worktable-1");
+    const fork = await screen.workspace.actions.forkItem("worktable-1");
 
     await waitFor(() => expect(screen.getAllByText(title)).toHaveLength(1));
+    const open = screen.getByRole("button", { name: `Open the fork for ${title}` });
+    expect(open).toBeTruthy();
+
+    screen.workspace.actions.focus("home");
+    fireEvent.click(open);
+    expect(screen.workspace.state.activeKey).toBe(fork.id);
   });
 
   it("shows each project's turn count after its open-item count", async () => {

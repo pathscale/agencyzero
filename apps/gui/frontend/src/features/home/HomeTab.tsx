@@ -594,9 +594,10 @@ function GroupItemRow(props: {
   /** Cycles through every owner-visible status, from the marker. */
   onAdvance: () => void;
 }): JSX.Element {
-  const { actions } = useWorkspace();
+  const { state, actions } = useWorkspace();
   const [editing, setEditing] = createSignal(false);
   const [title, setTitle] = createSignal("");
+  const fork = () => state.projects.find((project) => project.forkedFrom?.itemId === props.item.id);
 
   const save = async (): Promise<void> => {
     const value = title().trim();
@@ -654,6 +655,23 @@ function GroupItemRow(props: {
         >
           <ItemMarker status={props.item.status} />
         </button>
+        <Show when={fork()}>
+          {(child) => (
+            <button
+              type="button"
+              onClick={(event) => {
+                event.stopPropagation();
+                actions.openProject(child().id);
+              }}
+              aria-label={tx("Open the fork for {name}", { name: props.item.title })}
+              title={tx("Open this item's lower-token fork")}
+              class="flex h-6 shrink-0 items-center justify-center gap-1 rounded-md border border-primary/38 bg-primary/12 px-1.5 font-semibold text-[10.5px] text-primary transition-colors hover:border-primary/70 hover:bg-primary/22"
+            >
+              <Icon name="git-fork" class="text-[12px]" />
+              {tx("Forked")}
+            </button>
+          )}
+        </Show>
         <button
           type="button"
           onClick={props.onFold}
@@ -728,7 +746,14 @@ function ProjectGroup(props: { project: Project }): JSX.Element {
     }
   };
 
-  const items = () => itemsFor(props.project.id);
+  const items = () => {
+    const visible = itemsFor(props.project.id);
+    const archivedForkAnchors = (state.items[props.project.id] ?? []).filter(
+      (item) =>
+        item.archived && state.projects.some((project) => project.forkedFrom?.itemId === item.id),
+    );
+    return [...visible, ...archivedForkAnchors].sort((left, right) => left.order - right.order);
+  };
   const openCount = () =>
     items().filter((item) => item.status !== "finished" && item.status !== "canceled").length;
   const activeCount = () => items().filter((item) => item.status === "active").length;

@@ -96,6 +96,9 @@ export interface AgencyZeroApi {
   setItemStatus(id: string, status: ProjectStatus): Promise<ProjectItem>;
   /** Rewrite one item's title, for the panel's inline edit. */
   updateItem(id: string, title: string): Promise<ProjectItem>;
+  /** Context sent when focused work starts, omitted from ordinary compact snapshots. */
+  getItemContext(id: string): Promise<string>;
+  setItemContext(id: string, context: string): Promise<string>;
   /** Associate the item with a validated GitHub issue URL. */
   setItemIssue(id: string, url: string): Promise<ProjectItem>;
   reorderItems(projectId: string, ids: string[]): Promise<ProjectItem[]>;

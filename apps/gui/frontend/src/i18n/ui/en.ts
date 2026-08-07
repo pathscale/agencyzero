@@ -811,6 +811,7 @@ const en = {
   "The task manager cannot send prompts until its selected agent is installed, compatible, and signed in.":
     "The task manager cannot send prompts until its selected agent is installed, compatible, and signed in.",
   Fork: "Fork",
+  Forked: "Forked",
   "Open this item's fork": "Open this item's fork",
   "Open this item's lower-token fork": "Open this item's lower-token fork",
   "Fork into a fresh chat": "Fork into a fresh chat",
@@ -824,6 +825,14 @@ const en = {
   "Projected turn warning threshold": "Projected turn warning threshold",
   "Open the fork for {name}": "Open the fork for {name}",
   "Fork {name} into a fresh chat": "Fork {name} into a fresh chat",
+  "Prepare item fork": "Prepare item fork",
+  "Item context": "Item context",
+  "Describe constraints, acceptance criteria, decisions, and useful pointers…":
+    "Describe constraints, acceptance criteria, decisions, and useful pointers…",
+  "Sent when this item starts in a fresh fork or focused run. Ordinary compact item snapshots omit it.":
+    "Sent when this item starts in a fresh fork or focused run. Ordinary compact item snapshots omit it.",
+  "Start fork": "Start fork",
+  archived: "archived",
   "Return to the parent item": "Return to the parent item",
   "Parent project": "Parent project",
 } as const;

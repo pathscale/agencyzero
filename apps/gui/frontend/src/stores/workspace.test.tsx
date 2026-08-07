@@ -466,6 +466,17 @@ describe("item forks", () => {
     expect(
       workspace.state.tabs.filter((candidate) => candidate.projectId === fork.id),
     ).toHaveLength(1);
+
+    workspace.actions.setTabModel("worktable", "codex", "gpt-5.4", "auto", "high");
+    expect(workspace.state.tabs.find((candidate) => candidate.projectId === fork.id)).toMatchObject(
+      { agent: "codex", model: "gpt-5.4", permission: "auto", effort: "high" },
+    );
+
+    workspace.actions.closeTab(fork.id);
+    workspace.actions.openProject(fork.id);
+    expect(workspace.state.tabs.find((candidate) => candidate.projectId === fork.id)).toMatchObject(
+      { agent: "codex", model: "gpt-5.4", permission: "auto", effort: "high" },
+    );
   });
 
   it("hides an archived fork anchor without removing its durable row", async () => {
