@@ -1542,6 +1542,28 @@ async fn persist_terminal_agent_chunk(
 /// result as an AgencyZero system message gives the coordinator and owner the
 /// handback without copying the child transcript or making the parent native
 /// session pay for it on every turn.
+fn fork_handback_destination(
+    tables: &Tables,
+    child_project_id: &str,
+) -> Option<(String, String, String)> {
+    let child = tables.project.select(child_project_id.to_string())?;
+    let parent_id = fork_parent_project_id(&child)?;
+    let item_id = fork_source_item_id(&child)?;
+    // A child can update its parent-owned item through Prompt Syntax. Once
+    // that item is terminal, its status is already the handback the parent
+    // needs. Re-injecting the child's prose into the next parent prompt would
+    // make the coordinator pay for a turn to rediscover finished work.
+    if tables
+        .project_item
+        .select(item_id.clone())
+        .is_some_and(|item| matches!(item.status.as_str(), "finished" | "canceled"))
+    {
+        return None;
+    }
+    tables.project.select(parent_id.clone())?;
+    Some((child.name, parent_id, item_id))
+}
+
 async fn persist_fork_handback(
     app: &AppHandle,
     tables: &Tables,
@@ -1551,15 +1573,12 @@ async fn persist_fork_handback(
     body: &str,
 ) {
     const MAX_HANDBACK_BYTES: usize = 4_000;
-    let Some(child) = tables.project.select(child_project_id.to_string()) else {
-        return;
-    };
-    let (Some(parent_id), Some(item_id)) =
-        (fork_parent_project_id(&child), fork_source_item_id(&child))
+    let Some((child_name, parent_id, item_id)) =
+        fork_handback_destination(tables, child_project_id)
     else {
         return;
     };
-    if tables.project.select(parent_id.clone()).is_none() || body.trim().is_empty() {
+    if body.trim().is_empty() {
         return;
     }
     let trimmed = body.trim();
@@ -1571,7 +1590,7 @@ async fn persist_fork_handback(
     };
     let full = format!(
         "Fork handback from {} for item {}:\n\n{}",
-        child.name, item_id, summary
+        child_name, item_id, summary
     );
     let row = MessageRow {
         id: id("msg"),
@@ -10446,9 +10465,6 @@ async fn drive_run(
                 }
             };
             let _ = app.emit("message:appended", appended);
-            if stop == "completed" {
-                persist_fork_handback(&app, &tables, &project_id, agent, &model, &body).await;
-            }
             // The reply row now owns these words; the checkpoint is done.
             clear_partial_reply(&tables, &project_id).await;
 
@@ -10518,6 +10534,12 @@ async fn drive_run(
                     agent_wire_name(agent),
                     &done,
                 );
+            }
+            // Apply the child's state directives first. A terminal parent item
+            // makes the separate prose handback redundant, so the helper above
+            // suppresses it and the parent does not spend a turn consuming it.
+            if stop == "completed" {
+                persist_fork_handback(&app, &tables, &project_id, agent, &model, &body).await;
             }
             emit_run_stopped(
                 &app,
@@ -13344,6 +13366,10 @@ mod tests {
             "the fork's parent item remains durable"
         );
         assert!(item_is_archived(&tables, "item-anchor"));
+        assert!(
+            fork_handback_destination(&tables, "fork-a").is_none(),
+            "a finished parent item must not be re-injected into the parent's next prompt"
+        );
 
         tables.shutdown().await.expect("fork-anchor store drains");
         let _ = std::fs::remove_dir_all(dir);
