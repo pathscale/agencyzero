@@ -11652,7 +11652,7 @@ mod tests {
             .await
             .expect("legacy concise preference writes");
 
-        drop(tables);
+        tables.shutdown().await.expect("concise preference drains");
         let tables = crate::db::tables::Tables::open(&dir)
             .await
             .expect("concise preference store reopens");
@@ -11667,7 +11667,7 @@ mod tests {
         );
         assert!(response_verbosity_instruction("default").is_none());
 
-        drop(tables);
+        tables.shutdown().await.expect("concise store drains");
         let _ = std::fs::remove_dir_all(dir);
     }
 
