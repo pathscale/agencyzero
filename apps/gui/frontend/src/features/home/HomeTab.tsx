@@ -235,6 +235,10 @@ function TaskManagerComposer(): JSX.Element {
   const [draft, setDraft] = createSignal("");
   const [isSending, setIsSending] = createSignal(false);
   const [error, setError] = createSignal<string | null>(null);
+  const selectedAgent = () => state.settings?.taskManager.agent ?? "claude";
+  const agentReady = () =>
+    state.boot.status !== "ready" ||
+    state.agents.some((status) => status.agent === selectedAgent() && status.state === "connected");
   /*
    * The one-liner is right for "add X to project Y"; a pasted meeting's worth
    * of notes needs to be read before it is sent. The toggle swaps the input
@@ -277,7 +281,7 @@ function TaskManagerComposer(): JSX.Element {
     const body = [authored.trim(), attachments().join("\n")]
       .filter((part) => part.length > 0)
       .join("\n\n");
-    if (!body || isSending() || waitsForRun()) return;
+    if (!body || isSending() || waitsForRun() || !agentReady()) return;
 
     setError(null);
     setIsSending(true);
@@ -300,7 +304,9 @@ function TaskManagerComposer(): JSX.Element {
   };
 
   const placeholder = () => {
-    const label = AGENT_LABELS[state.settings?.taskManager.agent ?? "claude"];
+    const label = AGENT_LABELS[selectedAgent()];
+    if (!agentReady())
+      return tx("Install or sign in to {agent} before sending prompts", { agent: label });
     if (waitsForRun()) return `${label} task manager is finishing its current turn…`;
     return state.taskManagerSession
       ? tx("Tell {agent} task manager… · {session}", {
@@ -312,6 +318,26 @@ function TaskManagerComposer(): JSX.Element {
 
   return (
     <div class="flex min-w-0 flex-1 flex-col">
+      <Show when={!agentReady()}>
+        <div
+          role="alert"
+          class="mb-2 flex items-center gap-3 rounded-[11px] border border-error/38 bg-error/8 px-3 py-2.5"
+        >
+          <Icon name="shield" class="shrink-0 text-[14px] text-error" />
+          <p class="min-w-0 flex-1 text-[11px] text-az-body leading-[1.45]">
+            {tx(
+              "The task manager cannot send prompts until its selected agent is installed, compatible, and signed in.",
+            )}
+          </p>
+          <button
+            type="button"
+            onClick={() => actions.openSettings()}
+            class="shrink-0 rounded-lg border border-error/30 px-2.5 py-1 text-[10.5px] text-az-body hover:border-error hover:text-error"
+          >
+            {tx("Open Settings")}
+          </button>
+        </div>
+      </Show>
       <div
         class={`flex min-w-0 flex-1 gap-2.5 rounded-[11px] border bg-az-inset px-3 py-2.5 focus-within:border-primary/40 ${
           tall() ? "items-start" : "items-center"
@@ -338,7 +364,7 @@ function TaskManagerComposer(): JSX.Element {
                */
               placeholder={placeholder()}
               aria-label={tx("Task manager prompt")}
-              disabled={isSending() || waitsForRun()}
+              disabled={isSending() || waitsForRun() || !agentReady()}
               class="min-w-0 flex-1 bg-transparent text-[12.5px] text-base-content placeholder:text-az-muted focus:outline-none disabled:opacity-60"
             />
           }
@@ -357,7 +383,7 @@ function TaskManagerComposer(): JSX.Element {
             }}
             placeholder={placeholder()}
             aria-label={tx("Task manager prompt")}
-            disabled={isSending() || waitsForRun()}
+            disabled={isSending() || waitsForRun() || !agentReady()}
             class="az-scroll min-w-0 flex-1 resize-none bg-transparent text-[12.5px] text-base-content leading-[1.5] placeholder:text-az-muted focus:outline-none disabled:opacity-60"
           />
         </Show>

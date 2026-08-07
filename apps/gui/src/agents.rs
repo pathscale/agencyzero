@@ -8,12 +8,67 @@
 
 use agent_abstraction::{Agent, AuthState, AuthStatus, Error, Probe, VersionStatus};
 use serde::{Deserialize, Serialize};
+use std::ffi::{OsStr, OsString};
+use std::path::{Path, PathBuf};
 
 /// Where the last probe is cached in the store.
 pub const KEY: &str = "agents";
 
 /// Every agent this build can drive.
 pub const AGENTS: [Agent; 3] = [Agent::Claude, Agent::Codex, Agent::Copilot];
+
+/// Add the conventional user-local executable directory to a shell `PATH`.
+///
+/// GUI launches do not necessarily inherit the interactive shell's startup
+/// files, and some installers place Claude at `$HOME/.local/bin/claude`
+/// without adding that directory to the login shell either. Appending instead
+/// of prepending preserves the user's explicit shell ordering while still
+/// making an otherwise invisible install discoverable.
+pub(crate) fn with_user_local_bin(path: &OsStr, home: Option<&Path>) -> OsString {
+    let mut entries: Vec<PathBuf> = std::env::split_paths(path).collect();
+    if let Some(local) = home.map(|home| home.join(".local/bin"))
+        && !entries.contains(&local)
+    {
+        entries.push(local);
+    }
+    std::env::join_paths(entries).unwrap_or_else(|_| path.to_os_string())
+}
+
+/// Resolve the executable the selected provider adapter will spawn.
+///
+/// This is intentionally cheaper than [`Probe::run`]: prompt submission needs
+/// a synchronous preflight, not another version and authentication subprocess
+/// on every turn. The full probe still owns Settings and onboarding status.
+pub fn executable_path(agent: Agent) -> Option<PathBuf> {
+    let path = std::env::var_os("PATH").unwrap_or_default();
+    std::env::split_paths(&path)
+        .map(|directory| directory.join(agent.bin()))
+        .find(|candidate| is_executable(candidate))
+}
+
+#[cfg(unix)]
+fn is_executable(path: &Path) -> bool {
+    use std::os::unix::fs::PermissionsExt;
+
+    path.metadata()
+        .is_ok_and(|metadata| metadata.is_file() && metadata.permissions().mode() & 0o111 != 0)
+}
+
+#[cfg(not(unix))]
+fn is_executable(path: &Path) -> bool {
+    path.is_file()
+}
+
+/// Refuse before a prompt or project row is persisted when no process can be
+/// started to answer it.
+pub fn require_executable(agent: Agent) -> Result<PathBuf, String> {
+    executable_path(agent).ok_or_else(|| {
+        format!(
+            "{} is not installed or is not visible on PATH. Install it, then open Settings and run the agent checks again.",
+            agent.bin()
+        )
+    })
+}
 
 /// One agent's detected state, in the shape the webview expects.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -197,6 +252,28 @@ fn describe_caps(agent: Agent) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn user_local_bin_is_searchable_without_overriding_shell_order() {
+        let home = Path::new("/Users/example");
+        let amended = with_user_local_bin(OsStr::new("/opt/homebrew/bin:/usr/bin"), Some(home));
+        let entries: Vec<_> = std::env::split_paths(&amended).collect();
+        assert_eq!(entries[0], Path::new("/opt/homebrew/bin"));
+        assert_eq!(entries[1], Path::new("/usr/bin"));
+        assert_eq!(entries[2], home.join(".local/bin"));
+    }
+
+    #[test]
+    fn user_local_bin_is_not_duplicated() {
+        let home = Path::new("/Users/example");
+        let amended =
+            with_user_local_bin(OsStr::new("/Users/example/.local/bin:/usr/bin"), Some(home));
+        let entries: Vec<_> = std::env::split_paths(&amended).collect();
+        assert_eq!(
+            entries,
+            [home.join(".local/bin"), PathBuf::from("/usr/bin")]
+        );
+    }
 
     /// Every agent must produce a state the UI knows how to colour, whatever is
     /// or is not installed on the machine running the test.

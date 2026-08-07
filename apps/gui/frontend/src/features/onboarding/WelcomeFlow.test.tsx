@@ -1,6 +1,6 @@
 import { render, waitFor } from "@solidjs/testing-library";
 import { afterEach, describe, expect, it } from "vitest";
-import { SETTINGS } from "~/api/fixtures";
+import { AGENT_STATUS, SETTINGS } from "~/api/fixtures";
 import { WelcomeFlow } from "~/features/onboarding/WelcomeFlow";
 import { TabStrip } from "~/features/tabs/TabStrip";
 import { useWorkspace, type Workspace, WorkspaceProvider } from "~/stores/workspace";
@@ -30,6 +30,9 @@ async function mountWelcome(): Promise<{
 
 afterEach(() => {
   SETTINGS.onboardingCompleted = true;
+  AGENT_STATUS.find((status) => status.agent === "claude")!.state = "connected";
+  AGENT_STATUS.find((status) => status.agent === "codex")!.state = "logged_out";
+  AGENT_STATUS.find((status) => status.agent === "copilot")!.state = "outdated";
 });
 
 describe("WelcomeFlow", () => {
@@ -55,5 +58,22 @@ describe("WelcomeFlow", () => {
     await waitFor(() => expect(workspace.state.onboardingDeferred).toBe(true));
     expect(workspace.state.settings?.onboardingCompleted).toBe(false);
     expect(screen.queryByRole("dialog", { name: "Welcome to AgencyZero" })).toBeNull();
+  });
+
+  it("allows an explicit skip without pretending prompts will work", async () => {
+    SETTINGS.onboardingCompleted = true;
+    for (const status of AGENT_STATUS) status.state = "missing";
+    const { screen } = await mountWelcome();
+
+    screen.getByRole("button", { name: "Help and setup" }).click();
+    const firstContinue = screen.getByRole("button", { name: "Continue" });
+    await waitFor(() => expect(firstContinue).toBeEnabled());
+    firstContinue.click();
+
+    expect(await screen.findByText("No compatible project agent is ready")).toBeVisible();
+    screen.getByRole("button", { name: "Skip - I promise to install them later" }).click();
+
+    expect(await screen.findByText("Agent setup deferred")).toBeVisible();
+    expect(screen.getByText("Prompt controls will remain disabled")).toBeVisible();
   });
 });

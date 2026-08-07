@@ -21,6 +21,8 @@ mod study;
 mod tasks;
 mod update;
 
+use std::ffi::OsString;
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use tauri::menu::{AboutMetadata, Menu, MenuBuilder, MenuItemBuilder, SubmenuBuilder};
@@ -1099,21 +1101,20 @@ fn build_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> {
 /// Asking the login shell is the same trick every GUI editor uses.
 fn adopt_login_shell_path() {
     let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/zsh".into());
-    let Ok(output) = std::process::Command::new(&shell)
+    let shell_path = std::process::Command::new(&shell)
         .args(["-lc", "printf %s \"$PATH\""])
         .output()
-    else {
-        return;
-    };
-    if !output.status.success() {
-        return;
-    }
-    if let Ok(path) = String::from_utf8(output.stdout)
-        && !path.trim().is_empty()
-    {
-        // Safe: called before the async runtime or any thread exists.
-        unsafe { std::env::set_var("PATH", path.trim()) };
-    }
+        .ok()
+        .filter(|output| output.status.success())
+        .and_then(|output| String::from_utf8(output.stdout).ok())
+        .filter(|path| !path.trim().is_empty())
+        .map(OsString::from)
+        .or_else(|| std::env::var_os("PATH"))
+        .unwrap_or_default();
+    let home = std::env::var_os("HOME").map(PathBuf::from);
+    let path = agents::with_user_local_bin(&shell_path, home.as_deref());
+    // Safe: called before the async runtime or any thread exists.
+    unsafe { std::env::set_var("PATH", path) };
 }
 
 /// A scratch store for a session that must not touch the real one.

@@ -41,6 +41,7 @@ export function WelcomeFlow(): JSX.Element {
   const [busy, setBusy] = createSignal(false);
   const [note, setNote] = createSignal<string | null>(null);
   const [securityConfirmed, setSecurityConfirmed] = createSignal(false);
+  const [agentsSkipped, setAgentsSkipped] = createSignal(false);
   const [sources, setSources] = createSignal<ChatImportSource[]>([]);
   const [importsLoaded, setImportsLoaded] = createSignal(false);
   const [restoreSelection, setRestoreSelection] = createSignal<StoreBackupSelection | null>(null);
@@ -74,6 +75,7 @@ export function WelcomeFlow(): JSX.Element {
       setStep(0);
       setNote(null);
       setSecurityConfirmed(false);
+      setAgentsSkipped(false);
     } else if (isReplay()) {
       setSecurityConfirmed(true);
     }
@@ -173,9 +175,14 @@ export function WelcomeFlow(): JSX.Element {
 
   const canContinue = () => {
     if (step() === 0) return isReplay() || state.workspaceRoot?.exists === true;
-    if (step() === 1) return connectedProjectAgents().length > 0;
-    if (step() === 2) return defaultAgentReady() && securityConfirmed();
+    if (step() === 1) return connectedProjectAgents().length > 0 || agentsSkipped();
+    if (step() === 2) return agentsSkipped() || (defaultAgentReady() && securityConfirmed());
     return true;
+  };
+
+  const skipAgents = (): void => {
+    setAgentsSkipped(true);
+    setStep(2);
   };
 
   const finish = async (): Promise<void> => {
@@ -389,6 +396,29 @@ export function WelcomeFlow(): JSX.Element {
                   {tx("Run checks again")}
                 </button>
               </div>
+              <Show when={connectedProjectAgents().length === 0}>
+                <div
+                  role="alert"
+                  class="mt-4 rounded-xl border border-error/38 bg-error/8 px-4 py-3.5"
+                >
+                  <p class="font-semibold text-[12.5px] text-error">
+                    {tx("No compatible project agent is ready")}
+                  </p>
+                  <p class="mt-1 text-[11px] text-az-body leading-[1.5]">
+                    {tx(
+                      "AgencyZero cannot send prompts until Claude or Codex is installed, compatible, and signed in.",
+                    )}
+                  </p>
+                  <button
+                    type="button"
+                    disabled={busy()}
+                    onClick={skipAgents}
+                    class="mt-3 rounded-lg border border-error/35 px-3 py-1.5 text-[11.5px] text-az-body hover:border-error hover:text-error disabled:opacity-40"
+                  >
+                    {tx("Skip - I promise to install them later")}
+                  </button>
+                </div>
+              </Show>
             </Show>
 
             <Show when={step() === 2 && state.settings}>
@@ -396,86 +426,112 @@ export function WelcomeFlow(): JSX.Element {
                 <>
                   <SetupHeading
                     icon="shield"
-                    title={tx("Choose defaults and security")}
-                    hint={tx("These choices seed new projects; every project can override them.")}
+                    title={
+                      agentsSkipped() && connectedProjectAgents().length === 0
+                        ? tx("Agent setup deferred")
+                        : tx("Choose defaults and security")
+                    }
+                    hint={
+                      agentsSkipped() && connectedProjectAgents().length === 0
+                        ? tx("Install an agent from Settings before sending your first prompt.")
+                        : tx("These choices seed new projects; every project can override them.")
+                    }
                   />
-                  <div class="mt-4 grid grid-cols-2 gap-3">
-                    <For each={connectedProjectAgents()}>
-                      {(status) => (
-                        <button
-                          type="button"
-                          disabled={busy()}
-                          onClick={() => void chooseAgent(status.agent)}
-                          class={`rounded-xl border px-4 py-3 text-left transition-colors disabled:opacity-40 ${
-                            settings().defaultAgent === status.agent
-                              ? "border-primary/60 bg-primary/10"
-                              : "border-az-hairline bg-az-inset hover:border-primary/40"
-                          }`}
-                        >
-                          <span class="font-medium text-[12.5px] text-az-strong">
-                            {AGENT_LABELS[status.agent]}
-                          </span>
-                          <span class="mt-1 block text-[10.5px] text-az-muted">
-                            {tx("Default project agent")}
-                          </span>
-                        </button>
-                      )}
-                    </For>
-                  </div>
-                  <SetupRow
-                    title={tx("Default model")}
-                    hint={tx("Choose from the enabled models for this agent.")}
+                  <Show
+                    when={connectedProjectAgents().length > 0}
+                    fallback={
+                      <div class="mt-4 rounded-xl border border-warning/35 bg-warning/8 px-4 py-3.5">
+                        <p class="font-medium text-[12px] text-warning">
+                          {tx("Prompt controls will remain disabled")}
+                        </p>
+                        <p class="mt-1 text-[11px] text-az-body leading-[1.5]">
+                          {tx(
+                            "You can browse AgencyZero, but return to Settings and run the agent checks after installing Claude or Codex.",
+                          )}
+                        </p>
+                      </div>
+                    }
                   >
-                    <select
-                      aria-label={tx("Default model")}
-                      value={settings().models[settings().defaultAgent].default}
-                      disabled={busy() || !defaultAgentReady()}
-                      onChange={(event) =>
-                        void actions.setDefaultModel(
-                          settings().defaultAgent,
-                          event.currentTarget.value,
-                        )
-                      }
-                      class="h-9 min-w-[250px] rounded-lg border border-az-hairline bg-az-inset px-2.5 text-[12px] text-az-body outline-none disabled:opacity-40"
-                    >
-                      <For each={enabledModels()}>
-                        {(model) => <option value={model.id}>{model.name}</option>}
-                      </For>
-                    </select>
-                  </SetupRow>
-                  <div class="mt-4">
-                    <p class="font-medium text-[12.5px] text-az-strong">{tx("Security posture")}</p>
-                    <p class="mt-0.5 text-[11px] text-az-muted">
-                      {tx("Choose explicitly; AgencyZero never widens access on its own.")}
-                    </p>
-                    <div class="mt-3 grid grid-cols-3 gap-2.5">
-                      <For
-                        each={SECURITY.filter((permission) =>
-                          permissionsFor(settings().defaultAgent).includes(permission),
-                        )}
-                      >
-                        {(permission) => (
+                    <div class="mt-4 grid grid-cols-2 gap-3">
+                      <For each={connectedProjectAgents()}>
+                        {(status) => (
                           <button
                             type="button"
                             disabled={busy()}
-                            onClick={() => void chooseSecurity(permission)}
-                            class={`min-h-[112px] rounded-xl border p-3 text-left transition-colors disabled:opacity-40 ${
-                              settings().defaultPermission === permission && securityConfirmed()
+                            onClick={() => void chooseAgent(status.agent)}
+                            class={`rounded-xl border px-4 py-3 text-left transition-colors disabled:opacity-40 ${
+                              settings().defaultAgent === status.agent
                                 ? "border-primary/60 bg-primary/10"
                                 : "border-az-hairline bg-az-inset hover:border-primary/40"
                             }`}
                           >
-                            <span class="font-semibold text-[12px] text-az-strong">
-                              {permissionLabel(permission)}
+                            <span class="font-medium text-[12.5px] text-az-strong">
+                              {AGENT_LABELS[status.agent]}
                             </span>
-                            <span class="mt-1.5 block text-[10.5px] text-az-muted leading-[1.45]">
-                              {SECURITY_HINT[permission]}
+                            <span class="mt-1 block text-[10.5px] text-az-muted">
+                              {tx("Default project agent")}
                             </span>
                           </button>
                         )}
                       </For>
                     </div>
-                  </div>
+                    <SetupRow
+                      title={tx("Default model")}
+                      hint={tx("Choose from the enabled models for this agent.")}
+                    >
+                      <select
+                        aria-label={tx("Default model")}
+                        value={settings().models[settings().defaultAgent].default}
+                        disabled={busy() || !defaultAgentReady()}
+                        onChange={(event) =>
+                          void actions.setDefaultModel(
+                            settings().defaultAgent,
+                            event.currentTarget.value,
+                          )
+                        }
+                        class="h-9 min-w-[250px] rounded-lg border border-az-hairline bg-az-inset px-2.5 text-[12px] text-az-body outline-none disabled:opacity-40"
+                      >
+                        <For each={enabledModels()}>
+                          {(model) => <option value={model.id}>{model.name}</option>}
+                        </For>
+                      </select>
+                    </SetupRow>
+                    <div class="mt-4">
+                      <p class="font-medium text-[12.5px] text-az-strong">
+                        {tx("Security posture")}
+                      </p>
+                      <p class="mt-0.5 text-[11px] text-az-muted">
+                        {tx("Choose explicitly; AgencyZero never widens access on its own.")}
+                      </p>
+                      <div class="mt-3 grid grid-cols-3 gap-2.5">
+                        <For
+                          each={SECURITY.filter((permission) =>
+                            permissionsFor(settings().defaultAgent).includes(permission),
+                          )}
+                        >
+                          {(permission) => (
+                            <button
+                              type="button"
+                              disabled={busy()}
+                              onClick={() => void chooseSecurity(permission)}
+                              class={`min-h-[112px] rounded-xl border p-3 text-left transition-colors disabled:opacity-40 ${
+                                settings().defaultPermission === permission && securityConfirmed()
+                                  ? "border-primary/60 bg-primary/10"
+                                  : "border-az-hairline bg-az-inset hover:border-primary/40"
+                              }`}
+                            >
+                              <span class="font-semibold text-[12px] text-az-strong">
+                                {permissionLabel(permission)}
+                              </span>
+                              <span class="mt-1.5 block text-[10.5px] text-az-muted leading-[1.45]">
+                                {SECURITY_HINT[permission]}
+                              </span>
+                            </button>
+                          )}
+                        </For>
+                      </div>
+                    </div>
+                  </Show>
                 </>
               )}
             </Show>
@@ -568,9 +624,13 @@ export function WelcomeFlow(): JSX.Element {
                       {tx("What happens next")}
                     </p>
                     <p class="mt-1 text-[11px] text-az-muted leading-[1.55]">
-                      {tx(
-                        "AgencyZero opens an Untitled project. Describe the outcome you want; the first reply names the project and can create tracked work items.",
-                      )}
+                      {connectedProjectAgents().length > 0
+                        ? tx(
+                            "AgencyZero opens an Untitled project. Describe the outcome you want; the first reply names the project and can create tracked work items.",
+                          )
+                        : tx(
+                            "AgencyZero will open Home. Install and confirm Claude or Codex in Settings before starting a project.",
+                          )}
                     </p>
                   </div>
                 </>
@@ -613,7 +673,11 @@ export function WelcomeFlow(): JSX.Element {
               }
               class="flex min-w-[128px] items-center justify-center gap-1.5 rounded-lg bg-primary px-4 py-2 font-semibold text-[12px] text-primary-content hover:bg-az-primary-hover disabled:cursor-not-allowed disabled:opacity-40"
             >
-              {step() === LAST_STEP ? tx("Create first project") : tx("Continue")}
+              {step() === LAST_STEP
+                ? connectedProjectAgents().length > 0
+                  ? tx("Create first project")
+                  : tx("Finish setup")
+                : tx("Continue")}
               <Show when={step() !== LAST_STEP}>
                 <Icon name="chevron-right" class="text-[13px]" />
               </Show>

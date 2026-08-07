@@ -428,6 +428,19 @@ function createWorkspace() {
     return current;
   };
 
+  /** Refuse locally before creating a project or handing a prompt to IPC. */
+  function requireReadyAgent(agent: Agent): void {
+    // The fixture backend intentionally has no provider process. It simulates
+    // sends for UI tests; the real Tauri path is also guarded in Rust.
+    if (state.backend === "mock") return;
+    const status = state.agents.find((candidate) => candidate.agent === agent);
+    if (status?.state === "connected") return;
+    const label = agent === "claude" ? "Claude" : agent === "codex" ? "Codex" : "Copilot";
+    throw new Error(
+      `${label} is not ready. Install or sign in from Settings, then run the agent checks again.`,
+    );
+  }
+
   /**
    * Settings autosave, and each response replaces the whole record, so two
    * quick changes racing must not let the slower response revert local state.
@@ -1532,7 +1545,13 @@ function createWorkspace() {
       setState("onboardingOpen", false);
       setState("onboardingDeferred", false);
     });
-    openDraft();
+    if (
+      state.agents.some((status) => isProjectAgent(status.agent) && status.state === "connected")
+    ) {
+      openDraft();
+    } else {
+      focus("home");
+    }
   }
 
   /** The gauge opens Analytics as a real tab, the same way the gear opens Settings. */
@@ -1732,6 +1751,7 @@ function createWorkspace() {
     study?: StudyTurnMetadata,
   ): Promise<void> {
     const tab = state.tabs.find((candidate) => candidate.key === tabKey);
+    requireReadyAgent(tab?.agent ?? defaultAgent());
     const created = await client().createProject({
       firstMessage,
       agent: tab?.agent,
@@ -1844,6 +1864,7 @@ function createWorkspace() {
     replyQuestionId?: string,
   ): Promise<void> => {
     const tab = state.tabs.find((candidate) => candidate.projectId === projectId);
+    requireReadyAgent(tab?.agent ?? defaultAgent());
     const sent = await client().sendMessage({
       projectId,
       body,
@@ -1894,6 +1915,8 @@ function createWorkspace() {
     study?: StudyTurnMetadata,
     replyQuestionId?: string,
   ): Promise<void> => {
+    const tab = state.tabs.find((candidate) => candidate.projectId === projectId);
+    requireReadyAgent(tab?.agent ?? defaultAgent());
     /*
      * A compaction is the one busy state worth checking *before* dispatching.
      * It is not a turn that can be interrupted — the words would go into a run
@@ -1973,6 +1996,7 @@ function createWorkspace() {
    */
   const sendTaskPrompt = async (body: string, study?: StudyTurnMetadata): Promise<void> => {
     const taskManager = state.settings?.taskManager;
+    requireReadyAgent(taskManager?.agent ?? "claude");
     await client().sendMessage({
       projectId: TASK_MANAGER_ID,
       body,

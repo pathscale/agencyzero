@@ -1,7 +1,7 @@
 import { createEffect, createMemo, createSignal, For, type JSX, onMount, Show } from "solid-js";
 import { Icon } from "~/components/Icon";
 import { PillMenu } from "~/components/PillMenu";
-import { PERMISSION_ORDER, permissionLabel } from "~/lib/labels";
+import { AGENT_LABELS, PERMISSION_ORDER, permissionLabel } from "~/lib/labels";
 import { describeError, log } from "~/lib/log";
 import {
   assumedOutputTokensForEffort,
@@ -383,6 +383,12 @@ export function Composer(props: ComposerProps): JSX.Element {
   const error = () => errors()[bucket()] ?? null;
   const attachments = () => staged()[bucket()] ?? EMPTY_ATTACHMENTS;
   const isSending = () => sending()[bucket()] ?? false;
+  const selectedAgent = () => state.agents.find((candidate) => candidate.agent === props.agent);
+  const agentReady = () => state.boot.status !== "ready" || selectedAgent()?.state === "connected";
+  const agentBlockedReason = () =>
+    tx("{agent} is not ready. Install or sign in from Settings, then run the agent checks again.", {
+      agent: AGENT_LABELS[props.agent],
+    });
 
   /*
    * Written against a captured key, never `bucket()`, so a result that lands
@@ -407,7 +413,8 @@ export function Composer(props: ComposerProps): JSX.Element {
   // sends when the run lands, so Enter never starts a second run and never
   // bounces the words back either. Attachments alone are a sendable message:
   // "eat this file" needs no caption.
-  const canSend = () => (draft().trim().length > 0 || attachments().length > 0) && !isSending();
+  const canSend = () =>
+    agentReady() && (draft().trim().length > 0 || attachments().length > 0) && !isSending();
 
   /**
    * The Attach button: the OS picker, and the chosen files held as pills
@@ -595,6 +602,25 @@ export function Composer(props: ComposerProps): JSX.Element {
 
   return (
     <div class="flex flex-col gap-1.5">
+      <Show when={!agentReady()}>
+        <div
+          role="alert"
+          class="flex items-start gap-3 rounded-xl border border-error/38 bg-error/8 px-3 py-2.5"
+        >
+          <Icon name="shield" class="relative top-0.5 shrink-0 text-[14px] text-error" />
+          <div class="min-w-0 flex-1">
+            <p class="font-semibold text-[11.5px] text-error">{tx("Agent setup required")}</p>
+            <p class="mt-0.5 text-[11px] text-az-body leading-[1.45]">{agentBlockedReason()}</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => actions.openSettings()}
+            class="shrink-0 rounded-lg border border-error/30 px-2.5 py-1 text-[10.5px] text-az-body hover:border-error hover:text-error"
+          >
+            {tx("Open Settings")}
+          </button>
+        </div>
+      </Show>
       {/* Cost guidance comes first so the action is read before the two figures
           it explains. */}
       <Show when={showCostAlert()}>
@@ -1029,11 +1055,13 @@ export function Composer(props: ComposerProps): JSX.Element {
                     : tx("Send")
                 }
                 title={
-                  props.isRunning
-                    ? props.canFollowUp
-                      ? tx("Delivered into the running turn; the agent takes it at its next step")
-                      : tx("Queued until the running turn finishes")
-                    : undefined
+                  !agentReady()
+                    ? agentBlockedReason()
+                    : props.isRunning
+                      ? props.canFollowUp
+                        ? tx("Delivered into the running turn; the agent takes it at its next step")
+                        : tx("Queued until the running turn finishes")
+                      : undefined
                 }
                 class="flex size-[24px] items-center justify-center rounded-full bg-primary text-primary-content transition-colors hover:bg-az-primary-hover disabled:cursor-not-allowed disabled:opacity-40"
               >
