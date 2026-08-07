@@ -392,6 +392,7 @@ const zh = {
   "The store checkpoint runs every 200ms — the newest text is not saved yet":
     "存储检查点每 200 毫秒运行一次 — 最新文本尚未保存",
   "provider outage · temporary": "提供方故障 · 暂时",
+  "security review required": "需要安全审核",
   CRITICAL: "严重",
   CHECK: "检查",
   "Review the GUI crate": "审查 GUI crate",

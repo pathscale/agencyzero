@@ -410,6 +410,7 @@ const en = {
   "The store checkpoint runs every 200ms — the newest text is not saved yet":
     "The store checkpoint runs every 200ms — the newest text is not saved yet",
   "provider outage · temporary": "provider outage · temporary",
+  "security review required": "security review required",
   CRITICAL: "CRITICAL",
   CHECK: "CHECK",
   "Review the GUI crate": "Review the GUI crate",

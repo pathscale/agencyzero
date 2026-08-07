@@ -5,6 +5,7 @@ import {
   duration,
   elapsed,
   formatBytes,
+  isCybersecurityRefusal,
   isRetryableStop,
   isSuccessfulStop,
   isTransientStop,
@@ -97,6 +98,13 @@ describe("isRetryableStop", () => {
     expect(isRetryableStop("error")).toBe(true);
     expect(isRetryableStop("interrupted")).toBe(true);
     expect(isRetryableStop("API Error: 503 Service unavailable")).toBe(true);
+  });
+
+  it("keeps cybersecurity refusals visible without replaying the same prompt", () => {
+    const refusal =
+      "codex reported a failed turn: This content was flagged for possible cybersecurity risk.";
+    expect(isCybersecurityRefusal(refusal)).toBe(true);
+    expect(isRetryableStop(refusal)).toBe(false);
   });
 });
 

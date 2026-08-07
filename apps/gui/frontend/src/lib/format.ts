@@ -113,9 +113,14 @@ export function isTransientStop(stop: string): boolean {
   );
 }
 
+/** Whether Codex refused the turn under its cybersecurity safety policy. */
+export function isCybersecurityRefusal(stop: string): boolean {
+  return stop.includes("This content was flagged for possible cybersecurity risk");
+}
+
 /** Whether replaying the last user prompt is a valid recovery action. */
 export function isRetryableStop(stop: string): boolean {
-  return !isSuccessfulStop(stop) && stop !== "canceled";
+  return !isSuccessfulStop(stop) && stop !== "canceled" && !isCybersecurityRefusal(stop);
 }
 
 /** Stop reasons that represent a complete visible reply rather than a failed run. */

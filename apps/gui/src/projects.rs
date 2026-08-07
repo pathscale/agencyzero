@@ -4470,6 +4470,10 @@ fn emit_run_stopped(
     );
 }
 
+fn is_cybersecurity_refusal(message: &str) -> bool {
+    message.contains("This content was flagged for possible cybersecurity risk")
+}
+
 /// Drop a run's reply checkpoint, once a real row owns the words.
 async fn clear_partial_reply(tables: &Tables, project_id: &str) {
     if let Err(error) = tables
@@ -10663,8 +10667,9 @@ async fn drive_run(
             );
         }
         Err(error) => {
+            let error_text = error.to_string();
             measurement
-                .finish(&tables, &observed_session, &error.to_string(), &turn_usage)
+                .finish(&tables, &observed_session, &error_text, &turn_usage)
                 .await;
             crate::log!(
                 crate::log::Level::Error,
@@ -10695,7 +10700,13 @@ async fn drive_run(
              * the failure remains real consumption, so it is persisted with
              * the partial message and in the durable ledger.
              */
-            let visible_chunk = without_incomplete_prompt_syntax_tail(&streamed_chunk);
+            let mut visible_chunk = without_incomplete_prompt_syntax_tail(&streamed_chunk);
+            if visible_chunk.trim().is_empty() && is_cybersecurity_refusal(&error_text) {
+                // Keep the exact refusal durably in the transcript. The
+                // session-local stopped event disappears on restart, which
+                // makes a safety decision too easy to miss.
+                visible_chunk = error_text.clone();
+            }
             if !visible_chunk.trim().is_empty() || has_accountable_usage(&turn_usage) {
                 match persist_terminal_agent_chunk(
                     &tables,
@@ -10705,7 +10716,7 @@ async fn drive_run(
                     last_chunk_id.as_deref(),
                     AgentMessageOutcome {
                         usage: usage_json(&turn_usage),
-                        stop: error.to_string(),
+                        stop: error_text.clone(),
                         exit_code: -1,
                     },
                 )
@@ -10733,7 +10744,7 @@ async fn drive_run(
                 agent,
                 &model,
                 &permission,
-                error.to_string(),
+                error_text,
                 None,
             );
         }
@@ -11006,6 +11017,16 @@ mod tests {
 
         visibility.reset("project-a", Agent::Codex);
         assert!(visibility.should_announce("project-a", Agent::Codex));
+    }
+
+    #[test]
+    fn cybersecurity_refusals_are_recognized_for_durable_alerting() {
+        assert!(is_cybersecurity_refusal(
+            "codex reported a failed turn: This content was flagged for possible cybersecurity risk."
+        ));
+        assert!(!is_cybersecurity_refusal(
+            "codex reported a failed turn: service unavailable"
+        ));
     }
 
     #[test]

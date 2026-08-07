@@ -1383,6 +1383,8 @@ function createWorkspace() {
     );
 
     await bind("run:stopped", ({ projectId, agent, model, permission, stop, exitCode }) => {
+      const lastMessage = (state.messages[projectId] ?? []).at(-1);
+      const failureAlreadyPersisted = lastMessage?.author === "agent" && lastMessage.stop === stop;
       /*
        * The task manager's session id is recorded at `Event::Started`, but
        * with no project row there is no `project:updated` to carry it here —
@@ -1416,7 +1418,7 @@ function createWorkspace() {
          * it is the normal stop/yield path, and the backend has already kept
          * any partial reply and usage it received.
          */
-        if (stop !== "completed" && stop !== "canceled") {
+        if (stop !== "completed" && stop !== "canceled" && !failureAlreadyPersisted) {
           appendMessage({
             id: `run-error-${Date.now()}`,
             projectId,
