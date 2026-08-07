@@ -260,7 +260,7 @@ pub enum Severity {
 /// for a subscription user watching a weekly window, not an enterprise bill:
 /// the point is to catch the runaway wedged session (dollars per turn), not to
 /// nag on an ordinary reply (fractions of a cent).
-const WARN_USD: f64 = 0.50;
+const WARN_USD: f64 = 0.75;
 const HIGH_USD: f64 = 2.00;
 
 /// Estimate the cost of the next turn.

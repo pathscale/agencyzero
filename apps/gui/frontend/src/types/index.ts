@@ -581,6 +581,8 @@ export interface GlobalSettings {
   /** Off by default: HTTPS_PROXY often embeds credentials. */
   forwardProxyVars: boolean;
   notifications: NotificationSettings;
+  /** Projected per-turn USD that opens the composer's warning card. */
+  costWarningUsd: number;
   /**
    * What the owner's finished action does to an existing item: `"resolve"`
    * keeps the finished row, while `"delete"` removes it outright.

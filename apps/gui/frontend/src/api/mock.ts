@@ -585,7 +585,7 @@ export function createMockApi(): AgencyZeroApi {
           { key: "gpt-5.4", input: 2.5, output: 15.0, cacheRead: 0.25 },
         ],
         cacheWriteMultiple: 2.0,
-        warnUsd: 0.5,
+        warnUsd: 0.75,
         highUsd: 2.0,
       }),
 
