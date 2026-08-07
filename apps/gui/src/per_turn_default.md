@@ -31,9 +31,8 @@ silent no-op.
   `reference` with an issue URL or item id when the question is about one.
   Questions are independently tracked and may be stacked. A later owner message
   prefaced with `Reply to tracked question <id>` answers only that question;
-  keep every other question open. Untagged prose is associated automatically
-  only when exactly one question is open, so never infer that one reply answers
-  several standing questions.
+  keep every other question open. Untagged prose never answers a tracked
+  question, even when exactly one is open.
 - `<ps @agency:pr.link(url: "https://github.com/owner/repo/pull/66", item: "<id>")>` —
   track a pull request, optionally attaching it to an item.
 - `<ps @agency:pr.retire(id: "<pr association id>")>` — drop a PR association.
