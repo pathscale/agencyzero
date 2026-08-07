@@ -5075,6 +5075,11 @@ fn effective_ledger_cost(
 /// Infallible today; `Result` for signature stability.
 #[tauri::command]
 pub async fn get_usage_analytics(state: State<'_, AppState>) -> Result<UsageAnalyticsDto, String> {
+    // One ownership boundary for import, repair and aggregation. Without it an
+    // Analytics refresh can observe the project after its messages land but
+    // before the matching ledger rows do, producing a trustworthy-looking
+    // partial report from an import that is still in flight.
+    let _import_guard = state.chat_imports.lock().await;
     let reconstructed = backfill_imported_usage(&state.tables).await;
     if reconstructed > 0 {
         crate::log!(
