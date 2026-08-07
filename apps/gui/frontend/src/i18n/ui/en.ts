@@ -699,6 +699,72 @@ const en = {
     "Portable .azbackup package · version and integrity checked",
   "The app drains and restarts so the store is never copied while open.":
     "The app drains and restarts so the store is never copied while open.",
+  "Welcome to AgencyZero": "Welcome to AgencyZero",
+  "Set up the workspace once, then start with a real task.":
+    "Set up the workspace once, then start with a real task.",
+  "Close setup": "Close setup",
+  "Finish setup later": "Finish setup later",
+  "Setup progress": "Setup progress",
+  "Choose Home and language": "Choose Home and language",
+  "New projects start in Home; the interface changes language immediately.":
+    "New projects start in Home; the interface changes language immediately.",
+  "Interface language": "Interface language",
+  "Choose the language used by AgencyZero.": "Choose the language used by AgencyZero.",
+  "Home Project directory": "Home Project directory",
+  "Ready for new projects": "Ready for new projects",
+  "Choose or create the directory before continuing":
+    "Choose or create the directory before continuing",
+  "Not available": "Not available",
+  "Choose folder…": "Choose folder…",
+  "Create recommended folder": "Create recommended folder",
+  "Confirm your agents": "Confirm your agents",
+  "AgencyZero checks the installed CLI, version, and sign-in state.":
+    "AgencyZero checks the installed CLI, version, and sign-in state.",
+  "No installed version detected": "No installed version detected",
+  "At least one project agent is ready.": "At least one project agent is ready.",
+  "Install and sign in to Claude or Codex before continuing.":
+    "Install and sign in to Claude or Codex before continuing.",
+  "Run checks again": "Run checks again",
+  "Choose defaults and security": "Choose defaults and security",
+  "These choices seed new projects; every project can override them.":
+    "These choices seed new projects; every project can override them.",
+  "Default project agent": "Default project agent",
+  "Choose from the enabled models for this agent.":
+    "Choose from the enabled models for this agent.",
+  "Security posture": "Security posture",
+  "Choose explicitly; AgencyZero never widens access on its own.":
+    "Choose explicitly; AgencyZero never widens access on its own.",
+  "Read files and run checks, but do not change the workspace.":
+    "Read files and run checks, but do not change the workspace.",
+  "Ask before a tool crosses the current approval rules.":
+    "Ask before a tool crosses the current approval rules.",
+  "Edit inside the approved workspace and use routine network access automatically.":
+    "Edit inside the approved workspace and use routine network access automatically.",
+  "Bring existing chats": "Bring existing chats",
+  "Import is read-only: provider transcripts are copied into new projects.":
+    "Import is read-only: provider transcripts are copied into new projects.",
+  "No importable local sessions were found.": "No importable local sessions were found.",
+  "Checking known provider stores…": "Checking known provider stores…",
+  "{count} chats available": "{count} chats available",
+  "Import is optional. You can return to it from Settings at any time.":
+    "Import is optional. You can return to it from Settings at any time.",
+  "Ready for the first project": "Ready for the first project",
+  "Review update checks, then open a project and send a real task.":
+    "Review update checks, then open a project and send a real task.",
+  "Automatic update checks": "Automatic update checks",
+  "Checks after launch; AgencyZero never installs an update automatically.":
+    "Checks after launch; AgencyZero never installs an update automatically.",
+  On: "On",
+  Off: "Off",
+  "What happens next": "What happens next",
+  "AgencyZero opens an Untitled project. Describe the outcome you want; the first reply names the project and can create tracked work items.":
+    "AgencyZero opens an Untitled project. Describe the outcome you want; the first reply names the project and can create tracked work items.",
+  Back: "Back",
+  Close: "Close",
+  "Finish later": "Finish later",
+  "Create first project": "Create first project",
+  Continue: "Continue",
+  "Help and setup": "Help and setup",
 } as const;
 
 export default en;

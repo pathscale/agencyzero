@@ -98,6 +98,9 @@ type WorkspaceState = {
   /** Headless PR reviews currently running, keyed by provider and PR URL. */
   reviewing: Record<string, boolean>;
   settings: GlobalSettings | null;
+  /** Help replay, or a first-run guide dismissed only for this window. */
+  onboardingOpen: boolean;
+  onboardingDeferred: boolean;
   agents: AgentStatus[];
   /** Every agent's catalogue, for the Settings picker. Empty until boot ends. */
   models: AgentModels[];
@@ -356,6 +359,8 @@ function createWorkspace() {
     reviewing: {},
     taskManagerSession: null,
     settings: null,
+    onboardingOpen: false,
+    onboardingDeferred: false,
     agents: [],
     models: [],
     pricing: null,
@@ -1496,6 +1501,32 @@ function createWorkspace() {
     focus("settings");
   }
 
+  /** Replay the guide from Help without changing its durable completion flag. */
+  function openOnboarding(): void {
+    batch(() => {
+      setState("onboardingOpen", true);
+      setState("onboardingDeferred", false);
+    });
+  }
+
+  /** Close the guide for this window; an incomplete first run returns next launch. */
+  function deferOnboarding(): void {
+    batch(() => {
+      setState("onboardingOpen", false);
+      setState("onboardingDeferred", true);
+    });
+  }
+
+  /** Persist completion before handing the owner to the first project draft. */
+  async function completeOnboarding(): Promise<void> {
+    await saveSettings({ onboardingCompleted: true });
+    batch(() => {
+      setState("onboardingOpen", false);
+      setState("onboardingDeferred", false);
+    });
+    openDraft();
+  }
+
   /** The gauge opens Analytics as a real tab, the same way the gear opens Settings. */
   function openAnalytics(): void {
     if (!state.tabs.some((tab) => tab.kind === "analytics")) {
@@ -1953,6 +1984,9 @@ function createWorkspace() {
     commitTabOrder,
     openProject,
     openSettings,
+    openOnboarding,
+    deferOnboarding,
+    completeOnboarding,
     openAnalytics,
     openDraft,
     closeTab,
@@ -2139,6 +2173,13 @@ function createWorkspace() {
     /** Create the workspace directory, then re-read so the row updates. */
     async createWorkspaceRoot() {
       setState("workspaceRoot", await client().createWorkspaceRoot());
+    },
+    /** Pick the Home Project directory, persist it, then show the resolved path. */
+    async chooseWorkspaceRoot() {
+      const picked = await client().chooseProjectDirectory();
+      if (!picked) return;
+      await saveSettings({ workspaceRoot: picked });
+      setState("workspaceRoot", await client().getWorkspaceRoot());
     },
     async refreshModels() {
       setState("models", reconcile(await client().listModels(true)));
