@@ -592,6 +592,8 @@ export interface GlobalSettings {
   agentRestartPolicy: "disabled" | "restart" | "restart_and_update";
   /** Project tabs included in store backups. Null identifies an older record. */
   workspaceTabs: WorkspaceTabs | null;
+  /** False only for a genuinely new store until its welcome flow completes. */
+  onboardingCompleted: boolean;
   /** How a PR review is shaped: the prompt, and the model per reviewer agent. */
   review: ReviewSettings;
 }

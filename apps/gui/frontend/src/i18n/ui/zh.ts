@@ -678,6 +678,69 @@ const zh = {
     "便携式 .azbackup 包 · 已检查版本与完整性",
   "The app drains and restarts so the store is never copied while open.":
     "应用会先排空写入并重启，确保存储不会在打开时被复制。",
+  "Welcome to AgencyZero": "欢迎使用 AgencyZero",
+  "Set up the workspace once, then start with a real task.":
+    "完成一次工作区设置，然后从真实任务开始。",
+  "Close setup": "关闭设置",
+  "Finish setup later": "稍后完成设置",
+  "Setup progress": "设置进度",
+  "Choose Home and language": "选择主目录和语言",
+  "New projects start in Home; the interface changes language immediately.":
+    "新项目将在主目录中创建；界面语言会立即切换。",
+  "Interface language": "界面语言",
+  "Choose the language used by AgencyZero.": "选择 AgencyZero 使用的语言。",
+  "Home Project directory": "项目主目录",
+  "Ready for new projects": "已可创建新项目",
+  "Choose or create the directory before continuing": "继续前请选择或创建目录",
+  "Not available": "不可用",
+  "Choose folder…": "选择文件夹…",
+  "Create recommended folder": "创建推荐文件夹",
+  "Confirm your agents": "确认代理状态",
+  "AgencyZero checks the installed CLI, version, and sign-in state.":
+    "AgencyZero 会检查已安装的 CLI、版本和登录状态。",
+  "No installed version detected": "未检测到已安装版本",
+  "At least one project agent is ready.": "至少有一个项目代理已就绪。",
+  "Install and sign in to Claude or Codex before continuing.":
+    "请先安装并登录 Claude 或 Codex，然后继续。",
+  "Run checks again": "重新检查",
+  "Choose defaults and security": "选择默认值和安全策略",
+  "These choices seed new projects; every project can override them.":
+    "这些选择将作为新项目的初始值；每个项目都可单独更改。",
+  "Default project agent": "默认项目代理",
+  "Choose from the enabled models for this agent.": "从此代理已启用的模型中选择。",
+  "Security posture": "安全策略",
+  "Choose explicitly; AgencyZero never widens access on its own.":
+    "请明确选择；AgencyZero 不会自行扩大访问权限。",
+  "Read files and run checks, but do not change the workspace.":
+    "可读取文件并运行检查，但不更改工作区。",
+  "Ask before a tool crosses the current approval rules.": "工具超出当前批准规则前先询问。",
+  "Edit inside the approved workspace and use routine network access automatically.":
+    "可在已批准的工作区内编辑，并自动使用常规网络访问。",
+  "Bring existing chats": "导入现有聊天",
+  "Import is read-only: provider transcripts are copied into new projects.":
+    "导入过程只读：提供商的对话记录会被复制到新项目。",
+  "No importable local sessions were found.": "未发现可导入的本地会话。",
+  "Checking known provider stores…": "正在检查已知提供商存储…",
+  "{count} chats available": "有 {count} 个聊天可用",
+  "Import is optional. You can return to it from Settings at any time.":
+    "导入是可选的。你可以随时从设置中返回此功能。",
+  "Ready for the first project": "已准备创建第一个项目",
+  "Review update checks, then open a project and send a real task.":
+    "确认更新检查设置，然后打开项目并发送真实任务。",
+  "Automatic update checks": "自动检查更新",
+  "Checks after launch; AgencyZero never installs an update automatically.":
+    "启动后检查；AgencyZero 永远不会自动安装更新。",
+  On: "开",
+  Off: "关",
+  "What happens next": "接下来会发生什么",
+  "AgencyZero opens an Untitled project. Describe the outcome you want; the first reply names the project and can create tracked work items.":
+    "AgencyZero 会打开一个未命名项目。描述你想要的结果；第一次回复会为项目命名，并可创建跟踪事项。",
+  Back: "返回",
+  Close: "关闭",
+  "Finish later": "稍后完成",
+  "Create first project": "创建第一个项目",
+  Continue: "继续",
+  "Help and setup": "帮助和设置",
 } satisfies Record<keyof typeof en, string>;
 
 export default zh;

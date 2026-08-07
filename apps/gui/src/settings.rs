@@ -76,6 +76,13 @@ pub struct GlobalSettings {
     /// than mistaking the absence for an intentionally empty strip.
     #[serde(default)]
     pub workspace_tabs: Option<WorkspaceTabs>,
+    /// Whether this store's first-run guide has been completed.
+    ///
+    /// `None` identifies a settings row written before onboarding existed. It
+    /// normalizes to completed so an upgrade never presents itself as a new
+    /// install; [`Default`] uses `Some(false)` for a genuinely empty store.
+    #[serde(default)]
+    pub onboarding_completed: Option<bool>,
     /// How a PR review is shaped: the model each reviewer uses, and the prompt.
     #[serde(default)]
     pub review: Review,
@@ -374,6 +381,7 @@ impl Default for GlobalSettings {
             automatic_update_checks: true,
             agent_restart_policy: "disabled".into(),
             workspace_tabs: None,
+            onboarding_completed: Some(false),
             review: Review::default(),
         }
     }
@@ -427,6 +435,9 @@ pub fn normalize_task_manager(settings: &mut GlobalSettings) {
 pub fn normalize(settings: &mut GlobalSettings) {
     normalize_task_manager(settings);
     settings.agent_finished_retention_turns = settings.agent_finished_retention_turns.clamp(1, 3);
+    if settings.onboarding_completed.is_none() {
+        settings.onboarding_completed = Some(true);
+    }
     if !matches!(
         settings.agent_restart_policy.as_str(),
         "disabled" | "restart" | "restart_and_update"
@@ -477,6 +488,7 @@ mod tests {
         assert!(back.automatic_update_checks);
         assert_eq!(back.agent_restart_policy, "disabled");
         assert!(back.workspace_tabs.is_none());
+        assert_eq!(back.onboarding_completed, Some(false));
         assert!(json.contains("defaultAgent"), "must be camelCase: {json}");
     }
 
@@ -517,10 +529,22 @@ mod tests {
         assert!(loaded.automatic_update_checks);
         assert_eq!(loaded.agent_restart_policy, "disabled");
         assert!(loaded.workspace_tabs.is_none());
+        assert_eq!(loaded.onboarding_completed, None);
         assert_eq!(
             loaded.moderator.model, "haiku",
             "absent blocks use defaults"
         );
+    }
+
+    #[test]
+    fn normalization_shows_onboarding_only_for_a_new_store() {
+        let mut first_run = GlobalSettings::default();
+        normalize(&mut first_run);
+        assert_eq!(first_run.onboarding_completed, Some(false));
+
+        let mut upgraded: GlobalSettings = serde_json::from_str("{}").expect("old row parses");
+        normalize(&mut upgraded);
+        assert_eq!(upgraded.onboarding_completed, Some(true));
     }
 
     /// The case the model picker depends on: unchecking a model sends a shorter

@@ -4,6 +4,7 @@ import { IconSprite } from "~/components/IconSprite";
 import { AnalyticsTab } from "~/features/analytics/AnalyticsTab";
 import { DraftTab } from "~/features/draft/DraftTab";
 import { HomeTab } from "~/features/home/HomeTab";
+import { WelcomeFlow } from "~/features/onboarding/WelcomeFlow";
 import { ProjectTab } from "~/features/project/ProjectTab";
 import { SettingsTab } from "~/features/settings/SettingsTab";
 import { CloseConfirm } from "~/features/shell/CloseConfirm";
@@ -79,6 +80,8 @@ function Workspace(): JSX.Element {
       <Show when={state.backend === "mock"}>
         <MockBanner />
       </Show>
+
+      <WelcomeFlow />
 
       <CloseConfirm
         isOpen={shell.isClosing()}

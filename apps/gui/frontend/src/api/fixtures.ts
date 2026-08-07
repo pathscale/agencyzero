@@ -612,6 +612,7 @@ export const SETTINGS: GlobalSettings = {
   automaticUpdateChecks: true,
   agentRestartPolicy: "disabled",
   workspaceTabs: null,
+  onboardingCompleted: true,
   review: { prompt: "", models: {} },
   notifications: {
     onHold: true,

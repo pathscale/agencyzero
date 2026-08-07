@@ -147,6 +147,16 @@ export function TabStrip(): JSX.Element {
       <div class="flex flex-none items-center gap-1.5">
         <button
           type="button"
+          data-guide-target="help-setup"
+          onClick={() => actions.openOnboarding()}
+          title={tx("Help and setup")}
+          aria-label={tx("Help and setup")}
+          class="relative flex size-[30px] items-center justify-center rounded-full text-az-muted transition-colors hover:bg-white/6 hover:text-base-content"
+        >
+          <Icon name="info" class="text-[15px]" />
+        </button>
+        <button
+          type="button"
           onClick={() => actions.openAnalytics()}
           title={tx("Analytics")}
           aria-label={tx("Analytics")}
