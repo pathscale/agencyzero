@@ -28,6 +28,7 @@ import type { ThemeSettings } from "~/types";
  */
 export function ThemePicker(props: {
   theme: ThemeSettings;
+  onSurface: (hex: string) => void;
   onAccent: (hex: string) => void;
   onSoftness: (value: number) => void;
   onWash: (value: number) => void;
@@ -35,10 +36,10 @@ export function ThemePicker(props: {
 }): JSX.Element {
   /*
    * The wheel wants a full ColorValue and hands one back on change. An empty
-   * accent means "the palette's own", and that fallback lives in `lib/theme.ts`
-   * so there is exactly one place naming the default yellow.
+   * surface means the neutral designed desk. The fallback only supplies a
+   * wheel position; a blank setting still applies no wash.
    */
-  const current = () => toColorValue(props.theme.accent || DEFAULT_ACCENT);
+  const current = () => toColorValue(props.theme.surface || DEFAULT_ACCENT);
 
   /** Five stops across the comfort range, matching the strength row beside it. */
   const softnessStops = () => Array.from({ length: 5 }, (_, i) => (i * MAX_SOFTNESS) / 4);
@@ -49,7 +50,7 @@ export function ThemePicker(props: {
       ? `oklch(calc(93% - ${softness}%) 0.004 240)`
       : `oklch(calc(10.5% + ${softness}%) 0.004 240)`;
   const deskPreview = (theme: ThemeSettings) =>
-    `color-mix(in oklab, ${theme.accent || DEFAULT_ACCENT} ${theme.wash * 1.1}%, ${deskAnchor(theme.softness)})`;
+    `color-mix(in oklab, ${theme.surface || DEFAULT_ACCENT} ${theme.wash * 1.1}%, ${deskAnchor(theme.softness)})`;
 
   return (
     <div class="flex items-start gap-4 px-3.5 py-3">
@@ -59,7 +60,7 @@ export function ThemePicker(props: {
             color: current,
             format: () => "hex",
             disabled: () => false,
-            onChange: (color) => props.onAccent(color.hex),
+            onChange: (color) => props.onSurface(color.hex),
             onFormatChange: () => {},
           }}
         >
@@ -84,7 +85,7 @@ export function ThemePicker(props: {
           value={props.theme.wash}
           onPick={props.onWash}
           preview={(stop) =>
-            `color-mix(in oklab, ${props.theme.accent || DEFAULT_ACCENT} ${stop * 1.1}%, ${deskAnchor(props.theme.softness)})`
+            `color-mix(in oklab, ${props.theme.surface || DEFAULT_ACCENT} ${stop * 1.1}%, ${deskAnchor(props.theme.softness)})`
           }
           format={(stop) => `${stop}%`}
         />
@@ -96,7 +97,7 @@ export function ThemePicker(props: {
           value={props.theme.softness}
           onPick={props.onSoftness}
           preview={(stop) =>
-            `color-mix(in oklab, ${props.theme.accent || DEFAULT_ACCENT} ${props.theme.wash * 1.1}%, ${deskAnchor(stop)})`
+            `color-mix(in oklab, ${props.theme.surface || DEFAULT_ACCENT} ${props.theme.wash * 1.1}%, ${deskAnchor(stop)})`
           }
           format={(stop) => `${Math.round((stop / MAX_SOFTNESS) * 100)}%`}
         />
@@ -121,6 +122,73 @@ export function ThemePicker(props: {
           }
           format={(_stop, index) => `${Math.round((index / (BRIGHTNESS_STOPS.length - 1)) * 100)}%`}
         />
+
+        <AccentSelector
+          surface={props.theme.surface || DEFAULT_ACCENT}
+          accent={props.theme.accent}
+          onPick={props.onAccent}
+        />
+      </div>
+    </div>
+  );
+}
+
+/** An independent high-contrast colour for controls, rings and active states. */
+function AccentSelector(props: {
+  surface: string;
+  accent: string;
+  onPick: (value: string) => void;
+}): JSX.Element {
+  const resolved = () => props.accent || DEFAULT_ACCENT;
+  const matchesSurface = () => props.accent !== "" && props.accent === props.surface;
+  return (
+    <div class="flex flex-col gap-1.5">
+      <div class="flex items-baseline gap-2">
+        <span class="font-semibold text-[11px] text-az-muted uppercase tracking-[.04em]">
+          {t("appearance.accentColour")}
+        </span>
+        <span class="text-[11px] text-az-faint">{t("appearance.accentColourHint")}</span>
+      </div>
+      <div class="flex items-center gap-2">
+        <button
+          type="button"
+          aria-label={t("appearance.designedYellow")}
+          aria-pressed={props.accent === ""}
+          onClick={() => props.onPick("")}
+          class="size-7 rounded-full border-2 transition-colors"
+          classList={{
+            "border-primary": props.accent === "",
+            "border-az-hairline-strong": props.accent !== "",
+          }}
+          style={{ "background-color": DEFAULT_ACCENT }}
+        />
+        <button
+          type="button"
+          aria-label={t("appearance.matchSurface")}
+          aria-pressed={matchesSurface()}
+          onClick={() => props.onPick(props.surface)}
+          class="flex size-7 items-center justify-center rounded-full border-2 font-semibold text-[10px] transition-colors"
+          classList={{
+            "border-primary": matchesSurface(),
+            "border-az-hairline-strong": !matchesSurface(),
+          }}
+          style={{ "background-color": props.surface, color: "#111111" }}
+        >
+          S
+        </button>
+        <label
+          class="relative size-7 cursor-pointer overflow-hidden rounded-full border-2 border-az-hairline-strong transition-colors hover:border-primary"
+          style={{ "background-color": resolved() }}
+        >
+          <span class="sr-only">{t("appearance.customAccent")}</span>
+          <input
+            type="color"
+            aria-label={t("appearance.customAccent")}
+            value={resolved()}
+            onInput={(event) => props.onPick(event.currentTarget.value)}
+            class="absolute inset-0 size-full cursor-pointer opacity-0"
+          />
+        </label>
       </div>
     </div>
   );

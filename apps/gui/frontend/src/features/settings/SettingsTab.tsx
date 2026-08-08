@@ -628,6 +628,7 @@ export function SettingsTab(): JSX.Element {
                 </Row>
                 <ThemePicker
                   theme={current().theme}
+                  onSurface={(surface) => void actions.saveSettings({ theme: { surface } })}
                   onAccent={(accent) => void actions.saveSettings({ theme: { accent } })}
                   onSoftness={(softness) => void actions.saveSettings({ theme: { softness } })}
                   onWash={(wash) => void actions.saveSettings({ theme: { wash } })}
@@ -639,13 +640,21 @@ export function SettingsTab(): JSX.Element {
                   <button
                     type="button"
                     disabled={
+                      current().theme.surface === "" &&
                       current().theme.accent === "" &&
                       current().theme.softness === 0 &&
+                      current().theme.wash === DEFAULT_WASH &&
                       current().theme.textBrightness === 0
                     }
                     onClick={() =>
                       void actions.saveSettings({
-                        theme: { accent: "", softness: 0, wash: DEFAULT_WASH },
+                        theme: {
+                          surface: "",
+                          accent: "",
+                          softness: 0,
+                          wash: DEFAULT_WASH,
+                          textBrightness: 0,
+                        },
                       })
                     }
                     class="rounded-lg border border-az-hairline-strong px-3 py-[5px] text-[12px] text-az-muted transition-colors hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-40"

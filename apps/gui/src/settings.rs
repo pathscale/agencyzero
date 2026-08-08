@@ -190,7 +190,7 @@ pub struct StudyAnalytics {
     pub enabled_at: String,
 }
 
-/// The theme picker's two axes, as the webview applies them.
+/// The theme picker's persisted axes, as the webview applies them.
 ///
 /// Here rather than in the webview's own storage because settings in this app
 /// are rows in WorkTable: `localStorage` would not survive a data directory
@@ -199,6 +199,13 @@ pub struct StudyAnalytics {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
 pub struct Theme {
+    /// The colour washed into workspace surfaces.
+    ///
+    /// `None` identifies a settings row written before surface and accent
+    /// became independent. Normalization copies that row's old `accent` here,
+    /// preserving its appearance. `Some("")` is the designed neutral surface.
+    #[serde(default)]
+    pub surface: Option<String>,
     /// The accent, as a `#rrggbb` hex string. Drives `--color-primary` and
     /// everything derived from it — the composer ring, the status halo, active
     /// states.
@@ -217,15 +224,14 @@ pub struct Theme {
     /// here, so a record from a future build with a wider range cannot make
     /// this one unreadable — it renders at the edge instead.
     pub softness: f32,
-    /// How much of the accent is mixed into every surface, as a percentage.
+    /// How much of the surface colour is mixed into every surface, as a percentage.
     ///
     /// The difference between a picked colour that changes buttons and one that
     /// changes the workspace. nofilter.io washes its base tiers at 8–11%, which
     /// is why its picker reads as a theme and an accent-only version reads as a
     /// highlight — that version shipped here first and was wrong.
     ///
-    /// Ignored while `accent` is empty: the designed palette is grey, not grey
-    /// washed with its own yellow.
+    /// Ignored while `surface` is empty: the designed palette is grey.
     pub wash: f32,
     /// Lightness added back to every text rung, in oklch percentage points.
     ///
@@ -239,6 +245,7 @@ pub struct Theme {
 impl Default for Theme {
     fn default() -> Self {
         Theme {
+            surface: Some(String::new()),
             accent: String::new(),
             softness: 0.0,
             // Matches `DEFAULT_WASH` in the webview's lib/theme.ts: a colour
@@ -459,6 +466,9 @@ pub fn normalize_task_manager(settings: &mut GlobalSettings) {
 
 /// Clamp persisted settings whose valid range is narrower than their wire type.
 pub fn normalize(settings: &mut GlobalSettings) {
+    if settings.theme.surface.is_none() {
+        settings.theme.surface = Some(settings.theme.accent.clone());
+    }
     normalize_task_manager(settings);
     settings.agent_finished_retention_turns = settings.agent_finished_retention_turns.clamp(1, 3);
     settings.cost_warning_usd = if settings.cost_warning_usd.is_finite() {
@@ -514,15 +524,19 @@ pub fn prompt_syntax_patch(key: &str, value: &str) -> Result<Value, String> {
     }
 
     match key {
-        "theme.accent" => {
+        "theme.surface" | "theme.accent" => {
             let value = value.trim();
             let valid = value.is_empty()
                 || matches!(value.len(), 4 | 7)
                     && value.starts_with('#')
                     && value[1..].bytes().all(|byte| byte.is_ascii_hexdigit());
-            valid
-                .then(|| serde_json::json!({ "theme": { "accent": value } }))
-                .ok_or_else(|| "VALUE_INVALID".into())
+            if !valid {
+                return Err("VALUE_INVALID".into());
+            }
+            let field = key.strip_prefix("theme.").unwrap_or_default();
+            let mut theme = serde_json::Map::new();
+            theme.insert(field.to_string(), Value::String(value.to_string()));
+            Ok(serde_json::json!({ "theme": theme }))
         }
         "theme.softness" => {
             Ok(serde_json::json!({ "theme": { "softness": number(value, 0.0, 12.0)? } }))
@@ -591,6 +605,7 @@ mod tests {
         assert_eq!(back.agent_finished_retention_turns, 1);
         assert!(back.automatic_update_checks);
         assert_eq!(back.agent_restart_policy, "disabled");
+        assert_eq!(back.theme.surface.as_deref(), Some(""));
         assert!(back.workspace_tabs.is_none());
         assert_eq!(back.onboarding_completed, Some(false));
         assert_eq!(back.ui_preferences, serde_json::json!({}));
@@ -671,6 +686,10 @@ mod tests {
     #[test]
     fn prompt_syntax_settings_are_typed_and_allowlisted() {
         assert_eq!(
+            prompt_syntax_patch("theme.surface", "#182030").unwrap(),
+            serde_json::json!({ "theme": { "surface": "#182030" } })
+        );
+        assert_eq!(
             prompt_syntax_patch("theme.accent", "#2196F3").unwrap(),
             serde_json::json!({ "theme": { "accent": "#2196F3" } })
         );
@@ -683,6 +702,20 @@ mod tests {
             "SETTING_NOT_ALLOWED"
         );
         assert!(prompt_syntax_patch("theme.wash", "21").is_err());
+    }
+
+    #[test]
+    fn an_old_accent_migrates_to_both_surface_and_accent() {
+        let mut settings: GlobalSettings = serde_json::from_str(
+            r##"{"theme":{"accent":"#3355ff","softness":4,"wash":10,"textBrightness":0}}"##,
+        )
+        .unwrap();
+        assert!(settings.theme.surface.is_none());
+
+        normalize(&mut settings);
+
+        assert_eq!(settings.theme.surface.as_deref(), Some("#3355ff"));
+        assert_eq!(settings.theme.accent, "#3355ff");
     }
 
     /// The case the model picker depends on: unchecking a model sends a shorter

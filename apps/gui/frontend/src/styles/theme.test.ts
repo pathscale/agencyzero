@@ -195,6 +195,13 @@ describe("the theme axes", () => {
     // The ring pair, the halo, the desk's dot grid and both scrollbar rules.
     expect(CSS.match(/rgb\(from var\(--color-primary\)/g)?.length).toBeGreaterThanOrEqual(8);
   });
+
+  it("derives every washed surface from its own base colour", () => {
+    expect(CSS.match(/var\(--az-surface\)\s+(?:calc\()?var\(--az-wash\)/g)?.length).toBeGreaterThan(
+      20,
+    );
+    expect(CSS).not.toMatch(/var\(--color-primary\)\s+(?:calc\()?var\(--az-wash\)/);
+  });
 });
 
 describe("light mode", () => {

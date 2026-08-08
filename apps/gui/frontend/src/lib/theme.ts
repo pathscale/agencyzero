@@ -4,10 +4,8 @@ import type { ThemeSettings } from "~/types";
 /**
  * Applies the theme axes to the document.
  *
- * The stylesheet writes every colour as an expression over `--az-hue`,
- * `--az-tint`, `--az-lift` and `--az-damp` (see `styles/theme.css`), so
- * retinting the workspace is four `setProperty` calls rather than a second
- * palette. Nothing else in the app writes those variables.
+ * The stylesheet separates `--az-surface` from `--color-primary`, so the
+ * workspace wash and the interactive accent can have unrelated bases.
  *
  * Deliberately *not* `@pathscale/ui`'s own `createHueShiftStore`, though the
  * wheel this drives is theirs. That store writes `--color-base-*` against
@@ -82,8 +80,9 @@ export function applyTheme(
   theme: ThemeSettings,
   root: HTMLElement = document.documentElement,
 ): void {
-  const chosen = isAccent(theme.accent);
-  const accent = chosen ? theme.accent.trim() : DEFAULT_ACCENT;
+  const surfaceChosen = isAccent(theme.surface);
+  const surface = surfaceChosen ? theme.surface.trim() : DEFAULT_ACCENT;
+  const accent = isAccent(theme.accent) ? theme.accent.trim() : DEFAULT_ACCENT;
   const softness = Math.min(Math.max(theme.softness || 0, 0), MAX_SOFTNESS);
   /*
    * No accent means the designed palette, and the designed palette is not a
@@ -91,7 +90,7 @@ export function applyTheme(
    * been picked. Reset therefore returns the workspace to grey, rather than to
    * grey plus whatever wash was last set.
    */
-  const wash = chosen
+  const wash = surfaceChosen
     ? Math.min(Math.max(theme.wash ?? DEFAULT_WASH, 0), WASH_STOPS[WASH_STOPS.length - 1])
     : 0;
   const brightness = Math.min(
@@ -99,6 +98,7 @@ export function applyTheme(
     BRIGHTNESS_STOPS[BRIGHTNESS_STOPS.length - 1],
   );
 
+  root.style.setProperty("--az-surface", surface);
   root.style.setProperty("--color-primary", accent);
   root.style.setProperty("--color-accent", accent);
   root.style.setProperty("--az-wash", `${wash}%`);

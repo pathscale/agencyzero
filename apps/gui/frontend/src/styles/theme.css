@@ -30,7 +30,8 @@
      *                contrast the eye pays for over hours.
      *   --az-damp    taken off every text rung, so the ladder comes down to
      *                meet a lifted desk instead of glaring off it
-     *   --az-wash    how much of the accent is mixed into every surface
+     *   --az-surface the independent colour mixed into the surface ladder
+     *   --az-wash    how much of that colour is mixed into every surface
      *
      * `--az-wash` is what makes a picked colour read as a *theme* rather than
      * as a highlight. It follows nofilter.io, whose picker mixes the chosen
@@ -52,31 +53,32 @@
     --az-hue-text: 245;
     --az-damp: 0%;
     --az-wash: 0%;
+    --az-surface: #ffee58;
     --az-sheen: 255 255 255;
 
     /* Panels: the floating cards the workspace is built from. */
     --color-base-100: color-mix(
       in oklab,
-      var(--color-primary) var(--az-wash),
+      var(--az-surface) var(--az-wash),
       oklch(calc(15% + var(--az-lift)) calc(0.005 * var(--az-tint)) var(--az-hue))
     );
     /* Desk: the window interior, under the dot grid. */
     --color-base-200: color-mix(
       in oklab,
-      var(--color-primary) calc(var(--az-wash) * 1.1),
+      var(--az-surface) calc(var(--az-wash) * 1.1),
       oklch(calc(10.5% + var(--az-lift)) calc(0.004 * var(--az-tint)) var(--az-hue))
     );
     /* Cards: rows and chips sitting on a panel. */
     --color-base-300: color-mix(
       in oklab,
-      var(--color-primary) calc(var(--az-wash) * 1.2),
+      var(--az-surface) calc(var(--az-wash) * 1.2),
       oklch(calc(20% + var(--az-lift)) calc(0.008 * var(--az-tint)) var(--az-hue))
     );
     /* Text takes a fraction of the wash — enough to belong to the surface it
      * sits on, far short of tinting prose. */
     --color-base-content: color-mix(
       in oklab,
-      var(--color-primary) calc(var(--az-wash) * 0.25),
+      var(--az-surface) calc(var(--az-wash) * 0.25),
       oklch(calc(84% - var(--az-damp)) calc(0.008 * var(--az-tint)) var(--az-hue-text))
     );
 
@@ -122,22 +124,22 @@
 
     --color-base-100: color-mix(
       in oklab,
-      var(--color-primary) var(--az-wash),
+      var(--az-surface) var(--az-wash),
       oklch(calc(98% - var(--az-lift)) calc(0.005 * var(--az-tint)) var(--az-hue))
     );
     --color-base-200: color-mix(
       in oklab,
-      var(--color-primary) calc(var(--az-wash) * 1.1),
+      var(--az-surface) calc(var(--az-wash) * 1.1),
       oklch(calc(93% - var(--az-lift)) calc(0.004 * var(--az-tint)) var(--az-hue))
     );
     --color-base-300: color-mix(
       in oklab,
-      var(--color-primary) calc(var(--az-wash) * 1.2),
+      var(--az-surface) calc(var(--az-wash) * 1.2),
       oklch(calc(89% - var(--az-lift)) calc(0.008 * var(--az-tint)) var(--az-hue))
     );
     --color-base-content: color-mix(
       in oklab,
-      var(--color-primary) calc(var(--az-wash) * 0.18),
+      var(--az-surface) calc(var(--az-wash) * 0.18),
       oklch(calc(20% + var(--az-damp)) calc(0.008 * var(--az-tint)) var(--az-hue-text))
     );
 
@@ -167,27 +169,27 @@
    */
   --color-az-title: color-mix(
     in oklab,
-    var(--color-primary) calc(var(--az-wash) * 0.25),
+    var(--az-surface) calc(var(--az-wash) * 0.25),
     oklch(calc(86% - var(--az-damp)) calc(0.008 * var(--az-tint)) var(--az-hue-text))
   );
   --color-az-strong: color-mix(
     in oklab,
-    var(--color-primary) calc(var(--az-wash) * 0.25),
+    var(--az-surface) calc(var(--az-wash) * 0.25),
     oklch(calc(80% - var(--az-damp)) calc(0.008 * var(--az-tint)) var(--az-hue-text))
   );
   --color-az-body: color-mix(
     in oklab,
-    var(--color-primary) calc(var(--az-wash) * 0.25),
+    var(--az-surface) calc(var(--az-wash) * 0.25),
     oklch(calc(75% - var(--az-damp)) calc(0.009 * var(--az-tint)) var(--az-hue-text))
   );
   --color-az-muted: color-mix(
     in oklab,
-    var(--color-primary) calc(var(--az-wash) * 0.3),
+    var(--az-surface) calc(var(--az-wash) * 0.3),
     oklch(calc(66% - var(--az-damp)) calc(0.01 * var(--az-tint)) var(--az-hue-text))
   );
   --color-az-faint: color-mix(
     in oklab,
-    var(--color-primary) calc(var(--az-wash) * 0.3),
+    var(--az-surface) calc(var(--az-wash) * 0.3),
     oklch(calc(62% - var(--az-damp)) calc(0.01 * var(--az-tint)) var(--az-hue-text))
   );
 
@@ -198,12 +200,12 @@
    */
   --color-az-dim: color-mix(
     in oklab,
-    var(--color-primary) calc(var(--az-wash) * 0.3),
+    var(--az-surface) calc(var(--az-wash) * 0.3),
     oklch(calc(56% - var(--az-damp)) calc(0.01 * var(--az-tint)) var(--az-hue-text))
   );
   --color-az-ghost: color-mix(
     in oklab,
-    var(--color-primary) calc(var(--az-wash) * 0.3),
+    var(--az-surface) calc(var(--az-wash) * 0.3),
     oklch(calc(48% - var(--az-damp)) calc(0.01 * var(--az-tint)) var(--az-hue-text))
   );
 
@@ -214,22 +216,22 @@
    */
   --color-az-void: color-mix(
     in oklab,
-    var(--color-primary) calc(var(--az-wash) * 1.2),
+    var(--az-surface) calc(var(--az-wash) * 1.2),
     oklch(calc(8% + var(--az-lift)) calc(0.003 * var(--az-tint)) var(--az-hue))
   );
   --color-az-desk: color-mix(
     in oklab,
-    var(--color-primary) calc(var(--az-wash) * 1.1),
+    var(--az-surface) calc(var(--az-wash) * 1.1),
     oklch(calc(10.5% + var(--az-lift)) calc(0.004 * var(--az-tint)) var(--az-hue))
   );
   --color-az-inset: color-mix(
     in oklab,
-    var(--color-primary) calc(var(--az-wash) * 1.05),
+    var(--az-surface) calc(var(--az-wash) * 1.05),
     oklch(calc(12.5% + var(--az-lift)) calc(0.005 * var(--az-tint)) var(--az-hue))
   );
   --color-az-tab: color-mix(
     in oklab,
-    var(--color-primary) var(--az-wash),
+    var(--az-surface) var(--az-wash),
     oklch(calc(16% + var(--az-lift)) calc(0.006 * var(--az-tint)) var(--az-hue))
   );
 
@@ -237,17 +239,17 @@
    * badge pill. Same ladder, now named. */
   --color-az-sunken: color-mix(
     in oklab,
-    var(--color-primary) calc(var(--az-wash) * 1.05),
+    var(--az-surface) calc(var(--az-wash) * 1.05),
     oklch(calc(13% + var(--az-lift)) calc(0.004 * var(--az-tint)) var(--az-hue))
   );
   --color-az-hover: color-mix(
     in oklab,
-    var(--color-primary) var(--az-wash),
+    var(--az-surface) var(--az-wash),
     oklch(calc(17% + var(--az-lift)) calc(0.006 * var(--az-tint)) var(--az-hue))
   );
   --color-az-badge: color-mix(
     in oklab,
-    var(--color-primary) calc(var(--az-wash) * 1.2),
+    var(--az-surface) calc(var(--az-wash) * 1.2),
     oklch(calc(24% + var(--az-lift)) calc(0.01 * var(--az-tint)) var(--az-hue))
   );
 
@@ -299,17 +301,17 @@
    */
   --color-az-bubble: color-mix(
     in oklab,
-    var(--color-primary) calc(var(--az-wash) * 1.2),
+    var(--az-surface) calc(var(--az-wash) * 1.2),
     oklch(calc(23.5% + var(--az-lift)) calc(0.008 * var(--az-tint)) var(--az-hue))
   );
   --color-az-bubble-edge: color-mix(
     in oklab,
-    var(--color-primary) calc(var(--az-wash) * 1.1),
+    var(--az-surface) calc(var(--az-wash) * 1.1),
     oklch(calc(28.5% + var(--az-lift)) calc(0.008 * var(--az-tint)) var(--az-hue))
   );
   --color-az-bubble-text: color-mix(
     in oklab,
-    var(--color-primary) calc(var(--az-wash) * 0.25),
+    var(--az-surface) calc(var(--az-wash) * 0.25),
     oklch(calc(90.67% - var(--az-damp)) calc(0.008 * var(--az-tint)) var(--az-hue-text))
   );
 
@@ -574,27 +576,27 @@
 
   --color-az-title: color-mix(
     in oklab,
-    var(--color-primary) calc(var(--az-wash) * 0.18),
+    var(--az-surface) calc(var(--az-wash) * 0.18),
     oklch(calc(15% + var(--az-damp)) calc(0.008 * var(--az-tint)) var(--az-hue-text))
   );
   --color-az-strong: color-mix(
     in oklab,
-    var(--color-primary) calc(var(--az-wash) * 0.18),
+    var(--az-surface) calc(var(--az-wash) * 0.18),
     oklch(calc(22% + var(--az-damp)) calc(0.008 * var(--az-tint)) var(--az-hue-text))
   );
   --color-az-body: color-mix(
     in oklab,
-    var(--color-primary) calc(var(--az-wash) * 0.18),
+    var(--az-surface) calc(var(--az-wash) * 0.18),
     oklch(calc(28% + var(--az-damp)) calc(0.009 * var(--az-tint)) var(--az-hue-text))
   );
   --color-az-muted: color-mix(
     in oklab,
-    var(--color-primary) calc(var(--az-wash) * 0.2),
+    var(--az-surface) calc(var(--az-wash) * 0.2),
     oklch(calc(40% + var(--az-damp)) calc(0.01 * var(--az-tint)) var(--az-hue-text))
   );
   --color-az-faint: color-mix(
     in oklab,
-    var(--color-primary) calc(var(--az-wash) * 0.2),
+    var(--az-surface) calc(var(--az-wash) * 0.2),
     oklch(calc(46% + var(--az-damp)) calc(0.01 * var(--az-tint)) var(--az-hue-text))
   );
   --color-az-dim: oklch(calc(54% + var(--az-damp)) 0.01 var(--az-hue-text));
@@ -602,17 +604,17 @@
 
   --color-az-void: color-mix(
     in oklab,
-    var(--color-primary) calc(var(--az-wash) * 1.2),
+    var(--az-surface) calc(var(--az-wash) * 1.2),
     oklch(calc(88% - var(--az-lift)) 0.003 var(--az-hue))
   );
   --color-az-desk: color-mix(
     in oklab,
-    var(--color-primary) calc(var(--az-wash) * 1.1),
+    var(--az-surface) calc(var(--az-wash) * 1.1),
     oklch(calc(93% - var(--az-lift)) 0.004 var(--az-hue))
   );
   --color-az-inset: color-mix(
     in oklab,
-    var(--color-primary) calc(var(--az-wash) * 1.05),
+    var(--az-surface) calc(var(--az-wash) * 1.05),
     oklch(calc(96% - var(--az-lift)) 0.005 var(--az-hue))
   );
   --color-az-tab: oklch(calc(96% - var(--az-lift)) 0.006 var(--az-hue));
@@ -622,7 +624,7 @@
 
   --color-az-bubble: color-mix(
     in oklab,
-    var(--color-primary) calc(var(--az-wash) * 1.2),
+    var(--az-surface) calc(var(--az-wash) * 1.2),
     oklch(calc(91% - var(--az-lift)) 0.008 var(--az-hue))
   );
   --color-az-bubble-edge: oklch(calc(82% - var(--az-lift)) 0.008 var(--az-hue));

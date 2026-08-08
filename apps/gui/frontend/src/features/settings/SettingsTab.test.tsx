@@ -107,3 +107,17 @@ describe("cost warning settings", () => {
     await waitFor(() => expect(screen.workspace.state.settings?.costWarningUsd).toBe(1.25));
   });
 });
+
+describe("appearance settings", () => {
+  it("changes the interactive accent without changing the surface base", async () => {
+    const screen = await mountSettings();
+    const picker = screen.getByLabelText("Choose a custom accent colour") as HTMLInputElement;
+
+    expect(screen.workspace.state.settings?.theme.surface).toBe("");
+    expect(screen.workspace.state.settings?.theme.accent).toBe("");
+    fireEvent.input(picker, { target: { value: "#3355ff" } });
+
+    await waitFor(() => expect(screen.workspace.state.settings?.theme.accent).toBe("#3355ff"));
+    expect(screen.workspace.state.settings?.theme.surface).toBe("");
+  });
+});

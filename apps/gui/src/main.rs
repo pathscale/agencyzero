@@ -942,10 +942,15 @@ pub(crate) async fn apply_settings_patch(
             serde_json::to_value(settings::defaults_for_store(has_projects)).unwrap_or_default()
         });
 
-    let previous: GlobalSettings = serde_json::from_value(current.clone())
+    let mut previous: GlobalSettings = serde_json::from_value(current)
         .unwrap_or_else(|_| settings::defaults_for_store(has_projects));
+    // Materialize migrations before applying a partial patch. In particular,
+    // an old theme stored one colour in `accent`; changing the new independent
+    // accent must preserve that old colour as the surface rather than copying
+    // the newly selected accent into both roles.
+    settings::normalize_for_store(&mut previous, has_projects);
 
-    let mut merged = current;
+    let mut merged = serde_json::to_value(&previous).map_err(|error| error.to_string())?;
     settings::merge(&mut merged, &patch);
 
     // Parse before writing. A patch that produces something unreadable should

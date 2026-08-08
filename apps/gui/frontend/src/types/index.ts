@@ -644,6 +644,8 @@ export interface ReviewSettings {
  * appear in an export.
  */
 export interface ThemeSettings {
+  /** Colour washed into the workspace surfaces. Empty keeps them neutral. */
+  surface: string;
   /**
    * Accent as `#rrggbb`. Empty means the palette's own yellow — deliberately
    * not the literal, so the record cannot drift from the stylesheet.
@@ -656,9 +658,8 @@ export interface ThemeSettings {
    */
   softness: number;
   /**
-   * How much of the accent is mixed into every surface, as a percentage. The
-   * difference between a pick that changes buttons and one that changes the
-   * workspace. Ignored while `accent` is empty.
+   * How much of the surface colour is mixed into every surface, as a percentage.
+   * Ignored while `surface` is empty.
    */
   wash: number;
   /**

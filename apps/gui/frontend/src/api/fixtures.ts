@@ -607,7 +607,7 @@ export const SETTINGS: GlobalSettings = {
   costWarningUsd: 0.75,
   completedItems: "resolve",
   agentFinishedRetentionTurns: 1,
-  theme: { accent: "", softness: 0, wash: 10, textBrightness: 0 },
+  theme: { surface: "", accent: "", softness: 0, wash: 10, textBrightness: 0 },
   studyAnalytics: { enabled: false, sessionId: "", enabledAt: "" },
   perTurnInjection: true,
   automaticUpdateChecks: true,
