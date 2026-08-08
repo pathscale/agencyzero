@@ -447,6 +447,13 @@ export function createMockApi(): AgencyZeroApi {
       return settle(undefined);
     },
 
+    async unmarkItemDeletion(id) {
+      const item = findItem(id);
+      item.deleteProposed = false;
+      emit("item:updated", item);
+      return settle(item);
+    },
+
     async setItemStatus(id, status: ProjectStatus) {
       const item = findItem(id);
       item.status = status;

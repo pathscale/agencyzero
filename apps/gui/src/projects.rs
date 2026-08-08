@@ -121,6 +121,9 @@ pub struct ProjectItemDto {
     pub archived: bool,
     /// Owner-authored detail used only when focused work starts.
     pub context: String,
+    /// Task Manager proposed this row for deletion, but the owner has not
+    /// confirmed it. The row remains fully present until confirmation.
+    pub delete_proposed: bool,
 }
 
 #[derive(Serialize, Clone)]
@@ -144,6 +147,7 @@ impl From<ProjectItemRow> for ProjectItemDto {
             updated_at: String::new(),
             archived: false,
             context: String::new(),
+            delete_proposed: false,
         }
     }
 }
@@ -153,6 +157,7 @@ const ITEM_AGENT_PREFIX: &str = "item-agent:";
 const ITEM_FORK_HANDOFF_PREFIX: &str = "item-fork-handoff:";
 const ITEM_ARCHIVED_PREFIX: &str = "item-archived:";
 const ITEM_CONTEXT_PREFIX: &str = "item-context:";
+const ITEM_DELETE_PROPOSED_PREFIX: &str = "item-delete-proposed:";
 
 fn item_activity_key(item_id: &str) -> String {
     format!("{ITEM_ACTIVITY_PREFIX}{item_id}")
@@ -174,6 +179,10 @@ pub(crate) fn item_context_key(item_id: &str) -> String {
     format!("{ITEM_CONTEXT_PREFIX}{item_id}")
 }
 
+fn item_delete_proposed_key(item_id: &str) -> String {
+    format!("{ITEM_DELETE_PROPOSED_PREFIX}{item_id}")
+}
+
 pub(crate) fn item_context(tables: &Tables, item_id: &str) -> String {
     tables
         .kv_get(&item_context_key(item_id))
@@ -182,6 +191,13 @@ pub(crate) fn item_context(tables: &Tables, item_id: &str) -> String {
 
 fn item_is_archived(tables: &Tables, item_id: &str) -> bool {
     tables.kv.select(item_archived_key(item_id)).is_some()
+}
+
+fn item_delete_is_proposed(tables: &Tables, item_id: &str) -> bool {
+    tables
+        .kv
+        .select(item_delete_proposed_key(item_id))
+        .is_some()
 }
 
 fn item_has_fork(tables: &Tables, item_id: &str) -> bool {
@@ -218,6 +234,7 @@ fn item_dto(row: ProjectItemRow, tables: &Tables) -> ProjectItemDto {
         updated_at,
         archived: item_is_archived(tables, &row.id),
         context: item_context(tables, &row.id),
+        delete_proposed: item_delete_is_proposed(tables, &row.id),
         ..ProjectItemDto::from(row)
     }
 }
@@ -228,7 +245,36 @@ async fn archive_item(tables: &Tables, row: ProjectItemRow) -> Result<ProjectIte
         .await
         .map_err(|error| error.to_string())?;
     clear_finished_retirement(tables, &row.id).await?;
+    clear_item_delete_proposal(tables, &row.id).await?;
     Ok(item_dto(row, tables))
+}
+
+async fn propose_item_delete(tables: &Tables, item_id: &str) -> Result<ProjectItemDto, String> {
+    let row = tables
+        .project_item
+        .select(item_id.to_string())
+        .ok_or_else(|| format!("no item {item_id}"))?;
+    tables
+        .kv_put(&item_delete_proposed_key(item_id), now())
+        .await
+        .map_err(|error| error.to_string())?;
+    Ok(item_dto(row, tables))
+}
+
+fn retire_requires_owner_confirmation(project_id: &str) -> bool {
+    project_id == crate::tasks::TASK_MANAGER_ID
+}
+
+async fn clear_item_delete_proposal(tables: &Tables, item_id: &str) -> Result<(), String> {
+    let key = item_delete_proposed_key(item_id);
+    if tables.kv.select(key.clone()).is_some() {
+        tables
+            .kv
+            .delete(key)
+            .await
+            .map_err(|error| error.to_string())?;
+    }
+    Ok(())
 }
 
 async fn touch_item(tables: &Tables, item_id: &str) {
@@ -288,6 +334,13 @@ async fn clear_item_metadata(tables: &Tables, item_id: &str) {
             crate::log::Level::Warn,
             "items",
             "could not clear archive marker for {item_id}: {error}"
+        );
+    }
+    if let Err(error) = clear_item_delete_proposal(tables, item_id).await {
+        crate::log!(
+            crate::log::Level::Warn,
+            "items",
+            "could not clear proposed-delete marker for {item_id}: {error}"
         );
     }
 }
@@ -2585,6 +2638,28 @@ pub async fn delete_item(
     Ok(())
 }
 
+/// Remove Task Manager's proposed-delete marker while keeping the item.
+///
+/// # Errors
+/// Returns a message when the item does not exist or the marker cannot be
+/// removed from the store.
+#[tauri::command]
+pub async fn unmark_item_deletion(
+    app: AppHandle,
+    id: String,
+    state: State<'_, AppState>,
+) -> Result<ProjectItemDto, String> {
+    let row = state
+        .tables
+        .project_item
+        .select(id.clone())
+        .ok_or_else(|| format!("no item {id}"))?;
+    clear_item_delete_proposal(&state.tables, &id).await?;
+    let dto = item_dto(row, &state.tables);
+    let _ = app.emit("item:updated", dto.clone());
+    Ok(dto)
+}
+
 /// Persist a new order for a project's items.
 ///
 /// `ids` is the list as the user arranged it; position becomes the index.
@@ -3506,6 +3581,26 @@ async fn apply_directive(
                 .find(|row| row.id == resolved)
                 .map(|row| row.project_id.clone())
                 .unwrap_or_else(|| project_id.to_string());
+            /*
+             * Home cleanup is a proposal, not authority to destroy rows.
+             * The Task Manager can identify exact ids, but only the owner's
+             * review control turns those proposals into deletion. Project-tab
+             * agents retain the normal explicit-retire contract.
+             */
+            if retire_requires_owner_confirmation(project_id) {
+                return match propose_item_delete(tables, &resolved).await {
+                    Ok(item) => {
+                        let _ = app.emit("item:updated", item);
+                        Outcome::Done(format!(
+                            "{resolved} marked Delete {title:?}; awaiting owner confirmation"
+                        ))
+                    }
+                    Err(error) => Outcome::Refused {
+                        what: format!("items.retire({resolved})"),
+                        code: format!("WRITE_FAILED: {error}"),
+                    },
+                };
+            }
             match tables.project_item.delete(resolved.clone()).await {
                 Ok(()) => {
                     clear_item_metadata(tables, &resolved).await;
@@ -14370,5 +14465,59 @@ mod tests {
         assert_eq!(UsageDto::from(&empty), UsageDto::default());
         assert_eq!(UsageDto::default().tokens, 0);
         assert!(UsageDto::default().cost_usd.is_none());
+    }
+
+    #[tokio::test]
+    async fn task_manager_deletion_is_a_durable_proposal_until_owner_review() {
+        assert!(retire_requires_owner_confirmation(
+            crate::tasks::TASK_MANAGER_ID
+        ));
+        assert!(!retire_requires_owner_confirmation("project-a"));
+
+        let dir = std::env::temp_dir().join(format!(
+            "az-delete-proposal-{}-{}",
+            std::process::id(),
+            uuid::Uuid::now_v7()
+        ));
+        let tables = Tables::open(&dir).await.expect("proposal store opens");
+        let row = ProjectItemRow {
+            id: "item-review-delete".into(),
+            project_id: "project-a".into(),
+            title: "Review me first".into(),
+            status: "planning".into(),
+            position: 0,
+            reference: String::new(),
+        };
+        tables
+            .project_item
+            .insert(row)
+            .expect("review item inserts");
+
+        let proposed = propose_item_delete(&tables, "item-review-delete")
+            .await
+            .expect("proposal persists");
+        assert!(proposed.delete_proposed);
+        assert!(
+            tables
+                .project_item
+                .select("item-review-delete".to_string())
+                .is_some(),
+            "proposing cleanup must not remove the row"
+        );
+
+        clear_item_delete_proposal(&tables, "item-review-delete")
+            .await
+            .expect("owner can keep the item");
+        let kept = item_dto(
+            tables
+                .project_item
+                .select("item-review-delete".to_string())
+                .expect("kept row remains"),
+            &tables,
+        );
+        assert!(!kept.delete_proposed);
+
+        tables.shutdown().await.expect("proposal store drains");
+        let _ = std::fs::remove_dir_all(dir);
     }
 }

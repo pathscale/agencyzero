@@ -74,6 +74,14 @@ export function HomeTab(): JSX.Element {
     [...ordered()].sort((a, b) => b.lastActivityAt.localeCompare(a.lastActivityAt)),
   );
 
+  const proposedDeletes = createMemo(() =>
+    ordered().flatMap((project) =>
+      itemsFor(project.id)
+        .filter((item) => item.deleteProposed)
+        .map((item) => ({ item, projectName: project.name })),
+    ),
+  );
+
   return (
     <div class="flex min-w-0 flex-1 gap-3">
       <Panel class="flex min-w-0 flex-1 flex-col">
@@ -112,6 +120,13 @@ export function HomeTab(): JSX.Element {
           </div>
 
           <TaskManagerStatus />
+          <CleanupReview
+            candidates={proposedDeletes()}
+            onKeep={(id) => actions.unmarkItemDeletion(id)}
+            onConfirm={async (ids) => {
+              for (const id of ids) await actions.deleteItem(id);
+            }}
+          />
         </div>
 
         <div class="az-scroll flex min-h-0 flex-1 flex-col gap-2.5 px-3.5 pb-3.5">
@@ -236,6 +251,102 @@ export function HomeTab(): JSX.Element {
         </Show>
       </div>
     </div>
+  );
+}
+
+export interface CleanupCandidate {
+  item: ProjectItem;
+  projectName: string;
+}
+
+/**
+ * Task Manager deletion proposals stay here until the owner reviews them.
+ * Merely rendering this panel performs no mutation; Confirm is the sole path
+ * that turns the visible proposal set into deletions.
+ */
+export function CleanupReview(props: {
+  candidates: CleanupCandidate[];
+  onKeep: (id: string) => Promise<unknown>;
+  onConfirm: (ids: string[]) => Promise<unknown>;
+}): JSX.Element {
+  const [isConfirming, setIsConfirming] = createSignal(false);
+  const [error, setError] = createSignal<string | null>(null);
+
+  const keep = async (id: string): Promise<void> => {
+    setError(null);
+    try {
+      await props.onKeep(id);
+    } catch (cause) {
+      setError(describeError(cause));
+    }
+  };
+
+  const confirm = async (): Promise<void> => {
+    if (isConfirming() || props.candidates.length === 0) return;
+    const ids = props.candidates.map(({ item }) => item.id);
+    setError(null);
+    setIsConfirming(true);
+    try {
+      await props.onConfirm(ids);
+    } catch (cause) {
+      setError(describeError(cause));
+    } finally {
+      setIsConfirming(false);
+    }
+  };
+
+  return (
+    <Show when={props.candidates.length > 0}>
+      <section
+        aria-label={tx("Review proposed item deletions")}
+        class="flex flex-col gap-2 rounded-[11px] border border-warning/45 bg-warning/8 px-3 py-2.5"
+      >
+        <div class="flex items-center gap-2">
+          <Icon name="shield" class="shrink-0 text-[14px] text-warning" />
+          <span class="font-semibold text-[12px] text-az-strong">
+            {tx("{count} marked Delete", { count: props.candidates.length })}
+          </span>
+          <span class="text-[11px] text-az-muted">
+            {tx("Review these proposals before removing anything.")}
+          </span>
+          <button
+            type="button"
+            onClick={() => void confirm()}
+            disabled={isConfirming()}
+            class="ml-auto rounded-md border border-error/45 bg-error/12 px-2.5 py-1 font-semibold text-[11px] text-error transition-colors hover:bg-error/22 disabled:opacity-50"
+          >
+            {isConfirming() ? tx("Deleting…") : tx("Confirm delete")}
+          </button>
+        </div>
+        <div class="flex flex-wrap gap-1.5">
+          <For each={props.candidates}>
+            {({ item, projectName }) => (
+              <span class="flex items-center gap-1.5 rounded-md border border-warning/30 bg-az-inset px-2 py-1 text-[11px] text-az-body">
+                <span class="max-w-[360px] truncate">
+                  <span class="text-az-muted">{projectName} · </span>
+                  {item.title}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => void keep(item.id)}
+                  aria-label={tx("Keep {name}", { name: item.title })}
+                  class="font-semibold text-primary hover:text-az-primary-hover"
+                >
+                  {tx("Keep")}
+                </button>
+              </span>
+            )}
+          </For>
+        </div>
+        <Show when={error()}>
+          {(message) => (
+            <p role="alert" class="text-[11px] text-error">
+              {message()}
+            </p>
+          )}
+        </Show>
+      </section>
+    </Show>
   );
 }
 
@@ -796,6 +907,11 @@ function GroupItemRow(props: {
               {props.item.title}
             </span>
           </button>
+          <Show when={props.item.deleteProposed}>
+            <span class="shrink-0 rounded-md border border-warning/35 bg-warning/10 px-1.5 py-0.5 font-semibold text-[10.5px] text-warning">
+              {tx("Delete")}
+            </span>
+          </Show>
           <button
             type="button"
             onClick={() => {

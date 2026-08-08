@@ -2226,6 +2226,7 @@ function createWorkspace() {
     setItemContext: (id: string, context: string) => client().setItemContext(id, context),
     setItemIssue: (id: string, url: string) => client().setItemIssue(id, url),
     deleteItem: (id: string) => client().deleteItem(id),
+    unmarkItemDeletion: (id: string) => client().unmarkItemDeletion(id),
     chooseAttachments: () => client().chooseAttachments(),
     dismissPullRequest: (id: string) => client().dismissPullRequest(id),
     async reviewPullRequest(projectId: string, url: string, agent: Agent) {

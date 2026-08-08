@@ -191,6 +191,8 @@ export interface ProjectItem {
   archived?: boolean;
   /** Detailed work-start context, omitted from ordinary compact agent snapshots. */
   context?: string;
+  /** Task Manager proposed deletion; the row stays until owner confirmation. */
+  deleteProposed?: boolean;
 }
 
 /**

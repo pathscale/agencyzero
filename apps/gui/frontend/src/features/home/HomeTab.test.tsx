@@ -1,6 +1,6 @@
 import { fireEvent, render, waitFor } from "@solidjs/testing-library";
-import { describe, expect, it } from "vitest";
-import { HomeTab } from "~/features/home/HomeTab";
+import { describe, expect, it, vi } from "vitest";
+import { CleanupReview, HomeTab } from "~/features/home/HomeTab";
 import { useWorkspace, type Workspace, WorkspaceProvider } from "~/stores/workspace";
 
 async function mountHome() {
@@ -23,6 +23,37 @@ async function mountHome() {
 }
 
 describe("Home item rows", () => {
+  it("keeps cleanup proposals intact until the explicit confirm button", async () => {
+    const onKeep = vi.fn(async () => undefined);
+    const onConfirm = vi.fn(async () => undefined);
+    const candidate = {
+      projectName: "WorkTable",
+      item: {
+        id: "item-review-delete",
+        projectId: "worktable",
+        title: "Review before deleting",
+        status: "planning" as const,
+        order: 0,
+        reference: null,
+        deleteProposed: true,
+      },
+    };
+    const screen = render(() => (
+      <CleanupReview candidates={[candidate]} onKeep={onKeep} onConfirm={onConfirm} />
+    ));
+
+    expect(screen.getByText("1 marked Delete")).toBeTruthy();
+    expect(screen.getByText("Review before deleting")).toBeTruthy();
+    expect(onConfirm).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Keep Review before deleting" }));
+    await waitFor(() => expect(onKeep).toHaveBeenCalledWith("item-review-delete"));
+    expect(onConfirm).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Confirm delete" }));
+    await waitFor(() => expect(onConfirm).toHaveBeenCalledWith(["item-review-delete"]));
+  });
+
   it("sorts legacy Home items by time and direction instead of only changing the labels", async () => {
     const screen = await mountHome();
     const controls = screen.getByRole("group", { name: "Sort items" });

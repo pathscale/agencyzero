@@ -868,6 +868,12 @@ const en = {
   archived: "archived",
   "Return to the parent item": "Return to the parent item",
   "Parent project": "Parent project",
+  "Review proposed item deletions": "Review proposed item deletions",
+  "{count} marked Delete": "{count} marked Delete",
+  "Review these proposals before removing anything.":
+    "Review these proposals before removing anything.",
+  "Keep {name}": "Keep {name}",
+  Keep: "Keep",
 } as const;
 
 export default en;

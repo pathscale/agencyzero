@@ -23,7 +23,7 @@ checksum = "320119579fcad9c21884f5c4861d16174d0e06250625266f50fe6898340abefa"
 
 [[package]]
 name = "agency-tools"
-version = "0.3.32"
+version = "0.3.33"
 dependencies = [
  "derive_more 2.1.1",
  "dirs",
@@ -190,25 +190,25 @@ checksum = "f2032f911046de80f0a198e0901378627c33f59ea0ac00e363d481118bd70a53"
 
 [[package]]
 name = "az-agent"
-version = "0.3.32"
+version = "0.3.33"
 dependencies = [
  "az-core",
 ]
 
 [[package]]
 name = "az-agent-proxy"
-version = "0.3.32"
+version = "0.3.33"
 dependencies = [
  "az-core",
 ]
 
 [[package]]
 name = "az-core"
-version = "0.3.32"
+version = "0.3.33"
 
 [[package]]
 name = "az-gui"
-version = "0.3.32"
+version = "0.3.33"
 dependencies = [
  "agent-abstraction",
  "agent-experimental",
@@ -238,7 +238,7 @@ dependencies = [
 
 [[package]]
 name = "az-mcp-proxy"
-version = "0.3.32"
+version = "0.3.33"
 dependencies = [
  "az-core",
 ]
@@ -5756,7 +5756,7 @@ dependencies = [
 
 [[package]]
 name = "wt-migrate"
-version = "0.3.32"
+version = "0.3.33"
 dependencies = [
  "derive_more 2.1.1",
  "eyre",

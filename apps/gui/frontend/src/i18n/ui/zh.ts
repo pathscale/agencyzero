@@ -841,6 +841,11 @@ const zh = {
   archived: "已归档",
   "Return to the parent item": "返回父条目",
   "Parent project": "父项目",
+  "Review proposed item deletions": "查看建议删除的项目",
+  "{count} marked Delete": "{count} 个已标记为删除",
+  "Review these proposals before removing anything.": "删除任何项目之前，请先查看这些建议。",
+  "Keep {name}": "保留 {name}",
+  Keep: "保留",
 } satisfies Record<keyof typeof en, string>;
 
 export default zh;
