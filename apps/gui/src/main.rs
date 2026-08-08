@@ -203,6 +203,132 @@ pub(crate) struct AppState {
     _store_lock: std::fs::File,
 }
 
+const RESTART_RESUME_FILE: &str = "restart-resume.json";
+const RESTART_RESUME_PROMPT: &str = "Resume the work interrupted by the AgencyZero restart. Re-read the current item list, durable project memory, and working tree, then continue until the work is complete or an owner decision is genuinely required.";
+
+#[derive(Debug, serde::Deserialize, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct RestartResume {
+    /// Empty for an ordinary authored restart: the latest active project is
+    /// resolved at boot. A recovery tool may pin the project explicitly.
+    project_id: String,
+    agent: String,
+    model: String,
+    permission: String,
+    effort: String,
+    prompt: String,
+}
+
+fn restart_resume_path(config_dir: &std::path::Path) -> PathBuf {
+    config_dir.join(RESTART_RESUME_FILE)
+}
+
+fn write_restart_resume(state: &AppState) -> Result<(), String> {
+    let settings = state
+        .tables
+        .kv_get(settings::KEY)
+        .and_then(|raw| serde_json::from_str::<GlobalSettings>(&raw).ok())
+        .unwrap_or_default();
+    let agent = settings.default_agent.clone();
+    let model = settings
+        .models
+        .get(&agent)
+        .map(|selection| selection.default.clone())
+        .unwrap_or_default();
+    let marker = RestartResume {
+        project_id: String::new(),
+        agent,
+        model,
+        permission: settings.default_permission,
+        effort: settings.default_effort,
+        prompt: RESTART_RESUME_PROMPT.into(),
+    };
+    std::fs::create_dir_all(&state.config_dir)
+        .map_err(|error| format!("could not create restart-resume directory: {error}"))?;
+    let path = restart_resume_path(&state.config_dir);
+    let staging = path.with_extension("json.staging");
+    let encoded = serde_json::to_vec(&marker)
+        .map_err(|error| format!("could not encode restart-resume marker: {error}"))?;
+    std::fs::write(&staging, encoded)
+        .map_err(|error| format!("could not write restart-resume marker: {error}"))?;
+    std::fs::rename(&staging, &path)
+        .map_err(|error| format!("could not publish restart-resume marker: {error}"))
+}
+
+fn read_restart_resume(config_dir: &std::path::Path) -> Option<RestartResume> {
+    let path = restart_resume_path(config_dir);
+    let raw = std::fs::read(&path).ok()?;
+    match serde_json::from_slice(&raw) {
+        Ok(marker) => Some(marker),
+        Err(error) => {
+            crate::log!(
+                log::Level::Warn,
+                "boot",
+                "could not decode {}: {error}",
+                path.display()
+            );
+            None
+        }
+    }
+}
+
+async fn resume_after_restart(app: AppHandle, marker: RestartResume) {
+    // Let the webview subscribe before the resumed run begins emitting. The
+    // user message itself is durable, so a slower window still catches up.
+    tokio::time::sleep(std::time::Duration::from_millis(1_500)).await;
+    let state = app.state::<AppState>();
+    let project_id = if marker.project_id.is_empty() {
+        state
+            .tables
+            .project
+            .select_all()
+            .execute()
+            .unwrap_or_default()
+            .into_iter()
+            .filter(|project| !matches!(project.status.as_str(), "finished" | "canceled"))
+            .max_by(|left, right| left.last_activity_at.cmp(&right.last_activity_at))
+            .map(|project| project.id)
+    } else {
+        state
+            .tables
+            .project
+            .select(marker.project_id.clone())
+            .map(|project| project.id)
+    };
+    let Some(project_id) = project_id else {
+        crate::log!(
+            log::Level::Warn,
+            "boot",
+            "restart-resume marker has no available project"
+        );
+        return;
+    };
+    let input = projects::SendMessageInput {
+        project_id,
+        body: marker.prompt,
+        retry_message_id: None,
+        reply_question_id: None,
+        item_id: None,
+        agent: Some(marker.agent),
+        model: Some(marker.model),
+        permission: Some(marker.permission),
+        effort: Some(marker.effort),
+        extra_thinking: None,
+        study: None,
+    };
+    match projects::send_message(app.clone(), input, state).await {
+        Ok(_) => {
+            let _ = std::fs::remove_file(restart_resume_path(&app.state::<AppState>().config_dir));
+            crate::log!(log::Level::Info, "boot", "restart-resume run started");
+        }
+        Err(error) => crate::log!(
+            log::Level::Error,
+            "boot",
+            "restart-resume run could not start: {error}"
+        ),
+    }
+}
+
 impl AppState {
     pub(crate) fn live_run_count(&self) -> usize {
         self.active
@@ -273,6 +399,13 @@ pub(crate) fn schedule_agent_restart(app: &AppHandle, mode: &str) -> Result<(), 
             std::sync::atomic::Ordering::Acquire,
         )
         .map_err(|_| "a lifecycle action is already scheduled".to_string())?;
+
+    if let Err(error) = write_restart_resume(&state) {
+        state
+            .agent_restart_scheduled
+            .store(false, std::sync::atomic::Ordering::Release);
+        return Err(error);
+    }
 
     let handle = app.clone();
     let mode = mode.to_string();
@@ -1712,6 +1845,7 @@ fn main() {
             // launch was closed on top of becomes an `interrupted` row now,
             // so the transcript already holds it when the tab first renders.
             tauri::async_runtime::block_on(projects::recover_partial_replies(&tables));
+            let restart_resume = read_restart_resume(&config_dir);
             app.manage(AppState {
                 tables: Arc::new(tables),
                 running: Arc::default(),
@@ -1755,6 +1889,11 @@ fn main() {
                     serde_json::json!({ "message": message }),
                 );
             });
+
+            if let Some(marker) = restart_resume {
+                let resume_handle = app.handle().clone();
+                tauri::async_runtime::spawn(resume_after_restart(resume_handle, marker));
+            }
 
             /*
              * The cafe standard, ported: SIGTERM, SIGINT and SIGHUP route
