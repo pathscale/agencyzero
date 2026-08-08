@@ -1805,7 +1805,8 @@ function RelaunchButton(): JSX.Element {
 function CostSection(): JSX.Element {
   const { state, actions } = useWorkspace();
   const [summary, setSummary] = createSignal<CostSummary | null>(null);
-  const warningUsd = () => state.settings?.costWarningUsd ?? 0.75;
+  const [warningPreview, setWarningPreview] = createSignal<number | null>(null);
+  const warningUsd = () => warningPreview() ?? state.settings?.costWarningUsd ?? 0.75;
 
   // Asked once per visit: the ledger only grows when a run finishes, and
   // Settings is not a screen left open while runs happen.
@@ -1907,9 +1908,11 @@ function CostSection(): JSX.Element {
             step="0.25"
             value={warningUsd()}
             aria-label={tx("Projected turn warning threshold")}
-            onChange={(event) =>
-              void actions.saveSettings({ costWarningUsd: Number(event.currentTarget.value) })
-            }
+            onInput={(event) => setWarningPreview(Number(event.currentTarget.value))}
+            onChange={(event) => {
+              const costWarningUsd = Number(event.currentTarget.value);
+              void actions.saveSettings({ costWarningUsd }).finally(() => setWarningPreview(null));
+            }}
             class="h-1.5 min-w-0 flex-1 cursor-pointer accent-primary"
           />
           <output class="w-14 shrink-0 text-right font-mono text-[12.5px] text-az-strong">

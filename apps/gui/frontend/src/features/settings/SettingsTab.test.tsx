@@ -103,6 +103,8 @@ describe("cost warning settings", () => {
     expect(slider.max).toBe("20");
     expect(slider.value).toBe("0.75");
 
+    fireEvent.input(slider, { target: { value: "1.25" } });
+    expect(screen.getByText("$1.25")).toBeTruthy();
     fireEvent.change(slider, { target: { value: "1.25" } });
     await waitFor(() => expect(screen.workspace.state.settings?.costWarningUsd).toBe(1.25));
   });
