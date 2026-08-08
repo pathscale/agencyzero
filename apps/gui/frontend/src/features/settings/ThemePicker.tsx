@@ -5,6 +5,7 @@ import {
   closestColorIndex,
   DEFAULT_ACCENT,
   MAX_SOFTNESS,
+  normalizeWash,
   surfaceColors,
   WASH_STOPS,
 } from "~/lib/theme";
@@ -64,7 +65,7 @@ export function ThemePicker(props: {
           label={t("appearance.colourStrength")}
           hint={t("appearance.colourStrengthHint")}
           stops={[...WASH_STOPS]}
-          value={Math.min(props.theme.wash, WASH_STOPS[WASH_STOPS.length - 1])}
+          value={normalizeWash(props.theme.wash)}
           onPick={props.onWash}
           preview={(stop) =>
             `color-mix(in oklab, ${props.theme.surface || DEFAULT_ACCENT} ${deskStrength(stop)}%, ${deskAnchor(props.theme.softness)})`

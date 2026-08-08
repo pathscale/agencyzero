@@ -19,7 +19,7 @@ import { AgentStateDot } from "~/components/StatusDot";
 import { countdown, formatBytes, relativeTime } from "~/lib/format";
 import { AGENT_LABELS, agentStateLabel, envPolicyLabel, permissionLabel } from "~/lib/labels";
 import { describeError, log } from "~/lib/log";
-import { DEFAULT_WASH, WASH_STOPS } from "~/lib/theme";
+import { DEFAULT_WASH, normalizeWash } from "~/lib/theme";
 import { t, tx, type UiMessage } from "~/stores/i18n";
 import { prefs, setPrefs } from "~/stores/prefs";
 import { useNow, useWorkspace } from "~/stores/workspace";
@@ -632,7 +632,7 @@ export function SettingsTab(): JSX.Element {
                     void actions.saveSettings({
                       theme: {
                         surface,
-                        wash: Math.min(current().theme.wash, WASH_STOPS[WASH_STOPS.length - 1]),
+                        wash: normalizeWash(current().theme.wash),
                       },
                     })
                   }

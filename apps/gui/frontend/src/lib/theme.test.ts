@@ -4,6 +4,8 @@ import {
   applyTheme,
   closestColorIndex,
   DEFAULT_ACCENT,
+  DEFAULT_WASH,
+  defaultAccent,
   isAccent,
   MAX_SOFTNESS,
   surfaceColors,
@@ -26,7 +28,7 @@ describe("accentOptions", () => {
     const soft = accentOptions("#3355ff", "dark", 100, MAX_SOFTNESS);
 
     expect(dark).toHaveLength(7);
-    expect(dark[0]).toEqual({ value: "", color: DEFAULT_ACCENT });
+    expect(dark[0]).toEqual({ value: "", color: defaultAccent(10, 0) });
     expect(new Set(dark.map((option) => option.color)).size).toBe(7);
     expect(dark.every((option) => isAccent(option.color))).toBe(true);
     expect(light.slice(1)).not.toEqual(dark.slice(1));
@@ -59,7 +61,7 @@ describe("surfaceColors", () => {
 describe("applyTheme", () => {
   it("falls back to the palette's accent when the setting is empty", () => {
     applyTheme({ surface: "", accent: "", softness: 0, wash: 0, textBrightness: 0 }, root);
-    expect(root.style.getPropertyValue("--color-primary")).toBe(DEFAULT_ACCENT);
+    expect(root.style.getPropertyValue("--color-primary")).toBe(defaultAccent(10, 0));
     expect(root.style.getPropertyValue("--az-surface")).toBe(DEFAULT_ACCENT);
   });
 
@@ -87,7 +89,7 @@ describe("applyTheme", () => {
       },
       root,
     );
-    expect(root.style.getPropertyValue("--color-primary")).toBe(DEFAULT_ACCENT);
+    expect(root.style.getPropertyValue("--color-primary")).toBe(defaultAccent(10, 0));
   });
 
   /*
@@ -150,11 +152,24 @@ describe("applyTheme", () => {
     expect(root.style.getPropertyValue("--az-wash")).toBe(`${WASH_STOPS[WASH_STOPS.length - 1]}%`);
   });
 
-  it("caps strength before the dark base becomes a flat colour field", () => {
-    expect(WASH_STOPS).toEqual([0, 10, 25, 50]);
+  it("fills all five strength choices with the useful coloured range", () => {
+    expect(WASH_STOPS).toEqual([10, 20, 30, 40, 50]);
+    expect(DEFAULT_WASH).toBe(30);
     applyTheme({ surface: "#3355ff", accent: "", softness: 0, wash: 100, textBrightness: 0 }, root);
     expect(root.style.getPropertyValue("--az-surface")).toBe("#3355ff");
     expect(root.style.getPropertyValue("--az-wash")).toBe("50%");
+  });
+
+  it("moves the designed yellow with softness instead of keeping a harsh literal", () => {
+    applyTheme({ surface: "", accent: "", softness: 0, wash: 30, textBrightness: 0 }, root);
+    const firm = root.style.getPropertyValue("--color-primary");
+    applyTheme(
+      { surface: "", accent: "", softness: MAX_SOFTNESS, wash: 30, textBrightness: 0 },
+      root,
+    );
+    const soft = root.style.getPropertyValue("--color-primary");
+    expect(soft).not.toBe(firm);
+    expect(toColorValue(soft).hsl.s).toBeLessThan(toColorValue(firm).hsl.s - 20);
   });
 
   /*

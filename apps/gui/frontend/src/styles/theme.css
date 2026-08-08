@@ -85,13 +85,13 @@
       oklch(calc(84% - var(--az-damp)) calc(0.008 * var(--az-tint)) var(--az-hue-text))
     );
 
-    --color-primary: #ffee58;
+    --color-primary: #d2ad3f;
     --color-primary-content: #111111;
 
     --color-secondary: oklch(80% 0.13 260);
     --color-secondary-content: oklch(10% 0.003 240);
 
-    --color-accent: #ffee58;
+    --color-accent: #d2ad3f;
     --color-accent-content: #111111;
 
     --color-neutral: oklch(20% 0.008 240);
@@ -602,8 +602,16 @@
     var(--az-surface) calc(var(--az-wash) * 0.2),
     oklch(calc(46% + var(--az-damp)) calc(0.01 * var(--az-tint)) var(--az-hue-text))
   );
-  --color-az-dim: oklch(calc(54% + var(--az-damp)) 0.01 var(--az-hue-text));
-  --color-az-ghost: oklch(calc(62% + var(--az-damp)) 0.01 var(--az-hue-text));
+  --color-az-dim: color-mix(
+    in oklab,
+    var(--az-surface) calc(var(--az-wash) * 0.2),
+    oklch(calc(54% + var(--az-damp)) 0.01 var(--az-hue-text))
+  );
+  --color-az-ghost: color-mix(
+    in oklab,
+    var(--az-surface) calc(var(--az-wash) * 0.2),
+    oklch(calc(62% + var(--az-damp)) 0.01 var(--az-hue-text))
+  );
 
   --color-az-void: color-mix(
     in oklab,
@@ -620,22 +628,46 @@
     var(--az-surface) var(--az-wash-105),
     oklch(calc(96% - var(--az-lift)) 0.005 var(--az-hue))
   );
-  --color-az-tab: oklch(calc(96% - var(--az-lift)) 0.006 var(--az-hue));
-  --color-az-sunken: oklch(calc(94% - var(--az-lift)) 0.004 var(--az-hue));
-  --color-az-hover: oklch(calc(91% - var(--az-lift)) 0.006 var(--az-hue));
-  --color-az-badge: oklch(calc(85% - var(--az-lift)) 0.01 var(--az-hue));
+  --color-az-tab: color-mix(
+    in oklab,
+    var(--az-surface) var(--az-wash),
+    oklch(calc(96% - var(--az-lift)) 0.006 var(--az-hue))
+  );
+  --color-az-sunken: color-mix(
+    in oklab,
+    var(--az-surface) var(--az-wash-105),
+    oklch(calc(94% - var(--az-lift)) 0.004 var(--az-hue))
+  );
+  --color-az-hover: color-mix(
+    in oklab,
+    var(--az-surface) var(--az-wash),
+    oklch(calc(91% - var(--az-lift)) 0.006 var(--az-hue))
+  );
+  --color-az-badge: color-mix(
+    in oklab,
+    var(--az-surface) var(--az-wash-120),
+    oklch(calc(85% - var(--az-lift)) 0.01 var(--az-hue))
+  );
 
   --color-az-bubble: color-mix(
     in oklab,
     var(--az-surface) var(--az-wash-120),
     oklch(calc(91% - var(--az-lift)) 0.008 var(--az-hue))
   );
-  --color-az-bubble-edge: oklch(calc(82% - var(--az-lift)) 0.008 var(--az-hue));
-  --color-az-bubble-text: oklch(calc(18% + var(--az-damp)) 0.008 var(--az-hue-text));
+  --color-az-bubble-edge: color-mix(
+    in oklab,
+    var(--az-surface) var(--az-wash-110),
+    oklch(calc(82% - var(--az-lift)) 0.008 var(--az-hue))
+  );
+  --color-az-bubble-text: color-mix(
+    in oklab,
+    var(--az-surface) calc(var(--az-wash) * 0.18),
+    oklch(calc(18% + var(--az-damp)) 0.008 var(--az-hue-text))
+  );
 
-  --color-az-hairline: rgb(17 24 39 / 14%);
-  --color-az-hairline-soft: rgb(17 24 39 / 9%);
-  --color-az-hairline-strong: rgb(17 24 39 / 22%);
+  --color-az-hairline: rgb(from var(--color-primary) r g b / 14%);
+  --color-az-hairline-soft: rgb(from var(--color-primary) r g b / 9%);
+  --color-az-hairline-strong: rgb(from var(--color-primary) r g b / 22%);
   --color-az-link: #1d4ed8;
   --color-az-highlight: #0e7490;
   --color-az-active: #b45309;

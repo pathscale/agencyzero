@@ -152,12 +152,12 @@ describe("appearance settings", () => {
     const initialAccent = screen.workspace.state.settings?.theme.accent;
 
     expect(
-      screen.container.querySelector('button[aria-label="Colour strength 50%"]'),
+      screen.container.querySelector('button[aria-label="Colour strength 30%"]'),
     ).toHaveAttribute("aria-pressed", "true");
-    expect(screen.container.querySelector('button[aria-label="Colour strength 100%"]')).toBeNull();
+    expect(screen.container.querySelector('button[aria-label="Colour strength 0%"]')).toBeNull();
     fireEvent.click(
       screen.container.querySelector(
-        'button[aria-label="Colour strength 25%"]',
+        'button[aria-label="Colour strength 20%"]',
       ) as HTMLButtonElement,
     );
     await waitFor(() =>
@@ -168,6 +168,6 @@ describe("appearance settings", () => {
       screen.container.querySelector('button[aria-label="Reset to default"]') as HTMLButtonElement,
     );
     await waitFor(() => expect(screen.workspace.state.settings?.theme.accent).toBe(""));
-    expect(screen.workspace.state.settings?.theme.wash).toBe(50);
+    expect(screen.workspace.state.settings?.theme.wash).toBe(30);
   });
 });

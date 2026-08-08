@@ -13,7 +13,7 @@ import type { ThemeSettings } from "~/types";
  */
 
 /** The palette's own accent, for when the setting is empty. Matches `theme.css`. */
-export const DEFAULT_ACCENT = "#ffee58";
+export const DEFAULT_ACCENT = "#d2ad3f";
 
 /** One curated control accent shown beside the surface controls. */
 export interface AccentOption {
@@ -58,7 +58,7 @@ export function accentOptions(
   softness: number,
 ): AccentOption[] {
   const base = toColorValue(isAccent(surface) ? surface : DEFAULT_ACCENT).hsl.h;
-  const strength = Math.min(Math.max(wash, 0), 100) / 100;
+  const strength = normalizeWash(wash) / 50;
   const lift = Math.min(Math.max(softness, 0), MAX_SOFTNESS);
   const saturation = 50 + strength * 32 - lift * 2;
   const lightness = mode === "light" ? 54 - lift * 2.3 : 44 + lift * 2.5;
@@ -66,7 +66,15 @@ export function accentOptions(
     const color = hslToHex((base + offset) % 360, saturation, lightness);
     return { value: color, color };
   });
-  return [{ value: "", color: DEFAULT_ACCENT }, ...harmonies];
+  return [{ value: "", color: defaultAccent(wash, softness) }, ...harmonies];
+}
+
+/** The designed yellow follows softness too; empty is a semantic choice, not a frozen hex. */
+export function defaultAccent(wash: number, softness: number): string {
+  const hue = toColorValue(DEFAULT_ACCENT).hsl.h;
+  const strength = normalizeWash(wash) / 50;
+  const lift = Math.min(Math.max(softness, 0), MAX_SOFTNESS);
+  return hslToHex(hue, 58 + strength * 10 - lift * 2, 52 + lift * 0.9);
 }
 
 /**
@@ -90,13 +98,22 @@ const DAMP_RATIO = 0.45;
  * it. nofilter.io mixes 8–11% into its base tiers; the stops below bracket that,
  * with `0` kept reachable because the designed palette is a legitimate choice.
  *
- * Fifty percent is the deliberate ceiling: beyond it a dark theme stops being
- * a dark neutral foundation and becomes a flat field of the selected colour.
+ * Every stop carries colour. The old zero stop always produced grey, while
+ * values beyond fifty percent erased the neutral foundation. Five even steps
+ * across the useful 10–50% interval make the whole control meaningful.
  */
-export const WASH_STOPS = [0, 10, 25, 50] as const;
+export const WASH_STOPS = [10, 20, 30, 40, 50] as const;
 
 /** What a freshly picked colour washes at, before anyone touches the strength. */
-export const DEFAULT_WASH = 50;
+export const DEFAULT_WASH = 30;
+
+/** Map records from earlier stop layouts onto the nearest current choice. */
+export function normalizeWash(value: number): number {
+  const safe = Number.isFinite(value) ? value : DEFAULT_WASH;
+  return WASH_STOPS.reduce((closest, stop) =>
+    Math.abs(stop - safe) < Math.abs(closest - safe) ? stop : closest,
+  );
+}
 
 /**
  * How far the text ladder can be pushed back up, in oklch percentage points.
@@ -150,7 +167,6 @@ export function applyTheme(
 ): void {
   const surfaceChosen = isAccent(theme.surface);
   const surface = surfaceChosen ? theme.surface.trim() : DEFAULT_ACCENT;
-  const accent = isAccent(theme.accent) ? theme.accent.trim() : DEFAULT_ACCENT;
   const softness = Math.min(Math.max(theme.softness || 0, 0), MAX_SOFTNESS);
   /*
    * No accent means the designed palette, and the designed palette is not a
@@ -158,9 +174,11 @@ export function applyTheme(
    * been picked. Reset therefore returns the workspace to grey, rather than to
    * grey plus whatever wash was last set.
    */
-  const wash = surfaceChosen
-    ? Math.min(Math.max(theme.wash ?? DEFAULT_WASH, 0), WASH_STOPS[WASH_STOPS.length - 1])
-    : 0;
+  const configuredWash = normalizeWash(theme.wash ?? DEFAULT_WASH);
+  const wash = surfaceChosen ? configuredWash : 0;
+  const accent = isAccent(theme.accent)
+    ? theme.accent.trim()
+    : defaultAccent(configuredWash, softness);
   const brightness = Math.min(
     Math.max(theme.textBrightness || 0, BRIGHTNESS_STOPS[0]),
     BRIGHTNESS_STOPS[BRIGHTNESS_STOPS.length - 1],
