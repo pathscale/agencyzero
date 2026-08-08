@@ -6,7 +6,8 @@
 //! is what lets Settings distinguish "not installed" from "installed but signed
 //! out", which are different problems with different fixes.
 
-use agent_abstraction::{Agent, AuthState, AuthStatus, Error, Probe, VersionStatus};
+use agency_proxy_protocol::ProviderStatus;
+use agent_abstraction::Agent;
 use serde::{Deserialize, Serialize};
 use std::ffi::{OsStr, OsString};
 use std::path::{Path, PathBuf};
@@ -130,26 +131,31 @@ pub struct ProviderCapabilitiesDto {
 /// Concurrent because each probe spawns a process and waits on `--version` plus
 /// an auth check; run in series, three agents make Settings visibly slow to
 /// open.
-pub async fn detect_all() -> Vec<AgentStatusDto> {
-    let probes = AGENTS.map(detect_one);
-    futures::future::join_all(probes).await
+pub async fn detect_all(
+    proxy: &crate::agent_proxy::AgencyProxy,
+) -> Result<Vec<AgentStatusDto>, String> {
+    proxy
+        .probe_providers()
+        .await?
+        .into_iter()
+        .map(status_from_proxy)
+        .collect()
 }
 
-/// Probe one agent, mapping both failures onto a state the UI can render.
-async fn detect_one(agent: Agent) -> AgentStatusDto {
+fn status_from_proxy(status: ProviderStatus) -> Result<AgentStatusDto, String> {
+    let agent = match status.provider.as_str() {
+        "claude" => Agent::Claude,
+        "codex" => Agent::Codex,
+        "copilot" => Agent::Copilot,
+        other => return Err(format!("AgencyProxy reported an unknown provider: {other}")),
+    };
     let checked_at = chrono::Utc::now().to_rfc3339();
     let caps = describe_caps(agent);
     let capabilities = provider_capabilities(agent);
     let min_version = crate::models::verified_against(agent);
 
-    let probe = Probe::run(agent).await;
-    let auth = AuthStatus::check(agent).await;
-
-    // Not installed is answered by the probe alone: an agent that is not there
-    // cannot be signed in, and reporting `logged_out` for a missing binary would
-    // send someone to run a login command for a CLI they do not have.
-    if matches!(probe, Err(Error::NotInstalled { .. })) {
-        return AgentStatusDto {
+    if !status.installed {
+        return Ok(AgentStatusDto {
             agent,
             state: "missing".into(),
             version: None,
@@ -162,68 +168,29 @@ async fn detect_one(agent: Agent) -> AgentStatusDto {
             account: None,
             plan: None,
             login_hint: String::new(),
-        };
+        });
     }
-
-    let probe = probe.ok();
-    let version = probe
-        .as_ref()
-        .and_then(|p| p.version.as_ref().map(ToString::to_string));
-    let is_outdated = probe
-        .as_ref()
-        .is_some_and(|p| matches!(p.status, VersionStatus::Older));
-
-    let (auth_state, detail, method, account, plan, login_hint) = match &auth {
-        Ok(status) => (
-            status.state,
-            status.detail.clone(),
-            status.method.clone(),
-            status.account.clone(),
-            status.plan.clone(),
-            status.login_hint.to_string(),
-        ),
-        // An auth check that could not run is not a signed-out agent. Saying
-        // `Unknown` keeps the dot off "logged out" while still surfacing why.
-        Err(error) => (
-            AuthState::Unknown,
-            error.to_string(),
-            None,
-            None,
-            None,
-            String::new(),
-        ),
+    let state = if status.auth_state == "logged_out" {
+        "logged_out"
+    } else if status.outdated {
+        "outdated"
+    } else {
+        "connected"
     };
-
-    // Ordering matters: signed out is the more actionable of the two, so it wins
-    // over an old version. Fixing the login is what unblocks the agent; the
-    // upgrade advisory is still in `detail`.
-    let state = match auth_state {
-        AuthState::LoggedOut => "logged_out",
-        _ if is_outdated => "outdated",
-        _ => "connected",
-    };
-
-    let advisory = probe.as_ref().and_then(Probe::advisory);
-    let detail = match advisory {
-        Some(note) if !detail.is_empty() => format!("{detail} · {note}"),
-        Some(note) => note,
-        None => detail,
-    };
-
-    AgentStatusDto {
+    Ok(AgentStatusDto {
         agent,
         state: state.into(),
-        version,
+        version: status.version,
         min_version,
         caps,
         capabilities,
         checked_at,
-        detail,
-        auth_method: method,
-        account,
-        plan,
-        login_hint,
-    }
+        detail: status.detail,
+        auth_method: status.auth_method,
+        account: status.account,
+        plan: status.plan,
+        login_hint: status.login_hint,
+    })
 }
 
 fn provider_capabilities(agent: Agent) -> ProviderCapabilitiesDto {
@@ -296,10 +263,27 @@ mod tests {
 
     /// Every agent must produce a state the UI knows how to colour, whatever is
     /// or is not installed on the machine running the test.
-    #[tokio::test]
-    async fn every_agent_reports_a_renderable_state() {
+    #[test]
+    fn every_proxy_status_maps_to_a_renderable_state() {
         let known = ["connected", "outdated", "logged_out", "missing"];
-        for status in detect_all().await {
+        for (provider, installed, outdated, auth_state) in [
+            ("claude", true, false, "logged_in"),
+            ("codex", true, true, "logged_in"),
+            ("copilot", false, false, "unknown"),
+        ] {
+            let status = status_from_proxy(ProviderStatus {
+                provider: provider.into(),
+                installed,
+                version: installed.then(|| "1.0.0".into()),
+                outdated,
+                auth_state: auth_state.into(),
+                detail: String::new(),
+                auth_method: None,
+                account: None,
+                plan: None,
+                login_hint: String::new(),
+            })
+            .expect("known provider maps");
             assert!(
                 known.contains(&status.state.as_str()),
                 "{:?} reported an unrenderable state {:?}",
@@ -316,17 +300,23 @@ mod tests {
 
     /// A missing binary is not a signed-out one. Reporting `logged_out` would
     /// point someone at a login command for a CLI they have not installed.
-    #[tokio::test]
-    async fn a_missing_agent_never_reports_as_logged_out() {
-        for status in detect_all().await {
-            if status.state == "missing" {
-                assert!(
-                    status.version.is_none(),
-                    "{:?} cannot report a version while missing",
-                    status.agent
-                );
-            }
-        }
+    #[test]
+    fn a_missing_agent_never_reports_as_logged_out() {
+        let status = status_from_proxy(ProviderStatus {
+            provider: "claude".into(),
+            installed: false,
+            version: Some("impossible".into()),
+            outdated: false,
+            auth_state: "logged_out".into(),
+            detail: String::new(),
+            auth_method: None,
+            account: None,
+            plan: None,
+            login_hint: String::new(),
+        })
+        .expect("known provider maps");
+        assert_eq!(status.state, "missing");
+        assert!(status.version.is_none());
     }
 
     #[test]

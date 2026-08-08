@@ -33,7 +33,7 @@ struct Price {
 }
 
 /// The write premium a fresh cache prefix pays, as a multiple of input price.
-/// Claude is explicitly configured for a one-hour cache in `build_turn_request`,
+/// Claude is explicitly configured for a one-hour cache in `build_proxy_request`,
 /// whose write price is 2x input. Use that conservative rate for cross-provider
 /// handoffs too: understating a large cold transfer is the dangerous error.
 const CACHE_WRITE_MULTIPLE: f64 = 2.0;

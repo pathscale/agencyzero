@@ -4,7 +4,8 @@
 //! capabilities. AgencyZero owns the narrow integration boundary and keeps the
 //! prepared policy alive for exactly as long as the request's child process.
 
-use agent_abstraction::{Agent, Request};
+use agency_proxy_protocol::RunRequest;
+use agent_abstraction::Agent;
 
 /// One provider-defined Claude usage window.
 #[derive(serde::Serialize)]
@@ -36,27 +37,26 @@ pub struct ClaudeUsageDto {
     pub checked_at: String,
 }
 
-/// A request plus any invocation-scoped resources its experimental policy owns.
-pub struct AppliedRequest {
-    request: Request,
+/// A proxy request plus invocation-scoped experimental policy resources.
+pub struct AppliedProxyRequest {
+    request: RunRequest,
     #[cfg(feature = "experimental")]
     _expanded_context: Option<agent_experimental::CodexExpandedContext>,
 }
 
-impl AppliedRequest {
-    /// Borrow the request while retaining its policy resources in this wrapper.
-    pub fn request(&self) -> &Request {
+impl AppliedProxyRequest {
+    /// Borrow the wire request while retaining its policy resources.
+    pub fn request(&self) -> &RunRequest {
         &self.request
     }
 }
 
-/// Apply experimental policy when this build and model opt into it.
-///
-/// Standard builds compile a no-op implementation. Experimental builds fail
-/// visibly if the installed Codex version or bundled catalog is not the shape
-/// that was reviewed, rather than claiming expanded context while silently
-/// running the stock policy.
-pub fn apply(request: Request, _agent: Agent, _model: &str) -> Result<AppliedRequest, String> {
+/// Apply the same experimental policy at the AgencyProxy boundary.
+pub fn apply_proxy(
+    #[allow(unused_mut)] mut request: RunRequest,
+    _agent: Agent,
+    _model: &str,
+) -> Result<AppliedProxyRequest, String> {
     #[cfg(feature = "experimental")]
     {
         if eligible(_agent, _model) {
@@ -64,17 +64,17 @@ pub fn apply(request: Request, _agent: Agent, _model: &str) -> Result<AppliedReq
                 &agent_experimental::ExpandedContextOptions::default(),
             )
             .map_err(|error| format!("expanded Codex context is unavailable: {error:#}"))?;
-            let args = context
+            request.unchecked_args = context
                 .process_args()
                 .map_err(|error| format!("could not prepare expanded Codex context: {error:#}"))?;
-            return Ok(AppliedRequest {
-                request: request.unchecked_args(args),
+            return Ok(AppliedProxyRequest {
+                request,
                 _expanded_context: Some(context),
             });
         }
     }
 
-    Ok(AppliedRequest {
+    Ok(AppliedProxyRequest {
         request,
         #[cfg(feature = "experimental")]
         _expanded_context: None,

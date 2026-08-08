@@ -38,6 +38,9 @@
   },
   "bundle": {
     "active": true,
+    "externalBin": [
+      "binaries/agency-proxy"
+    ],
     "targets": [
       "app"
     ],
