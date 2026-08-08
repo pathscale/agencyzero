@@ -1174,8 +1174,29 @@ fn should_forget_unresponsive_resume(
 /// cancels a session it had already (incorrectly) marked healthy. Other agents'
 /// started events are emitted from their running turn, so their existing
 /// readiness contract stays unchanged.
-fn event_proves_turn_started(agent: Agent, event: &Event) -> bool {
-    agent != Agent::Codex || !matches!(event, Event::Started { .. } | Event::RateLimit(_))
+fn event_proves_turn_started(agent: Agent, codex_session_opened: bool, event: &Event) -> bool {
+    if agent != Agent::Codex {
+        return true;
+    }
+    if !codex_session_opened {
+        return false;
+    }
+    match event {
+        Event::Thinking(text) | Event::Text(text) => !text.is_empty(),
+        Event::ToolCall { .. } | Event::ToolResult { .. } | Event::ApprovalRequest(_) => true,
+        /*
+         * Started is thread setup, and app-server may publish token/history
+         * bookkeeping while a resumed thread is being opened. A boundary has
+         * no content of its own. None proves the new turn accepted its prompt.
+         */
+        Event::Started { .. }
+        | Event::MessageBoundary
+        | Event::Usage(_)
+        | Event::RateLimit(_)
+        | Event::Compaction(_)
+        | Event::Commands(_) => false,
+        _ => false,
+    }
 }
 
 fn agent_wire_name(agent: Agent) -> &'static str {
@@ -4516,9 +4537,9 @@ async fn deliver_injection(
 /// Tell the window what became of one visible user row.
 ///
 /// `sent` means the row is durably in AgencyZero. `read` means the provider
-/// accepted it, either by emitting the opening run event or acknowledging a
-/// live steer. The event is intentionally session-local: once a reply lands,
-/// the transcript itself is the durable acknowledgement.
+/// accepted it, either by producing current-turn activity after session setup
+/// or acknowledging a live steer. The event is intentionally session-local:
+/// once a reply lands, the transcript itself is the durable acknowledgement.
 fn emit_message_receipt(app: &AppHandle, project_id: &str, message_id: &str, status: &str) {
     let _ = app.emit(
         "message:receipt",
@@ -10033,6 +10054,10 @@ async fn drive_run(
     // steer has its own acknowledgement in `deliver_injection` and does not
     // touch this flag.
     let mut opening_message_read = false;
+    // Codex can emit thread bookkeeping before the resume/open RPC settles.
+    // No later event can prove this turn live until that response establishes
+    // which session the event belongs to.
+    let mut codex_session_opened = false;
     // Set when the idle deadline trips: a run that went silent long enough to be
     // treated as wedged. Recovered like a stall rather than reported as a crash.
     let mut idle_stalled = false;
@@ -10134,7 +10159,10 @@ async fn drive_run(
                 continue;
             }
         };
-        let turn_started = event_proves_turn_started(agent, &event);
+        if agent == Agent::Codex && matches!(&event, Event::Started { .. }) {
+            codex_session_opened = true;
+        }
+        let turn_started = event_proves_turn_started(agent, codex_session_opened, &event);
         if turn_started {
             ready_for_followup.store(true, std::sync::atomic::Ordering::Release);
         }
@@ -12189,12 +12217,37 @@ mod tests {
             session: "thread-open".into(),
             model: Some("gpt-5.6-sol".into()),
         };
-        assert!(!event_proves_turn_started(Agent::Codex, &opened));
+        assert!(!event_proves_turn_started(Agent::Codex, true, &opened));
+        assert!(!event_proves_turn_started(
+            Agent::Codex,
+            false,
+            &Event::Thinking("orphaned setup output".into())
+        ));
+        assert!(!event_proves_turn_started(
+            Agent::Codex,
+            true,
+            &Event::Usage(agent_abstraction::Usage::default())
+        ));
+        assert!(!event_proves_turn_started(
+            Agent::Codex,
+            true,
+            &Event::MessageBoundary
+        ));
         assert!(event_proves_turn_started(
             Agent::Codex,
+            true,
             &Event::Thinking("the turn is now producing work".into())
         ));
-        assert!(event_proves_turn_started(Agent::Claude, &opened));
+        assert!(event_proves_turn_started(
+            Agent::Codex,
+            true,
+            &Event::ToolCall {
+                id: Some("tool-1".into()),
+                name: "shell".into(),
+                input: serde_json::json!({"command": "true"}),
+            }
+        ));
+        assert!(event_proves_turn_started(Agent::Claude, false, &opened));
     }
 
     #[tokio::test]
