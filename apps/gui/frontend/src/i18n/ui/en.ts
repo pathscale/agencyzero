@@ -1,4 +1,5 @@
 const en = {
+  AgencyZero: "AgencyZero",
   "This project could not be loaded": "This project could not be loaded",
   "The tab is open but its record is missing from the workspace. Reopening the window will re-read it from the database.":
     "The tab is open but its record is missing from the workspace. Reopening the window will re-read it from the database.",

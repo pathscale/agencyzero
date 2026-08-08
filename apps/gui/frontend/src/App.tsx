@@ -27,7 +27,9 @@ function Workspace(): JSX.Element {
 
   return (
     <div class="az-desk relative flex h-full flex-col overflow-hidden">
-      <TabStrip />
+      <Show when={state.boot.status !== "loading"}>
+        <TabStrip />
+      </Show>
 
       <Show when={shell.persistenceFailure()}>
         {(failure) => (
@@ -113,10 +115,26 @@ function Workspace(): JSX.Element {
   );
 }
 
-function Booting(): JSX.Element {
+export function Booting(): JSX.Element {
   return (
-    <div class="flex flex-1 items-center justify-center text-[12.5px] text-az-muted">
-      {tx("Loading workspace…")}
+    <div
+      role="status"
+      aria-label={tx("Loading workspace…")}
+      class="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden rounded-panel border border-az-hairline bg-az-sunken"
+    >
+      <div class="absolute top-1/2 left-1/2 size-[360px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-primary/7 blur-[90px]" />
+      <div class="relative flex flex-col items-center">
+        <div class="az-halo-primary flex size-[58px] items-center justify-center rounded-[18px] border border-primary/28 bg-primary/11 text-primary shadow-[0_16px_45px_rgb(from_var(--color-primary)_r_g_b/.12)]">
+          <Icon name="sparkles" class="text-[27px]" />
+        </div>
+        <p class="mt-4 font-semibold text-[18px] text-az-title tracking-[-.02em]">
+          {tx("AgencyZero")}
+        </p>
+        <p class="mt-1 text-[11.5px] text-az-muted">{tx("Loading workspace…")}</p>
+        <div class="mt-4 h-1 w-32 overflow-hidden rounded-full bg-primary/10">
+          <div class="h-full w-2/3 animate-pulse rounded-full bg-primary/65" />
+        </div>
+      </div>
     </div>
   );
 }

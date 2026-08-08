@@ -1,6 +1,7 @@
 import type en from "./en";
 
 const zh = {
+  AgencyZero: "AgencyZero",
   "This project could not be loaded": "无法加载此项目",
   "The tab is open but its record is missing from the workspace. Reopening the window will re-read it from the database.":
     "此标签页已打开，但工作区中缺少对应记录。重新打开窗口会从数据库重新读取。",
