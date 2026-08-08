@@ -1,11 +1,11 @@
-import { ColorPickerContext, ColorWheelFlower } from "@pathscale/ui/components/color-wheel-flower";
 import { createEffect, For, type JSX, Show } from "solid-js";
 import {
   accentOptions,
   BRIGHTNESS_STOPS,
+  closestColorIndex,
   DEFAULT_ACCENT,
   MAX_SOFTNESS,
-  toColorValue,
+  surfaceColors,
   WASH_STOPS,
 } from "~/lib/theme";
 import { t } from "~/stores/i18n";
@@ -15,12 +15,10 @@ import type { ThemeSettings } from "~/types";
 /**
  * The colour wheel and the softness strip, side by side.
  *
- * The wheel is `@pathscale/ui`'s `ColorWheelFlower`, the same one nofilter.io
- * shows — it takes its value and its handler from a context rather than props,
- * which is the whole integration. What is *not* reused is that package's
- * `ThemeColorPicker` wrapper: it writes `--color-base-*` against nofilter's own
- * anchors. AgencyZero exposes light/dark to the wheel itself, but keeps the
- * application layer here so those picks drive this app's own surface tokens.
+ * The wheel owns literal AgencyZero colours rather than borrowing the
+ * upstream contrast palette. That palette makes dark-mode swatches pastel so
+ * they stand out from a black ring; here the swatch is the value, so dark mode
+ * must offer dark-oriented colours and a pressed dot must equal the stored hex.
  *
  * The strip beside it is ours. nofilter's greyscale column switches between two
  * themes; there is one theme here, so the column drives the axis that actually
@@ -34,13 +32,6 @@ export function ThemePicker(props: {
   onWash: (value: number) => void;
   onBrightness: (value: number) => void;
 }): JSX.Element {
-  /*
-   * The wheel wants a full ColorValue and hands one back on change. An empty
-   * surface means the neutral designed desk. The fallback only supplies a
-   * wheel position; a blank setting still applies no wash.
-   */
-  const current = () => toColorValue(props.theme.surface || DEFAULT_ACCENT);
-
   /** Five stops across the comfort range, matching the strength row beside it. */
   const softnessStops = () => Array.from({ length: 5 }, (_, i) => (i * MAX_SOFTNESS) / 4);
 
@@ -56,19 +47,7 @@ export function ThemePicker(props: {
   return (
     <div class="flex items-start gap-4 px-3.5 py-3">
       <div class="shrink-0">
-        <ColorPickerContext.Provider
-          value={{
-            color: current,
-            format: () => "hex",
-            disabled: () => false,
-            onChange: (color) => props.onSurface(color.hex),
-            onFormatChange: () => {},
-          }}
-        >
-          {/* The component sizes itself at 190px square and ships its own
-              stylesheet, so there is nothing to add here. */}
-          <ColorWheelFlower />
-        </ColorPickerContext.Provider>
+        <SurfaceColorWheel value={props.theme.surface} onPick={props.onSurface} />
       </div>
 
       <div class="flex flex-1 flex-col gap-3">
@@ -136,6 +115,75 @@ export function ThemePicker(props: {
   );
 }
 
+/** Concentric literal swatches: what is shown is exactly what gets persisted. */
+function SurfaceColorWheel(props: { value: string; onPick: (value: string) => void }): JSX.Element {
+  const layout = [
+    ...Array.from({ length: 12 }, (_, index) => ({ count: 12, index, radius: 56, phase: -30 })),
+    ...Array.from({ length: 12 }, (_, index) => ({ count: 12, index, radius: 40, phase: -30 })),
+    ...Array.from({ length: 6 }, (_, index) => ({ count: 6, index, radius: 21, phase: -60 })),
+    { count: 1, index: 0, radius: 0, phase: 0 },
+  ];
+  const colors = () => surfaceColors(prefs.colorMode);
+  let previous = colors();
+
+  // Preserve the same petal across a mode change, and migrate the upstream
+  // palette values written by earlier builds to the nearest literal petal.
+  createEffect(() => {
+    const next = colors();
+    const value = props.value.trim().toLowerCase();
+    if (value) {
+      let selected = previous.findIndex((color) => color.toLowerCase() === value);
+      if (selected < 0) selected = closestColorIndex(value, previous);
+      const rebased = next[selected];
+      if (rebased && rebased.toLowerCase() !== value) props.onPick(rebased);
+    }
+    previous = next;
+  });
+
+  return (
+    <fieldset
+      aria-label={t("appearance.surfaceColour")}
+      class="relative m-0 size-[190px] rounded-full border border-az-hairline bg-az-inset p-0 shadow-inner"
+    >
+      <For each={colors()}>
+        {(color, index) => {
+          const point = layout[index()];
+          const angle = ((point.index / point.count) * 360 + point.phase) * (Math.PI / 180);
+          const x = Math.cos(angle) * point.radius;
+          const y = Math.sin(angle) * point.radius;
+          const selected = () => props.value.trim().toLowerCase() === color.toLowerCase();
+          return (
+            <label
+              title={color}
+              class="absolute size-7 cursor-pointer rounded-full"
+              style={{
+                left: `calc(50% + ${x.toFixed(2)}px)`,
+                top: `calc(50% + ${y.toFixed(2)}px)`,
+                transform: "translate(-50%, -50%)",
+              }}
+            >
+              <input
+                type="radio"
+                name="surface-colour"
+                value={color}
+                aria-label={`${t("appearance.surfaceColour")} ${color}`}
+                checked={selected()}
+                onChange={() => props.onPick(color)}
+                class="peer sr-only"
+              />
+              <span
+                aria-hidden="true"
+                class="block size-full rounded-full border-2 border-az-hairline-strong transition-[border-color,box-shadow] hover:border-base-content/45 peer-checked:border-base-content/70 peer-checked:ring-2 peer-checked:ring-primary peer-checked:ring-offset-2 peer-checked:ring-offset-base-200 peer-focus-visible:ring-2 peer-focus-visible:ring-primary"
+                style={{ "background-color": color }}
+              />
+            </label>
+          );
+        }}
+      </For>
+    </fieldset>
+  );
+}
+
 /** An independent high-contrast colour for controls, rings and active states. */
 function AccentSelector(props: {
   surface: string;
@@ -149,10 +197,17 @@ function AccentSelector(props: {
 
   // A palette choice is semantic, not a frozen hex. Keep the same harmony
   // selected while its rendered colour responds to surface, mode, strength,
-  // and softness. Legacy/custom hex values that match no option are preserved.
+  // and softness. Older arbitrary hex values migrate to the nearest harmony.
   createEffect(() => {
     const next = options();
-    const selected = previous.findIndex((option) => option.value === props.accent);
+    let selected = previous.findIndex((option) => option.value === props.accent);
+    if (selected < 1 && props.accent) {
+      const closest = closestColorIndex(
+        props.accent,
+        previous.slice(1).map((option) => option.color),
+      );
+      if (closest >= 0) selected = closest + 1;
+    }
     if (selected > 0 && next[selected]?.value !== props.accent) {
       props.onPick(next[selected].value);
     }

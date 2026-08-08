@@ -25,6 +25,7 @@ const fr = {
     softnessHint: "écart des surfaces par rapport au bord de la palette",
     textBrightness: "Luminosité du texte",
     textBrightnessHint: "contraste du texte avec la surface",
+    surfaceColour: "Couleur de surface",
     accentColour: "Couleur d’accent",
     accentColourHint: "indépendante de la couleur des surfaces",
     designedYellow: "Accent jaune du design",

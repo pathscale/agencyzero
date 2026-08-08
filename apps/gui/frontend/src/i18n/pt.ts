@@ -25,6 +25,7 @@ const pt = {
     softnessHint: "quanto as superfícies se afastam da borda da paleta",
     textBrightness: "Brilho do texto",
     textBrightnessHint: "quanto o texto se destaca da superfície",
+    surfaceColour: "Cor da superfície",
     accentColour: "Cor de destaque",
     accentColourHint: "independente da cor das superfícies",
     designedYellow: "Destaque amarelo do design",

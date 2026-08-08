@@ -208,9 +208,7 @@ describe("the theme axes", () => {
 describe("light mode", () => {
   it("overrides the complete surface and text ladder under the root mode selector", () => {
     const rule = [
-      ...CSS.matchAll(
-        /\[data-agency-theme="agencyzero"\]\[data-color-mode="light"\]\s*\{([\s\S]*?)\n\}/g,
-      ),
+      ...CSS.matchAll(/\[data-theme="agencyzero"\]\[data-color-mode="light"\]\s*\{([\s\S]*?)\n\}/g),
     ]
       .map((match) => match[1])
       .join("\n");

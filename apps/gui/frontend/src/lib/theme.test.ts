@@ -2,9 +2,11 @@ import { beforeEach, describe, expect, it } from "vitest";
 import {
   accentOptions,
   applyTheme,
+  closestColorIndex,
   DEFAULT_ACCENT,
   isAccent,
   MAX_SOFTNESS,
+  surfaceColors,
   toColorValue,
   WASH_STOPS,
 } from "~/lib/theme";
@@ -31,6 +33,26 @@ describe("accentOptions", () => {
     expect(green.slice(1)).not.toEqual(dark.slice(1));
     expect(strong.slice(1)).not.toEqual(dark.slice(1));
     expect(soft.slice(1)).not.toEqual(strong.slice(1));
+    expect(toColorValue(soft[1].color).hsl.l - toColorValue(strong[1].color).hsl.l).toBeGreaterThan(
+      15,
+    );
+  });
+});
+
+describe("surfaceColors", () => {
+  it("uses literal, darker values in dark mode", () => {
+    const dark = surfaceColors("dark");
+    const light = surfaceColors("light");
+
+    expect(dark).toHaveLength(31);
+    expect(light).toHaveLength(31);
+    expect(dark.every(isAccent)).toBe(true);
+    expect(light.every(isAccent)).toBe(true);
+    expect(dark).not.toEqual(light);
+    const average = (colors: string[]) =>
+      colors.reduce((sum, color) => sum + toColorValue(color).hsl.l, 0) / colors.length;
+    expect(average(dark)).toBeLessThan(average(light) - 20);
+    expect(closestColorIndex(dark[7], dark)).toBe(7);
   });
 });
 

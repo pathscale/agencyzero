@@ -109,6 +109,29 @@ describe("cost warning settings", () => {
 });
 
 describe("appearance settings", () => {
+  it("stores the literal dark wheel value and rebases the same petal in light mode", async () => {
+    const screen = await mountSettings();
+    const darkSwatches = Array.from(
+      screen.container.querySelectorAll<HTMLInputElement>('input[name="surface-colour"]'),
+    );
+    expect(darkSwatches).toHaveLength(31);
+
+    const darkHex = darkSwatches[0].value;
+    fireEvent.click(darkSwatches[0]);
+    await waitFor(() => expect(screen.workspace.state.settings?.theme.surface).toBe(darkHex));
+    expect(darkSwatches[0].checked).toBe(true);
+
+    fireEvent.click(screen.getByRole("button", { name: "Light" }));
+    await waitFor(() => expect(screen.workspace.state.settings?.theme.surface).not.toBe(darkHex));
+    expect(
+      Array.from(
+        screen.container.querySelectorAll<HTMLInputElement>('input[name="surface-colour"]'),
+      ).some((input) => input.checked),
+    ).toBe(true);
+
+    fireEvent.click(screen.getByRole("button", { name: "Dark" }));
+  });
+
   it("offers curated accents without opening a colour input", async () => {
     const screen = await mountSettings();
 

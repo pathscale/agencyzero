@@ -25,6 +25,7 @@ const zh = {
     softnessHint: "表面偏离配色边缘的程度",
     textBrightness: "文字亮度",
     textBrightnessHint: "文字与表面的对比程度",
+    surfaceColour: "表面颜色",
     accentColour: "强调色",
     accentColourHint: "独立于工作区表面颜色",
     designedYellow: "设计默认黄色强调色",

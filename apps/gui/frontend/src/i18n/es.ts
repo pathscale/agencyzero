@@ -25,6 +25,7 @@ const es = {
     softnessHint: "cuánto se alejan las superficies del borde de la paleta",
     textBrightness: "Brillo del texto",
     textBrightnessHint: "cuánto destaca el texto sobre la superficie",
+    surfaceColour: "Color de superficie",
     accentColour: "Color de acento",
     accentColourHint: "independiente del color de las superficies",
     designedYellow: "Acento amarillo del diseño",

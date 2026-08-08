@@ -7,11 +7,9 @@ import type { ThemeSettings } from "~/types";
  * The stylesheet separates `--az-surface` from `--color-primary`, so the
  * workspace wash and the interactive accent can have unrelated bases.
  *
- * Deliberately *not* `@pathscale/ui`'s own `createHueShiftStore`, though the
- * wheel this drives is theirs. That store writes `--color-base-*` against
- * NoFilter's anchors. AgencyZero keeps its own surface ladder and exposes the
- * conventional light/dark `data-theme` only so the wheel renders the matching
- * swatch set.
+ * Deliberately *not* `@pathscale/ui`'s own `createHueShiftStore` or contrast
+ * palette. Those write NoFilter's base tokens and brighten dark-mode swatches;
+ * AgencyZero needs literal dark-oriented values feeding its own surface ladder.
  */
 
 /** The palette's own accent, for when the setting is empty. Matches `theme.css`. */
@@ -25,13 +23,33 @@ export interface AccentOption {
 }
 
 /**
+ * The 31 literal wheel values, from the outside ring to the centre.
+ *
+ * These are intentionally *not* the upstream wheel's contrast palettes. Its
+ * dark-theme set is pastel so the dots pop against black; the owner wants the
+ * chosen colours themselves to be dark-oriented. Every button displays and
+ * stores the same generated hex, so selection can never drift from its swatch.
+ */
+export function surfaceColors(mode: "light" | "dark"): string[] {
+  const ringHues = [42, 24, 4, 336, 300, 268, 238, 210, 184, 162, 132, 94];
+  const innerHues = [30, 330, 270, 210, 150, 90];
+  const levels = mode === "dark" ? [28, 40, 52] : [52, 66, 80];
+  return [
+    ...ringHues.map((hue) => hslToHex(hue, 72, levels[0])),
+    ...ringHues.map((hue) => hslToHex(hue, 68, levels[1])),
+    ...innerHues.map((hue) => hslToHex(hue, 55, levels[2])),
+    mode === "dark" ? "#30343b" : "#f1f3f5",
+  ];
+}
+
+/**
  * Seven accents that stay legible on the selected workspace background.
  *
  * The surface wheel remains the expressive control. Accent is intentionally a
  * small palette: six harmonies around the selected surface hue plus the
- * product's designed yellow. Dark mode gets bright controls and light mode gets
- * dark controls, so every option reads as an action rather than another patch
- * of background colour.
+ * product's designed yellow. Softness moves the accents visibly toward the
+ * middle from opposite sides in light and dark mode, while strength controls
+ * saturation.
  */
 export function accentOptions(
   surface: string,
@@ -42,8 +60,8 @@ export function accentOptions(
   const base = toColorValue(isAccent(surface) ? surface : DEFAULT_ACCENT).hsl.h;
   const strength = Math.min(Math.max(wash, 0), 100) / 100;
   const lift = Math.min(Math.max(softness, 0), MAX_SOFTNESS);
-  const saturation = 52 + strength * 38;
-  const lightness = mode === "light" ? 42 - lift * 0.5 : 62 + lift * 0.65;
+  const saturation = 46 + strength * 36;
+  const lightness = mode === "light" ? 52 - lift * 1.5 : 48 + lift * 1.7;
   const harmonies = [0, 35, 95, 155, 180, 250].map((offset) => {
     const color = hslToHex((base + offset) % 360, saturation, lightness);
     return { value: color, color };
@@ -99,6 +117,25 @@ const HEX = /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i;
 
 export function isAccent(value: string): boolean {
   return HEX.test(value.trim());
+}
+
+/** Nearest literal palette entry for one older or mode-shifted hex value. */
+export function closestColorIndex(value: string, colors: string[]): number {
+  if (!isAccent(value) || colors.length === 0) return -1;
+  const current = toColorValue(value).hsl;
+  let closest = 0;
+  let best = Number.POSITIVE_INFINITY;
+  for (let index = 0; index < colors.length; index += 1) {
+    const candidate = toColorValue(colors[index]).hsl;
+    const rawHue = Math.abs(current.h - candidate.h) % 360;
+    const hue = Math.min(rawHue, 360 - rawHue);
+    const score = hue * 2 + Math.abs(current.s - candidate.s) + Math.abs(current.l - candidate.l);
+    if (score < best) {
+      closest = index;
+      best = score;
+    }
+  }
+  return closest;
 }
 
 /**

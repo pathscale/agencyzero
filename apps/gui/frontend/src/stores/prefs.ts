@@ -126,7 +126,6 @@ createEffect(() => {
 createEffect(() => {
   if (typeof document === "undefined") return;
   document.documentElement.dataset.colorMode = prefs.colorMode;
-  document.documentElement.dataset.theme = prefs.colorMode;
   document.documentElement.style.colorScheme = prefs.colorMode;
 });
 

@@ -11,7 +11,7 @@
  */
 
 @layer theme {
-  [data-agency-theme="agencyzero"] {
+  [data-theme="agencyzero"] {
     color-scheme: only dark;
 
     /*
@@ -121,7 +121,7 @@
    * theme. Accent, wash and comfort axes still apply; surfaces subtract lift
    * while text adds damp so both modes soften toward the middle.
    */
-  [data-agency-theme="agencyzero"][data-color-mode="light"] {
+  [data-theme="agencyzero"][data-color-mode="light"] {
     color-scheme: only light;
     --az-sheen: 17 24 39;
 
@@ -573,7 +573,7 @@
  * Keep their light counterparts outside that layer too, or the unlayered dark
  * values win the cascade even when the root carries `data-color-mode=light`.
  */
-[data-agency-theme="agencyzero"][data-color-mode="light"] {
+[data-theme="agencyzero"][data-color-mode="light"] {
   /* Tailwind's `white/N` utilities are translucent chrome in this app. */
   --color-white: #111827;
 

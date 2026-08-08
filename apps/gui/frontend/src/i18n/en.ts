@@ -25,6 +25,7 @@ const en = {
     softnessHint: "how far the surfaces move from the palette edge",
     textBrightness: "Text brightness",
     textBrightnessHint: "how far the text rises off the surface",
+    surfaceColour: "Surface colour",
     accentColour: "Accent colour",
     accentColourHint: "independent from the workspace surface colour",
     designedYellow: "Designed yellow accent",
