@@ -46,6 +46,7 @@ const en = {
   Connected: "Connected",
   Unavailable: "Unavailable",
   "live runs": "live runs",
+  "live run": "live run",
   loading: "loading",
   Executable: "Executable",
   "a selection takes effect when you restart the idle sidecar":
@@ -56,6 +57,7 @@ const en = {
   Start: "Start",
   "Stopping…": "Stopping…",
   "Waiting for {count} live runs to finish": "Waiting for {count} live runs to finish",
+  "Waiting for 1 live run to finish": "Waiting for 1 live run to finish",
   "Terminating live runs before restart": "Terminating live runs before restart",
   "Wait & restart": "Wait & restart",
   "Terminate & restart": "Terminate & restart",

@@ -12,6 +12,7 @@ use agency_proxy_protocol::{
 use agent_abstraction::{Decision, Event, Outcome};
 use serde::Serialize;
 use std::{
+    fs::OpenOptions,
     path::{Path, PathBuf},
     process::{Command, Stdio},
     sync::{
@@ -54,6 +55,7 @@ pub struct AgencyProxy {
     configured_binary: std::sync::RwLock<Option<PathBuf>>,
     start_gate: Mutex<()>,
     connection_state: Arc<AtomicU8>,
+    failure_detail: std::sync::RwLock<Option<String>>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -71,10 +73,11 @@ impl AgencyProxy {
     #[must_use]
     pub fn new(config_dir: &Path, configured_binary: Option<PathBuf>) -> Self {
         Self {
-            socket_path: config_dir.join("agency-proxy/runtime.sock"),
+            socket_path: proxy_socket_path(config_dir),
             configured_binary: std::sync::RwLock::new(configured_binary),
             start_gate: Mutex::new(()),
             connection_state: Arc::new(AtomicU8::new(ConnectionState::Cold as u8)),
+            failure_detail: std::sync::RwLock::new(None),
         }
     }
 
@@ -206,20 +209,27 @@ impl AgencyProxy {
             .write()
             .map_err(|_| "AgencyProxy configuration is unavailable".to_string())? =
             configured_binary;
+        self.clear_failure();
         self.set_connection_state(ConnectionState::Cold);
         self.status().await
     }
 
-    /// Stop an idle daemon and keep it stopped until an explicit restart.
-    pub async fn stop_if_idle(&self) -> Result<Status, String> {
+    /// Close admission, let every live run finish, then keep the daemon stopped.
+    pub async fn stop(&self) -> Result<Status, String> {
         let client = self.connect().await?;
-        match client
-            .request(ClientMessage::ShutdownIfIdle)
-            .await
-            .map_err(|error| error.to_string())?
-        {
-            ServerResponse::Accepted => {}
-            response => return Err(response_error(response)),
+        if client.version().minor >= 3 {
+            match client
+                .request(ClientMessage::Shutdown {
+                    mode: ShutdownMode::Drain,
+                })
+                .await
+                .map_err(|error| error.to_string())?
+            {
+                ServerResponse::Accepted => {}
+                response => return Err(response_error(response)),
+            }
+        } else {
+            shutdown_legacy_proxy(&client, ShutdownMode::Drain).await?;
         }
         self.set_connection_state(ConnectionState::Stopped);
         drop(client);
@@ -261,7 +271,7 @@ impl AgencyProxy {
     async fn connect(&self) -> Result<Client, String> {
         match self.connection_state() {
             ConnectionState::Crashed => {
-                return Err("AgencyProxy stopped unexpectedly; start it from Settings".into());
+                return Err(self.failure_message());
             }
             ConnectionState::Stopped => {
                 return Err("AgencyProxy is stopped; start it from Settings".into());
@@ -269,6 +279,7 @@ impl AgencyProxy {
             ConnectionState::Cold | ConnectionState::Live => {}
         }
         if let Ok(client) = Client::connect(&self.socket_path).await {
+            self.clear_failure();
             self.set_connection_state(ConnectionState::Live);
             return Ok(client);
         }
@@ -276,7 +287,7 @@ impl AgencyProxy {
         let state = self.connection_state();
         match state {
             ConnectionState::Crashed => {
-                return Err("AgencyProxy stopped unexpectedly; start it from Settings".into());
+                return Err(self.failure_message());
             }
             ConnectionState::Stopped => {
                 return Err("AgencyProxy is stopped; start it from Settings".into());
@@ -287,12 +298,14 @@ impl AgencyProxy {
         // while this one waited for the gate. Re-probe before deciding a
         // previously live daemon has really disappeared.
         if let Ok(client) = Client::connect(&self.socket_path).await {
+            self.clear_failure();
             self.set_connection_state(ConnectionState::Live);
             return Ok(client);
         }
         if state == ConnectionState::Live {
-            self.set_connection_state(ConnectionState::Crashed);
-            return Err("AgencyProxy stopped unexpectedly; start it from Settings".into());
+            return Err(self.record_failure(
+                "AgencyProxy stopped unexpectedly; start it from Settings".into(),
+            ));
         }
         debug_assert!(state.may_spawn());
         let configured_binary = self
@@ -305,32 +318,52 @@ impl AgencyProxy {
             std::fs::create_dir_all(parent).map_err(|error| {
                 format!("could not create AgencyProxy runtime directory: {error}")
             })?;
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                std::fs::set_permissions(parent, std::fs::Permissions::from_mode(0o700)).map_err(
+                    |error| format!("could not secure AgencyProxy runtime directory: {error}"),
+                )?;
+            }
         }
-        if let Err(error) = Command::new(&binary)
+        let output_path = self.socket_path.with_file_name("agency-proxy.log");
+        let captured = OpenOptions::new()
+            .create(true)
+            .write(true)
+            .truncate(true)
+            .open(&output_path)
+            .ok();
+        let mut command = Command::new(&binary);
+        command
             .arg("--socket")
             .arg(&self.socket_path)
-            .stdin(Stdio::null())
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .spawn()
-        {
-            self.set_connection_state(ConnectionState::Crashed);
-            return Err(format!("could not start {}: {error}", binary.display()));
+            .stdin(Stdio::null());
+        if let Some(stderr) = captured {
+            command.stdout(
+                stderr
+                    .try_clone()
+                    .map_or_else(|_| Stdio::null(), Stdio::from),
+            );
+            command.stderr(Stdio::from(stderr));
+        } else {
+            command.stdout(Stdio::null()).stderr(Stdio::null());
+        }
+        if let Err(error) = command.spawn() {
+            return Err(
+                self.record_failure(format!("could not start {}: {error}", binary.display()))
+            );
         }
         for _ in 0..50 {
             match Client::connect(&self.socket_path).await {
                 Ok(client) => {
+                    self.clear_failure();
                     self.set_connection_state(ConnectionState::Live);
                     return Ok(client);
                 }
                 Err(_) => tokio::time::sleep(Duration::from_millis(50)).await,
             }
         }
-        self.set_connection_state(ConnectionState::Crashed);
-        Err(format!(
-            "AgencyProxy did not become ready at {}",
-            self.socket_path.display()
-        ))
+        Err(self.record_failure(proxy_startup_failure(&output_path, &self.socket_path)))
     }
 
     fn connection_state(&self) -> ConnectionState {
@@ -339,6 +372,28 @@ impl AgencyProxy {
 
     fn set_connection_state(&self, state: ConnectionState) {
         self.connection_state.store(state as u8, Ordering::Release);
+    }
+
+    fn record_failure(&self, detail: String) -> String {
+        if let Ok(mut stored) = self.failure_detail.write() {
+            *stored = Some(detail.clone());
+        }
+        self.set_connection_state(ConnectionState::Crashed);
+        detail
+    }
+
+    fn clear_failure(&self) {
+        if let Ok(mut stored) = self.failure_detail.write() {
+            *stored = None;
+        }
+    }
+
+    fn failure_message(&self) -> String {
+        self.failure_detail
+            .read()
+            .ok()
+            .and_then(|stored| stored.clone())
+            .unwrap_or_else(|| "AgencyProxy stopped unexpectedly; start it from Settings".into())
     }
 
     fn status_with_runs(
@@ -375,6 +430,45 @@ impl AgencyProxy {
         )?
         .to_string_lossy()
         .into_owned())
+    }
+}
+
+/// Keep the readable per-profile path when Unix can carry it. macOS caps a
+/// Unix-domain socket pathname at 103 bytes plus its terminator, which the
+/// Experimental bundle id exceeds under `~/Library/Application Support`.
+/// Only that overlong case moves to a deterministic owner-only temp directory,
+/// so existing System and Dev daemons keep their established endpoints.
+fn proxy_socket_path(config_dir: &Path) -> PathBuf {
+    const SAFE_SOCKET_BYTES: usize = 100;
+
+    let direct = config_dir.join("agency-proxy/runtime.sock");
+    if direct.as_os_str().as_encoded_bytes().len() <= SAFE_SOCKET_BYTES {
+        return direct;
+    }
+
+    let mut hash = 0xcbf2_9ce4_8422_2325_u64;
+    for byte in config_dir.as_os_str().as_encoded_bytes() {
+        hash ^= u64::from(*byte);
+        hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
+    }
+    std::env::temp_dir()
+        .join(format!("azp-{hash:016x}"))
+        .join("runtime.sock")
+}
+
+fn proxy_startup_failure(output_path: &Path, socket_path: &Path) -> String {
+    let base = format!(
+        "AgencyProxy did not become ready at {}",
+        socket_path.display()
+    );
+    let Ok(output) = std::fs::read_to_string(output_path) else {
+        return base;
+    };
+    let output = output.trim();
+    if output.is_empty() {
+        base
+    } else {
+        format!("{base}: {output}")
     }
 }
 
@@ -684,7 +778,8 @@ fn decode<T: serde::de::DeserializeOwned>(
 
 #[cfg(test)]
 mod tests {
-    use super::ConnectionState;
+    use super::{AgencyProxy, ConnectionState, proxy_socket_path, proxy_startup_failure};
+    use std::path::Path;
 
     #[test]
     fn only_a_cold_proxy_may_be_started_automatically() {
@@ -692,5 +787,57 @@ mod tests {
         assert!(!ConnectionState::Live.may_spawn());
         assert!(!ConnectionState::Crashed.may_spawn());
         assert!(!ConnectionState::Stopped.may_spawn());
+    }
+
+    #[test]
+    fn a_crash_keeps_the_specific_failure_for_settings_and_later_calls() {
+        let proxy = AgencyProxy::new(Path::new("/tmp/agency-proxy-failure-detail"), None);
+        proxy.record_failure("socket bind failed: operation not permitted".into());
+        assert_eq!(
+            proxy.failure_message(),
+            "socket bind failed: operation not permitted"
+        );
+    }
+
+    #[test]
+    fn startup_failure_includes_the_sidecars_captured_error() {
+        let dir =
+            std::env::temp_dir().join(format!("agency-proxy-startup-error-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).expect("create temp directory");
+        let output = dir.join("agency-proxy.log");
+        std::fs::write(&output, "could not bind socket: operation not permitted\n")
+            .expect("write captured output");
+
+        let message = proxy_startup_failure(&output, &dir.join("runtime.sock"));
+        assert!(message.contains("did not become ready"));
+        assert!(message.contains("operation not permitted"));
+    }
+
+    #[test]
+    fn a_short_profile_keeps_its_readable_socket_path() {
+        let config = Path::new("/tmp/agencyzero-dev");
+        assert_eq!(
+            proxy_socket_path(config),
+            config.join("agency-proxy/runtime.sock")
+        );
+    }
+
+    #[test]
+    fn an_overlong_profile_gets_a_short_stable_distinct_socket_path() {
+        let experimental = Path::new(
+            "/Users/example/Library/Application Support/com.pathscale.agencyzero.experimental",
+        );
+        let another = Path::new(
+            "/Users/example/Library/Application Support/com.pathscale.agencyzero.experimental-two",
+        );
+        let first = proxy_socket_path(experimental);
+
+        assert_eq!(first, proxy_socket_path(experimental));
+        assert_ne!(first, proxy_socket_path(another));
+        assert!(first.as_os_str().as_encoded_bytes().len() <= 100);
+        assert_eq!(
+            first.file_name().and_then(|name| name.to_str()),
+            Some("runtime.sock")
+        );
     }
 }

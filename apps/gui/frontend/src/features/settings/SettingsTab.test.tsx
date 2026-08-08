@@ -1,5 +1,6 @@
 import { fireEvent, render, waitFor } from "@solidjs/testing-library";
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
+import { setMockProxyActiveRuns } from "~/api/mock";
 import { SettingsTab } from "~/features/settings/SettingsTab";
 import { useWorkspace, type Workspace, WorkspaceProvider } from "~/stores/workspace";
 
@@ -22,6 +23,8 @@ async function mountSettings() {
   await waitFor(() => expect(screen.getByText("no study interval has been started")).toBeTruthy());
   return { ...screen, workspace };
 }
+
+beforeEach(() => setMockProxyActiveRuns(0));
 
 describe("PS deployment study settings", () => {
   it("starts off and explains the content boundary", async () => {
@@ -108,6 +111,16 @@ describe("AgencyProxy lifecycle", () => {
     fireEvent.click(start);
     await waitFor(() => expect(screen.getByText("AgencyProxy started")).toBeTruthy());
     expect(screen.workspace.state.agencyProxy?.connected).toBe(true);
+  });
+
+  it("offers graceful Stop during a live run and explains the wait", async () => {
+    setMockProxyActiveRuns(1);
+    const screen = await mountSettings();
+    const stop = await screen.findByRole("button", { name: "Stop" });
+
+    fireEvent.click(stop);
+    expect(screen.getByText("Waiting for 1 live run to finish")).toBeTruthy();
+    await waitFor(() => expect(screen.getByText("AgencyProxy stopped")).toBeTruthy());
   });
 });
 

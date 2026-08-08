@@ -45,6 +45,7 @@ const zh = {
   Connected: "已连接",
   Unavailable: "不可用",
   "live runs": "个实时运行",
+  "live run": "个实时运行",
   loading: "正在加载",
   Executable: "可执行文件",
   "a selection takes effect when you restart the idle sidecar":
@@ -55,6 +56,7 @@ const zh = {
   Start: "启动",
   "Stopping…": "正在停止…",
   "Waiting for {count} live runs to finish": "正在等待 {count} 个运行中的任务完成",
+  "Waiting for 1 live run to finish": "正在等待 1 个运行中的任务完成",
   "Terminating live runs before restart": "正在终止运行中的任务，然后重启",
   "Wait & restart": "等待后重启",
   "Terminate & restart": "终止并重启",

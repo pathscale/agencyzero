@@ -56,6 +56,12 @@ const MOCK_STOPPED_PROXY_STATUS: AgencyProxyStatus = {
   detail: "Stopped by user",
 };
 
+let mockProxyActiveRuns = 0;
+
+export function setMockProxyActiveRuns(count: number): void {
+  mockProxyActiveRuns = count;
+}
+
 function clone<T>(value: T): T {
   return structuredClone(value);
 }
@@ -742,7 +748,7 @@ export function createMockApi(): AgencyZeroApi {
     // No native panel in the preview; the typed path still works.
     chooseProjectDirectory: () => settle(null),
     chooseAgentProxyBinary: () => settle(null),
-    getAgentProxyStatus: () => settle(MOCK_PROXY_STATUS),
+    getAgentProxyStatus: () => settle({ ...MOCK_PROXY_STATUS, activeRuns: mockProxyActiveRuns }),
     restartAgentProxy: () => settle(MOCK_PROXY_STATUS),
     stopAgentProxy: () => settle(MOCK_STOPPED_PROXY_STATUS),
     // A fixed fixture path: the preview has no OS picker to open.
