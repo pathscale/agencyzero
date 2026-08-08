@@ -1,5 +1,5 @@
 import { ColorPickerContext, ColorWheelFlower } from "@pathscale/ui/components/color-wheel-flower";
-import { For, type JSX, Show } from "solid-js";
+import { createEffect, For, type JSX, Show } from "solid-js";
 import {
   accentOptions,
   BRIGHTNESS_STOPS,
@@ -19,9 +19,8 @@ import type { ThemeSettings } from "~/types";
  * shows — it takes its value and its handler from a context rather than props,
  * which is the whole integration. What is *not* reused is that package's
  * `ThemeColorPicker` wrapper: it writes `--color-base-*` against nofilter's own
- * anchors and resolves light/dark by reading `data-theme` for the literal
- * "light"/"dark", so under this app's `data-theme="agencyzero"` it falls back to
- * the OS setting and would paint near-white surfaces over a dark workspace.
+ * anchors. AgencyZero exposes light/dark to the wheel itself, but keeps the
+ * application layer here so those picks drive this app's own surface tokens.
  *
  * The strip beside it is ours. nofilter's greyscale column switches between two
  * themes; there is one theme here, so the column drives the axis that actually
@@ -50,8 +49,9 @@ export function ThemePicker(props: {
     prefs.colorMode === "light"
       ? `oklch(calc(93% - ${softness}%) 0.004 240)`
       : `oklch(calc(10.5% + ${softness}%) 0.004 240)`;
+  const deskStrength = (wash: number) => Math.min(wash * 1.1, 100);
   const deskPreview = (theme: ThemeSettings) =>
-    `color-mix(in oklab, ${theme.surface || DEFAULT_ACCENT} ${theme.wash * 1.1}%, ${deskAnchor(theme.softness)})`;
+    `color-mix(in oklab, ${theme.surface || DEFAULT_ACCENT} ${deskStrength(theme.wash)}%, ${deskAnchor(theme.softness)})`;
 
   return (
     <div class="flex items-start gap-4 px-3.5 py-3">
@@ -86,7 +86,7 @@ export function ThemePicker(props: {
           value={props.theme.wash}
           onPick={props.onWash}
           preview={(stop) =>
-            `color-mix(in oklab, ${props.theme.surface || DEFAULT_ACCENT} ${stop * 1.1}%, ${deskAnchor(props.theme.softness)})`
+            `color-mix(in oklab, ${props.theme.surface || DEFAULT_ACCENT} ${deskStrength(stop)}%, ${deskAnchor(props.theme.softness)})`
           }
           format={(stop) => `${stop}%`}
         />
@@ -98,7 +98,7 @@ export function ThemePicker(props: {
           value={props.theme.softness}
           onPick={props.onSoftness}
           preview={(stop) =>
-            `color-mix(in oklab, ${props.theme.surface || DEFAULT_ACCENT} ${props.theme.wash * 1.1}%, ${deskAnchor(stop)})`
+            `color-mix(in oklab, ${props.theme.surface || DEFAULT_ACCENT} ${deskStrength(props.theme.wash)}%, ${deskAnchor(stop)})`
           }
           format={(stop) => `${Math.round((stop / MAX_SOFTNESS) * 100)}%`}
         />
@@ -127,6 +127,8 @@ export function ThemePicker(props: {
         <AccentSelector
           surface={props.theme.surface || DEFAULT_ACCENT}
           accent={props.theme.accent}
+          wash={props.theme.wash}
+          softness={props.theme.softness}
           onPick={props.onAccent}
         />
       </div>
@@ -138,9 +140,24 @@ export function ThemePicker(props: {
 function AccentSelector(props: {
   surface: string;
   accent: string;
+  wash: number;
+  softness: number;
   onPick: (value: string) => void;
 }): JSX.Element {
-  const options = () => accentOptions(props.surface, prefs.colorMode);
+  const options = () => accentOptions(props.surface, prefs.colorMode, props.wash, props.softness);
+  let previous = options();
+
+  // A palette choice is semantic, not a frozen hex. Keep the same harmony
+  // selected while its rendered colour responds to surface, mode, strength,
+  // and softness. Legacy/custom hex values that match no option are preserved.
+  createEffect(() => {
+    const next = options();
+    const selected = previous.findIndex((option) => option.value === props.accent);
+    if (selected > 0 && next[selected]?.value !== props.accent) {
+      props.onPick(next[selected].value);
+    }
+    previous = next;
+  });
   return (
     <div class="flex flex-col gap-1.5">
       <div class="flex items-baseline gap-2">

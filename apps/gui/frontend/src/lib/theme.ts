@@ -9,11 +9,9 @@ import type { ThemeSettings } from "~/types";
  *
  * Deliberately *not* `@pathscale/ui`'s own `createHueShiftStore`, though the
  * wheel this drives is theirs. That store writes `--color-base-*` against
- * NoFilter's anchors and picks its light/dark set by reading `data-theme` for
- * the literal strings "light" or "dark" — this app's is `agencyzero`, so it
- * falls through to the OS preference and would paint 98%-white surfaces over a
- * dark workspace on any Mac set to Light. The wheel is reusable; its
- * application layer is not.
+ * NoFilter's anchors. AgencyZero keeps its own surface ladder and exposes the
+ * conventional light/dark `data-theme` only so the wheel renders the matching
+ * swatch set.
  */
 
 /** The palette's own accent, for when the setting is empty. Matches `theme.css`. */
@@ -35,11 +33,19 @@ export interface AccentOption {
  * dark controls, so every option reads as an action rather than another patch
  * of background colour.
  */
-export function accentOptions(surface: string, mode: "light" | "dark"): AccentOption[] {
+export function accentOptions(
+  surface: string,
+  mode: "light" | "dark",
+  wash: number,
+  softness: number,
+): AccentOption[] {
   const base = toColorValue(isAccent(surface) ? surface : DEFAULT_ACCENT).hsl.h;
-  const lightness = mode === "light" ? 38 : 68;
+  const strength = Math.min(Math.max(wash, 0), 100) / 100;
+  const lift = Math.min(Math.max(softness, 0), MAX_SOFTNESS);
+  const saturation = 52 + strength * 38;
+  const lightness = mode === "light" ? 42 - lift * 0.5 : 62 + lift * 0.65;
   const harmonies = [0, 35, 95, 155, 180, 250].map((offset) => {
-    const color = hslToHex((base + offset) % 360, 78, lightness);
+    const color = hslToHex((base + offset) % 360, saturation, lightness);
     return { value: color, color };
   });
   return [{ value: "", color: DEFAULT_ACCENT }, ...harmonies];
@@ -66,11 +72,11 @@ const DAMP_RATIO = 0.45;
  * it. nofilter.io mixes 8–11% into its base tiers; the stops below bracket that,
  * with `0` kept reachable because the designed palette is a legitimate choice.
  *
- * Higher than about 20% and the surface ladder stops reading as neutral at all —
- * the desk becomes the accent at low lightness, and the depth cues that separate
- * desk from panel from card collapse into one wash.
+ * The final stop is deliberately literal: at 100% the selected wheel colour is
+ * the surface colour, not an approximation hidden behind another mix. The
+ * intermediate stops keep the useful neutral-to-colour progression.
  */
-export const WASH_STOPS = [0, 6, 10, 14, 20] as const;
+export const WASH_STOPS = [0, 10, 25, 50, 100] as const;
 
 /** What a freshly picked colour washes at, before anyone touches the strength. */
 export const DEFAULT_WASH = 10;

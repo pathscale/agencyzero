@@ -197,17 +197,20 @@ describe("the theme axes", () => {
   });
 
   it("derives every washed surface from its own base colour", () => {
-    expect(CSS.match(/var\(--az-surface\)\s+(?:calc\()?var\(--az-wash\)/g)?.length).toBeGreaterThan(
-      20,
-    );
+    expect(CSS.match(/var\(--az-surface\)[\s\S]{0,80}var\(--az-wash/g)?.length).toBeGreaterThan(20);
     expect(CSS).not.toMatch(/var\(--color-primary\)\s+(?:calc\()?var\(--az-wash\)/);
+    for (const multiplier of ["105", "110", "120"]) {
+      expect(CSS).toContain(`--az-wash-${multiplier}: min(100%`);
+    }
   });
 });
 
 describe("light mode", () => {
   it("overrides the complete surface and text ladder under the root mode selector", () => {
     const rule = [
-      ...CSS.matchAll(/\[data-theme="agencyzero"\]\[data-color-mode="light"\]\s*\{([\s\S]*?)\n\}/g),
+      ...CSS.matchAll(
+        /\[data-agency-theme="agencyzero"\]\[data-color-mode="light"\]\s*\{([\s\S]*?)\n\}/g,
+      ),
     ]
       .map((match) => match[1])
       .join("\n");

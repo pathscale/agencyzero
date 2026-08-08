@@ -120,5 +120,11 @@ describe("appearance settings", () => {
 
     await waitFor(() => expect(screen.workspace.state.settings?.theme.accent).not.toBe(""));
     expect(screen.workspace.state.settings?.theme.surface).toBe("");
+    const initialAccent = screen.workspace.state.settings?.theme.accent;
+
+    fireEvent.click(screen.getByRole("button", { name: "Colour strength 100%" }));
+    await waitFor(() =>
+      expect(screen.workspace.state.settings?.theme.accent).not.toBe(initialAccent),
+    );
   });
 });

@@ -16,10 +16,12 @@ beforeEach(() => {
 });
 
 describe("accentOptions", () => {
-  it("offers seven valid harmonies shaped by surface and mode", () => {
-    const dark = accentOptions("#3355ff", "dark");
-    const light = accentOptions("#3355ff", "light");
-    const green = accentOptions("#22aa66", "dark");
+  it("offers seven valid harmonies shaped by every colour axis", () => {
+    const dark = accentOptions("#3355ff", "dark", 10, 0);
+    const light = accentOptions("#3355ff", "light", 10, 0);
+    const green = accentOptions("#22aa66", "dark", 10, 0);
+    const strong = accentOptions("#3355ff", "dark", 100, 0);
+    const soft = accentOptions("#3355ff", "dark", 100, MAX_SOFTNESS);
 
     expect(dark).toHaveLength(7);
     expect(dark[0]).toEqual({ value: "", color: DEFAULT_ACCENT });
@@ -27,6 +29,8 @@ describe("accentOptions", () => {
     expect(dark.every((option) => isAccent(option.color))).toBe(true);
     expect(light.slice(1)).not.toEqual(dark.slice(1));
     expect(green.slice(1)).not.toEqual(dark.slice(1));
+    expect(strong.slice(1)).not.toEqual(dark.slice(1));
+    expect(soft.slice(1)).not.toEqual(strong.slice(1));
   });
 });
 
@@ -120,8 +124,15 @@ describe("applyTheme", () => {
   });
 
   it("clamps the wash to what the surface ladder survives", () => {
-    applyTheme({ surface: "#3355ff", accent: "", softness: 0, wash: 90, textBrightness: 0 }, root);
+    applyTheme({ surface: "#3355ff", accent: "", softness: 0, wash: 999, textBrightness: 0 }, root);
     expect(root.style.getPropertyValue("--az-wash")).toBe(`${WASH_STOPS[WASH_STOPS.length - 1]}%`);
+  });
+
+  it("includes a literal full-strength surface choice", () => {
+    expect(WASH_STOPS).toContain(100);
+    applyTheme({ surface: "#3355ff", accent: "", softness: 0, wash: 100, textBrightness: 0 }, root);
+    expect(root.style.getPropertyValue("--az-surface")).toBe("#3355ff");
+    expect(root.style.getPropertyValue("--az-wash")).toBe("100%");
   });
 
   /*

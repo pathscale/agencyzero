@@ -45,6 +45,7 @@ describe("the project side panel", () => {
     expect(panel.classList).toContain("h-full");
     expect(panel.classList).toContain("az-scroll");
     expect(panel.classList).toContain("min-h-0");
+    expect(panel.classList).toContain("overflow-y-auto");
   });
 
   it("keeps the lower-token fork action visible without waiting for hover", async () => {

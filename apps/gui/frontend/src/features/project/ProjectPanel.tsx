@@ -46,7 +46,7 @@ export function ProjectPanel(props: { project: Project }): JSX.Element {
   });
 
   return (
-    <div class="az-scroll flex h-full min-h-0 w-[322px] flex-none flex-col gap-2.5">
+    <div class="az-scroll flex h-full min-h-0 w-[322px] flex-none flex-col gap-2.5 overflow-y-auto overscroll-contain">
       <SectionPanel
         icon="list-checks"
         title={tx("Items")}

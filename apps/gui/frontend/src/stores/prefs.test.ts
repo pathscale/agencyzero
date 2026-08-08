@@ -30,6 +30,7 @@ describe("colour mode", () => {
 
     expect(prefs.colorMode).toBe("light");
     expect(document.documentElement.dataset.colorMode).toBe("light");
+    expect(document.documentElement.dataset.theme).toBe("light");
     expect(document.documentElement.style.colorScheme).toBe("light");
 
     setPrefs("colorMode", "dark");

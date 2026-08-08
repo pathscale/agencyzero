@@ -11,7 +11,7 @@
  */
 
 @layer theme {
-  [data-theme="agencyzero"] {
+  [data-agency-theme="agencyzero"] {
     color-scheme: only dark;
 
     /*
@@ -53,6 +53,9 @@
     --az-hue-text: 245;
     --az-damp: 0%;
     --az-wash: 0%;
+    --az-wash-105: min(100%, calc(var(--az-wash) * 1.05));
+    --az-wash-110: min(100%, calc(var(--az-wash) * 1.1));
+    --az-wash-120: min(100%, calc(var(--az-wash) * 1.2));
     --az-surface: #ffee58;
     --az-sheen: 255 255 255;
 
@@ -65,13 +68,13 @@
     /* Desk: the window interior, under the dot grid. */
     --color-base-200: color-mix(
       in oklab,
-      var(--az-surface) calc(var(--az-wash) * 1.1),
+      var(--az-surface) var(--az-wash-110),
       oklch(calc(10.5% + var(--az-lift)) calc(0.004 * var(--az-tint)) var(--az-hue))
     );
     /* Cards: rows and chips sitting on a panel. */
     --color-base-300: color-mix(
       in oklab,
-      var(--az-surface) calc(var(--az-wash) * 1.2),
+      var(--az-surface) var(--az-wash-120),
       oklch(calc(20% + var(--az-lift)) calc(0.008 * var(--az-tint)) var(--az-hue))
     );
     /* Text takes a fraction of the wash — enough to belong to the surface it
@@ -118,7 +121,7 @@
    * theme. Accent, wash and comfort axes still apply; surfaces subtract lift
    * while text adds damp so both modes soften toward the middle.
    */
-  [data-theme="agencyzero"][data-color-mode="light"] {
+  [data-agency-theme="agencyzero"][data-color-mode="light"] {
     color-scheme: only light;
     --az-sheen: 17 24 39;
 
@@ -129,12 +132,12 @@
     );
     --color-base-200: color-mix(
       in oklab,
-      var(--az-surface) calc(var(--az-wash) * 1.1),
+      var(--az-surface) var(--az-wash-110),
       oklch(calc(93% - var(--az-lift)) calc(0.004 * var(--az-tint)) var(--az-hue))
     );
     --color-base-300: color-mix(
       in oklab,
-      var(--az-surface) calc(var(--az-wash) * 1.2),
+      var(--az-surface) var(--az-wash-120),
       oklch(calc(89% - var(--az-lift)) calc(0.008 * var(--az-tint)) var(--az-hue))
     );
     --color-base-content: color-mix(
@@ -216,17 +219,17 @@
    */
   --color-az-void: color-mix(
     in oklab,
-    var(--az-surface) calc(var(--az-wash) * 1.2),
+    var(--az-surface) var(--az-wash-120),
     oklch(calc(8% + var(--az-lift)) calc(0.003 * var(--az-tint)) var(--az-hue))
   );
   --color-az-desk: color-mix(
     in oklab,
-    var(--az-surface) calc(var(--az-wash) * 1.1),
+    var(--az-surface) var(--az-wash-110),
     oklch(calc(10.5% + var(--az-lift)) calc(0.004 * var(--az-tint)) var(--az-hue))
   );
   --color-az-inset: color-mix(
     in oklab,
-    var(--az-surface) calc(var(--az-wash) * 1.05),
+    var(--az-surface) var(--az-wash-105),
     oklch(calc(12.5% + var(--az-lift)) calc(0.005 * var(--az-tint)) var(--az-hue))
   );
   --color-az-tab: color-mix(
@@ -239,7 +242,7 @@
    * badge pill. Same ladder, now named. */
   --color-az-sunken: color-mix(
     in oklab,
-    var(--az-surface) calc(var(--az-wash) * 1.05),
+    var(--az-surface) var(--az-wash-105),
     oklch(calc(13% + var(--az-lift)) calc(0.004 * var(--az-tint)) var(--az-hue))
   );
   --color-az-hover: color-mix(
@@ -249,7 +252,7 @@
   );
   --color-az-badge: color-mix(
     in oklab,
-    var(--az-surface) calc(var(--az-wash) * 1.2),
+    var(--az-surface) var(--az-wash-120),
     oklch(calc(24% + var(--az-lift)) calc(0.01 * var(--az-tint)) var(--az-hue))
   );
 
@@ -301,12 +304,12 @@
    */
   --color-az-bubble: color-mix(
     in oklab,
-    var(--az-surface) calc(var(--az-wash) * 1.2),
+    var(--az-surface) var(--az-wash-120),
     oklch(calc(23.5% + var(--az-lift)) calc(0.008 * var(--az-tint)) var(--az-hue))
   );
   --color-az-bubble-edge: color-mix(
     in oklab,
-    var(--az-surface) calc(var(--az-wash) * 1.1),
+    var(--az-surface) var(--az-wash-110),
     oklch(calc(28.5% + var(--az-lift)) calc(0.008 * var(--az-tint)) var(--az-hue))
   );
   --color-az-bubble-text: color-mix(
@@ -570,7 +573,7 @@
  * Keep their light counterparts outside that layer too, or the unlayered dark
  * values win the cascade even when the root carries `data-color-mode=light`.
  */
-[data-theme="agencyzero"][data-color-mode="light"] {
+[data-agency-theme="agencyzero"][data-color-mode="light"] {
   /* Tailwind's `white/N` utilities are translucent chrome in this app. */
   --color-white: #111827;
 
@@ -604,17 +607,17 @@
 
   --color-az-void: color-mix(
     in oklab,
-    var(--az-surface) calc(var(--az-wash) * 1.2),
+    var(--az-surface) var(--az-wash-120),
     oklch(calc(88% - var(--az-lift)) 0.003 var(--az-hue))
   );
   --color-az-desk: color-mix(
     in oklab,
-    var(--az-surface) calc(var(--az-wash) * 1.1),
+    var(--az-surface) var(--az-wash-110),
     oklch(calc(93% - var(--az-lift)) 0.004 var(--az-hue))
   );
   --color-az-inset: color-mix(
     in oklab,
-    var(--az-surface) calc(var(--az-wash) * 1.05),
+    var(--az-surface) var(--az-wash-105),
     oklch(calc(96% - var(--az-lift)) 0.005 var(--az-hue))
   );
   --color-az-tab: oklch(calc(96% - var(--az-lift)) 0.006 var(--az-hue));
@@ -624,7 +627,7 @@
 
   --color-az-bubble: color-mix(
     in oklab,
-    var(--az-surface) calc(var(--az-wash) * 1.2),
+    var(--az-surface) var(--az-wash-120),
     oklch(calc(91% - var(--az-lift)) 0.008 var(--az-hue))
   );
   --color-az-bubble-edge: oklch(calc(82% - var(--az-lift)) 0.008 var(--az-hue));

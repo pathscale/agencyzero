@@ -9,10 +9,11 @@ import { i18n } from "./stores/i18n";
 // Without a driver, every @pathscale/ui animation snaps to its end state.
 enablePopmotion(animate);
 
-// One AgencyZero token system with a persisted light/dark axis. The preference
-// effect supplies `data-color-mode`; `data-theme` remains the stable identity
-// @pathscale/ui and Tailwind resolve against.
-document.documentElement.setAttribute("data-theme", "agencyzero");
+// AgencyZero owns the token system; third-party controls still need the
+// conventional light/dark theme name. The preference effect keeps `data-theme`
+// and `data-color-mode` in sync, while this stable attribute scopes our CSS.
+document.documentElement.setAttribute("data-agency-theme", "agencyzero");
+document.documentElement.setAttribute("data-theme", "dark");
 void i18n.init();
 
 const root = document.getElementById("root");
