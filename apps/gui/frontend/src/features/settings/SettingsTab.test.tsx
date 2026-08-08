@@ -109,15 +109,16 @@ describe("cost warning settings", () => {
 });
 
 describe("appearance settings", () => {
-  it("changes the interactive accent without changing the surface base", async () => {
+  it("offers curated accents without opening a colour input", async () => {
     const screen = await mountSettings();
-    const picker = screen.getByLabelText("Choose a custom accent colour") as HTMLInputElement;
 
     expect(screen.workspace.state.settings?.theme.surface).toBe("");
     expect(screen.workspace.state.settings?.theme.accent).toBe("");
-    fireEvent.input(picker, { target: { value: "#3355ff" } });
+    expect(screen.container.querySelector('input[type="color"]')).toBeNull();
+    expect(screen.getAllByRole("button", { name: /accent/i })).toHaveLength(7);
+    fireEvent.click(screen.getByRole("button", { name: "Accent colour 2" }));
 
-    await waitFor(() => expect(screen.workspace.state.settings?.theme.accent).toBe("#3355ff"));
+    await waitFor(() => expect(screen.workspace.state.settings?.theme.accent).not.toBe(""));
     expect(screen.workspace.state.settings?.theme.surface).toBe("");
   });
 });

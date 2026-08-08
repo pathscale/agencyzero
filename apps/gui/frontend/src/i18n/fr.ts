@@ -28,8 +28,6 @@ const fr = {
     accentColour: "Couleur d’accent",
     accentColourHint: "indépendante de la couleur des surfaces",
     designedYellow: "Accent jaune du design",
-    matchSurface: "Utiliser la couleur de surface",
-    customAccent: "Choisir une couleur d’accent personnalisée",
     reset: "Réinitialiser",
     resetHint: "revient à l’accent jaune et aux surfaces par défaut",
     resetButton: "Utiliser les valeurs par défaut",

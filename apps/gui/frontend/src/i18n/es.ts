@@ -28,8 +28,6 @@ const es = {
     accentColour: "Color de acento",
     accentColourHint: "independiente del color de las superficies",
     designedYellow: "Acento amarillo del diseño",
-    matchSurface: "Igualar el color de la superficie",
-    customAccent: "Elegir un color de acento personalizado",
     reset: "Restablecer",
     resetHint: "vuelve al acento amarillo y a las superficies predeterminadas",
     resetButton: "Usar valores predeterminados",

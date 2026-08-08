@@ -1,6 +1,7 @@
 import { ColorPickerContext, ColorWheelFlower } from "@pathscale/ui/components/color-wheel-flower";
 import { For, type JSX, Show } from "solid-js";
 import {
+  accentOptions,
   BRIGHTNESS_STOPS,
   DEFAULT_ACCENT,
   MAX_SOFTNESS,
@@ -139,8 +140,7 @@ function AccentSelector(props: {
   accent: string;
   onPick: (value: string) => void;
 }): JSX.Element {
-  const resolved = () => props.accent || DEFAULT_ACCENT;
-  const matchesSurface = () => props.accent !== "" && props.accent === props.surface;
+  const options = () => accentOptions(props.surface, prefs.colorMode);
   return (
     <div class="flex flex-col gap-1.5">
       <div class="flex items-baseline gap-2">
@@ -150,45 +150,30 @@ function AccentSelector(props: {
         <span class="text-[11px] text-az-faint">{t("appearance.accentColourHint")}</span>
       </div>
       <div class="flex items-center gap-2">
-        <button
-          type="button"
-          aria-label={t("appearance.designedYellow")}
-          aria-pressed={props.accent === ""}
-          onClick={() => props.onPick("")}
-          class="size-7 rounded-full border-2 transition-colors"
-          classList={{
-            "border-primary": props.accent === "",
-            "border-az-hairline-strong": props.accent !== "",
+        <For each={options()}>
+          {(option, index) => {
+            const selected = () => props.accent === option.value;
+            const label = () =>
+              index() === 0
+                ? t("appearance.designedYellow")
+                : `${t("appearance.accentColour")} ${index() + 1}`;
+            return (
+              <button
+                type="button"
+                aria-label={label()}
+                title={label()}
+                aria-pressed={selected()}
+                onClick={() => props.onPick(option.value)}
+                class="size-7 rounded-full border-2 transition-colors"
+                classList={{
+                  "border-primary": selected(),
+                  "border-az-hairline-strong hover:border-primary": !selected(),
+                }}
+                style={{ "background-color": option.color }}
+              />
+            );
           }}
-          style={{ "background-color": DEFAULT_ACCENT }}
-        />
-        <button
-          type="button"
-          aria-label={t("appearance.matchSurface")}
-          aria-pressed={matchesSurface()}
-          onClick={() => props.onPick(props.surface)}
-          class="flex size-7 items-center justify-center rounded-full border-2 font-semibold text-[10px] transition-colors"
-          classList={{
-            "border-primary": matchesSurface(),
-            "border-az-hairline-strong": !matchesSurface(),
-          }}
-          style={{ "background-color": props.surface, color: "#111111" }}
-        >
-          S
-        </button>
-        <label
-          class="relative size-7 cursor-pointer overflow-hidden rounded-full border-2 border-az-hairline-strong transition-colors hover:border-primary"
-          style={{ "background-color": resolved() }}
-        >
-          <span class="sr-only">{t("appearance.customAccent")}</span>
-          <input
-            type="color"
-            aria-label={t("appearance.customAccent")}
-            value={resolved()}
-            onInput={(event) => props.onPick(event.currentTarget.value)}
-            class="absolute inset-0 size-full cursor-pointer opacity-0"
-          />
-        </label>
+        </For>
       </div>
     </div>
   );

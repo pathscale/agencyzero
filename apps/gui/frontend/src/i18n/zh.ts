@@ -28,8 +28,6 @@ const zh = {
     accentColour: "强调色",
     accentColourHint: "独立于工作区表面颜色",
     designedYellow: "设计默认黄色强调色",
-    matchSurface: "匹配表面颜色",
-    customAccent: "选择自定义强调色",
     reset: "重置",
     resetHint: "恢复黄色强调色和默认表面设置",
     resetButton: "使用默认值",

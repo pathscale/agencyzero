@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import {
+  accentOptions,
   applyTheme,
   DEFAULT_ACCENT,
   isAccent,
@@ -12,6 +13,21 @@ let root: HTMLElement;
 
 beforeEach(() => {
   root = document.createElement("div");
+});
+
+describe("accentOptions", () => {
+  it("offers seven valid harmonies shaped by surface and mode", () => {
+    const dark = accentOptions("#3355ff", "dark");
+    const light = accentOptions("#3355ff", "light");
+    const green = accentOptions("#22aa66", "dark");
+
+    expect(dark).toHaveLength(7);
+    expect(dark[0]).toEqual({ value: "", color: DEFAULT_ACCENT });
+    expect(new Set(dark.map((option) => option.color)).size).toBe(7);
+    expect(dark.every((option) => isAccent(option.color))).toBe(true);
+    expect(light.slice(1)).not.toEqual(dark.slice(1));
+    expect(green.slice(1)).not.toEqual(dark.slice(1));
+  });
 });
 
 describe("applyTheme", () => {

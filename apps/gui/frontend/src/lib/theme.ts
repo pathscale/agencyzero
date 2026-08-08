@@ -19,6 +19,32 @@ import type { ThemeSettings } from "~/types";
 /** The palette's own accent, for when the setting is empty. Matches `theme.css`. */
 export const DEFAULT_ACCENT = "#ffee58";
 
+/** One curated control accent shown beside the surface controls. */
+export interface AccentOption {
+  /** Empty preserves the designed palette rather than storing its current hex. */
+  value: string;
+  color: string;
+}
+
+/**
+ * Seven accents that stay legible on the selected workspace background.
+ *
+ * The surface wheel remains the expressive control. Accent is intentionally a
+ * small palette: six harmonies around the selected surface hue plus the
+ * product's designed yellow. Dark mode gets bright controls and light mode gets
+ * dark controls, so every option reads as an action rather than another patch
+ * of background colour.
+ */
+export function accentOptions(surface: string, mode: "light" | "dark"): AccentOption[] {
+  const base = toColorValue(isAccent(surface) ? surface : DEFAULT_ACCENT).hsl.h;
+  const lightness = mode === "light" ? 38 : 68;
+  const harmonies = [0, 35, 95, 155, 180, 250].map((offset) => {
+    const color = hslToHex((base + offset) % 360, 78, lightness);
+    return { value: color, color };
+  });
+  return [{ value: "", color: DEFAULT_ACCENT }, ...harmonies];
+}
+
 /**
  * How far the softness axis may travel, in oklch percentage points.
  *
@@ -157,6 +183,35 @@ export function toColorValue(hex: string): ColorValue {
     hsl: { h: hue, s: saturation * 100, l: l * 100, a: 1 },
     hex: `#${full}`,
   };
+}
+
+/** Convert one generated HSL harmony to the persisted `#rrggbb` shape. */
+function hslToHex(hue: number, saturation: number, lightness: number): string {
+  const s = saturation / 100;
+  const l = lightness / 100;
+  const chroma = (1 - Math.abs(2 * l - 1)) * s;
+  const sector = hue / 60;
+  const x = chroma * (1 - Math.abs((sector % 2) - 1));
+  const [r1, g1, b1] =
+    sector < 1
+      ? [chroma, x, 0]
+      : sector < 2
+        ? [x, chroma, 0]
+        : sector < 3
+          ? [0, chroma, x]
+          : sector < 4
+            ? [0, x, chroma]
+            : sector < 5
+              ? [x, 0, chroma]
+              : [chroma, 0, x];
+  const match = l - chroma / 2;
+  return `#${[r1, g1, b1]
+    .map((channel) =>
+      Math.round((channel + match) * 255)
+        .toString(16)
+        .padStart(2, "0"),
+    )
+    .join("")}`;
 }
 
 /**

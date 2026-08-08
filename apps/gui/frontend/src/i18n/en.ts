@@ -28,8 +28,6 @@ const en = {
     accentColour: "Accent colour",
     accentColourHint: "independent from the workspace surface colour",
     designedYellow: "Designed yellow accent",
-    matchSurface: "Match the surface colour",
-    customAccent: "Choose a custom accent colour",
     reset: "Reset",
     resetHint: "back to the designed yellow accent and default surface settings",
     resetButton: "Use the default",

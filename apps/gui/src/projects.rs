@@ -1089,7 +1089,7 @@ fn agent_session_key(project_id: &str, agent: Agent) -> String {
 
 /// Whether a failed run proved that its persisted resume pointer is unusable.
 ///
-/// A deliberate stop before the first provider event says nothing about the
+/// A deliberate stop before the first real turn event says nothing about the
 /// session, so it keeps the pointer. An idle timeout or a rejected live steer
 /// does: the resumed process accepted neither the opening prompt nor the
 /// follow-up. Retrying that same pointer only repeats the dead wait.
@@ -1102,6 +1102,19 @@ fn should_forget_unresponsive_resume(
     resume.is_some_and(|session| !session.is_empty())
         && !opening_message_read
         && (stalled_injection || idle_stalled)
+}
+
+/// Whether this event proves the provider's actual turn can accept follow-ups.
+///
+/// Codex app-server reports [`Event::Started`] as soon as the thread is opened,
+/// before `turn/start` has returned a turn id. Treating that setup event as
+/// ready lets a follow-up enter the host queue while `turn/steer` is still
+/// impossible. If the turn never starts, the receipt expires and the host
+/// cancels a session it had already (incorrectly) marked healthy. Other agents'
+/// started events are emitted from their running turn, so their existing
+/// readiness contract stays unchanged.
+fn event_proves_turn_started(agent: Agent, event: &Event) -> bool {
+    agent != Agent::Codex || !matches!(event, Event::Started { .. } | Event::RateLimit(_))
 }
 
 fn agent_wire_name(agent: Agent) -> &'static str {
@@ -4332,6 +4345,7 @@ async fn deliver_injection(
                 } else {
                     format!("the mid-run message could not be delivered: {error}")
                 };
+                crate::log!(crate::log::Level::Warn, "run", "{project_id}: {why}");
                 note_io(app, io, project_id, "received", "error", why);
                 let _ = app.emit(
                     "run:inject_failed",
@@ -5358,7 +5372,16 @@ fn load_rules(tables: &crate::db::tables::Tables, project_id: &str) -> Vec<Strin
 /// become a denial rather than a run that hangs until the agent's own timeout.
 const APPROVAL_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30 * 60);
 
-/// How long a live run may emit *nothing* before it is treated as wedged.
+/// How long a resumed process gets to produce the first real turn event.
+///
+/// Opening a Codex thread is not the same as starting its turn. A poisoned
+/// resume can complete the first step and then wait forever before `turn/start`
+/// returns. Bound that startup separately so the existing fresh-session retry
+/// happens before the owner has to diagnose and reset it by hand.
+const RUN_START_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(45);
+
+/// How long a live run may emit *nothing* after it starts before it is treated
+/// as wedged.
 ///
 /// A run that is working streams constantly — reasoning deltas, text, tool
 /// events — so true silence means the turn is stuck, almost always on a shell
@@ -9784,9 +9807,10 @@ async fn drive_run(
     // it lands. The loop exits, and the tail below tears the agent down.
     let mut cancelled = false;
     let mut stalled_injection = false;
-    // The first provider event proves the opening prompt crossed the process
-    // boundary. A live steer has its own acknowledgement in
-    // `deliver_injection` and does not touch this flag.
+    // The first real turn event proves the opening prompt crossed the process
+    // boundary. Codex's earlier thread-open event deliberately does not. A live
+    // steer has its own acknowledgement in `deliver_injection` and does not
+    // touch this flag.
     let mut opening_message_read = false;
     // Set when the idle deadline trips: a run that went silent long enough to be
     // treated as wedged. Recovered like a stall rather than reported as a crash.
@@ -9800,11 +9824,10 @@ async fn drive_run(
         Inject(InjectedMessage),
     }
 
-    // The idle deadline, as an absolute instant like the approval deadline
-    // below. Pushed forward past every event, so it measures silence since the
-    // last one rather than total run time; a streaming turn never reaches it,
-    // only one emitting nothing at all does.
-    let mut idle_deadline = tokio::time::Instant::now() + RUN_IDLE_TIMEOUT;
+    // Before the turn begins this is an absolute startup bound: thread setup
+    // events do not extend it. After the first real turn event it becomes the
+    // ordinary sliding idle deadline.
+    let mut idle_deadline = tokio::time::Instant::now() + RUN_START_TIMEOUT;
     loop {
         let wake = tokio::select! {
             event = run.recv() => match event {
@@ -9828,16 +9851,21 @@ async fn drive_run(
                 break;
             }
             () = tokio::time::sleep_until(idle_deadline) => {
-                // No event for RUN_IDLE_TIMEOUT: the turn is wedged, almost
-                // always on a shell command that never returns. Tear the run
-                // down so the slot frees and the session can resume, rather than
-                // sit here until the owner notices and hits Stop.
-                crate::log!(
-                    crate::log::Level::Warn,
-                    "run",
-                    "{project_id}: no output for {}s — treating the run as wedged and stopping it",
-                    RUN_IDLE_TIMEOUT.as_secs()
-                );
+                if opening_message_read {
+                    crate::log!(
+                        crate::log::Level::Warn,
+                        "run",
+                        "{project_id}: no output for {}s after turn activity — treating the run as wedged and stopping it",
+                        RUN_IDLE_TIMEOUT.as_secs()
+                    );
+                } else {
+                    crate::log!(
+                        crate::log::Level::Warn,
+                        "run",
+                        "{project_id}: the provider opened but its turn did not start within {}s — stopping it for fresh-session recovery",
+                        RUN_START_TIMEOUT.as_secs()
+                    );
+                }
                 cancelled = true;
                 idle_stalled = true;
                 break;
@@ -9849,12 +9877,12 @@ async fn drive_run(
                 None => continue,
             },
         };
-        // The run is alive: push the idle deadline past this event so only
-        // silence *after* it, not total run time, can trip the timeout.
-        idle_deadline = tokio::time::Instant::now() + RUN_IDLE_TIMEOUT;
         let event = match wake {
             Wake::Event(event) => event,
             Wake::Inject(injected) => {
+                // Injection is exposed only after a real turn event, so this is
+                // activity on an already-started turn.
+                idle_deadline = tokio::time::Instant::now() + RUN_IDLE_TIMEOUT;
                 // A correction typed mid-turn. The user row was persisted and
                 // broadcast by `send_message`. Close the agent text the owner
                 // was replying to before delivering the new words.
@@ -9885,8 +9913,16 @@ async fn drive_run(
                 continue;
             }
         };
-        ready_for_followup.store(true, std::sync::atomic::Ordering::Release);
-        if !opening_message_read {
+        let turn_started = event_proves_turn_started(agent, &event);
+        if turn_started {
+            ready_for_followup.store(true, std::sync::atomic::Ordering::Release);
+        }
+        // Once the turn is real, every provider event extends the ordinary idle
+        // window. Setup events before that point never extend startup.
+        if opening_message_read || turn_started {
+            idle_deadline = tokio::time::Instant::now() + RUN_IDLE_TIMEOUT;
+        }
+        if turn_started && !opening_message_read {
             emit_message_receipt(&app, &project_id, &turn_id, "read");
             app.state::<crate::AppState>()
                 .startup_visibility
@@ -10549,7 +10585,9 @@ async fn drive_run(
             &project_id,
             "sent",
             "cancel",
-            if idle_stalled {
+            if idle_stalled && !opening_message_read {
+                "the provider opened its session but never started the turn — stopping it so the opening message can retry fresh"
+            } else if idle_stalled {
                 "the run went idle with no output for too long, likely wedged on a command that never returns; stopped so the session can resume"
             } else if stalled_injection {
                 "interactive delivery stalled — restarting the run so the queued message can resume the session"
@@ -11889,7 +11927,7 @@ mod tests {
     }
 
     #[test]
-    fn only_recovery_before_the_first_provider_event_forgets_a_resume() {
+    fn only_recovery_before_the_first_turn_event_forgets_a_resume() {
         assert!(should_forget_unresponsive_resume(
             Some("thread-stuck"),
             false,
@@ -11922,6 +11960,20 @@ mod tests {
             true,
             false
         ));
+    }
+
+    #[test]
+    fn codex_thread_open_does_not_mark_the_turn_ready() {
+        let opened = Event::Started {
+            session: "thread-open".into(),
+            model: Some("gpt-5.6-sol".into()),
+        };
+        assert!(!event_proves_turn_started(Agent::Codex, &opened));
+        assert!(event_proves_turn_started(
+            Agent::Codex,
+            &Event::Thinking("the turn is now producing work".into())
+        ));
+        assert!(event_proves_turn_started(Agent::Claude, &opened));
     }
 
     #[tokio::test]
@@ -12158,7 +12210,7 @@ mod tests {
     }
 
     #[test]
-    fn live_follow_up_waits_for_the_first_provider_event() {
+    fn live_follow_up_waits_for_the_first_turn_event() {
         let (cancel, _) = tokio::sync::watch::channel(false);
         let ready = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
         let run = ActiveRun {

@@ -28,8 +28,6 @@ const pt = {
     accentColour: "Cor de destaque",
     accentColourHint: "independente da cor das superfícies",
     designedYellow: "Destaque amarelo do design",
-    matchSurface: "Usar a cor da superfície",
-    customAccent: "Escolher uma cor de destaque personalizada",
     reset: "Redefinir",
     resetHint: "volta ao destaque amarelo e às superfícies padrão",
     resetButton: "Usar o padrão",
