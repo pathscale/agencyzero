@@ -5617,6 +5617,8 @@ checksum = "1ebf944e87a7c253233ad6766e082e3cd714b5d03812acc24c318f549614536e"
 [[package]]
 name = "worktable"
 version = "1.0.0-beta.9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c28ac6dc1d643c8840ba30c324f3db2f67568003646e8da5e4730abaa38cfdb8"
 dependencies = [
  "WorkTablesIndex",
  "arctic-wt",
@@ -5647,6 +5649,8 @@ dependencies = [
 [[package]]
 name = "worktable_codegen"
 version = "1.0.0-beta.9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cafbc02aea479acd024d5afba53b1454929360865da1263d7a2ab845b42ea60b"
 dependencies = [
  "convert_case 0.6.0",
  "indexmap 2.14.0",
