@@ -137,7 +137,9 @@ export function SettingsTab(): JSX.Element {
     setTerminateArmed(false);
     setProxyNote(
       mode === "drain" && active > 0
-        ? tx("Waiting for {count} live runs to finish", { count: active })
+        ? active === 1
+          ? tx("Waiting for 1 live run to finish")
+          : tx("Waiting for {count} live runs to finish", { count: active })
         : mode === "terminate"
           ? tx("Terminating live runs before restart")
           : "",
@@ -152,8 +154,15 @@ export function SettingsTab(): JSX.Element {
   };
 
   const stopProxy = (): void => {
+    const active = state.agencyProxy?.activeRuns ?? 0;
     setProxyAction("stop");
-    setProxyNote("");
+    setProxyNote(
+      active === 1
+        ? tx("Waiting for 1 live run to finish")
+        : active > 1
+          ? tx("Waiting for {count} live runs to finish", { count: active })
+          : "",
+    );
     void actions
       .stopAgentProxy()
       .then(() => setProxyNote(tx("AgencyProxy stopped")))
@@ -350,16 +359,23 @@ export function SettingsTab(): JSX.Element {
                     </span>
                     <span class="text-[11px] text-az-muted">
                       {state.agencyProxy
-                        ? `${state.agencyProxy.activeRuns} ${tx("live runs")}`
+                        ? `${state.agencyProxy.activeRuns} ${tx(
+                            state.agencyProxy.activeRuns === 1 ? "live run" : "live runs",
+                          )}`
                         : tx("loading")}
                     </span>
                     <button
                       type="button"
+                      title={tx("Refresh")}
+                      aria-label={tx("Refresh")}
                       disabled={proxyAction() !== null || !isLive("getAgentProxyStatus")}
                       onClick={refreshProxy}
-                      class="rounded-lg border border-az-hairline-strong px-3 py-[5px] text-[12px] text-az-muted transition-colors hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-40"
+                      class="flex size-8 items-center justify-center rounded-lg border border-az-hairline-strong text-az-muted transition-colors hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-40"
                     >
-                      {proxyAction() === "refresh" ? tx("Checking…") : tx("Refresh")}
+                      <Icon
+                        name="refresh-cw"
+                        class={`text-[13px] ${proxyAction() === "refresh" ? "animate-spin" : ""}`}
+                      />
                     </button>
                     <button
                       type="button"
@@ -375,20 +391,18 @@ export function SettingsTab(): JSX.Element {
                             ? tx("Wait & restart")
                             : tx("Restart")}
                     </button>
-                    <Show
-                      when={
-                        state.agencyProxy?.connected &&
-                        state.agencyProxy.activeRuns === 0 &&
-                        isLive("stopAgentProxy")
-                      }
-                    >
+                    <Show when={state.agencyProxy?.connected && isLive("stopAgentProxy")}>
                       <button
                         type="button"
                         disabled={proxyAction() !== null}
                         onClick={stopProxy}
                         class="rounded-lg border border-az-hairline-strong px-3 py-[5px] text-[12px] text-az-muted transition-colors hover:border-error hover:text-error disabled:cursor-not-allowed disabled:opacity-40"
                       >
-                        {proxyAction() === "stop" ? tx("Stopping…") : tx("Stop")}
+                        {proxyAction() === "stop" && (state.agencyProxy?.activeRuns ?? 0) > 0
+                          ? tx("Waiting…")
+                          : proxyAction() === "stop"
+                            ? tx("Stopping…")
+                            : tx("Stop")}
                       </button>
                     </Show>
                     <Show when={(state.agencyProxy?.activeRuns ?? 0) > 0}>
@@ -2249,7 +2263,7 @@ function Row(props: {
       <span class={`text-[12.5px] text-az-body ${props.stack ? "" : "min-w-0 flex-1"}`}>
         {props.label}
         <Show when={props.hint}>
-          <span class="mt-0.5 block text-[11.5px] text-az-muted">{props.hint}</span>
+          <span class="mt-0.5 block break-words text-[11.5px] text-az-muted">{props.hint}</span>
         </Show>
       </span>
       {props.children}

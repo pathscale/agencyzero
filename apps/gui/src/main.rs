@@ -849,7 +849,7 @@ async fn restart_agent_proxy(
 
 #[tauri::command]
 async fn stop_agent_proxy(state: State<'_, AppState>) -> Result<agent_proxy::Status, String> {
-    state.proxy.stop_if_idle().await
+    state.proxy.stop().await
 }
 
 /// The user's home, or nothing when the platform will not say.
