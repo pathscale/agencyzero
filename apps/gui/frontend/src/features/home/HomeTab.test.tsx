@@ -23,6 +23,19 @@ async function mountHome() {
 }
 
 describe("Home item rows", () => {
+  it("sorts Home items with the same persisted status/time controls as project panels", async () => {
+    const screen = await mountHome();
+    const controls = screen.getByRole("group", { name: "Sort items" });
+    const [by, direction] = Array.from(controls.querySelectorAll("button"));
+    const initialBy = by.textContent;
+    const initialDirection = direction.getAttribute("aria-label");
+
+    fireEvent.click(by);
+    expect(by.textContent).not.toBe(initialBy);
+    fireEvent.click(direction);
+    expect(direction.getAttribute("aria-label")).not.toBe(initialDirection);
+  });
+
   it("expands one item description and closes it when another item receives focus", async () => {
     const screen = await mountHome();
 

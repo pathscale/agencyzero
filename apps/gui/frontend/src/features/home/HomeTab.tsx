@@ -9,6 +9,7 @@ import { AttachmentPills } from "~/features/project/Composer";
 import { AgentIoList } from "~/features/project/ProjectPanel";
 import { relativeTime } from "~/lib/format";
 import { defaultItemDescription } from "~/lib/itemDescription";
+import { sortItems } from "~/lib/itemSort";
 import { AGENT_LABELS, nextStatus, statusSuffix } from "~/lib/labels";
 import { describeError, log } from "~/lib/log";
 import { compileAdvancedPrompt } from "~/lib/promptEditor";
@@ -82,6 +83,7 @@ export function HomeTab(): JSX.Element {
             <span class="text-[11.5px] text-az-faint">
               {tx("and their items · click a project to open its tab")}
             </span>
+            <HomeItemSortControls />
           </div>
 
           {/*
@@ -234,6 +236,39 @@ export function HomeTab(): JSX.Element {
         </Show>
       </div>
     </div>
+  );
+}
+
+/** Home uses the same durable item sort preference as every project panel. */
+function HomeItemSortControls(): JSX.Element {
+  return (
+    <fieldset
+      class="ml-auto flex shrink-0 items-center gap-1 border-0 p-0"
+      aria-label={tx("Sort items")}
+    >
+      <button
+        type="button"
+        onClick={() => setPrefs("itemSortBy", prefs.itemSortBy === "status" ? "time" : "status")}
+        class="rounded-md border border-az-hairline bg-az-inset px-1.5 py-0.5 font-medium text-[10.5px] text-az-muted transition-colors hover:text-az-strong"
+        title={tx("Toggle item sort between status and time")}
+      >
+        {tx(prefs.itemSortBy === "status" ? "Status" : "Time")}
+      </button>
+      <button
+        type="button"
+        onClick={() =>
+          setPrefs("itemSortDirection", prefs.itemSortDirection === "asc" ? "desc" : "asc")
+        }
+        class="flex size-5 items-center justify-center rounded-md border border-az-hairline bg-az-inset text-az-muted transition-colors hover:text-az-strong"
+        aria-label={tx(prefs.itemSortDirection === "asc" ? "Sort descending" : "Sort ascending")}
+        title={tx(prefs.itemSortDirection === "asc" ? "Ascending" : "Descending")}
+      >
+        <Icon
+          name="arrow-up"
+          class={`text-[11px] transition-transform ${prefs.itemSortDirection === "desc" ? "rotate-180" : ""}`}
+        />
+      </button>
+    </fieldset>
   );
 }
 
@@ -1000,7 +1035,11 @@ function ProjectGroup(props: {
       (item) =>
         item.archived && state.projects.some((project) => project.forkedFrom?.itemId === item.id),
     );
-    return [...visible, ...archivedForkAnchors].sort((left, right) => left.order - right.order);
+    return sortItems(
+      [...visible, ...archivedForkAnchors],
+      prefs.itemSortBy,
+      prefs.itemSortDirection,
+    );
   };
   const openCount = () =>
     items().filter((item) => item.status !== "finished" && item.status !== "canceled").length;
