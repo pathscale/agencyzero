@@ -663,3 +663,10 @@ export let CLAUDE_USAGE_ERROR: string | null = null;
 export function setClaudeUsageError(message: string | null): void {
   CLAUDE_USAGE_ERROR = message;
 }
+
+/** Makes project reattachment reject, for degraded-startup coverage. */
+export let SYNC_PROJECT_ERROR: string | null = null;
+
+export function setSyncProjectError(message: string | null): void {
+  SYNC_PROJECT_ERROR = message;
+}

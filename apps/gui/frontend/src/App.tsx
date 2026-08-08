@@ -53,12 +53,16 @@ function Workspace(): JSX.Element {
 
       <main class="flex min-h-0 flex-1 gap-3 px-3 pt-1.5 pb-3">
         <Show
-          when={state.boot.status === "ready"}
+          when={
+            state.boot.status === "ready" ||
+            (activeTab().kind === "settings" && state.settings !== null)
+          }
           fallback={
             <Show when={state.boot.status === "error"} fallback={<Booting />}>
               <BootFailed
                 message={state.boot.status === "error" ? state.boot.message : ""}
                 onRetry={() => void actions.retryInit()}
+                onOpenSettings={actions.openSettings}
               />
             </Show>
           }
@@ -145,7 +149,11 @@ export function Booting(): JSX.Element {
  * A half-loaded workspace must not render as though it were whole: the tabs
  * would be there, the panels would be empty, and nothing would explain why.
  */
-function BootFailed(props: { message: string; onRetry: () => void }): JSX.Element {
+export function BootFailed(props: {
+  message: string;
+  onRetry: () => void;
+  onOpenSettings: () => void;
+}): JSX.Element {
   return (
     <div class="flex flex-1 flex-col items-center justify-center gap-3.5 px-8">
       <div class="flex size-[54px] items-center justify-center rounded-2xl border border-error/26 bg-error/8">
@@ -162,13 +170,22 @@ function BootFailed(props: { message: string; onRetry: () => void }): JSX.Elemen
           {props.message}
         </p>
       </div>
-      <button
-        type="button"
-        onClick={props.onRetry}
-        class="rounded-lg bg-primary px-3.5 py-1.5 font-semibold text-[12.5px] text-primary-content transition-colors hover:bg-az-primary-hover"
-      >
-        {tx("Try again")}
-      </button>
+      <div class="flex items-center gap-2">
+        <button
+          type="button"
+          onClick={props.onRetry}
+          class="rounded-lg bg-primary px-3.5 py-1.5 font-semibold text-[12.5px] text-primary-content transition-colors hover:bg-az-primary-hover"
+        >
+          {tx("Try again")}
+        </button>
+        <button
+          type="button"
+          onClick={props.onOpenSettings}
+          class="rounded-lg border border-az-hairline px-3.5 py-1.5 font-semibold text-[12.5px] text-az-body transition-colors hover:bg-white/6 hover:text-base-content"
+        >
+          {tx("Open Settings")}
+        </button>
+      </div>
     </div>
   );
 }

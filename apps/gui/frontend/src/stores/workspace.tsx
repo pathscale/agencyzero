@@ -730,7 +730,7 @@ function createWorkspace() {
    */
   async function fetchProject(projectId: string): Promise<void> {
     const backend = client();
-    const [items, messages, running, log, io, prs, questions] = await Promise.all([
+    const [items, messages, running, taskLog, io, prs, questions] = await Promise.all([
       backend.listItems(projectId),
       backend.listMessages(projectId),
       backend.listRunningTasks(projectId),
@@ -746,8 +746,8 @@ function createWorkspace() {
       setState("messages", projectId, reconcile(messages));
       setState("turnCounts", projectId, usageTotals(messages).turns);
       setState("running", projectId, reconcile(running));
-      setState("taskLog", projectId, reconcile(log.entries));
-      setState("logTotals", projectId, log.total);
+      setState("taskLog", projectId, reconcile(taskLog.entries));
+      setState("logTotals", projectId, taskLog.total);
       setState("agentIo", projectId, reconcile(io));
       setState("pullRequests", projectId, reconcile(prs));
       setState("questions", projectId, reconcile(questions));
@@ -763,7 +763,12 @@ function createWorkspace() {
       }
     });
     const lastReceivedAt = messages.at(-1)?.createdAt ?? "";
-    await backend.syncProject(projectId, lastReceivedAt);
+    // Reattachment is recovery for live proxy-owned work, not hydration of the
+    // persisted workspace. A dead proxy must not hide the projects and the
+    // Settings control needed to recover it.
+    await backend
+      .syncProject(projectId, lastReceivedAt)
+      .catch((cause) => log.warn(`could not reattach ${projectId}: ${describeError(cause)}`));
   }
 
   /** One snapshot request per project, shared by boot and a simultaneous tab open. */
