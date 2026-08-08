@@ -768,6 +768,26 @@ export function SettingsTab(): JSX.Element {
               <StudySettings />
 
               <Section
+                icon="lock"
+                title={tx("Agent authority")}
+                hint={tx("explicit capabilities delegated to Prompt Syntax")}
+              >
+                <Row
+                  label={tx("Update app settings")}
+                  hint={tx("off by default; allows only the settings keys this build declares")}
+                  isLast
+                >
+                  <SettingToggle
+                    label={tx("Allow agents to update app settings")}
+                    checked={current().agentSettingsUpdates}
+                    onChange={(agentSettingsUpdates) =>
+                      void actions.saveSettings({ agentSettingsUpdates })
+                    }
+                  />
+                </Row>
+              </Section>
+
+              <Section
                 icon="shield"
                 title={tx("Moderator")}
                 hint={tx("a second agent watching the stream — costs tokens")}

@@ -365,6 +365,7 @@ export interface AgencyZeroApi {
 
 /** Every broadcast the window listens for, and what rides on it. */
 export interface AppEvents {
+  "settings:updated": GlobalSettings;
   "project:created": Project;
   "project:updated": Project;
   "project:deleted": { id: string };

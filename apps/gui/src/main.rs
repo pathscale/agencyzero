@@ -912,6 +912,17 @@ async fn set_settings(
     patch: serde_json::Value,
     state: State<'_, AppState>,
 ) -> Result<GlobalSettings, String> {
+    apply_settings_patch(patch, &state).await
+}
+
+/// Apply one settings merge through the shared serialized write path.
+///
+/// The Settings UI and owner-authorized Prompt Syntax both call this function,
+/// so neither can race a stale read over the other's update.
+pub(crate) async fn apply_settings_patch(
+    patch: serde_json::Value,
+    state: &AppState,
+) -> Result<GlobalSettings, String> {
     // Held across the whole read-merge-write. The frontend's response
     // ticketing protects its in-memory copy from stale responses; only this
     // protects the record on disk from a stale write.

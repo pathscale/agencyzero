@@ -605,6 +605,8 @@ export interface GlobalSettings {
   perTurnInjection: boolean;
   /** Check the signed release manifest after launch. Never auto-installs. */
   automaticUpdateChecks: boolean;
+  /** Explicit owner authority for agent-authored allowlisted settings writes. */
+  agentSettingsUpdates: boolean;
   /** Agent lifecycle authority, disabled until the owner delegates it. */
   agentRestartPolicy: "disabled" | "restart" | "restart_and_update";
   /** Project tabs included in store backups. Null identifies an older record. */

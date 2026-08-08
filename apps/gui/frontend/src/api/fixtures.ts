@@ -611,6 +611,7 @@ export const SETTINGS: GlobalSettings = {
   studyAnalytics: { enabled: false, sessionId: "", enabledAt: "" },
   perTurnInjection: true,
   automaticUpdateChecks: true,
+  agentSettingsUpdates: false,
   agentRestartPolicy: "disabled",
   workspaceTabs: null,
   onboardingCompleted: true,

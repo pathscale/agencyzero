@@ -3073,6 +3073,7 @@ fn state_snapshot(
          <ps @agency:items.add(ref: \"t1\", title: \"<one line>\", status: \"planning\")>\n\
          <ps @agency:items.add(project: \"<project id or exact name>\", ref: \"t2\", title: \"<one line>\")>\n\
          <ps @agency:items.retire(id: \"<id>\")>\n\
+         <ps @agency:settings.update(key: \"theme.accent\", value: \"#2196F3\")>\n\
          <ps @agency:ask(text: \"<your question>\", urgency: \"blocking\")>\n\
          <ps @agency:pr.link(url: \"https://github.com/owner/repo/pull/66\", item: \"<id>\")>\n\
          <ps @agency:pr.retire(id: \"<pr association id>\")>\n\
@@ -3215,6 +3216,35 @@ async fn apply_directive(
                 }
                 Err(error) => Outcome::Refused {
                     what: format!("items.describe({resolved})"),
+                    code: format!("WRITE_FAILED: {error}"),
+                },
+            }
+        }
+        Directive::SettingsUpdate { key, value } => {
+            let current = crate::get_settings(app.state::<AppState>());
+            if !current.agent_settings_updates {
+                return Outcome::Refused {
+                    what: format!("settings.update({key})"),
+                    code: "SETTINGS_AUTHORITY_DISABLED".into(),
+                };
+            }
+            let patch = match crate::settings::prompt_syntax_patch(&key, &value) {
+                Ok(patch) => patch,
+                Err(code) => {
+                    return Outcome::Refused {
+                        what: format!("settings.update({key})"),
+                        code,
+                    };
+                }
+            };
+            let state = app.state::<AppState>();
+            match crate::apply_settings_patch(patch, &state).await {
+                Ok(updated) => {
+                    let _ = app.emit("settings:updated", &updated);
+                    Outcome::Done(format!("{key} updated"))
+                }
+                Err(error) => Outcome::Refused {
+                    what: format!("settings.update({key})"),
                     code: format!("WRITE_FAILED: {error}"),
                 },
             }
@@ -3751,6 +3781,11 @@ fn study_target_before(
             // point at beforehand — a fresh row, like items.add.
             kind: "question",
             id: String::new(),
+            before_add: std::collections::HashSet::new(),
+        },
+        Directive::SettingsUpdate { key, .. } => StudyTarget {
+            kind: "settings",
+            id: key.clone(),
             before_add: std::collections::HashSet::new(),
         },
         Directive::AppRestart { .. } => StudyTarget {

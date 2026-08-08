@@ -66,6 +66,11 @@ pub struct GlobalSettings {
     /// installs an update merely because a check found one.
     #[serde(default = "default_true")]
     pub automatic_update_checks: bool,
+    /// Whether agent-authored Prompt Syntax may update the allowlisted app
+    /// settings. Off by default: merely knowing the syntax never grants
+    /// authority over owner preferences.
+    #[serde(default)]
+    pub agent_settings_updates: bool,
     /// Which lifecycle action an agent-authored Prompt Syntax directive may
     /// schedule after its current turn finishes. The default is deliberately
     /// `"disabled"`: restarting or replacing the running binary is owner
@@ -397,6 +402,7 @@ impl Default for GlobalSettings {
             study_analytics: StudyAnalytics::default(),
             per_turn_injection: true,
             automatic_update_checks: true,
+            agent_settings_updates: false,
             agent_restart_policy: "disabled".into(),
             workspace_tabs: None,
             onboarding_completed: Some(false),
@@ -483,6 +489,50 @@ pub fn normalize_for_store(settings: &mut GlobalSettings, has_projects: bool) {
     normalize(settings);
     if has_projects {
         settings.onboarding_completed = Some(true);
+    }
+}
+
+/// Convert one agent-authored settings key/value pair into the same merge
+/// patch the Settings UI sends.
+pub fn prompt_syntax_patch(key: &str, value: &str) -> Result<Value, String> {
+    fn number(value: &str, min: f32, max: f32) -> Result<f32, String> {
+        let parsed = value
+            .parse::<f32>()
+            .map_err(|_| "VALUE_INVALID".to_string())?;
+        if parsed.is_finite() && (min..=max).contains(&parsed) {
+            Ok(parsed)
+        } else {
+            Err("VALUE_OUT_OF_RANGE".into())
+        }
+    }
+    fn boolean(value: &str) -> Result<bool, String> {
+        match value.to_ascii_lowercase().as_str() {
+            "true" => Ok(true),
+            "false" => Ok(false),
+            _ => Err("VALUE_INVALID".into()),
+        }
+    }
+
+    match key {
+        "theme.accent" => {
+            let value = value.trim();
+            let valid = value.is_empty()
+                || matches!(value.len(), 4 | 7)
+                    && value.starts_with('#')
+                    && value[1..].bytes().all(|byte| byte.is_ascii_hexdigit());
+            valid
+                .then(|| serde_json::json!({ "theme": { "accent": value } }))
+                .ok_or_else(|| "VALUE_INVALID".into())
+        }
+        "theme.softness" => {
+            Ok(serde_json::json!({ "theme": { "softness": number(value, 0.0, 12.0)? } }))
+        }
+        "theme.wash" => Ok(serde_json::json!({ "theme": { "wash": number(value, 0.0, 20.0)? } })),
+        "theme.textBrightness" => {
+            Ok(serde_json::json!({ "theme": { "textBrightness": number(value, -4.0, 6.0)? } }))
+        }
+        "onboardingCompleted" => Ok(serde_json::json!({ "onboardingCompleted": boolean(value)? })),
+        _ => Err("SETTING_NOT_ALLOWED".into()),
     }
 }
 
@@ -616,6 +666,23 @@ mod tests {
         let mut settings = GlobalSettings::default();
         normalize_for_store(&mut settings, true);
         assert_eq!(settings.onboarding_completed, Some(true));
+    }
+
+    #[test]
+    fn prompt_syntax_settings_are_typed_and_allowlisted() {
+        assert_eq!(
+            prompt_syntax_patch("theme.accent", "#2196F3").unwrap(),
+            serde_json::json!({ "theme": { "accent": "#2196F3" } })
+        );
+        assert_eq!(
+            prompt_syntax_patch("theme.textBrightness", "6").unwrap(),
+            serde_json::json!({ "theme": { "textBrightness": 6.0 } })
+        );
+        assert_eq!(
+            prompt_syntax_patch("defaultPermission", "auto").unwrap_err(),
+            "SETTING_NOT_ALLOWED"
+        );
+        assert!(prompt_syntax_patch("theme.wash", "21").is_err());
     }
 
     /// The case the model picker depends on: unchecking a model sends a shorter

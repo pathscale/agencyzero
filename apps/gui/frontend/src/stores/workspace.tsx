@@ -1078,6 +1078,14 @@ function createWorkspace() {
 
     await bind("project:updated", upsertProject);
 
+    await bind("settings:updated", (settings) => {
+      batch(() => {
+        setState("settings", reconcile(settings));
+        reconcileTabModels(settings);
+      });
+      applyTheme(settings.theme);
+    });
+
     await bind("project:deleted", ({ id }) => purgeProject(id));
 
     const upsertItem = (item: ProjectItem) => {

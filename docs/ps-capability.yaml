@@ -19,6 +19,7 @@ standing_promotion:
     - agency:items.add
     - agency:items.describe
     - agency:items.retire
+    - agency:settings.update
     - agency:ask
     - agency:pr.link
     - agency:pr.retire
@@ -45,6 +46,7 @@ standing_promotion:
     agency:items.add: [project, ref, title, status]
     agency:items.describe: [id, description]
     agency:items.retire: [id]
+    agency:settings.update: [key, value]
     # `text` is the question. `urgency` is critical | blocking | passive; a
     # missing or unknown value defaults to blocking. `reference` is optional
     # context: a GitHub issue URL, or a bare item id.

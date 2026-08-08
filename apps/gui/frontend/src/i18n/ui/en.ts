@@ -165,6 +165,13 @@ const en = {
   "off by default; disabling stops new rows but keeps existing data":
     "off by default; disabling stops new rows but keeps existing data",
   "Stored events": "Stored events",
+  "Agent authority": "Agent authority",
+  "explicit capabilities delegated to Prompt Syntax":
+    "explicit capabilities delegated to Prompt Syntax",
+  "Update app settings": "Update app settings",
+  "off by default; allows only the settings keys this build declares":
+    "off by default; allows only the settings keys this build declares",
+  "Allow agents to update app settings": "Allow agents to update app settings",
   "Storage stopped saving": "Storage stopped saving",
   "Copy anything important from the current turn, then restart AgencyZero.":
     "Copy anything important from the current turn, then restart AgencyZero.",

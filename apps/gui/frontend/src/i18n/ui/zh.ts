@@ -155,6 +155,12 @@ const zh = {
   "off by default; disabling stops new rows but keeps existing data":
     "默认关闭；禁用后停止新增记录，但保留现有数据",
   "Stored events": "已存储事件",
+  "Agent authority": "代理权限",
+  "explicit capabilities delegated to Prompt Syntax": "明确授予 Prompt Syntax 的能力",
+  "Update app settings": "更新应用设置",
+  "off by default; allows only the settings keys this build declares":
+    "默认关闭；仅允许此版本声明的设置项",
+  "Allow agents to update app settings": "允许代理更新应用设置",
   "Storage stopped saving": "存储已停止保存",
   "Copy anything important from the current turn, then restart AgencyZero.":
     "请复制当前回合中的重要内容，然后重新启动 AgencyZero。",
