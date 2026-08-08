@@ -1127,6 +1127,17 @@ function createWorkspace() {
       );
     };
 
+    const refreshProxyAfterLifecycleEvent = (): void => {
+      void backend
+        .getAgentProxyStatus()
+        .then((status) => setState("agencyProxy", status))
+        .catch((cause) =>
+          log.warn(
+            `could not refresh AgencyProxy after run state changed: ${describeError(cause)}`,
+          ),
+        );
+    };
+
     // No tab is opened here. The agent creates projects too, and a new tab
     // appearing in the strip mid-sentence would be the agent taking the window
     // from you. It lands in Home; opening it is a click.
@@ -1330,6 +1341,7 @@ function createWorkspace() {
 
     await bind("run:accepted", ({ projectId, agent, model, permission }) => {
       touchRunStatus(projectId, "waiting for the agent…", { agent, model, permission });
+      refreshProxyAfterLifecycleEvent();
     });
 
     await bind("run:inject_failed", ({ projectId, messageId, body, replyQuestionId }) => {
@@ -1512,6 +1524,7 @@ function createWorkspace() {
       if ((state.queued[projectId] ?? []).length > 0) {
         window.setTimeout(() => void flushQueue(projectId, 0), 250);
       }
+      refreshProxyAfterLifecycleEvent();
     });
   }
 
@@ -2373,6 +2386,9 @@ function createWorkspace() {
     },
     async restartAgentProxy(mode: "drain" | "terminate") {
       setState("agencyProxy", await client().restartAgentProxy(mode));
+    },
+    async stopAgentProxy() {
+      setState("agencyProxy", await client().stopAgentProxy());
     },
     /** Read the on-disk backup catalogue and the result from the last angel run. */
     getStoreBackupStatus() {

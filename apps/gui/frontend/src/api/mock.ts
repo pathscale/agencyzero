@@ -47,6 +47,13 @@ const MOCK_PROXY_STATUS: AgencyProxyStatus = {
   retainedRuns: 0,
   binary: "Bundled AgencyProxy fixture",
   socket: "(fixture endpoint)",
+  detail: null,
+};
+
+const MOCK_STOPPED_PROXY_STATUS: AgencyProxyStatus = {
+  ...MOCK_PROXY_STATUS,
+  connected: false,
+  detail: "Stopped by user",
 };
 
 function clone<T>(value: T): T {
@@ -734,6 +741,7 @@ export function createMockApi(): AgencyZeroApi {
     chooseAgentProxyBinary: () => settle(null),
     getAgentProxyStatus: () => settle(MOCK_PROXY_STATUS),
     restartAgentProxy: () => settle(MOCK_PROXY_STATUS),
+    stopAgentProxy: () => settle(MOCK_STOPPED_PROXY_STATUS),
     // A fixed fixture path: the preview has no OS picker to open.
     chooseAttachments: () => settle(["/tmp/mock-attachment.txt"]),
 

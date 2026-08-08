@@ -50,6 +50,10 @@ const zh = {
   "a selection takes effect when you restart the idle sidecar":
     "所选文件将在空闲的辅助进程重启后生效",
   "AgencyProxy restarted": "AgencyProxy 已重启",
+  "AgencyProxy started": "AgencyProxy 已启动",
+  "AgencyProxy stopped": "AgencyProxy 已停止",
+  Start: "启动",
+  "Stopping…": "正在停止…",
   "Waiting for {count} live runs to finish": "正在等待 {count} 个运行中的任务完成",
   "Terminating live runs before restart": "正在终止运行中的任务，然后重启",
   "Wait & restart": "等待后重启",
