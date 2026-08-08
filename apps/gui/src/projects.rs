@@ -531,6 +531,8 @@ struct SessionRunRecord {
     turn_id: String,
     project_id: String,
     item_id: String,
+    #[serde(default)]
+    item_title: String,
     agent: String,
     kind: String,
     mode: String,
@@ -553,8 +555,10 @@ struct SessionRunRecord {
     finished_at: String,
 }
 
+const SESSION_RUN_PREFIX: &str = "session-run:";
+
 fn session_run_key(id: &str) -> String {
-    format!("session-run:{id}")
+    format!("{SESSION_RUN_PREFIX}{id}")
 }
 
 impl RunMeasurement {
@@ -582,6 +586,10 @@ impl RunMeasurement {
             turn_id: self.turn_id.clone(),
             project_id: self.project_id.clone(),
             item_id: self.item_id.clone(),
+            item_title: tables
+                .project_item
+                .select(self.item_id.clone())
+                .map_or_else(String::new, |item| item.title),
             agent: agent_wire_name(self.agent).to_string(),
             kind: "coordinator".into(),
             mode: self.mode.into(),
@@ -5829,6 +5837,100 @@ pub struct UsageAgentValueDto {
     pub turns: usize,
 }
 
+/// Measured agent work attributed to one item.
+///
+/// `duration_ms` sums provider invocation time, not the wall-clock gap between
+/// item creation and completion. Distinct owner/agent exchanges are counted by
+/// `turn_id`, so an internal retry adds to the work time without pretending the
+/// owner took another turn.
+#[derive(Debug, Clone, Default, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UsageItemDto {
+    pub item_id: String,
+    pub item_title: String,
+    pub project_id: String,
+    pub project_name: String,
+    pub agents: Vec<String>,
+    pub duration_ms: i64,
+    pub turns: usize,
+    pub completed: bool,
+    pub last_at: String,
+}
+
+#[derive(Default)]
+struct UsageItemAccumulator {
+    row: UsageItemDto,
+    agents: std::collections::BTreeSet<String>,
+    turn_ids: std::collections::HashSet<String>,
+}
+
+fn aggregate_item_runs(
+    runs: impl IntoIterator<Item = SessionRunRecord>,
+    current_items: &std::collections::HashMap<String, ProjectItemRow>,
+    project_names: &std::collections::HashMap<String, String>,
+    completed_ids: &std::collections::HashSet<String>,
+) -> Vec<UsageItemDto> {
+    let mut by_item: std::collections::HashMap<String, UsageItemAccumulator> =
+        std::collections::HashMap::new();
+
+    for run in runs {
+        if run.item_id.is_empty() {
+            continue;
+        }
+        let current = current_items.get(&run.item_id);
+        let item_title = current
+            .map(|item| item.title.clone())
+            .filter(|title| !title.is_empty())
+            .or_else(|| (!run.item_title.is_empty()).then_some(run.item_title.clone()))
+            .unwrap_or_else(|| format!("Retired item ({})", run.item_id));
+        let project_id =
+            current.map_or_else(|| run.project_id.clone(), |item| item.project_id.clone());
+        let project_name = project_names
+            .get(&project_id)
+            .cloned()
+            .unwrap_or_else(|| format!("Deleted project ({project_id})"));
+        let entry = by_item
+            .entry(run.item_id.clone())
+            .or_insert_with(|| UsageItemAccumulator {
+                row: UsageItemDto {
+                    item_id: run.item_id.clone(),
+                    item_title,
+                    project_id,
+                    project_name,
+                    completed: completed_ids.contains(&run.item_id),
+                    ..UsageItemDto::default()
+                },
+                ..UsageItemAccumulator::default()
+            });
+        entry.row.duration_ms = entry.row.duration_ms.saturating_add(run.duration_ms.max(0));
+        if run.finished_at > entry.row.last_at {
+            entry.row.last_at.clone_from(&run.finished_at);
+        }
+        if !run.agent.is_empty() {
+            entry.agents.insert(run.agent);
+        }
+        if !run.turn_id.is_empty() {
+            entry.turn_ids.insert(run.turn_id);
+        }
+    }
+
+    let mut items: Vec<_> = by_item
+        .into_values()
+        .map(|mut entry| {
+            entry.row.agents = entry.agents.into_iter().collect();
+            entry.row.turns = entry.turn_ids.len();
+            entry.row
+        })
+        .collect();
+    items.sort_by(|left, right| {
+        right
+            .duration_ms
+            .cmp(&left.duration_ms)
+            .then_with(|| right.last_at.cmp(&left.last_at))
+    });
+    items
+}
+
 /// The single turn that processed the most tokens.
 ///
 /// Answers the question a big bill raises: is one request enormous, or is it
@@ -5865,6 +5967,8 @@ pub struct UsageAnalyticsDto {
     pub sessions: Vec<UsageSessionDto>,
     /// Outcome-per-dollar by agent, from newly attributed durable rows.
     pub agents: Vec<UsageAgentValueDto>,
+    /// Measured provider time and distinct turns attributed to work items.
+    pub items: Vec<UsageItemDto>,
     pub total_usd: f64,
     /// Portion of `total_usd` supplied by the local pricing table because the
     /// provider reported tokens but no dollar charge.
@@ -6067,6 +6171,27 @@ pub async fn get_usage_analytics(state: State<'_, AppState>) -> Result<UsageAnal
         .into_iter()
         .map(|project| (project.id, project.name))
         .collect();
+    let current_items: std::collections::HashMap<String, ProjectItemRow> = state
+        .tables
+        .project_item
+        .select_all()
+        .execute()
+        .unwrap_or_default()
+        .into_iter()
+        .map(|item| (item.id.clone(), item))
+        .collect();
+    let completed_ids: std::collections::HashSet<String> =
+        completions.iter().map(|row| row.id.clone()).collect();
+    let item_runs = state
+        .tables
+        .kv
+        .select_all()
+        .execute()
+        .unwrap_or_default()
+        .into_iter()
+        .filter(|row| row.key.starts_with(SESSION_RUN_PREFIX))
+        .filter_map(|row| serde_json::from_str::<SessionRunRecord>(&row.value).ok());
+    let items = aggregate_item_runs(item_runs, &current_items, &project_names, &completed_ids);
     let mut by_project: std::collections::HashMap<String, UsageProjectDto> =
         std::collections::HashMap::new();
     let mut by_session: std::collections::HashMap<(String, String, String), UsageSessionDto> =
@@ -6196,12 +6321,12 @@ pub async fn get_usage_analytics(state: State<'_, AppState>) -> Result<UsageAnal
         }
     }
 
-    for completion in completions {
+    for completion in &completions {
         let value =
             by_agent
                 .entry(completion.agent.clone())
                 .or_insert_with(|| UsageAgentValueDto {
-                    agent: completion.agent,
+                    agent: completion.agent.clone(),
                     ..Default::default()
                 });
         value.completed_items += 1;
@@ -6306,6 +6431,7 @@ pub async fn get_usage_analytics(state: State<'_, AppState>) -> Result<UsageAnal
         projects,
         sessions,
         agents,
+        items,
         total_usd,
         estimated_cost_usd,
         total_input_tokens: total_input,
@@ -12585,6 +12711,75 @@ mod tests {
 
         tables.shutdown().await.expect("tables drain");
         let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn item_run_analytics_sum_agent_time_without_double_counting_retries() {
+        let run = |id: &str, turn: &str, agent: &str, duration_ms: i64, finished_at: &str| {
+            SessionRunRecord {
+                id: id.into(),
+                turn_id: turn.into(),
+                project_id: "project-current".into(),
+                item_id: "item-current".into(),
+                item_title: "Older captured title".into(),
+                agent: agent.into(),
+                kind: "coordinator".into(),
+                mode: "resume".into(),
+                parent_session_id: String::new(),
+                session_id: "session-current".into(),
+                handoff_bytes: 0,
+                request_bytes: 0,
+                system_bytes: 0,
+                parent_context_tokens: 0,
+                context_tokens: 0,
+                context_window: 0,
+                input_tokens: 0,
+                output_tokens: 0,
+                cache_read_tokens: 0,
+                cache_write_tokens: 0,
+                cost_micro: 0,
+                duration_ms,
+                status: "completed".into(),
+                started_at: "2026-08-08T00:00:00Z".into(),
+                finished_at: finished_at.into(),
+            }
+        };
+        let current_items = std::collections::HashMap::from([(
+            "item-current".to_string(),
+            ProjectItemRow {
+                id: "item-current".into(),
+                project_id: "project-current".into(),
+                title: "Current item title".into(),
+                status: "active".into(),
+                position: 0,
+                reference: String::new(),
+            },
+        )]);
+        let project_names = std::collections::HashMap::from([(
+            "project-current".to_string(),
+            "AgencyZero".to_string(),
+        )]);
+        let completed_ids = std::collections::HashSet::from(["item-current".to_string()]);
+
+        let items = aggregate_item_runs(
+            [
+                run("run-1", "turn-1", "codex", 1_000, "2026-08-08T00:00:01Z"),
+                run("run-2", "turn-1", "codex", 500, "2026-08-08T00:00:02Z"),
+                run("run-3", "turn-2", "claude", 2_000, "2026-08-08T00:00:03Z"),
+            ],
+            &current_items,
+            &project_names,
+            &completed_ids,
+        );
+
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0].item_title, "Current item title");
+        assert_eq!(items[0].project_name, "AgencyZero");
+        assert_eq!(items[0].duration_ms, 3_500);
+        assert_eq!(items[0].turns, 2, "a retry remains part of one owner turn");
+        assert_eq!(items[0].agents, ["claude", "codex"]);
+        assert!(items[0].completed);
+        assert_eq!(items[0].last_at, "2026-08-08T00:00:03Z");
     }
 
     #[tokio::test]

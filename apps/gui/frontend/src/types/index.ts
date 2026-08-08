@@ -774,6 +774,19 @@ export interface UsageAgentValue {
   turns: number;
 }
 
+/** Measured provider work attributed to one AgencyZero item. */
+export interface UsageItem {
+  itemId: string;
+  itemTitle: string;
+  projectId: string;
+  projectName: string;
+  agents: string[];
+  durationMs: number;
+  turns: number;
+  completed: boolean;
+  lastAt: string;
+}
+
 /** Everything the Analytics view charts, from one call. */
 /**
  * The single heaviest turn — the answer to "is one request enormous, or is it
@@ -799,6 +812,7 @@ export interface UsageAnalytics {
   projects: UsageProject[];
   sessions: UsageSession[];
   agents: UsageAgentValue[];
+  items: UsageItem[];
   totalUsd: number;
   estimatedCostUsd: number;
   totalInputTokens: number;
