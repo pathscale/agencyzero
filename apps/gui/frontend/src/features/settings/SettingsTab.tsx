@@ -110,6 +110,27 @@ const SearchScope = createContext<{
 export function SettingsTab(): JSX.Element {
   const { state, actions, isLive, effortsFor, permissionsFor } = useWorkspace();
   const settings = () => state.settings;
+  const [proxyAction, setProxyAction] = createSignal<"refresh" | "restart" | null>(null);
+  const [proxyNote, setProxyNote] = createSignal("");
+
+  const refreshProxy = (): void => {
+    setProxyAction("refresh");
+    setProxyNote("");
+    void actions
+      .refreshAgentProxy()
+      .catch((cause) => setProxyNote(describeError(cause)))
+      .finally(() => setProxyAction(null));
+  };
+
+  const restartProxy = (): void => {
+    setProxyAction("restart");
+    setProxyNote("");
+    void actions
+      .restartAgentProxy()
+      .then(() => setProxyNote(tx("AgencyProxy restarted")))
+      .catch((cause) => setProxyNote(describeError(cause)))
+      .finally(() => setProxyAction(null));
+  };
 
   /**
    * Why a section is not wired yet, or `undefined` when it is.
@@ -279,30 +300,51 @@ export function SettingsTab(): JSX.Element {
           {(current) => (
             <>
               <Section
-                icon="shield"
-                title={tx("Agents")}
-                hint={tx("detected from the installed CLIs, not from configuration")}
+                icon="gauge"
+                title={tx("AgencyProxy")}
+                hint={tx("owns live agent sessions across AgencyZero restarts")}
               >
-                <For each={state.agents}>{(agent) => <AgentRow status={agent} />}</For>
-                <div class="flex items-center gap-2.5 px-3.5 pt-0 pb-3">
-                  <button
-                    type="button"
-                    onClick={() => void actions.recheckAgents()}
-                    class="rounded-lg border border-az-hairline-strong px-3 py-[5px] text-[12px] text-az-body transition-colors hover:border-primary hover:text-primary"
-                  >
-                    {tx("Re-check")}
-                  </button>
-                  <Show when={state.agents[0]}>
-                    {(first) => (
-                      <span class="text-[11.5px] text-az-muted">
-                        {tx("last checked")} {relativeTime(first().checkedAt)}
-                      </span>
-                    )}
-                  </Show>
-                </div>
                 <Row
-                  label={tx("AgencyProxy sidecar")}
-                  hint={tx("bundled by default; a custom executable takes effect next launch")}
+                  label={tx("Sidecar status")}
+                  hint={state.agencyProxy?.socket ?? tx("checking the local endpoint")}
+                >
+                  <div class="flex flex-wrap items-center justify-end gap-2">
+                    <span
+                      class={`size-2 rounded-full ${state.agencyProxy?.connected ? "bg-success" : "bg-error"}`}
+                    />
+                    <span class="text-[11.5px] text-az-body">
+                      {state.agencyProxy?.connected ? tx("Connected") : tx("Unavailable")}
+                    </span>
+                    <span class="text-[11px] text-az-muted">
+                      {state.agencyProxy
+                        ? `${state.agencyProxy.activeRuns} ${tx("live runs")}`
+                        : tx("loading")}
+                    </span>
+                    <button
+                      type="button"
+                      disabled={proxyAction() !== null || !isLive("getAgentProxyStatus")}
+                      onClick={refreshProxy}
+                      class="rounded-lg border border-az-hairline-strong px-3 py-[5px] text-[12px] text-az-muted transition-colors hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      {proxyAction() === "refresh" ? tx("Checking…") : tx("Refresh")}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={
+                        proxyAction() !== null ||
+                        !isLive("restartAgentProxy") ||
+                        (state.agencyProxy?.activeRuns ?? 1) > 0
+                      }
+                      onClick={restartProxy}
+                      class="rounded-lg border border-warning/40 px-3 py-[5px] text-[12px] text-warning transition-colors hover:border-warning hover:bg-warning/8 disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      {proxyAction() === "restart" ? tx("Restarting…") : tx("Restart")}
+                    </button>
+                  </div>
+                </Row>
+                <Row
+                  label={tx("Executable")}
+                  hint={tx("a selection takes effect when you restart the idle sidecar")}
                   stack
                   isLast
                 >
@@ -327,7 +369,34 @@ export function SettingsTab(): JSX.Element {
                       {tx("Use bundled")}
                     </button>
                   </div>
+                  <Show when={proxyNote()}>
+                    <div class="mt-2 text-[11px] text-az-muted">{proxyNote()}</div>
+                  </Show>
                 </Row>
+              </Section>
+
+              <Section
+                icon="shield"
+                title={tx("Agents")}
+                hint={tx("detected from the installed CLIs, not from configuration")}
+              >
+                <For each={state.agents}>{(agent) => <AgentRow status={agent} />}</For>
+                <div class="flex items-center gap-2.5 px-3.5 pt-0 pb-3">
+                  <button
+                    type="button"
+                    onClick={() => void actions.recheckAgents()}
+                    class="rounded-lg border border-az-hairline-strong px-3 py-[5px] text-[12px] text-az-body transition-colors hover:border-primary hover:text-primary"
+                  >
+                    {tx("Re-check")}
+                  </button>
+                  <Show when={state.agents[0]}>
+                    {(first) => (
+                      <span class="text-[11.5px] text-az-muted">
+                        {tx("last checked")} {relativeTime(first().checkedAt)}
+                      </span>
+                    )}
+                  </Show>
+                </div>
               </Section>
 
               <Section

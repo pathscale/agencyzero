@@ -1,4 +1,5 @@
 import type {
+  AgencyProxyStatus,
   AgentIoEntry,
   AgentModels,
   AgentStatus,
@@ -39,6 +40,14 @@ import * as fixtures from "./fixtures";
  */
 
 const LATENCY_MS = 90;
+
+const MOCK_PROXY_STATUS: AgencyProxyStatus = {
+  connected: true,
+  activeRuns: 0,
+  retainedRuns: 0,
+  binary: "Bundled AgencyProxy fixture",
+  socket: "(fixture endpoint)",
+};
 
 function clone<T>(value: T): T {
   return structuredClone(value);
@@ -723,6 +732,8 @@ export function createMockApi(): AgencyZeroApi {
     // No native panel in the preview; the typed path still works.
     chooseProjectDirectory: () => settle(null),
     chooseAgentProxyBinary: () => settle(null),
+    getAgentProxyStatus: () => settle(MOCK_PROXY_STATUS),
+    restartAgentProxy: () => settle(MOCK_PROXY_STATUS),
     // A fixed fixture path: the preview has no OS picker to open.
     chooseAttachments: () => settle(["/tmp/mock-attachment.txt"]),
 

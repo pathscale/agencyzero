@@ -26,6 +26,7 @@ import {
   setPrefs,
 } from "~/stores/prefs";
 import type {
+  AgencyProxyStatus,
   Agent,
   AgentIoEntry,
   AgentModels,
@@ -134,6 +135,7 @@ type WorkspaceState = {
   onboardingOpen: boolean;
   onboardingDeferred: boolean;
   agents: AgentStatus[];
+  agencyProxy: AgencyProxyStatus | null;
   /** Every agent's catalogue, for the Settings picker. Empty until boot ends. */
   models: AgentModels[];
   /** The per-token price table, for the composer's live cost estimate. Null until boot ends. */
@@ -397,6 +399,7 @@ function createWorkspace() {
     onboardingOpen: false,
     onboardingDeferred: false,
     agents: [],
+    agencyProxy: null,
     models: [],
     pricing: null,
     dataLocation: null,
@@ -818,6 +821,7 @@ function createWorkspace() {
         homeSnapshot,
         settings,
         agents,
+        agencyProxy,
         models,
         pricing,
         dataLocation,
@@ -828,6 +832,7 @@ function createWorkspace() {
         backend.getHomeSnapshot(),
         backend.getSettings(),
         backend.listAgentStatus(false),
+        backend.getAgentProxyStatus(),
         // Compiled catalogues only. Discovery spawns a CLI per agent, which is
         // too slow to sit in front of the first paint; Settings can ask for it.
         backend.listModels(false),
@@ -859,6 +864,7 @@ function createWorkspace() {
         setState("turnCounts", reconcile(homeSnapshot.turnCounts));
         setState("settings", settings);
         setState("agents", reconcile(agents));
+        setState("agencyProxy", agencyProxy);
         setState("models", reconcile(models));
         setState("pricing", pricing);
         setState("dataLocation", dataLocation);
@@ -2361,6 +2367,12 @@ function createWorkspace() {
     async chooseAgentProxyBinary() {
       const picked = await client().chooseAgentProxyBinary();
       if (picked) await saveSettings({ agentProxyBinary: picked });
+    },
+    async refreshAgentProxy() {
+      setState("agencyProxy", await client().getAgentProxyStatus());
+    },
+    async restartAgentProxy() {
+      setState("agencyProxy", await client().restartAgentProxy());
     },
     /** Read the on-disk backup catalogue and the result from the last angel run. */
     getStoreBackupStatus() {

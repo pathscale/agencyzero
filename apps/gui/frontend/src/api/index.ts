@@ -78,6 +78,8 @@ const COMMAND_FOR: Record<CommandMethod, string> = {
   chooseDataDirectory: "choose_data_directory",
   chooseProjectDirectory: "choose_project_directory",
   chooseAgentProxyBinary: "choose_agent_proxy_binary",
+  getAgentProxyStatus: "get_agent_proxy_status",
+  restartAgentProxy: "restart_agent_proxy",
   chooseAttachments: "choose_attachments",
   getWorkspaceRoot: "get_workspace_root",
   createWorkspaceRoot: "create_workspace_root",

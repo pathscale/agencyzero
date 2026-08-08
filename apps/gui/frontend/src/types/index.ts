@@ -353,6 +353,14 @@ export interface AgentStatus {
   checkedAt: string;
 }
 
+export interface AgencyProxyStatus {
+  connected: boolean;
+  activeRuns: number;
+  retainedRuns: number;
+  binary: string;
+  socket: string;
+}
+
 export interface ProviderCapabilities {
   session: boolean;
   fork: boolean;

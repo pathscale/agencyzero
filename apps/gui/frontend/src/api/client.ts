@@ -1,4 +1,5 @@
 import type {
+  AgencyProxyStatus,
   Agent,
   AgentIoEntry,
   AgentModels,
@@ -217,6 +218,10 @@ export interface AgencyZeroApi {
   chooseProjectDirectory(): Promise<string | null>;
   /** Choose a custom AgencyProxy executable; null means cancelled. */
   chooseAgentProxyBinary(): Promise<string | null>;
+  /** The detached sidecar and the runs it currently owns. */
+  getAgentProxyStatus(): Promise<AgencyProxyStatus>;
+  /** Restart the selected sidecar binary, refusing while any run is live. */
+  restartAgentProxy(): Promise<AgencyProxyStatus>;
   /**
    * Open the OS file picker, for the composer's Attach button. The chosen
    * paths land in the prompt as text — the agents read file paths in prose,

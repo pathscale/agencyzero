@@ -100,6 +100,8 @@ export function createTauriApi(): AgencyZeroApi {
     chooseDataDirectory: () => call("choose_data_directory"),
     chooseProjectDirectory: () => call("choose_project_directory"),
     chooseAgentProxyBinary: () => call("choose_agent_proxy_binary"),
+    getAgentProxyStatus: () => call("get_agent_proxy_status"),
+    restartAgentProxy: () => call("restart_agent_proxy"),
     chooseAttachments: () => call("choose_attachments"),
     getWorkspaceRoot: () => call("get_workspace_root"),
     createWorkspaceRoot: () => call("create_workspace_root"),
