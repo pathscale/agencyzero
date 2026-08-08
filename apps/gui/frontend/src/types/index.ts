@@ -359,6 +359,7 @@ export interface AgencyProxyStatus {
   retainedRuns: number;
   binary: string;
   socket: string;
+  detail: string | null;
 }
 
 export interface ProviderCapabilities {

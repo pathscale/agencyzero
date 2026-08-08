@@ -102,6 +102,7 @@ export function createTauriApi(): AgencyZeroApi {
     chooseAgentProxyBinary: () => call("choose_agent_proxy_binary"),
     getAgentProxyStatus: () => call("get_agent_proxy_status"),
     restartAgentProxy: (mode) => call("restart_agent_proxy", { mode }),
+    stopAgentProxy: () => call("stop_agent_proxy"),
     chooseAttachments: () => call("choose_attachments"),
     getWorkspaceRoot: () => call("get_workspace_root"),
     createWorkspaceRoot: () => call("create_workspace_root"),

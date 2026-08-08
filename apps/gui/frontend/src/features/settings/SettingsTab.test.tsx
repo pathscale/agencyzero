@@ -94,6 +94,23 @@ describe("store backups", () => {
   });
 });
 
+describe("AgencyProxy lifecycle", () => {
+  it("keeps an idle stop down until the owner starts it", async () => {
+    const screen = await mountSettings();
+    const stop = await screen.findByRole("button", { name: "Stop" });
+
+    fireEvent.click(stop);
+    await waitFor(() => expect(screen.getByText("AgencyProxy stopped")).toBeTruthy());
+    expect(screen.workspace.state.agencyProxy?.connected).toBe(false);
+
+    const start = screen.getByRole("button", { name: "Start" });
+    await waitFor(() => expect(start).toBeEnabled());
+    fireEvent.click(start);
+    await waitFor(() => expect(screen.getByText("AgencyProxy started")).toBeTruthy());
+    expect(screen.workspace.state.agencyProxy?.connected).toBe(true);
+  });
+});
+
 describe("cost warning settings", () => {
   it("persists a per-turn warning threshold across the full slider range", async () => {
     const screen = await mountSettings();

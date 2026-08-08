@@ -110,20 +110,11 @@ const SearchScope = createContext<{
 export function SettingsTab(): JSX.Element {
   const { state, actions, isLive, effortsFor, permissionsFor } = useWorkspace();
   const settings = () => state.settings;
-  const [proxyAction, setProxyAction] = createSignal<"refresh" | "drain" | "terminate" | null>(
-    null,
-  );
+  const [proxyAction, setProxyAction] = createSignal<
+    "refresh" | "drain" | "terminate" | "stop" | null
+  >(null);
   const [proxyNote, setProxyNote] = createSignal("");
   const [terminateArmed, setTerminateArmed] = createSignal(false);
-
-  onMount(() => {
-    const timer = window.setInterval(() => {
-      if (proxyAction() === null && isLive("getAgentProxyStatus")) {
-        void actions.refreshAgentProxy().catch(() => undefined);
-      }
-    }, 2_000);
-    onCleanup(() => window.clearInterval(timer));
-  });
 
   const refreshProxy = (): void => {
     setProxyAction("refresh");
@@ -134,8 +125,14 @@ export function SettingsTab(): JSX.Element {
       .finally(() => setProxyAction(null));
   };
 
+  // Settings needs one current snapshot when it opens. Later changes arrive
+  // from run lifecycle events or the explicit Refresh button, without a timer
+  // that repeatedly wakes or respawns an otherwise idle sidecar.
+  onMount(refreshProxy);
+
   const restartProxy = (mode: "drain" | "terminate"): void => {
     const active = state.agencyProxy?.activeRuns ?? 0;
+    const wasConnected = state.agencyProxy?.connected ?? false;
     setProxyAction(mode);
     setTerminateArmed(false);
     setProxyNote(
@@ -147,7 +144,19 @@ export function SettingsTab(): JSX.Element {
     );
     void actions
       .restartAgentProxy(mode)
-      .then(() => setProxyNote(tx("AgencyProxy restarted")))
+      .then(() =>
+        setProxyNote(wasConnected ? tx("AgencyProxy restarted") : tx("AgencyProxy started")),
+      )
+      .catch((cause) => setProxyNote(describeError(cause)))
+      .finally(() => setProxyAction(null));
+  };
+
+  const stopProxy = (): void => {
+    setProxyAction("stop");
+    setProxyNote("");
+    void actions
+      .stopAgentProxy()
+      .then(() => setProxyNote(tx("AgencyProxy stopped")))
       .catch((cause) => setProxyNote(describeError(cause)))
       .finally(() => setProxyAction(null));
   };
@@ -326,7 +335,11 @@ export function SettingsTab(): JSX.Element {
               >
                 <Row
                   label={tx("Sidecar status")}
-                  hint={state.agencyProxy?.socket ?? tx("checking the local endpoint")}
+                  hint={
+                    state.agencyProxy?.detail ??
+                    state.agencyProxy?.socket ??
+                    tx("checking the local endpoint")
+                  }
                 >
                   <div class="flex flex-wrap items-center justify-end gap-2">
                     <span
@@ -356,10 +369,28 @@ export function SettingsTab(): JSX.Element {
                     >
                       {proxyAction() === "drain"
                         ? tx("Waiting…")
-                        : (state.agencyProxy?.activeRuns ?? 0) > 0
-                          ? tx("Wait & restart")
-                          : tx("Restart")}
+                        : state.agencyProxy?.connected === false
+                          ? tx("Start")
+                          : (state.agencyProxy?.activeRuns ?? 0) > 0
+                            ? tx("Wait & restart")
+                            : tx("Restart")}
                     </button>
+                    <Show
+                      when={
+                        state.agencyProxy?.connected &&
+                        state.agencyProxy.activeRuns === 0 &&
+                        isLive("stopAgentProxy")
+                      }
+                    >
+                      <button
+                        type="button"
+                        disabled={proxyAction() !== null}
+                        onClick={stopProxy}
+                        class="rounded-lg border border-az-hairline-strong px-3 py-[5px] text-[12px] text-az-muted transition-colors hover:border-error hover:text-error disabled:cursor-not-allowed disabled:opacity-40"
+                      >
+                        {proxyAction() === "stop" ? tx("Stopping…") : tx("Stop")}
+                      </button>
+                    </Show>
                     <Show when={(state.agencyProxy?.activeRuns ?? 0) > 0}>
                       <button
                         type="button"

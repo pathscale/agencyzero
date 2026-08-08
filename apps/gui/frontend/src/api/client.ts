@@ -222,6 +222,8 @@ export interface AgencyZeroApi {
   getAgentProxyStatus(): Promise<AgencyProxyStatus>;
   /** Restart after active runs drain, or cooperatively terminate them first. */
   restartAgentProxy(mode: "drain" | "terminate"): Promise<AgencyProxyStatus>;
+  /** Stop an idle sidecar until the owner explicitly starts it again. */
+  stopAgentProxy(): Promise<AgencyProxyStatus>;
   /**
    * Open the OS file picker, for the composer's Attach button. The chosen
    * paths land in the prompt as text — the agents read file paths in prose,

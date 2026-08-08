@@ -51,6 +51,10 @@ const en = {
   "a selection takes effect when you restart the idle sidecar":
     "a selection takes effect when you restart the idle sidecar",
   "AgencyProxy restarted": "AgencyProxy restarted",
+  "AgencyProxy started": "AgencyProxy started",
+  "AgencyProxy stopped": "AgencyProxy stopped",
+  Start: "Start",
+  "Stopping…": "Stopping…",
   "Waiting for {count} live runs to finish": "Waiting for {count} live runs to finish",
   "Terminating live runs before restart": "Terminating live runs before restart",
   "Wait & restart": "Wait & restart",

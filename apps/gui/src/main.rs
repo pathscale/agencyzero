@@ -59,6 +59,7 @@ const IMPLEMENTED: &[&str] = &[
     "choose_agent_proxy_binary",
     "get_agent_proxy_status",
     "restart_agent_proxy",
+    "stop_agent_proxy",
     "get_workspace_root",
     "create_workspace_root",
     "list_projects",
@@ -844,6 +845,11 @@ async fn restart_agent_proxy(
         .filter(|path| !path.is_empty())
         .map(PathBuf::from);
     state.proxy.restart(configured_proxy, mode).await
+}
+
+#[tauri::command]
+async fn stop_agent_proxy(state: State<'_, AppState>) -> Result<agent_proxy::Status, String> {
+    state.proxy.stop_if_idle().await
 }
 
 /// The user's home, or nothing when the platform will not say.
@@ -1677,6 +1683,7 @@ fn main() {
             choose_agent_proxy_binary,
             get_agent_proxy_status,
             restart_agent_proxy,
+            stop_agent_proxy,
             get_workspace_root,
             create_workspace_root,
             projects::list_projects,
