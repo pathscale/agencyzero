@@ -223,26 +223,38 @@ fn restart_resume_path(config_dir: &std::path::Path) -> PathBuf {
     config_dir.join(RESTART_RESUME_FILE)
 }
 
-fn write_restart_resume(state: &AppState) -> Result<(), String> {
-    let settings = state
-        .tables
-        .kv_get(settings::KEY)
-        .and_then(|raw| serde_json::from_str::<GlobalSettings>(&raw).ok())
-        .unwrap_or_default();
-    let agent = settings.default_agent.clone();
+fn restart_resume_marker(
+    settings: &GlobalSettings,
+    project_id: &str,
+    actor: &str,
+) -> RestartResume {
+    let agent = if settings.models.contains_key(actor) {
+        actor.to_string()
+    } else {
+        settings.default_agent.clone()
+    };
     let model = settings
         .models
         .get(&agent)
         .map(|selection| selection.default.clone())
         .unwrap_or_default();
-    let marker = RestartResume {
-        project_id: String::new(),
+    RestartResume {
+        project_id: project_id.into(),
         agent,
         model,
-        permission: settings.default_permission,
-        effort: settings.default_effort,
+        permission: settings.default_permission.clone(),
+        effort: settings.default_effort.clone(),
         prompt: RESTART_RESUME_PROMPT.into(),
-    };
+    }
+}
+
+fn write_restart_resume(state: &AppState, project_id: &str, actor: &str) -> Result<(), String> {
+    let settings = state
+        .tables
+        .kv_get(settings::KEY)
+        .and_then(|raw| serde_json::from_str::<GlobalSettings>(&raw).ok())
+        .unwrap_or_default();
+    let marker = restart_resume_marker(&settings, project_id, actor);
     std::fs::create_dir_all(&state.config_dir)
         .map_err(|error| format!("could not create restart-resume directory: {error}"))?;
     let path = restart_resume_path(&state.config_dir);
@@ -385,7 +397,12 @@ impl AppState {
 /// owner message acquire the slot first; in that case the restart waits again.
 /// Nothing is persisted and the angel remains unaware of networks, settings,
 /// or Prompt Syntax.
-pub(crate) fn schedule_agent_restart(app: &AppHandle, mode: &str) -> Result<(), String> {
+pub(crate) fn schedule_agent_restart(
+    app: &AppHandle,
+    mode: &str,
+    project_id: &str,
+    actor: &str,
+) -> Result<(), String> {
     if !matches!(mode, "disk" | "update") {
         return Err("unsupported restart mode".into());
     }
@@ -400,7 +417,7 @@ pub(crate) fn schedule_agent_restart(app: &AppHandle, mode: &str) -> Result<(), 
         )
         .map_err(|_| "a lifecycle action is already scheduled".to_string())?;
 
-    if let Err(error) = write_restart_resume(&state) {
+    if let Err(error) = write_restart_resume(&state, project_id, actor) {
         state
             .agent_restart_scheduled
             .store(false, std::sync::atomic::Ordering::Release);
@@ -450,6 +467,36 @@ pub(crate) fn schedule_agent_restart(app: &AppHandle, mode: &str) -> Result<(), 
         }
     });
     Ok(())
+}
+
+#[cfg(test)]
+mod restart_resume_tests {
+    use super::*;
+
+    #[test]
+    fn authored_restart_resumes_the_originating_project_and_provider() {
+        let settings = GlobalSettings::default();
+
+        let marker = restart_resume_marker(&settings, "project-origin", "codex");
+
+        assert_eq!(marker.project_id, "project-origin");
+        assert_eq!(marker.agent, "codex");
+        assert_eq!(
+            marker.model,
+            settings.models.get("codex").unwrap().default,
+            "the resumed run should use the originating provider's selected default"
+        );
+    }
+
+    #[test]
+    fn an_unknown_actor_falls_back_without_losing_the_project() {
+        let settings = GlobalSettings::default();
+
+        let marker = restart_resume_marker(&settings, "project-origin", "future-agent");
+
+        assert_eq!(marker.project_id, "project-origin");
+        assert_eq!(marker.agent, settings.default_agent);
+    }
 }
 
 /// Which commands Rust answers. See [`IMPLEMENTED`].

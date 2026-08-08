@@ -3719,7 +3719,7 @@ async fn apply_directive(
                     code: "OWNER_AUTHORITY_REQUIRED".into(),
                 };
             }
-            match crate::schedule_agent_restart(app, &mode) {
+            match crate::schedule_agent_restart(app, &mode, project_id, actor) {
                 Ok(()) => Outcome::Done(format!(
                     "application {} scheduled after active runs finish",
                     if mode == "update" {
