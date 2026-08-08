@@ -1,7 +1,8 @@
-import { render, waitFor } from "@solidjs/testing-library";
+import { render, waitFor, within } from "@solidjs/testing-library";
 import { afterEach, describe, expect, it } from "vitest";
 import { AGENT_STATUS, SETTINGS } from "~/api/fixtures";
 import { WelcomeFlow } from "~/features/onboarding/WelcomeFlow";
+import { SettingsTab } from "~/features/settings/SettingsTab";
 import { TabStrip } from "~/features/tabs/TabStrip";
 import { useWorkspace, type Workspace, WorkspaceProvider } from "~/stores/workspace";
 
@@ -20,6 +21,7 @@ async function mountWelcome(): Promise<{
     <WorkspaceProvider>
       <Probe />
       <TabStrip />
+      <SettingsTab />
       <WelcomeFlow />
     </WorkspaceProvider>
   ));
@@ -36,16 +38,18 @@ afterEach(() => {
 });
 
 describe("WelcomeFlow", () => {
-  it("stays out of the way for an existing install and reopens from Help", async () => {
+  it("stays out of the way for an existing install and reopens from Settings", async () => {
     SETTINGS.onboardingCompleted = true;
     const { screen } = await mountWelcome();
 
     expect(screen.queryByRole("dialog", { name: "Welcome to AgencyZero" })).toBeNull();
-    screen.getByRole("button", { name: "Help and setup" }).click();
+    expect(screen.queryByRole("button", { name: "Help and setup" })).toBeNull();
+    screen.getByRole("button", { name: "Welcome Tutorial" }).click();
 
-    expect(await screen.findByRole("dialog", { name: "Welcome to AgencyZero" })).toBeVisible();
-    expect(screen.getByText("Restoring from backup?")).toBeVisible();
-    expect(screen.getByRole("button", { name: "Select backup file…" })).toBeVisible();
+    const dialog = await screen.findByRole("dialog", { name: "Welcome to AgencyZero" });
+    expect(dialog).toBeVisible();
+    expect(within(dialog).getByText("Restoring from backup?")).toBeVisible();
+    expect(within(dialog).getByRole("button", { name: "Select backup file…" })).toBeVisible();
   });
 
   it("shows on a new store and defers without marking setup complete", async () => {
@@ -65,7 +69,7 @@ describe("WelcomeFlow", () => {
     for (const status of AGENT_STATUS) status.state = "missing";
     const { screen } = await mountWelcome();
 
-    screen.getByRole("button", { name: "Help and setup" }).click();
+    screen.getByRole("button", { name: "Welcome Tutorial" }).click();
     const firstContinue = screen.getByRole("button", { name: "Continue" });
     await waitFor(() => expect(firstContinue).toBeEnabled());
     firstContinue.click();

@@ -253,7 +253,17 @@ export function SettingsTab(): JSX.Element {
             <div class="font-medium text-[12.5px] text-az-strong">{t("language.label")}</div>
             <div class="mt-0.5 text-[11px] text-az-muted">{t("language.hint")}</div>
           </div>
-          <LanguageSwitcher align="end" />
+          <div class="flex shrink-0 items-center gap-2">
+            <LanguageSwitcher align="end" />
+            <button
+              type="button"
+              data-guide-target="help-setup"
+              onClick={() => actions.openOnboarding()}
+              class="rounded-lg border border-az-hairline-strong px-2.5 py-1.5 text-[11.5px] text-az-muted transition-colors hover:border-primary hover:text-primary"
+            >
+              {tx("Welcome Tutorial")}
+            </button>
+          </div>
         </div>
 
         <Show when={settings()}>

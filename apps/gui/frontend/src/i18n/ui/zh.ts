@@ -776,6 +776,7 @@ const zh = {
   "Create first project": "创建第一个项目",
   Continue: "继续",
   "Help and setup": "帮助和设置",
+  "Welcome Tutorial": "欢迎教程",
   "Restoring from backup?": "要从备份恢复吗？",
   "Select an AgencyZero backup, then restore it before continuing setup.":
     "选择 AgencyZero 备份，然后在继续设置前恢复。",
