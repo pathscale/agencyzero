@@ -50,6 +50,13 @@ const zh = {
   "a selection takes effect when you restart the idle sidecar":
     "所选文件将在空闲的辅助进程重启后生效",
   "AgencyProxy restarted": "AgencyProxy 已重启",
+  "Waiting for {count} live runs to finish": "正在等待 {count} 个运行中的任务完成",
+  "Terminating live runs before restart": "正在终止运行中的任务，然后重启",
+  "Wait & restart": "等待后重启",
+  "Terminate & restart": "终止并重启",
+  "Confirm terminate & restart": "确认终止并重启",
+  "Terminating…": "正在终止…",
+  "Waiting…": "正在等待…",
   Reconnected: "已重新连接",
   "Agent defaults": "智能体默认值",
   "what a new tab starts with": "新标签页的初始设置",
