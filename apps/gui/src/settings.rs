@@ -474,6 +474,20 @@ pub fn normalize(settings: &mut GlobalSettings) {
     }
 }
 
+/// Defaults for a store whose settings row is missing or unreadable.
+///
+/// A genuinely empty store should offer first-run setup. A store that already
+/// owns projects is an established installation whose settings row was lost;
+/// showing onboarding there compounds the failure and can write defaults back
+/// over the owner's configuration.
+pub fn defaults_for_store(has_projects: bool) -> GlobalSettings {
+    let mut settings = GlobalSettings::default();
+    if has_projects {
+        settings.onboarding_completed = Some(true);
+    }
+    settings
+}
+
 /// Merge a partial patch into a stored record.
 ///
 /// Objects merge key by key; everything else replaces. **Arrays replace rather
@@ -577,6 +591,12 @@ mod tests {
         let mut upgraded: GlobalSettings = serde_json::from_str("{}").expect("old row parses");
         normalize(&mut upgraded);
         assert_eq!(upgraded.onboarding_completed, Some(true));
+    }
+
+    #[test]
+    fn a_missing_settings_row_does_not_reopen_onboarding_in_an_established_store() {
+        assert_eq!(defaults_for_store(false).onboarding_completed, Some(false));
+        assert_eq!(defaults_for_store(true).onboarding_completed, Some(true));
     }
 
     /// The case the model picker depends on: unchecking a model sends a shorter

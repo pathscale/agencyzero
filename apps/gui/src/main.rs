@@ -29,6 +29,7 @@ use std::sync::Arc;
 use tauri::menu::{AboutMetadata, Menu, MenuBuilder, MenuItemBuilder, SubmenuBuilder};
 use tauri::{AppHandle, Emitter, Manager, Runtime, State};
 use tauri_plugin_dialog::DialogExt;
+use worktable::prelude::SelectQueryExecutor;
 
 use crate::db::location::{self, DataLocation};
 use crate::db::tables::Tables;
@@ -876,21 +877,23 @@ async fn quit_app(app: AppHandle, state: State<'_, AppState>) -> Result<(), Stri
 /// disk rather than overwritten, so it is still there to look at.
 #[tauri::command]
 fn get_settings(state: State<'_, AppState>) -> GlobalSettings {
-    let mut settings = state
+    let has_projects = state
         .tables
-        .kv_get(settings::KEY)
-        .and_then(|raw| match serde_json::from_str(&raw) {
-            Ok(parsed) => Some(parsed),
-            Err(error) => {
-                crate::log!(
-                    log::Level::Warn,
-                    "settings",
-                    "record unreadable, using defaults: {error}"
-                );
-                None
-            }
-        })
-        .unwrap_or_default();
+        .project
+        .select_all()
+        .execute()
+        .is_ok_and(|projects| !projects.is_empty());
+    let mut settings = match state.tables.kv_get(settings::KEY) {
+        Some(raw) => serde_json::from_str(&raw).unwrap_or_else(|error| {
+            crate::log!(
+                log::Level::Warn,
+                "settings",
+                "record unreadable, using established-store defaults: {error}"
+            );
+            settings::defaults_for_store(has_projects)
+        }),
+        None => settings::defaults_for_store(has_projects),
+    };
     settings::normalize(&mut settings);
     settings
 }
@@ -914,14 +917,22 @@ async fn set_settings(
     // protects the record on disk from a stale write.
     let _guard = state.settings_write.lock().await;
 
+    let has_projects = state
+        .tables
+        .project
+        .select_all()
+        .execute()
+        .is_ok_and(|projects| !projects.is_empty());
     let current = state
         .tables
         .kv_get(settings::KEY)
         .and_then(|raw| serde_json::from_str(&raw).ok())
-        .unwrap_or_else(|| serde_json::to_value(GlobalSettings::default()).unwrap_or_default());
+        .unwrap_or_else(|| {
+            serde_json::to_value(settings::defaults_for_store(has_projects)).unwrap_or_default()
+        });
 
-    let previous: GlobalSettings =
-        serde_json::from_value(current.clone()).unwrap_or_else(|_| GlobalSettings::default());
+    let previous: GlobalSettings = serde_json::from_value(current.clone())
+        .unwrap_or_else(|_| settings::defaults_for_store(has_projects));
 
     let mut merged = current;
     settings::merge(&mut merged, &patch);
