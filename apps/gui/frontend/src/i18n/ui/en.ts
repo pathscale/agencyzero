@@ -523,6 +523,7 @@ const en = {
   "Review with {agent}": "Review with {agent}",
   "Review by {agent}": "Review by {agent}",
   "Review failed": "Review failed",
+  "head {sha}": "head {sha}",
   "Not sent to the agent. Copy it and paste it on if you want.":
     "Not sent to the agent. Copy it and paste it on if you want.",
   "Copy this message": "Copy this message",

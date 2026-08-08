@@ -958,6 +958,11 @@ export function ReviewNote(props: { message: Message }): JSX.Element {
             {props.message.stop}
           </span>
         </Show>
+        <Show when={props.message.review?.headSha}>
+          <span class="shrink-0 font-mono text-[10px] text-az-muted">
+            {tx("head {sha}", { sha: props.message.review!.headSha.slice(0, 8) })}
+          </span>
+        </Show>
         <span class="ml-auto shrink-0">
           <CopyMessageButton body={props.message.body} />
         </span>

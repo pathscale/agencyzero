@@ -234,24 +234,45 @@ impl Tables {
             }
         }
 
+        // Each monitor owns only the table's terminal lifecycle handle. It
+        // does not borrow the generated table, so a future shutdown can still
+        // move every table into `close()` while this watcher is alive.
+        let kv = self.kv.persistence_monitor();
+        let project = self.project.persistence_monitor();
+        let project_item = self.project_item.persistence_monitor();
+        let item_completion = self.item_completion.persistence_monitor();
+        let message = self.message.persistence_monitor();
+        let message_chunk = self.message_chunk.persistence_monitor();
+        let task_log = self.task_log.persistence_monitor();
+        let agent_io = self.agent_io.persistence_monitor();
+        let usage_ledger = self.usage_ledger.persistence_monitor();
+        let usage_cache = self.usage_cache.persistence_monitor();
+        let usage_session = self.usage_session.persistence_monitor();
+        let approval_rule = self.approval_rule.persistence_monitor();
+        let pull_request = self.pull_request.persistence_monitor();
+        let question = self.question.persistence_monitor();
+        let question_reply = self.question_reply.persistence_monitor();
+        let reply_checkpoint = self.reply_checkpoint.persistence_monitor();
+        let study_event = self.study_event.persistence_monitor();
+
         tokio::select! {
-            result = self.kv.wait_for_persistence_failure() => named("kv", result),
-            result = self.project.wait_for_persistence_failure() => named("project", result),
-            result = self.project_item.wait_for_persistence_failure() => named("project_item", result),
-            result = self.item_completion.wait_for_persistence_failure() => named("item_completion", result),
-            result = self.message.wait_for_persistence_failure() => named("message", result),
-            result = self.message_chunk.wait_for_persistence_failure() => named("message_chunk", result),
-            result = self.task_log.wait_for_persistence_failure() => named("task_log", result),
-            result = self.agent_io.wait_for_persistence_failure() => named("agent_io", result),
-            result = self.usage_ledger.wait_for_persistence_failure() => named("usage_ledger", result),
-            result = self.usage_cache.wait_for_persistence_failure() => named("usage_cache", result),
-            result = self.usage_session.wait_for_persistence_failure() => named("usage_session", result),
-            result = self.approval_rule.wait_for_persistence_failure() => named("approval_rule", result),
-            result = self.pull_request.wait_for_persistence_failure() => named("pull_request", result),
-            result = self.question.wait_for_persistence_failure() => named("question", result),
-            result = self.question_reply.wait_for_persistence_failure() => named("question_reply", result),
-            result = self.reply_checkpoint.wait_for_persistence_failure() => named("reply_checkpoint", result),
-            result = self.study_event.wait_for_persistence_failure() => named("study_event", result),
+            result = kv.wait_for_failure() => named("kv", result),
+            result = project.wait_for_failure() => named("project", result),
+            result = project_item.wait_for_failure() => named("project_item", result),
+            result = item_completion.wait_for_failure() => named("item_completion", result),
+            result = message.wait_for_failure() => named("message", result),
+            result = message_chunk.wait_for_failure() => named("message_chunk", result),
+            result = task_log.wait_for_failure() => named("task_log", result),
+            result = agent_io.wait_for_failure() => named("agent_io", result),
+            result = usage_ledger.wait_for_failure() => named("usage_ledger", result),
+            result = usage_cache.wait_for_failure() => named("usage_cache", result),
+            result = usage_session.wait_for_failure() => named("usage_session", result),
+            result = approval_rule.wait_for_failure() => named("approval_rule", result),
+            result = pull_request.wait_for_failure() => named("pull_request", result),
+            result = question.wait_for_failure() => named("question", result),
+            result = question_reply.wait_for_failure() => named("question_reply", result),
+            result = reply_checkpoint.wait_for_failure() => named("reply_checkpoint", result),
+            result = study_event.wait_for_failure() => named("study_event", result),
         }
     }
 

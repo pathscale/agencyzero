@@ -504,6 +504,7 @@ const zh = {
   "Review with {agent}": "使用 {agent} 审查",
   "Review by {agent}": "{agent} 的审查",
   "Review failed": "审查失败",
+  "head {sha}": "提交 {sha}",
   "Not sent to the agent. Copy it and paste it on if you want.":
     "不会发送给智能体。如需要可复制后手动粘贴。",
   "Copy this message": "复制此消息",

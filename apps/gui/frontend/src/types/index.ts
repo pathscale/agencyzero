@@ -271,6 +271,8 @@ export interface Message {
   agent: Agent;
   /** Set when `author` is "moderator". */
   moderation: Moderation | null;
+  /** PR revision reviewed when `author` is "review". */
+  review?: ReviewMetadata | null;
   /** `Request::model` — the tab's model at send time. */
   model: string;
   permission: Permission;
@@ -281,6 +283,12 @@ export interface Message {
   body: string;
   /** ISO 8601. Transcript order. */
   createdAt: string;
+}
+
+/** Structured review metadata; provenance and outcome remain normal message fields. */
+export interface ReviewMetadata {
+  /** Immutable Git commit reviewed. Empty only on legacy rows or lookup failure. */
+  headSha: string;
 }
 
 /** Live now — one per `Event::ToolCall` with no result yet. */
