@@ -2165,7 +2165,11 @@ function createWorkspace() {
    * Its conversation is separate from project tabs, including one native
    * session per provider.
    */
-  const sendTaskPrompt = async (body: string, study?: StudyTurnMetadata): Promise<void> => {
+  const sendTaskPrompt = async (
+    body: string,
+    study?: StudyTurnMetadata,
+    stateless = false,
+  ): Promise<void> => {
     const taskManager = state.settings?.taskManager;
     requireReadyAgent(taskManager?.agent ?? "claude");
     await client().sendMessage({
@@ -2175,6 +2179,7 @@ function createWorkspace() {
       model: taskManager?.model,
       permission: taskManager?.permission,
       effort: taskManager?.effort,
+      stateless,
       study,
     });
   };

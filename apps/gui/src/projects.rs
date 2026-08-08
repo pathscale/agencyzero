@@ -1087,6 +1087,10 @@ pub struct SendMessageInput {
     /// `Some(true)` and `None` both leave the agent's default. Only Claude has a
     /// lever; the crate no-ops it for the others.
     pub extra_thinking: Option<bool>,
+    /// Fresh one-shot run that neither resumes nor replaces the stored native
+    /// session. Used by bounded maintenance actions such as Home cleanup.
+    #[serde(default)]
+    pub stateless: bool,
     /// Content-free facts computed before the composer compiles controls or
     /// appends attachment paths. Absent callers fall back to the sent body.
     pub study: Option<StudyTurnMetadata>,
@@ -1146,6 +1150,26 @@ fn agent_session_key(project_id: &str, agent: Agent) -> String {
         Agent::Codex => format!("session:codex:{project_id}"),
         Agent::Copilot => format!("session:copilot:{project_id}"),
     }
+}
+
+/// Record a provider-opened session unless this is an isolated maintenance
+/// run. Returning whether a write occurred keeps the caller from emitting a
+/// misleading project-session update for a stateless run.
+async fn record_started_session(
+    tables: &Tables,
+    project_id: &str,
+    agent: Agent,
+    session: String,
+    stateless: bool,
+) -> Result<bool, String> {
+    if stateless {
+        return Ok(false);
+    }
+    tables
+        .kv_put(&agent_session_key(project_id, agent), session)
+        .await
+        .map_err(|error| error.to_string())?;
+    Ok(true)
 }
 
 /// Whether a failed run proved that its persisted resume pointer is unusable.
@@ -8668,6 +8692,7 @@ pub async fn create_project(
             permission: input.permission,
             effort: input.effort,
             extra_thinking: input.extra_thinking,
+            stateless: false,
             study: input.study,
         },
         state,
@@ -8822,13 +8847,16 @@ pub async fn send_message(
     // place: if Settings changed its roots, the frontend queues this message
     // until the current run settles, then a fresh invocation resumes the same
     // session with the new scope.
-    let scope = invocation_scope(
+    let mut scope = invocation_scope(
         &state.tables,
         &input.project_id,
         agent,
         crate::workspace_root_path(&app, &state),
         &state.location.path,
     );
+    if input.stateless {
+        scope.resume = None;
+    }
     let workspace_roots = scope.workspace_roots();
 
     /*
@@ -8858,6 +8886,10 @@ pub async fn send_message(
             .lock()
             .map_err(|_| "the run registry is unavailable".to_string())?;
         if let Some(running) = active.get(&input.project_id) {
+            if input.stateless {
+                drop(active);
+                return Err(BUSY_WITH_RUN.into());
+            }
             if !can_inject(running.agent, agent) {
                 drop(active);
                 return Err(BUSY_WITH_RUN.into());
@@ -8995,11 +9027,15 @@ pub async fn send_message(
      * directory rather than the platform default. `None` is the whole feature
      * turned off, in one value: an off project cannot accidentally sample.
      */
-    let checkpoint_dir = state
-        .tables
-        .kv_get(&crate::notes::checkpoints_key(&input.project_id))
-        .is_some_and(|value| value == "true")
-        .then(|| state.location.path.join("checkpoints"));
+    let checkpoint_dir = if input.stateless {
+        None
+    } else {
+        state
+            .tables
+            .kv_get(&crate::notes::checkpoints_key(&input.project_id))
+            .is_some_and(|value| value == "true")
+            .then(|| state.location.path.join("checkpoints"))
+    };
 
     /*
      * Where this project's durable memory lives, keyed by project id.
@@ -9065,6 +9101,7 @@ pub async fn send_message(
     let turn_id = user_message.id.clone();
     let effort = input.effort.clone();
     let extra_thinking = input.extra_thinking;
+    let stateless = input.stateless;
 
     tauri::async_runtime::spawn(async move {
         drive_run(
@@ -9088,6 +9125,7 @@ pub async fn send_message(
             permission,
             effort,
             extra_thinking,
+            stateless,
             scope,
             checkpoint_dir,
         )
@@ -9541,6 +9579,9 @@ async fn drive_run(
     // Whether the model may spend reasoning tokens. `Some(false)` disables it;
     // see `SendMessageInput::extra_thinking`.
     extra_thinking: Option<bool>,
+    // A bounded maintenance run: never resume, learn from, or replace the
+    // Task Manager's conversational session.
+    stateless: bool,
     scope: InvocationScope,
     // Where to write knowledge checkpoints, or `None` when this project does
     // not take them. See `checkpoint_if_due`.
@@ -9558,13 +9599,21 @@ async fn drive_run(
      * theirs, the format is ours.
      */
     let is_task_manager = project_id == crate::tasks::TASK_MANAGER_ID;
-    let provider_handoff = provider_handoff(&tables, &project_id, &turn_id, agent);
-    let item_fork_handoff = resume
-        .as_deref()
-        .is_none_or(str::is_empty)
-        .then(|| tables.kv_get(&item_fork_handoff_key(&project_id)))
-        .flatten()
-        .unwrap_or_default();
+    let provider_handoff = if stateless {
+        String::new()
+    } else {
+        provider_handoff(&tables, &project_id, &turn_id, agent)
+    };
+    let item_fork_handoff = if stateless {
+        String::new()
+    } else {
+        resume
+            .as_deref()
+            .is_none_or(str::is_empty)
+            .then(|| tables.kv_get(&item_fork_handoff_key(&project_id)))
+            .flatten()
+            .unwrap_or_default()
+    };
     let handoff_bytes = provider_handoff.len() + item_fork_handoff.len();
     let settings = global_settings(&tables);
     let announce_start = app
@@ -9680,9 +9729,13 @@ async fn drive_run(
      * Empty until a compaction has happened, which is the honest default: a
      * conversation that has never been summarised has lost nothing yet.
      */
-    let notes = tables
-        .kv_get(&crate::notes::notes_key(&project_id))
-        .unwrap_or_default();
+    let notes = if stateless {
+        String::new()
+    } else {
+        tables
+            .kv_get(&crate::notes::notes_key(&project_id))
+            .unwrap_or_default()
+    };
     let mut system = String::new();
 
     /*
@@ -9699,10 +9752,11 @@ async fn drive_run(
      * A whole file rather than a section of one, so there is no parse to get
      * wrong and no heading whose rename would switch this off in silence.
      */
-    if let Some(rules) =
-        std::fs::read_to_string(std::path::Path::new(&cwd).join(crate::notes::RULES_FILE))
-            .ok()
-            .filter(|text| !text.trim().is_empty())
+    if !stateless
+        && let Some(rules) =
+            std::fs::read_to_string(std::path::Path::new(&cwd).join(crate::notes::RULES_FILE))
+                .ok()
+                .filter(|text| !text.trim().is_empty())
     {
         system.push_str(
             "The repository you are working in states these rules, and they take \
@@ -9729,8 +9783,9 @@ async fn drive_run(
         system.push_str(instructions.trim());
     }
 
-    if let Some(instruction) =
-        response_verbosity_instruction(&project_response_verbosity(&tables, &project_id))
+    if !stateless
+        && let Some(instruction) =
+            response_verbosity_instruction(&project_response_verbosity(&tables, &project_id))
     {
         if !system.is_empty() {
             system.push_str("\n\n");
@@ -9780,22 +9835,24 @@ async fn drive_run(
      * AgencyZero knows which project this is, so it says so, and the memory
      * follows the project instead of the path.
      */
-    if let Err(error) = std::fs::create_dir_all(&memory_dir) {
-        crate::log!(
-            crate::log::Level::Warn,
-            "run",
-            "{project_id}: could not create the memory directory: {error}"
-        );
+    if !stateless {
+        if let Err(error) = std::fs::create_dir_all(&memory_dir) {
+            crate::log!(
+                crate::log::Level::Warn,
+                "run",
+                "{project_id}: could not create the memory directory: {error}"
+            );
+        }
+        if !system.is_empty() {
+            system.push_str("\n\n");
+        }
+        system.push_str(&format!(
+            "This project's durable memory is {}. It belongs to this project and follows \
+             it across sessions, compactions and re-clones. Keep operating knowledge \
+             there rather than in a memory keyed to the working directory.",
+            memory_dir.display()
+        ));
     }
-    if !system.is_empty() {
-        system.push_str("\n\n");
-    }
-    system.push_str(&format!(
-        "This project's durable memory is {}. It belongs to this project and follows \
-         it across sessions, compactions and re-clones. Keep operating knowledge \
-         there rather than in a memory keyed to the working directory.",
-        memory_dir.display()
-    ));
 
     let system_bytes = system.len();
     let parent_session_id = resume.clone().unwrap_or_default();
@@ -10778,20 +10835,29 @@ async fn drive_run(
                 // Written every time rather than only when empty, because an
                 // agent is free to hand back a new id and the stale one would
                 // resume the wrong conversation.
-                if let Err(error) = tables
-                    .kv_put(&agent_session_key(&project_id, agent), session.clone())
-                    .await
+                match record_started_session(
+                    &tables,
+                    &project_id,
+                    agent,
+                    session.clone(),
+                    stateless,
+                )
+                .await
                 {
-                    crate::log!(
+                    Err(error) => crate::log!(
                         crate::log::Level::Error,
                         "run",
                         "{project_id}: could not record the session id: {error}"
-                    );
-                } else if let Some(row) = tables.project.select(project_id.clone()) {
-                    let _ = app.emit(
-                        "project:updated",
-                        with_session(ProjectDto::from(row), &tables),
-                    );
+                    ),
+                    Ok(true) => {
+                        if let Some(row) = tables.project.select(project_id.clone()) {
+                            let _ = app.emit(
+                                "project:updated",
+                                with_session(ProjectDto::from(row), &tables),
+                            );
+                        }
+                    }
+                    Ok(false) => {}
                 }
             }
             _ => {}
@@ -13167,6 +13233,7 @@ mod tests {
             permission: Some("auto".into()),
             effort: None,
             extra_thinking: None,
+            stateless: false,
             study: None,
         };
 
@@ -14571,6 +14638,44 @@ mod tests {
         assert!(!kept.delete_proposed);
 
         tables.shutdown().await.expect("proposal store drains");
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[tokio::test]
+    async fn stateless_cleanup_cannot_replace_the_task_manager_session() {
+        let dir = std::env::temp_dir().join(format!(
+            "az-stateless-cleanup-{}-{}",
+            std::process::id(),
+            uuid::Uuid::now_v7()
+        ));
+        let tables = Tables::open(&dir).await.expect("session store opens");
+        let project_id = crate::tasks::TASK_MANAGER_ID;
+        tables
+            .kv_put(
+                &agent_session_key(project_id, Agent::Codex),
+                "existing-conversation".into(),
+            )
+            .await
+            .expect("existing session writes");
+
+        assert!(
+            !record_started_session(
+                &tables,
+                project_id,
+                Agent::Codex,
+                "one-shot-cleanup".into(),
+                true,
+            )
+            .await
+            .expect("stateless recording is deliberate")
+        );
+        assert_eq!(
+            tables.kv_get(&agent_session_key(project_id, Agent::Codex)),
+            Some("existing-conversation".into()),
+            "cleanup must leave the conversational session untouched"
+        );
+
+        tables.shutdown().await.expect("session store drains");
         let _ = std::fs::remove_dir_all(dir);
     }
 }

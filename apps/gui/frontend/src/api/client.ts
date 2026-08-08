@@ -140,6 +140,8 @@ export interface AgencyZeroApi {
     effort?: string;
     /** "Extra Thinking": `false` disables the model's reasoning (Claude only). */
     extraThinking?: boolean;
+    /** Fresh one-shot run that neither resumes nor replaces the stored native session. */
+    stateless?: boolean;
     study?: StudyTurnMetadata;
   }): Promise<Message>;
   /** Approve once / Deny on a moderator hold. */
