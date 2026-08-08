@@ -231,7 +231,7 @@ dependencies = [
  "tauri-plugin-updater",
  "tokio",
  "uuid",
- "worktable 1.0.0-beta.9 (git+https://github.com/pathscale/WorkTable.git?rev=c5f7a6b1e983137e03c8bf9c2f9f0e72b37949cd)",
+ "worktable 1.0.0-beta.9 (git+https://github.com/pathscale/WorkTable.git?rev=bf986cf5575cfb49da8795d30ef6a3868e85eaa3)",
  "wt-migrate",
  "zip",
 ]
@@ -5649,7 +5649,7 @@ dependencies = [
 [[package]]
 name = "worktable"
 version = "1.0.0-beta.9"
-source = "git+https://github.com/pathscale/WorkTable.git?rev=c5f7a6b1e983137e03c8bf9c2f9f0e72b37949cd#c5f7a6b1e983137e03c8bf9c2f9f0e72b37949cd"
+source = "git+https://github.com/pathscale/WorkTable.git?rev=bf986cf5575cfb49da8795d30ef6a3868e85eaa3#bf986cf5575cfb49da8795d30ef6a3868e85eaa3"
 dependencies = [
  "WorkTablesIndex",
  "arctic-wt",
@@ -5674,7 +5674,7 @@ dependencies = [
  "tokio",
  "tracing",
  "uuid",
- "worktable_codegen 1.0.0-beta.9 (git+https://github.com/pathscale/WorkTable.git?rev=c5f7a6b1e983137e03c8bf9c2f9f0e72b37949cd)",
+ "worktable_codegen 1.0.0-beta.9 (git+https://github.com/pathscale/WorkTable.git?rev=bf986cf5575cfb49da8795d30ef6a3868e85eaa3)",
 ]
 
 [[package]]
@@ -5694,7 +5694,7 @@ dependencies = [
 [[package]]
 name = "worktable_codegen"
 version = "1.0.0-beta.9"
-source = "git+https://github.com/pathscale/WorkTable.git?rev=c5f7a6b1e983137e03c8bf9c2f9f0e72b37949cd#c5f7a6b1e983137e03c8bf9c2f9f0e72b37949cd"
+source = "git+https://github.com/pathscale/WorkTable.git?rev=bf986cf5575cfb49da8795d30ef6a3868e85eaa3#bf986cf5575cfb49da8795d30ef6a3868e85eaa3"
 dependencies = [
  "convert_case 0.6.0",
  "indexmap 2.14.0",
