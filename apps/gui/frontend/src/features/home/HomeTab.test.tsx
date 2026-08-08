@@ -1,6 +1,7 @@
 import { fireEvent, render, waitFor } from "@solidjs/testing-library";
 import { describe, expect, it, vi } from "vitest";
 import { CleanupReview, HomeTab, TASK_CLEANUP_PROMPT } from "~/features/home/HomeTab";
+import { setPrefs } from "~/stores/prefs";
 import { useWorkspace, type Workspace, WorkspaceProvider } from "~/stores/workspace";
 
 async function mountHome() {
@@ -68,7 +69,7 @@ describe("Home item rows", () => {
 
   it("sorts legacy Home items by time and direction instead of only changing the labels", async () => {
     const screen = await mountHome();
-    const controls = screen.getByRole("group", { name: "Sort items" });
+    const controls = screen.getByRole("group", { name: "Sort projects and items" });
     const [by, direction] = Array.from(controls.querySelectorAll("button"));
     const worktableOrder = () =>
       screen
@@ -89,6 +90,26 @@ describe("Home item rows", () => {
     expect(worktableOrder()[0]).toContain("Phase A");
     fireEvent.click(direction);
     expect(worktableOrder()[0]).toContain("Ship corrective");
+  });
+
+  it("sorts the Home project groups instead of leaving the dominant rows fixed", async () => {
+    setPrefs("itemSortBy", "status");
+    setPrefs("itemSortDirection", "asc");
+    const screen = await mountHome();
+    const controls = screen.getByRole("group", { name: "Sort projects and items" });
+    const [by, direction] = Array.from(controls.querySelectorAll("button"));
+    const projectOrder = () =>
+      Array.from(screen.container.querySelectorAll<HTMLElement>("[data-project-id]")).map(
+        (project) => project.dataset.projectId,
+      );
+
+    expect(projectOrder()).toEqual(["cafe", "agencyzero", "worktable"]);
+    fireEvent.click(direction);
+    expect(projectOrder()).toEqual(["worktable", "agencyzero", "cafe"]);
+
+    fireEvent.click(by);
+    expect(by).toHaveTextContent("Time");
+    expect(projectOrder()).toEqual(["worktable", "cafe", "agencyzero"]);
   });
 
   it("expands one item description and closes it when another item receives focus", async () => {

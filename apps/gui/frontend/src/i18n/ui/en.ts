@@ -338,6 +338,7 @@ const en = {
   "Filter items…": "Filter items…",
   "Filter items": "Filter items",
   "Sort items": "Sort items",
+  "Sort projects and items": "Sort projects and items",
   "Toggle item sort between status and time": "Toggle item sort between status and time",
   Status: "Status",
   Time: "Time",

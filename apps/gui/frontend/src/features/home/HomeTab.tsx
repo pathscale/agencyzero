@@ -9,7 +9,7 @@ import { AttachmentPills } from "~/features/project/Composer";
 import { AgentIoList } from "~/features/project/ProjectPanel";
 import { relativeTime } from "~/lib/format";
 import { defaultItemDescription } from "~/lib/itemDescription";
-import { sortItems } from "~/lib/itemSort";
+import { sortItems, sortProjects } from "~/lib/itemSort";
 import { AGENT_LABELS, nextStatus, statusSuffix } from "~/lib/labels";
 import { describeError, log } from "~/lib/log";
 import { compileAdvancedPrompt } from "~/lib/promptEditor";
@@ -54,9 +54,11 @@ export function HomeTab(): JSX.Element {
   // Showing them here as peers would turn one project into a pile of apparent
   // top-level projects and erase the hierarchy that makes routing obvious.
   const ordered = createMemo(() =>
-    state.projects
-      .filter((project) => project.forkedFrom === null)
-      .sort((a, b) => a.order - b.order),
+    sortProjects(
+      state.projects.filter((project) => project.forkedFrom === null),
+      prefs.itemSortBy,
+      prefs.itemSortDirection,
+    ),
   );
 
   /**
@@ -356,12 +358,12 @@ export function CleanupReview(props: {
   );
 }
 
-/** Home uses the same durable item sort preference as every project panel. */
+/** Home sorts its project groups and each group's items with one durable preference. */
 function HomeItemSortControls(): JSX.Element {
   return (
     <fieldset
       class="ml-auto flex shrink-0 items-center gap-1 border-0 p-0"
-      aria-label={tx("Sort items")}
+      aria-label={tx("Sort projects and items")}
     >
       <button
         type="button"
@@ -1253,7 +1255,10 @@ function ProjectGroup(props: {
      * letting the column scroll. The projects with no items compressed to
      * 2px slivers, which read as four empty pills above the real groups.
      */
-    <div class="flex-none overflow-hidden rounded-xl border border-az-hairline-soft bg-base-300">
+    <div
+      data-project-id={props.project.id}
+      class="flex-none overflow-hidden rounded-xl border border-az-hairline-soft bg-base-300"
+    >
       {/*
         Single click folds, double click opens the tab. The two coexist
         without timers: a double-click fires two clicks first, which toggle

@@ -323,6 +323,7 @@ const zh = {
   "Filter items…": "筛选事项…",
   "Filter items": "筛选事项",
   "Sort items": "事项排序",
+  "Sort projects and items": "项目和事项排序",
   "Toggle item sort between status and time": "在状态和时间排序间切换",
   Status: "状态",
   Time: "时间",
