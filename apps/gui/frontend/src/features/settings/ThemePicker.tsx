@@ -31,6 +31,8 @@ export function ThemePicker(props: {
   onSoftness: (value: number) => void;
   onWash: (value: number) => void;
   onBrightness: (value: number) => void;
+  onReset: () => void;
+  isDefault: boolean;
 }): JSX.Element {
   /** Five stops across the comfort range, matching the strength row beside it. */
   const softnessStops = () => Array.from({ length: 5 }, (_, i) => (i * MAX_SOFTNESS) / 4);
@@ -62,12 +64,23 @@ export function ThemePicker(props: {
           label={t("appearance.colourStrength")}
           hint={t("appearance.colourStrengthHint")}
           stops={[...WASH_STOPS]}
-          value={props.theme.wash}
+          value={Math.min(props.theme.wash, WASH_STOPS[WASH_STOPS.length - 1])}
           onPick={props.onWash}
           preview={(stop) =>
             `color-mix(in oklab, ${props.theme.surface || DEFAULT_ACCENT} ${deskStrength(stop)}%, ${deskAnchor(props.theme.softness)})`
           }
           format={(stop) => `${stop}%`}
+          action={
+            <button
+              type="button"
+              aria-label={t("appearance.resetButton")}
+              disabled={props.isDefault}
+              onClick={props.onReset}
+              class="ml-auto rounded-lg border border-az-hairline-strong px-2.5 py-1 text-[11px] text-az-muted transition-colors hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              {t("appearance.resetButton")}
+            </button>
+          }
         />
 
         <Axis
@@ -268,6 +281,7 @@ function Axis(props: {
   /** When present, the swatch shows a letter in this colour instead of a fill alone. */
   ink?: (stop: number) => string;
   format: (stop: number, index: number) => string;
+  action?: JSX.Element;
 }): JSX.Element {
   const selected = (stop: number) => Math.abs(props.value - stop) < 0.01;
   return (
@@ -277,6 +291,7 @@ function Axis(props: {
           {props.label}
         </span>
         <span class="text-[11px] text-az-faint">{props.hint}</span>
+        {props.action}
       </div>
       <div class="flex items-center gap-2">
         <For each={props.stops}>

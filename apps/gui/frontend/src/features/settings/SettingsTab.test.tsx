@@ -138,16 +138,36 @@ describe("appearance settings", () => {
     expect(screen.workspace.state.settings?.theme.surface).toBe("");
     expect(screen.workspace.state.settings?.theme.accent).toBe("");
     expect(screen.container.querySelector('input[type="color"]')).toBeNull();
-    expect(screen.getAllByRole("button", { name: /accent/i })).toHaveLength(7);
-    fireEvent.click(screen.getByRole("button", { name: "Accent colour 2" }));
+    expect(
+      screen.container.querySelectorAll(
+        'button[aria-label^="Accent colour"], button[aria-label="Designed yellow accent"]',
+      ),
+    ).toHaveLength(7);
+    fireEvent.click(
+      screen.container.querySelector('button[aria-label="Accent colour 2"]') as HTMLButtonElement,
+    );
 
     await waitFor(() => expect(screen.workspace.state.settings?.theme.accent).not.toBe(""));
     expect(screen.workspace.state.settings?.theme.surface).toBe("");
     const initialAccent = screen.workspace.state.settings?.theme.accent;
 
-    fireEvent.click(screen.getByRole("button", { name: "Colour strength 100%" }));
+    expect(
+      screen.container.querySelector('button[aria-label="Colour strength 50%"]'),
+    ).toHaveAttribute("aria-pressed", "true");
+    expect(screen.container.querySelector('button[aria-label="Colour strength 100%"]')).toBeNull();
+    fireEvent.click(
+      screen.container.querySelector(
+        'button[aria-label="Colour strength 25%"]',
+      ) as HTMLButtonElement,
+    );
     await waitFor(() =>
       expect(screen.workspace.state.settings?.theme.accent).not.toBe(initialAccent),
     );
+
+    fireEvent.click(
+      screen.container.querySelector('button[aria-label="Reset to default"]') as HTMLButtonElement,
+    );
+    await waitFor(() => expect(screen.workspace.state.settings?.theme.accent).toBe(""));
+    expect(screen.workspace.state.settings?.theme.wash).toBe(50);
   });
 });

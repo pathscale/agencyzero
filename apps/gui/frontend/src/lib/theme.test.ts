@@ -150,11 +150,11 @@ describe("applyTheme", () => {
     expect(root.style.getPropertyValue("--az-wash")).toBe(`${WASH_STOPS[WASH_STOPS.length - 1]}%`);
   });
 
-  it("includes a literal full-strength surface choice", () => {
-    expect(WASH_STOPS).toContain(100);
+  it("caps strength before the dark base becomes a flat colour field", () => {
+    expect(WASH_STOPS).toEqual([0, 10, 25, 50]);
     applyTheme({ surface: "#3355ff", accent: "", softness: 0, wash: 100, textBrightness: 0 }, root);
     expect(root.style.getPropertyValue("--az-surface")).toBe("#3355ff");
-    expect(root.style.getPropertyValue("--az-wash")).toBe("100%");
+    expect(root.style.getPropertyValue("--az-wash")).toBe("50%");
   });
 
   /*

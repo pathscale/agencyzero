@@ -19,7 +19,7 @@ import { AgentStateDot } from "~/components/StatusDot";
 import { countdown, formatBytes, relativeTime } from "~/lib/format";
 import { AGENT_LABELS, agentStateLabel, envPolicyLabel, permissionLabel } from "~/lib/labels";
 import { describeError, log } from "~/lib/log";
-import { DEFAULT_WASH } from "~/lib/theme";
+import { DEFAULT_WASH, WASH_STOPS } from "~/lib/theme";
 import { t, tx, type UiMessage } from "~/stores/i18n";
 import { prefs, setPrefs } from "~/stores/prefs";
 import { useNow, useWorkspace } from "~/stores/workspace";
@@ -628,40 +628,39 @@ export function SettingsTab(): JSX.Element {
                 </Row>
                 <ThemePicker
                   theme={current().theme}
-                  onSurface={(surface) => void actions.saveSettings({ theme: { surface } })}
+                  onSurface={(surface) =>
+                    void actions.saveSettings({
+                      theme: {
+                        surface,
+                        wash: Math.min(current().theme.wash, WASH_STOPS[WASH_STOPS.length - 1]),
+                      },
+                    })
+                  }
                   onAccent={(accent) => void actions.saveSettings({ theme: { accent } })}
                   onSoftness={(softness) => void actions.saveSettings({ theme: { softness } })}
                   onWash={(wash) => void actions.saveSettings({ theme: { wash } })}
                   onBrightness={(textBrightness) =>
                     void actions.saveSettings({ theme: { textBrightness } })
                   }
+                  isDefault={
+                    current().theme.surface === "" &&
+                    current().theme.accent === "" &&
+                    current().theme.softness === 0 &&
+                    current().theme.wash === DEFAULT_WASH &&
+                    current().theme.textBrightness === 0
+                  }
+                  onReset={() =>
+                    void actions.saveSettings({
+                      theme: {
+                        surface: "",
+                        accent: "",
+                        softness: 0,
+                        wash: DEFAULT_WASH,
+                        textBrightness: 0,
+                      },
+                    })
+                  }
                 />
-                <Row label={t("appearance.reset")} hint={t("appearance.resetHint")} isLast>
-                  <button
-                    type="button"
-                    disabled={
-                      current().theme.surface === "" &&
-                      current().theme.accent === "" &&
-                      current().theme.softness === 0 &&
-                      current().theme.wash === DEFAULT_WASH &&
-                      current().theme.textBrightness === 0
-                    }
-                    onClick={() =>
-                      void actions.saveSettings({
-                        theme: {
-                          surface: "",
-                          accent: "",
-                          softness: 0,
-                          wash: DEFAULT_WASH,
-                          textBrightness: 0,
-                        },
-                      })
-                    }
-                    class="rounded-lg border border-az-hairline-strong px-3 py-[5px] text-[12px] text-az-muted transition-colors hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-40"
-                  >
-                    {t("appearance.resetButton")}
-                  </button>
-                </Row>
               </Section>
 
               <Section

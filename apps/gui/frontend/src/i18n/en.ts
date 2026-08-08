@@ -31,7 +31,7 @@ const en = {
     designedYellow: "Designed yellow accent",
     reset: "Reset",
     resetHint: "back to the designed yellow accent and default surface settings",
-    resetButton: "Use the default",
+    resetButton: "Reset to default",
   },
 } as const;
 

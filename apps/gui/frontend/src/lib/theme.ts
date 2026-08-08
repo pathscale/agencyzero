@@ -33,7 +33,7 @@ export interface AccentOption {
 export function surfaceColors(mode: "light" | "dark"): string[] {
   const ringHues = [42, 24, 4, 336, 300, 268, 238, 210, 184, 162, 132, 94];
   const innerHues = [30, 330, 270, 210, 150, 90];
-  const levels = mode === "dark" ? [28, 40, 52] : [52, 66, 80];
+  const levels = mode === "dark" ? [22, 33, 44] : [52, 66, 80];
   return [
     ...ringHues.map((hue) => hslToHex(hue, 72, levels[0])),
     ...ringHues.map((hue) => hslToHex(hue, 68, levels[1])),
@@ -60,8 +60,8 @@ export function accentOptions(
   const base = toColorValue(isAccent(surface) ? surface : DEFAULT_ACCENT).hsl.h;
   const strength = Math.min(Math.max(wash, 0), 100) / 100;
   const lift = Math.min(Math.max(softness, 0), MAX_SOFTNESS);
-  const saturation = 46 + strength * 36;
-  const lightness = mode === "light" ? 52 - lift * 1.5 : 48 + lift * 1.7;
+  const saturation = 50 + strength * 32 - lift * 2;
+  const lightness = mode === "light" ? 54 - lift * 2.3 : 44 + lift * 2.5;
   const harmonies = [0, 35, 95, 155, 180, 250].map((offset) => {
     const color = hslToHex((base + offset) % 360, saturation, lightness);
     return { value: color, color };
@@ -90,14 +90,13 @@ const DAMP_RATIO = 0.45;
  * it. nofilter.io mixes 8–11% into its base tiers; the stops below bracket that,
  * with `0` kept reachable because the designed palette is a legitimate choice.
  *
- * The final stop is deliberately literal: at 100% the selected wheel colour is
- * the surface colour, not an approximation hidden behind another mix. The
- * intermediate stops keep the useful neutral-to-colour progression.
+ * Fifty percent is the deliberate ceiling: beyond it a dark theme stops being
+ * a dark neutral foundation and becomes a flat field of the selected colour.
  */
-export const WASH_STOPS = [0, 10, 25, 50, 100] as const;
+export const WASH_STOPS = [0, 10, 25, 50] as const;
 
 /** What a freshly picked colour washes at, before anyone touches the strength. */
-export const DEFAULT_WASH = 10;
+export const DEFAULT_WASH = 50;
 
 /**
  * How far the text ladder can be pushed back up, in oklch percentage points.

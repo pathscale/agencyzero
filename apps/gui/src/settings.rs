@@ -248,9 +248,9 @@ impl Default for Theme {
             surface: Some(String::new()),
             accent: String::new(),
             softness: 0.0,
-            // Matches `DEFAULT_WASH` in the webview's lib/theme.ts: a colour
-            // picked with no opinion about strength washes at 10%.
-            wash: 10.0,
+            // Matches `DEFAULT_WASH` in the webview's lib/theme.ts: the fourth
+            // and strongest useful stop preserves a dark neutral foundation.
+            wash: 50.0,
             text_brightness: 0.0,
         }
     }
