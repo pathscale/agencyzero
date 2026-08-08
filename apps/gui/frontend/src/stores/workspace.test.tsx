@@ -1,6 +1,6 @@
 import { render, waitFor } from "@solidjs/testing-library";
 import { beforeEach, describe, expect, it } from "vitest";
-import { SETTINGS, setClaudeUsageError } from "~/api/fixtures";
+import { SETTINGS, setClaudeUsageError, setSyncProjectError } from "~/api/fixtures";
 import { prefs, setPrefs } from "~/stores/prefs";
 import {
   claudeUsageBackoffMs,
@@ -87,6 +87,7 @@ const keys = (workspace: Workspace) => workspace.state.tabs.map((tab) => tab.key
 
 beforeEach(() => {
   setClaudeUsageError(null);
+  setSyncProjectError(null);
   SETTINGS.workspaceTabs = null;
   setPrefs("lastTabKey", "home");
   // These scenarios predate tab restore, so they remember everything open.
@@ -94,6 +95,15 @@ beforeEach(() => {
 });
 
 describe("startup", () => {
+  it("keeps the workspace and Settings usable when proxy reattachment fails", async () => {
+    setSyncProjectError("AgencyProxy stopped unexpectedly");
+    const workspace = await mountWorkspace();
+
+    expect(workspace.state.boot.status).toBe("ready");
+    workspace.actions.openSettings();
+    expect(workspace.state.activeKey).toBe("settings");
+  });
+
   it("opens Home plus the remembered tabs, in project order", async () => {
     const workspace = await mountWorkspace();
     expect(keys(workspace)).toEqual(["home", "worktable", "cafe", "agencyzero"]);

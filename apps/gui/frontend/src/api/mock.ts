@@ -519,7 +519,10 @@ export function createMockApi(): AgencyZeroApi {
 
     listMessages: (projectId) =>
       settle(messages.filter((message) => message.projectId === projectId)),
-    syncProject: () => settle(undefined),
+    syncProject: () =>
+      fixtures.SYNC_PROJECT_ERROR
+        ? Promise.reject(new Error(fixtures.SYNC_PROJECT_ERROR))
+        : settle(undefined),
 
     async sendMessage(input) {
       // The task manager is reserved with no project row, exactly like Rust:
