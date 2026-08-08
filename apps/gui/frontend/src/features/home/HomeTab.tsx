@@ -280,12 +280,14 @@ export function CleanupReview(props: {
   const [isConfirming, setIsConfirming] = createSignal(false);
   const [error, setError] = createSignal<string | null>(null);
 
-  const keep = async (id: string): Promise<void> => {
+  const keep = async (id: string): Promise<boolean> => {
     setError(null);
     try {
       await props.onKeep(id);
+      return true;
     } catch (cause) {
       setError(describeError(cause));
+      return false;
     }
   };
 
@@ -329,20 +331,26 @@ export function CleanupReview(props: {
         <div class="flex flex-wrap gap-1.5">
           <For each={props.candidates}>
             {({ item, projectName }) => (
-              <span class="flex items-center gap-1.5 rounded-md border border-warning/30 bg-az-inset px-2 py-1 text-[11px] text-az-body">
+              <label class="flex cursor-pointer items-center gap-1.5 rounded-md border border-warning/30 bg-az-inset px-2 py-1 text-[11px] text-az-body">
+                <input
+                  type="checkbox"
+                  checked
+                  aria-label={tx("Delete {name}", { name: item.title })}
+                  class="checkbox checkbox-xs checkbox-error"
+                  onChange={(event) => {
+                    if (event.currentTarget.checked) return;
+                    const checkbox = event.currentTarget;
+                    void keep(item.id).then((kept) => {
+                      if (!kept) checkbox.checked = true;
+                    });
+                  }}
+                />
                 <span class="max-w-[360px] truncate">
                   <span class="text-az-muted">{projectName} · </span>
                   {item.title}
                 </span>
-                <button
-                  type="button"
-                  onClick={() => void keep(item.id)}
-                  aria-label={tx("Keep {name}", { name: item.title })}
-                  class="font-semibold text-primary hover:text-az-primary-hover"
-                >
-                  {tx("Keep")}
-                </button>
-              </span>
+                <span class="font-semibold text-error">{tx("Delete")}</span>
+              </label>
             )}
           </For>
         </div>
@@ -406,7 +414,7 @@ function HomeCleanupButton(): JSX.Element {
     setError(null);
     setIsStarting(true);
     try {
-      await actions.sendTaskPrompt(TASK_CLEANUP_PROMPT);
+      await actions.sendTaskPrompt(TASK_CLEANUP_PROMPT, undefined, true);
     } catch (cause) {
       setError(describeError(cause));
     } finally {

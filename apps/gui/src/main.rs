@@ -327,6 +327,7 @@ async fn resume_after_restart(app: AppHandle, marker: RestartResume) {
         permission: Some(marker.permission),
         effort: Some(marker.effort),
         extra_thinking: None,
+        stateless: false,
         study: None,
     };
     match projects::send_message(app.clone(), input, state).await {
