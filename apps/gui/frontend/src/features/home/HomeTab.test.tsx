@@ -160,4 +160,29 @@ describe("Home item rows", () => {
     fireEvent.click(remove);
     await waitFor(() => expect(screen.queryByText(title)).toBeNull());
   });
+
+  it("reviews a project deletion in place before removing its stored work", async () => {
+    const screen = await mountHome();
+    expect(screen.workspace.state.projects.some((project) => project.id === "worktable")).toBe(
+      true,
+    );
+
+    fireEvent.click(screen.getByLabelText("Delete WorkTable"));
+
+    expect(screen.getByText("Delete?")).toBeTruthy();
+    expect(screen.workspace.state.projects.some((project) => project.id === "worktable")).toBe(
+      true,
+    );
+
+    const confirm = screen.getByTitle(
+      "Removes this project and its transcript, items, pull requests and sessions from the store. Usage/cost history is kept.",
+    );
+    fireEvent.click(confirm);
+
+    await waitFor(() =>
+      expect(screen.workspace.state.projects.some((project) => project.id === "worktable")).toBe(
+        false,
+      ),
+    );
+  });
 });
