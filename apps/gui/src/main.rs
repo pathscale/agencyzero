@@ -1949,6 +1949,7 @@ fn main() {
                 let resume_handle = app.handle().clone();
                 tauri::async_runtime::spawn(resume_after_restart(resume_handle, marker));
             }
+            tauri::async_runtime::spawn(projects::recover_proxy_runs(app.handle().clone()));
 
             /*
              * The cafe standard, ported: SIGTERM, SIGINT and SIGHUP route

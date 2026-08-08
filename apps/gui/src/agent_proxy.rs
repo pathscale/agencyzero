@@ -35,20 +35,30 @@ impl AgencyProxy {
         }
     }
 
-    pub async fn start(&self, request: RunRequest) -> Result<ProxyRun, String> {
+    pub async fn start(
+        &self,
+        request: RunRequest,
+        existing_run_id: Option<RunId>,
+    ) -> Result<ProxyRun, String> {
         let client = self.connect().await?;
         let events = client.subscribe();
-        let run_id = next_run_id();
-        accepted(
-            client
-                .request(ClientMessage::StartRun {
-                    run_id: run_id.clone(),
-                    request: Box::new(request),
-                    idempotency_key: format!("{}:start", run_id.0),
-                })
-                .await
-                .map_err(|error| error.to_string())?,
-        )?;
+        let run_id = existing_run_id.unwrap_or_else(next_run_id);
+        match client
+            .request(ClientMessage::StartRun {
+                run_id: run_id.clone(),
+                request: Box::new(request),
+                idempotency_key: format!("{}:start", run_id.0),
+            })
+            .await
+            .map_err(|error| error.to_string())?
+        {
+            ServerResponse::Accepted
+            | ServerResponse::Error {
+                code: agency_proxy_protocol::ErrorCode::Conflict,
+                ..
+            } => {}
+            response => return Err(response_error(response)),
+        }
         match client
             .request(ClientMessage::AttachRun {
                 run_id: run_id.clone(),
@@ -72,9 +82,22 @@ impl AgencyProxy {
     }
 
     pub async fn run(&self, request: RunRequest) -> Result<Outcome, String> {
-        let mut run = self.start(request).await?;
+        let mut run = self.start(request, None).await?;
         while run.recv().await.is_some() {}
         run.finish().await
+    }
+
+    pub async fn list_runs(&self) -> Result<Vec<agency_proxy_protocol::RunSnapshot>, String> {
+        match self
+            .connect()
+            .await?
+            .request(ClientMessage::ListRuns)
+            .await
+            .map_err(|error| error.to_string())?
+        {
+            ServerResponse::Runs { runs } => Ok(runs),
+            response => Err(response_error(response)),
+        }
     }
 
     pub async fn probe_providers(&self) -> Result<Vec<ProviderStatus>, String> {
