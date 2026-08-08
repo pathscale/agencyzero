@@ -69,6 +69,42 @@ function deepMerge<T>(target: T, patch: DeepPartial<T>): T {
   return out;
 }
 
+const MODERATOR_AGENTS = ["claude", "codex", "copilot"] as const;
+
+/** Mirror Rust's backwards-compatible moderator model normalization. */
+function normalizeModeratorModel(settings: GlobalSettings): string {
+  const configured = settings.moderator.model;
+  const qualified = configured.split(":", 2);
+  if (qualified.length === 2) {
+    const [agent, model] = qualified;
+    if (
+      MODERATOR_AGENTS.includes(agent as (typeof MODERATOR_AGENTS)[number]) &&
+      settings.models[agent as (typeof MODERATOR_AGENTS)[number]].enabled.includes(model)
+    ) {
+      return configured;
+    }
+  } else {
+    for (const agent of MODERATOR_AGENTS) {
+      if (settings.models[agent].enabled.includes(configured)) return `${agent}:${configured}`;
+    }
+  }
+
+  const priorAgent = qualified.length === 2 ? qualified[0] : undefined;
+  const candidates = [priorAgent, settings.defaultAgent, ...MODERATOR_AGENTS].filter(
+    (agent, index, all): agent is (typeof MODERATOR_AGENTS)[number] =>
+      MODERATOR_AGENTS.includes(agent as (typeof MODERATOR_AGENTS)[number]) &&
+      all.indexOf(agent) === index,
+  );
+  for (const agent of candidates) {
+    const selection = settings.models[agent];
+    const model = selection.enabled.includes(selection.default)
+      ? selection.default
+      : selection.enabled[0];
+    if (model) return `${agent}:${model}`;
+  }
+  return configured;
+}
+
 let idCounter = 0;
 const nextId = (prefix: string) =>
   `${prefix}-${++idCounter}-${Math.random().toString(36).slice(2, 7)}`;
@@ -411,6 +447,13 @@ export function createMockApi(): AgencyZeroApi {
       return settle(undefined);
     },
 
+    async unmarkItemDeletion(id) {
+      const item = findItem(id);
+      item.deleteProposed = false;
+      emit("item:updated", item);
+      return settle(item);
+    },
+
     async setItemStatus(id, status: ProjectStatus) {
       const item = findItem(id);
       item.status = status;
@@ -531,6 +574,7 @@ export function createMockApi(): AgencyZeroApi {
     async setSettings(patch): Promise<GlobalSettings> {
       const wasEnabled = settings.studyAnalytics.enabled;
       settings = deepMerge(settings, patch);
+      settings.moderator.model = normalizeModeratorModel(settings);
       if (!wasEnabled && settings.studyAnalytics.enabled) {
         settings.studyAnalytics.sessionId = nextId("study");
         settings.studyAnalytics.enabledAt = new Date().toISOString();
@@ -563,19 +607,21 @@ export function createMockApi(): AgencyZeroApi {
     },
 
     claudeUsage: () =>
-      settle({
-        fiveHour: {
-          utilization: 31.5,
-          resetsAt: new Date(Date.now() + 2 * 3_600_000).toISOString(),
-        },
-        sevenDay: {
-          utilization: 42,
-          resetsAt: new Date(Date.now() + 4 * 86_400_000).toISOString(),
-        },
-        sevenDaySonnet: null,
-        limits: [],
-        checkedAt: new Date().toISOString(),
-      }),
+      fixtures.CLAUDE_USAGE_ERROR
+        ? Promise.reject(new Error(fixtures.CLAUDE_USAGE_ERROR))
+        : settle({
+            fiveHour: {
+              utilization: 31.5,
+              resetsAt: new Date(Date.now() + 2 * 3_600_000).toISOString(),
+            },
+            sevenDay: {
+              utilization: 42,
+              resetsAt: new Date(Date.now() + 4 * 86_400_000).toISOString(),
+            },
+            sevenDaySonnet: null,
+            limits: [],
+            checkedAt: new Date().toISOString(),
+          }),
 
     listAgentStatus(recheck): Promise<AgentStatus[]> {
       if (recheck) {
@@ -982,6 +1028,30 @@ export function createMockApi(): AgencyZeroApi {
             costPerCompletedItem: 0.317_777,
             processedTokens: 880_800,
             turns: 127,
+          },
+        ],
+        items: [
+          {
+            itemId: "item-settings",
+            itemTitle: "Repair settings drift",
+            projectId: "project-alpha",
+            projectName: "AgencyZero",
+            agents: ["codex"],
+            durationMs: 18 * 60_000 + 24_000,
+            turns: 7,
+            completed: true,
+            lastAt: "2026-08-05T14:22:07.000Z",
+          },
+          {
+            itemId: "item-colors",
+            itemTitle: "Refine theme color controls",
+            projectId: "project-alpha",
+            projectName: "AgencyZero",
+            agents: ["claude", "codex"],
+            durationMs: 11 * 60_000 + 8_000,
+            turns: 5,
+            completed: false,
+            lastAt: "2026-08-05T15:04:12.000Z",
           },
         ],
         totalUsd: 11.8,

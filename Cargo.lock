@@ -23,7 +23,7 @@ checksum = "320119579fcad9c21884f5c4861d16174d0e06250625266f50fe6898340abefa"
 
 [[package]]
 name = "agency-tools"
-version = "0.3.21"
+version = "0.3.38"
 dependencies = [
  "derive_more 2.1.1",
  "dirs",
@@ -34,7 +34,7 @@ dependencies = [
  "serde_json",
  "tokio",
  "uuid",
- "worktable",
+ "worktable 1.0.0-beta.10 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -190,25 +190,25 @@ checksum = "f2032f911046de80f0a198e0901378627c33f59ea0ac00e363d481118bd70a53"
 
 [[package]]
 name = "az-agent"
-version = "0.3.21"
+version = "0.3.38"
 dependencies = [
  "az-core",
 ]
 
 [[package]]
 name = "az-agent-proxy"
-version = "0.3.21"
+version = "0.3.38"
 dependencies = [
  "az-core",
 ]
 
 [[package]]
 name = "az-core"
-version = "0.3.21"
+version = "0.3.38"
 
 [[package]]
 name = "az-gui"
-version = "0.3.21"
+version = "0.3.38"
 dependencies = [
  "agent-abstraction",
  "agent-experimental",
@@ -231,14 +231,14 @@ dependencies = [
  "tauri-plugin-updater",
  "tokio",
  "uuid",
- "worktable",
+ "worktable 1.0.0-beta.10 (git+https://github.com/pathscale/WorkTable.git?rev=7ab68d17c31e7dd3e56a364ffbb559dd0819b317)",
  "wt-migrate",
  "zip",
 ]
 
 [[package]]
 name = "az-mcp-proxy"
-version = "0.3.21"
+version = "0.3.38"
 dependencies = [
  "az-core",
 ]
@@ -5616,9 +5616,9 @@ checksum = "1ebf944e87a7c253233ad6766e082e3cd714b5d03812acc24c318f549614536e"
 
 [[package]]
 name = "worktable"
-version = "1.0.0-beta.8"
+version = "1.0.0-beta.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "96c37605ed6afe8990858ded94cab2afdeb81ee558c312a9c88ae4345d7b3c46"
+checksum = "424244aef8a2162ade170468ada2d4046379538bc42a21cbdf48f528a97f5e94"
 dependencies = [
  "WorkTablesIndex",
  "arctic-wt",
@@ -5643,14 +5643,58 @@ dependencies = [
  "tokio",
  "tracing",
  "uuid",
- "worktable_codegen",
+ "worktable_codegen 1.0.0-beta.10 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
+name = "worktable"
+version = "1.0.0-beta.10"
+source = "git+https://github.com/pathscale/WorkTable.git?rev=7ab68d17c31e7dd3e56a364ffbb559dd0819b317#7ab68d17c31e7dd3e56a364ffbb559dd0819b317"
+dependencies = [
+ "WorkTablesIndex",
+ "arctic-wt",
+ "async-trait",
+ "congee-wt",
+ "convert_case 0.6.0",
+ "crc32fast",
+ "data_bucket",
+ "derive_more 2.1.1",
+ "eyre",
+ "fastrand",
+ "futures",
+ "indexset",
+ "log",
+ "ordered-float",
+ "parking_lot",
+ "prettytable-rs",
+ "psc-nanoid",
+ "rkyv 0.8.17",
+ "rustc-hash",
+ "smart-default",
+ "tokio",
+ "tracing",
+ "uuid",
+ "worktable_codegen 1.0.0-beta.10 (git+https://github.com/pathscale/WorkTable.git?rev=7ab68d17c31e7dd3e56a364ffbb559dd0819b317)",
 ]
 
 [[package]]
 name = "worktable_codegen"
-version = "1.0.0-beta.8"
+version = "1.0.0-beta.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "62581ac648016ad4d43f538cc7aa259844ab93f9ead34c1504a3192bb5283f64"
+checksum = "47b741a448603e7a016bf8369b93883f58186554d25cbb70dbaa28b64047d5a5"
+dependencies = [
+ "convert_case 0.6.0",
+ "indexmap 2.14.0",
+ "proc-macro2",
+ "quote",
+ "rkyv 0.7.46",
+ "syn 2.0.119",
+]
+
+[[package]]
+name = "worktable_codegen"
+version = "1.0.0-beta.10"
+source = "git+https://github.com/pathscale/WorkTable.git?rev=7ab68d17c31e7dd3e56a364ffbb559dd0819b317#7ab68d17c31e7dd3e56a364ffbb559dd0819b317"
 dependencies = [
  "convert_case 0.6.0",
  "indexmap 2.14.0",
@@ -5712,7 +5756,7 @@ dependencies = [
 
 [[package]]
 name = "wt-migrate"
-version = "0.3.21"
+version = "0.3.38"
 dependencies = [
  "derive_more 2.1.1",
  "eyre",
@@ -5722,7 +5766,7 @@ dependencies = [
  "tempfile",
  "tokio",
  "uuid",
- "worktable",
+ "worktable 1.0.0-beta.10 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]

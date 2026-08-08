@@ -1,11 +1,13 @@
 import { createMemo, createSignal, For, type JSX, onMount, Show } from "solid-js";
 import { Icon } from "~/components/Icon";
+import { duration } from "~/lib/format";
 import { tx } from "~/stores/i18n";
 import { useWorkspace } from "~/stores/workspace";
 import type {
   UsageAgentValue,
   UsageAnalytics,
   UsageDay,
+  UsageItem,
   UsageModel,
   UsageProject,
   UsageSession,
@@ -21,6 +23,7 @@ const TOKEN_CLASSES = [
 
 const ANALYTICS_TABS = [
   { key: "value", label: "Value" },
+  { key: "items", label: "Items" },
   { key: "sessions", label: "Sessions" },
   { key: "daily", label: "Daily" },
   { key: "projects", label: "Projects" },
@@ -159,6 +162,9 @@ export function AnalyticsTab(): JSX.Element {
                 <Show when={activeTab() === "sessions"}>
                   <SessionBreakdown sessions={usage().sessions} />
                 </Show>
+                <Show when={activeTab() === "items"}>
+                  <ItemBreakdown items={usage().items} />
+                </Show>
                 <Show when={activeTab() === "daily"}>
                   <DaySeries days={usage().days} />
                 </Show>
@@ -173,6 +179,60 @@ export function AnalyticsTab(): JSX.Element {
           )}
         </Show>
       </div>
+    </div>
+  );
+}
+
+function agentTime(ms: number): string {
+  if (ms < 60 * 60_000) return duration(ms);
+  const hours = Math.floor(ms / (60 * 60_000));
+  const minutes = Math.round((ms % (60 * 60_000)) / 60_000);
+  return `${hours}h ${minutes}m`;
+}
+
+/** Actual provider runtime attributed to each item, longest-running first. */
+function ItemBreakdown(props: { items: UsageItem[] }): JSX.Element {
+  return (
+    <div class="rounded-xl border border-az-hairline bg-base-100 px-4 py-3.5">
+      <div class="flex items-baseline justify-between gap-3">
+        <h2 class="font-medium text-[12.5px] text-az-title">{tx("Per item")}</h2>
+        <span class="text-[10.5px] text-az-muted">
+          {tx("measured agent-active time from captured runs")}
+        </span>
+      </div>
+      <Show
+        when={props.items.length > 0}
+        fallback={
+          <div class="py-8 text-center text-[11.5px] text-az-muted">
+            {tx("No item-linked runs yet")}
+          </div>
+        }
+      >
+        <div class="mt-3 flex flex-col gap-2">
+          <For each={props.items}>
+            {(item) => (
+              <div class="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 rounded-lg border border-az-hairline px-3 py-2.5">
+                <div class="min-w-0">
+                  <div class="truncate text-[11.5px] text-az-strong" title={item.itemId}>
+                    {item.itemTitle}
+                  </div>
+                  <div class="mt-1 truncate font-mono text-[10px] text-az-muted">
+                    {item.projectName} · {item.agents.join(", ") || "—"} · {item.turns}{" "}
+                    {tx("turns")}
+                    {item.completed ? ` · ${tx("finished")}` : ""}
+                  </div>
+                </div>
+                <div class="text-right">
+                  <div class="font-mono font-semibold text-[12px] text-primary">
+                    {agentTime(item.durationMs)}
+                  </div>
+                  <div class="mt-0.5 text-[9.5px] text-az-muted">{tx("agent time")}</div>
+                </div>
+              </div>
+            )}
+          </For>
+        </div>
+      </Show>
     </div>
   );
 }

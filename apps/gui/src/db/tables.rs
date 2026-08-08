@@ -221,6 +221,61 @@ impl Tables {
 }
 
 impl Tables {
+    /// Wait until any table's persistence worker becomes terminal.
+    ///
+    /// Healthy idle workers keep these futures pending. The first failure is
+    /// named so the application can alert immediately instead of discovering
+    /// it much later during the quit drain.
+    pub async fn wait_for_persistence_failure(&self) -> String {
+        fn named(table: &str, result: worktable::persistence::PersistenceResult) -> String {
+            match result {
+                Ok(()) => format!("{table} persistence worker closed unexpectedly"),
+                Err(error) => format!("{table} persistence failed: {error}"),
+            }
+        }
+
+        // Each monitor owns only the table's terminal lifecycle handle. It
+        // does not borrow the generated table, so a future shutdown can still
+        // move every table into `close()` while this watcher is alive.
+        let kv = self.kv.persistence_monitor();
+        let project = self.project.persistence_monitor();
+        let project_item = self.project_item.persistence_monitor();
+        let item_completion = self.item_completion.persistence_monitor();
+        let message = self.message.persistence_monitor();
+        let message_chunk = self.message_chunk.persistence_monitor();
+        let task_log = self.task_log.persistence_monitor();
+        let agent_io = self.agent_io.persistence_monitor();
+        let usage_ledger = self.usage_ledger.persistence_monitor();
+        let usage_cache = self.usage_cache.persistence_monitor();
+        let usage_session = self.usage_session.persistence_monitor();
+        let approval_rule = self.approval_rule.persistence_monitor();
+        let pull_request = self.pull_request.persistence_monitor();
+        let question = self.question.persistence_monitor();
+        let question_reply = self.question_reply.persistence_monitor();
+        let reply_checkpoint = self.reply_checkpoint.persistence_monitor();
+        let study_event = self.study_event.persistence_monitor();
+
+        tokio::select! {
+            result = kv.wait_for_failure() => named("kv", result),
+            result = project.wait_for_failure() => named("project", result),
+            result = project_item.wait_for_failure() => named("project_item", result),
+            result = item_completion.wait_for_failure() => named("item_completion", result),
+            result = message.wait_for_failure() => named("message", result),
+            result = message_chunk.wait_for_failure() => named("message_chunk", result),
+            result = task_log.wait_for_failure() => named("task_log", result),
+            result = agent_io.wait_for_failure() => named("agent_io", result),
+            result = usage_ledger.wait_for_failure() => named("usage_ledger", result),
+            result = usage_cache.wait_for_failure() => named("usage_cache", result),
+            result = usage_session.wait_for_failure() => named("usage_session", result),
+            result = approval_rule.wait_for_failure() => named("approval_rule", result),
+            result = pull_request.wait_for_failure() => named("pull_request", result),
+            result = question.wait_for_failure() => named("question", result),
+            result = question_reply.wait_for_failure() => named("question_reply", result),
+            result = reply_checkpoint.wait_for_failure() => named("reply_checkpoint", result),
+            result = study_event.wait_for_failure() => named("study_event", result),
+        }
+    }
+
     /// The stored schema fingerprint, read by opening **only** the kv table.
     ///
     /// The boot flow needs the fingerprint *before* deciding whether the other

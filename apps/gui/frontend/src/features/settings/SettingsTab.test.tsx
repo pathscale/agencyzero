@@ -103,7 +103,97 @@ describe("cost warning settings", () => {
     expect(slider.max).toBe("20");
     expect(slider.value).toBe("0.75");
 
+    fireEvent.input(slider, { target: { value: "1.25" } });
+    expect(screen.getByText("$1.25")).toBeTruthy();
     fireEvent.change(slider, { target: { value: "1.25" } });
     await waitFor(() => expect(screen.workspace.state.settings?.costWarningUsd).toBe(1.25));
+  });
+});
+
+describe("moderator settings", () => {
+  it("offers every selected provider model", async () => {
+    const screen = await mountSettings();
+
+    fireEvent.click(screen.getByLabelText("Moderator model"));
+
+    await waitFor(() => expect(document.body.textContent).toContain("Codex · GPT-5.6-Sol"));
+    expect(document.body.textContent).toContain("Claude · Haiku");
+    expect(document.body.textContent).toContain("Copilot · Auto");
+  });
+});
+
+describe("appearance settings", () => {
+  it("stores the literal dark wheel value and rebases the same petal in light mode", async () => {
+    const screen = await mountSettings();
+    const darkSwatches = Array.from(
+      screen.container.querySelectorAll<HTMLInputElement>('input[name="surface-colour"]'),
+    );
+    expect(darkSwatches).toHaveLength(31);
+
+    const darkHex = darkSwatches[0].value;
+    fireEvent.click(darkSwatches[0]);
+    await waitFor(() => expect(screen.workspace.state.settings?.theme.surface).toBe(darkHex));
+    expect(darkSwatches[0].checked).toBe(true);
+
+    fireEvent.click(screen.getByRole("button", { name: "Light" }));
+    await waitFor(() => expect(screen.workspace.state.settings?.theme.surface).not.toBe(darkHex));
+    expect(
+      Array.from(
+        screen.container.querySelectorAll<HTMLInputElement>('input[name="surface-colour"]'),
+      ).some((input) => input.checked),
+    ).toBe(true);
+
+    fireEvent.click(screen.getByRole("button", { name: "Dark" }));
+  });
+
+  it("offers curated accents without opening a colour input", async () => {
+    const screen = await mountSettings();
+
+    expect(screen.workspace.state.settings?.theme.surface).toBe("");
+    expect(screen.workspace.state.settings?.theme.accent).toBe("");
+    expect(screen.container.querySelector('input[type="color"]')).toBeNull();
+    expect(
+      screen.container.querySelectorAll(
+        'button[aria-label^="Accent colour"], button[aria-label="Designed yellow accent"]',
+      ),
+    ).toHaveLength(7);
+    fireEvent.click(
+      screen.container.querySelector('button[aria-label="Accent colour 2"]') as HTMLButtonElement,
+    );
+
+    await waitFor(() => expect(screen.workspace.state.settings?.theme.accent).not.toBe(""));
+    expect(screen.workspace.state.settings?.theme.surface).toBe("");
+    const initialAccent = screen.workspace.state.settings?.theme.accent;
+
+    expect(
+      screen.container.querySelector('button[aria-label="Colour strength 30%"]'),
+    ).toHaveAttribute("aria-pressed", "true");
+    expect(screen.container.querySelector('button[aria-label="Colour strength 0%"]')).toBeNull();
+    fireEvent.click(
+      screen.container.querySelector(
+        'button[aria-label="Colour strength 20%"]',
+      ) as HTMLButtonElement,
+    );
+    await waitFor(() =>
+      expect(screen.workspace.state.settings?.theme.accent).not.toBe(initialAccent),
+    );
+
+    fireEvent.click(
+      screen.container.querySelector('button[aria-label="Reset to default"]') as HTMLButtonElement,
+    );
+    await waitFor(() => expect(screen.workspace.state.settings?.theme.accent).toBe(""));
+    expect(screen.workspace.state.settings?.theme.wash).toBe(30);
+  });
+});
+
+describe("open source actions", () => {
+  it("offers source and star actions without interrupting the owner", async () => {
+    const screen = await mountSettings();
+    expect(screen.getByRole("button", { name: "View source" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Star on GitHub" })).toBeTruthy();
+    expect(
+      screen.getByText("If AgencyZero is useful, a GitHub star helps more people find it."),
+    ).toBeTruthy();
+    expect(screen.queryByRole("dialog", { name: /star/i })).toBeNull();
   });
 });

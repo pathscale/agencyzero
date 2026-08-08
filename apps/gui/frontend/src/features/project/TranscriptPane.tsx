@@ -15,7 +15,13 @@ import {
 import { Icon } from "~/components/Icon";
 import { ApprovalCard } from "~/features/project/ApprovalCard";
 import { CopyMessageButton, InlineText, MessageBody } from "~/features/project/MessageBody";
-import { isRetryableStop, isSuccessfulStop, isTransientStop, relativeTime } from "~/lib/format";
+import {
+  isCybersecurityRefusal,
+  isRetryableStop,
+  isSuccessfulStop,
+  isTransientStop,
+  relativeTime,
+} from "~/lib/format";
 import { AGENT_LABELS } from "~/lib/labels";
 import { costLabel, estimateTurnCost } from "~/lib/pricing";
 import { compactCount } from "~/lib/stats";
@@ -604,6 +610,7 @@ function AgentBubble(props: {
    * hover), and the fix — resend the same prompt — offered right there.
    */
   const transient = () => isTransientStop(props.message.stop);
+  const cybersecurityRefusal = () => isCybersecurityRefusal(props.message.stop);
 
   return (
     /*
@@ -630,7 +637,11 @@ function AgentBubble(props: {
               transient() ? "bg-warning/18 text-warning" : "bg-error/18 text-error"
             }`}
           >
-            {transient() ? tx("provider outage · temporary") : props.message.stop}
+            {transient()
+              ? tx("provider outage · temporary")
+              : cybersecurityRefusal()
+                ? tx("security review required")
+                : props.message.stop}
           </span>
         </Show>
         <div class="flex-1" />
@@ -945,6 +956,11 @@ export function ReviewNote(props: { message: Message }): JSX.Element {
         <Show when={props.message.stop}>
           <span class="min-w-0 truncate font-mono text-[11px] text-az-muted">
             {props.message.stop}
+          </span>
+        </Show>
+        <Show when={props.message.review?.headSha}>
+          <span class="shrink-0 font-mono text-[10px] text-az-muted">
+            {tx("head {sha}", { sha: props.message.review!.headSha.slice(0, 8) })}
           </span>
         </Show>
         <span class="ml-auto shrink-0">

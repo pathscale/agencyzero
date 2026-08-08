@@ -191,6 +191,8 @@ export interface ProjectItem {
   archived?: boolean;
   /** Detailed work-start context, omitted from ordinary compact agent snapshots. */
   context?: string;
+  /** Task Manager proposed deletion; the row stays until owner confirmation. */
+  deleteProposed?: boolean;
 }
 
 /**
@@ -271,6 +273,8 @@ export interface Message {
   agent: Agent;
   /** Set when `author` is "moderator". */
   moderation: Moderation | null;
+  /** PR revision reviewed when `author` is "review". */
+  review?: ReviewMetadata | null;
   /** `Request::model` — the tab's model at send time. */
   model: string;
   permission: Permission;
@@ -281,6 +285,12 @@ export interface Message {
   body: string;
   /** ISO 8601. Transcript order. */
   createdAt: string;
+}
+
+/** Structured review metadata; provenance and outcome remain normal message fields. */
+export interface ReviewMetadata {
+  /** Immutable Git commit reviewed. Empty only on legacy rows or lookup failure. */
+  headSha: string;
 }
 
 /** Live now — one per `Event::ToolCall` with no result yet. */
@@ -605,6 +615,8 @@ export interface GlobalSettings {
   perTurnInjection: boolean;
   /** Check the signed release manifest after launch. Never auto-installs. */
   automaticUpdateChecks: boolean;
+  /** Explicit owner authority for agent-authored allowlisted settings writes. */
+  agentSettingsUpdates: boolean;
   /** Agent lifecycle authority, disabled until the owner delegates it. */
   agentRestartPolicy: "disabled" | "restart" | "restart_and_update";
   /** Project tabs included in store backups. Null identifies an older record. */
@@ -635,13 +647,15 @@ export interface ReviewSettings {
 }
 
 /**
- * Mirrors `settings::Theme` — the two axes the picker drives.
+ * Mirrors `settings::Theme` — the persisted axes the picker drives.
  *
  * In settings rather than `localStorage` because that is where this app keeps
  * state: a webview store would not survive a data directory move and would not
  * appear in an export.
  */
 export interface ThemeSettings {
+  /** Colour washed into the workspace surfaces. Empty keeps them neutral. */
+  surface: string;
   /**
    * Accent as `#rrggbb`. Empty means the palette's own yellow — deliberately
    * not the literal, so the record cannot drift from the stylesheet.
@@ -654,9 +668,8 @@ export interface ThemeSettings {
    */
   softness: number;
   /**
-   * How much of the accent is mixed into every surface, as a percentage. The
-   * difference between a pick that changes buttons and one that changes the
-   * workspace. Ignored while `accent` is empty.
+   * How much of the surface colour is mixed into every surface, as a percentage.
+   * Ignored while `surface` is empty.
    */
   wash: number;
   /**
@@ -763,6 +776,19 @@ export interface UsageAgentValue {
   turns: number;
 }
 
+/** Measured provider work attributed to one AgencyZero item. */
+export interface UsageItem {
+  itemId: string;
+  itemTitle: string;
+  projectId: string;
+  projectName: string;
+  agents: string[];
+  durationMs: number;
+  turns: number;
+  completed: boolean;
+  lastAt: string;
+}
+
 /** Everything the Analytics view charts, from one call. */
 /**
  * The single heaviest turn — the answer to "is one request enormous, or is it
@@ -788,6 +814,7 @@ export interface UsageAnalytics {
   projects: UsageProject[];
   sessions: UsageSession[];
   agents: UsageAgentValue[];
+  items: UsageItem[];
   totalUsd: number;
   estimatedCostUsd: number;
   totalInputTokens: number;

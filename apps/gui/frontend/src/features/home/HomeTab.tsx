@@ -9,6 +9,7 @@ import { AttachmentPills } from "~/features/project/Composer";
 import { AgentIoList } from "~/features/project/ProjectPanel";
 import { relativeTime } from "~/lib/format";
 import { defaultItemDescription } from "~/lib/itemDescription";
+import { sortItems, sortProjects } from "~/lib/itemSort";
 import { AGENT_LABELS, nextStatus, statusSuffix } from "~/lib/labels";
 import { describeError, log } from "~/lib/log";
 import { compileAdvancedPrompt } from "~/lib/promptEditor";
@@ -31,6 +32,11 @@ const STATUS_TONE: Record<ProjectItem["status"], string> = {
   canceled: "text-az-faint",
 };
 
+export const TASK_CLEANUP_PROMPT = `Review every current project item and clean up the task list.
+Propose deletion for obsolete, duplicate, superseded, or fully delivered items with the exact items.retire directive and the item's id.
+Do not delete projects, do not change unrelated items, and do not treat a proposal as final deletion.
+The owner will review every item marked Delete and confirm or keep it separately.`;
+
 /**
  * Home: every project with its items, plus Pinned and Recent.
  *
@@ -48,9 +54,11 @@ export function HomeTab(): JSX.Element {
   // Showing them here as peers would turn one project into a pile of apparent
   // top-level projects and erase the hierarchy that makes routing obvious.
   const ordered = createMemo(() =>
-    state.projects
-      .filter((project) => project.forkedFrom === null)
-      .sort((a, b) => a.order - b.order),
+    sortProjects(
+      state.projects.filter((project) => project.forkedFrom === null),
+      prefs.itemSortBy,
+      prefs.itemSortDirection,
+    ),
   );
 
   /**
@@ -73,6 +81,14 @@ export function HomeTab(): JSX.Element {
     [...ordered()].sort((a, b) => b.lastActivityAt.localeCompare(a.lastActivityAt)),
   );
 
+  const proposedDeletes = createMemo(() =>
+    ordered().flatMap((project) =>
+      itemsFor(project.id)
+        .filter((item) => item.deleteProposed)
+        .map((item) => ({ item, projectName: project.name })),
+    ),
+  );
+
   return (
     <div class="flex min-w-0 flex-1 gap-3">
       <Panel class="flex min-w-0 flex-1 flex-col">
@@ -82,6 +98,8 @@ export function HomeTab(): JSX.Element {
             <span class="text-[11.5px] text-az-faint">
               {tx("and their items · click a project to open its tab")}
             </span>
+            <HomeItemSortControls />
+            <HomeCleanupButton />
           </div>
 
           {/*
@@ -110,6 +128,13 @@ export function HomeTab(): JSX.Element {
           </div>
 
           <TaskManagerStatus />
+          <CleanupReview
+            candidates={proposedDeletes()}
+            onKeep={(id) => actions.unmarkItemDeletion(id)}
+            onConfirm={async (ids) => {
+              for (const id of ids) await actions.deleteItem(id);
+            }}
+          />
         </div>
 
         <div class="az-scroll flex min-h-0 flex-1 flex-col gap-2.5 px-3.5 pb-3.5">
@@ -234,6 +259,181 @@ export function HomeTab(): JSX.Element {
         </Show>
       </div>
     </div>
+  );
+}
+
+export interface CleanupCandidate {
+  item: ProjectItem;
+  projectName: string;
+}
+
+/**
+ * Task Manager deletion proposals stay here until the owner reviews them.
+ * Merely rendering this panel performs no mutation; Confirm is the sole path
+ * that turns the visible proposal set into deletions.
+ */
+export function CleanupReview(props: {
+  candidates: CleanupCandidate[];
+  onKeep: (id: string) => Promise<unknown>;
+  onConfirm: (ids: string[]) => Promise<unknown>;
+}): JSX.Element {
+  const [isConfirming, setIsConfirming] = createSignal(false);
+  const [error, setError] = createSignal<string | null>(null);
+
+  const keep = async (id: string): Promise<void> => {
+    setError(null);
+    try {
+      await props.onKeep(id);
+    } catch (cause) {
+      setError(describeError(cause));
+    }
+  };
+
+  const confirm = async (): Promise<void> => {
+    if (isConfirming() || props.candidates.length === 0) return;
+    const ids = props.candidates.map(({ item }) => item.id);
+    setError(null);
+    setIsConfirming(true);
+    try {
+      await props.onConfirm(ids);
+    } catch (cause) {
+      setError(describeError(cause));
+    } finally {
+      setIsConfirming(false);
+    }
+  };
+
+  return (
+    <Show when={props.candidates.length > 0}>
+      <section
+        aria-label={tx("Review proposed item deletions")}
+        class="flex flex-col gap-2 rounded-[11px] border border-warning/45 bg-warning/8 px-3 py-2.5"
+      >
+        <div class="flex items-center gap-2">
+          <Icon name="shield" class="shrink-0 text-[14px] text-warning" />
+          <span class="font-semibold text-[12px] text-az-strong">
+            {tx("{count} marked Delete", { count: props.candidates.length })}
+          </span>
+          <span class="text-[11px] text-az-muted">
+            {tx("Review these proposals before removing anything.")}
+          </span>
+          <button
+            type="button"
+            onClick={() => void confirm()}
+            disabled={isConfirming()}
+            class="ml-auto rounded-md border border-error/45 bg-error/12 px-2.5 py-1 font-semibold text-[11px] text-error transition-colors hover:bg-error/22 disabled:opacity-50"
+          >
+            {isConfirming() ? tx("Deleting…") : tx("Confirm delete")}
+          </button>
+        </div>
+        <div class="flex flex-wrap gap-1.5">
+          <For each={props.candidates}>
+            {({ item, projectName }) => (
+              <span class="flex items-center gap-1.5 rounded-md border border-warning/30 bg-az-inset px-2 py-1 text-[11px] text-az-body">
+                <span class="max-w-[360px] truncate">
+                  <span class="text-az-muted">{projectName} · </span>
+                  {item.title}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => void keep(item.id)}
+                  aria-label={tx("Keep {name}", { name: item.title })}
+                  class="font-semibold text-primary hover:text-az-primary-hover"
+                >
+                  {tx("Keep")}
+                </button>
+              </span>
+            )}
+          </For>
+        </div>
+        <Show when={error()}>
+          {(message) => (
+            <p role="alert" class="text-[11px] text-error">
+              {message()}
+            </p>
+          )}
+        </Show>
+      </section>
+    </Show>
+  );
+}
+
+/** Home sorts its project groups and each group's items with one durable preference. */
+function HomeItemSortControls(): JSX.Element {
+  return (
+    <fieldset
+      class="ml-auto flex shrink-0 items-center gap-1 border-0 p-0"
+      aria-label={tx("Sort projects and items")}
+    >
+      <button
+        type="button"
+        onClick={() => setPrefs("itemSortBy", prefs.itemSortBy === "status" ? "time" : "status")}
+        class="rounded-md border border-az-hairline bg-az-inset px-1.5 py-0.5 font-medium text-[10.5px] text-az-muted transition-colors hover:text-az-strong"
+        title={tx("Toggle item sort between status and time")}
+      >
+        {tx(prefs.itemSortBy === "status" ? "Status" : "Time")}
+      </button>
+      <button
+        type="button"
+        onClick={() =>
+          setPrefs("itemSortDirection", prefs.itemSortDirection === "asc" ? "desc" : "asc")
+        }
+        class="flex size-5 items-center justify-center rounded-md border border-az-hairline bg-az-inset text-az-muted transition-colors hover:text-az-strong"
+        aria-label={tx(prefs.itemSortDirection === "asc" ? "Sort descending" : "Sort ascending")}
+        title={tx(prefs.itemSortDirection === "asc" ? "Ascending" : "Descending")}
+      >
+        <Icon
+          name="arrow-up"
+          class={`text-[11px] transition-transform ${prefs.itemSortDirection === "desc" ? "rotate-180" : ""}`}
+        />
+      </button>
+    </fieldset>
+  );
+}
+
+/** Ask Task Manager to stage cleanup proposals; this button never deletes. */
+function HomeCleanupButton(): JSX.Element {
+  const { state, actions } = useWorkspace();
+  const [isStarting, setIsStarting] = createSignal(false);
+  const [error, setError] = createSignal<string | null>(null);
+  const isRunning = () =>
+    TASK_MANAGER_ID in state.runStatus ||
+    (state.running[TASK_MANAGER_ID] ?? []).length > 0 ||
+    (state.streaming[TASK_MANAGER_ID] ?? "") !== "";
+
+  const start = async (): Promise<void> => {
+    if (isStarting() || isRunning()) return;
+    setError(null);
+    setIsStarting(true);
+    try {
+      await actions.sendTaskPrompt(TASK_CLEANUP_PROMPT);
+    } catch (cause) {
+      setError(describeError(cause));
+    } finally {
+      setIsStarting(false);
+    }
+  };
+
+  return (
+    <button
+      type="button"
+      onClick={() => void start()}
+      disabled={isStarting() || isRunning()}
+      title={
+        error() ??
+        (isRunning()
+          ? tx("Clean-up is already running")
+          : tx("Review project items and mark proposed deletions"))
+      }
+      class={`flex shrink-0 items-center gap-1 rounded-md border px-2 py-0.5 font-semibold text-[10.5px] transition-colors disabled:cursor-not-allowed disabled:opacity-45 ${
+        error()
+          ? "border-error/45 bg-error/10 text-error"
+          : "border-primary/35 bg-primary/10 text-primary hover:bg-primary/18"
+      }`}
+    >
+      <Icon name="sparkles" class="text-[11px]" />
+      {isStarting() ? tx("Starting…") : tx("Clean-up")}
+    </button>
   );
 }
 
@@ -761,6 +961,11 @@ function GroupItemRow(props: {
               {props.item.title}
             </span>
           </button>
+          <Show when={props.item.deleteProposed}>
+            <span class="shrink-0 rounded-md border border-warning/35 bg-warning/10 px-1.5 py-0.5 font-semibold text-[10.5px] text-warning">
+              {tx("Delete")}
+            </span>
+          </Show>
           <button
             type="button"
             onClick={() => {
@@ -1000,7 +1205,11 @@ function ProjectGroup(props: {
       (item) =>
         item.archived && state.projects.some((project) => project.forkedFrom?.itemId === item.id),
     );
-    return [...visible, ...archivedForkAnchors].sort((left, right) => left.order - right.order);
+    return sortItems(
+      [...visible, ...archivedForkAnchors],
+      prefs.itemSortBy,
+      prefs.itemSortDirection,
+    );
   };
   const openCount = () =>
     items().filter((item) => item.status !== "finished" && item.status !== "canceled").length;
@@ -1046,7 +1255,10 @@ function ProjectGroup(props: {
      * letting the column scroll. The projects with no items compressed to
      * 2px slivers, which read as four empty pills above the real groups.
      */
-    <div class="flex-none overflow-hidden rounded-xl border border-az-hairline-soft bg-base-300">
+    <div
+      data-project-id={props.project.id}
+      class="flex-none overflow-hidden rounded-xl border border-az-hairline-soft bg-base-300"
+    >
       {/*
         Single click folds, double click opens the tab. The two coexist
         without timers: a double-click fires two clicks first, which toggle

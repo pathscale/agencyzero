@@ -1,6 +1,7 @@
 import { fireEvent, render, waitFor } from "@solidjs/testing-library";
-import { describe, expect, it } from "vitest";
-import { HomeTab } from "~/features/home/HomeTab";
+import { describe, expect, it, vi } from "vitest";
+import { CleanupReview, HomeTab, TASK_CLEANUP_PROMPT } from "~/features/home/HomeTab";
+import { setPrefs } from "~/stores/prefs";
 import { useWorkspace, type Workspace, WorkspaceProvider } from "~/stores/workspace";
 
 async function mountHome() {
@@ -23,6 +24,94 @@ async function mountHome() {
 }
 
 describe("Home item rows", () => {
+  it("always exposes Clean-up and stages proposals through Task Manager", async () => {
+    const screen = await mountHome();
+    const send = vi.spyOn(screen.workspace.actions, "sendTaskPrompt").mockResolvedValue(undefined);
+
+    expect(screen.queryByRole("button", { name: "Confirm delete" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Clean-up" }));
+
+    await waitFor(() => expect(send).toHaveBeenCalledWith(TASK_CLEANUP_PROMPT));
+    expect(TASK_CLEANUP_PROMPT).toContain("items.retire");
+    expect(screen.queryByRole("button", { name: "Confirm delete" })).toBeNull();
+  });
+
+  it("keeps cleanup proposals intact until the explicit confirm button", async () => {
+    const onKeep = vi.fn(async () => undefined);
+    const onConfirm = vi.fn(async () => undefined);
+    const candidate = {
+      projectName: "WorkTable",
+      item: {
+        id: "item-review-delete",
+        projectId: "worktable",
+        title: "Review before deleting",
+        status: "planning" as const,
+        order: 0,
+        reference: null,
+        deleteProposed: true,
+      },
+    };
+    const screen = render(() => (
+      <CleanupReview candidates={[candidate]} onKeep={onKeep} onConfirm={onConfirm} />
+    ));
+
+    expect(screen.getByText("1 marked Delete")).toBeTruthy();
+    expect(screen.getByText("Review before deleting")).toBeTruthy();
+    expect(onConfirm).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Keep Review before deleting" }));
+    await waitFor(() => expect(onKeep).toHaveBeenCalledWith("item-review-delete"));
+    expect(onConfirm).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Confirm delete" }));
+    await waitFor(() => expect(onConfirm).toHaveBeenCalledWith(["item-review-delete"]));
+  });
+
+  it("sorts legacy Home items by time and direction instead of only changing the labels", async () => {
+    const screen = await mountHome();
+    const controls = screen.getByRole("group", { name: "Sort projects and items" });
+    const [by, direction] = Array.from(controls.querySelectorAll("button"));
+    const worktableOrder = () =>
+      screen
+        .getAllByRole("button", { name: /^Change the status of / })
+        .map((button) => button.getAttribute("aria-label"))
+        .filter((label) =>
+          [
+            "Change the status of Phase A — safety quick-wins → 0.9.3",
+            "Change the status of Phase B — engine observability (API break)",
+            "Change the status of Phase C — benches before the rewrite",
+            "Change the status of Reader-model design proposal",
+            "Change the status of Ship corrective 0.9.2 release",
+          ].includes(label ?? ""),
+        );
+
+    fireEvent.click(by);
+    expect(by).toHaveTextContent("Time");
+    expect(worktableOrder()[0]).toContain("Phase A");
+    fireEvent.click(direction);
+    expect(worktableOrder()[0]).toContain("Ship corrective");
+  });
+
+  it("sorts the Home project groups instead of leaving the dominant rows fixed", async () => {
+    setPrefs("itemSortBy", "status");
+    setPrefs("itemSortDirection", "asc");
+    const screen = await mountHome();
+    const controls = screen.getByRole("group", { name: "Sort projects and items" });
+    const [by, direction] = Array.from(controls.querySelectorAll("button"));
+    const projectOrder = () =>
+      Array.from(screen.container.querySelectorAll<HTMLElement>("[data-project-id]")).map(
+        (project) => project.dataset.projectId,
+      );
+
+    expect(projectOrder()).toEqual(["cafe", "agencyzero", "worktable"]);
+    fireEvent.click(direction);
+    expect(projectOrder()).toEqual(["worktable", "agencyzero", "cafe"]);
+
+    fireEvent.click(by);
+    expect(by).toHaveTextContent("Time");
+    expect(projectOrder()).toEqual(["worktable", "cafe", "agencyzero"]);
+  });
+
   it("expands one item description and closes it when another item receives focus", async () => {
     const screen = await mountHome();
 
@@ -146,5 +235,30 @@ describe("Home item rows", () => {
 
     fireEvent.click(remove);
     await waitFor(() => expect(screen.queryByText(title)).toBeNull());
+  });
+
+  it("reviews a project deletion in place before removing its stored work", async () => {
+    const screen = await mountHome();
+    expect(screen.workspace.state.projects.some((project) => project.id === "worktable")).toBe(
+      true,
+    );
+
+    fireEvent.click(screen.getByLabelText("Delete WorkTable"));
+
+    expect(screen.getByText("Delete?")).toBeTruthy();
+    expect(screen.workspace.state.projects.some((project) => project.id === "worktable")).toBe(
+      true,
+    );
+
+    const confirm = screen.getByTitle(
+      "Removes this project and its transcript, items, pull requests and sessions from the store. Usage/cost history is kept.",
+    );
+    fireEvent.click(confirm);
+
+    await waitFor(() =>
+      expect(screen.workspace.state.projects.some((project) => project.id === "worktable")).toBe(
+        false,
+      ),
+    );
   });
 });

@@ -17,6 +17,7 @@ const EMPTY_USAGE: UsageAnalytics = {
   projects: [],
   sessions: [],
   agents: [],
+  items: [],
   totalUsd: 0,
   estimatedCostUsd: 0,
   totalInputTokens: 0,
@@ -50,7 +51,7 @@ describe("analytics refresh", () => {
     await waitFor(() => expect(screen.getByRole("tablist")).toBeInTheDocument());
     expect(screen.getByRole("tablist")).toHaveClass("shrink-0");
 
-    expect(screen.getAllByRole("tab")).toHaveLength(5);
+    expect(screen.getAllByRole("tab")).toHaveLength(6);
     expect(screen.getByRole("tab", { name: "Value" })).toHaveAttribute("aria-selected", "true");
     expect(screen.queryByRole("tab", { name: "Efficiency" })).not.toBeInTheDocument();
     expect(screen.queryByRole("tab", { name: "Largest turn" })).not.toBeInTheDocument();
@@ -61,6 +62,33 @@ describe("analytics refresh", () => {
     expect(screen.getByRole("tab", { name: "Models" })).toHaveAttribute("aria-selected", "true");
     expect(screen.getByRole("tabpanel")).toHaveAccessibleName("Models");
     expect(screen.getByText("Per model")).toBeInTheDocument();
+  });
+
+  it("shows measured agent time and distinct turns per item", async () => {
+    getUsageAnalytics.mockResolvedValue({
+      ...EMPTY_USAGE,
+      items: [
+        {
+          itemId: "item-a",
+          itemTitle: "Repair settings drift",
+          projectId: "project-a",
+          projectName: "AgencyZero",
+          agents: ["codex"],
+          durationMs: 3_754_000,
+          turns: 4,
+          completed: true,
+          lastAt: "2026-08-08T16:00:00Z",
+        },
+      ],
+    });
+
+    const screen = render(() => <AnalyticsTab />);
+    await waitFor(() => expect(screen.getByRole("tab", { name: "Items" })).toBeInTheDocument());
+    fireEvent.click(screen.getByRole("tab", { name: "Items" }));
+
+    expect(screen.getByText("Repair settings drift")).toBeInTheDocument();
+    expect(screen.getByText("1h 3m")).toBeInTheDocument();
+    expect(screen.getByText(/4 turns/)).toBeInTheDocument();
   });
 
   it("labels inferred Sol cache writes and uses them in the efficiency ratio", async () => {

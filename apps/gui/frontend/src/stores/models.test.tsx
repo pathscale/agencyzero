@@ -101,6 +101,8 @@ describe("choosing models", () => {
       "haiku",
       "fable",
       "best",
+      "opus[1m]",
+      "sonnet[1m]",
     ]);
   });
 
@@ -117,7 +119,7 @@ describe("choosing models", () => {
    */
   it("refuses to remove the last enabled model", async () => {
     const workspace = await mountWorkspace();
-    for (const id of ["default", "opus", "haiku"]) {
+    for (const id of ["default", "opus", "haiku", "opus[1m]", "sonnet[1m]"]) {
       await workspace.actions.toggleModel("claude", id, false);
     }
     expect(claude(workspace)?.enabled).toEqual(["sonnet"]);
@@ -171,10 +173,22 @@ describe("what the prompt offers", () => {
       "claude:opus",
       "claude:sonnet",
       "claude:haiku",
+      "claude:opus[1m]",
+      "claude:sonnet[1m]",
       "codex:gpt-5.6-sol",
       "codex:gpt-5.6-terra",
+      "codex:gpt-5.6-luna",
       "codex:gpt-5.5",
     ]);
+  });
+
+  it("moves the moderator to another selected model when its model is removed", async () => {
+    const workspace = await mountWorkspace();
+    await workspace.actions.saveSettings({ moderator: { model: "codex:gpt-5.6-sol" } });
+
+    await workspace.actions.toggleModel("codex", "gpt-5.6-sol", false);
+
+    expect(workspace.state.settings?.moderator.model).toBe("codex:gpt-5.6-terra");
   });
 
   /** The pill names both provider and model so a mixed list stays legible. */

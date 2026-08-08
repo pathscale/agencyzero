@@ -1,8 +1,9 @@
 import { render, waitFor } from "@solidjs/testing-library";
 import { beforeEach, describe, expect, it } from "vitest";
-import { SETTINGS } from "~/api/fixtures";
+import { SETTINGS, setClaudeUsageError } from "~/api/fixtures";
 import { prefs, setPrefs } from "~/stores/prefs";
 import {
+  claudeUsageBackoffMs,
   isLimitLive,
   monotonicUsage,
   queueReason,
@@ -17,6 +18,43 @@ describe("running usage continuity", () => {
     expect(monotonicUsage(91_800_000, 225_000)).toBe(91_800_000);
     expect(monotonicUsage(46.768, 0.14)).toBe(46.768);
     expect(monotonicUsage(null, 225_000)).toBe(225_000);
+  });
+});
+
+describe("Claude usage backoff", () => {
+  it("waits longer after each rejection and stops doubling at a quarter hour", () => {
+    // A rejection has to cost more than the poll period, or the next tick asks
+    // again and the alternating success/failure loop never actually breaks.
+    expect(claudeUsageBackoffMs(1)).toBe(120_000);
+    expect(claudeUsageBackoffMs(2)).toBe(240_000);
+    expect(claudeUsageBackoffMs(3)).toBe(480_000);
+    expect(claudeUsageBackoffMs(4)).toBe(900_000);
+    expect(claudeUsageBackoffMs(40)).toBe(900_000);
+  });
+
+  it("asks again immediately once a reading succeeds", () => {
+    expect(claudeUsageBackoffMs(0)).toBe(0);
+  });
+
+  it("skips the poll while backed off, and still answers the Refresh button", async () => {
+    const workspace = await mountWorkspace();
+    setClaudeUsageError("Claude usage is rate limited; retry after 0");
+
+    await expect(workspace.actions.refreshClaudeUsage()).rejects.toThrow(/rate limited/);
+    expect(workspace.state.claudeUsage).toBeNull();
+
+    // The budget frees up, but the next tick is inside the backoff window: a
+    // reading now would prove the poll never actually stopped asking.
+    setClaudeUsageError(null);
+    await workspace.actions.refreshClaudeUsage();
+    expect(workspace.state.claudeUsage).toBeNull();
+
+    await workspace.actions.refreshClaudeUsage({ force: true });
+    expect(workspace.state.claudeUsage).not.toBeNull();
+
+    // One success clears the streak, so the ordinary poll resumes.
+    await workspace.actions.refreshClaudeUsage();
+    expect(workspace.state.claudeUsage).not.toBeNull();
   });
 });
 
@@ -48,6 +86,7 @@ async function mountWorkspace(): Promise<Workspace> {
 const keys = (workspace: Workspace) => workspace.state.tabs.map((tab) => tab.key);
 
 beforeEach(() => {
+  setClaudeUsageError(null);
   SETTINGS.workspaceTabs = null;
   setPrefs("lastTabKey", "home");
   // These scenarios predate tab restore, so they remember everything open.

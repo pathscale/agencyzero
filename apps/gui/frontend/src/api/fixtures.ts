@@ -579,15 +579,21 @@ export const SETTINGS: GlobalSettings = {
    * Copilot id a Free plan permits. The rest are one checkbox away in Settings.
    */
   models: {
-    claude: { enabled: ["default", "opus", "sonnet", "haiku"], default: "sonnet" },
-    codex: { enabled: ["gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.5"], default: "gpt-5.6-sol" },
+    claude: {
+      enabled: ["default", "opus", "sonnet", "haiku", "opus[1m]", "sonnet[1m]"],
+      default: "sonnet",
+    },
+    codex: {
+      enabled: ["gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna", "gpt-5.5"],
+      default: "gpt-5.6-sol",
+    },
     copilot: { enabled: ["auto"], default: "auto" },
   },
   defaultPermission: "read_only",
   defaultEffort: "high",
   moderator: {
     enabled: true,
-    model: "haiku",
+    model: "claude:haiku",
     sees: ["transcript", "events"],
     onCheck: "hold_step",
     onCritical: "cancel_run",
@@ -596,9 +602,9 @@ export const SETTINGS: GlobalSettings = {
   // Deliberately not the prompt's model: a list keeper running unattended
   // wants a cheap fast model far more often than a frontier one.
   taskManager: {
-    agent: "claude",
-    model: "haiku",
-    effort: "medium",
+    agent: "codex",
+    model: "gpt-5.6-luna",
+    effort: "low",
     permission: "ask",
     dirs: [],
   },
@@ -607,10 +613,11 @@ export const SETTINGS: GlobalSettings = {
   costWarningUsd: 0.75,
   completedItems: "resolve",
   agentFinishedRetentionTurns: 1,
-  theme: { accent: "", softness: 0, wash: 10, textBrightness: 0 },
+  theme: { surface: "", accent: "", softness: 0, wash: 30, textBrightness: 0 },
   studyAnalytics: { enabled: false, sessionId: "", enabledAt: "" },
   perTurnInjection: true,
   automaticUpdateChecks: true,
+  agentSettingsUpdates: false,
   agentRestartPolicy: "disabled",
   workspaceTabs: null,
   onboardingCompleted: true,
@@ -643,3 +650,15 @@ export const RATE_LIMITS: Record<
     resetsAt: new Date(now + 34 * 60_000).toISOString(),
   },
 };
+
+/**
+ * Makes the mock's Claude usage read reject, for backoff coverage.
+ *
+ * Claude usage is the one read whose failure path carries behaviour of its own,
+ * and the mock is otherwise incapable of producing a rejection there.
+ */
+export let CLAUDE_USAGE_ERROR: string | null = null;
+
+export function setClaudeUsageError(message: string | null): void {
+  CLAUDE_USAGE_ERROR = message;
+}

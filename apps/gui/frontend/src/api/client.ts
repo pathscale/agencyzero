@@ -93,6 +93,8 @@ export interface AgencyZeroApi {
   /** Mostly agent-authored from natural language, but the user can add one too. */
   createItem(projectId: string, title: string): Promise<ProjectItem>;
   deleteItem(id: string): Promise<void>;
+  /** Keep a row that Task Manager proposed for deletion. */
+  unmarkItemDeletion(id: string): Promise<ProjectItem>;
   setItemStatus(id: string, status: ProjectStatus): Promise<ProjectItem>;
   /** Rewrite one item's title, for the panel's inline edit. */
   updateItem(id: string, title: string): Promise<ProjectItem>;
@@ -365,6 +367,7 @@ export interface AgencyZeroApi {
 
 /** Every broadcast the window listens for, and what rides on it. */
 export interface AppEvents {
+  "settings:updated": GlobalSettings;
   "project:created": Project;
   "project:updated": Project;
   "project:deleted": { id: string };
@@ -511,6 +514,8 @@ export interface AppEvents {
     stop: string;
     exitCode: number | null;
   };
+  /** A WorkTable worker became terminal; the window must warn immediately. */
+  "persistence:failed": { message: string };
 }
 
 export type AppEvent = keyof AppEvents;

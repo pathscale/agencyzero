@@ -1,4 +1,5 @@
 const en = {
+  AgencyZero: "AgencyZero",
   "This project could not be loaded": "This project could not be loaded",
   "The tab is open but its record is missing from the workspace. Reopening the window will re-read it from the database.":
     "The tab is open but its record is missing from the workspace. Reopening the window will re-read it from the database.",
@@ -165,6 +166,16 @@ const en = {
   "off by default; disabling stops new rows but keeps existing data":
     "off by default; disabling stops new rows but keeps existing data",
   "Stored events": "Stored events",
+  "Agent authority": "Agent authority",
+  "explicit capabilities delegated to Prompt Syntax":
+    "explicit capabilities delegated to Prompt Syntax",
+  "Update app settings": "Update app settings",
+  "off by default; allows only the settings keys this build declares":
+    "off by default; allows only the settings keys this build declares",
+  "Allow agents to update app settings": "Allow agents to update app settings",
+  "Storage stopped saving": "Storage stopped saving",
+  "Copy anything important from the current turn, then restart AgencyZero.":
+    "Copy anything important from the current turn, then restart AgencyZero.",
   "Study data": "Study data",
   "Export JSONL": "Export JSONL",
   "needs the study event backend": "needs the study event backend",
@@ -327,6 +338,7 @@ const en = {
   "Filter items…": "Filter items…",
   "Filter items": "Filter items",
   "Sort items": "Sort items",
+  "Sort projects and items": "Sort projects and items",
   "Toggle item sort between status and time": "Toggle item sort between status and time",
   Status: "Status",
   Time: "Time",
@@ -334,6 +346,11 @@ const en = {
   "Sort ascending": "Sort ascending",
   Ascending: "Ascending",
   Descending: "Descending",
+  "Clean-up": "Clean-up",
+  "Clean-up is already running": "Clean-up is already running",
+  "Review project items and mark proposed deletions":
+    "Review project items and mark proposed deletions",
+  "Starting…": "Starting…",
   "Clear the filter": "Clear the filter",
   "No item matches “{query}”": "No item matches “{query}”",
   "Link a GitHub issue": "Link a GitHub issue",
@@ -410,6 +427,7 @@ const en = {
   "The store checkpoint runs every 200ms — the newest text is not saved yet":
     "The store checkpoint runs every 200ms — the newest text is not saved yet",
   "provider outage · temporary": "provider outage · temporary",
+  "security review required": "security review required",
   CRITICAL: "CRITICAL",
   CHECK: "CHECK",
   "Review the GUI crate": "Review the GUI crate",
@@ -480,6 +498,11 @@ const en = {
   "Ask, or type / for commands…": "Ask, or type / for commands…",
   copied: "copied",
   "GitHub ›": "GitHub ›",
+  "Open source": "Open source",
+  "View source": "View source",
+  "Star on GitHub": "Star on GitHub",
+  "If AgencyZero is useful, a GitHub star helps more people find it.":
+    "If AgencyZero is useful, a GitHub star helps more people find it.",
   "CI rollup — click to re-check": "CI rollup — click to re-check",
   Closed: "Closed",
   Merged: "Merged",
@@ -512,6 +535,7 @@ const en = {
   "Review with {agent}": "Review with {agent}",
   "Review by {agent}": "Review by {agent}",
   "Review failed": "Review failed",
+  "head {sha}": "head {sha}",
   "Not sent to the agent. Copy it and paste it on if you want.":
     "Not sent to the agent. Copy it and paste it on if you want.",
   "Copy this message": "Copy this message",
@@ -705,6 +729,10 @@ const en = {
   "No importable sessions": "No importable sessions",
   "Not installed": "Not installed",
   "captured from this build onward": "captured from this build onward",
+  "Per item": "Per item",
+  "measured agent-active time from captured runs": "measured agent-active time from captured runs",
+  "No item-linked runs yet": "No item-linked runs yet",
+  "agent time": "agent time",
   "Provider supplied no session id": "Provider supplied no session id",
   "no session id": "no session id",
   processed: "processed",
@@ -785,6 +813,7 @@ const en = {
   "Create first project": "Create first project",
   Continue: "Continue",
   "Help and setup": "Help and setup",
+  "Welcome Tutorial": "Welcome Tutorial",
   "Restoring from backup?": "Restoring from backup?",
   "Select an AgencyZero backup, then restore it before continuing setup.":
     "Select an AgencyZero backup, then restore it before continuing setup.",
@@ -845,6 +874,12 @@ const en = {
   archived: "archived",
   "Return to the parent item": "Return to the parent item",
   "Parent project": "Parent project",
+  "Review proposed item deletions": "Review proposed item deletions",
+  "{count} marked Delete": "{count} marked Delete",
+  "Review these proposals before removing anything.":
+    "Review these proposals before removing anything.",
+  "Keep {name}": "Keep {name}",
+  Keep: "Keep",
 } as const;
 
 export default en;

@@ -40,6 +40,7 @@ const COMMAND_FOR: Record<CommandMethod, string> = {
   listItems: "list_items",
   createItem: "create_item",
   deleteItem: "delete_item",
+  unmarkItemDeletion: "unmark_item_deletion",
   setItemStatus: "set_item_status",
   updateItem: "update_item",
   getItemContext: "get_item_context",

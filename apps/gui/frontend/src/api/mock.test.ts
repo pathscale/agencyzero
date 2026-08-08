@@ -213,14 +213,27 @@ describe("tasks", () => {
 });
 
 describe("settings", () => {
+  it("uses the same model and task-manager defaults as the native backend", async () => {
+    const settings = await api.getSettings();
+    expect(settings.models.claude.enabled).toContain("opus[1m]");
+    expect(settings.models.claude.enabled).toContain("sonnet[1m]");
+    expect(settings.models.codex.enabled).toContain("gpt-5.6-luna");
+    expect(settings.taskManager).toMatchObject({
+      agent: "codex",
+      model: "gpt-5.6-luna",
+      effort: "low",
+      permission: "ask",
+    });
+  });
+
   it("merges a leaf patch without flattening its siblings", async () => {
     const before = await api.getSettings();
     expect(before.moderator).toMatchObject({ enabled: true, confineToDirs: true });
 
-    const after = await api.setSettings({ moderator: { model: "opus" } });
+    const after = await api.setSettings({ moderator: { model: "codex:gpt-5.6-sol" } });
 
     expect(after.moderator).toMatchObject({
-      model: "opus",
+      model: "codex:gpt-5.6-sol",
       enabled: true,
       confineToDirs: true,
       onCritical: "cancel_run",

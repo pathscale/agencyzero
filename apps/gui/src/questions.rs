@@ -130,9 +130,9 @@ pub async fn answer_question(
 
 /// Resolve which standing question a newly accepted owner message answers.
 ///
-/// A chip names its question exactly. Untagged prose is associated only when
-/// there is exactly one possible target; closing every open question made
-/// stacked asks unusable and silently guessed at out-of-order replies.
+/// A chip names its question exactly. Untagged prose never answers a tracked
+/// question: even one open question can coexist with unrelated feedback, and
+/// inferring intent from ordinary text closes the card without owner action.
 pub fn reply_target(
     tables: &Tables,
     project_id: &str,
@@ -148,7 +148,7 @@ pub fn reply_target(
         .collect();
 
     let Some(requested_id) = requested_id else {
-        return Ok((open.len() == 1).then(|| open[0].clone()));
+        return Ok(None);
     };
     let Some(row) = open.into_iter().find(|row| row.id == requested_id) else {
         return Err(format!(
@@ -268,7 +268,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn untagged_prose_is_implicit_only_when_one_question_is_open() {
+    async fn untagged_prose_never_answers_a_question() {
         let dir = std::env::temp_dir().join(format!(
             "az-question-inference-{}-{}",
             std::process::id(),
@@ -289,12 +289,11 @@ mod tests {
             .question
             .insert(question("only"))
             .expect("question inserts");
-        assert_eq!(
+        assert!(
             reply_target(&tables, "project-a", None)
-                .expect("inference succeeds")
-                .expect("single question is inferred")
-                .id,
-            "only"
+                .expect("untagged prose is valid")
+                .is_none(),
+            "one open question still requires an explicit reply chip"
         );
         tables
             .question

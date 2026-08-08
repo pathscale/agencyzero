@@ -63,7 +63,9 @@ pub const SURFACE: Surface = Surface {
     verbs: &[
         "items.state",
         "items.add",
+        "items.describe",
         "items.retire",
+        "settings.update",
         "ask",
         "pr.link",
         "pr.retire",
@@ -118,6 +120,10 @@ pub enum Directive {
         title: String,
         status: String,
     },
+    /// Replace the owner-visible description for an existing item.
+    ItemDescribe { id: String, description: String },
+    /// Update one allowlisted app setting when the owner has delegated it.
+    SettingsUpdate { key: String, value: String },
     /// Track a pull request, and optionally attach it to an item.
     ///
     /// A URL creates the PR row. A number is enough only when an item is also
@@ -164,6 +170,8 @@ impl Directive {
         match self {
             Self::ItemState { .. } => "items.state",
             Self::ItemAdd { .. } => "items.add",
+            Self::ItemDescribe { .. } => "items.describe",
+            Self::SettingsUpdate { .. } => "settings.update",
             Self::ItemRetire { .. } => "items.retire",
             Self::Ask { .. } => "ask",
             Self::PrLink { .. } => "pr.link",
@@ -286,9 +294,19 @@ fn from_reference(reference: &Reference) -> Option<Directive> {
                 .to_ascii_lowercase(),
         });
     }
+    if verb.eq_ignore_ascii_case("items.describe") {
+        let id = arg(args, "id")?;
+        let description = arg(args, "description")?;
+        return (!id.is_empty()).then_some(Directive::ItemDescribe { id, description });
+    }
     if verb.eq_ignore_ascii_case("items.retire") {
         let id = arg(args, "id")?;
         return (!id.is_empty()).then_some(Directive::ItemRetire { id });
+    }
+    if verb.eq_ignore_ascii_case("settings.update") {
+        let key = arg(args, "key")?;
+        let value = arg(args, "value")?;
+        return (!key.is_empty()).then_some(Directive::SettingsUpdate { key, value });
     }
     if verb.eq_ignore_ascii_case("ask") {
         let text = arg(args, "text")?;
@@ -468,6 +486,31 @@ mod tests {
                 project: Some("Prompt Syntax".into()),
                 title: "Unify the surface".into(),
                 status: "planning".into(),
+            })
+        );
+    }
+
+    #[test]
+    fn an_item_description_names_an_existing_item() {
+        assert_eq!(
+            parse(
+                r#"<ps @agency:items.describe(id: "item-a3f9", description: "Define the durable outcome and its acceptance checks.")>"#
+            ),
+            Some(Directive::ItemDescribe {
+                id: "item-a3f9".into(),
+                description: "Define the durable outcome and its acceptance checks.".into(),
+            })
+        );
+        assert!(parse(r#"<ps @agency:items.describe(description: "Missing id")>"#).is_none());
+    }
+
+    #[test]
+    fn a_settings_update_keeps_a_typed_key_and_value() {
+        assert_eq!(
+            parse(r##"<ps @agency:settings.update(key: "theme.accent", value: "#2196F3")>"##),
+            Some(Directive::SettingsUpdate {
+                key: "theme.accent".into(),
+                value: "#2196F3".into(),
             })
         );
     }

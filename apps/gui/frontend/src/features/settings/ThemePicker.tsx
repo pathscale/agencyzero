@@ -1,10 +1,12 @@
-import { ColorPickerContext, ColorWheelFlower } from "@pathscale/ui/components/color-wheel-flower";
-import { For, type JSX, Show } from "solid-js";
+import { createEffect, For, type JSX, Show } from "solid-js";
 import {
+  accentOptions,
   BRIGHTNESS_STOPS,
+  closestColorIndex,
   DEFAULT_ACCENT,
   MAX_SOFTNESS,
-  toColorValue,
+  normalizeWash,
+  surfaceColors,
   WASH_STOPS,
 } from "~/lib/theme";
 import { t } from "~/stores/i18n";
@@ -14,13 +16,10 @@ import type { ThemeSettings } from "~/types";
 /**
  * The colour wheel and the softness strip, side by side.
  *
- * The wheel is `@pathscale/ui`'s `ColorWheelFlower`, the same one nofilter.io
- * shows — it takes its value and its handler from a context rather than props,
- * which is the whole integration. What is *not* reused is that package's
- * `ThemeColorPicker` wrapper: it writes `--color-base-*` against nofilter's own
- * anchors and resolves light/dark by reading `data-theme` for the literal
- * "light"/"dark", so under this app's `data-theme="agencyzero"` it falls back to
- * the OS setting and would paint near-white surfaces over a dark workspace.
+ * The wheel owns literal AgencyZero colours rather than borrowing the
+ * upstream contrast palette. That palette makes dark-mode swatches pastel so
+ * they stand out from a black ring; here the swatch is the value, so dark mode
+ * must offer dark-oriented colours and a pressed dot must equal the stored hex.
  *
  * The strip beside it is ours. nofilter's greyscale column switches between two
  * themes; there is one theme here, so the column drives the axis that actually
@@ -28,18 +27,14 @@ import type { ThemeSettings } from "~/types";
  */
 export function ThemePicker(props: {
   theme: ThemeSettings;
+  onSurface: (hex: string) => void;
   onAccent: (hex: string) => void;
   onSoftness: (value: number) => void;
   onWash: (value: number) => void;
   onBrightness: (value: number) => void;
+  onReset: () => void;
+  isDefault: boolean;
 }): JSX.Element {
-  /*
-   * The wheel wants a full ColorValue and hands one back on change. An empty
-   * accent means "the palette's own", and that fallback lives in `lib/theme.ts`
-   * so there is exactly one place naming the default yellow.
-   */
-  const current = () => toColorValue(props.theme.accent || DEFAULT_ACCENT);
-
   /** Five stops across the comfort range, matching the strength row beside it. */
   const softnessStops = () => Array.from({ length: 5 }, (_, i) => (i * MAX_SOFTNESS) / 4);
 
@@ -48,25 +43,14 @@ export function ThemePicker(props: {
     prefs.colorMode === "light"
       ? `oklch(calc(93% - ${softness}%) 0.004 240)`
       : `oklch(calc(10.5% + ${softness}%) 0.004 240)`;
+  const deskStrength = (wash: number) => Math.min(wash * 1.1, 100);
   const deskPreview = (theme: ThemeSettings) =>
-    `color-mix(in oklab, ${theme.accent || DEFAULT_ACCENT} ${theme.wash * 1.1}%, ${deskAnchor(theme.softness)})`;
+    `color-mix(in oklab, ${theme.surface || DEFAULT_ACCENT} ${deskStrength(theme.wash)}%, ${deskAnchor(theme.softness)})`;
 
   return (
     <div class="flex items-start gap-4 px-3.5 py-3">
       <div class="shrink-0">
-        <ColorPickerContext.Provider
-          value={{
-            color: current,
-            format: () => "hex",
-            disabled: () => false,
-            onChange: (color) => props.onAccent(color.hex),
-            onFormatChange: () => {},
-          }}
-        >
-          {/* The component sizes itself at 190px square and ships its own
-              stylesheet, so there is nothing to add here. */}
-          <ColorWheelFlower />
-        </ColorPickerContext.Provider>
+        <SurfaceColorWheel value={props.theme.surface} onPick={props.onSurface} />
       </div>
 
       <div class="flex flex-1 flex-col gap-3">
@@ -81,12 +65,23 @@ export function ThemePicker(props: {
           label={t("appearance.colourStrength")}
           hint={t("appearance.colourStrengthHint")}
           stops={[...WASH_STOPS]}
-          value={props.theme.wash}
+          value={normalizeWash(props.theme.wash)}
           onPick={props.onWash}
           preview={(stop) =>
-            `color-mix(in oklab, ${props.theme.accent || DEFAULT_ACCENT} ${stop * 1.1}%, ${deskAnchor(props.theme.softness)})`
+            `color-mix(in oklab, ${props.theme.surface || DEFAULT_ACCENT} ${deskStrength(stop)}%, ${deskAnchor(props.theme.softness)})`
           }
           format={(stop) => `${stop}%`}
+          action={
+            <button
+              type="button"
+              aria-label={t("appearance.resetButton")}
+              disabled={props.isDefault}
+              onClick={props.onReset}
+              class="ml-auto rounded-lg border border-az-hairline-strong px-2.5 py-1 text-[11px] text-az-muted transition-colors hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              {t("appearance.resetButton")}
+            </button>
+          }
         />
 
         <Axis
@@ -96,7 +91,7 @@ export function ThemePicker(props: {
           value={props.theme.softness}
           onPick={props.onSoftness}
           preview={(stop) =>
-            `color-mix(in oklab, ${props.theme.accent || DEFAULT_ACCENT} ${props.theme.wash * 1.1}%, ${deskAnchor(stop)})`
+            `color-mix(in oklab, ${props.theme.surface || DEFAULT_ACCENT} ${deskStrength(props.theme.wash)}%, ${deskAnchor(stop)})`
           }
           format={(stop) => `${Math.round((stop / MAX_SOFTNESS) * 100)}%`}
         />
@@ -121,6 +116,150 @@ export function ThemePicker(props: {
           }
           format={(_stop, index) => `${Math.round((index / (BRIGHTNESS_STOPS.length - 1)) * 100)}%`}
         />
+
+        <AccentSelector
+          surface={props.theme.surface || DEFAULT_ACCENT}
+          accent={props.theme.accent}
+          wash={props.theme.wash}
+          softness={props.theme.softness}
+          onPick={props.onAccent}
+        />
+      </div>
+    </div>
+  );
+}
+
+/** Concentric literal swatches: what is shown is exactly what gets persisted. */
+function SurfaceColorWheel(props: { value: string; onPick: (value: string) => void }): JSX.Element {
+  const layout = [
+    ...Array.from({ length: 12 }, (_, index) => ({ count: 12, index, radius: 56, phase: -30 })),
+    ...Array.from({ length: 12 }, (_, index) => ({ count: 12, index, radius: 40, phase: -30 })),
+    ...Array.from({ length: 6 }, (_, index) => ({ count: 6, index, radius: 21, phase: -60 })),
+    { count: 1, index: 0, radius: 0, phase: 0 },
+  ];
+  const colors = () => surfaceColors(prefs.colorMode);
+  let previous = colors();
+
+  // Preserve the same petal across a mode change, and migrate the upstream
+  // palette values written by earlier builds to the nearest literal petal.
+  createEffect(() => {
+    const next = colors();
+    const value = props.value.trim().toLowerCase();
+    if (value) {
+      let selected = previous.findIndex((color) => color.toLowerCase() === value);
+      if (selected < 0) selected = closestColorIndex(value, previous);
+      const rebased = next[selected];
+      if (rebased && rebased.toLowerCase() !== value) props.onPick(rebased);
+    }
+    previous = next;
+  });
+
+  return (
+    <fieldset
+      aria-label={t("appearance.surfaceColour")}
+      class="relative m-0 size-[190px] rounded-full border border-az-hairline bg-az-inset p-0 shadow-inner"
+    >
+      <For each={colors()}>
+        {(color, index) => {
+          const point = layout[index()];
+          const angle = ((point.index / point.count) * 360 + point.phase) * (Math.PI / 180);
+          const x = Math.cos(angle) * point.radius;
+          const y = Math.sin(angle) * point.radius;
+          const selected = () => props.value.trim().toLowerCase() === color.toLowerCase();
+          return (
+            <label
+              title={color}
+              class="absolute size-7 cursor-pointer rounded-full"
+              style={{
+                left: `calc(50% + ${x.toFixed(2)}px)`,
+                top: `calc(50% + ${y.toFixed(2)}px)`,
+                transform: "translate(-50%, -50%)",
+              }}
+            >
+              <input
+                type="radio"
+                name="surface-colour"
+                value={color}
+                aria-label={`${t("appearance.surfaceColour")} ${color}`}
+                checked={selected()}
+                onChange={() => props.onPick(color)}
+                class="peer sr-only"
+              />
+              <span
+                aria-hidden="true"
+                class="block size-full rounded-full border-2 border-az-hairline-strong transition-[border-color,box-shadow] hover:border-base-content/45 peer-checked:border-base-content/70 peer-checked:ring-2 peer-checked:ring-primary peer-checked:ring-offset-2 peer-checked:ring-offset-base-200 peer-focus-visible:ring-2 peer-focus-visible:ring-primary"
+                style={{ "background-color": color }}
+              />
+            </label>
+          );
+        }}
+      </For>
+    </fieldset>
+  );
+}
+
+/** An independent high-contrast colour for controls, rings and active states. */
+function AccentSelector(props: {
+  surface: string;
+  accent: string;
+  wash: number;
+  softness: number;
+  onPick: (value: string) => void;
+}): JSX.Element {
+  const options = () => accentOptions(props.surface, prefs.colorMode, props.wash, props.softness);
+  let previous = options();
+
+  // A palette choice is semantic, not a frozen hex. Keep the same harmony
+  // selected while its rendered colour responds to surface, mode, strength,
+  // and softness. Older arbitrary hex values migrate to the nearest harmony.
+  createEffect(() => {
+    const next = options();
+    let selected = previous.findIndex((option) => option.value === props.accent);
+    if (selected < 1 && props.accent) {
+      const closest = closestColorIndex(
+        props.accent,
+        previous.slice(1).map((option) => option.color),
+      );
+      if (closest >= 0) selected = closest + 1;
+    }
+    if (selected > 0 && next[selected]?.value !== props.accent) {
+      props.onPick(next[selected].value);
+    }
+    previous = next;
+  });
+  return (
+    <div class="flex flex-col gap-1.5">
+      <div class="flex items-baseline gap-2">
+        <span class="font-semibold text-[11px] text-az-muted uppercase tracking-[.04em]">
+          {t("appearance.accentColour")}
+        </span>
+        <span class="text-[11px] text-az-faint">{t("appearance.accentColourHint")}</span>
+      </div>
+      <div class="flex items-center gap-2">
+        <For each={options()}>
+          {(option, index) => {
+            const selected = () => props.accent === option.value;
+            const label = () =>
+              index() === 0
+                ? t("appearance.designedYellow")
+                : `${t("appearance.accentColour")} ${index() + 1}`;
+            return (
+              <button
+                type="button"
+                aria-label={label()}
+                title={label()}
+                aria-pressed={selected()}
+                onClick={() => props.onPick(option.value)}
+                class="size-7 rounded-full border-2 transition-colors"
+                classList={{
+                  "border-primary": selected(),
+                  "border-az-hairline-strong hover:border-primary": !selected(),
+                }}
+                style={{ "background-color": option.color }}
+              />
+            );
+          }}
+        </For>
       </div>
     </div>
   );
@@ -143,6 +282,7 @@ function Axis(props: {
   /** When present, the swatch shows a letter in this colour instead of a fill alone. */
   ink?: (stop: number) => string;
   format: (stop: number, index: number) => string;
+  action?: JSX.Element;
 }): JSX.Element {
   const selected = (stop: number) => Math.abs(props.value - stop) < 0.01;
   return (
@@ -152,6 +292,7 @@ function Axis(props: {
           {props.label}
         </span>
         <span class="text-[11px] text-az-faint">{props.hint}</span>
+        {props.action}
       </div>
       <div class="flex items-center gap-2">
         <For each={props.stops}>

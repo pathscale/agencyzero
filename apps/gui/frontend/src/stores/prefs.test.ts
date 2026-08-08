@@ -37,6 +37,22 @@ describe("colour mode", () => {
 });
 
 describe("workspace layout", () => {
+  it("normalizes restored enum preferences before controls consume them", () => {
+    preparePortablePrefsRestore();
+    restorePortablePrefs(
+      {
+        itemSortBy: "unknown",
+        itemSortDirection: "sideways",
+        taskPlacement: "somewhere",
+      } as unknown as Parameters<typeof restorePortablePrefs>[0],
+      "invalid-enums",
+    );
+
+    expect(prefs.itemSortBy).toBe("status");
+    expect(prefs.itemSortDirection).toBe("asc");
+    expect(prefs.taskPlacement).toBe("panel");
+  });
+
   it("persists sidebar visibility and expanded composers as UI preferences", () => {
     setPrefs("projectPanelVisible", false);
     setPrefs("expandedComposerKeys", ["project:abc"]);

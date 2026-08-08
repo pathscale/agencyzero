@@ -1,6 +1,7 @@
 import type en from "./en";
 
 const zh = {
+  AgencyZero: "AgencyZero",
   "This project could not be loaded": "无法加载此项目",
   "The tab is open but its record is missing from the workspace. Reopening the window will re-read it from the database.":
     "此标签页已打开，但工作区中缺少对应记录。重新打开窗口会从数据库重新读取。",
@@ -155,6 +156,15 @@ const zh = {
   "off by default; disabling stops new rows but keeps existing data":
     "默认关闭；禁用后停止新增记录，但保留现有数据",
   "Stored events": "已存储事件",
+  "Agent authority": "代理权限",
+  "explicit capabilities delegated to Prompt Syntax": "明确授予 Prompt Syntax 的能力",
+  "Update app settings": "更新应用设置",
+  "off by default; allows only the settings keys this build declares":
+    "默认关闭；仅允许此版本声明的设置项",
+  "Allow agents to update app settings": "允许代理更新应用设置",
+  "Storage stopped saving": "存储已停止保存",
+  "Copy anything important from the current turn, then restart AgencyZero.":
+    "请复制当前回合中的重要内容，然后重新启动 AgencyZero。",
   "Study data": "研究数据",
   "Export JSONL": "导出 JSONL",
   "needs the study event backend": "需要研究事件后端",
@@ -313,6 +323,7 @@ const zh = {
   "Filter items…": "筛选事项…",
   "Filter items": "筛选事项",
   "Sort items": "事项排序",
+  "Sort projects and items": "项目和事项排序",
   "Toggle item sort between status and time": "在状态和时间排序间切换",
   Status: "状态",
   Time: "时间",
@@ -320,6 +331,10 @@ const zh = {
   "Sort ascending": "升序排列",
   Ascending: "升序",
   Descending: "降序",
+  "Clean-up": "清理",
+  "Clean-up is already running": "清理正在进行中",
+  "Review project items and mark proposed deletions": "检查项目事项并标记建议删除项",
+  "Starting…": "正在启动…",
   "Clear the filter": "清除筛选条件",
   "No item matches “{query}”": "没有事项与“{query}”匹配",
   "Link a GitHub issue": "关联 GitHub Issue",
@@ -392,6 +407,7 @@ const zh = {
   "The store checkpoint runs every 200ms — the newest text is not saved yet":
     "存储检查点每 200 毫秒运行一次 — 最新文本尚未保存",
   "provider outage · temporary": "提供方故障 · 暂时",
+  "security review required": "需要安全审核",
   CRITICAL: "严重",
   CHECK: "检查",
   "Review the GUI crate": "审查 GUI crate",
@@ -462,6 +478,11 @@ const zh = {
   "Ask, or type / for commands…": "提问，或输入 / 查看命令…",
   copied: "已复制",
   "GitHub ›": "GitHub ›",
+  "Open source": "开源",
+  "View source": "查看源代码",
+  "Star on GitHub": "在 GitHub 上加星",
+  "If AgencyZero is useful, a GitHub star helps more people find it.":
+    "如果 AgencyZero 对你有帮助，在 GitHub 上加星可以让更多人发现它。",
   "CI rollup — click to re-check": "CI 汇总 — 点击重新检查",
   Closed: "已关闭",
   Merged: "已合并",
@@ -494,6 +515,7 @@ const zh = {
   "Review with {agent}": "使用 {agent} 审查",
   "Review by {agent}": "{agent} 的审查",
   "Review failed": "审查失败",
+  "head {sha}": "提交 {sha}",
   "Not sent to the agent. Copy it and paste it on if you want.":
     "不会发送给智能体。如需要可复制后手动粘贴。",
   "Copy this message": "复制此消息",
@@ -683,6 +705,10 @@ const zh = {
   "No importable sessions": "没有可导入的会话",
   "Not installed": "未安装",
   "captured from this build onward": "从此版本开始记录",
+  "Per item": "按工作项",
+  "measured agent-active time from captured runs": "根据已记录运行测得的智能体活跃时间",
+  "No item-linked runs yet": "尚无关联工作项的运行记录",
+  "agent time": "智能体用时",
   "Provider supplied no session id": "提供商未提供会话 ID",
   "no session id": "无会话 ID",
   processed: "已处理",
@@ -760,6 +786,7 @@ const zh = {
   "Create first project": "创建第一个项目",
   Continue: "继续",
   "Help and setup": "帮助和设置",
+  "Welcome Tutorial": "欢迎教程",
   "Restoring from backup?": "要从备份恢复吗？",
   "Select an AgencyZero backup, then restore it before continuing setup.":
     "选择 AgencyZero 备份，然后在继续设置前恢复。",
@@ -819,6 +846,11 @@ const zh = {
   archived: "已归档",
   "Return to the parent item": "返回父条目",
   "Parent project": "父项目",
+  "Review proposed item deletions": "查看建议删除的项目",
+  "{count} marked Delete": "{count} 个已标记为删除",
+  "Review these proposals before removing anything.": "删除任何项目之前，请先查看这些建议。",
+  "Keep {name}": "保留 {name}",
+  Keep: "保留",
 } satisfies Record<keyof typeof en, string>;
 
 export default zh;

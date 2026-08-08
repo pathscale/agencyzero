@@ -29,6 +29,7 @@ use std::sync::Arc;
 use tauri::menu::{AboutMetadata, Menu, MenuBuilder, MenuItemBuilder, SubmenuBuilder};
 use tauri::{AppHandle, Emitter, Manager, Runtime, State};
 use tauri_plugin_dialog::DialogExt;
+use worktable::prelude::SelectQueryExecutor;
 
 use crate::db::location::{self, DataLocation};
 use crate::db::tables::Tables;
@@ -65,6 +66,7 @@ const IMPLEMENTED: &[&str] = &[
     "update_item",
     "set_item_issue",
     "delete_item",
+    "unmark_item_deletion",
     "reorder_items",
     "choose_attachments",
     "list_pull_requests",
@@ -105,6 +107,7 @@ const IMPLEMENTED: &[&str] = &[
     "reset_project_session",
     "adopt_session",
     "get_build_info",
+    "get_persistence_failure",
     "quit_app",
     "relaunch_app",
     "list_agent_io",
@@ -180,6 +183,10 @@ pub(crate) struct AppState {
     /// Treating both as success let a second close request exit after the first
     /// one had proved persistence was unsafe.
     exit_drain_succeeded: std::sync::atomic::AtomicBool,
+    /// The first terminal WorkTable failure for this process. The event is the
+    /// fast path; retaining it closes the startup race before the webview has
+    /// registered its listener.
+    persistence_failure: Arc<std::sync::RwLock<Option<String>>>,
     /// At most one agent-authored lifecycle request may wait for the current
     /// run to finish. This is process-local on purpose: a crash must not leave
     /// a stale restart command to execute on the next launch.
@@ -195,6 +202,144 @@ pub(crate) struct AppState {
     /// The store's exclusive flock, held for the life of the process — the
     /// single-writer rule made mechanical. See `lock_store`.
     _store_lock: std::fs::File,
+}
+
+const RESTART_RESUME_FILE: &str = "restart-resume.json";
+const RESTART_RESUME_PROMPT: &str = "Resume the work interrupted by the AgencyZero restart. Re-read the current item list, durable project memory, and working tree, then continue until the work is complete or an owner decision is genuinely required.";
+
+#[derive(Debug, serde::Deserialize, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct RestartResume {
+    /// Empty for an ordinary authored restart: the latest active project is
+    /// resolved at boot. A recovery tool may pin the project explicitly.
+    project_id: String,
+    agent: String,
+    model: String,
+    permission: String,
+    effort: String,
+    prompt: String,
+}
+
+fn restart_resume_path(config_dir: &std::path::Path) -> PathBuf {
+    config_dir.join(RESTART_RESUME_FILE)
+}
+
+fn restart_resume_marker(
+    settings: &GlobalSettings,
+    project_id: &str,
+    actor: &str,
+) -> RestartResume {
+    let agent = if settings.models.contains_key(actor) {
+        actor.to_string()
+    } else {
+        settings.default_agent.clone()
+    };
+    let model = settings
+        .models
+        .get(&agent)
+        .map(|selection| selection.default.clone())
+        .unwrap_or_default();
+    RestartResume {
+        project_id: project_id.into(),
+        agent,
+        model,
+        permission: settings.default_permission.clone(),
+        effort: settings.default_effort.clone(),
+        prompt: RESTART_RESUME_PROMPT.into(),
+    }
+}
+
+fn write_restart_resume(state: &AppState, project_id: &str, actor: &str) -> Result<(), String> {
+    let settings = state
+        .tables
+        .kv_get(settings::KEY)
+        .and_then(|raw| serde_json::from_str::<GlobalSettings>(&raw).ok())
+        .unwrap_or_default();
+    let marker = restart_resume_marker(&settings, project_id, actor);
+    std::fs::create_dir_all(&state.config_dir)
+        .map_err(|error| format!("could not create restart-resume directory: {error}"))?;
+    let path = restart_resume_path(&state.config_dir);
+    let staging = path.with_extension("json.staging");
+    let encoded = serde_json::to_vec(&marker)
+        .map_err(|error| format!("could not encode restart-resume marker: {error}"))?;
+    std::fs::write(&staging, encoded)
+        .map_err(|error| format!("could not write restart-resume marker: {error}"))?;
+    std::fs::rename(&staging, &path)
+        .map_err(|error| format!("could not publish restart-resume marker: {error}"))
+}
+
+fn read_restart_resume(config_dir: &std::path::Path) -> Option<RestartResume> {
+    let path = restart_resume_path(config_dir);
+    let raw = std::fs::read(&path).ok()?;
+    match serde_json::from_slice(&raw) {
+        Ok(marker) => Some(marker),
+        Err(error) => {
+            crate::log!(
+                log::Level::Warn,
+                "boot",
+                "could not decode {}: {error}",
+                path.display()
+            );
+            None
+        }
+    }
+}
+
+async fn resume_after_restart(app: AppHandle, marker: RestartResume) {
+    // Let the webview subscribe before the resumed run begins emitting. The
+    // user message itself is durable, so a slower window still catches up.
+    tokio::time::sleep(std::time::Duration::from_millis(1_500)).await;
+    let state = app.state::<AppState>();
+    let project_id = if marker.project_id.is_empty() {
+        state
+            .tables
+            .project
+            .select_all()
+            .execute()
+            .unwrap_or_default()
+            .into_iter()
+            .filter(|project| !matches!(project.status.as_str(), "finished" | "canceled"))
+            .max_by(|left, right| left.last_activity_at.cmp(&right.last_activity_at))
+            .map(|project| project.id)
+    } else {
+        state
+            .tables
+            .project
+            .select(marker.project_id.clone())
+            .map(|project| project.id)
+    };
+    let Some(project_id) = project_id else {
+        crate::log!(
+            log::Level::Warn,
+            "boot",
+            "restart-resume marker has no available project"
+        );
+        return;
+    };
+    let input = projects::SendMessageInput {
+        project_id,
+        body: marker.prompt,
+        retry_message_id: None,
+        reply_question_id: None,
+        item_id: None,
+        agent: Some(marker.agent),
+        model: Some(marker.model),
+        permission: Some(marker.permission),
+        effort: Some(marker.effort),
+        extra_thinking: None,
+        study: None,
+    };
+    match projects::send_message(app.clone(), input, state).await {
+        Ok(_) => {
+            let _ = std::fs::remove_file(restart_resume_path(&app.state::<AppState>().config_dir));
+            crate::log!(log::Level::Info, "boot", "restart-resume run started");
+        }
+        Err(error) => crate::log!(
+            log::Level::Error,
+            "boot",
+            "restart-resume run could not start: {error}"
+        ),
+    }
 }
 
 impl AppState {
@@ -253,7 +398,12 @@ impl AppState {
 /// owner message acquire the slot first; in that case the restart waits again.
 /// Nothing is persisted and the angel remains unaware of networks, settings,
 /// or Prompt Syntax.
-pub(crate) fn schedule_agent_restart(app: &AppHandle, mode: &str) -> Result<(), String> {
+pub(crate) fn schedule_agent_restart(
+    app: &AppHandle,
+    mode: &str,
+    project_id: &str,
+    actor: &str,
+) -> Result<(), String> {
     if !matches!(mode, "disk" | "update") {
         return Err("unsupported restart mode".into());
     }
@@ -267,6 +417,13 @@ pub(crate) fn schedule_agent_restart(app: &AppHandle, mode: &str) -> Result<(), 
             std::sync::atomic::Ordering::Acquire,
         )
         .map_err(|_| "a lifecycle action is already scheduled".to_string())?;
+
+    if let Err(error) = write_restart_resume(&state, project_id, actor) {
+        state
+            .agent_restart_scheduled
+            .store(false, std::sync::atomic::Ordering::Release);
+        return Err(error);
+    }
 
     let handle = app.clone();
     let mode = mode.to_string();
@@ -313,6 +470,36 @@ pub(crate) fn schedule_agent_restart(app: &AppHandle, mode: &str) -> Result<(), 
     Ok(())
 }
 
+#[cfg(test)]
+mod restart_resume_tests {
+    use super::*;
+
+    #[test]
+    fn authored_restart_resumes_the_originating_project_and_provider() {
+        let settings = GlobalSettings::default();
+
+        let marker = restart_resume_marker(&settings, "project-origin", "codex");
+
+        assert_eq!(marker.project_id, "project-origin");
+        assert_eq!(marker.agent, "codex");
+        assert_eq!(
+            marker.model,
+            settings.models.get("codex").unwrap().default,
+            "the resumed run should use the originating provider's selected default"
+        );
+    }
+
+    #[test]
+    fn an_unknown_actor_falls_back_without_losing_the_project() {
+        let settings = GlobalSettings::default();
+
+        let marker = restart_resume_marker(&settings, "project-origin", "future-agent");
+
+        assert_eq!(marker.project_id, "project-origin");
+        assert_eq!(marker.agent, settings.default_agent);
+    }
+}
+
 /// Which commands Rust answers. See [`IMPLEMENTED`].
 #[tauri::command]
 fn list_capabilities() -> Vec<String> {
@@ -346,6 +533,15 @@ const BUILD: BuildInfo = BuildInfo {
 #[tauri::command]
 fn get_build_info() -> BuildInfo {
     BUILD
+}
+
+#[tauri::command]
+fn get_persistence_failure(state: State<'_, AppState>) -> Option<String> {
+    state
+        .persistence_failure
+        .read()
+        .map(|failure| failure.clone())
+        .unwrap_or_else(|_| Some("persistence failure state is poisoned".into()))
 }
 
 /// Record a line the webview produced, in the same file as the Rust ones.
@@ -862,22 +1058,24 @@ async fn quit_app(app: AppHandle, state: State<'_, AppState>) -> Result<(), Stri
 /// disk rather than overwritten, so it is still there to look at.
 #[tauri::command]
 fn get_settings(state: State<'_, AppState>) -> GlobalSettings {
-    let mut settings = state
+    let has_projects = state
         .tables
-        .kv_get(settings::KEY)
-        .and_then(|raw| match serde_json::from_str(&raw) {
-            Ok(parsed) => Some(parsed),
-            Err(error) => {
-                crate::log!(
-                    log::Level::Warn,
-                    "settings",
-                    "record unreadable, using defaults: {error}"
-                );
-                None
-            }
-        })
-        .unwrap_or_default();
-    settings::normalize(&mut settings);
+        .project
+        .select_all()
+        .execute()
+        .is_ok_and(|projects| !projects.is_empty());
+    let mut settings = match state.tables.kv_get(settings::KEY) {
+        Some(raw) => serde_json::from_str(&raw).unwrap_or_else(|error| {
+            crate::log!(
+                log::Level::Warn,
+                "settings",
+                "record unreadable, using established-store defaults: {error}"
+            );
+            settings::defaults_for_store(has_projects)
+        }),
+        None => settings::defaults_for_store(has_projects),
+    };
+    settings::normalize_for_store(&mut settings, has_projects);
     settings
 }
 
@@ -895,28 +1093,52 @@ async fn set_settings(
     patch: serde_json::Value,
     state: State<'_, AppState>,
 ) -> Result<GlobalSettings, String> {
+    apply_settings_patch(patch, &state).await
+}
+
+/// Apply one settings merge through the shared serialized write path.
+///
+/// The Settings UI and owner-authorized Prompt Syntax both call this function,
+/// so neither can race a stale read over the other's update.
+pub(crate) async fn apply_settings_patch(
+    patch: serde_json::Value,
+    state: &AppState,
+) -> Result<GlobalSettings, String> {
     // Held across the whole read-merge-write. The frontend's response
     // ticketing protects its in-memory copy from stale responses; only this
     // protects the record on disk from a stale write.
     let _guard = state.settings_write.lock().await;
 
+    let has_projects = state
+        .tables
+        .project
+        .select_all()
+        .execute()
+        .is_ok_and(|projects| !projects.is_empty());
     let current = state
         .tables
         .kv_get(settings::KEY)
         .and_then(|raw| serde_json::from_str(&raw).ok())
-        .unwrap_or_else(|| serde_json::to_value(GlobalSettings::default()).unwrap_or_default());
+        .unwrap_or_else(|| {
+            serde_json::to_value(settings::defaults_for_store(has_projects)).unwrap_or_default()
+        });
 
-    let previous: GlobalSettings =
-        serde_json::from_value(current.clone()).unwrap_or_else(|_| GlobalSettings::default());
+    let mut previous: GlobalSettings = serde_json::from_value(current)
+        .unwrap_or_else(|_| settings::defaults_for_store(has_projects));
+    // Materialize migrations before applying a partial patch. In particular,
+    // an old theme stored one colour in `accent`; changing the new independent
+    // accent must preserve that old colour as the surface rather than copying
+    // the newly selected accent into both roles.
+    settings::normalize_for_store(&mut previous, has_projects);
 
-    let mut merged = current;
+    let mut merged = serde_json::to_value(&previous).map_err(|error| error.to_string())?;
     settings::merge(&mut merged, &patch);
 
     // Parse before writing. A patch that produces something unreadable should
     // fail here rather than land on disk and break the next launch.
     let mut parsed: GlobalSettings =
         serde_json::from_value(merged.clone()).map_err(|error| error.to_string())?;
-    settings::normalize(&mut parsed);
+    settings::normalize_for_store(&mut parsed, has_projects);
     let boundary = study::normalize_setting(&previous.study_analytics, &mut parsed.study_analytics);
     let merged = serde_json::to_value(&parsed).map_err(|error| error.to_string())?;
 
@@ -1412,6 +1634,7 @@ fn main() {
             projects::update_item,
             projects::set_item_issue,
             projects::delete_item,
+            projects::unmark_item_deletion,
             projects::reorder_items,
             choose_attachments,
             prs::list_pull_requests,
@@ -1455,6 +1678,7 @@ fn main() {
             projects::reset_project_session,
             projects::adopt_session,
             get_build_info,
+            get_persistence_failure,
             projects::list_agent_io,
             projects::get_io_persist,
             projects::set_io_persist,
@@ -1670,6 +1894,7 @@ fn main() {
             // launch was closed on top of becomes an `interrupted` row now,
             // so the transcript already holds it when the tab first renders.
             tauri::async_runtime::block_on(projects::recover_partial_replies(&tables));
+            let restart_resume = read_restart_resume(&config_dir);
             app.manage(AppState {
                 tables: Arc::new(tables),
                 running: Arc::default(),
@@ -1685,12 +1910,39 @@ fn main() {
                 pr_refreshes: Arc::default(),
                 exit_drain_started: std::sync::atomic::AtomicBool::new(false),
                 exit_drain_succeeded: std::sync::atomic::AtomicBool::new(false),
+                persistence_failure: Arc::new(std::sync::RwLock::new(None)),
                 agent_restart_scheduled: std::sync::atomic::AtomicBool::new(false),
                 config_dir,
                 data_dir,
                 location,
                 _store_lock: store_lock,
             });
+
+            // WorkTable persistence is asynchronous. A worker panic once left
+            // the UI accepting writes for twenty minutes and surfaced only
+            // when Quit tried to drain the dead table. Keep one event-driven
+            // watcher across every table and raise the failure in the window
+            // as soon as WorkTable marks a worker terminal.
+            let persistence_handle = app.handle().clone();
+            let persistence_state = persistence_handle.state::<AppState>();
+            let persistence_tables = persistence_state.tables.clone();
+            let persistence_failure = persistence_state.persistence_failure.clone();
+            tauri::async_runtime::spawn(async move {
+                let message = persistence_tables.wait_for_persistence_failure().await;
+                crate::log!(log::Level::Error, "persistence", "{message}");
+                if let Ok(mut failure) = persistence_failure.write() {
+                    *failure = Some(message.clone());
+                }
+                let _ = persistence_handle.emit(
+                    "persistence:failed",
+                    serde_json::json!({ "message": message }),
+                );
+            });
+
+            if let Some(marker) = restart_resume {
+                let resume_handle = app.handle().clone();
+                tauri::async_runtime::spawn(resume_after_restart(resume_handle, marker));
+            }
 
             /*
              * The cafe standard, ported: SIGTERM, SIGINT and SIGHUP route

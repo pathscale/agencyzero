@@ -46,7 +46,7 @@ export function ProjectPanel(props: { project: Project }): JSX.Element {
   });
 
   return (
-    <div class="az-scroll flex h-full min-h-0 w-[322px] flex-none flex-col gap-2.5">
+    <div class="az-scroll flex h-full min-h-0 w-[322px] flex-none flex-col gap-2.5 overflow-y-auto overscroll-contain">
       <SectionPanel
         icon="list-checks"
         title={tx("Items")}
@@ -54,7 +54,11 @@ export function ProjectPanel(props: { project: Project }): JSX.Element {
         lead={<ItemSortControls />}
         isOpen={prefs.panelSections.items}
         onToggle={() => togglePanelSection("items")}
-        class={prefs.panelSections.items ? "flex min-h-0 flex-1 flex-col" : "flex-none"}
+        class={
+          prefs.panelSections.items
+            ? "flex max-h-[48vh] min-h-[52px] flex-none flex-col"
+            : "flex-none"
+        }
         contentClass="flex min-h-0 flex-1 flex-col"
       >
         <ItemList projectId={props.project.id} items={panelItems()} />
@@ -1101,7 +1105,7 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
   }
 
   return (
-    <div class="az-scroll flex min-h-0 flex-1 flex-col gap-0.5 px-2 pt-1.5 pb-2.5">
+    <div class="az-scroll flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto px-2 pt-1.5 pb-2.5">
       <Show when={props.items.length > 3}>
         <div class="mb-1 flex items-center gap-2 border-az-hairline-soft border-b bg-az-inset px-2.5 py-1.5">
           <Icon name="search" class="shrink-0 text-[12px] text-primary/70" />

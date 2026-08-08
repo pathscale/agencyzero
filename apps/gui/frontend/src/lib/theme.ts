@@ -4,22 +4,78 @@ import type { ThemeSettings } from "~/types";
 /**
  * Applies the theme axes to the document.
  *
- * The stylesheet writes every colour as an expression over `--az-hue`,
- * `--az-tint`, `--az-lift` and `--az-damp` (see `styles/theme.css`), so
- * retinting the workspace is four `setProperty` calls rather than a second
- * palette. Nothing else in the app writes those variables.
+ * The stylesheet separates `--az-surface` from `--color-primary`, so the
+ * workspace wash and the interactive accent can have unrelated bases.
  *
- * Deliberately *not* `@pathscale/ui`'s own `createHueShiftStore`, though the
- * wheel this drives is theirs. That store writes `--color-base-*` against
- * NoFilter's anchors and picks its light/dark set by reading `data-theme` for
- * the literal strings "light" or "dark" — this app's is `agencyzero`, so it
- * falls through to the OS preference and would paint 98%-white surfaces over a
- * dark workspace on any Mac set to Light. The wheel is reusable; its
- * application layer is not.
+ * Deliberately *not* `@pathscale/ui`'s own `createHueShiftStore` or contrast
+ * palette. Those write NoFilter's base tokens and brighten dark-mode swatches;
+ * AgencyZero needs literal dark-oriented values feeding its own surface ladder.
  */
 
 /** The palette's own accent, for when the setting is empty. Matches `theme.css`. */
-export const DEFAULT_ACCENT = "#ffee58";
+export const DEFAULT_ACCENT = "#d2ad3f";
+
+/** One curated control accent shown beside the surface controls. */
+export interface AccentOption {
+  /** Empty preserves the designed palette rather than storing its current hex. */
+  value: string;
+  color: string;
+}
+
+/**
+ * The 31 literal wheel values, from the outside ring to the centre.
+ *
+ * These are intentionally *not* the upstream wheel's contrast palettes. Its
+ * dark-theme set is pastel so the dots pop against black; the owner wants the
+ * chosen colours themselves to be dark-oriented. Every button displays and
+ * stores the same generated hex, so selection can never drift from its swatch.
+ */
+export function surfaceColors(mode: "light" | "dark"): string[] {
+  const ringHues = [42, 24, 4, 336, 300, 268, 238, 210, 184, 162, 132, 94];
+  const innerHues = [30, 330, 270, 210, 150, 90];
+  const levels = mode === "dark" ? [22, 33, 44] : [52, 66, 80];
+  return [
+    ...ringHues.map((hue) => hslToHex(hue, 72, levels[0])),
+    ...ringHues.map((hue) => hslToHex(hue, 68, levels[1])),
+    ...innerHues.map((hue) => hslToHex(hue, 55, levels[2])),
+    mode === "dark" ? "#30343b" : "#f1f3f5",
+  ];
+}
+
+/**
+ * Seven accents that stay legible on the selected workspace background.
+ *
+ * The surface wheel remains the expressive control. Accent is intentionally a
+ * small palette: six harmonies around the selected surface hue plus the
+ * product's designed yellow. Softness moves the accents visibly toward the
+ * middle from opposite sides in light and dark mode, while strength controls
+ * saturation.
+ */
+export function accentOptions(
+  surface: string,
+  mode: "light" | "dark",
+  wash: number,
+  softness: number,
+): AccentOption[] {
+  const base = toColorValue(isAccent(surface) ? surface : DEFAULT_ACCENT).hsl.h;
+  const strength = normalizeWash(wash) / 50;
+  const lift = Math.min(Math.max(softness, 0), MAX_SOFTNESS);
+  const saturation = 50 + strength * 32 - lift * 2;
+  const lightness = mode === "light" ? 54 - lift * 2.3 : 44 + lift * 2.5;
+  const harmonies = [0, 35, 95, 155, 180, 250].map((offset) => {
+    const color = hslToHex((base + offset) % 360, saturation, lightness);
+    return { value: color, color };
+  });
+  return [{ value: "", color: defaultAccent(wash, softness) }, ...harmonies];
+}
+
+/** The designed yellow follows softness too; empty is a semantic choice, not a frozen hex. */
+export function defaultAccent(wash: number, softness: number): string {
+  const hue = toColorValue(DEFAULT_ACCENT).hsl.h;
+  const strength = normalizeWash(wash) / 50;
+  const lift = Math.min(Math.max(softness, 0), MAX_SOFTNESS);
+  return hslToHex(hue, 58 + strength * 10 - lift * 2, 52 + lift * 0.9);
+}
 
 /**
  * How far the softness axis may travel, in oklch percentage points.
@@ -39,17 +95,25 @@ const DAMP_RATIO = 0.45;
  * The axis that makes a pick read as a *theme* rather than a highlight: without
  * it the wheel recolours buttons and rings while the workspace stays the same
  * grey, which is exactly how this first shipped and exactly what was wrong with
- * it. nofilter.io mixes 8–11% into its base tiers; the stops below bracket that,
- * with `0` kept reachable because the designed palette is a legitimate choice.
+ * it. nofilter.io mixes roughly 8–11% into its base tiers; the first stop keeps
+ * that restrained floor while the remaining four make the useful range visible.
  *
- * Higher than about 20% and the surface ladder stops reading as neutral at all —
- * the desk becomes the accent at low lightness, and the depth cues that separate
- * desk from panel from card collapse into one wash.
+ * Every stop carries colour. The old zero stop always produced grey, while
+ * values beyond fifty percent erased the neutral foundation. Five even steps
+ * across the useful 10–50% interval make the whole control meaningful.
  */
-export const WASH_STOPS = [0, 6, 10, 14, 20] as const;
+export const WASH_STOPS = [10, 20, 30, 40, 50] as const;
 
 /** What a freshly picked colour washes at, before anyone touches the strength. */
-export const DEFAULT_WASH = 10;
+export const DEFAULT_WASH = 30;
+
+/** Map records from earlier stop layouts onto the nearest current choice. */
+export function normalizeWash(value: number): number {
+  const safe = Number.isFinite(value) ? value : DEFAULT_WASH;
+  return WASH_STOPS.reduce((closest, stop) =>
+    Math.abs(stop - safe) < Math.abs(closest - safe) ? stop : closest,
+  );
+}
 
 /**
  * How far the text ladder can be pushed back up, in oklch percentage points.
@@ -71,6 +135,25 @@ export function isAccent(value: string): boolean {
   return HEX.test(value.trim());
 }
 
+/** Nearest literal palette entry for one older or mode-shifted hex value. */
+export function closestColorIndex(value: string, colors: string[]): number {
+  if (!isAccent(value) || colors.length === 0) return -1;
+  const current = toColorValue(value).hsl;
+  let closest = 0;
+  let best = Number.POSITIVE_INFINITY;
+  for (let index = 0; index < colors.length; index += 1) {
+    const candidate = toColorValue(colors[index]).hsl;
+    const rawHue = Math.abs(current.h - candidate.h) % 360;
+    const hue = Math.min(rawHue, 360 - rawHue);
+    const score = hue * 2 + Math.abs(current.s - candidate.s) + Math.abs(current.l - candidate.l);
+    if (score < best) {
+      closest = index;
+      best = score;
+    }
+  }
+  return closest;
+}
+
 /**
  * Write the axes onto `:root`.
  *
@@ -82,8 +165,8 @@ export function applyTheme(
   theme: ThemeSettings,
   root: HTMLElement = document.documentElement,
 ): void {
-  const chosen = isAccent(theme.accent);
-  const accent = chosen ? theme.accent.trim() : DEFAULT_ACCENT;
+  const surfaceChosen = isAccent(theme.surface);
+  const surface = surfaceChosen ? theme.surface.trim() : DEFAULT_ACCENT;
   const softness = Math.min(Math.max(theme.softness || 0, 0), MAX_SOFTNESS);
   /*
    * No accent means the designed palette, and the designed palette is not a
@@ -91,14 +174,17 @@ export function applyTheme(
    * been picked. Reset therefore returns the workspace to grey, rather than to
    * grey plus whatever wash was last set.
    */
-  const wash = chosen
-    ? Math.min(Math.max(theme.wash ?? DEFAULT_WASH, 0), WASH_STOPS[WASH_STOPS.length - 1])
-    : 0;
+  const configuredWash = normalizeWash(theme.wash ?? DEFAULT_WASH);
+  const wash = surfaceChosen ? configuredWash : 0;
+  const accent = isAccent(theme.accent)
+    ? theme.accent.trim()
+    : defaultAccent(configuredWash, softness);
   const brightness = Math.min(
     Math.max(theme.textBrightness || 0, BRIGHTNESS_STOPS[0]),
     BRIGHTNESS_STOPS[BRIGHTNESS_STOPS.length - 1],
   );
 
+  root.style.setProperty("--az-surface", surface);
   root.style.setProperty("--color-primary", accent);
   root.style.setProperty("--color-accent", accent);
   root.style.setProperty("--az-wash", `${wash}%`);
@@ -157,6 +243,35 @@ export function toColorValue(hex: string): ColorValue {
     hsl: { h: hue, s: saturation * 100, l: l * 100, a: 1 },
     hex: `#${full}`,
   };
+}
+
+/** Convert one generated HSL harmony to the persisted `#rrggbb` shape. */
+function hslToHex(hue: number, saturation: number, lightness: number): string {
+  const s = saturation / 100;
+  const l = lightness / 100;
+  const chroma = (1 - Math.abs(2 * l - 1)) * s;
+  const sector = hue / 60;
+  const x = chroma * (1 - Math.abs((sector % 2) - 1));
+  const [r1, g1, b1] =
+    sector < 1
+      ? [chroma, x, 0]
+      : sector < 2
+        ? [x, chroma, 0]
+        : sector < 3
+          ? [0, chroma, x]
+          : sector < 4
+            ? [0, x, chroma]
+            : sector < 5
+              ? [x, 0, chroma]
+              : [chroma, 0, x];
+  const match = l - chroma / 2;
+  return `#${[r1, g1, b1]
+    .map((channel) =>
+      Math.round((channel + match) * 255)
+        .toString(16)
+        .padStart(2, "0"),
+    )
+    .join("")}`;
 }
 
 /**

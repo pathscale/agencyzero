@@ -19,7 +19,7 @@ import { AgentStateDot } from "~/components/StatusDot";
 import { countdown, formatBytes, relativeTime } from "~/lib/format";
 import { AGENT_LABELS, agentStateLabel, envPolicyLabel, permissionLabel } from "~/lib/labels";
 import { describeError, log } from "~/lib/log";
-import { DEFAULT_WASH } from "~/lib/theme";
+import { DEFAULT_WASH, normalizeWash } from "~/lib/theme";
 import { t, tx, type UiMessage } from "~/stores/i18n";
 import { prefs, setPrefs } from "~/stores/prefs";
 import { useNow, useWorkspace } from "~/stores/workspace";
@@ -220,6 +220,15 @@ export function SettingsTab(): JSX.Element {
     return catalogue.models.filter((model) => selection.enabled.includes(model.id));
   };
 
+  /** Every selected provider model is eligible to watch a run. */
+  const moderatorModels = () =>
+    (["claude", "codex", "copilot"] as const).flatMap((agent) =>
+      enabledModels(agent).map((model) => ({
+        value: `${agent}:${model.id}`,
+        label: `${AGENT_LABELS[agent]} · ${model.name}`,
+      })),
+    );
+
   return (
     <div class="az-scroll flex min-w-0 flex-1 justify-center rounded-panel border border-az-hairline bg-az-sunken">
       <div class="flex w-full max-w-[720px] flex-col gap-3 px-6 pt-5.5 pb-7">
@@ -253,7 +262,17 @@ export function SettingsTab(): JSX.Element {
             <div class="font-medium text-[12.5px] text-az-strong">{t("language.label")}</div>
             <div class="mt-0.5 text-[11px] text-az-muted">{t("language.hint")}</div>
           </div>
-          <LanguageSwitcher align="end" />
+          <div class="flex shrink-0 items-center gap-2">
+            <LanguageSwitcher align="end" />
+            <button
+              type="button"
+              data-guide-target="help-setup"
+              onClick={() => actions.openOnboarding()}
+              class="rounded-lg border border-az-hairline-strong px-2.5 py-1.5 text-[11.5px] text-az-muted transition-colors hover:border-primary hover:text-primary"
+            >
+              {tx("Welcome Tutorial")}
+            </button>
+          </div>
         </div>
 
         <Show when={settings()}>
@@ -559,6 +578,12 @@ export function SettingsTab(): JSX.Element {
                   />
                 </Row>
                 <Row
+                  label={tx("Open source")}
+                  hint={tx("If AgencyZero is useful, a GitHub star helps more people find it.")}
+                >
+                  <SourceActions />
+                </Row>
+                <Row
                   label={tx("Restart")}
                   hint={tx(
                     "drains the store, then reopens into the build currently on disk — the second half of a rebuild",
@@ -628,31 +653,39 @@ export function SettingsTab(): JSX.Element {
                 </Row>
                 <ThemePicker
                   theme={current().theme}
+                  onSurface={(surface) =>
+                    void actions.saveSettings({
+                      theme: {
+                        surface,
+                        wash: normalizeWash(current().theme.wash),
+                      },
+                    })
+                  }
                   onAccent={(accent) => void actions.saveSettings({ theme: { accent } })}
                   onSoftness={(softness) => void actions.saveSettings({ theme: { softness } })}
                   onWash={(wash) => void actions.saveSettings({ theme: { wash } })}
                   onBrightness={(textBrightness) =>
                     void actions.saveSettings({ theme: { textBrightness } })
                   }
+                  isDefault={
+                    current().theme.surface === "" &&
+                    current().theme.accent === "" &&
+                    current().theme.softness === 0 &&
+                    normalizeWash(current().theme.wash) === DEFAULT_WASH &&
+                    current().theme.textBrightness === 0
+                  }
+                  onReset={() =>
+                    void actions.saveSettings({
+                      theme: {
+                        surface: "",
+                        accent: "",
+                        softness: 0,
+                        wash: DEFAULT_WASH,
+                        textBrightness: 0,
+                      },
+                    })
+                  }
                 />
-                <Row label={t("appearance.reset")} hint={t("appearance.resetHint")} isLast>
-                  <button
-                    type="button"
-                    disabled={
-                      current().theme.accent === "" &&
-                      current().theme.softness === 0 &&
-                      current().theme.textBrightness === 0
-                    }
-                    onClick={() =>
-                      void actions.saveSettings({
-                        theme: { accent: "", softness: 0, wash: DEFAULT_WASH },
-                      })
-                    }
-                    class="rounded-lg border border-az-hairline-strong px-3 py-[5px] text-[12px] text-az-muted transition-colors hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-40"
-                  >
-                    {t("appearance.resetButton")}
-                  </button>
-                </Row>
               </Section>
 
               <Section
@@ -768,6 +801,26 @@ export function SettingsTab(): JSX.Element {
               <StudySettings />
 
               <Section
+                icon="lock"
+                title={tx("Agent authority")}
+                hint={tx("explicit capabilities delegated to Prompt Syntax")}
+              >
+                <Row
+                  label={tx("Update app settings")}
+                  hint={tx("off by default; allows only the settings keys this build declares")}
+                  isLast
+                >
+                  <SettingToggle
+                    label={tx("Allow agents to update app settings")}
+                    checked={current().agentSettingsUpdates}
+                    onChange={(agentSettingsUpdates) =>
+                      void actions.saveSettings({ agentSettingsUpdates })
+                    }
+                  />
+                </Row>
+              </Section>
+
+              <Section
                 icon="shield"
                 title={tx("Moderator")}
                 hint={tx("a second agent watching the stream — costs tokens")}
@@ -787,10 +840,7 @@ export function SettingsTab(): JSX.Element {
                   <PillMenu
                     label={tx("Moderator model")}
                     value={current().moderator.model}
-                    options={enabledModels("claude").map((model) => ({
-                      value: model.id,
-                      label: model.name,
-                    }))}
+                    options={moderatorModels()}
                     onChange={(model) => void actions.saveSettings({ moderator: { model } })}
                   />
                 </Row>
@@ -1251,7 +1301,8 @@ function ExperimentalSettings(): JSX.Element {
     setBusy(true);
     setNote(null);
     try {
-      await Promise.all([actions.refreshQuota(), actions.refreshClaudeUsage()]);
+      // Forced: asking for a reading by hand should outrank the poll's backoff.
+      await Promise.all([actions.refreshQuota(), actions.refreshClaudeUsage({ force: true })]);
     } catch (cause) {
       setNote(describeError(cause));
     } finally {
@@ -1675,6 +1726,32 @@ function BuildStamp(): JSX.Element {
   );
 }
 
+const AGENCYZERO_REPOSITORY = "https://github.com/pathscale/agencyzero";
+
+/** A visible source link and a quiet, explicit star invitation—never a modal. */
+function SourceActions(): JSX.Element {
+  const { actions } = useWorkspace();
+  const openRepository = () => void actions.openExternal(AGENCYZERO_REPOSITORY);
+  return (
+    <div class="flex items-center gap-2">
+      <button
+        type="button"
+        onClick={openRepository}
+        class="rounded-lg border border-az-hairline-strong px-2.5 py-1 text-[11.5px] text-az-muted transition-colors hover:border-primary hover:text-primary"
+      >
+        {tx("View source")}
+      </button>
+      <button
+        type="button"
+        onClick={openRepository}
+        class="rounded-lg bg-primary px-2.5 py-1 text-[11.5px] text-primary-content transition-opacity hover:opacity-90"
+      >
+        {tx("Star on GitHub")}
+      </button>
+    </div>
+  );
+}
+
 /**
  * The whole update story in one row: what the boot check found, a manual
  * re-check, and the install button. "Up to date" is only ever said after an
@@ -1777,7 +1854,8 @@ function RelaunchButton(): JSX.Element {
 function CostSection(): JSX.Element {
   const { state, actions } = useWorkspace();
   const [summary, setSummary] = createSignal<CostSummary | null>(null);
-  const warningUsd = () => state.settings?.costWarningUsd ?? 0.75;
+  const [warningPreview, setWarningPreview] = createSignal<number | null>(null);
+  const warningUsd = () => warningPreview() ?? state.settings?.costWarningUsd ?? 0.75;
 
   // Asked once per visit: the ledger only grows when a run finishes, and
   // Settings is not a screen left open while runs happen.
@@ -1879,9 +1957,11 @@ function CostSection(): JSX.Element {
             step="0.25"
             value={warningUsd()}
             aria-label={tx("Projected turn warning threshold")}
-            onChange={(event) =>
-              void actions.saveSettings({ costWarningUsd: Number(event.currentTarget.value) })
-            }
+            onInput={(event) => setWarningPreview(Number(event.currentTarget.value))}
+            onChange={(event) => {
+              const costWarningUsd = Number(event.currentTarget.value);
+              void actions.saveSettings({ costWarningUsd }).finally(() => setWarningPreview(null));
+            }}
             class="h-1.5 min-w-0 flex-1 cursor-pointer accent-primary"
           />
           <output class="w-14 shrink-0 text-right font-mono text-[12.5px] text-az-strong">
