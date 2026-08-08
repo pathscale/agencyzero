@@ -474,6 +474,18 @@ pub fn normalize(settings: &mut GlobalSettings) {
     }
 }
 
+/// Normalize with the durable evidence that this is an established store.
+///
+/// Once projects exist, first-run setup is no longer a valid automatic state.
+/// This also repairs the 3.20 failure mode where the KV worker lost the
+/// settings row and 3.21 persisted a fresh default row with onboarding false.
+pub fn normalize_for_store(settings: &mut GlobalSettings, has_projects: bool) {
+    normalize(settings);
+    if has_projects {
+        settings.onboarding_completed = Some(true);
+    }
+}
+
 /// Defaults for a store whose settings row is missing or unreadable.
 ///
 /// A genuinely empty store should offer first-run setup. A store that already
@@ -597,6 +609,13 @@ mod tests {
     fn a_missing_settings_row_does_not_reopen_onboarding_in_an_established_store() {
         assert_eq!(defaults_for_store(false).onboarding_completed, Some(false));
         assert_eq!(defaults_for_store(true).onboarding_completed, Some(true));
+    }
+
+    #[test]
+    fn an_existing_default_row_does_not_reopen_onboarding_in_an_established_store() {
+        let mut settings = GlobalSettings::default();
+        normalize_for_store(&mut settings, true);
+        assert_eq!(settings.onboarding_completed, Some(true));
     }
 
     /// The case the model picker depends on: unchecking a model sends a shorter

@@ -894,7 +894,7 @@ fn get_settings(state: State<'_, AppState>) -> GlobalSettings {
         }),
         None => settings::defaults_for_store(has_projects),
     };
-    settings::normalize(&mut settings);
+    settings::normalize_for_store(&mut settings, has_projects);
     settings
 }
 
@@ -941,7 +941,7 @@ async fn set_settings(
     // fail here rather than land on disk and break the next launch.
     let mut parsed: GlobalSettings =
         serde_json::from_value(merged.clone()).map_err(|error| error.to_string())?;
-    settings::normalize(&mut parsed);
+    settings::normalize_for_store(&mut parsed, has_projects);
     let boundary = study::normalize_setting(&previous.study_analytics, &mut parsed.study_analytics);
     let merged = serde_json::to_value(&parsed).map_err(|error| error.to_string())?;
 
