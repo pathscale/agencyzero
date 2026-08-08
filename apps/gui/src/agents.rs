@@ -17,19 +17,31 @@ pub const KEY: &str = "agents";
 /// Every agent this build can drive.
 pub const AGENTS: [Agent; 3] = [Agent::Claude, Agent::Codex, Agent::Copilot];
 
-/// Add the conventional user-local executable directory to a shell `PATH`.
+/// Add conventional GUI-invisible agent executable directories to `PATH`.
 ///
 /// GUI launches do not necessarily inherit the interactive shell's startup
-/// files, and some installers place Claude at `$HOME/.local/bin/claude`
-/// without adding that directory to the login shell either. Appending instead
-/// of prepending preserves the user's explicit shell ordering while still
-/// making an otherwise invisible install discoverable.
+/// files. Claude's native installer uses `$HOME/.local/bin`; a common npm
+/// setup uses `$HOME/.npm-global/bin`; Volta uses `$HOME/.volta/bin`; and cmux
+/// bundles provider CLIs inside its application resources. Appending preserves
+/// the user's explicit shell ordering while making those fallbacks visible.
 pub(crate) fn with_user_local_bin(path: &OsStr, home: Option<&Path>) -> OsString {
     let mut entries: Vec<PathBuf> = std::env::split_paths(path).collect();
-    if let Some(local) = home.map(|home| home.join(".local/bin"))
-        && !entries.contains(&local)
-    {
-        entries.push(local);
+    let mut candidates = Vec::new();
+    if let Some(home) = home {
+        candidates.extend([
+            home.join(".local/bin"),
+            home.join(".npm-global/bin"),
+            home.join(".volta/bin"),
+        ]);
+    }
+    #[cfg(target_os = "macos")]
+    candidates.push(PathBuf::from(
+        "/Applications/cmux.app/Contents/Resources/bin",
+    ));
+    for candidate in candidates {
+        if !entries.contains(&candidate) {
+            entries.push(candidate);
+        }
     }
     std::env::join_paths(entries).unwrap_or_else(|_| path.to_os_string())
 }
@@ -261,6 +273,13 @@ mod tests {
         assert_eq!(entries[0], Path::new("/opt/homebrew/bin"));
         assert_eq!(entries[1], Path::new("/usr/bin"));
         assert_eq!(entries[2], home.join(".local/bin"));
+        assert_eq!(entries[3], home.join(".npm-global/bin"));
+        assert_eq!(entries[4], home.join(".volta/bin"));
+        #[cfg(target_os = "macos")]
+        assert_eq!(
+            entries[5],
+            Path::new("/Applications/cmux.app/Contents/Resources/bin")
+        );
     }
 
     #[test]
@@ -269,10 +288,10 @@ mod tests {
         let amended =
             with_user_local_bin(OsStr::new("/Users/example/.local/bin:/usr/bin"), Some(home));
         let entries: Vec<_> = std::env::split_paths(&amended).collect();
-        assert_eq!(
-            entries,
-            [home.join(".local/bin"), PathBuf::from("/usr/bin")]
-        );
+        assert_eq!(entries[0], home.join(".local/bin"));
+        assert_eq!(entries[1], PathBuf::from("/usr/bin"));
+        assert_eq!(entries[2], home.join(".npm-global/bin"));
+        assert_eq!(entries[3], home.join(".volta/bin"));
     }
 
     /// Every agent must produce a state the UI knows how to colour, whatever is
