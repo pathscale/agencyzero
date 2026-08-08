@@ -573,6 +573,7 @@ export const SETTINGS: GlobalSettings = {
   defaultAgent: "claude",
   // Empty is "not chosen yet". Rust resolves it to $HOME/AgencyZero on read.
   workspaceRoot: "",
+  agentProxyBinary: "",
   /*
    * A deliberately short starting selection out of a long catalogue: the four
    * Claude aliases that are actually models, Codex's top three, and the only

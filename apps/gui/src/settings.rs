@@ -25,6 +25,9 @@ pub struct GlobalSettings {
     /// handle, and baking a literal home path into the record would freeze it
     /// against the machine that first wrote it.
     pub workspace_root: String,
+    /// Empty selects the bundled AgencyProxy sidecar. A custom absolute path
+    /// takes effect on the next AgencyZero launch.
+    pub agent_proxy_binary: String,
     /// Per agent: which models the picker offers, and which one it starts on.
     pub models: BTreeMap<String, ModelSelection>,
     pub default_permission: String,
@@ -370,6 +373,7 @@ impl Default for GlobalSettings {
         GlobalSettings {
             default_agent: "claude".into(),
             workspace_root: String::new(),
+            agent_proxy_binary: String::new(),
             models: BTreeMap::from([
                 (
                     "claude".to_string(),

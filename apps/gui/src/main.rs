@@ -56,6 +56,7 @@ const IMPLEMENTED: &[&str] = &[
     "restore_store_backup",
     "choose_data_directory",
     "choose_project_directory",
+    "choose_agent_proxy_binary",
     "get_workspace_root",
     "create_workspace_root",
     "list_projects",
@@ -78,6 +79,7 @@ const IMPLEMENTED: &[&str] = &[
     "list_questions",
     "answer_question",
     "list_messages",
+    "sync_project",
     "list_running_tasks",
     "list_task_log",
     "clear_task_log",
@@ -797,6 +799,23 @@ async fn choose_project_directory(app: AppHandle) -> Result<Option<String>, Stri
     let picked = rx
         .await
         .map_err(|_| "the directory picker closed without answering".to_string())?;
+    Ok(picked.map(|path| path.to_string()))
+}
+
+/// Choose a custom AgencyProxy executable. The persisted setting is applied on
+/// the next launch; canceling the picker changes nothing.
+#[tauri::command]
+async fn choose_agent_proxy_binary(app: AppHandle) -> Result<Option<String>, String> {
+    let (tx, rx) = tokio::sync::oneshot::channel();
+    app.dialog()
+        .file()
+        .set_title("Choose an AgencyProxy executable")
+        .pick_file(move |picked| {
+            let _ = tx.send(picked);
+        });
+    let picked = rx
+        .await
+        .map_err(|_| "the AgencyProxy picker closed without answering".to_string())?;
     Ok(picked.map(|path| path.to_string()))
 }
 
@@ -1628,6 +1647,7 @@ fn main() {
             restore_store_backup,
             choose_data_directory,
             choose_project_directory,
+            choose_agent_proxy_binary,
             get_workspace_root,
             create_workspace_root,
             projects::list_projects,
@@ -1650,6 +1670,7 @@ fn main() {
             questions::list_questions,
             questions::answer_question,
             projects::list_messages,
+            projects::sync_project,
             projects::list_running_tasks,
             projects::list_task_log,
             projects::list_rate_limits,
@@ -1895,14 +1916,28 @@ fn main() {
                 );
             }
 
-            // Before the window can ask for messages: a reply the previous
-            // launch was closed on top of becomes an `interrupted` row now,
-            // so the transcript already holds it when the tab first renders.
-            tauri::async_runtime::block_on(projects::recover_partial_replies(&tables));
+            let configured_proxy = tables
+                .kv_get(settings::KEY)
+                .and_then(|raw| serde_json::from_str::<GlobalSettings>(&raw).ok())
+                .map(|settings| settings.agent_proxy_binary)
+                .filter(|path| !path.is_empty())
+                .map(PathBuf::from);
+            let proxy = Arc::new(agent_proxy::AgencyProxy::new(&config_dir, configured_proxy));
+            // A checkpoint backed by a still-live proxy run remains a live
+            // draft. Only orphaned checkpoints become `interrupted` rows.
+            let live_proxy_runs = tauri::async_runtime::block_on(proxy.list_runs())
+                .unwrap_or_default()
+                .into_iter()
+                .map(|run| run.run_id.0)
+                .collect();
+            tauri::async_runtime::block_on(projects::recover_partial_replies_excluding(
+                &tables,
+                &live_proxy_runs,
+            ));
             let restart_resume = read_restart_resume(&config_dir);
             app.manage(AppState {
                 tables: Arc::new(tables),
-                proxy: Arc::new(agent_proxy::AgencyProxy::new(&config_dir)),
+                proxy,
                 running: Arc::default(),
                 io: Arc::default(),
                 approvals: Arc::default(),
@@ -1949,7 +1984,6 @@ fn main() {
                 let resume_handle = app.handle().clone();
                 tauri::async_runtime::spawn(resume_after_restart(resume_handle, marker));
             }
-            tauri::async_runtime::spawn(projects::recover_proxy_runs(app.handle().clone()));
 
             /*
              * The cafe standard, ported: SIGTERM, SIGINT and SIGHUP route

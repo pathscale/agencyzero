@@ -503,6 +503,7 @@ export function createMockApi(): AgencyZeroApi {
 
     listMessages: (projectId) =>
       settle(messages.filter((message) => message.projectId === projectId)),
+    syncProject: () => settle(undefined),
 
     async sendMessage(input) {
       // The task manager is reserved with no project row, exactly like Rust:
@@ -721,6 +722,7 @@ export function createMockApi(): AgencyZeroApi {
     chooseDataDirectory: () => settle(null),
     // No native panel in the preview; the typed path still works.
     chooseProjectDirectory: () => settle(null),
+    chooseAgentProxyBinary: () => settle(null),
     // A fixed fixture path: the preview has no OS picker to open.
     chooseAttachments: () => settle(["/tmp/mock-attachment.txt"]),
 

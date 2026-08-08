@@ -33,6 +33,11 @@ const en = {
     "detected from the installed CLIs, not from configuration",
   "Re-check": "Re-check",
   "last checked": "last checked",
+  "AgencyProxy sidecar": "AgencyProxy sidecar",
+  "bundled by default; a custom executable takes effect next launch":
+    "bundled by default; a custom executable takes effect next launch",
+  "Bundled AgencyProxy": "Bundled AgencyProxy",
+  "Use bundled": "Use bundled",
   "Agent defaults": "Agent defaults",
   "what a new tab starts with": "what a new tab starts with",
   Agent: "Agent",

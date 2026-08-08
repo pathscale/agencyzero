@@ -300,6 +300,34 @@ export function SettingsTab(): JSX.Element {
                     )}
                   </Show>
                 </div>
+                <Row
+                  label={tx("AgencyProxy sidecar")}
+                  hint={tx("bundled by default; a custom executable takes effect next launch")}
+                  stack
+                  isLast
+                >
+                  <div class="flex min-w-0 items-center gap-2">
+                    <span class="min-w-0 flex-1 truncate font-mono text-[11.5px] text-az-muted">
+                      {current().agentProxyBinary || tx("Bundled AgencyProxy")}
+                    </span>
+                    <button
+                      type="button"
+                      disabled={!isLive("chooseAgentProxyBinary")}
+                      onClick={() => void actions.chooseAgentProxyBinary()}
+                      class="rounded-lg border border-az-hairline-strong px-3 py-[5px] text-[12px] text-az-body transition-colors hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      {tx("Choose…")}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={!current().agentProxyBinary}
+                      onClick={() => void actions.saveSettings({ agentProxyBinary: "" })}
+                      class="rounded-lg border border-az-hairline-strong px-3 py-[5px] text-[12px] text-az-muted transition-colors hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      {tx("Use bundled")}
+                    </button>
+                  </div>
+                </Row>
               </Section>
 
               <Section

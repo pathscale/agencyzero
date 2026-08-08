@@ -759,6 +759,8 @@ function createWorkspace() {
         }
       }
     });
+    const lastReceivedAt = messages.at(-1)?.createdAt ?? "";
+    await backend.syncProject(projectId, lastReceivedAt);
   }
 
   /** One snapshot request per project, shared by boot and a simultaneous tab open. */
@@ -2355,6 +2357,10 @@ function createWorkspace() {
     async chooseDataLocation() {
       const picked = await client().chooseDataDirectory();
       if (picked) await actions.setDataLocation(picked);
+    },
+    async chooseAgentProxyBinary() {
+      const picked = await client().chooseAgentProxyBinary();
+      if (picked) await saveSettings({ agentProxyBinary: picked });
     },
     /** Read the on-disk backup catalogue and the result from the last angel run. */
     getStoreBackupStatus() {
