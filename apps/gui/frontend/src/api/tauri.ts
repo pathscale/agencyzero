@@ -76,6 +76,7 @@ export function createTauriApi(): AgencyZeroApi {
     answerQuestion: (id, answered) => call("answer_question", { id, answered }),
 
     listMessages: (projectId) => call("list_messages", { projectId }),
+    syncProject: (projectId, lastReceivedAt) => call("sync_project", { projectId, lastReceivedAt }),
     sendMessage: (input) => call("send_message", { input }),
     resolveModeration: (messageId, approve) => call("resolve_moderation", { messageId, approve }),
 
@@ -98,6 +99,7 @@ export function createTauriApi(): AgencyZeroApi {
     restoreStoreBackup: () => call("restore_store_backup"),
     chooseDataDirectory: () => call("choose_data_directory"),
     chooseProjectDirectory: () => call("choose_project_directory"),
+    chooseAgentProxyBinary: () => call("choose_agent_proxy_binary"),
     chooseAttachments: () => call("choose_attachments"),
     getWorkspaceRoot: () => call("get_workspace_root"),
     createWorkspaceRoot: () => call("create_workspace_root"),

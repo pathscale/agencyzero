@@ -4345,7 +4345,7 @@ fn legacy_partial_reply_path(tables: &Tables, project_id: &str) -> std::path::Pa
 /// Versioned because older builds stored the body as a bare string. Recovery
 /// treats those legacy values as Claude, which was the only possible writer at
 /// the time, while every new checkpoint preserves the provider that wrote it.
-#[derive(serde::Deserialize, serde::Serialize)]
+#[derive(Clone, serde::Deserialize, serde::Serialize)]
 struct PartialReply {
     version: u8,
     body: String,
@@ -4354,6 +4354,10 @@ struct PartialReply {
     permission: String,
     #[serde(default)]
     started_at: Option<String>,
+    #[serde(default)]
+    proxy_run_id: Option<String>,
+    #[serde(default)]
+    proxy_sequence: u64,
 }
 
 fn encode_partial_reply(
@@ -4362,6 +4366,8 @@ fn encode_partial_reply(
     model: &str,
     permission: &str,
     started_at: Option<&str>,
+    proxy_run_id: Option<&str>,
+    proxy_sequence: u64,
 ) -> String {
     let mut body_limit = body.len().min(MAX_PERSISTED_BLOB);
     loop {
@@ -4371,12 +4377,14 @@ fn encode_partial_reply(
             body.to_string()
         };
         let encoded = serde_json::to_string(&PartialReply {
-            version: 2,
+            version: 3,
             body: clipped,
             agent: agent_wire_name(agent).into(),
             model: model.into(),
             permission: permission.into(),
             started_at: started_at.map(str::to_string),
+            proxy_run_id: proxy_run_id.map(str::to_string),
+            proxy_sequence,
         })
         .unwrap_or_default();
         if encoded.len() <= MAX_PERSISTED_BLOB || body_limit == 0 {
@@ -4389,7 +4397,7 @@ fn encode_partial_reply(
 fn decode_partial_reply(raw: String) -> PartialReply {
     serde_json::from_str::<PartialReply>(&raw)
         .ok()
-        .filter(|checkpoint| matches!(checkpoint.version, 1 | 2))
+        .filter(|checkpoint| matches!(checkpoint.version, 1..=3))
         .unwrap_or(PartialReply {
             version: 0,
             body: raw,
@@ -4397,7 +4405,23 @@ fn decode_partial_reply(raw: String) -> PartialReply {
             model: String::new(),
             permission: String::new(),
             started_at: None,
+            proxy_run_id: None,
+            proxy_sequence: 0,
         })
+}
+
+fn latest_partial_reply(tables: &Tables, project_id: &str) -> Option<PartialReply> {
+    tables
+        .reply_checkpoint
+        .select_by_project_id(project_id.to_string())
+        .execute()
+        .ok()?
+        .into_iter()
+        .max_by(|left, right| {
+            (left.created_at.as_str(), left.id.as_str())
+                .cmp(&(right.created_at.as_str(), right.id.as_str()))
+        })
+        .map(|row| decode_partial_reply(row.payload))
 }
 
 async fn write_partial_reply(
@@ -5017,7 +5041,16 @@ async fn recover_partial_reply(tables: &Tables, project_id: &str, raw: String) -
 /// files are the current format. Legacy KV rows are consumed once on upgrade;
 /// the durable-message check prevents a persistence-worker failure from
 /// resurrecting the same old prefix on every later launch.
+#[cfg(test)]
 pub async fn recover_partial_replies(tables: &Tables) {
+    recover_partial_replies_excluding(tables, &std::collections::HashSet::new()).await;
+}
+
+/// Recover only checkpoints whose owning proxy run is no longer available.
+pub async fn recover_partial_replies_excluding(
+    tables: &Tables,
+    live_proxy_runs: &std::collections::HashSet<String>,
+) {
     discard_recovered_prefix_duplicates(tables).await;
 
     // Current format: there may be several rows only if a process died between
@@ -5038,6 +5071,14 @@ pub async fn recover_partial_replies(tables: &Tables) {
         }
     }
     for (project_id, row) in latest {
+        let checkpoint = decode_partial_reply(row.payload.clone());
+        if checkpoint
+            .proxy_run_id
+            .as_ref()
+            .is_some_and(|run_id| live_proxy_runs.contains(run_id))
+        {
+            continue;
+        }
         if recover_partial_reply(tables, &project_id, row.payload).await {
             let _ = tables.reply_checkpoint.delete_by_project(project_id).await;
         }
@@ -7266,7 +7307,7 @@ pub async fn compact_project(
 
     let mut run = state
         .proxy
-        .start(request, None)
+        .start(request, None, 0)
         .await
         .map_err(|error| format!("could not start the compaction: {error}"))?;
 
@@ -9124,6 +9165,7 @@ pub async fn send_message(
             stateless,
             scope,
             checkpoint_dir,
+            None,
         )
         .await;
     });
@@ -9131,24 +9173,19 @@ pub async fn send_message(
     Ok(user_message)
 }
 
-/// Reattach GUI event handling to provider runs that outlived a prior process.
-pub async fn recover_proxy_runs(app: AppHandle) {
-    // Let the webview install its event listeners before replay begins.
-    tokio::time::sleep(std::time::Duration::from_millis(1_500)).await;
-    let state = app.state::<AppState>();
-    let snapshots = match state.proxy.list_runs().await {
-        Ok(runs) => runs,
-        Err(error) => {
-            crate::log!(
-                crate::log::Level::Warn,
-                "proxy",
-                "recovery unavailable: {error}"
-            );
-            return;
-        }
-    };
+/// Synchronize one opened project from its durable checkpoint into live
+/// streaming. `last_received_at` is the client's freshness marker; the exact
+/// transport cursor is the proxy sequence stored in the checkpoint.
+#[tauri::command]
+pub async fn sync_project(
+    app: AppHandle,
+    project_id: String,
+    last_received_at: String,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let snapshots = state.proxy.list_runs().await?;
     for snapshot in snapshots {
-        let Some(project_id) = snapshot
+        let Some(run_project_id) = snapshot
             .metadata
             .get("projectId")
             .and_then(serde_json::Value::as_str)
@@ -9156,6 +9193,9 @@ pub async fn recover_proxy_runs(app: AppHandle) {
         else {
             continue;
         };
+        if run_project_id != project_id {
+            continue;
+        }
         let turn_id = snapshot
             .metadata
             .get("turnId")
@@ -9169,6 +9209,10 @@ pub async fn recover_proxy_runs(app: AppHandle) {
         {
             continue;
         }
+        let recovered_checkpoint =
+            latest_partial_reply(&state.tables, &project_id).filter(|checkpoint| {
+                checkpoint.proxy_run_id.as_deref() == Some(snapshot.run_id.0.as_str())
+            });
         let Some(opening) = state.tables.message.select(turn_id.clone()) else {
             continue;
         };
@@ -9247,6 +9291,14 @@ pub async fn recover_proxy_runs(app: AppHandle) {
                     .is_some_and(|value| value == "true")
             });
         let provider_body = full_body(&state.tables, &opening.id, &opening.body);
+        crate::log!(
+            crate::log::Level::Info,
+            "proxy",
+            "{project_id}: syncing from client timestamp {last_received_at} and proxy sequence {}",
+            recovered_checkpoint
+                .as_ref()
+                .map_or(0, |checkpoint| checkpoint.proxy_sequence)
+        );
         let _ = app.emit(
             "run:accepted",
             serde_json::json!({
@@ -9290,10 +9342,13 @@ pub async fn recover_proxy_runs(app: AppHandle) {
                 stateless,
                 scope,
                 checkpoint_dir,
+                recovered_checkpoint,
             )
             .await;
         });
+        break;
     }
+    Ok(())
 }
 
 /// Review a pull request with the chosen agent, inline and read-only.
@@ -9744,6 +9799,7 @@ async fn drive_run(
     // Where to write knowledge checkpoints, or `None` when this project does
     // not take them. See `checkpoint_if_due`.
     checkpoint_dir: Option<std::path::PathBuf>,
+    recovered_checkpoint: Option<PartialReply>,
 ) {
     let cwd = scope.cwd.clone();
     let extra_dirs = scope.extra_dirs.clone();
@@ -10161,6 +10217,9 @@ async fn drive_run(
         .start(
             request.request().clone(),
             Some(agency_proxy_protocol::RunId(turn_id.clone())),
+            recovered_checkpoint
+                .as_ref()
+                .map_or(0, |checkpoint| checkpoint.proxy_sequence),
         )
         .await
     {
@@ -10240,8 +10299,12 @@ async fn drive_run(
      * event between deltas marks a block boundary; a pause detector would
      * fire on network hiccups mid-sentence and miss fast tool calls.
      */
-    let mut last_was_text = false;
-    let mut streamed_any = false;
+    let recovered_body = recovered_checkpoint
+        .as_ref()
+        .map(|checkpoint| checkpoint.body.clone())
+        .unwrap_or_default();
+    let mut last_was_text = !recovered_body.is_empty();
+    let mut streamed_any = !recovered_body.is_empty();
     /*
      * Everything the model said, exactly as it streamed. The crate's
      * `Outcome::text` is the provider's settled answer, which can be only the
@@ -10250,12 +10313,14 @@ async fn drive_run(
      * The transcript keeps what the user watched; the terminal text is the
      * fallback for a run that never streamed.
      */
-    let mut streamed_text = String::new();
+    let mut streamed_text = recovered_body.clone();
     // The not-yet-persisted slice of `streamed_text`. A live owner message
     // closes this slice so it can render before that message instead of the
     // whole agent turn landing as one final blob below it.
-    let mut streamed_chunk = String::new();
-    let mut chunk_started_at: Option<String> = None;
+    let mut streamed_chunk = recovered_body.clone();
+    let mut chunk_started_at = recovered_checkpoint
+        .as_ref()
+        .and_then(|checkpoint| checkpoint.started_at.clone());
     let mut last_chunk_id: Option<String> = None;
     let message_context = AgentMessageContext {
         project_id: &project_id,
@@ -10272,7 +10337,9 @@ async fn drive_run(
      * asked to follow the procedure could not follow it, and the list only ever
      * described work that was already over.
      */
-    let mut directives_scanned_to = 0usize;
+    let mut directives_scanned_to = recovered_body
+        .rfind('\n')
+        .map_or(0, |index| index.saturating_add(1));
     let mut directives_fenced = FenceState::default();
 
     /*
@@ -10282,6 +10349,13 @@ async fn drive_run(
      * `run:persisted`, which is what the window's saved/unsaved dot reads.
      */
     let mut partial_flushed_at = std::time::Instant::now();
+
+    if !recovered_body.is_empty() {
+        let _ = app.emit(
+            "run:text",
+            serde_json::json!({ "projectId": project_id, "delta": recovered_body }),
+        );
+    }
 
     /*
      * The live token counter's ledger. Each `Event::Usage` carries one API
@@ -10710,6 +10784,8 @@ async fn drive_run(
                         &model,
                         &permission,
                         chunk_started_at.as_deref(),
+                        Some(&turn_id),
+                        run.sequence(),
                     );
                     match write_partial_reply(&tables, &project_id, &checkpoint).await {
                         Ok(()) => {
@@ -12065,11 +12141,15 @@ mod tests {
             "gpt-5.6-sol",
             "edit",
             Some("2026-08-07T00:00:00Z"),
+            Some("run-test"),
+            17,
         );
         assert!(raw.len() <= MAX_PERSISTED_BLOB);
 
         let recovered = decode_partial_reply(raw);
-        assert_eq!(recovered.version, 2);
+        assert_eq!(recovered.version, 3);
+        assert_eq!(recovered.proxy_run_id.as_deref(), Some("run-test"));
+        assert_eq!(recovered.proxy_sequence, 17);
         assert_eq!(recovered.agent, "codex");
         assert_eq!(recovered.model, "gpt-5.6-sol");
         assert_eq!(recovered.permission, "edit");
@@ -12098,6 +12178,8 @@ mod tests {
                 "gpt-5.6-sol",
                 "edit",
                 Some("2026-08-07T00:00:00Z"),
+                Some("run-test"),
+                u64::try_from(n).unwrap_or(u64::MAX),
             );
             write_partial_reply(&tables, "project-a", &expected)
                 .await
@@ -12181,6 +12263,8 @@ mod tests {
             model: "gpt-5.6-sol".into(),
             permission: "edit".into(),
             started_at: None,
+            proxy_run_id: None,
+            proxy_sequence: 0,
         })
         .expect("checkpoint encodes");
         tables

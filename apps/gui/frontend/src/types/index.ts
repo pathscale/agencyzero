@@ -571,6 +571,8 @@ export interface GlobalSettings {
    * `$HOME/AgencyZero` at read time rather than being frozen into the record.
    */
   workspaceRoot: string;
+  /** Empty uses the bundled sidecar; a custom executable applies next launch. */
+  agentProxyBinary: string;
   /**
    * Per agent, which models the picker offers and which one it starts on.
    *

@@ -32,6 +32,11 @@ const zh = {
   "detected from the installed CLIs, not from configuration": "从已安装的 CLI 检测，而非读取配置",
   "Re-check": "重新检查",
   "last checked": "上次检查",
+  "AgencyProxy sidecar": "AgencyProxy 辅助进程",
+  "bundled by default; a custom executable takes effect next launch":
+    "默认使用内置版本；自定义可执行文件将在下次启动时生效",
+  "Bundled AgencyProxy": "内置 AgencyProxy",
+  "Use bundled": "使用内置版本",
   "Agent defaults": "智能体默认值",
   "what a new tab starts with": "新标签页的初始设置",
   Agent: "智能体",

@@ -125,6 +125,7 @@ export interface AgencyZeroApi {
 
   // — Conversation ————————————————————————————————————————————
   listMessages(projectId: string): Promise<Message[]>;
+  syncProject(projectId: string, lastReceivedAt: string): Promise<void>;
   sendMessage(input: {
     projectId: string;
     body: string;
@@ -214,6 +215,8 @@ export interface AgencyZeroApi {
   chooseDataDirectory(): Promise<string | null>;
   /** A working directory for a project. Starts at home, not beside the store. */
   chooseProjectDirectory(): Promise<string | null>;
+  /** Choose a custom AgencyProxy executable; null means cancelled. */
+  chooseAgentProxyBinary(): Promise<string | null>;
   /**
    * Open the OS file picker, for the composer's Attach button. The chosen
    * paths land in the prompt as text — the agents read file paths in prose,

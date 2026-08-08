@@ -23,14 +23,16 @@ static RUN_SEQUENCE: AtomicU64 = AtomicU64::new(1);
 #[derive(Debug)]
 pub struct AgencyProxy {
     socket_path: PathBuf,
+    configured_binary: Option<PathBuf>,
     start_gate: Mutex<()>,
 }
 
 impl AgencyProxy {
     #[must_use]
-    pub fn new(config_dir: &Path) -> Self {
+    pub fn new(config_dir: &Path, configured_binary: Option<PathBuf>) -> Self {
         Self {
             socket_path: config_dir.join("agency-proxy/runtime.sock"),
+            configured_binary,
             start_gate: Mutex::new(()),
         }
     }
@@ -39,6 +41,7 @@ impl AgencyProxy {
         &self,
         request: RunRequest,
         existing_run_id: Option<RunId>,
+        after_sequence: u64,
     ) -> Result<ProxyRun, String> {
         let client = self.connect().await?;
         let events = client.subscribe();
@@ -62,7 +65,7 @@ impl AgencyProxy {
         match client
             .request(ClientMessage::AttachRun {
                 run_id: run_id.clone(),
-                after_sequence: 0,
+                after_sequence,
             })
             .await
             .map_err(|error| error.to_string())?
@@ -76,13 +79,13 @@ impl AgencyProxy {
             client,
             events,
             run_id,
-            latest_sequence: 0,
+            latest_sequence: after_sequence,
             terminal: None,
         })
     }
 
     pub async fn run(&self, request: RunRequest) -> Result<Outcome, String> {
-        let mut run = self.start(request, None).await?;
+        let mut run = self.start(request, None, 0).await?;
         while run.recv().await.is_some() {}
         run.finish().await
     }
@@ -134,7 +137,7 @@ impl AgencyProxy {
         if let Ok(client) = Client::connect(&self.socket_path).await {
             return Ok(client);
         }
-        let binary = proxy_binary()?;
+        let binary = proxy_binary(self.configured_binary.as_deref())?;
         if let Some(parent) = self.socket_path.parent() {
             std::fs::create_dir_all(parent).map_err(|error| {
                 format!("could not create AgencyProxy runtime directory: {error}")
@@ -161,7 +164,13 @@ impl AgencyProxy {
     }
 }
 
-fn proxy_binary() -> Result<PathBuf, String> {
+fn proxy_binary(configured: Option<&Path>) -> Result<PathBuf, String> {
+    if let Some(path) = configured {
+        return path
+            .is_file()
+            .then(|| path.to_path_buf())
+            .ok_or_else(|| format!("configured AgencyProxy does not exist: {}", path.display()));
+    }
     if let Some(path) = std::env::var_os("AGENCY_PROXY_BIN") {
         return Ok(path.into());
     }
@@ -254,6 +263,10 @@ pub struct ProxyRun {
 }
 
 impl ProxyRun {
+    #[must_use]
+    pub fn sequence(&self) -> u64 {
+        self.latest_sequence
+    }
     #[must_use]
     pub fn control(&self) -> ProxyControl {
         ProxyControl {

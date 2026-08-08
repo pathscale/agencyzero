@@ -11,9 +11,9 @@ import { useWorkspace } from "~/stores/workspace";
  *
  * Two jobs. Menu items carry ids rather than behaviour, so Close Tab and the
  * tab-cycling items arrive here as events and are answered by the same actions
- * the strip uses. And every route out of the app — the traffic light, ⌘Q, the
- * menu's Quit — is intercepted and routed through one confirmation, because
- * closing the window ends every run it is supervising.
+ * the strip uses. Every route out of the app — the traffic light, ⌘Q, the
+ * menu's Quit — drains persistence before exiting. Agent runs belong to the
+ * persistent sidecar, so closing this client detaches without warning.
  *
  * Inert outside Tauri: there is no menu and no window to close.
  */
@@ -34,18 +34,6 @@ export function useAppShell(): {
     setCloseError("");
   };
 
-  // Defensive optional chaining: `purgeProject` leaves some of these records
-  // with keys the others do not have, so a value can be absent even though the
-  // key exists. A bare `.length`/`.some` on an undefined value throws the same
-  // "undefined is not an object" this file must never raise on close.
-  const hasLiveWork = () =>
-    Object.keys(state.runStatus).length > 0 ||
-    Object.values(state.streaming).some((text) => (text?.length ?? 0) > 0) ||
-    Object.values(state.running).some((tasks) => (tasks?.length ?? 0) > 0) ||
-    Object.values(state.messages).some((messages) =>
-      messages?.some((message) => message.moderation?.needsApproval),
-    );
-
   const confirmClose = () => {
     setIsClosing(false);
     setCloseError("");
@@ -61,10 +49,7 @@ export function useAppShell(): {
     });
   };
 
-  const requestClose = () => {
-    if (hasLiveWork()) setIsClosing(true);
-    else confirmClose();
-  };
+  const requestClose = confirmClose;
 
   onMount(() => {
     if (!isTauri()) return;
