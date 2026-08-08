@@ -5649,6 +5649,18 @@ fn run_ready_for_followup(run: &ActiveRun) -> bool {
         .load(std::sync::atomic::Ordering::Acquire)
 }
 
+/// Whether a proxy snapshot proves that its provider turn already accepts input.
+///
+/// A freshly launched GUI misses the event that originally armed the local
+/// follow-up gate. AgencyProxy's state is the durable equivalent: `Running`
+/// and `WaitingApproval` are entered only after a provider event has arrived.
+fn recovered_run_ready_for_followup(state: &agency_proxy_protocol::RunState) -> bool {
+    matches!(
+        state,
+        agency_proxy_protocol::RunState::Running | agency_proxy_protocol::RunState::WaitingApproval
+    )
+}
+
 fn queue_mid_turn_review(
     active: &ActiveRuns,
     project_id: &str,
@@ -9253,7 +9265,9 @@ pub async fn sync_project(
             }
             let (cancel_tx, cancel_rx) = tokio::sync::watch::channel(false);
             let (inject_tx, inject_rx) = tokio::sync::mpsc::unbounded_channel();
-            let ready = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+            let ready = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(
+                recovered_run_ready_for_followup(&snapshot.state),
+            ));
             active.insert(
                 project_id.clone(),
                 ActiveRun {
@@ -12848,6 +12862,17 @@ mod tests {
         assert!(!run_ready_for_followup(&run));
         ready.store(true, std::sync::atomic::Ordering::Release);
         assert!(run_ready_for_followup(&run));
+    }
+
+    #[test]
+    fn recovered_live_run_is_immediately_ready_for_follow_up() {
+        use agency_proxy_protocol::RunState;
+
+        assert!(!recovered_run_ready_for_followup(&RunState::Starting));
+        assert!(recovered_run_ready_for_followup(&RunState::Running));
+        assert!(recovered_run_ready_for_followup(&RunState::WaitingApproval));
+        assert!(!recovered_run_ready_for_followup(&RunState::Finishing));
+        assert!(!recovered_run_ready_for_followup(&RunState::Completed));
     }
 
     #[test]
