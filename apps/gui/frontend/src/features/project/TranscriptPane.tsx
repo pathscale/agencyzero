@@ -593,6 +593,14 @@ function AgentBubble(props: {
   turn?: string;
   onRetry?: () => void;
 }): JSX.Element {
+  if (props.message.stop === "reconnected" && props.message.body === "Reconnected") {
+    return (
+      <div class="self-start rounded-full border border-az-hairline px-3 py-1 text-[11px] text-az-muted">
+        {tx("Reconnected")}
+      </div>
+    );
+  }
+
   /*
    * A run that did not complete says so on the bubble. The body may be empty or
    * partial, and an unexplained short reply reads as the agent being unhelpful

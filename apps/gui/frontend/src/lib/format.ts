@@ -125,7 +125,9 @@ export function isRetryableStop(stop: string): boolean {
 
 /** Stop reasons that represent a complete visible reply rather than a failed run. */
 export function isSuccessfulStop(stop: string): boolean {
-  return stop === "completed" || stop === "continued" || stop === "imported";
+  return (
+    stop === "completed" || stop === "continued" || stop === "imported" || stop === "reconnected"
+  );
 }
 
 /** "resets 14:20" on the rate-limit pill. */
