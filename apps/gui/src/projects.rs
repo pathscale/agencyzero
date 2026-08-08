@@ -7266,7 +7266,7 @@ pub async fn compact_project(
 
     let mut run = state
         .proxy
-        .start(request)
+        .start(request, None)
         .await
         .map_err(|error| format!("could not start the compaction: {error}"))?;
 
@@ -9131,6 +9131,171 @@ pub async fn send_message(
     Ok(user_message)
 }
 
+/// Reattach GUI event handling to provider runs that outlived a prior process.
+pub async fn recover_proxy_runs(app: AppHandle) {
+    // Let the webview install its event listeners before replay begins.
+    tokio::time::sleep(std::time::Duration::from_millis(1_500)).await;
+    let state = app.state::<AppState>();
+    let snapshots = match state.proxy.list_runs().await {
+        Ok(runs) => runs,
+        Err(error) => {
+            crate::log!(
+                crate::log::Level::Warn,
+                "proxy",
+                "recovery unavailable: {error}"
+            );
+            return;
+        }
+    };
+    for snapshot in snapshots {
+        let Some(project_id) = snapshot
+            .metadata
+            .get("projectId")
+            .and_then(serde_json::Value::as_str)
+            .map(str::to_string)
+        else {
+            continue;
+        };
+        let turn_id = snapshot
+            .metadata
+            .get("turnId")
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or(&snapshot.run_id.0)
+            .to_string();
+        if state
+            .tables
+            .kv_get(&format!("agency-proxy-complete:{turn_id}"))
+            .is_some()
+        {
+            continue;
+        }
+        let Some(opening) = state.tables.message.select(turn_id.clone()) else {
+            continue;
+        };
+        let Ok(agent) = parse_agent(Some(&snapshot.provider)) else {
+            continue;
+        };
+        let permission = snapshot
+            .metadata
+            .get("permission")
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or("read_only")
+            .to_string();
+        let effort = snapshot
+            .metadata
+            .get("effort")
+            .and_then(serde_json::Value::as_str)
+            .map(str::to_string);
+        let extra_thinking = snapshot
+            .metadata
+            .get("extraThinking")
+            .and_then(serde_json::Value::as_bool);
+        let stateless = snapshot
+            .metadata
+            .get("stateless")
+            .and_then(serde_json::Value::as_bool)
+            .unwrap_or(false);
+        let item_id = snapshot
+            .metadata
+            .get("itemId")
+            .and_then(serde_json::Value::as_str)
+            .map(str::to_string);
+        let (reservation, cancel, inject_rx, ready_for_followup) = {
+            let Ok(mut active) = state.active.lock() else {
+                continue;
+            };
+            if active.contains_key(&project_id) {
+                continue;
+            }
+            let (cancel_tx, cancel_rx) = tokio::sync::watch::channel(false);
+            let (inject_tx, inject_rx) = tokio::sync::mpsc::unbounded_channel();
+            let ready = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+            active.insert(
+                project_id.clone(),
+                ActiveRun {
+                    cancel: cancel_tx,
+                    agent,
+                    workspace_roots: snapshot.workspace_roots.clone(),
+                    ready_for_followup: ready.clone(),
+                    inject: Some(inject_tx),
+                },
+            );
+            (
+                RunReservation {
+                    active: state.active.clone(),
+                    project_id: project_id.clone(),
+                },
+                cancel_rx,
+                inject_rx,
+                ready,
+            )
+        };
+        let mut scope = invocation_scope(
+            &state.tables,
+            &project_id,
+            agent,
+            crate::workspace_root_path(&app, &state),
+            &state.location.path,
+        );
+        scope.resume = snapshot.provider_session_id.clone().or(scope.resume);
+        let checkpoint_dir = (!stateless)
+            .then(|| state.location.path.join("checkpoints"))
+            .filter(|_| {
+                state
+                    .tables
+                    .kv_get(&crate::notes::checkpoints_key(&project_id))
+                    .is_some_and(|value| value == "true")
+            });
+        let provider_body = full_body(&state.tables, &opening.id, &opening.body);
+        let _ = app.emit(
+            "run:accepted",
+            serde_json::json!({
+                "projectId": project_id,
+                "agent": snapshot.provider,
+                "model": snapshot.model,
+                "permission": permission,
+                "recovered": true,
+            }),
+        );
+        let tables = state.tables.clone();
+        let running = state.running.clone();
+        let io = state.io.clone();
+        let approvals = state.approvals.clone();
+        let limits = state.limits.clone();
+        let receipts = state.receipts.clone();
+        let model = snapshot.model.clone();
+        let recovered_app = app.clone();
+        tauri::async_runtime::spawn(async move {
+            drive_run(
+                recovered_app,
+                tables,
+                running,
+                io,
+                approvals,
+                limits,
+                receipts,
+                item_id,
+                reservation,
+                cancel,
+                inject_rx,
+                ready_for_followup,
+                project_id,
+                turn_id,
+                provider_body,
+                agent,
+                model,
+                permission,
+                effort,
+                extra_thinking,
+                stateless,
+                scope,
+                checkpoint_dir,
+            )
+            .await;
+        });
+    }
+}
+
 /// Review a pull request with the chosen agent, inline and read-only.
 ///
 /// A side-channel: the reviewer runs headlessly on the PR in the project's cwd,
@@ -9709,6 +9874,30 @@ async fn drive_run(
         extra_thinking,
         &scope,
     );
+    request
+        .metadata
+        .insert("projectId".into(), project_id.clone().into());
+    request
+        .metadata
+        .insert("turnId".into(), turn_id.clone().into());
+    request.metadata.insert(
+        "itemId".into(),
+        item_id.clone().map_or(serde_json::Value::Null, Into::into),
+    );
+    request
+        .metadata
+        .insert("permission".into(), permission.clone().into());
+    request.metadata.insert(
+        "effort".into(),
+        effort.clone().map_or(serde_json::Value::Null, Into::into),
+    );
+    request.metadata.insert(
+        "extraThinking".into(),
+        extra_thinking.map_or(serde_json::Value::Null, Into::into),
+    );
+    request
+        .metadata
+        .insert("stateless".into(), stateless.into());
 
     /*
      * What the last compaction taught, carried on every turn since.
@@ -9968,7 +10157,13 @@ async fn drive_run(
     }
 
     let proxy = app.state::<crate::AppState>().proxy.clone();
-    let mut run = match proxy.start(request.request().clone()).await {
+    let mut run = match proxy
+        .start(
+            request.request().clone(),
+            Some(agency_proxy_protocol::RunId(turn_id.clone())),
+        )
+        .await
+    {
         Ok(run) => run,
         Err(error) => {
             measurement
@@ -11407,6 +11602,16 @@ async fn drive_run(
         checkpoint_dir.as_deref(),
     )
     .await;
+    if let Err(error) = tables
+        .kv_put(&format!("agency-proxy-complete:{turn_id}"), now())
+        .await
+    {
+        crate::log!(
+            crate::log::Level::Warn,
+            "run",
+            "{project_id}: could not mark proxy run {turn_id} consumed: {error}"
+        );
+    }
 }
 
 /// Take a knowledge sample if this turn pushed the conversation past a mark.
