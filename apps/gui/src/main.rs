@@ -57,6 +57,8 @@ const IMPLEMENTED: &[&str] = &[
     "choose_data_directory",
     "choose_project_directory",
     "choose_agent_proxy_binary",
+    "get_agent_proxy_status",
+    "restart_agent_proxy",
     "get_workspace_root",
     "create_workspace_root",
     "list_projects",
@@ -803,7 +805,7 @@ async fn choose_project_directory(app: AppHandle) -> Result<Option<String>, Stri
 }
 
 /// Choose a custom AgencyProxy executable. The persisted setting is applied on
-/// the next launch; canceling the picker changes nothing.
+/// the next proxy restart; canceling the picker changes nothing.
 #[tauri::command]
 async fn choose_agent_proxy_binary(app: AppHandle) -> Result<Option<String>, String> {
     let (tx, rx) = tokio::sync::oneshot::channel();
@@ -817,6 +819,23 @@ async fn choose_agent_proxy_binary(app: AppHandle) -> Result<Option<String>, Str
         .await
         .map_err(|_| "the AgencyProxy picker closed without answering".to_string())?;
     Ok(picked.map(|path| path.to_string()))
+}
+
+#[tauri::command]
+async fn get_agent_proxy_status(state: State<'_, AppState>) -> Result<agent_proxy::Status, String> {
+    state.proxy.status().await
+}
+
+#[tauri::command]
+async fn restart_agent_proxy(state: State<'_, AppState>) -> Result<agent_proxy::Status, String> {
+    let configured_proxy = state
+        .tables
+        .kv_get(settings::KEY)
+        .and_then(|raw| serde_json::from_str::<GlobalSettings>(&raw).ok())
+        .map(|settings| settings.agent_proxy_binary)
+        .filter(|path| !path.is_empty())
+        .map(PathBuf::from);
+    state.proxy.restart_if_idle(configured_proxy).await
 }
 
 /// The user's home, or nothing when the platform will not say.
@@ -1648,6 +1667,8 @@ fn main() {
             choose_data_directory,
             choose_project_directory,
             choose_agent_proxy_binary,
+            get_agent_proxy_status,
+            restart_agent_proxy,
             get_workspace_root,
             create_workspace_root,
             projects::list_projects,

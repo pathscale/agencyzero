@@ -10,6 +10,7 @@ use agency_proxy_protocol::{
     RunRequest, ServerFrame, ServerResponse,
 };
 use agent_abstraction::{Decision, Event, Outcome};
+use serde::Serialize;
 use std::{
     path::{Path, PathBuf},
     process::{Command, Stdio},
@@ -23,8 +24,18 @@ static RUN_SEQUENCE: AtomicU64 = AtomicU64::new(1);
 #[derive(Debug)]
 pub struct AgencyProxy {
     socket_path: PathBuf,
-    configured_binary: Option<PathBuf>,
+    configured_binary: std::sync::RwLock<Option<PathBuf>>,
     start_gate: Mutex<()>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Status {
+    pub connected: bool,
+    pub active_runs: usize,
+    pub retained_runs: usize,
+    pub binary: String,
+    pub socket: String,
 }
 
 impl AgencyProxy {
@@ -32,7 +43,7 @@ impl AgencyProxy {
     pub fn new(config_dir: &Path, configured_binary: Option<PathBuf>) -> Self {
         Self {
             socket_path: config_dir.join("agency-proxy/runtime.sock"),
-            configured_binary,
+            configured_binary: std::sync::RwLock::new(configured_binary),
             start_gate: Mutex::new(()),
         }
     }
@@ -103,6 +114,61 @@ impl AgencyProxy {
         }
     }
 
+    pub async fn status(&self) -> Result<Status, String> {
+        let runs = self.list_runs().await?;
+        Ok(Status {
+            connected: true,
+            active_runs: runs.iter().filter(|run| run_is_active(&run.state)).count(),
+            retained_runs: runs.len(),
+            binary: proxy_binary(
+                self.configured_binary
+                    .read()
+                    .map_err(|_| "AgencyProxy configuration is unavailable".to_string())?
+                    .as_deref(),
+            )?
+            .to_string_lossy()
+            .into_owned(),
+            socket: self.socket_path.to_string_lossy().into_owned(),
+        })
+    }
+
+    /// Stop an idle daemon and immediately launch the selected binary.
+    pub async fn restart_if_idle(
+        &self,
+        configured_binary: Option<PathBuf>,
+    ) -> Result<Status, String> {
+        let client = self.connect().await?;
+        match client
+            .request(ClientMessage::ShutdownIfIdle)
+            .await
+            .map_err(|error| error.to_string())?
+        {
+            ServerResponse::Accepted => {}
+            response => return Err(response_error(response)),
+        }
+        drop(client);
+        *self
+            .configured_binary
+            .write()
+            .map_err(|_| "AgencyProxy configuration is unavailable".to_string())? =
+            configured_binary;
+
+        // The shutdown acknowledgement precedes the accept loop releasing its
+        // socket. Wait for that exact endpoint to close before `connect`
+        // performs the ordinary lazy spawn; otherwise it can reconnect to the
+        // daemon that just acknowledged its own shutdown.
+        for _ in 0..50 {
+            if tokio::net::UnixStream::connect(&self.socket_path)
+                .await
+                .is_err()
+            {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
+        self.status().await
+    }
+
     pub async fn probe_providers(&self) -> Result<Vec<ProviderStatus>, String> {
         match self
             .connect()
@@ -137,7 +203,12 @@ impl AgencyProxy {
         if let Ok(client) = Client::connect(&self.socket_path).await {
             return Ok(client);
         }
-        let binary = proxy_binary(self.configured_binary.as_deref())?;
+        let configured_binary = self
+            .configured_binary
+            .read()
+            .map_err(|_| "AgencyProxy configuration is unavailable".to_string())?
+            .clone();
+        let binary = proxy_binary(configured_binary.as_deref())?;
         if let Some(parent) = self.socket_path.parent() {
             std::fs::create_dir_all(parent).map_err(|error| {
                 format!("could not create AgencyProxy runtime directory: {error}")
@@ -212,6 +283,16 @@ fn response_error(response: ServerResponse) -> String {
         ServerResponse::Error { message, .. } => message,
         response => format!("unexpected AgencyProxy response: {response:?}"),
     }
+}
+
+fn run_is_active(state: &agency_proxy_protocol::RunState) -> bool {
+    matches!(
+        state,
+        agency_proxy_protocol::RunState::Starting
+            | agency_proxy_protocol::RunState::Running
+            | agency_proxy_protocol::RunState::WaitingApproval
+            | agency_proxy_protocol::RunState::Finishing
+    )
 }
 
 #[derive(Clone, Debug)]
