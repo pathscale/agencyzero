@@ -1,6 +1,7 @@
 /target
 .DS_Store
 /apps/gui/gen/schemas
+/apps/blitz-preview/gen/schemas
 
 # Built by apps/gui/frontend (rsbuild -> ../dist), served by Tauri.
 /apps/gui/dist

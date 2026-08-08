@@ -1,25 +1,30 @@
-use anyrender_vello_cpu::VelloCpuWindowRenderer as WindowRenderer;
 use blitz_dom::DocumentConfig;
-use blitz_script::{DebugController, ScriptDocument};
-use blitz_shell::{BlitzApplication, BlitzShellProxy, WindowConfig, create_default_event_loop};
+use blitz_script::ScriptDocument;
+use tauri_runtime_blitz::{builder, set_document_factory};
 
 include!(concat!(env!("OUT_DIR"), "/embedded.rs"));
 
+#[tauri::command]
+fn greet(name: String) -> String {
+    format!("Hello, {name}!")
+}
+
+#[tauri::command]
+fn list_capabilities() -> Vec<String> {
+    Vec::new()
+}
+
 fn main() {
-    let event_loop = create_default_event_loop();
-    let (proxy, receiver) = BlitzShellProxy::new(event_loop.create_proxy());
+    set_document_factory(|url| {
+        let config = DocumentConfig {
+            base_url: Some(url.into()),
+            ..DocumentConfig::default()
+        };
+        Ok(ScriptDocument::from_html(EMBEDDED_HTML, config))
+    });
 
-    let document = ScriptDocument::from_html(EMBEDDED_HTML, DocumentConfig::default());
-
-    let window = WindowConfig::new(Box::new(document), WindowRenderer::new());
-    let mut application = BlitzApplication::new(proxy, receiver);
-    if let Some(controller) = DebugController::start_from_env(env!("CARGO_PKG_VERSION"))
-        .expect("invalid Blitz debug-control configuration")
-    {
-        application.set_debug_controller(controller);
-    }
-    application.add_window(window);
-    event_loop
-        .run_app(application)
-        .expect("AgencyZero Blitz preview event loop failed");
+    builder()
+        .invoke_handler(tauri::generate_handler![greet, list_capabilities])
+        .run(tauri::generate_context!("tauri.conf.json"))
+        .expect("AgencyZero Tauri Blitz preview failed");
 }
