@@ -1,0 +1,4 @@
+[target.'cfg(target_os = "macos")']
+# `tauri-runtime` exposes WKWebView types even when the selected custom runtime never uses WebKit.
+# Remove those otherwise-unused framework load commands from final binaries.
+rustflags = ["-C", "link-arg=-Wl,-dead_strip_dylibs"]
