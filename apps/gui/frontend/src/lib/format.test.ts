@@ -92,6 +92,8 @@ describe("isRetryableStop", () => {
     expect(isRetryableStop("completed")).toBe(false);
     expect(isRetryableStop("canceled")).toBe(false);
     expect(isRetryableStop("imported")).toBe(false);
+    expect(isRetryableStop("reconnected")).toBe(false);
+    expect(isSuccessfulStop("reconnected")).toBe(true);
   });
 
   it("keeps Retry for failures and interrupted runs", () => {

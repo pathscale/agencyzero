@@ -51,6 +51,7 @@ const en = {
   "a selection takes effect when you restart the idle sidecar":
     "a selection takes effect when you restart the idle sidecar",
   "AgencyProxy restarted": "AgencyProxy restarted",
+  Reconnected: "Reconnected",
   "Agent defaults": "Agent defaults",
   "what a new tab starts with": "what a new tab starts with",
   Agent: "Agent",

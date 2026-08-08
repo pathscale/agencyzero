@@ -1189,6 +1189,25 @@ fn should_forget_unresponsive_resume(
         && (stalled_injection || idle_stalled)
 }
 
+const CANCELED_STOP: &str = "canceled";
+const RECONNECTED_STOP: &str = "reconnected";
+const STALLED_STOP: &str = "stalled";
+
+/// Name an interrupted run by what the owner experienced, not by the internal
+/// process signal used to tear the provider down.
+///
+/// A queued recovery is a reconnect. A watchdog that cannot queue recovery is
+/// a stall. Only the owner's Stop action is a cancellation.
+fn interrupted_stop(recovery_queued: bool, internally_stalled: bool) -> &'static str {
+    if recovery_queued {
+        RECONNECTED_STOP
+    } else if internally_stalled {
+        STALLED_STOP
+    } else {
+        CANCELED_STOP
+    }
+}
+
 /// Whether this event proves the provider's actual turn can accept follow-ups.
 ///
 /// Codex app-server reports [`Event::Started`] as soon as the thread is opened,
@@ -11484,14 +11503,7 @@ async fn drive_run(
         // The normal shape of a stop: `cancel()` reports `Cancelled` unless
         // the run happened to finish first (then it is the `Ok` arm above).
         Err(error) if cancelled => {
-            measurement
-                .finish(&tables, &observed_session, "canceled", &turn_usage)
-                .await;
-            crate::log!(
-                crate::log::Level::Info,
-                "run",
-                "{project_id}: run cancelled ({error})"
-            );
+            let mut recovery_queued = stalled_injection;
             /*
              * A poisoned native session used to survive this exact recovery
              * path. The failed live message was queued, the run was torn down,
@@ -11527,8 +11539,9 @@ async fn drive_run(
                         );
                         if let Some(retry) =
                             unresponsive_opening_retry(&tables, &project_id, &turn_id)
+                            && app.emit("run:inject_failed", retry).is_ok()
                         {
-                            let _ = app.emit("run:inject_failed", retry);
+                            recovery_queued = true;
                         }
                         if let Some(row) = tables.project.select(project_id.clone()) {
                             let _ = app.emit(
@@ -11544,6 +11557,15 @@ async fn drive_run(
                     ),
                 }
             }
+            let stop = interrupted_stop(recovery_queued, idle_stalled || stalled_injection);
+            measurement
+                .finish(&tables, &observed_session, stop, &turn_usage)
+                .await;
+            crate::log!(
+                crate::log::Level::Info,
+                "run",
+                "{project_id}: run stopped as {stop} ({error})"
+            );
             /*
              * The partial transcript is what the user watched stream; a
              * cancelled run that said something must not read afterwards as
@@ -11552,7 +11574,10 @@ async fn drive_run(
              * Keep it on the message and in the ledger, while still skipping
              * harvest because this is not a finished answer.
              */
-            let visible_chunk = without_incomplete_prompt_syntax_tail(&streamed_chunk);
+            let mut visible_chunk = without_incomplete_prompt_syntax_tail(&streamed_chunk);
+            if stop == RECONNECTED_STOP && visible_chunk.trim().is_empty() {
+                visible_chunk = "Reconnected".into();
+            }
             if !visible_chunk.trim().is_empty() || has_accountable_usage(&turn_usage) {
                 match persist_terminal_agent_chunk(
                     &tables,
@@ -11562,7 +11587,7 @@ async fn drive_run(
                     last_chunk_id.as_deref(),
                     AgentMessageOutcome {
                         usage: usage_json(&turn_usage),
-                        stop: "canceled".into(),
+                        stop: stop.into(),
                         exit_code: -1,
                     },
                 )
@@ -11587,15 +11612,7 @@ async fn drive_run(
                 // crash-recovery on the next launch.
                 clear_partial_reply(&tables, &project_id).await;
             }
-            emit_run_stopped(
-                &app,
-                &project_id,
-                agent,
-                &model,
-                &permission,
-                "canceled",
-                None,
-            );
+            emit_run_stopped(&app, &project_id, agent, &model, &permission, stop, None);
         }
         Err(error) => {
             let error_text = error.to_string();
@@ -12578,6 +12595,13 @@ mod tests {
             true,
             false
         ));
+    }
+
+    #[test]
+    fn internal_recovery_is_not_reported_as_an_owner_cancellation() {
+        assert_eq!(interrupted_stop(true, true), RECONNECTED_STOP);
+        assert_eq!(interrupted_stop(false, true), STALLED_STOP);
+        assert_eq!(interrupted_stop(false, false), CANCELED_STOP);
     }
 
     #[test]
