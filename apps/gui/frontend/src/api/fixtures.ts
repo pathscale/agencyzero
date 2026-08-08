@@ -650,3 +650,15 @@ export const RATE_LIMITS: Record<
     resetsAt: new Date(now + 34 * 60_000).toISOString(),
   },
 };
+
+/**
+ * Makes the mock's Claude usage read reject, for backoff coverage.
+ *
+ * Claude usage is the one read whose failure path carries behaviour of its own,
+ * and the mock is otherwise incapable of producing a rejection there.
+ */
+export let CLAUDE_USAGE_ERROR: string | null = null;
+
+export function setClaudeUsageError(message: string | null): void {
+  CLAUDE_USAGE_ERROR = message;
+}

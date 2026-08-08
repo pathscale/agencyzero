@@ -61,6 +61,28 @@ const AGENT_IO_LIMIT = 500;
 
 const FALLBACK_EFFORT = "high";
 
+/** Matches the strip's poll period; see `claudeUsageBackoffMs`. */
+const CLAUDE_USAGE_POLL_MS = 60_000;
+
+/** Long enough to stop asking, short enough that a freed budget is noticed. */
+const CLAUDE_USAGE_MAX_BACKOFF_MS = 15 * 60_000;
+
+/**
+ * How long to wait after `failures` consecutive Claude usage rejections.
+ *
+ * The usage endpoint's budget belongs to the login rather than to this app, so
+ * any other client signed in as the same user spends from it too. A Claude Code
+ * session alongside us is enough: the fixed one-minute poll then succeeds and
+ * fails in alternation indefinitely, which used to mean a rejection logged
+ * every other minute and no adaptation at all. Doubling from twice the poll
+ * period backs all the way off to a quarter hour, and one success resets it, so
+ * a budget that frees up is picked back up on the next tick.
+ */
+export function claudeUsageBackoffMs(failures: number): number {
+  if (failures <= 0) return 0;
+  return Math.min(CLAUDE_USAGE_POLL_MS * 2 ** failures, CLAUDE_USAGE_MAX_BACKOFF_MS);
+}
+
 /**
  * A compact model name for the composer pill.
  *
@@ -403,6 +425,10 @@ function createWorkspace() {
   let itemRevealRevision = 0;
   /** Last project (or Home) focused before a utility tab covered it. */
   let lastPortableActiveKey = "home";
+
+  /** Claude usage backoff; see `refreshClaudeUsage`. */
+  let claudeUsageFailures = 0;
+  let claudeUsageRetryAt = 0;
 
   /** Events that arrived while snapshots were still loading — see `init`. */
   let buffered: (() => void)[] = [];
@@ -939,11 +965,30 @@ function createWorkspace() {
     }
   }
 
-  async function refreshClaudeUsage(): Promise<void> {
+  /**
+   * Read Claude usage, skipping the call while a rejection is still backed off.
+   *
+   * `force` is what the Settings Refresh button passes: an owner who asks for a
+   * reading now gets a real attempt, and the streak resets around it either
+   * way, rather than the button silently doing nothing for a quarter hour.
+   */
+  async function refreshClaudeUsage(options?: { force?: boolean }): Promise<void> {
+    if (!options?.force && Date.now() < claudeUsageRetryAt) return;
     try {
       setState("claudeUsage", await client().claudeUsage());
+      claudeUsageFailures = 0;
+      claudeUsageRetryAt = 0;
     } catch (cause) {
-      log.warn(`could not refresh Claude usage: ${describeError(cause)}`);
+      claudeUsageFailures += 1;
+      const wait = claudeUsageBackoffMs(claudeUsageFailures);
+      claudeUsageRetryAt = Date.now() + wait;
+      // Only the opening failure of a streak says anything new. The rest are
+      // the same rejection on a timer, and the last good reading stays up.
+      if (claudeUsageFailures === 1) {
+        log.warn(
+          `could not refresh Claude usage: ${describeError(cause)}; retrying in ${Math.round(wait / 1000)}s`,
+        );
+      }
       throw cause;
     }
   }

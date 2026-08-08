@@ -600,19 +600,21 @@ export function createMockApi(): AgencyZeroApi {
     },
 
     claudeUsage: () =>
-      settle({
-        fiveHour: {
-          utilization: 31.5,
-          resetsAt: new Date(Date.now() + 2 * 3_600_000).toISOString(),
-        },
-        sevenDay: {
-          utilization: 42,
-          resetsAt: new Date(Date.now() + 4 * 86_400_000).toISOString(),
-        },
-        sevenDaySonnet: null,
-        limits: [],
-        checkedAt: new Date().toISOString(),
-      }),
+      fixtures.CLAUDE_USAGE_ERROR
+        ? Promise.reject(new Error(fixtures.CLAUDE_USAGE_ERROR))
+        : settle({
+            fiveHour: {
+              utilization: 31.5,
+              resetsAt: new Date(Date.now() + 2 * 3_600_000).toISOString(),
+            },
+            sevenDay: {
+              utilization: 42,
+              resetsAt: new Date(Date.now() + 4 * 86_400_000).toISOString(),
+            },
+            sevenDaySonnet: null,
+            limits: [],
+            checkedAt: new Date().toISOString(),
+          }),
 
     listAgentStatus(recheck): Promise<AgentStatus[]> {
       if (recheck) {

@@ -1301,7 +1301,8 @@ function ExperimentalSettings(): JSX.Element {
     setBusy(true);
     setNote(null);
     try {
-      await Promise.all([actions.refreshQuota(), actions.refreshClaudeUsage()]);
+      // Forced: asking for a reading by hand should outrank the poll's backoff.
+      await Promise.all([actions.refreshQuota(), actions.refreshClaudeUsage({ force: true })]);
     } catch (cause) {
       setNote(describeError(cause));
     } finally {
