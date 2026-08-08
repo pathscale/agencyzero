@@ -20,7 +20,7 @@ agent-experimental = { git = "https://gitlab.com/anonymous-28282828282/agent-exp
 promptsyntax = "0.1.0"
 shlex = "1.3"
 az-core.workspace = true
-worktable = "=1.0.0-beta.8"
+worktable = "=1.0.0-beta.9"
 # The `worktable!` macro emits code that names these by bare path rather than
 # through a re-export, so a consumer of the macro has to declare them too.
 # Versions match worktable 1.0 beta's own, since a mismatch produces errors that name

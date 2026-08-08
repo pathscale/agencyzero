@@ -105,6 +105,7 @@ const IMPLEMENTED: &[&str] = &[
     "reset_project_session",
     "adopt_session",
     "get_build_info",
+    "get_persistence_failure",
     "quit_app",
     "relaunch_app",
     "list_agent_io",
@@ -180,6 +181,10 @@ pub(crate) struct AppState {
     /// Treating both as success let a second close request exit after the first
     /// one had proved persistence was unsafe.
     exit_drain_succeeded: std::sync::atomic::AtomicBool,
+    /// The first terminal WorkTable failure for this process. The event is the
+    /// fast path; retaining it closes the startup race before the webview has
+    /// registered its listener.
+    persistence_failure: Arc<std::sync::RwLock<Option<String>>>,
     /// At most one agent-authored lifecycle request may wait for the current
     /// run to finish. This is process-local on purpose: a crash must not leave
     /// a stale restart command to execute on the next launch.
@@ -346,6 +351,15 @@ const BUILD: BuildInfo = BuildInfo {
 #[tauri::command]
 fn get_build_info() -> BuildInfo {
     BUILD
+}
+
+#[tauri::command]
+fn get_persistence_failure(state: State<'_, AppState>) -> Option<String> {
+    state
+        .persistence_failure
+        .read()
+        .map(|failure| failure.clone())
+        .unwrap_or_else(|_| Some("persistence failure state is poisoned".into()))
 }
 
 /// Record a line the webview produced, in the same file as the Rust ones.
@@ -1455,6 +1469,7 @@ fn main() {
             projects::reset_project_session,
             projects::adopt_session,
             get_build_info,
+            get_persistence_failure,
             projects::list_agent_io,
             projects::get_io_persist,
             projects::set_io_persist,
@@ -1685,11 +1700,33 @@ fn main() {
                 pr_refreshes: Arc::default(),
                 exit_drain_started: std::sync::atomic::AtomicBool::new(false),
                 exit_drain_succeeded: std::sync::atomic::AtomicBool::new(false),
+                persistence_failure: Arc::new(std::sync::RwLock::new(None)),
                 agent_restart_scheduled: std::sync::atomic::AtomicBool::new(false),
                 config_dir,
                 data_dir,
                 location,
                 _store_lock: store_lock,
+            });
+
+            // WorkTable persistence is asynchronous. A worker panic once left
+            // the UI accepting writes for twenty minutes and surfaced only
+            // when Quit tried to drain the dead table. Keep one event-driven
+            // watcher across every table and raise the failure in the window
+            // as soon as WorkTable marks a worker terminal.
+            let persistence_handle = app.handle().clone();
+            let persistence_state = persistence_handle.state::<AppState>();
+            let persistence_tables = persistence_state.tables.clone();
+            let persistence_failure = persistence_state.persistence_failure.clone();
+            tauri::async_runtime::spawn(async move {
+                let message = persistence_tables.wait_for_persistence_failure().await;
+                crate::log!(log::Level::Error, "persistence", "{message}");
+                if let Ok(mut failure) = persistence_failure.write() {
+                    *failure = Some(message.clone());
+                }
+                let _ = persistence_handle.emit(
+                    "persistence:failed",
+                    serde_json::json!({ "message": message }),
+                );
             });
 
             /*

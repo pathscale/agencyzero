@@ -511,6 +511,8 @@ export interface AppEvents {
     stop: string;
     exitCode: number | null;
   };
+  /** A WorkTable worker became terminal; the window must warn immediately. */
+  "persistence:failed": { message: string };
 }
 
 export type AppEvent = keyof AppEvents;

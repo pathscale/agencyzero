@@ -221,6 +221,40 @@ impl Tables {
 }
 
 impl Tables {
+    /// Wait until any table's persistence worker becomes terminal.
+    ///
+    /// Healthy idle workers keep these futures pending. The first failure is
+    /// named so the application can alert immediately instead of discovering
+    /// it much later during the quit drain.
+    pub async fn wait_for_persistence_failure(&self) -> String {
+        fn named(table: &str, result: worktable::persistence::PersistenceResult) -> String {
+            match result {
+                Ok(()) => format!("{table} persistence worker closed unexpectedly"),
+                Err(error) => format!("{table} persistence failed: {error}"),
+            }
+        }
+
+        tokio::select! {
+            result = self.kv.wait_for_persistence_failure() => named("kv", result),
+            result = self.project.wait_for_persistence_failure() => named("project", result),
+            result = self.project_item.wait_for_persistence_failure() => named("project_item", result),
+            result = self.item_completion.wait_for_persistence_failure() => named("item_completion", result),
+            result = self.message.wait_for_persistence_failure() => named("message", result),
+            result = self.message_chunk.wait_for_persistence_failure() => named("message_chunk", result),
+            result = self.task_log.wait_for_persistence_failure() => named("task_log", result),
+            result = self.agent_io.wait_for_persistence_failure() => named("agent_io", result),
+            result = self.usage_ledger.wait_for_persistence_failure() => named("usage_ledger", result),
+            result = self.usage_cache.wait_for_persistence_failure() => named("usage_cache", result),
+            result = self.usage_session.wait_for_persistence_failure() => named("usage_session", result),
+            result = self.approval_rule.wait_for_persistence_failure() => named("approval_rule", result),
+            result = self.pull_request.wait_for_persistence_failure() => named("pull_request", result),
+            result = self.question.wait_for_persistence_failure() => named("question", result),
+            result = self.question_reply.wait_for_persistence_failure() => named("question_reply", result),
+            result = self.reply_checkpoint.wait_for_persistence_failure() => named("reply_checkpoint", result),
+            result = self.study_event.wait_for_persistence_failure() => named("study_event", result),
+        }
+    }
+
     /// The stored schema fingerprint, read by opening **only** the kv table.
     ///
     /// The boot flow needs the fingerprint *before* deciding whether the other

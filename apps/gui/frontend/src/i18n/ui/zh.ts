@@ -155,6 +155,9 @@ const zh = {
   "off by default; disabling stops new rows but keeps existing data":
     "默认关闭；禁用后停止新增记录，但保留现有数据",
   "Stored events": "已存储事件",
+  "Storage stopped saving": "存储已停止保存",
+  "Copy anything important from the current turn, then restart AgencyZero.":
+    "请复制当前回合中的重要内容，然后重新启动 AgencyZero。",
   "Study data": "研究数据",
   "Export JSONL": "导出 JSONL",
   "needs the study event backend": "需要研究事件后端",

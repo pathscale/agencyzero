@@ -165,6 +165,9 @@ const en = {
   "off by default; disabling stops new rows but keeps existing data":
     "off by default; disabling stops new rows but keeps existing data",
   "Stored events": "Stored events",
+  "Storage stopped saving": "Storage stopped saving",
+  "Copy anything important from the current turn, then restart AgencyZero.":
+    "Copy anything important from the current turn, then restart AgencyZero.",
   "Study data": "Study data",
   "Export JSONL": "Export JSONL",
   "needs the study event backend": "needs the study event backend",

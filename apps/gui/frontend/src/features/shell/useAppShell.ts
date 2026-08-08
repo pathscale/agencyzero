@@ -1,3 +1,4 @@
+import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { type Accessor, createSignal, onCleanup, onMount } from "solid-js";
@@ -19,12 +20,14 @@ import { useWorkspace } from "~/stores/workspace";
 export function useAppShell(): {
   isClosing: Accessor<boolean>;
   closeError: Accessor<string>;
+  persistenceFailure: Accessor<string>;
   cancelClose: () => void;
   confirmClose: () => void;
 } {
   const { state, actions } = useWorkspace();
   const [isClosing, setIsClosing] = createSignal(false);
   const [closeError, setCloseError] = createSignal("");
+  const [persistenceFailure, setPersistenceFailure] = createSignal("");
 
   const cancelClose = () => {
     setIsClosing(false);
@@ -82,6 +85,28 @@ export function useAppShell(): {
     track(listen("menu:prev-tab", () => actions.cycleTab(-1)));
     track(listen("menu:next-tab", () => actions.cycleTab(1)));
     track(listen("menu:quit", requestClose));
+    // Register first, then query the retained backend failure. This ordering
+    // covers both sides of startup without a gap where an event can be lost.
+    void (async () => {
+      try {
+        const unlisten = await listen<{ message: string }>("persistence:failed", ({ payload }) => {
+          log.error(`persistence worker failed: ${payload.message}`);
+          setPersistenceFailure(payload.message);
+        });
+        if (disposed) {
+          unlisten();
+          return;
+        }
+        unlisteners.push(unlisten);
+        const retained = await invoke<string | null>("get_persistence_failure");
+        if (retained) {
+          log.error(`persistence worker failed before listener registration: ${retained}`);
+          setPersistenceFailure(retained);
+        }
+      } catch (cause) {
+        log.error(`could not monitor persistence health: ${describeError(cause)}`);
+      }
+    })();
     // Same drain-then-exec as the Settings button; the menu is just nearer.
     track(listen("menu:restart", () => void actions.relaunchApp()));
 
@@ -99,5 +124,5 @@ export function useAppShell(): {
     });
   });
 
-  return { isClosing, closeError, cancelClose, confirmClose };
+  return { isClosing, closeError, persistenceFailure, cancelClose, confirmClose };
 }
