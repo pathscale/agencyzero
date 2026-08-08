@@ -23,7 +23,7 @@ checksum = "320119579fcad9c21884f5c4861d16174d0e06250625266f50fe6898340abefa"
 
 [[package]]
 name = "agency-proxy-client"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "agency-proxy-protocol",
  "endpoint-libs",
@@ -35,7 +35,7 @@ dependencies = [
 
 [[package]]
 name = "agency-proxy-protocol"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "serde",
  "serde_json",
@@ -43,7 +43,7 @@ dependencies = [
 
 [[package]]
 name = "agency-tools"
-version = "0.3.41"
+version = "0.3.42"
 dependencies = [
  "derive_more 2.1.1",
  "dirs",
@@ -621,11 +621,11 @@ dependencies = [
 
 [[package]]
 name = "az-core"
-version = "0.3.41"
+version = "0.3.42"
 
 [[package]]
 name = "az-gui"
-version = "0.3.41"
+version = "0.3.42"
 dependencies = [
  "agency-proxy-client",
  "agency-proxy-protocol",
@@ -657,7 +657,7 @@ dependencies = [
 
 [[package]]
 name = "az-mcp-proxy"
-version = "0.3.41"
+version = "0.3.42"
 dependencies = [
  "az-core",
 ]
@@ -7598,7 +7598,7 @@ dependencies = [
 
 [[package]]
 name = "wt-migrate"
-version = "0.3.41"
+version = "0.3.42"
 dependencies = [
  "derive_more 2.1.1",
  "eyre",

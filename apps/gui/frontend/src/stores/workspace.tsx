@@ -2371,8 +2371,8 @@ function createWorkspace() {
     async refreshAgentProxy() {
       setState("agencyProxy", await client().getAgentProxyStatus());
     },
-    async restartAgentProxy() {
-      setState("agencyProxy", await client().restartAgentProxy());
+    async restartAgentProxy(mode: "drain" | "terminate") {
+      setState("agencyProxy", await client().restartAgentProxy(mode));
     },
     /** Read the on-disk backup catalogue and the result from the last angel run. */
     getStoreBackupStatus() {

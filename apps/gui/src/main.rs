@@ -827,7 +827,15 @@ async fn get_agent_proxy_status(state: State<'_, AppState>) -> Result<agent_prox
 }
 
 #[tauri::command]
-async fn restart_agent_proxy(state: State<'_, AppState>) -> Result<agent_proxy::Status, String> {
+async fn restart_agent_proxy(
+    mode: String,
+    state: State<'_, AppState>,
+) -> Result<agent_proxy::Status, String> {
+    let mode = match mode.as_str() {
+        "drain" => agency_proxy_protocol::ShutdownMode::Drain,
+        "terminate" => agency_proxy_protocol::ShutdownMode::Terminate,
+        _ => return Err(format!("unknown AgencyProxy restart mode: {mode}")),
+    };
     let configured_proxy = state
         .tables
         .kv_get(settings::KEY)
@@ -835,7 +843,7 @@ async fn restart_agent_proxy(state: State<'_, AppState>) -> Result<agent_proxy::
         .map(|settings| settings.agent_proxy_binary)
         .filter(|path| !path.is_empty())
         .map(PathBuf::from);
-    state.proxy.restart_if_idle(configured_proxy).await
+    state.proxy.restart(configured_proxy, mode).await
 }
 
 /// The user's home, or nothing when the platform will not say.

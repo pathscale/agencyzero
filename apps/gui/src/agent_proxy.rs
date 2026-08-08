@@ -6,8 +6,8 @@
 
 use agency_proxy_client::Client;
 use agency_proxy_protocol::{
-    ApprovalDecision, ClientMessage, ProviderAccountUsage, ProviderStatus, RunEvent, RunId,
-    RunRequest, ServerFrame, ServerResponse,
+    ApprovalDecision, ClientMessage, ErrorCode, ProviderAccountUsage, ProviderStatus, RunEvent,
+    RunId, RunRequest, ServerFrame, ServerResponse, ShutdownMode,
 };
 use agent_abstraction::{Decision, Event, Outcome};
 use serde::Serialize;
@@ -132,19 +132,25 @@ impl AgencyProxy {
         })
     }
 
-    /// Stop an idle daemon and immediately launch the selected binary.
-    pub async fn restart_if_idle(
+    /// Close admission, settle existing runs under the selected policy, and
+    /// immediately launch the selected binary once the daemon exits.
+    pub async fn restart(
         &self,
         configured_binary: Option<PathBuf>,
+        mode: ShutdownMode,
     ) -> Result<Status, String> {
         let client = self.connect().await?;
-        match client
-            .request(ClientMessage::ShutdownIfIdle)
-            .await
-            .map_err(|error| error.to_string())?
-        {
-            ServerResponse::Accepted => {}
-            response => return Err(response_error(response)),
+        if client.version().minor >= 3 {
+            match client
+                .request(ClientMessage::Shutdown { mode })
+                .await
+                .map_err(|error| error.to_string())?
+            {
+                ServerResponse::Accepted => {}
+                response => return Err(response_error(response)),
+            }
+        } else {
+            shutdown_legacy_proxy(&client, mode).await?;
         }
         drop(client);
         *self
@@ -157,14 +163,14 @@ impl AgencyProxy {
         // socket. Wait for that exact endpoint to close before `connect`
         // performs the ordinary lazy spawn; otherwise it can reconnect to the
         // daemon that just acknowledged its own shutdown.
-        for _ in 0..50 {
+        loop {
             if tokio::net::UnixStream::connect(&self.socket_path)
                 .await
                 .is_err()
             {
                 break;
             }
-            tokio::time::sleep(Duration::from_millis(50)).await;
+            tokio::time::sleep(Duration::from_millis(100)).await;
         }
         self.status().await
     }
@@ -232,6 +238,54 @@ impl AgencyProxy {
             "AgencyProxy did not become ready at {}",
             self.socket_path.display()
         ))
+    }
+}
+
+/// Upgrade an already-running v0.2 daemon without sending it a message it
+/// cannot decode. The old protocol cannot close admission while runs drain,
+/// so `ShutdownIfIdle` is retried until its own atomic idle check succeeds.
+async fn shutdown_legacy_proxy(client: &Client, mode: ShutdownMode) -> Result<(), String> {
+    if mode == ShutdownMode::Terminate {
+        let runs = match client
+            .request(ClientMessage::ListRuns)
+            .await
+            .map_err(|error| error.to_string())?
+        {
+            ServerResponse::Runs { runs } => runs,
+            response => return Err(response_error(response)),
+        };
+        for run in runs.into_iter().filter(|run| run_is_active(&run.state)) {
+            match client
+                .request(ClientMessage::CancelRun {
+                    idempotency_key: format!("{}:restart", run.run_id.0),
+                    run_id: run.run_id,
+                })
+                .await
+                .map_err(|error| error.to_string())?
+            {
+                ServerResponse::Accepted
+                | ServerResponse::Error {
+                    code: ErrorCode::Conflict | ErrorCode::NotFound,
+                    ..
+                } => {}
+                response => return Err(response_error(response)),
+            }
+        }
+    }
+
+    loop {
+        match client
+            .request(ClientMessage::ShutdownIfIdle)
+            .await
+            .map_err(|error| error.to_string())?
+        {
+            ServerResponse::Accepted => return Ok(()),
+            ServerResponse::Error {
+                code: ErrorCode::Conflict,
+                ..
+            } => tokio::time::sleep(Duration::from_millis(100)).await,
+            response => return Err(response_error(response)),
+        }
     }
 }
 

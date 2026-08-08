@@ -110,8 +110,20 @@ const SearchScope = createContext<{
 export function SettingsTab(): JSX.Element {
   const { state, actions, isLive, effortsFor, permissionsFor } = useWorkspace();
   const settings = () => state.settings;
-  const [proxyAction, setProxyAction] = createSignal<"refresh" | "restart" | null>(null);
+  const [proxyAction, setProxyAction] = createSignal<"refresh" | "drain" | "terminate" | null>(
+    null,
+  );
   const [proxyNote, setProxyNote] = createSignal("");
+  const [terminateArmed, setTerminateArmed] = createSignal(false);
+
+  onMount(() => {
+    const timer = window.setInterval(() => {
+      if (proxyAction() === null && isLive("getAgentProxyStatus")) {
+        void actions.refreshAgentProxy().catch(() => undefined);
+      }
+    }, 2_000);
+    onCleanup(() => window.clearInterval(timer));
+  });
 
   const refreshProxy = (): void => {
     setProxyAction("refresh");
@@ -122,11 +134,19 @@ export function SettingsTab(): JSX.Element {
       .finally(() => setProxyAction(null));
   };
 
-  const restartProxy = (): void => {
-    setProxyAction("restart");
-    setProxyNote("");
+  const restartProxy = (mode: "drain" | "terminate"): void => {
+    const active = state.agencyProxy?.activeRuns ?? 0;
+    setProxyAction(mode);
+    setTerminateArmed(false);
+    setProxyNote(
+      mode === "drain" && active > 0
+        ? tx("Waiting for {count} live runs to finish", { count: active })
+        : mode === "terminate"
+          ? tx("Terminating live runs before restart")
+          : "",
+    );
     void actions
-      .restartAgentProxy()
+      .restartAgentProxy(mode)
       .then(() => setProxyNote(tx("AgencyProxy restarted")))
       .catch((cause) => setProxyNote(describeError(cause)))
       .finally(() => setProxyAction(null));
@@ -330,16 +350,32 @@ export function SettingsTab(): JSX.Element {
                     </button>
                     <button
                       type="button"
-                      disabled={
-                        proxyAction() !== null ||
-                        !isLive("restartAgentProxy") ||
-                        (state.agencyProxy?.activeRuns ?? 1) > 0
-                      }
-                      onClick={restartProxy}
+                      disabled={proxyAction() !== null || !isLive("restartAgentProxy")}
+                      onClick={() => restartProxy("drain")}
                       class="rounded-lg border border-warning/40 px-3 py-[5px] text-[12px] text-warning transition-colors hover:border-warning hover:bg-warning/8 disabled:cursor-not-allowed disabled:opacity-40"
                     >
-                      {proxyAction() === "restart" ? tx("Restarting…") : tx("Restart")}
+                      {proxyAction() === "drain"
+                        ? tx("Waiting…")
+                        : (state.agencyProxy?.activeRuns ?? 0) > 0
+                          ? tx("Wait & restart")
+                          : tx("Restart")}
                     </button>
+                    <Show when={(state.agencyProxy?.activeRuns ?? 0) > 0}>
+                      <button
+                        type="button"
+                        disabled={proxyAction() !== null || !isLive("restartAgentProxy")}
+                        onClick={() =>
+                          terminateArmed() ? restartProxy("terminate") : setTerminateArmed(true)
+                        }
+                        class="rounded-lg border border-error/40 px-3 py-[5px] text-[12px] text-error transition-colors hover:border-error hover:bg-error/8 disabled:cursor-not-allowed disabled:opacity-40"
+                      >
+                        {proxyAction() === "terminate"
+                          ? tx("Terminating…")
+                          : terminateArmed()
+                            ? tx("Confirm terminate & restart")
+                            : tx("Terminate & restart")}
+                      </button>
+                    </Show>
                   </div>
                 </Row>
                 <Row
