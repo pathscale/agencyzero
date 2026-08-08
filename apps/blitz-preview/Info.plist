@@ -3,7 +3,7 @@
 <plist version="1.0">
 <dict>
   <key>CFBundleDevelopmentRegion</key>
-  <string>en</string>
+  <string>English</string>
   <key>CFBundleDisplayName</key>
   <string>AgencyZero Blitz Preview</string>
   <key>CFBundleExecutable</key>
@@ -22,8 +22,12 @@
   <string>0.3.39</string>
   <key>CFBundleVersion</key>
   <string>0.3.39</string>
+  <key>CSResourcesFileMapped</key>
+  <true/>
   <key>LSMinimumSystemVersion</key>
   <string>11.0</string>
+  <key>LSRequiresCarbon</key>
+  <true/>
   <key>NSHighResolutionCapable</key>
   <true/>
 </dict>
