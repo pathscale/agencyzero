@@ -211,7 +211,7 @@ pub struct Theme {
     /// states.
     ///
     /// Empty means "the palette's own yellow", deliberately rather than the
-    /// literal `#ffee58`: writing the default in here would freeze this record
+    /// literal palette value: writing the default in here would freeze this record
     /// against the stylesheet, and the two would drift the first time the
     /// design changed.
     pub accent: String,
@@ -231,7 +231,8 @@ pub struct Theme {
     /// is why its picker reads as a theme and an accent-only version reads as a
     /// highlight — that version shipped here first and was wrong.
     ///
-    /// Ignored while `surface` is empty: the designed palette is grey.
+    /// Surface mixing is ignored while `surface` is empty; the value still
+    /// shapes the semantic default accent's saturation.
     pub wash: f32,
     /// Lightness added back to every text rung, in oklch percentage points.
     ///
@@ -469,7 +470,81 @@ pub fn normalize(settings: &mut GlobalSettings) {
     if settings.theme.surface.is_none() {
         settings.theme.surface = Some(settings.theme.accent.clone());
     }
+    if !settings
+        .theme
+        .surface
+        .as_deref()
+        .is_some_and(valid_theme_color)
+    {
+        settings.theme.surface = Some(String::new());
+    }
+    if !valid_theme_color(&settings.theme.accent) {
+        settings.theme.accent.clear();
+    }
+    settings.theme.softness = finite_clamp(settings.theme.softness, 0.0, 12.0, 0.0);
+    settings.theme.wash = nearest_theme_wash(settings.theme.wash);
+    settings.theme.text_brightness = finite_clamp(settings.theme.text_brightness, -4.0, 6.0, 0.0);
+
+    let defaults = GlobalSettings::default();
+    for (agent, fallback) in &defaults.models {
+        let selection = settings
+            .models
+            .entry(agent.clone())
+            .or_insert_with(|| fallback.clone());
+        selection.enabled.retain(|model| !model.trim().is_empty());
+        if selection.enabled.is_empty() {
+            selection.clone_from(fallback);
+        } else if !selection.enabled.contains(&selection.default) {
+            selection.default.clone_from(&selection.enabled[0]);
+        }
+    }
+    if !matches!(settings.default_agent.as_str(), "claude" | "codex") {
+        settings.default_agent = defaults.default_agent;
+    }
+    if !valid_permission(&settings.default_permission) {
+        settings.default_permission = defaults.default_permission;
+    }
+    if !valid_effort(&settings.default_effort) {
+        settings.default_effort = defaults.default_effort;
+    }
+    if !matches!(settings.completed_items.as_str(), "resolve" | "delete") {
+        settings.completed_items = defaults.completed_items;
+    }
+    if !matches!(settings.env_policy.as_str(), "minimal" | "inherit") {
+        settings.env_policy = defaults.env_policy;
+    }
+    if !matches!(settings.moderator.on_check.as_str(), "hold_step" | "notify") {
+        settings.moderator.on_check = defaults.moderator.on_check;
+    }
+    if !matches!(
+        settings.moderator.on_critical.as_str(),
+        "cancel_run" | "hold_step"
+    ) {
+        settings.moderator.on_critical = defaults.moderator.on_critical;
+    }
+    settings
+        .moderator
+        .sees
+        .retain(|surface| matches!(surface.as_str(), "transcript" | "events"));
+    if settings.moderator.sees.is_empty() {
+        settings.moderator.sees = defaults.moderator.sees;
+    }
+    if let Some(claude) = settings.models.get("claude")
+        && !claude.enabled.contains(&settings.moderator.model)
+    {
+        settings.moderator.model = if claude.enabled.contains(&defaults.moderator.model) {
+            defaults.moderator.model
+        } else {
+            claude.enabled[0].clone()
+        };
+    }
     normalize_task_manager(settings);
+    if !valid_permission(&settings.task_manager.permission) {
+        settings.task_manager.permission = defaults.task_manager.permission;
+    }
+    if !valid_effort(&settings.task_manager.effort) {
+        settings.task_manager.effort = defaults.task_manager.effort;
+    }
     settings.agent_finished_retention_turns = settings.agent_finished_retention_turns.clamp(1, 3);
     settings.cost_warning_usd = if settings.cost_warning_usd.is_finite() {
         settings.cost_warning_usd.clamp(0.25, 20.0)
@@ -488,6 +563,43 @@ pub fn normalize(settings: &mut GlobalSettings) {
     ) {
         settings.agent_restart_policy = "disabled".into();
     }
+}
+
+const THEME_WASH_STOPS: [f32; 5] = [10.0, 20.0, 30.0, 40.0, 50.0];
+
+fn finite_clamp(value: f32, min: f32, max: f32, fallback: f32) -> f32 {
+    if value.is_finite() {
+        value.clamp(min, max)
+    } else {
+        fallback
+    }
+}
+
+fn nearest_theme_wash(value: f32) -> f32 {
+    let safe = if value.is_finite() { value } else { 30.0 };
+    THEME_WASH_STOPS
+        .into_iter()
+        .min_by(|left, right| (left - safe).abs().total_cmp(&(right - safe).abs()))
+        .unwrap_or(30.0)
+}
+
+fn valid_theme_color(value: &str) -> bool {
+    let value = value.trim();
+    value.is_empty()
+        || matches!(value.len(), 4 | 7)
+            && value.starts_with('#')
+            && value[1..].bytes().all(|byte| byte.is_ascii_hexdigit())
+}
+
+fn valid_permission(value: &str) -> bool {
+    matches!(
+        value,
+        "read_only" | "plan" | "ask" | "edit" | "auto" | "bypass"
+    )
+}
+
+fn valid_effort(value: &str) -> bool {
+    matches!(value, "low" | "medium" | "high" | "xhigh" | "max" | "ultra")
 }
 
 /// Normalize with the durable evidence that this is an established store.
@@ -526,11 +638,7 @@ pub fn prompt_syntax_patch(key: &str, value: &str) -> Result<Value, String> {
     match key {
         "theme.surface" | "theme.accent" => {
             let value = value.trim();
-            let valid = value.is_empty()
-                || matches!(value.len(), 4 | 7)
-                    && value.starts_with('#')
-                    && value[1..].bytes().all(|byte| byte.is_ascii_hexdigit());
-            if !valid {
+            if !valid_theme_color(value) {
                 return Err("VALUE_INVALID".into());
             }
             let field = key.strip_prefix("theme.").unwrap_or_default();
@@ -541,7 +649,13 @@ pub fn prompt_syntax_patch(key: &str, value: &str) -> Result<Value, String> {
         "theme.softness" => {
             Ok(serde_json::json!({ "theme": { "softness": number(value, 0.0, 12.0)? } }))
         }
-        "theme.wash" => Ok(serde_json::json!({ "theme": { "wash": number(value, 0.0, 20.0)? } })),
+        "theme.wash" => {
+            let wash = number(value, 10.0, 50.0)?;
+            if !THEME_WASH_STOPS.contains(&wash) {
+                return Err("VALUE_INVALID".into());
+            }
+            Ok(serde_json::json!({ "theme": { "wash": wash } }))
+        }
         "theme.textBrightness" => {
             Ok(serde_json::json!({ "theme": { "textBrightness": number(value, -4.0, 6.0)? } }))
         }
@@ -698,10 +812,54 @@ mod tests {
             serde_json::json!({ "theme": { "textBrightness": 6.0 } })
         );
         assert_eq!(
+            prompt_syntax_patch("theme.wash", "50").unwrap(),
+            serde_json::json!({ "theme": { "wash": 50.0 } })
+        );
+        assert_eq!(
             prompt_syntax_patch("defaultPermission", "auto").unwrap_err(),
             "SETTING_NOT_ALLOWED"
         );
         assert!(prompt_syntax_patch("theme.wash", "21").is_err());
+        assert!(prompt_syntax_patch("theme.wash", "0").is_err());
+        assert!(prompt_syntax_patch("theme.wash", "35").is_err());
+    }
+
+    #[test]
+    fn normalization_keeps_persisted_controls_inside_the_ui_contract() {
+        let mut settings = GlobalSettings::default();
+        settings.theme.surface = Some("not-a-colour".into());
+        settings.theme.accent = "#xyzxyz".into();
+        settings.theme.softness = f32::NAN;
+        settings.theme.wash = 25.0;
+        settings.theme.text_brightness = 99.0;
+        settings.default_agent = "copilot".into();
+        settings.default_permission = "root".into();
+        settings.default_effort = "impossible".into();
+        settings.completed_items = "hide".into();
+        settings.env_policy = "everything".into();
+        settings.task_manager.permission = "root".into();
+        settings.task_manager.effort = "impossible".into();
+        settings.moderator.on_check = "ignore".into();
+        settings.moderator.on_critical = "ignore".into();
+        settings.moderator.sees = vec!["unknown".into()];
+
+        normalize(&mut settings);
+
+        assert_eq!(settings.theme.surface.as_deref(), Some(""));
+        assert!(settings.theme.accent.is_empty());
+        assert_eq!(settings.theme.softness, 0.0);
+        assert_eq!(settings.theme.wash, 20.0);
+        assert_eq!(settings.theme.text_brightness, 6.0);
+        assert_eq!(settings.default_agent, "claude");
+        assert_eq!(settings.default_permission, "read_only");
+        assert_eq!(settings.default_effort, "high");
+        assert_eq!(settings.completed_items, "resolve");
+        assert_eq!(settings.env_policy, "minimal");
+        assert_eq!(settings.task_manager.permission, "ask");
+        assert_eq!(settings.task_manager.effort, "low");
+        assert_eq!(settings.moderator.on_check, "hold_step");
+        assert_eq!(settings.moderator.on_critical, "cancel_run");
+        assert_eq!(settings.moderator.sees, vec!["transcript", "events"]);
     }
 
     #[test]

@@ -645,7 +645,7 @@ export interface ReviewSettings {
 }
 
 /**
- * Mirrors `settings::Theme` — the two axes the picker drives.
+ * Mirrors `settings::Theme` — the persisted axes the picker drives.
  *
  * In settings rather than `localStorage` because that is where this app keeps
  * state: a webview store would not survive a data directory move and would not

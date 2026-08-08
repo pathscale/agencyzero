@@ -652,7 +652,7 @@ export function SettingsTab(): JSX.Element {
                     current().theme.surface === "" &&
                     current().theme.accent === "" &&
                     current().theme.softness === 0 &&
-                    current().theme.wash === DEFAULT_WASH &&
+                    normalizeWash(current().theme.wash) === DEFAULT_WASH &&
                     current().theme.textBrightness === 0
                   }
                   onReset={() =>

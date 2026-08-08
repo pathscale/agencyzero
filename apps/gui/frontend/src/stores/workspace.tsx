@@ -399,6 +399,7 @@ function createWorkspace() {
 
   /** Monotonic ticket for settings writes; see `saveSettings`. */
   let settingsWrite = 0;
+  let settingsWriteTail: Promise<void> = Promise.resolve();
   let itemRevealRevision = 0;
   /** Last project (or Home) focused before a utility tab covered it. */
   let lastPortableActiveKey = "home";
@@ -455,7 +456,12 @@ function createWorkspace() {
    */
   async function saveSettings(patch: Parameters<AgencyZeroApi["setSettings"]>[0]): Promise<void> {
     const ticket = ++settingsWrite;
-    const next = await client().setSettings(patch);
+    const request = settingsWriteTail.then(() => client().setSettings(patch));
+    settingsWriteTail = request.then(
+      () => undefined,
+      () => undefined,
+    );
+    const next = await request;
     if (ticket !== settingsWrite) return;
     batch(() => {
       setState("settings", next);

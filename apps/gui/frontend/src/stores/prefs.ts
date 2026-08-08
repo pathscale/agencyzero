@@ -82,6 +82,20 @@ function normalize(stored: Partial<UiPrefs>): UiPrefs {
       stored.colorMode === "light" || stored.colorMode === "dark"
         ? stored.colorMode
         : DEFAULTS.colorMode,
+    itemSortBy:
+      stored.itemSortBy === "status" || stored.itemSortBy === "time"
+        ? stored.itemSortBy
+        : DEFAULTS.itemSortBy,
+    itemSortDirection:
+      stored.itemSortDirection === "asc" || stored.itemSortDirection === "desc"
+        ? stored.itemSortDirection
+        : DEFAULTS.itemSortDirection,
+    taskPlacement:
+      stored.taskPlacement === "panel" ||
+      stored.taskPlacement === "dock" ||
+      stored.taskPlacement === "inline"
+        ? stored.taskPlacement
+        : DEFAULTS.taskPlacement,
     panelSections: sections,
     seenSections: [...new Set([...seen, ...RESET_ONCE])],
   };

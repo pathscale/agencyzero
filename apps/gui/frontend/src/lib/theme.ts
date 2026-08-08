@@ -95,8 +95,8 @@ const DAMP_RATIO = 0.45;
  * The axis that makes a pick read as a *theme* rather than a highlight: without
  * it the wheel recolours buttons and rings while the workspace stays the same
  * grey, which is exactly how this first shipped and exactly what was wrong with
- * it. nofilter.io mixes 8–11% into its base tiers; the stops below bracket that,
- * with `0` kept reachable because the designed palette is a legitimate choice.
+ * it. nofilter.io mixes roughly 8–11% into its base tiers; the first stop keeps
+ * that restrained floor while the remaining four make the useful range visible.
  *
  * Every stop carries colour. The old zero stop always produced grey, while
  * values beyond fifty percent erased the neutral foundation. Five even steps

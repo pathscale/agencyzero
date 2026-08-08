@@ -579,8 +579,14 @@ export const SETTINGS: GlobalSettings = {
    * Copilot id a Free plan permits. The rest are one checkbox away in Settings.
    */
   models: {
-    claude: { enabled: ["default", "opus", "sonnet", "haiku"], default: "sonnet" },
-    codex: { enabled: ["gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.5"], default: "gpt-5.6-sol" },
+    claude: {
+      enabled: ["default", "opus", "sonnet", "haiku", "opus[1m]", "sonnet[1m]"],
+      default: "sonnet",
+    },
+    codex: {
+      enabled: ["gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna", "gpt-5.5"],
+      default: "gpt-5.6-sol",
+    },
     copilot: { enabled: ["auto"], default: "auto" },
   },
   defaultPermission: "read_only",
@@ -596,9 +602,9 @@ export const SETTINGS: GlobalSettings = {
   // Deliberately not the prompt's model: a list keeper running unattended
   // wants a cheap fast model far more often than a frontier one.
   taskManager: {
-    agent: "claude",
-    model: "haiku",
-    effort: "medium",
+    agent: "codex",
+    model: "gpt-5.6-luna",
+    effort: "low",
     permission: "ask",
     dirs: [],
   },
