@@ -217,12 +217,13 @@ function ItemBreakdown(props: { items: UsageItem[] }): JSX.Element {
                     {item.itemTitle}
                   </div>
                   <div class="mt-1 truncate font-mono text-[10px] text-az-muted">
-                    {item.projectName} · {item.agents.join(", ") || "—"} · {item.turns} {tx("turns")}
+                    {item.projectName} · {item.agents.join(", ") || "—"} · {item.turns}{" "}
+                    {tx("turns")}
                     {item.completed ? ` · ${tx("finished")}` : ""}
                   </div>
                 </div>
                 <div class="text-right">
-                  <div class="font-semibold font-mono text-[12px] text-primary">
+                  <div class="font-mono font-semibold text-[12px] text-primary">
                     {agentTime(item.durationMs)}
                   </div>
                   <div class="mt-0.5 text-[9.5px] text-az-muted">{tx("agent time")}</div>

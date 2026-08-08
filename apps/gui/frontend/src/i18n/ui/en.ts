@@ -723,8 +723,7 @@ const en = {
   "Not installed": "Not installed",
   "captured from this build onward": "captured from this build onward",
   "Per item": "Per item",
-  "measured agent-active time from captured runs":
-    "measured agent-active time from captured runs",
+  "measured agent-active time from captured runs": "measured agent-active time from captured runs",
   "No item-linked runs yet": "No item-linked runs yet",
   "agent time": "agent time",
   "Provider supplied no session id": "Provider supplied no session id",

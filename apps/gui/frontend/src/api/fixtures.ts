@@ -593,7 +593,7 @@ export const SETTINGS: GlobalSettings = {
   defaultEffort: "high",
   moderator: {
     enabled: true,
-    model: "haiku",
+    model: "claude:haiku",
     sees: ["transcript", "events"],
     onCheck: "hold_step",
     onCritical: "cancel_run",

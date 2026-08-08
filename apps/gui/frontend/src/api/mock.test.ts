@@ -230,10 +230,10 @@ describe("settings", () => {
     const before = await api.getSettings();
     expect(before.moderator).toMatchObject({ enabled: true, confineToDirs: true });
 
-    const after = await api.setSettings({ moderator: { model: "opus" } });
+    const after = await api.setSettings({ moderator: { model: "codex:gpt-5.6-sol" } });
 
     expect(after.moderator).toMatchObject({
-      model: "opus",
+      model: "codex:gpt-5.6-sol",
       enabled: true,
       confineToDirs: true,
       onCritical: "cancel_run",

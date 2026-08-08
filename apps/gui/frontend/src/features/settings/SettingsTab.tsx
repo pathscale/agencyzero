@@ -220,6 +220,15 @@ export function SettingsTab(): JSX.Element {
     return catalogue.models.filter((model) => selection.enabled.includes(model.id));
   };
 
+  /** Every selected provider model is eligible to watch a run. */
+  const moderatorModels = () =>
+    (["claude", "codex", "copilot"] as const).flatMap((agent) =>
+      enabledModels(agent).map((model) => ({
+        value: `${agent}:${model.id}`,
+        label: `${AGENT_LABELS[agent]} · ${model.name}`,
+      })),
+    );
+
   return (
     <div class="az-scroll flex min-w-0 flex-1 justify-center rounded-panel border border-az-hairline bg-az-sunken">
       <div class="flex w-full max-w-[720px] flex-col gap-3 px-6 pt-5.5 pb-7">
@@ -831,10 +840,7 @@ export function SettingsTab(): JSX.Element {
                   <PillMenu
                     label={tx("Moderator model")}
                     value={current().moderator.model}
-                    options={enabledModels("claude").map((model) => ({
-                      value: model.id,
-                      label: model.name,
-                    }))}
+                    options={moderatorModels()}
                     onChange={(model) => void actions.saveSettings({ moderator: { model } })}
                   />
                 </Row>

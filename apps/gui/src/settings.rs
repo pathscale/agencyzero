@@ -298,7 +298,7 @@ impl Default for Moderator {
     fn default() -> Self {
         Moderator {
             enabled: true,
-            model: "haiku".into(),
+            model: "claude:haiku".into(),
             sees: vec!["transcript".into(), "events".into()],
             on_check: "hold_step".into(),
             on_critical: "cancel_run".into(),
@@ -529,15 +529,7 @@ pub fn normalize(settings: &mut GlobalSettings) {
     if settings.moderator.sees.is_empty() {
         settings.moderator.sees = defaults.moderator.sees;
     }
-    if let Some(claude) = settings.models.get("claude")
-        && !claude.enabled.contains(&settings.moderator.model)
-    {
-        settings.moderator.model = if claude.enabled.contains(&defaults.moderator.model) {
-            defaults.moderator.model
-        } else {
-            claude.enabled[0].clone()
-        };
-    }
+    normalize_moderator_model(settings);
     normalize_task_manager(settings);
     if !valid_permission(&settings.task_manager.permission) {
         settings.task_manager.permission = defaults.task_manager.permission;
@@ -562,6 +554,70 @@ pub fn normalize(settings: &mut GlobalSettings) {
         "disabled" | "restart" | "restart_and_update"
     ) {
         settings.agent_restart_policy = "disabled".into();
+    }
+}
+
+/// Keep the moderator on one of the models selected in Settings.
+///
+/// Older records stored an unqualified Claude id. New records include the
+/// agent because different providers may expose the same model id and the
+/// moderator picker now spans every configured provider.
+fn normalize_moderator_model(settings: &mut GlobalSettings) {
+    const AGENTS: [&str; 3] = ["claude", "codex", "copilot"];
+
+    let configured = settings.moderator.model.clone();
+    let canonical = if let Some((agent, model)) = configured.split_once(':') {
+        settings
+            .models
+            .get(agent)
+            .filter(|selection| selection.enabled.iter().any(|enabled| enabled == model))
+            .map(|_| configured.clone())
+    } else {
+        // Moderator models were Claude-only before provider qualification.
+        // Prefer that interpretation when migrating an old row.
+        AGENTS.iter().find_map(|agent| {
+            settings
+                .models
+                .get(*agent)
+                .filter(|selection| selection.enabled.contains(&configured))
+                .map(|_| format!("{agent}:{configured}"))
+        })
+    };
+    if let Some(canonical) = canonical {
+        settings.moderator.model = canonical;
+        return;
+    }
+
+    let prior_agent = configured.split_once(':').map(|(agent, _)| agent);
+    let mut candidates = Vec::with_capacity(5);
+    for agent in [
+        prior_agent,
+        Some(settings.default_agent.as_str()),
+        Some("claude"),
+        Some("codex"),
+        Some("copilot"),
+    ]
+    .into_iter()
+    .flatten()
+    {
+        if !candidates.contains(&agent) {
+            candidates.push(agent);
+        }
+    }
+
+    for agent in candidates {
+        let Some(selection) = settings.models.get(agent) else {
+            continue;
+        };
+        let model = if selection.enabled.contains(&selection.default) {
+            Some(selection.default.as_str())
+        } else {
+            selection.enabled.first().map(String::as_str)
+        };
+        if let Some(model) = model {
+            settings.moderator.model = format!("{agent}:{model}");
+            return;
+        }
     }
 }
 
@@ -768,7 +824,7 @@ mod tests {
         assert_eq!(loaded.ui_preferences, serde_json::json!({}));
         assert!(loaded.ui_preferences_revision.is_empty());
         assert_eq!(
-            loaded.moderator.model, "haiku",
+            loaded.moderator.model, "claude:haiku",
             "absent blocks use defaults"
         );
     }
@@ -782,6 +838,27 @@ mod tests {
         let mut upgraded: GlobalSettings = serde_json::from_str("{}").expect("old row parses");
         normalize(&mut upgraded);
         assert_eq!(upgraded.onboarding_completed, Some(true));
+    }
+
+    #[test]
+    fn moderator_model_tracks_the_selected_models_across_providers() {
+        let mut settings = GlobalSettings::default();
+        settings.moderator.model = "haiku".into();
+        normalize(&mut settings);
+        assert_eq!(settings.moderator.model, "claude:haiku");
+
+        settings.moderator.model = "codex:gpt-5.6-sol".into();
+        normalize(&mut settings);
+        assert_eq!(settings.moderator.model, "codex:gpt-5.6-sol");
+
+        settings.models.get_mut("codex").unwrap().enabled = vec!["gpt-5.6-terra".into()];
+        settings.models.get_mut("codex").unwrap().default = "gpt-5.6-terra".into();
+        normalize(&mut settings);
+        assert_eq!(settings.moderator.model, "codex:gpt-5.6-terra");
+
+        settings.moderator.model = "copilot:auto".into();
+        normalize(&mut settings);
+        assert_eq!(settings.moderator.model, "copilot:auto");
     }
 
     #[test]
