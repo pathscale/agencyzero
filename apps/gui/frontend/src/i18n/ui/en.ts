@@ -345,6 +345,11 @@ const en = {
   "Sort ascending": "Sort ascending",
   Ascending: "Ascending",
   Descending: "Descending",
+  "Clean-up": "Clean-up",
+  "Clean-up is already running": "Clean-up is already running",
+  "Review project items and mark proposed deletions":
+    "Review project items and mark proposed deletions",
+  "Starting…": "Starting…",
   "Clear the filter": "Clear the filter",
   "No item matches “{query}”": "No item matches “{query}”",
   "Link a GitHub issue": "Link a GitHub issue",

@@ -32,6 +32,11 @@ const STATUS_TONE: Record<ProjectItem["status"], string> = {
   canceled: "text-az-faint",
 };
 
+export const TASK_CLEANUP_PROMPT = `Review every current project item and clean up the task list.
+Propose deletion for obsolete, duplicate, superseded, or fully delivered items with the exact items.retire directive and the item's id.
+Do not delete projects, do not change unrelated items, and do not treat a proposal as final deletion.
+The owner will review every item marked Delete and confirm or keep it separately.`;
+
 /**
  * Home: every project with its items, plus Pinned and Recent.
  *
@@ -92,6 +97,7 @@ export function HomeTab(): JSX.Element {
               {tx("and their items · click a project to open its tab")}
             </span>
             <HomeItemSortControls />
+            <HomeCleanupButton />
           </div>
 
           {/*
@@ -380,6 +386,52 @@ function HomeItemSortControls(): JSX.Element {
         />
       </button>
     </fieldset>
+  );
+}
+
+/** Ask Task Manager to stage cleanup proposals; this button never deletes. */
+function HomeCleanupButton(): JSX.Element {
+  const { state, actions } = useWorkspace();
+  const [isStarting, setIsStarting] = createSignal(false);
+  const [error, setError] = createSignal<string | null>(null);
+  const isRunning = () =>
+    TASK_MANAGER_ID in state.runStatus ||
+    (state.running[TASK_MANAGER_ID] ?? []).length > 0 ||
+    (state.streaming[TASK_MANAGER_ID] ?? "") !== "";
+
+  const start = async (): Promise<void> => {
+    if (isStarting() || isRunning()) return;
+    setError(null);
+    setIsStarting(true);
+    try {
+      await actions.sendTaskPrompt(TASK_CLEANUP_PROMPT);
+    } catch (cause) {
+      setError(describeError(cause));
+    } finally {
+      setIsStarting(false);
+    }
+  };
+
+  return (
+    <button
+      type="button"
+      onClick={() => void start()}
+      disabled={isStarting() || isRunning()}
+      title={
+        error() ??
+        (isRunning()
+          ? tx("Clean-up is already running")
+          : tx("Review project items and mark proposed deletions"))
+      }
+      class={`flex shrink-0 items-center gap-1 rounded-md border px-2 py-0.5 font-semibold text-[10.5px] transition-colors disabled:cursor-not-allowed disabled:opacity-45 ${
+        error()
+          ? "border-error/45 bg-error/10 text-error"
+          : "border-primary/35 bg-primary/10 text-primary hover:bg-primary/18"
+      }`}
+    >
+      <Icon name="sparkles" class="text-[11px]" />
+      {isStarting() ? tx("Starting…") : tx("Clean-up")}
+    </button>
   );
 }
 

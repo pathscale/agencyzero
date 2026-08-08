@@ -1,6 +1,6 @@
 import { fireEvent, render, waitFor } from "@solidjs/testing-library";
 import { describe, expect, it, vi } from "vitest";
-import { CleanupReview, HomeTab } from "~/features/home/HomeTab";
+import { CleanupReview, HomeTab, TASK_CLEANUP_PROMPT } from "~/features/home/HomeTab";
 import { useWorkspace, type Workspace, WorkspaceProvider } from "~/stores/workspace";
 
 async function mountHome() {
@@ -23,6 +23,18 @@ async function mountHome() {
 }
 
 describe("Home item rows", () => {
+  it("always exposes Clean-up and stages proposals through Task Manager", async () => {
+    const screen = await mountHome();
+    const send = vi.spyOn(screen.workspace.actions, "sendTaskPrompt").mockResolvedValue(undefined);
+
+    expect(screen.queryByRole("button", { name: "Confirm delete" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Clean-up" }));
+
+    await waitFor(() => expect(send).toHaveBeenCalledWith(TASK_CLEANUP_PROMPT));
+    expect(TASK_CLEANUP_PROMPT).toContain("items.retire");
+    expect(screen.queryByRole("button", { name: "Confirm delete" })).toBeNull();
+  });
+
   it("keeps cleanup proposals intact until the explicit confirm button", async () => {
     const onKeep = vi.fn(async () => undefined);
     const onConfirm = vi.fn(async () => undefined);

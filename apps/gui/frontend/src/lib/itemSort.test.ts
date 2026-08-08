@@ -23,6 +23,15 @@ describe("item sorting", () => {
     ]);
   });
 
+  it("reverses rows that share a status or timestamp", () => {
+    const tiedStatus = [item("first", "planning", 0), item("last", "planning", 1)];
+    expect(sortItems(tiedStatus, "status", "asc").map((row) => row.id)).toEqual(["first", "last"]);
+    expect(sortItems(tiedStatus, "status", "desc").map((row) => row.id)).toEqual(["last", "first"]);
+
+    const tiedTime = tiedStatus.map((row) => ({ ...row, updatedAt: "2026-08-07T03:00:00Z" }));
+    expect(sortItems(tiedTime, "time", "desc").map((row) => row.id)).toEqual(["last", "first"]);
+  });
+
   it("reverses known times but keeps unknown history last and stable", () => {
     expect(sortItems(rows, "time", "desc").map((row) => row.id)).toEqual([
       "new",
