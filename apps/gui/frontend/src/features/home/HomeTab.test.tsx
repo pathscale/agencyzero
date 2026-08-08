@@ -23,17 +23,29 @@ async function mountHome() {
 }
 
 describe("Home item rows", () => {
-  it("sorts Home items with the same persisted status/time controls as project panels", async () => {
+  it("sorts legacy Home items by time and direction instead of only changing the labels", async () => {
     const screen = await mountHome();
     const controls = screen.getByRole("group", { name: "Sort items" });
     const [by, direction] = Array.from(controls.querySelectorAll("button"));
-    const initialBy = by.textContent;
-    const initialDirection = direction.getAttribute("aria-label");
+    const worktableOrder = () =>
+      screen
+        .getAllByRole("button", { name: /^Change the status of / })
+        .map((button) => button.getAttribute("aria-label"))
+        .filter((label) =>
+          [
+            "Change the status of Phase A — safety quick-wins → 0.9.3",
+            "Change the status of Phase B — engine observability (API break)",
+            "Change the status of Phase C — benches before the rewrite",
+            "Change the status of Reader-model design proposal",
+            "Change the status of Ship corrective 0.9.2 release",
+          ].includes(label ?? ""),
+        );
 
     fireEvent.click(by);
-    expect(by.textContent).not.toBe(initialBy);
+    expect(by).toHaveTextContent("Time");
+    expect(worktableOrder()[0]).toContain("Phase A");
     fireEvent.click(direction);
-    expect(direction.getAttribute("aria-label")).not.toBe(initialDirection);
+    expect(worktableOrder()[0]).toContain("Ship corrective");
   });
 
   it("expands one item description and closes it when another item receives focus", async () => {

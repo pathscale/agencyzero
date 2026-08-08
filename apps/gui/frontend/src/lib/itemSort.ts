@@ -7,8 +7,10 @@ export type ItemSortDirection = UiPrefs["itemSortDirection"];
 /**
  * Sort a copy of an item list using the two compact header toggles.
  *
- * Rows predating activity tracking have no timestamp. They remain in manual
- * order after every known-time row rather than receiving a fabricated date.
+ * Rows predating activity tracking have no timestamp. They remain after every
+ * known-time row, but still follow the selected direction using their durable
+ * manual order. Otherwise an all-legacy project makes both time-sort controls
+ * appear to do nothing.
  */
 export function sortItems(
   source: readonly ProjectItem[],
@@ -24,7 +26,7 @@ export function sortItems(
     }
     const leftTime = left.updatedAt ?? "";
     const rightTime = right.updatedAt ?? "";
-    if (!leftTime && !rightTime) return left.order - right.order;
+    if (!leftTime && !rightTime) return (left.order - right.order) * sign;
     if (!leftTime) return 1;
     if (!rightTime) return -1;
     const time = leftTime.localeCompare(rightTime);

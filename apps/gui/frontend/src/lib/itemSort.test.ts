@@ -27,8 +27,15 @@ describe("item sorting", () => {
     expect(sortItems(rows, "time", "desc").map((row) => row.id)).toEqual([
       "new",
       "active",
-      "legacy-a",
       "legacy-b",
+      "legacy-a",
     ]);
+  });
+
+  it("sorts an all-legacy list instead of leaving both directions identical", () => {
+    const legacy = [item("first", "planning", 0), item("last", "planning", 1)];
+
+    expect(sortItems(legacy, "time", "asc").map((row) => row.id)).toEqual(["first", "last"]);
+    expect(sortItems(legacy, "time", "desc").map((row) => row.id)).toEqual(["last", "first"]);
   });
 });
