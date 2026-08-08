@@ -23,7 +23,7 @@ checksum = "320119579fcad9c21884f5c4861d16174d0e06250625266f50fe6898340abefa"
 
 [[package]]
 name = "agency-tools"
-version = "0.3.35"
+version = "0.3.36"
 dependencies = [
  "derive_more 2.1.1",
  "dirs",
@@ -34,7 +34,7 @@ dependencies = [
  "serde_json",
  "tokio",
  "uuid",
- "worktable 1.0.0-beta.9 (registry+https://github.com/rust-lang/crates.io-index)",
+ "worktable 1.0.0-beta.10 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -190,25 +190,25 @@ checksum = "f2032f911046de80f0a198e0901378627c33f59ea0ac00e363d481118bd70a53"
 
 [[package]]
 name = "az-agent"
-version = "0.3.35"
+version = "0.3.36"
 dependencies = [
  "az-core",
 ]
 
 [[package]]
 name = "az-agent-proxy"
-version = "0.3.35"
+version = "0.3.36"
 dependencies = [
  "az-core",
 ]
 
 [[package]]
 name = "az-core"
-version = "0.3.35"
+version = "0.3.36"
 
 [[package]]
 name = "az-gui"
-version = "0.3.35"
+version = "0.3.36"
 dependencies = [
  "agent-abstraction",
  "agent-experimental",
@@ -231,14 +231,14 @@ dependencies = [
  "tauri-plugin-updater",
  "tokio",
  "uuid",
- "worktable 1.0.0-beta.9 (git+https://github.com/pathscale/WorkTable.git?rev=d80d8343c52b2810858f33d080cb5c5d2e4d4bbd)",
+ "worktable 1.0.0-beta.10 (git+https://github.com/pathscale/WorkTable.git?rev=7ab68d17c31e7dd3e56a364ffbb559dd0819b317)",
  "wt-migrate",
  "zip",
 ]
 
 [[package]]
 name = "az-mcp-proxy"
-version = "0.3.35"
+version = "0.3.36"
 dependencies = [
  "az-core",
 ]
@@ -924,7 +924,7 @@ dependencies = [
  "libc",
  "option-ext",
  "redox_users 0.5.2",
- "windows-sys 0.59.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -1100,7 +1100,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -1976,7 +1976,7 @@ checksum = "3640c1c38b8e4e43584d8df18be5fc6b0aa314ce6ebf51b53313d4306cca8e46"
 dependencies = [
  "hermit-abi",
  "libc",
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -2294,7 +2294,7 @@ dependencies = [
  "png 0.18.1",
  "serde",
  "thiserror 2.0.19",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -3329,7 +3329,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys",
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -3385,7 +3385,7 @@ dependencies = [
  "security-framework",
  "security-framework-sys",
  "webpki-root-certs",
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -3528,7 +3528,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5b55fb86dfd3a2f5f76ea78310a88f96c4ea21a3031f8d212443d56123fd0521"
 dependencies = [
  "libc",
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -3809,7 +3809,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c3d1e2c7f27f8d4cb10542a02c49005dbd6e93095799d6f3be745fae9f8fedd4"
 dependencies = [
  "libc",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -4364,10 +4364,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "32497e9a4c7b38532efcdebeef879707aa9f794296a4f0244f6f69e9bc8574bd"
 dependencies = [
  "fastrand",
- "getrandom 0.3.4",
+ "getrandom 0.4.3",
  "once_cell",
  "rustix",
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -4751,7 +4751,7 @@ dependencies = [
  "png 0.18.1",
  "serde",
  "thiserror 2.0.19",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -5162,7 +5162,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -5616,9 +5616,9 @@ checksum = "1ebf944e87a7c253233ad6766e082e3cd714b5d03812acc24c318f549614536e"
 
 [[package]]
 name = "worktable"
-version = "1.0.0-beta.9"
+version = "1.0.0-beta.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c28ac6dc1d643c8840ba30c324f3db2f67568003646e8da5e4730abaa38cfdb8"
+checksum = "424244aef8a2162ade170468ada2d4046379538bc42a21cbdf48f528a97f5e94"
 dependencies = [
  "WorkTablesIndex",
  "arctic-wt",
@@ -5643,13 +5643,13 @@ dependencies = [
  "tokio",
  "tracing",
  "uuid",
- "worktable_codegen 1.0.0-beta.9 (registry+https://github.com/rust-lang/crates.io-index)",
+ "worktable_codegen 1.0.0-beta.10 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
 name = "worktable"
-version = "1.0.0-beta.9"
-source = "git+https://github.com/pathscale/WorkTable.git?rev=d80d8343c52b2810858f33d080cb5c5d2e4d4bbd#d80d8343c52b2810858f33d080cb5c5d2e4d4bbd"
+version = "1.0.0-beta.10"
+source = "git+https://github.com/pathscale/WorkTable.git?rev=7ab68d17c31e7dd3e56a364ffbb559dd0819b317#7ab68d17c31e7dd3e56a364ffbb559dd0819b317"
 dependencies = [
  "WorkTablesIndex",
  "arctic-wt",
@@ -5674,14 +5674,14 @@ dependencies = [
  "tokio",
  "tracing",
  "uuid",
- "worktable_codegen 1.0.0-beta.9 (git+https://github.com/pathscale/WorkTable.git?rev=d80d8343c52b2810858f33d080cb5c5d2e4d4bbd)",
+ "worktable_codegen 1.0.0-beta.10 (git+https://github.com/pathscale/WorkTable.git?rev=7ab68d17c31e7dd3e56a364ffbb559dd0819b317)",
 ]
 
 [[package]]
 name = "worktable_codegen"
-version = "1.0.0-beta.9"
+version = "1.0.0-beta.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cafbc02aea479acd024d5afba53b1454929360865da1263d7a2ab845b42ea60b"
+checksum = "47b741a448603e7a016bf8369b93883f58186554d25cbb70dbaa28b64047d5a5"
 dependencies = [
  "convert_case 0.6.0",
  "indexmap 2.14.0",
@@ -5693,8 +5693,8 @@ dependencies = [
 
 [[package]]
 name = "worktable_codegen"
-version = "1.0.0-beta.9"
-source = "git+https://github.com/pathscale/WorkTable.git?rev=d80d8343c52b2810858f33d080cb5c5d2e4d4bbd#d80d8343c52b2810858f33d080cb5c5d2e4d4bbd"
+version = "1.0.0-beta.10"
+source = "git+https://github.com/pathscale/WorkTable.git?rev=7ab68d17c31e7dd3e56a364ffbb559dd0819b317#7ab68d17c31e7dd3e56a364ffbb559dd0819b317"
 dependencies = [
  "convert_case 0.6.0",
  "indexmap 2.14.0",
@@ -5756,7 +5756,7 @@ dependencies = [
 
 [[package]]
 name = "wt-migrate"
-version = "0.3.35"
+version = "0.3.36"
 dependencies = [
  "derive_more 2.1.1",
  "eyre",
@@ -5766,7 +5766,7 @@ dependencies = [
  "tempfile",
  "tokio",
  "uuid",
- "worktable 1.0.0-beta.9 (registry+https://github.com/rust-lang/crates.io-index)",
+ "worktable 1.0.0-beta.10 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
