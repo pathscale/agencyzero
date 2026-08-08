@@ -349,6 +349,7 @@ export function SettingsTab(): JSX.Element {
                     state.agencyProxy?.socket ??
                     tx("checking the local endpoint")
                   }
+                  stack
                 >
                   <div class="flex flex-wrap items-center justify-end gap-2">
                     <span
@@ -364,70 +365,12 @@ export function SettingsTab(): JSX.Element {
                           )}`
                         : tx("loading")}
                     </span>
-                    <button
-                      type="button"
-                      title={tx("Refresh")}
-                      aria-label={tx("Refresh")}
-                      disabled={proxyAction() !== null || !isLive("getAgentProxyStatus")}
-                      onClick={refreshProxy}
-                      class="flex size-8 items-center justify-center rounded-lg border border-az-hairline-strong text-az-muted transition-colors hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-40"
-                    >
-                      <Icon
-                        name="refresh-cw"
-                        class={`text-[13px] ${proxyAction() === "refresh" ? "animate-spin" : ""}`}
-                      />
-                    </button>
-                    <button
-                      type="button"
-                      disabled={proxyAction() !== null || !isLive("restartAgentProxy")}
-                      onClick={() => restartProxy("drain")}
-                      class="rounded-lg border border-warning/40 px-3 py-[5px] text-[12px] text-warning transition-colors hover:border-warning hover:bg-warning/8 disabled:cursor-not-allowed disabled:opacity-40"
-                    >
-                      {proxyAction() === "drain"
-                        ? tx("Waiting…")
-                        : state.agencyProxy?.connected === false
-                          ? tx("Start")
-                          : (state.agencyProxy?.activeRuns ?? 0) > 0
-                            ? tx("Wait & restart")
-                            : tx("Restart")}
-                    </button>
-                    <Show when={state.agencyProxy?.connected && isLive("stopAgentProxy")}>
-                      <button
-                        type="button"
-                        disabled={proxyAction() !== null}
-                        onClick={stopProxy}
-                        class="rounded-lg border border-az-hairline-strong px-3 py-[5px] text-[12px] text-az-muted transition-colors hover:border-error hover:text-error disabled:cursor-not-allowed disabled:opacity-40"
-                      >
-                        {proxyAction() === "stop" && (state.agencyProxy?.activeRuns ?? 0) > 0
-                          ? tx("Waiting…")
-                          : proxyAction() === "stop"
-                            ? tx("Stopping…")
-                            : tx("Stop")}
-                      </button>
-                    </Show>
-                    <Show when={(state.agencyProxy?.activeRuns ?? 0) > 0}>
-                      <button
-                        type="button"
-                        disabled={proxyAction() !== null || !isLive("restartAgentProxy")}
-                        onClick={() =>
-                          terminateArmed() ? restartProxy("terminate") : setTerminateArmed(true)
-                        }
-                        class="rounded-lg border border-error/40 px-3 py-[5px] text-[12px] text-error transition-colors hover:border-error hover:bg-error/8 disabled:cursor-not-allowed disabled:opacity-40"
-                      >
-                        {proxyAction() === "terminate"
-                          ? tx("Terminating…")
-                          : terminateArmed()
-                            ? tx("Confirm terminate & restart")
-                            : tx("Terminate & restart")}
-                      </button>
-                    </Show>
                   </div>
                 </Row>
                 <Row
                   label={tx("Executable")}
                   hint={tx("a selection takes effect when you restart the idle sidecar")}
                   stack
-                  isLast
                 >
                   <div class="flex min-w-0 items-center gap-2">
                     <span class="min-w-0 flex-1 truncate font-mono text-[11.5px] text-az-muted">
@@ -450,10 +393,69 @@ export function SettingsTab(): JSX.Element {
                       {tx("Use bundled")}
                     </button>
                   </div>
-                  <Show when={proxyNote()}>
-                    <div class="mt-2 text-[11px] text-az-muted">{proxyNote()}</div>
-                  </Show>
                 </Row>
+                <div class="flex flex-wrap items-center justify-end gap-2 px-3.5 py-2.5">
+                  <Show when={proxyNote()}>
+                    <span class="mr-auto text-[11px] text-az-muted">{proxyNote()}</span>
+                  </Show>
+                  <button
+                    type="button"
+                    title={tx("Refresh")}
+                    aria-label={tx("Refresh")}
+                    disabled={proxyAction() !== null || !isLive("getAgentProxyStatus")}
+                    onClick={refreshProxy}
+                    class="flex size-8 items-center justify-center rounded-lg border border-az-hairline-strong text-az-muted transition-colors hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    <Icon
+                      name="refresh-cw"
+                      class={`text-[13px] ${proxyAction() === "refresh" ? "animate-spin" : ""}`}
+                    />
+                  </button>
+                  <button
+                    type="button"
+                    disabled={proxyAction() !== null || !isLive("restartAgentProxy")}
+                    onClick={() => restartProxy("drain")}
+                    class="rounded-lg border border-warning/40 px-3 py-[5px] text-[12px] text-warning transition-colors hover:border-warning hover:bg-warning/8 disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    {proxyAction() === "drain"
+                      ? tx("Waiting…")
+                      : state.agencyProxy?.connected === false
+                        ? tx("Start")
+                        : (state.agencyProxy?.activeRuns ?? 0) > 0
+                          ? tx("Wait & restart")
+                          : tx("Restart")}
+                  </button>
+                  <Show when={state.agencyProxy?.connected && isLive("stopAgentProxy")}>
+                    <button
+                      type="button"
+                      disabled={proxyAction() !== null}
+                      onClick={stopProxy}
+                      class="rounded-lg border border-az-hairline-strong px-3 py-[5px] text-[12px] text-az-muted transition-colors hover:border-error hover:text-error disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      {proxyAction() === "stop" && (state.agencyProxy?.activeRuns ?? 0) > 0
+                        ? tx("Waiting…")
+                        : proxyAction() === "stop"
+                          ? tx("Stopping…")
+                          : tx("Stop")}
+                    </button>
+                  </Show>
+                  <Show when={(state.agencyProxy?.activeRuns ?? 0) > 0}>
+                    <button
+                      type="button"
+                      disabled={proxyAction() !== null || !isLive("restartAgentProxy")}
+                      onClick={() =>
+                        terminateArmed() ? restartProxy("terminate") : setTerminateArmed(true)
+                      }
+                      class="rounded-lg border border-error/40 px-3 py-[5px] text-[12px] text-error transition-colors hover:border-error hover:bg-error/8 disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      {proxyAction() === "terminate"
+                        ? tx("Terminating…")
+                        : terminateArmed()
+                          ? tx("Confirm terminate & restart")
+                          : tx("Terminate & restart")}
+                    </button>
+                  </Show>
+                </div>
               </Section>
 
               <Section

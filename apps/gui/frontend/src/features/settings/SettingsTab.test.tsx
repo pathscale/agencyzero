@@ -102,6 +102,8 @@ describe("AgencyProxy lifecycle", () => {
     const screen = await mountSettings();
     const stop = await screen.findByRole("button", { name: "Stop" });
 
+    expect(screen.getByText("(fixture endpoint)")).toBeTruthy();
+
     fireEvent.click(stop);
     await waitFor(() => expect(screen.getByText("AgencyProxy stopped")).toBeTruthy());
     expect(screen.workspace.state.agencyProxy?.connected).toBe(false);
