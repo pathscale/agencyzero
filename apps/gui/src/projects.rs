@@ -23,7 +23,7 @@
 //! never waits on a model. The cheap second call that improves it, and the manual
 //! rename that outranks both, are not built yet.
 
-use agent_abstraction::{Agent, Decision, Event, Permission, Request, Stop};
+use agent_abstraction::{Agent, Decision, Event, Stop};
 use serde::{Deserialize, Serialize};
 use std::process::Stdio;
 use tauri::{AppHandle, Emitter, Manager, State};
@@ -1813,16 +1813,15 @@ fn provider_handoff(tables: &Tables, project_id: &str, turn_id: &str, target: Ag
     )
 }
 
-fn parse_permission(raw: Option<&str>) -> Permission {
-    match raw.unwrap_or("read_only") {
-        "plan" => Permission::Plan,
-        // `ask` is Edit with a human answering each gated call. It cannot be
-        // ReadOnly underneath: that posture strips the mutating tools, so
-        // nothing would ever ask and the crate refuses the combination.
-        "ask" | "edit" => Permission::Edit,
-        "auto" => Permission::Auto,
-        "bypass" => Permission::Bypass,
-        _ => Permission::ReadOnly,
+fn proxy_permission(raw: &str) -> &'static str {
+    match raw {
+        // `ask` is Edit with a human answering each gated call. ReadOnly would
+        // strip the mutating tools, so nothing could ask.
+        "ask" | "edit" => "edit",
+        "root" | "bypass" => "bypass",
+        "plan" => "plan",
+        "auto" => "auto",
+        _ => "read_only",
     }
 }
 
@@ -4463,7 +4462,7 @@ async fn deliver_injection(
     app: &AppHandle,
     tables: &Tables,
     io: &std::sync::Arc<AgentIo>,
-    control: &agent_abstraction::RunControl,
+    control: &crate::agent_proxy::ProxyControl,
     project_id: &str,
     active_turn_id: &str,
     injected: InjectedMessage,
@@ -4488,11 +4487,7 @@ async fn deliver_injection(
                 true
             }
             Err(error) => {
-                let why = if error.is_cancelled() {
-                    "the turn settled before the message arrived — queued for a fresh turn resuming the session".to_string()
-                } else {
-                    format!("the mid-run message could not be delivered: {error}")
-                };
+                let why = format!("the mid-run message could not be delivered: {error}");
                 crate::log!(crate::log::Level::Warn, "run", "{project_id}: {why}");
                 note_io(app, io, project_id, "received", "error", why);
                 let _ = app.emit(
@@ -6853,11 +6848,14 @@ async fn learn_before_compacting(
         .kv_get(&crate::notes::notes_key(project_id))
         .unwrap_or_default();
 
-    let mut request =
-        agent_abstraction::Request::new(agent, crate::notes::merge_prompt(&existing)).cwd(cwd);
-    if let Some(session) = session {
-        request = request.resume(session);
-    }
+    let request = read_only_proxy_request(
+        agent,
+        crate::notes::merge_prompt(&existing),
+        cwd,
+        &[],
+        "",
+        session,
+    );
 
     note_io(
         app,
@@ -6871,7 +6869,7 @@ async fn learn_before_compacting(
         ),
     );
 
-    let outcome = match agent_abstraction::run(&request).await {
+    let outcome = match state.proxy.run(request).await {
         Ok(outcome) => outcome,
         Err(error) => {
             crate::log!(
@@ -7244,14 +7242,9 @@ pub async fn compact_project(
         return Ok(());
     }
 
-    let mut request = agent_abstraction::Request::command(
-        agent,
-        &agent_abstraction::Command::Compact { instructions: None },
-    )
-    .cwd(&cwd);
-    if let Some(session) = &session {
-        request = request.resume(session);
-    }
+    let mut request =
+        read_only_proxy_request(agent, "/compact".into(), &cwd, &[], "", session.as_deref());
+    request.is_command = true;
 
     let resumed = session.as_deref().unwrap_or("<new session>");
     note_io(
@@ -7271,7 +7264,10 @@ pub async fn compact_project(
         "{project_id}: compacting session {resumed}"
     );
 
-    let mut run = agent_abstraction::stream(&request)
+    let mut run = state
+        .proxy
+        .start(request)
+        .await
         .map_err(|error| format!("could not start the compaction: {error}"))?;
 
     let _ = app.emit(
@@ -9367,14 +9363,9 @@ pub async fn review_pull_request(
 
     let prompt =
         format!("{instruction}\n\nThe pull request: {url}\n\nThe diff:\n\n```diff\n{diff}\n```");
-    let mut request = agent_abstraction::Request::new(agent, prompt).cwd(&scope.cwd);
-    for dir in &scope.extra_dirs {
-        request = request.add_dir(dir);
-    }
-    if !model.is_empty() {
-        request = request.model(&model);
-    }
-    let request = match crate::experimental::apply(request, agent, &model) {
+    let request =
+        read_only_proxy_request(agent, prompt, &scope.cwd, &scope.extra_dirs, &model, None);
+    let request = match crate::experimental::apply_proxy(request, agent, &model) {
         Ok(request) => request,
         Err(error) => {
             return append_review_message(
@@ -9387,7 +9378,7 @@ pub async fn review_pull_request(
         }
     };
 
-    let outcome = match agent_abstraction::run(request.request()).await {
+    let outcome = match state.proxy.run(request.request().clone()).await {
         Ok(outcome) => outcome,
         Err(error) => {
             return append_review_message(
@@ -9467,13 +9458,11 @@ fn append_review_message(
     Ok(())
 }
 
-/// Build the provider request whose filesystem and resume policy were resolved
-/// for this invocation.
+/// Build the transport-neutral request AgencyProxy executes.
 ///
-/// This function is deliberately provider-neutral. AgencyZero supplies typed
-/// roots on every call; agent-abstraction owns whether those become CLI flags
-/// or Codex app-server workspace-write fields.
-fn build_turn_request(
+/// This mirrors the established provider policy while keeping every process,
+/// session, and connection detail on the daemon side of the IPC boundary.
+fn build_proxy_request(
     agent: Agent,
     prompt: String,
     permission: &str,
@@ -9481,63 +9470,67 @@ fn build_turn_request(
     effort: Option<&str>,
     extra_thinking: Option<bool>,
     scope: &InvocationScope,
-) -> Request {
-    let mut request = Request::new(agent, prompt)
-        .permission(parse_permission(Some(permission)))
-        .cwd(&scope.cwd);
-    for dir in &scope.extra_dirs {
-        request = request.add_dir(dir);
-    }
-    let asks = should_route_approvals(permission);
-    if asks && agent.caps().approvals {
-        request = request.approvals();
-        if agent == Agent::Codex {
-            /*
-             * AgencyZero is the approval reviewer only when the owner selected
-             * Ask. Auto opens no approval channel and agent-abstraction gives
-             * its workspace-write sandbox network access directly, so routine
-             * GitHub commands neither ask nor widen the filesystem sandbox.
-             *
-             * Verified against codex-cli 0.146.0: the app-server accepts this
-             * top-level config override after `app-server --stdio`, and `user`
-             * routes approval requests to the client. Ask's broad remembered
-             * rules still auto-answer before showing a card.
-             */
-            request = request.unchecked_args(["-c", "approvals_reviewer=\"user\""]);
-        }
-    }
-    if agent.caps().live_follow_up {
-        request = request.interactive();
-    }
-    /*
-     * Ask for the one-hour prompt cache, not the five-minute default.
-     *
-     * The whole conversation is re-sent every turn; a cache read is a tenth of
-     * the input price, so keeping the prefix warm across replies is where the
-     * saving is. On a subscription the CLI already requests 1h and this is a
-     * no-op; on an API key it defaults to 5m, and in a long conversation with
-     * minutes between turns the 5m cache dies between turns and every turn pays
-     * full price for the entire history. The CLI exposes no per-request TTL
-     * flag — this env var is the only lever, and it is Claude's. Cache reads
-     * refresh the window for free, so an active session rarely pays the higher
-     * 1h write more than once.
-     */
+) -> agency_proxy_protocol::RunRequest {
+    let asks = should_route_approvals(permission) && agent.caps().approvals;
+    let permission = proxy_permission(permission);
+    let mut environment = std::collections::BTreeMap::new();
     if agent == Agent::Claude {
-        request = request.env("ENABLE_PROMPT_CACHING_1H", "1");
+        environment.insert("ENABLE_PROMPT_CACHING_1H".into(), "1".into());
     }
-    if !model.is_empty() {
-        request = request.model(model);
+    let mut unchecked_args = Vec::new();
+    if asks && agent == Agent::Codex {
+        unchecked_args.extend(["-c".into(), "approvals_reviewer=\"user\"".into()]);
     }
-    if let Some(effort) = effort.filter(|value| !value.is_empty()) {
-        request = request.effort(effort);
+    agency_proxy_protocol::RunRequest {
+        provider: agent_wire_name(agent).into(),
+        model: model.into(),
+        prompt,
+        is_command: false,
+        system: None,
+        permission: permission.into(),
+        effort: effort.filter(|value| !value.is_empty()).map(str::to_string),
+        extra_thinking,
+        approvals: asks,
+        interactive: agent.caps().live_follow_up,
+        workspace_roots: std::iter::once(scope.cwd.clone())
+            .chain(scope.extra_dirs.iter().cloned())
+            .collect(),
+        resume_session_id: scope.resume.clone().filter(|id| !id.is_empty()),
+        binary: None,
+        environment,
+        unchecked_args,
+        metadata: std::collections::BTreeMap::new(),
     }
-    if extra_thinking == Some(false) {
-        request = request.thinking(false);
+}
+
+fn read_only_proxy_request(
+    agent: Agent,
+    prompt: String,
+    cwd: &str,
+    extra_dirs: &[String],
+    model: &str,
+    resume: Option<&str>,
+) -> agency_proxy_protocol::RunRequest {
+    agency_proxy_protocol::RunRequest {
+        provider: agent_wire_name(agent).into(),
+        model: model.into(),
+        prompt,
+        is_command: false,
+        system: None,
+        permission: "read_only".into(),
+        effort: None,
+        extra_thinking: None,
+        approvals: false,
+        interactive: false,
+        workspace_roots: std::iter::once(cwd.to_string())
+            .chain(extra_dirs.iter().cloned())
+            .collect(),
+        resume_session_id: resume.filter(|id| !id.is_empty()).map(str::to_string),
+        binary: None,
+        environment: std::collections::BTreeMap::new(),
+        unchecked_args: Vec::new(),
+        metadata: std::collections::BTreeMap::new(),
     }
-    if let Some(session) = scope.resume.as_deref().filter(|id| !id.is_empty()) {
-        request = request.resume(session);
-    }
-    request
 }
 
 /// Stream one turn: events out as they arrive, one row in at the end.
@@ -9707,7 +9700,7 @@ async fn drive_run(
     let prompt_echo = prompt.clone();
     let effort_echo = effort.clone().filter(|value| !value.is_empty());
 
-    let mut request = build_turn_request(
+    let mut request = build_proxy_request(
         agent,
         prompt,
         &permission,
@@ -9904,10 +9897,10 @@ async fn drive_run(
      * history is then read from cache rather than re-billed in full each turn.
      */
     if !system.is_empty() {
-        request = request.system(system);
+        request.system = Some(system);
     }
 
-    let request = match crate::experimental::apply(request, agent, &model) {
+    let request = match crate::experimental::apply_proxy(request, agent, &model) {
         Ok(request) => request,
         Err(error) => {
             measurement
@@ -9974,7 +9967,8 @@ async fn drive_run(
         kept.remove(&project_id);
     }
 
-    let mut run = match agent_abstraction::stream(request.request()) {
+    let proxy = app.state::<crate::AppState>().proxy.clone();
+    let mut run = match proxy.start(request.request().clone()).await {
         Ok(run) => run,
         Err(error) => {
             measurement
@@ -11517,10 +11511,15 @@ async fn checkpoint_if_due(
     let existing = tables
         .kv_get(&crate::notes::notes_key(project_id))
         .unwrap_or_default();
-    let request = agent_abstraction::Request::new(agent, crate::notes::merge_prompt(&existing))
-        .cwd(cwd)
-        .resume(&session);
-    let request = match crate::experimental::apply(request, agent, model) {
+    let request = read_only_proxy_request(
+        agent,
+        crate::notes::merge_prompt(&existing),
+        cwd,
+        &[],
+        model,
+        Some(&session),
+    );
+    let request = match crate::experimental::apply_proxy(request, agent, model) {
         Ok(request) => request,
         Err(error) => {
             crate::log!(
@@ -11532,7 +11531,8 @@ async fn checkpoint_if_due(
         }
     };
 
-    let taken = match agent_abstraction::run(request.request()).await {
+    let proxy = app.state::<crate::AppState>().proxy.clone();
+    let taken = match proxy.run(request.request().clone()).await {
         Ok(outcome) => crate::notes::clamp(&outcome.text),
         Err(error) => {
             crate::log!(
@@ -12184,12 +12184,12 @@ mod tests {
     }
 
     #[test]
-    fn permissions_map_onto_the_crates_own_enum() {
-        assert_eq!(parse_permission(Some("bypass")), Permission::Bypass);
-        assert_eq!(parse_permission(Some("plan")), Permission::Plan);
+    fn permissions_map_onto_the_proxy_protocol() {
+        assert_eq!(proxy_permission("bypass"), "bypass");
+        assert_eq!(proxy_permission("plan"), "plan");
         // Anything unrecognized is the safest posture, never the widest.
-        assert_eq!(parse_permission(Some("nonsense")), Permission::ReadOnly);
-        assert_eq!(parse_permission(None), Permission::ReadOnly);
+        assert_eq!(proxy_permission("nonsense"), "read_only");
+        assert_eq!(proxy_permission(""), "read_only");
     }
 
     #[test]
@@ -12400,7 +12400,7 @@ mod tests {
         );
         assert!(!scope.workspace_roots().contains(&"/Users/revenge".into()));
 
-        let request = build_turn_request(
+        let request = build_proxy_request(
             Agent::Codex,
             "probe".into(),
             "auto",
@@ -12409,11 +12409,11 @@ mod tests {
             None,
             &scope,
         );
-        let described = format!("{request:?}");
         for root in ["/managed/project", "/repo-a", "/repo-b", &memory] {
             assert!(
-                described.contains(root),
-                "request omitted {root}: {described}"
+                request.workspace_roots.iter().any(|kept| kept == root),
+                "request omitted {root}: {:?}",
+                request.workspace_roots
             );
         }
 
@@ -12475,7 +12475,7 @@ mod tests {
         assert!(after.workspace_roots().contains(&"/repo-a".into()));
         assert!(after.workspace_roots().contains(&"/repo-b".into()));
 
-        let request = build_turn_request(
+        let request = build_proxy_request(
             Agent::Codex,
             "continue".into(),
             "auto",
@@ -12484,9 +12484,11 @@ mod tests {
             None,
             &after,
         );
-        let described = format!("{request:?}");
-        assert!(described.contains("Resume(\"thread-existing\")"));
-        assert!(described.contains("/repo-b"));
+        assert_eq!(
+            request.resume_session_id.as_deref(),
+            Some("thread-existing")
+        );
+        assert!(request.workspace_roots.contains(&"/repo-b".into()));
 
         reopened.shutdown().await.expect("tables drain");
         let _ = std::fs::remove_dir_all(&store);
@@ -12519,7 +12521,7 @@ mod tests {
                 .contains(&scope.memory_dir.to_string_lossy().into_owned())
         );
 
-        let argv = build_turn_request(
+        let request = build_proxy_request(
             Agent::Claude,
             "continue".into(),
             "edit",
@@ -12527,15 +12529,8 @@ mod tests {
             None,
             None,
             &scope,
-        )
-        .argv()
-        .expect("Claude request is valid");
-        let add_dirs: Vec<_> = argv
-            .windows(2)
-            .filter(|pair| pair[0] == "--add-dir")
-            .map(|pair| pair[1].as_str())
-            .collect();
-        assert_eq!(add_dirs, ["/repo-b"]);
+        );
+        assert_eq!(request.workspace_roots, ["/repo-a", "/repo-b"]);
 
         tables.shutdown().await.expect("tables drain");
         let _ = std::fs::remove_dir_all(&store);
@@ -12670,8 +12665,8 @@ mod tests {
             resume: None,
             memory_dir: "/memory/project".into(),
         };
-        let argv = |permission| {
-            build_turn_request(
+        let request = |permission| {
+            build_proxy_request(
                 Agent::Codex,
                 "probe".into(),
                 permission,
@@ -12680,20 +12675,20 @@ mod tests {
                 None,
                 &scope,
             )
-            .argv()
-            .expect("Codex approval request is valid")
         };
-        let forces_user_review = |args: &[String]| {
-            args.windows(2)
+        let forces_user_review = |request: &agency_proxy_protocol::RunRequest| {
+            request
+                .unchecked_args
+                .windows(2)
                 .any(|pair| pair == ["-c", "approvals_reviewer=\"user\""])
         };
 
         assert!(
-            !forces_user_review(&argv("auto")),
+            !forces_user_review(&request("auto")),
             "Auto opens no approval channel"
         );
         assert!(
-            forces_user_review(&argv("ask")),
+            forces_user_review(&request("ask")),
             "Ask routes the decision to AgencyZero's approval card"
         );
     }

@@ -16,6 +16,8 @@ tauri-build = { version = "2", features = [] }
 # Carries the store forward when a column changes; see crates/wt-migrate.
 wt-migrate = { path = "../../crates/wt-migrate" }
 agent-abstraction = "0.4.15"
+agency-proxy-client = { path = "../../../agencyproxy/crates/client" }
+agency-proxy-protocol = { path = "../../../agencyproxy/crates/protocol" }
 agent-experimental = { git = "https://gitlab.com/anonymous-28282828282/agent-experimental.git", rev = "f04ee035d9f243eb0c2dadb03829f827bb87d918", default-features = false, optional = true }
 promptsyntax = "0.1.0"
 shlex = "1.3"
@@ -32,7 +34,7 @@ futures = "0.3"
 libc = "0.2"
 uuid = "1"
 chrono = { version = "0.4", default-features = false, features = ["clock", "serde", "std"] }
-tokio = { version = "1", features = ["rt-multi-thread"] }
+tokio = { version = "1", features = ["process", "rt-multi-thread", "time"] }
 tauri = { version = "2", features = [] }
 tauri-plugin-updater = "2"
 serde = { version = "1", features = ["derive"] }

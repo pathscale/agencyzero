@@ -22,10 +22,12 @@
 //! and there are no limits in force" — a bare empty list flattens the two, and
 //! they mean opposite things.
 
+use agency_proxy_protocol::ProviderAccountUsage;
 use agent_abstraction::Agent;
 use serde::{Deserialize, Serialize};
+use tauri::State;
 
-use crate::agents::AGENTS;
+use crate::AppState;
 
 /// One quota window, in the provider's own terms.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
@@ -78,10 +80,20 @@ fn epoch_to_iso(seconds: i64) -> Option<String> {
 }
 
 /// Ask one agent, having first asked whether it can answer.
-async fn probe(agent: Agent) -> AgentQuota {
+fn from_proxy(provider: ProviderAccountUsage) -> Result<AgentQuota, String> {
+    let agent = match provider.provider.as_str() {
+        "claude" => Agent::Claude,
+        "codex" => Agent::Codex,
+        "copilot" => Agent::Copilot,
+        other => {
+            return Err(format!(
+                "AgencyProxy reported unknown quota provider: {other}"
+            ));
+        }
+    };
     let mut quota = AgentQuota {
         agent,
-        supported: false,
+        supported: provider.supported,
         windows: Vec::new(),
         plan: None,
         credit_balance: None,
@@ -89,19 +101,20 @@ async fn probe(agent: Agent) -> AgentQuota {
         detail: String::new(),
     };
 
-    if !agent.reports_account_usage() {
+    if !provider.supported {
         quota.detail = match agent {
             Agent::Claude => "Claude reports quota only during a run, as a rate limit. \
                               Its usage percentages are not on the wire."
                 .into(),
             _ => "This agent does not report account-wide usage.".into(),
         };
-        return quota;
+        return Ok(quota);
     }
 
-    match agent.account_usage().await {
-        Ok(usage) => {
-            quota.supported = true;
+    match provider.usage {
+        Some(value) => {
+            let usage: agent_abstraction::AccountUsage = serde_json::from_value(value)
+                .map_err(|error| format!("AgencyProxy returned invalid account usage: {error}"))?;
             quota.plan = usage.plan.clone();
             quota.unlimited = usage.credits.as_ref().is_some_and(|c| c.unlimited);
             quota.credit_balance = usage.credits.as_ref().and_then(|c| c.balance.clone());
@@ -117,7 +130,8 @@ async fn probe(agent: Agent) -> AgentQuota {
                 })
                 .collect();
         }
-        Err(error) => {
+        None => {
+            let error = provider.error.unwrap_or_else(|| "no detail".into());
             // Reachable but unhappy: the agent can answer in principle and did
             // not this time. Not the same as "cannot answer", so it is said
             // differently rather than folded into the unsupported case.
@@ -130,17 +144,23 @@ async fn probe(agent: Agent) -> AgentQuota {
         }
     }
 
-    quota
+    Ok(quota)
 }
 
 /// Where every agent's account stands, for the window-wide usage readout.
 #[tauri::command]
-pub async fn list_quota() -> QuotaReport {
-    let probes = AGENTS.map(probe);
-    QuotaReport {
-        agents: futures::future::join_all(probes).await,
+pub async fn list_quota(state: State<'_, AppState>) -> Result<QuotaReport, String> {
+    let agents = state
+        .proxy
+        .account_usage()
+        .await?
+        .into_iter()
+        .map(from_proxy)
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(QuotaReport {
+        agents,
         checked_at: chrono::Utc::now().to_rfc3339(),
-    }
+    })
 }
 
 #[cfg(test)]
@@ -149,9 +169,15 @@ mod tests {
 
     /// The distinction the whole module exists to preserve. Claude cannot report
     /// account usage, and saying so is not the same as saying "no limits".
-    #[tokio::test]
-    async fn an_agent_that_cannot_answer_says_so_rather_than_reporting_zero() {
-        let quota = probe(Agent::Claude).await;
+    #[test]
+    fn an_agent_that_cannot_answer_says_so_rather_than_reporting_zero() {
+        let quota = from_proxy(ProviderAccountUsage {
+            provider: "claude".into(),
+            supported: false,
+            usage: None,
+            error: None,
+        })
+        .expect("known provider maps");
 
         assert!(!quota.supported, "Claude does not report account usage");
         assert!(quota.windows.is_empty());

@@ -1,5 +1,6 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod agent_proxy;
 mod agents;
 mod angel;
 mod chat_import;
@@ -138,6 +139,9 @@ const IMPLEMENTED: &[&str] = &[
 /// What the GUI carries for the life of the process.
 pub(crate) struct AppState {
     tables: Arc<Tables>,
+    /// Persistent provider runtime. The GUI is only a client; live agent
+    /// processes survive this application's restart inside AgencyProxy.
+    proxy: Arc<agent_proxy::AgencyProxy>,
     /// Tool calls in flight, by project. Not persisted, on purpose, see
     /// [`projects::RunningTasks`].
     running: Arc<projects::RunningTasks>,
@@ -1182,7 +1186,7 @@ async fn list_agent_status(
         return Ok(cached);
     }
 
-    let detected = agents::detect_all().await;
+    let detected = agents::detect_all(&state.proxy).await?;
     // A cache that cannot be written is not worth failing the call over: the
     // answer in hand is still correct, it just will not survive a restart.
     if let Ok(encoded) = serde_json::to_string(&detected)
@@ -1898,6 +1902,7 @@ fn main() {
             let restart_resume = read_restart_resume(&config_dir);
             app.manage(AppState {
                 tables: Arc::new(tables),
+                proxy: Arc::new(agent_proxy::AgencyProxy::new(&config_dir)),
                 running: Arc::default(),
                 io: Arc::default(),
                 approvals: Arc::default(),
