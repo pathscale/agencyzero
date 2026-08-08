@@ -559,6 +559,12 @@ export function SettingsTab(): JSX.Element {
                   />
                 </Row>
                 <Row
+                  label={tx("Open source")}
+                  hint={tx("If AgencyZero is useful, a GitHub star helps more people find it.")}
+                >
+                  <SourceActions />
+                </Row>
+                <Row
                   label={tx("Restart")}
                   hint={tx(
                     "drains the store, then reopens into the build currently on disk — the second half of a rebuild",
@@ -1700,6 +1706,32 @@ function BuildStamp(): JSX.Element {
         </span>
       )}
     </Show>
+  );
+}
+
+const AGENCYZERO_REPOSITORY = "https://github.com/pathscale/agencyzero";
+
+/** A visible source link and a quiet, explicit star invitation—never a modal. */
+function SourceActions(): JSX.Element {
+  const { actions } = useWorkspace();
+  const openRepository = () => void actions.openExternal(AGENCYZERO_REPOSITORY);
+  return (
+    <div class="flex items-center gap-2">
+      <button
+        type="button"
+        onClick={openRepository}
+        class="rounded-lg border border-az-hairline-strong px-2.5 py-1 text-[11.5px] text-az-muted transition-colors hover:border-primary hover:text-primary"
+      >
+        {tx("View source")}
+      </button>
+      <button
+        type="button"
+        onClick={openRepository}
+        class="rounded-lg bg-primary px-2.5 py-1 text-[11.5px] text-primary-content transition-opacity hover:opacity-90"
+      >
+        {tx("Star on GitHub")}
+      </button>
+    </div>
   );
 }
 

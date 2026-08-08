@@ -491,6 +491,11 @@ const en = {
   "Ask, or type / for commands…": "Ask, or type / for commands…",
   copied: "copied",
   "GitHub ›": "GitHub ›",
+  "Open source": "Open source",
+  "View source": "View source",
+  "Star on GitHub": "Star on GitHub",
+  "If AgencyZero is useful, a GitHub star helps more people find it.":
+    "If AgencyZero is useful, a GitHub star helps more people find it.",
   "CI rollup — click to re-check": "CI rollup — click to re-check",
   Closed: "Closed",
   Merged: "Merged",

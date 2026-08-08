@@ -472,6 +472,11 @@ const zh = {
   "Ask, or type / for commands…": "提问，或输入 / 查看命令…",
   copied: "已复制",
   "GitHub ›": "GitHub ›",
+  "Open source": "开源",
+  "View source": "查看源代码",
+  "Star on GitHub": "在 GitHub 上加星",
+  "If AgencyZero is useful, a GitHub star helps more people find it.":
+    "如果 AgencyZero 对你有帮助，在 GitHub 上加星可以让更多人发现它。",
   "CI rollup — click to re-check": "CI 汇总 — 点击重新检查",
   Closed: "已关闭",
   Merged: "已合并",

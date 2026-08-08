@@ -173,3 +173,15 @@ describe("appearance settings", () => {
     expect(screen.workspace.state.settings?.theme.wash).toBe(30);
   });
 });
+
+describe("open source actions", () => {
+  it("offers source and star actions without interrupting the owner", async () => {
+    const screen = await mountSettings();
+    expect(screen.getByRole("button", { name: "View source" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Star on GitHub" })).toBeTruthy();
+    expect(
+      screen.getByText("If AgencyZero is useful, a GitHub star helps more people find it."),
+    ).toBeTruthy();
+    expect(screen.queryByRole("dialog", { name: /star/i })).toBeNull();
+  });
+});
