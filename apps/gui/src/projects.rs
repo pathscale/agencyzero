@@ -10517,7 +10517,10 @@ async fn drive_run(
         }
         let turn_started = event_proves_turn_started(agent, codex_session_opened, &event);
         if turn_started {
-            ready_for_followup.store(true, std::sync::atomic::Ordering::Release);
+            let was_ready = ready_for_followup.swap(true, std::sync::atomic::Ordering::AcqRel);
+            if !was_ready {
+                let _ = app.emit("run:ready", serde_json::json!({ "projectId": project_id }));
+            }
         }
         // Once the turn is real, every provider event extends the ordinary idle
         // window. Setup events before that point never extend startup.

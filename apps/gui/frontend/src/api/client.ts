@@ -423,6 +423,8 @@ export interface AppEvents {
     model: string;
     permission: Permission;
   };
+  /** The active provider channel can now accept an ordered live follow-up. */
+  "run:ready": { projectId: string };
   /**
    * A message sent into a live run could not be delivered — the turn settled
    * in the race window. The words are already in the transcript; this hands
