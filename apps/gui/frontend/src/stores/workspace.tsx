@@ -1349,6 +1349,16 @@ function createWorkspace() {
       refreshProxyAfterLifecycleEvent();
     });
 
+    await bind("run:ready", ({ projectId }) => {
+      // A send in the narrow startup window is queued because the run owns its
+      // slot before its interactive channel exists. This event is the missing
+      // release cue: preserve order and inject as soon as the backend says the
+      // channel is ready, without waiting for the whole turn to stop.
+      if ((state.queued[projectId] ?? []).length > 0) {
+        void flushQueue(projectId, 0, true);
+      }
+    });
+
     await bind("run:inject_failed", ({ projectId, messageId, body, replyQuestionId }) => {
       // The turn settled before the interruption reached it. The transcript
       // already shows the words; queue that exact row so a fresh turn hears it
@@ -2118,6 +2128,19 @@ function createWorkspace() {
       return;
     }
 
+    if ((state.queued[projectId] ?? []).length > 0) {
+      enqueue(projectId, body, "busy", study, undefined, replyQuestionId, itemId);
+      const runningAgent = state.runStatus[projectId]?.agent;
+      if (
+        isBusy(projectId) &&
+        runningAgent !== undefined &&
+        capabilitiesFor(runningAgent)?.liveFollowUp
+      ) {
+        void flushQueue(projectId, 0, true);
+      }
+      return;
+    }
+
     const runningAgent = state.runStatus[projectId]?.agent;
     if (
       isBusy(projectId) &&
@@ -2155,11 +2178,15 @@ function createWorkspace() {
    * actually opening; after the attempts run out the prompt goes back to the
    * front of the queue, still visible above the composer rather than lost.
    */
-  async function flushQueue(projectId: string, attempt: number): Promise<void> {
+  async function flushQueue(
+    projectId: string,
+    attempt: number,
+    allowLiveFollowUp = false,
+  ): Promise<void> {
     const waiting = state.queued[projectId] ?? [];
     const next = waiting[0];
     if (next === undefined) return;
-    if (isBusy(projectId)) return; // a newer run took the slot; its stop will re-cue
+    if (isBusy(projectId) && !allowLiveFollowUp) return;
     setState("queued", projectId, waiting.slice(1));
     try {
       await dispatch(
@@ -2173,7 +2200,10 @@ function createWorkspace() {
     } catch (cause) {
       setState("queued", projectId, (rest = []) => [next, ...rest]);
       if (attempt < 4) {
-        window.setTimeout(() => void flushQueue(projectId, attempt + 1), 500 * 2 ** attempt);
+        window.setTimeout(
+          () => void flushQueue(projectId, attempt + 1, allowLiveFollowUp),
+          500 * 2 ** attempt,
+        );
       } else {
         log.error(`could not send the queued prompt: ${describeError(cause)}`);
       }
