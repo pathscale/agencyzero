@@ -86,5 +86,8 @@ jobs:
         run: scripts/stage-agency-proxy-sidecar.sh
 
       - run: cargo fmt --all --check
-      - run: cargo clippy --workspace --all-targets --all-features -- -D warnings
-      - run: cargo test --workspace --all-features
+      # Blitz is currently a macOS preview runtime. Enabling every feature on
+      # this Linux runner asks it to implement Tauri's GTK-only runtime traits,
+      # which is separate portability work rather than Linux CI for AgencyZero.
+      - run: cargo clippy --workspace --all-targets --features experimental -- -D warnings
+      - run: cargo test --workspace --features experimental
