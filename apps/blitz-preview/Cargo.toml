@@ -1,15 +1,20 @@
 [package]
 name = "agencyzero-blitz-preview"
 description = "Native Blitz and Boa preview shell for the AgencyZero frontend"
-version = "0.3.48"
+version = "0.3.50"
 edition = "2024"
 publish = false
 build = "build.rs"
 
 [dependencies]
+anyrender = "=0.12.0"
+anyrender_vello_cpu = "=0.15.0"
 blitz-dom = { path = "../../../blitz-rust/packages/blitz-dom", features = ["system-fonts"] }
+blitz-paint = { path = "../../../blitz-rust/packages/blitz-paint", features = ["scrollbars"] }
 blitz-script = { path = "../../../blitz-rust/packages/blitz-script", features = ["system-fonts"] }
+blitz-traits = { path = "../../../blitz-rust/packages/blitz-traits" }
 brotli = { version = "=8.0.4", default-features = false, features = ["std"] }
+png = "=0.18.1"
 tauri = { version = "=2.11.5", default-features = false, features = ["compression"] }
 tauri-runtime-blitz = { path = "../../../tauri-runtime-blitz/crates/tauri-runtime-blitz" }
 url = "=2.5.8"
@@ -17,6 +22,9 @@ url = "=2.5.8"
 [build-dependencies]
 brotli = { version = "=8.0.4", default-features = false, features = ["std"] }
 tauri-build = "=2.6.3"
+
+[dev-dependencies]
+usvg = "=0.46.0"
 
 [workspace]
 resolver = "3"
