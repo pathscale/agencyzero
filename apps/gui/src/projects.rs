@@ -9257,9 +9257,20 @@ pub async fn send_message(
     }
     let project_id = input.project_id.clone();
     let turn_id = user_message.id.clone();
-    let effort = input.effort.clone();
-    let extra_thinking = input.extra_thinking;
     let stateless = input.stateless;
+    // Cleanup is a small JSON classification, not an open-ended reasoning
+    // turn. Respect the selected provider/model but force its cheapest effort
+    // posture so the absolute 30-second bound leaves time for an answer.
+    let effort = if stateless {
+        Some("low".into())
+    } else {
+        input.effort.clone()
+    };
+    let extra_thinking = if stateless {
+        Some(false)
+    } else {
+        input.extra_thinking
+    };
 
     tauri::async_runtime::spawn(async move {
         drive_run(

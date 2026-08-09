@@ -391,6 +391,7 @@ function TaskManagerComposer(): JSX.Element {
   const { state, actions, capabilitiesFor, isLive } = useWorkspace();
   const [draft, setDraft] = createSignal("");
   const [isSending, setIsSending] = createSignal(false);
+  const [isCanceling, setIsCanceling] = createSignal(false);
   const [error, setError] = createSignal<string | null>(null);
   const selectedAgent = () => state.settings?.taskManager.agent ?? "claude";
   const agentReady = () =>
@@ -430,6 +431,18 @@ function TaskManagerComposer(): JSX.Element {
     );
   };
   const waitsForRun = () => isRunning() && !canFollowUp();
+
+  const cancel = async (): Promise<void> => {
+    if (isCanceling()) return;
+    setIsCanceling(true);
+    try {
+      await actions.cancelRun(TASK_MANAGER_ID);
+    } catch (cause) {
+      setError(describeError(cause));
+    } finally {
+      setIsCanceling(false);
+    }
+  };
 
   const submit = async (): Promise<void> => {
     const authored = draft();
@@ -572,7 +585,16 @@ function TaskManagerComposer(): JSX.Element {
             </kbd>
           }
         >
-          <span class="az-halo-primary size-2 shrink-0 rounded-full bg-primary" />
+          <button
+            type="button"
+            onClick={() => void cancel()}
+            disabled={isCanceling()}
+            title={tx("Cancel")}
+            aria-label={tx("Cancel")}
+            class="flex size-5 shrink-0 items-center justify-center rounded-full border border-error/35 text-error transition-colors hover:bg-error/12 disabled:opacity-45"
+          >
+            <Icon name="x" class="text-[11px]" />
+          </button>
         </Show>
         {/*
           The debug reveal. The reply and collected list answer "what did the
