@@ -156,6 +156,16 @@ describe("Home item rows", () => {
     expect(screen.getByText("4 open · 2 turns · 1 active")).toBeTruthy();
   });
 
+  it("lets Recent card text shrink before its timestamp", async () => {
+    const screen = await mountHome();
+    const recentCard = screen
+      .getAllByRole("button")
+      .find((button) => button.textContent?.includes("~/src/WorkTable"));
+
+    expect(recentCard).toBeTruthy();
+    expect(recentCard?.querySelector("div")).toHaveClass("flex-1");
+  });
+
   it("does not count canceled work as open in the group summary", async () => {
     const screen = await mountHome();
 
