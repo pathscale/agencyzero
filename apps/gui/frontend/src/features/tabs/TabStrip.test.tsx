@@ -1,6 +1,6 @@
 import { render, waitFor } from "@solidjs/testing-library";
 import { beforeEach, describe, expect, it } from "vitest";
-import { TabStrip } from "~/features/tabs/TabStrip";
+import { horizontalRevealTarget, TabStrip } from "~/features/tabs/TabStrip";
 import { setPrefs } from "~/stores/prefs";
 import { useWorkspace, type Workspace, WorkspaceProvider } from "~/stores/workspace";
 
@@ -138,6 +138,18 @@ describe("TabStrip", () => {
 });
 
 describe("overflow", () => {
+  it("computes an immediate reveal position for an offscreen active pill", () => {
+    const strip = { clientWidth: 160, scrollLeft: 0, scrollWidth: 400 };
+    const stripRect = { left: 100, right: 260 };
+    expect(horizontalRevealTarget(strip, stripRect, { left: 300, right: 380 })).toBe(128);
+
+    strip.scrollLeft = 100;
+    expect(horizontalRevealTarget(strip, stripRect, { left: 50, right: 90 })).toBe(42);
+
+    strip.scrollLeft = 40;
+    expect(horizontalRevealTarget(strip, stripRect, { left: 140, right: 180 })).toBeNull();
+  });
+
   /*
    * jsdom has no layout, so scrollWidth and clientWidth are both 0 and the
    * strip never reports as overflowing. What is checkable here is that the
