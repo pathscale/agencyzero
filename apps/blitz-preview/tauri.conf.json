@@ -1,10 +1,10 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "AgencyZero Blitz Preview",
-  "version": "0.3.41",
+  "version": "0.3.42",
   "identifier": "com.pathscale.agencyzero.blitz-preview",
   "build": {
-    "frontendDist": "../gui/dist"
+    "frontendDist": "dist"
   },
   "app": {
     "windows": [
