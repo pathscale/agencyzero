@@ -56,7 +56,9 @@ describe("analytics refresh", () => {
     expect(screen.queryByRole("tab", { name: "Efficiency" })).not.toBeInTheDocument();
     expect(screen.queryByRole("tab", { name: "Largest turn" })).not.toBeInTheDocument();
     expect(screen.getByText("Efficiency")).toBeInTheDocument();
-    expect(screen.getByText("Largest single turn")).toBeInTheDocument();
+    expect(screen.getByText("Billable traffic")).toBeInTheDocument();
+    expect(screen.getByText("Largest agent run")).toBeInTheDocument();
+    expect(screen.getByText("Usage records")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("tab", { name: "Models" }));
     expect(screen.getByRole("tab", { name: "Models" })).toHaveAttribute("aria-selected", "true");

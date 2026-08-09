@@ -414,11 +414,20 @@ function HeadlineRow(props: {
         tone: "text-primary",
       },
       {
-        label: tx("Processed"),
+        label: tx("Billable traffic"),
         value: tokens(props.usage.totalProcessedTokens),
         tone: "text-primary",
+        detail: tx("summed across model calls"),
+        title: tx(
+          "Cumulative billable token traffic across this turn's model calls: fresh input, repeated cached input, cache writes, and generated output reported so far.",
+        ),
       },
-      { label: tx("Turns"), value: `${props.usage.turns}`, tone: "text-accent" },
+      {
+        label: tx("Usage records"),
+        value: `${props.usage.turns}`,
+        tone: "text-accent",
+        detail: tx("completed and reconstructed agent runs"),
+      },
       { label: tx("Sessions"), value: `${props.usage.sessions.length}`, tone: "text-info" },
       { label: tx("Projects"), value: `${props.usage.projects.length}`, tone: "text-info" },
       {
@@ -431,12 +440,16 @@ function HeadlineRow(props: {
         ),
       },
       {
-        label: tx("Largest single turn"),
+        label: tx("Largest agent run"),
         value: largest ? tokens(largest.processedTokens) : "—",
         tone: largest ? "text-warning" : "text-az-muted",
-        detail: largest ? `${largest.model} · ${dollars(largest.costUsd)}` : tx("No turns yet"),
+        detail: largest
+          ? `${largest.model} · ${dollars(largest.costUsd)} · ${tx("across model calls")}`
+          : tx("No turns yet"),
         title: largest
-          ? `${tokens(largest.processedTokens)} ${tx("tokens processed")} · ${largest.model} · ${dollars(largest.costUsd)}`
+          ? tx(
+              "One agent run can make many model calls. This is cumulative token traffic, not context-window size.",
+            )
           : undefined,
       },
       { label: tx("Input"), value: tokens(props.usage.totalInputTokens), tone: "text-primary" },
