@@ -10,14 +10,14 @@ use std::time::Duration;
 
 use serde::Serialize;
 use serde_json::{Value, json};
-use tauri::{AppHandle, State};
+use tauri::State;
 use tauri_plugin_dialog::DialogExt;
 use worktable::prelude::*;
 
-use crate::AppState;
 use crate::db::schema::study_event::StudyEventRow;
 use crate::db::tables::Tables;
 use crate::settings::{GlobalSettings, StudyAnalytics};
+use crate::{AppHandle, AppState};
 
 pub const PROTOCOL_VERSION: &str = "agencyzero-ps-deployment-study/0.1";
 pub const PARSER_VERSION: &str = "promptsyntax-rs/0.1.0";

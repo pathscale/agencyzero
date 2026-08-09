@@ -8,15 +8,15 @@
 //! `unknown` rather than a guess.
 
 use serde::Serialize;
-use tauri::{AppHandle, Emitter, Manager, State};
+use tauri::{Emitter, Manager, State};
 // `execute` on a select builder is a trait method.
 use worktable::prelude::*;
 
-use crate::AppState;
 use crate::db::schema::pull_request::{
     PrDismissedByIdQuery, PrFactsByIdQuery, PullRequestRow, PullRequestWorkTable,
 };
 use crate::db::tables::Tables;
+use crate::{AppHandle, AppState};
 
 /// One in-flight GitHub refresh per project.
 ///

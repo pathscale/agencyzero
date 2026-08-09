@@ -10,10 +10,10 @@
 //! the first published bundle, not after it.
 
 use serde::Serialize;
-use tauri::{AppHandle, Manager, State};
+use tauri::{Manager, State};
 use tauri_plugin_updater::UpdaterExt;
 
-use crate::AppState;
+use crate::{AppHandle, AppState};
 
 /// What the frontend needs in order to offer the upgrade.
 #[derive(Serialize)]

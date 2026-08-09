@@ -24,17 +24,76 @@ mod update;
 mod workers;
 
 use std::ffi::OsString;
+#[cfg(feature = "blitz-runtime")]
+use std::io::Read;
 use std::path::PathBuf;
 use std::sync::Arc;
 
 use tauri::menu::{AboutMetadata, Menu, MenuBuilder, MenuItemBuilder, SubmenuBuilder};
-use tauri::{AppHandle, Emitter, Manager, Runtime, State};
+use tauri::{Emitter, Manager, Runtime, State};
 use tauri_plugin_dialog::DialogExt;
 use worktable::prelude::SelectQueryExecutor;
+
+#[cfg(feature = "blitz-runtime")]
+pub(crate) type AppHandle = tauri::AppHandle<tauri_runtime_blitz::BlitzRuntime>;
+#[cfg(not(feature = "blitz-runtime"))]
+pub(crate) type AppHandle = tauri::AppHandle<tauri::Wry>;
+
+#[cfg(feature = "blitz-runtime")]
+fn standard_identity_dir(bundle_dir: PathBuf) -> PathBuf {
+    bundle_dir
+        .parent()
+        .map(|parent| parent.join("com.pathscale.agencyzero"))
+        .unwrap_or(bundle_dir)
+}
 
 use crate::db::location::{self, DataLocation};
 use crate::db::tables::Tables;
 use crate::settings::GlobalSettings;
+
+#[cfg(feature = "blitz-runtime")]
+include!(concat!(env!("OUT_DIR"), "/blitz_embedded.rs"));
+
+#[cfg(feature = "blitz-runtime")]
+struct EmbeddedBlitzScriptFetcher;
+
+#[cfg(feature = "blitz-runtime")]
+impl blitz_script::ScriptFetcher for EmbeddedBlitzScriptFetcher {
+    fn fetch(&self, url: &url::Url) -> Result<String, blitz_script::FetchError> {
+        if url.as_str() == BLITZ_JS_URL {
+            decompress_blitz_asset(BLITZ_JS_BROTLI, BLITZ_JS_LEN, "JavaScript")
+                .map_err(blitz_script::FetchError::InvalidData)
+        } else {
+            blitz_script::DefaultScriptFetcher.fetch(url)
+        }
+    }
+}
+
+#[cfg(feature = "blitz-runtime")]
+fn decompress_blitz_asset(
+    compressed: &[u8],
+    expected_len: usize,
+    label: &str,
+) -> Result<String, String> {
+    let mut decoder = brotli::Decompressor::new(compressed, 4096);
+    let mut decoded = String::with_capacity(expected_len);
+    decoder
+        .read_to_string(&mut decoded)
+        .map_err(|error| format!("could not decompress embedded {label}: {error}"))?;
+    Ok(decoded)
+}
+
+#[cfg(feature = "blitz-runtime")]
+fn create_blitz_document(url: &str) -> Result<blitz_script::ScriptDocument, String> {
+    let css = decompress_blitz_asset(BLITZ_CSS_BROTLI, BLITZ_CSS_LEN, "CSS")?;
+    let html = BLITZ_SHELL_HTML.replacen(BLITZ_CSS_MARKER, &css, 1);
+    let config = blitz_dom::DocumentConfig {
+        base_url: Some(url.into()),
+        ..Default::default()
+    };
+    Ok(blitz_script::ScriptDocument::from_html(&html, config)
+        .with_fetcher(EmbeddedBlitzScriptFetcher))
+}
 
 /// Commands this build actually implements.
 ///
@@ -687,7 +746,7 @@ struct WorkspaceRoot {
 }
 
 /// Resolve the workspace root: the stored value, else `$HOME/AgencyZero`.
-fn resolve_workspace_root(app: &tauri::AppHandle, state: &AppState) -> WorkspaceRoot {
+fn resolve_workspace_root(app: &AppHandle, state: &AppState) -> WorkspaceRoot {
     let stored = state
         .tables
         .kv_get(settings::KEY)
@@ -710,12 +769,12 @@ fn resolve_workspace_root(app: &tauri::AppHandle, state: &AppState) -> Workspace
 }
 
 /// The workspace root as a plain path, for callers that need somewhere to run.
-pub(crate) fn workspace_root_path(app: &tauri::AppHandle, state: &AppState) -> String {
+pub(crate) fn workspace_root_path(app: &AppHandle, state: &AppState) -> String {
     resolve_workspace_root(app, state).path
 }
 
 #[tauri::command]
-fn get_workspace_root(app: tauri::AppHandle, state: State<'_, AppState>) -> WorkspaceRoot {
+fn get_workspace_root(app: AppHandle, state: State<'_, AppState>) -> WorkspaceRoot {
     resolve_workspace_root(&app, &state)
 }
 
@@ -729,7 +788,7 @@ fn get_workspace_root(app: tauri::AppHandle, state: State<'_, AppState>) -> Work
 /// Returns the IO error as a string when the directory cannot be created.
 #[tauri::command]
 fn create_workspace_root(
-    app: tauri::AppHandle,
+    app: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<WorkspaceRoot, String> {
     let resolved = resolve_workspace_root(&app, &state);
@@ -1304,7 +1363,7 @@ const RESTART: &str = "restart";
 /// which owns the tab strip and the close confirmation. A menu accelerator
 /// beats a webview keybinding for these because macOS delivers it whatever has
 /// focus, and because it puts the shortcut somewhere discoverable.
-fn build_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> {
+fn build_menu<R: Runtime>(app: &tauri::AppHandle<R>) -> tauri::Result<Menu<R>> {
     let quit = MenuItemBuilder::with_id(QUIT, "Quit AgencyZero")
         .accelerator("CmdOrCtrl+Q")
         .build(app)?;
@@ -1681,7 +1740,15 @@ fn main() {
         eprintln!("{info}");
     }));
 
-    tauri::Builder::default()
+    #[cfg(feature = "blitz-runtime")]
+    tauri_runtime_blitz::set_document_factory(create_blitz_document);
+
+    #[cfg(feature = "blitz-runtime")]
+    let builder = tauri_runtime_blitz::builder();
+    #[cfg(not(feature = "blitz-runtime"))]
+    let builder = tauri::Builder::default();
+
+    builder
         .plugin(tauri_plugin_updater::Builder::new().build())
         // Called from Rust only, so no capability entry: the permissions in
         // `capabilities/default.json` gate the plugin's *JavaScript* commands,
@@ -1798,6 +1865,18 @@ fn main() {
                 .path()
                 .app_data_dir()
                 .map_err(|error| format!("no data directory: {error}"))?;
+
+            // The separately named Blitz test bundle must not share a bundle
+            // identifier with the WebKit app: LaunchServices otherwise
+            // activates whichever process already owns that identity. The
+            // owner normally runs the experimental profile, so this standard
+            // build uses the non-experimental profile's real store. That keeps
+            // backend behavior realistic while allowing both apps to run for
+            // side-by-side renderer testing.
+            #[cfg(feature = "blitz-runtime")]
+            let config_dir = standard_identity_dir(config_dir);
+            #[cfg(feature = "blitz-runtime")]
+            let data_dir = standard_identity_dir(data_dir);
 
             // Before anything that can fail, so whatever happens next is on the
             // record. Opening the tables is the first thing that can, and it is
