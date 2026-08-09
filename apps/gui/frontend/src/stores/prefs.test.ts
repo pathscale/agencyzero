@@ -98,4 +98,20 @@ describe("workspace layout", () => {
     setPrefs("composerDrafts", "project:abc", "");
     setPrefs("replyQuestionIds", "project:abc", "");
   });
+
+  it("restores portable preferences when Web Storage is unavailable", () => {
+    const storage = window.localStorage;
+    Object.defineProperty(window, "localStorage", { writable: true, value: undefined });
+
+    try {
+      setPrefs("uiSize", "extra-large");
+      expect(() => preparePortablePrefsRestore()).not.toThrow();
+      expect(() =>
+        restorePortablePrefs({ uiSize: "normal" }, "backup-without-web-storage"),
+      ).not.toThrow();
+      expect(prefs.uiSize).toBe("normal");
+    } finally {
+      Object.defineProperty(window, "localStorage", { writable: true, value: storage });
+    }
+  });
 });
