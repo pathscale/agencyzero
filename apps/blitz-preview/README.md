@@ -2,7 +2,9 @@
 
 This is an isolated native preview of the production AgencyZero frontend on Blitz + Boa. It
 uses the frontend's built-in mock backend, Tauri with `tauri-runtime-blitz`, winit windowing,
-Vello's CPU renderer, and softbuffer presentation. It does not link Wry, V8, or a GPU renderer.
+and Vello/wgpu rendering. On macOS, wgpu presents through Metal. The CPU renderer remains in
+the preview for deterministic headless captures and as a reference fallback. It does not link
+Wry or V8.
 The bottom-right status banner exercises a real Tauri `greet` command and reports whether its
 response returned through Boa.
 
