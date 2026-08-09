@@ -75,6 +75,22 @@ FemtoVG demonstrates retained glyph atlases, batched vertices and commands, tigh
 
 Reference: https://github.com/femtovg/femtovg
 
+### Treat browser-quality text as a correctness requirement
+
+AgencyZero is a text-reading application. Font output must remain clean, stable, and comfortable at
+normal and Retina scales. A roughly one-percent rendering cost is an acceptable trade for visibly
+better text; font quality must not be reduced merely to improve a throughput benchmark.
+
+Preserve correct font fallback, shaping, kerning, ligatures, variable-font axes, weight/style
+selection, line metrics, baselines, glyph positioning, hinting, and antialiasing. Optimize font
+discovery, shaped-run caches, glyph atlases, and GPU batching only when cached and uncached output
+remain equivalent. Validate long chat/browser-like passages, small secondary text, bold labels,
+mixed scripts, emoji, zoom, and Retina scale transitions against the platform/WebKit reference.
+
+Performance measurements should identify text cost separately, but the quality baseline is the
+constraint: accept about a one-percent regression for materially cleaner text, and require explicit
+visual evidence before adopting any faster lower-quality mode.
+
 ### Keep runtime data compact and renderer backends replaceable
 
 Slint stores component elements, items, and properties in compact regions to reduce allocation overhead, while keeping rendering backends selectable behind one runtime boundary. Its compiler can eliminate constant or unchanged property work before runtime.
@@ -186,6 +202,7 @@ The local AgencyZero item tracker contains separate workstreams for:
 - retained scene reuse and dirty-region rendering
 - Linux and Windows performance/rendering validation
 - glyph and path caches with batched GPU submission
+- browser-quality font shaping and rendering parity
 - CPU-versus-GPU latency, startup, and resident-memory comparison
 - benchmark-driven evaluation of WorkTable for complex tabular application state
 
