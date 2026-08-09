@@ -102,10 +102,15 @@ const ITEM_DOT: Record<ProjectStatus, string> = {
 export function ItemMarker(props: { status: ProjectStatus }): JSX.Element {
   return (
     <Show
-      when={props.status !== "finished"}
-      fallback={<Icon name="check" class="relative top-0.5 shrink-0 text-[12px] text-success" />}
+      when={props.status !== "questions"}
+      fallback={<Icon name="circle-help" class="shrink-0 text-[13px] text-warning" />}
     >
-      <span class={`size-2 shrink-0 rounded-full ${ITEM_DOT[props.status] ?? ITEM_DOT.new}`} />
+      <Show
+        when={props.status !== "finished"}
+        fallback={<Icon name="check" class="relative top-0.5 shrink-0 text-[12px] text-success" />}
+      >
+        <span class={`size-2 shrink-0 rounded-full ${ITEM_DOT[props.status] ?? ITEM_DOT.new}`} />
+      </Show>
     </Show>
   );
 }

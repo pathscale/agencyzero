@@ -494,7 +494,7 @@ export function ProjectTab(props: { tab: Tab; project: Project }): JSX.Element {
           aria-hidden={!prefs.projectPanelVisible}
           class={`min-h-0 flex-none overflow-hidden transition-[width,margin,opacity,transform] duration-200 ease-out motion-reduce:transition-none ${
             prefs.projectPanelVisible
-              ? "ml-4 w-[322px] translate-x-0 opacity-100"
+              ? "ml-4 w-[332px] translate-x-0 opacity-100"
               : "pointer-events-none ml-0 w-0 translate-x-3 opacity-0"
           }`}
         >
