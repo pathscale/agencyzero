@@ -17,6 +17,89 @@ use std::process::ExitCode;
 fn main() -> ExitCode {
     let mut args: Vec<String> = std::env::args().skip(1).collect();
 
+    if args.first().map(String::as_str) == Some("merge-message-window") {
+        args.remove(0);
+        let [source, target, project, after, before] = args.as_slice() else {
+            eprintln!(
+                "usage: wt-migrate merge-message-window <source-store> <target-store> <project-id> <after-inclusive> <before-exclusive>"
+            );
+            return ExitCode::from(2);
+        };
+        let source = PathBuf::from(source);
+        let target = PathBuf::from(target);
+        if source == target || source.canonicalize().ok() == target.canonicalize().ok() {
+            eprintln!("the source and target are the same store; nothing was touched");
+            return ExitCode::from(2);
+        }
+        let (_source_lock, _target_lock) = match (
+            wt_migrate::lock_store(&source),
+            wt_migrate::lock_store(&target),
+        ) {
+            (Ok(source_lock), Ok(target_lock)) => (source_lock, target_lock),
+            (Err(message), _) | (_, Err(message)) => {
+                eprintln!("{message}");
+                return ExitCode::FAILURE;
+            }
+        };
+        let runtime = tokio::runtime::Builder::new_multi_thread()
+            .worker_threads(2)
+            .enable_io()
+            .enable_time()
+            .build()
+            .expect("runtime");
+        return match runtime.block_on(wt_migrate::merge_message_window(
+            &source, &target, project, after, before,
+        )) {
+            Ok(report) => {
+                println!(
+                    "message window: {} candidate(s), {} inserted, {} already present",
+                    report.candidates, report.inserted, report.already_present
+                );
+                ExitCode::SUCCESS
+            }
+            Err(error) => {
+                eprintln!("message-window merge failed: {error:#}");
+                ExitCode::FAILURE
+            }
+        };
+    }
+
+    if args.first().map(String::as_str) == Some("restore-session") {
+        args.remove(0);
+        let [target, project, agent, session] = args.as_slice() else {
+            eprintln!(
+                "usage: wt-migrate restore-session <target-store> <project-id> <claude|codex> <session-id>"
+            );
+            return ExitCode::from(2);
+        };
+        let target = PathBuf::from(target);
+        let _target_lock = match wt_migrate::lock_store(&target) {
+            Ok(lock) => lock,
+            Err(message) => {
+                eprintln!("{message}");
+                return ExitCode::FAILURE;
+            }
+        };
+        let runtime = tokio::runtime::Builder::new_multi_thread()
+            .worker_threads(2)
+            .enable_io()
+            .enable_time()
+            .build()
+            .expect("runtime");
+        return match runtime.block_on(wt_migrate::restore_provider_session(
+            &target, project, agent, session,
+        )) {
+            Ok(()) => {
+                println!("restored {agent} session {session} for {project}");
+                ExitCode::SUCCESS
+            }
+            Err(error) => {
+                eprintln!("session restore failed: {error:#}");
+                ExitCode::FAILURE
+            }
+        };
+    }
+
     if args.first().map(String::as_str) == Some("salvage-pull-request-index") {
         args.remove(0);
         let [source, target] = args.as_slice() else {

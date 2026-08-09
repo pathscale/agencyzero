@@ -67,11 +67,133 @@ pub struct TaskLogRecoveryReport {
     pub projects: usize,
 }
 
+#[cfg(test)]
+mod profile_repair_tests {
+    use super::*;
+    use app_schema::kv::{KvPersistenceEngine, KvWorkTable};
+    use app_schema::message::{MessagePersistenceEngine, MessageRow, MessageWorkTable};
+
+    async fn open_messages(dir: &Path) -> MessageWorkTable {
+        let config = DiskConfig::new_with_table_name(
+            dir.to_string_lossy().into_owned(),
+            MessageWorkTable::name_snake_case(),
+            MessageWorkTable::version(),
+        );
+        let engine = MessagePersistenceEngine::new(config).await.unwrap();
+        MessageWorkTable::load(engine).await.unwrap()
+    }
+
+    fn message(id: &str, project: &str, at: &str) -> MessageRow {
+        MessageRow {
+            id: id.into(),
+            project_id: project.into(),
+            item_id: String::new(),
+            author: "user".into(),
+            agent: "codex".into(),
+            moderation: String::new(),
+            model: "gpt-test".into(),
+            permission: "auto".into(),
+            usage: String::new(),
+            stop: "completed".into(),
+            exit_code: 0,
+            body: id.into(),
+            created_at: at.into(),
+        }
+    }
+
+    #[tokio::test]
+    async fn message_window_merge_is_bounded_verified_and_idempotent() {
+        let temp = tempfile::tempdir().unwrap();
+        let source = temp.path().join("source");
+        let target = temp.path().join("target");
+        let source_table = open_messages(&source).await;
+        for row in [
+            message("before", "project", "2026-08-09T20:01:59+00:00"),
+            message("wanted", "project", "2026-08-09T20:02:00+00:00"),
+            message("other-project", "other", "2026-08-09T20:03:00+00:00"),
+            message("after", "project", "2026-08-09T20:20:00+00:00"),
+        ] {
+            source_table.insert(row).unwrap();
+        }
+        source_table.wait_for_ops().await.unwrap();
+        source_table.close().await.unwrap();
+
+        let report = merge_message_window(
+            &source,
+            &target,
+            "project",
+            "2026-08-09T20:02:00+00:00",
+            "2026-08-09T20:20:00+00:00",
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            report,
+            MessageMergeReport {
+                candidates: 1,
+                inserted: 1,
+                already_present: 0,
+            }
+        );
+        let repeated = merge_message_window(
+            &source,
+            &target,
+            "project",
+            "2026-08-09T20:02:00+00:00",
+            "2026-08-09T20:20:00+00:00",
+        )
+        .await
+        .unwrap();
+        assert_eq!(repeated.inserted, 0);
+        assert_eq!(repeated.already_present, 1);
+    }
+
+    #[tokio::test]
+    async fn session_restore_refuses_to_replace_a_different_live_pointer() {
+        let temp = tempfile::tempdir().unwrap();
+        let target = temp.path().join("target");
+        restore_provider_session(&target, "project", "codex", "recovered")
+            .await
+            .unwrap();
+        restore_provider_session(&target, "project", "codex", "recovered")
+            .await
+            .unwrap();
+        let error = restore_provider_session(&target, "project", "codex", "different")
+            .await
+            .unwrap_err();
+        assert!(error.to_string().contains("another nonempty session"));
+
+        let config = DiskConfig::new_with_table_name(
+            target.to_string_lossy().into_owned(),
+            KvWorkTable::name_snake_case(),
+            KvWorkTable::version(),
+        );
+        let engine = KvPersistenceEngine::new(config).await.unwrap();
+        let table = KvWorkTable::load(engine).await.unwrap();
+        let row = table
+            .select_all()
+            .execute()
+            .unwrap()
+            .into_iter()
+            .find(|row| row.key == "session:codex:project")
+            .unwrap();
+        assert_eq!(row.value, "recovered");
+    }
+}
+
 /// Result of rebuilding a transcript through its surviving primary index.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct MessageRecoveryReport {
     pub rows: usize,
     pub projects: usize,
+}
+
+/// Result of merging an explicitly bounded transcript window into a store.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct MessageMergeReport {
+    pub candidates: usize,
+    pub inserted: usize,
+    pub already_present: usize,
 }
 
 /// Result of rebuilding pull requests through their surviving primary index.
@@ -469,6 +591,150 @@ pub mod app_schema {
     pub mod pull_request;
     pub mod task_log;
     pub mod usage_ledger;
+}
+
+/// Merge one project's bounded message window into an existing store.
+///
+/// Rows retain their original ids and timestamps. Existing ids are skipped,
+/// making a repair safe to re-run after interruption. The caller must hold
+/// both stores' process locks for the whole operation.
+pub async fn merge_message_window(
+    source: &Path,
+    target: &Path,
+    project_id: &str,
+    after_inclusive: &str,
+    before_exclusive: &str,
+) -> eyre::Result<MessageMergeReport> {
+    use app_schema::message::{MessagePersistenceEngine, MessageWorkTable};
+
+    let open = |dir: &Path| {
+        let config = DiskConfig::new_with_table_name(
+            dir.to_string_lossy().into_owned(),
+            MessageWorkTable::name_snake_case(),
+            MessageWorkTable::version(),
+        );
+        async move {
+            let engine = MessagePersistenceEngine::new(config).await?;
+            MessageWorkTable::load(engine).await
+        }
+    };
+
+    let source_table = open(source).await?;
+    let mut candidates: Vec<_> = source_table
+        .select_all()
+        .execute()?
+        .into_iter()
+        .filter(|row| {
+            row.project_id == project_id
+                && row.created_at.as_str() >= after_inclusive
+                && row.created_at.as_str() < before_exclusive
+        })
+        .collect();
+    candidates.sort_by(|left, right| left.created_at.cmp(&right.created_at));
+
+    let target_table = open(target).await?;
+    let mut target_ids: BTreeSet<String> = target_table
+        .select_all()
+        .execute()?
+        .into_iter()
+        .map(|row| row.id)
+        .collect();
+    let mut inserted = 0;
+    for row in &candidates {
+        if target_ids.insert(row.id.clone()) {
+            target_table
+                .insert(row.clone())
+                .map_err(|error| eyre::eyre!("message {}: {error}", row.id))?;
+            inserted += 1;
+        }
+    }
+    target_table
+        .wait_for_ops()
+        .await
+        .map_err(|error| eyre::eyre!("message persistence failed: {error}"))?;
+
+    let verified: BTreeSet<String> = target_table
+        .select_all()
+        .execute()?
+        .into_iter()
+        .map(|row| row.id)
+        .collect();
+    if let Some(missing) = candidates.iter().find(|row| !verified.contains(&row.id)) {
+        return Err(eyre::eyre!(
+            "message {} was absent after the merge drained",
+            missing.id
+        ));
+    }
+    source_table
+        .close()
+        .await
+        .map_err(|error| eyre::eyre!("could not close source message table: {error}"))?;
+    target_table
+        .close()
+        .await
+        .map_err(|error| eyre::eyre!("could not close target message table: {error}"))?;
+
+    Ok(MessageMergeReport {
+        candidates: candidates.len(),
+        inserted,
+        already_present: candidates.len() - inserted,
+    })
+}
+
+/// Restore one explicit provider-session pointer without overwriting a
+/// different nonempty pointer. The caller must hold the store lock.
+pub async fn restore_provider_session(
+    target: &Path,
+    project_id: &str,
+    agent: &str,
+    session_id: &str,
+) -> eyre::Result<()> {
+    use app_schema::kv::{KvPersistenceEngine, KvRow, KvWorkTable};
+
+    if session_id.is_empty() {
+        return Err(eyre::eyre!("a session id may not be empty"));
+    }
+    let key = match agent {
+        "claude" => format!("session:{project_id}"),
+        "codex" => format!("session:codex:{project_id}"),
+        other => return Err(eyre::eyre!("unsupported provider: {other}")),
+    };
+    let config = DiskConfig::new_with_table_name(
+        target.to_string_lossy().into_owned(),
+        KvWorkTable::name_snake_case(),
+        KvWorkTable::version(),
+    );
+    let engine = KvPersistenceEngine::new(config).await?;
+    let table = KvWorkTable::load(engine).await?;
+    if let Some(existing) = table
+        .select_all()
+        .execute()?
+        .into_iter()
+        .find(|row| row.key == key)
+        && !existing.value.is_empty()
+        && existing.value != session_id
+    {
+        return Err(eyre::eyre!(
+            "{agent} already points at another nonempty session: {}",
+            existing.value
+        ));
+    }
+    table
+        .upsert(KvRow {
+            key,
+            value: session_id.to_string(),
+            updated_at: chrono::Utc::now().to_rfc3339(),
+        })
+        .await?;
+    table
+        .wait_for_ops()
+        .await
+        .map_err(|error| eyre::eyre!("kv persistence failed: {error}"))?;
+    table
+        .close()
+        .await
+        .map_err(|error| eyre::eyre!("could not close kv table: {error}"))?;
+    Ok(())
 }
 
 /// Rebuild every table of a store, row by row, into a brand-new store.
