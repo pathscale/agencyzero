@@ -190,6 +190,30 @@ fn capture_preview(output: &std::path::Path) -> Result<(), String> {
         document.poll(None);
     }
 
+    if let Ok(script) = std::env::var("BLITZ_CAPTURE_EVAL") {
+        for (index, step) in script.split("/* BLITZ_STEP */").enumerate() {
+            document.inner_mut().resolve(0.0);
+            trace(&format!("headless capture script step {index} started"));
+            match document.eval_json(step) {
+                Ok(result) => trace(&format!(
+                    "headless capture script step {index} result: {result}"
+                )),
+                Err(error) => trace(&format!(
+                    "headless capture script step {index} failed: {error}"
+                )),
+            }
+            for _ in 0..3 {
+                std::thread::sleep(std::time::Duration::from_millis(20));
+                document.eval("void 0");
+                document.poll(None);
+            }
+            trace(&format!("headless capture script step {index} completed"));
+        }
+    }
+    document.eval(
+        "const status = document.getElementById('native-ipc-status'); if (status && status.parentNode) status.parentNode.removeChild(status);",
+    );
+
     let mut doc = document.inner_mut();
     doc.resolve(0.0);
     let buffer = render_to_buffer::<VelloCpuImageRenderer, _>(
