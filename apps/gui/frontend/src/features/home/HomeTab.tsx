@@ -947,9 +947,7 @@ function GroupItemRow(props: {
               onClick={() =>
                 void actions
                   .deleteItem(props.item.id)
-                  .catch((cause) =>
-                    log.error(`could not delete the item: ${describeError(cause)}`),
-                  )
+                  .catch((cause) => log.error(`could not delete the item: ${describeError(cause)}`))
               }
               aria-label={tx("Delete {name}", { name: props.item.title })}
               title={tx("Delete this item")}

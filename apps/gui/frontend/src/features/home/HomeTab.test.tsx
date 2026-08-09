@@ -50,11 +50,7 @@ describe("Home item rows", () => {
       deleteProposed: true,
     };
     const screen = render(() => (
-      <CleanupRowActions
-        item={item}
-        onKeep={onKeep}
-        onConfirm={onConfirm}
-      />
+      <CleanupRowActions item={item} onKeep={onKeep} onConfirm={onConfirm} />
     ));
 
     expect(screen.getByRole("checkbox", { name: "Delete Review before deleting" })).toBeChecked();
