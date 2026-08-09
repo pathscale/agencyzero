@@ -1,6 +1,8 @@
-use blitz_dom::{Document, DocumentConfig};
+#[cfg(any(test, feature = "capture"))]
+use blitz_dom::Document;
+use blitz_dom::DocumentConfig;
 use blitz_script::{DefaultScriptFetcher, FetchError, ScriptDocument, ScriptFetcher};
-#[cfg(not(test))]
+#[cfg(all(not(test), feature = "capture"))]
 use blitz_traits::shell::{ColorScheme, Viewport};
 use brotli::Decompressor;
 #[cfg(not(test))]
@@ -61,13 +63,13 @@ impl ScriptFetcher for EmbeddedScriptFetcher {
     }
 }
 
-#[cfg(not(test))]
+#[cfg(all(not(test), feature = "capture"))]
 struct CapturedScriptFetcher {
     url: String,
     javascript: String,
 }
 
-#[cfg(not(test))]
+#[cfg(all(not(test), feature = "capture"))]
 impl ScriptFetcher for CapturedScriptFetcher {
     fn fetch(&self, url: &Url) -> Result<String, FetchError> {
         if url.as_str() == self.url {
@@ -101,7 +103,7 @@ fn create_document(url: &str) -> Result<ScriptDocument, String> {
     Ok(document)
 }
 
-#[cfg(not(test))]
+#[cfg(all(not(test), feature = "capture"))]
 fn create_dist_document(dist: &std::path::Path, url: &str) -> Result<ScriptDocument, String> {
     fn asset_url<'a>(html: &'a str, attribute: &str) -> Result<&'a str, String> {
         let marker = format!("{attribute}=\"");
@@ -152,7 +154,7 @@ fn create_dist_document(dist: &std::path::Path, url: &str) -> Result<ScriptDocum
     )
 }
 
-#[cfg(not(test))]
+#[cfg(all(not(test), feature = "capture"))]
 fn capture_preview(output: &std::path::Path) -> Result<(), String> {
     use anyrender::render_to_buffer;
     use anyrender_vello_cpu::VelloCpuImageRenderer;
@@ -295,14 +297,29 @@ fn main() {
     reset_trace();
     trace("main entered");
     #[cfg(not(test))]
+    // SAFETY: this is the first operation in `main`, before the runtime starts any threads.
+    unsafe {
+        std::env::set_var("BLITZ_FRAME_STATS", "1");
+        std::env::set_var("BLITZ_FRAME_STATS_FILE", TRACE_PATH);
+    }
+    #[cfg(not(test))]
     {
         if let Some(output) = std::env::var_os("AGENCYZERO_BLITZ_CAPTURE") {
-            let output = std::path::PathBuf::from(output);
-            if let Err(error) = capture_preview(&output) {
-                trace(&format!("headless capture failed: {error}"));
-                std::process::exit(1);
+            #[cfg(feature = "capture")]
+            {
+                let output = std::path::PathBuf::from(output);
+                if let Err(error) = capture_preview(&output) {
+                    trace(&format!("headless capture failed: {error}"));
+                    std::process::exit(1);
+                }
+                return;
             }
-            return;
+            #[cfg(not(feature = "capture"))]
+            {
+                let _ = output;
+                trace("headless capture requested, but this build excludes the capture feature");
+                std::process::exit(2);
+            }
         }
     }
     set_runtime_trace(trace);

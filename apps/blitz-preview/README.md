@@ -19,5 +19,8 @@ The Rust build script embeds the generated CSS and JavaScript into the executabl
 preview is the first native Tauri IPC checkpoint. The production command table remains mock-backed
 until each AgencyZero command is exposed through the runtime.
 
+The normal release bundle excludes the CPU image renderer. Build or run with `--features capture`
+when deterministic PNG capture support is required.
+
 The normal Finder launch opens no control port. Debug-control reintegration follows after the
 concrete runtime window is stable.
