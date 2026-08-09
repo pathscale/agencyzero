@@ -1,6 +1,6 @@
 import { onCleanup, onMount } from "solid-js";
 import { copyText } from "~/features/project/MessageBody";
-import { isTauri } from "~/lib/platform";
+import { isBlitz, isTauri } from "~/lib/platform";
 import { useWorkspace } from "~/stores/workspace";
 
 /**
@@ -86,7 +86,7 @@ export function useTabShortcuts(): void {
      * means a change in that behaviour cannot double-fire and silently skip a
      * tab.
      */
-    if (isTauri()) return;
+    if (isTauri() && !isBlitz()) return;
     if (!event.metaKey || event.ctrlKey) return;
 
     if (event.key === "n" || event.code === "KeyN") {

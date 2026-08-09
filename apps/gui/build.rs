@@ -53,7 +53,7 @@ fn embed_blitz_assets() {
     let css_len = compress_asset(&css_path, &output_dir.join("embedded.css.br"), quality);
     let js_len = compress_asset(&js_path, &output_dir.join("embedded.js.br"), quality);
     let html = format!(
-        "<!doctype html><html><head><title>AgencyZero</title><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><style>{CSS_MARKER}</style></head><body><div id=\"root\"></div><script src=\"{JS_URL}\"></script></body></html>"
+        "<!doctype html><html><head><title>AgencyZero</title><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><style>{CSS_MARKER}</style></head><body><div id=\"root\"></div><script>globalThis.__AGENCYZERO_BLITZ__=true</script><script src=\"{JS_URL}\"></script></body></html>"
     );
     let generated = format!(
         "const BLITZ_SHELL_HTML: &str = {html:?};\n\

@@ -1428,9 +1428,19 @@ fn build_menu<R: Runtime>(app: &tauri::AppHandle<R>) -> tauri::Result<Menu<R>> {
     let close_tab = MenuItemBuilder::with_id(CLOSE_TAB, "Close Tab")
         .accelerator("CmdOrCtrl+W")
         .build(app)?;
+    // macOS consumes a native menu accelerator before Blitz receives the key,
+    // while the custom runtime does not yet deliver that menu callback. Leave
+    // these two unclaimed in Blitz so its DOM keydown fallback can cycle tabs.
+    // WebKit keeps the native accelerators and their right-aligned menu labels.
+    #[cfg(feature = "blitz-runtime")]
+    let prev_tab = MenuItemBuilder::with_id(PREV_TAB, "Select Previous Tab (⌘1)").build(app)?;
+    #[cfg(not(feature = "blitz-runtime"))]
     let prev_tab = MenuItemBuilder::with_id(PREV_TAB, "Select Previous Tab")
         .accelerator("CmdOrCtrl+1")
         .build(app)?;
+    #[cfg(feature = "blitz-runtime")]
+    let next_tab = MenuItemBuilder::with_id(NEXT_TAB, "Select Next Tab (⌘2)").build(app)?;
+    #[cfg(not(feature = "blitz-runtime"))]
     let next_tab = MenuItemBuilder::with_id(NEXT_TAB, "Select Next Tab")
         .accelerator("CmdOrCtrl+2")
         .build(app)?;
