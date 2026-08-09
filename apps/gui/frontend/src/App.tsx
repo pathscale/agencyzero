@@ -1,4 +1,15 @@
-import { type JSX, Match, onCleanup, onMount, Show, Switch } from "solid-js";
+import {
+  createEffect,
+  createMemo,
+  createSignal,
+  For,
+  type JSX,
+  Match,
+  onCleanup,
+  onMount,
+  Show,
+  Switch,
+} from "solid-js";
 import { Icon } from "~/components/Icon";
 import { IconSprite } from "~/components/IconSprite";
 import { AnalyticsTab } from "~/features/analytics/AnalyticsTab";
@@ -14,16 +25,45 @@ import { installSelectionCopy } from "~/lib/clipboard";
 import { tx } from "~/stores/i18n";
 import { useWorkspace, WorkspaceProvider } from "~/stores/workspace";
 
+export const RETAINED_PROJECT_LIMIT = 8;
+
+export function nextRetainedProjects(
+  current: readonly string[],
+  active: string | null,
+  open: readonly string[],
+): string[] {
+  const openSet = new Set(open);
+  const next = current.filter((key) => openSet.has(key) && key !== active);
+  if (active && openSet.has(active)) next.push(active);
+  return next.slice(-RETAINED_PROJECT_LIMIT);
+}
+
 /**
  * The window: a tab strip over one screen at a time.
  *
- * Only the active tab is mounted. A background tab holds no DOM — its state
- * lives in the workspace store and its dot in the strip, which is the whole
- * point of the dot.
+ * Home and the eight most recently visited project tabs retain their DOM. That
+ * makes the common back-and-forth path a visibility toggle instead of a full
+ * Solid/Boa reconstruction, while the hard limit prevents a long-lived tab
+ * strip from rebuilding the old unbounded background DOM.
  */
-function Workspace(): JSX.Element {
+export function Workspace(): JSX.Element {
   const { state, actions, activeTab, activeProject } = useWorkspace();
   const shell = useAppShell();
+  const [retainedProjects, setRetainedProjects] = createSignal<string[]>([]);
+
+  createEffect(() => {
+    const active = activeTab();
+    const activeProjectId = active.kind === "project" ? active.projectId : null;
+    const openProjectIds = state.tabs.flatMap((tab) =>
+      tab.kind === "project" && tab.projectId ? [tab.projectId] : [],
+    );
+    setRetainedProjects((current) => {
+      const next = nextRetainedProjects(current, activeProjectId, openProjectIds);
+      return next.length === current.length && next.every((key, index) => key === current[index])
+        ? current
+        : next;
+    });
+  });
 
   return (
     <div class="az-desk relative flex h-full flex-col overflow-hidden">
@@ -67,39 +107,69 @@ function Workspace(): JSX.Element {
             </Show>
           }
         >
-          <Switch>
-            <Match when={activeTab().kind === "home"}>
-              <HomeTab />
-            </Match>
-            <Match when={activeTab().kind === "settings"}>
-              <SettingsTab />
-            </Match>
-            <Match when={activeTab().kind === "analytics"}>
-              <AnalyticsTab />
-            </Match>
-            <Match when={activeTab().kind === "draft"}>
-              <DraftTab tab={activeTab()} />
-            </Match>
-            <Match when={activeTab().kind === "project" && activeProject()}>
-              {(project) => <ProjectTab tab={activeTab()} project={project()} />}
-            </Match>
+          <div
+            data-retained-tab="home"
+            aria-hidden={activeTab().kind !== "home"}
+            class={activeTab().kind === "home" ? "flex min-h-0 min-w-0 flex-1" : "hidden"}
+          >
+            <HomeTab />
+          </div>
+
+          <For each={retainedProjects()}>
+            {(projectId) => {
+              const view = createMemo(() => {
+                const project = state.projects.find((candidate) => candidate.id === projectId);
+                const tab = state.tabs.find((candidate) => candidate.key === projectId);
+                return project && tab ? { project, tab } : null;
+              });
+              return (
+                <Show when={view()}>
+                  {(retained) => (
+                    <div
+                      data-retained-project={projectId}
+                      aria-hidden={state.activeKey !== projectId}
+                      class={
+                        state.activeKey === projectId ? "flex min-h-0 min-w-0 flex-1" : "hidden"
+                      }
+                    >
+                      <ProjectTab tab={retained().tab} project={retained().project} />
+                    </div>
+                  )}
+                </Show>
+              );
+            }}
+          </For>
+
+          <Show when={activeTab().kind !== "home" && activeTab().kind !== "project"}>
+            <Switch>
+              <Match when={activeTab().kind === "settings"}>
+                <SettingsTab />
+              </Match>
+              <Match when={activeTab().kind === "analytics"}>
+                <AnalyticsTab />
+              </Match>
+              <Match when={activeTab().kind === "draft"}>
+                <DraftTab tab={activeTab()} />
+              </Match>
+            </Switch>
+          </Show>
+
+          <Show when={activeTab().kind === "project" && !activeProject()}>
             {/*
               A project tab whose record is not in state. Previously this matched
               nothing and the window rendered an unexplained black void, which is
               the worst possible failure: no content, no error, no way to tell a
               missing record from a broken render.
             */}
-            <Match when={activeTab().kind === "project"}>
-              <div class="flex min-w-0 flex-1 flex-col items-center justify-center gap-2 rounded-panel border border-az-hairline bg-az-sunken">
-                <p class="text-[13.5px] text-az-title">{tx("This project could not be loaded")}</p>
-                <p class="max-w-[420px] text-center text-[11.5px] text-az-muted">
-                  {tx(
-                    "The tab is open but its record is missing from the workspace. Reopening the window will re-read it from the database.",
-                  )}
-                </p>
-              </div>
-            </Match>
-          </Switch>
+            <div class="flex min-w-0 flex-1 flex-col items-center justify-center gap-2 rounded-panel border border-az-hairline bg-az-sunken">
+              <p class="text-[13.5px] text-az-title">{tx("This project could not be loaded")}</p>
+              <p class="max-w-[420px] text-center text-[11.5px] text-az-muted">
+                {tx(
+                  "The tab is open but its record is missing from the workspace. Reopening the window will re-read it from the database.",
+                )}
+              </p>
+            </div>
+          </Show>
         </Show>
       </main>
 
