@@ -137,9 +137,7 @@ export function Workspace(): JSX.Element {
                       data-retained-project={projectId}
                       aria-hidden={state.activeKey !== projectId}
                       class={
-                        state.activeKey === projectId
-                          ? "flex min-h-0 min-w-0 flex-1"
-                          : "hidden"
+                        state.activeKey === projectId ? "flex min-h-0 min-w-0 flex-1" : "hidden"
                       }
                     >
                       <ProjectTab tab={retained().tab} project={retained().project} />
