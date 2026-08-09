@@ -155,7 +155,12 @@ fn run(command: Command) -> eyre::Result<()> {
             }
             Command::ListItems { project } => {
                 let table = agency_tools::open_items(&dir).await?;
-                print_lines(&agency_tools::list_items(&table, project.as_deref())?)
+                let kv = agency_tools::open_kv(&dir).await?;
+                print_lines(&agency_tools::list_items_with_descriptions(
+                    &table,
+                    &kv,
+                    project.as_deref(),
+                )?)
             }
             Command::SearchItems { query } => {
                 let table = agency_tools::open_items(&dir).await?;

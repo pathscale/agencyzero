@@ -65,6 +65,7 @@ pub mod usage_cache;
 pub mod usage_ledger;
 
 use approval_rule::{ApprovalRuleRow, ApprovalRuleWorkTable};
+use kv::KvWorkTable;
 use message::{MessageRow, MessageWorkTable};
 use project::{ProjectRow, ProjectWorkTable};
 use project_item::{ProjectItemRow, ProjectItemWorkTable};
@@ -154,6 +155,11 @@ open_read_only!(
     ProjectItemWorkTable
 );
 open_read_only!(
+    /// The key/value table holding item descriptions, read-only.
+    open_kv,
+    KvWorkTable
+);
+open_read_only!(
     /// The remembered-approval table, read-only.
     open_rules,
     ApprovalRuleWorkTable
@@ -227,6 +233,7 @@ pub struct ItemOut {
     pub title: String,
     pub status: String,
     pub position: u32,
+    pub description: String,
 }
 
 impl From<ProjectItemRow> for ItemOut {
@@ -237,6 +244,7 @@ impl From<ProjectItemRow> for ItemOut {
             title: row.title,
             status: row.status,
             position: row.position,
+            description: String::new(),
         }
     }
 }
@@ -507,6 +515,37 @@ pub fn list_items(
     }
     sort_items(&mut rows);
     Ok(rows.into_iter().map(ItemOut::from).collect())
+}
+
+/// Items with their owner-authored descriptions joined from the key/value table.
+///
+/// Descriptions deliberately remain outside the item schema so adding this UI
+/// field never requires migrating every item row. The read-only CLI joins the
+/// two app-owned tables for the same complete view Home renders.
+///
+/// # Errors
+/// Returns a read error from either table.
+pub fn list_items_with_descriptions(
+    items: &ProjectItemWorkTable,
+    kv: &KvWorkTable,
+    project: Option<&str>,
+) -> eyre::Result<Vec<ItemOut>> {
+    const ITEM_CONTEXT_PREFIX: &str = "item-context:";
+    let descriptions: std::collections::HashMap<String, String> = kv
+        .select_all()
+        .execute()?
+        .into_iter()
+        .filter_map(|row| {
+            row.key
+                .strip_prefix(ITEM_CONTEXT_PREFIX)
+                .map(|id| (id.to_string(), row.value))
+        })
+        .collect();
+    let mut rows = list_items(items, project)?;
+    for row in &mut rows {
+        row.description = descriptions.get(&row.id).cloned().unwrap_or_default();
+    }
+    Ok(rows)
 }
 
 /// One transcript row as the CLI prints it.

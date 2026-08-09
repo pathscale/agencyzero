@@ -6,6 +6,7 @@ use std::path::{Path, PathBuf};
 // `new` on the engine is a `PersistenceEngine` method and `load` a
 // `PersistedWorkTable` one, so both traits have to be in scope even though
 // nothing here names them.
+use agency_tools::kv::{KvPersistenceEngine, KvRow, KvWorkTable};
 use agency_tools::project::{ProjectPersistenceEngine, ProjectRow, ProjectWorkTable};
 use agency_tools::project_item::{
     ProjectItemPersistenceEngine, ProjectItemRow, ProjectItemWorkTable,
@@ -80,6 +81,20 @@ async fn write_items(dir: &Path, rows: Vec<ProjectItemRow>) {
         .expect("project item rows persist");
 }
 
+async fn write_descriptions(dir: &Path, rows: Vec<KvRow>) {
+    let config = DiskConfig::new_with_table_name(
+        dir.to_string_lossy().to_string(),
+        KvWorkTable::name_snake_case(),
+        KvWorkTable::version(),
+    );
+    let engine = KvPersistenceEngine::new(config).await.unwrap();
+    let table = KvWorkTable::load(engine).await.unwrap();
+    for row in rows {
+        table.insert(row).unwrap();
+    }
+    table.wait_for_ops().await.expect("descriptions persist");
+}
+
 /// Every byte of every file under `dir`, so a read can be proven writeless.
 fn store_bytes(dir: &Path) -> Vec<(PathBuf, Vec<u8>)> {
     let mut files = vec![];
@@ -136,8 +151,18 @@ async fn items_filter_and_search() {
         ],
     )
     .await;
+    write_descriptions(
+        &dir,
+        vec![KvRow {
+            key: "item-context:item-2".into(),
+            value: "Explain the release outcome".into(),
+            updated_at: "2026-08-09T00:00:00Z".into(),
+        }],
+    )
+    .await;
 
     let table = agency_tools::open_items(&dir).await.unwrap();
+    let kv = agency_tools::open_kv(&dir).await.unwrap();
 
     let all = agency_tools::list_items(&table, None).unwrap();
     assert_eq!(all.len(), 3);
@@ -145,6 +170,11 @@ async fn items_filter_and_search() {
     let only_a = agency_tools::list_items(&table, Some("proj-a")).unwrap();
     assert_eq!(only_a.len(), 2);
     assert!(only_a.iter().all(|item| item.project_id == "proj-a"));
+
+    let described = agency_tools::list_items_with_descriptions(&table, &kv, Some("proj-a"))
+        .expect("descriptions join");
+    assert_eq!(described[0].description, "");
+    assert_eq!(described[1].description, "Explain the release outcome");
 
     // Case-insensitive substring, across projects.
     let hits = agency_tools::search_items(&table, "DEPLOY").unwrap();
