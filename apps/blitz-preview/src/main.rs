@@ -112,6 +112,8 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use blitz_dom::Document;
+    use std::collections::HashSet;
 
     #[test]
     fn embedded_assets_are_compressed_and_round_trip() {
@@ -136,5 +138,61 @@ mod tests {
 
         assert_eq!(scripts.len(), 1);
         assert_eq!(scripts[0].as_str(), EMBEDDED_JS_URL);
+    }
+
+    #[test]
+    fn production_icon_uses_resolve_to_nonempty_svg_images() {
+        std::thread::Builder::new()
+            .name("production-icon-test".to_owned())
+            .stack_size(16 * 1024 * 1024)
+            .spawn(assert_production_icon_uses_resolve)
+            .unwrap()
+            .join()
+            .unwrap();
+    }
+
+    fn assert_production_icon_uses_resolve() {
+        let mut document = create_document("tauri://localhost/").unwrap();
+        document.execute_scripts();
+        document.inner_mut().resolve(0.0);
+
+        let doc = document.inner();
+        let use_ids = doc.query_selector_all("svg use").unwrap();
+        assert!(
+            !use_ids.is_empty(),
+            "production bundle rendered no SVG uses"
+        );
+
+        let mut svg_ids = HashSet::new();
+        for use_id in use_ids {
+            let mut current = doc.get_node(use_id).and_then(|node| node.parent);
+            while let Some(node_id) = current {
+                let node = doc.get_node(node_id).unwrap();
+                if node
+                    .element_data()
+                    .is_some_and(|element| element.name.local.as_ref() == "svg")
+                {
+                    svg_ids.insert(node_id);
+                    break;
+                }
+                current = node.parent;
+            }
+        }
+
+        assert!(
+            !svg_ids.is_empty(),
+            "no visible SVG ancestors found for uses"
+        );
+        for svg_id in svg_ids {
+            let tree = doc
+                .get_node(svg_id)
+                .and_then(|node| node.element_data())
+                .and_then(|element| element.svg_data())
+                .expect("visible SVG use was not parsed as an image");
+            assert!(
+                !tree.root().children().is_empty(),
+                "visible SVG use parsed to an empty image"
+            );
+        }
     }
 }
