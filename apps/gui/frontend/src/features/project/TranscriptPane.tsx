@@ -57,6 +57,19 @@ function holdBackPartialDirective(text: string): string {
   return closed === -1 ? text.slice(0, open) : text;
 }
 
+const TRANSCRIPT_PAGE_SIZE = 12;
+
+export function transcriptTail<T>(
+  entries: T[],
+  visibleCount: number,
+): {
+  hidden: number;
+  visible: T[];
+} {
+  const hidden = Math.max(0, entries.length - Math.max(1, visibleCount));
+  return { hidden, visible: entries.slice(hidden) };
+}
+
 /**
  * The conversation. Three voices, three shapes:
  * you (a right-aligned bubble), the agent (plain prose), and the moderator
@@ -86,6 +99,7 @@ export function TranscriptPane(props: {
    * bottom re-engages the follow.
    */
   const [pinned, setPinned] = createSignal(true);
+  const [visibleEntries, setVisibleEntries] = createSignal(TRANSCRIPT_PAGE_SIZE);
   let lastScrollTop = 0;
   const trackScroll = (): void => {
     const top = scroller.scrollTop;
@@ -215,6 +229,7 @@ export function TranscriptPane(props: {
       return 0;
     });
   });
+  const visibleTimeline = createMemo(() => transcriptTail(timeline(), visibleEntries()));
 
   // Follow the tail as content arrives: new messages, streaming deltas, the
   // status line appearing. Reading these is what subscribes the effect;
@@ -253,7 +268,18 @@ export function TranscriptPane(props: {
         {/* Messages and answered questions, threaded together by time, so an
             answered question sits where it was asked rather than in a pile at
             the bottom. */}
-        <For each={timeline()}>
+        <Show when={visibleTimeline().hidden > 0}>
+          <button
+            type="button"
+            onClick={() => setVisibleEntries((count) => count + TRANSCRIPT_PAGE_SIZE)}
+            class="mx-auto rounded-full border border-az-hairline-strong px-3 py-1 text-[11px] text-az-muted transition-colors hover:border-primary/50 hover:text-az-body"
+          >
+            {tx("Show {count} earlier messages", {
+              count: Math.min(TRANSCRIPT_PAGE_SIZE, visibleTimeline().hidden),
+            })}
+          </button>
+        </Show>
+        <For each={visibleTimeline().visible}>
           {(entry) => (
             <Switch>
               <Match when={entry.kind === "question" && entry}>
