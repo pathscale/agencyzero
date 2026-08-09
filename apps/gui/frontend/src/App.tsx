@@ -91,7 +91,7 @@ export function Workspace(): JSX.Element {
         )}
       </Show>
 
-      <main class="grid min-h-0 flex-1 px-3 pt-1.5 pb-3">
+      <main class="flex min-h-0 flex-1 gap-3 px-3 pt-1.5 pb-3">
         <Show
           when={
             state.boot.status === "ready" ||
@@ -110,11 +110,7 @@ export function Workspace(): JSX.Element {
           <div
             data-retained-tab="home"
             aria-hidden={activeTab().kind !== "home"}
-            class={
-              activeTab().kind === "home"
-                ? "pointer-events-auto visible col-start-1 row-start-1 flex min-h-0 min-w-0"
-                : "pointer-events-none invisible col-start-1 row-start-1 flex min-h-0 min-w-0"
-            }
+            class={activeTab().kind === "home" ? "flex min-h-0 min-w-0 flex-1" : "hidden"}
           >
             <HomeTab />
           </div>
@@ -122,11 +118,7 @@ export function Workspace(): JSX.Element {
           <div
             data-retained-tab="settings"
             aria-hidden={activeTab().kind !== "settings"}
-            class={
-              activeTab().kind === "settings"
-                ? "pointer-events-auto visible col-start-1 row-start-1 flex min-h-0 min-w-0"
-                : "pointer-events-none invisible col-start-1 row-start-1 flex min-h-0 min-w-0"
-            }
+            class={activeTab().kind === "settings" ? "flex min-h-0 min-w-0 flex-1" : "hidden"}
           >
             <SettingsTab />
           </div>
@@ -146,8 +138,8 @@ export function Workspace(): JSX.Element {
                       aria-hidden={state.activeKey !== projectId}
                       class={
                         state.activeKey === projectId
-                          ? "pointer-events-auto visible col-start-1 row-start-1 flex min-h-0 min-w-0"
-                          : "pointer-events-none invisible col-start-1 row-start-1 flex min-h-0 min-w-0"
+                          ? "flex min-h-0 min-w-0 flex-1"
+                          : "hidden"
                       }
                     >
                       <ProjectTab tab={retained().tab} project={retained().project} />
@@ -165,7 +157,7 @@ export function Workspace(): JSX.Element {
               activeTab().kind !== "settings"
             }
           >
-            <div class="col-start-1 row-start-1 flex min-h-0 min-w-0">
+            <div class="flex min-h-0 min-w-0 flex-1">
               <Switch>
                 <Match when={activeTab().kind === "analytics"}>
                   <AnalyticsTab />
@@ -184,7 +176,7 @@ export function Workspace(): JSX.Element {
               the worst possible failure: no content, no error, no way to tell a
               missing record from a broken render.
             */}
-            <div class="col-start-1 row-start-1 flex min-w-0 flex-1 flex-col items-center justify-center gap-2 rounded-panel border border-az-hairline bg-az-sunken">
+            <div class="flex min-w-0 flex-1 flex-col items-center justify-center gap-2 rounded-panel border border-az-hairline bg-az-sunken">
               <p class="text-[13.5px] text-az-title">{tx("This project could not be loaded")}</p>
               <p class="max-w-[420px] text-center text-[11.5px] text-az-muted">
                 {tx(
