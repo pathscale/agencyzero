@@ -3,7 +3,7 @@ set -euo pipefail
 
 repo_root=$(git rev-parse --show-toplevel)
 manifest="$repo_root/apps/gui/Cargo.toml"
-proxy_rev=$(python3 - "$manifest" <<'PY'
+proxy_version=$(python3 - "$manifest" <<'PY'
 import sys, tomllib
 
 with open(sys.argv[1], "rb") as manifest:
@@ -11,9 +11,11 @@ with open(sys.argv[1], "rb") as manifest:
 
 client = dependencies["agency-proxy-client"]
 protocol = dependencies["agency-proxy-protocol"]
-if client.get("git") != protocol.get("git") or client.get("rev") != protocol.get("rev"):
-    raise SystemExit("AgencyProxy client and protocol pins must match")
-print(client["rev"])
+client_version = client if isinstance(client, str) else client.get("version")
+protocol_version = protocol if isinstance(protocol, str) else protocol.get("version")
+if client_version != protocol_version:
+    raise SystemExit("AgencyProxy client and protocol versions must match")
+print(client_version)
 PY
 )
 host_target=$(rustc -vV | sed -n 's/^host: //p')
@@ -25,8 +27,7 @@ fi
 install_root="$repo_root/target/agency-proxy-sidecar"
 build_target="${CARGO_TARGET_DIR:-$repo_root/target/agency-proxy-sidecar-build}"
 CARGO_TARGET_DIR="$build_target" cargo install \
-  --git https://github.com/pathscale/agencyproxy.git \
-  --rev "$proxy_rev" \
+  --version "$proxy_version" \
   --locked \
   --root "$install_root" \
   agency-proxy
