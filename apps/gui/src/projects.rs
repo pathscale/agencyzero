@@ -9416,6 +9416,14 @@ pub async fn sync_project(
             .kv_get(&format!("agency-proxy-complete:{turn_id}"))
             .is_some()
         {
+            if let Err(error) = state.proxy.acknowledge(&snapshot.run_id, u64::MAX).await {
+                crate::log!(
+                    crate::log::Level::Warn,
+                    "run",
+                    "{project_id}: could not release completed proxy journal {}: {error}",
+                    snapshot.run_id.0
+                );
+            }
             continue;
         }
         let recovered_checkpoint =
@@ -10488,6 +10496,7 @@ async fn drive_run(
     let injection_io = io.clone();
     let injection_project_id = project_id.clone();
     let injection_turn_id = turn_id.clone();
+    let acknowledgement_control = run.control();
     let injection_control = run.control();
     let injection_delivery = tokio::spawn(async move {
         while let Some(injected) = injection_delivery_rx.recv().await {
@@ -11008,6 +11017,7 @@ async fn drive_run(
 
                 if partial_flushed_at.elapsed() >= PARTIAL_FLUSH_EVERY {
                     partial_flushed_at = std::time::Instant::now();
+                    let persisted_sequence = run.sequence();
                     /*
                      * Capped like every persisted blob: an oversized row has
                      * corrupted a table twice on this machine, and this one
@@ -11024,7 +11034,7 @@ async fn drive_run(
                         &permission,
                         chunk_started_at.as_deref(),
                         Some(&turn_id),
-                        run.sequence(),
+                        persisted_sequence,
                     );
                     match write_partial_reply(&tables, &project_id, &checkpoint).await {
                         Ok(()) => {
@@ -11037,6 +11047,16 @@ async fn drive_run(
                                     "chars": streamed_chunk.len(),
                                 }),
                             );
+                            if let Err(error) = acknowledgement_control
+                                .acknowledge(persisted_sequence)
+                                .await
+                            {
+                                crate::log!(
+                                    crate::log::Level::Warn,
+                                    "run",
+                                    "{project_id}: could not acknowledge persisted proxy events through {persisted_sequence}: {error}"
+                                );
+                            }
                         }
                         Err(error) => crate::log!(
                             crate::log::Level::Warn,
@@ -11455,6 +11475,13 @@ async fn drive_run(
         // Including its checkpoint: recovery must not resurrect a deleted
         // project's half-written reply at the next boot.
         clear_partial_reply(&tables, &project_id).await;
+        if let Err(error) = acknowledgement_control.acknowledge_all().await {
+            crate::log!(
+                crate::log::Level::Warn,
+                "run",
+                "{project_id}: could not release deleted-project proxy journal {turn_id}: {error}"
+            );
+        }
         emit_run_stopped(
             &app,
             &project_id,
@@ -11929,15 +11956,26 @@ async fn drive_run(
         checkpoint_dir.as_deref(),
     )
     .await;
-    if let Err(error) = tables
+    match tables
         .kv_put(&format!("agency-proxy-complete:{turn_id}"), now())
         .await
     {
-        crate::log!(
-            crate::log::Level::Warn,
-            "run",
-            "{project_id}: could not mark proxy run {turn_id} consumed: {error}"
-        );
+        Ok(()) => {
+            if let Err(error) = acknowledgement_control.acknowledge_all().await {
+                crate::log!(
+                    crate::log::Level::Warn,
+                    "run",
+                    "{project_id}: could not release consumed proxy journal {turn_id}: {error}"
+                );
+            }
+        }
+        Err(error) => {
+            crate::log!(
+                crate::log::Level::Warn,
+                "run",
+                "{project_id}: could not mark proxy run {turn_id} consumed: {error}"
+            );
+        }
     }
 }
 

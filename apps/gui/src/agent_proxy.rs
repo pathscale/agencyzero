@@ -131,8 +131,21 @@ impl AgencyProxy {
 
     pub async fn run(&self, request: RunRequest) -> Result<Outcome, String> {
         let mut run = self.start(request, None, 0).await?;
+        let acknowledgement = run.control();
         while run.recv().await.is_some() {}
-        run.finish().await
+        let outcome = run.finish().await;
+        // Journal release is cleanup, not the provider outcome. A transient
+        // control-plane failure here must not turn a successful one-shot run
+        // into a failed review or compaction after its answer already landed.
+        if let Err(error) = acknowledgement.acknowledge_all().await {
+            crate::log!(
+                crate::log::Level::Warn,
+                "run",
+                "could not release one-shot proxy journal {}: {error}",
+                acknowledgement.run_id.0
+            );
+        }
+        outcome
     }
 
     pub async fn list_runs(&self) -> Result<Vec<agency_proxy_protocol::RunSnapshot>, String> {
@@ -146,6 +159,19 @@ impl AgencyProxy {
             ServerResponse::Runs { runs } => Ok(runs),
             response => Err(response_error(response)),
         }
+    }
+
+    pub async fn acknowledge(&self, run_id: &RunId, through_sequence: u64) -> Result<(), String> {
+        accepted(
+            self.connect()
+                .await?
+                .request(ClientMessage::AckEvents {
+                    run_id: run_id.clone(),
+                    through_sequence,
+                })
+                .await
+                .map_err(|error| error.to_string())?,
+        )
     }
 
     pub async fn status(&self) -> Result<Status, String> {
@@ -615,6 +641,22 @@ pub struct ProxyControl {
 }
 
 impl ProxyControl {
+    pub async fn acknowledge(&self, through_sequence: u64) -> Result<(), String> {
+        accepted(
+            self.client
+                .request(ClientMessage::AckEvents {
+                    run_id: self.run_id.clone(),
+                    through_sequence,
+                })
+                .await
+                .map_err(|error| error.to_string())?,
+        )
+    }
+
+    pub async fn acknowledge_all(&self) -> Result<(), String> {
+        self.acknowledge(u64::MAX).await
+    }
+
     pub async fn send(&self, body: &str) -> Result<(), String> {
         accepted(
             self.client
