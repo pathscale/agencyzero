@@ -19,6 +19,27 @@ const TAB_ICON: Record<Tab["kind"], IconProps["name"] | null> = {
   project: null,
 };
 
+const TAB_REVEAL_PADDING = 8;
+
+export function horizontalRevealTarget(
+  strip: Pick<HTMLElement, "clientWidth" | "scrollLeft" | "scrollWidth">,
+  stripRect: Pick<DOMRect, "left" | "right">,
+  itemRect: Pick<DOMRect, "left" | "right">,
+): number | null {
+  const maxScroll = Math.max(0, strip.scrollWidth - strip.clientWidth);
+
+  if (itemRect.left < stripRect.left + TAB_REVEAL_PADDING) {
+    return Math.max(0, strip.scrollLeft + itemRect.left - stripRect.left - TAB_REVEAL_PADDING);
+  }
+  if (itemRect.right > stripRect.right - TAB_REVEAL_PADDING) {
+    return Math.min(
+      maxScroll,
+      strip.scrollLeft + itemRect.right - stripRect.right + TAB_REVEAL_PADDING,
+    );
+  }
+  return null;
+}
+
 /**
  * The tab strip: Home · any Untitled draft · one tab per project · Settings.
  *
@@ -50,10 +71,27 @@ export function TabStrip(): JSX.Element {
 
   /** Roughly a screenful, so repeated presses walk the strip without overshooting. */
   function nudge(direction: -1 | 1): void {
-    strip?.scrollBy({
-      left: direction * Math.max(180, strip.clientWidth * 0.7),
-      behavior: "smooth",
-    });
+    if (!strip) return;
+    const maxScroll = Math.max(0, strip.scrollWidth - strip.clientWidth);
+    strip.scrollLeft = Math.min(
+      maxScroll,
+      Math.max(0, strip.scrollLeft + direction * Math.max(180, strip.clientWidth * 0.7)),
+    );
+    measure();
+  }
+
+  function reveal(key: string): void {
+    const pill = [...(strip?.children ?? [])].find(
+      (child) => (child as HTMLElement).dataset?.tabKey === key,
+    ) as HTMLElement | undefined;
+    if (!pill) return;
+    const target = horizontalRevealTarget(
+      strip,
+      strip.getBoundingClientRect(),
+      pill.getBoundingClientRect(),
+    );
+    if (target !== null) strip.scrollLeft = target;
+    measure();
   }
 
   onMount(() => {
@@ -88,16 +126,7 @@ export function TabStrip(): JSX.Element {
     state.tabs.length;
 
     queueMicrotask(() => {
-      const pill = [...(strip?.children ?? [])].find(
-        (child) => (child as HTMLElement).dataset?.tabKey === key,
-      );
-      // jsdom does not implement scrollIntoView.
-      (pill as HTMLElement | undefined)?.scrollIntoView?.({
-        inline: "nearest",
-        block: "nearest",
-        behavior: "smooth",
-      });
-      measure();
+      reveal(key);
     });
   });
 
