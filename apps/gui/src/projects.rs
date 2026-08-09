@@ -1190,6 +1190,7 @@ fn should_forget_unresponsive_resume(
 }
 
 const CANCELED_STOP: &str = "canceled";
+const INTERRUPTED_STOP: &str = "interrupted";
 const RECONNECTED_STOP: &str = "reconnected";
 const STALLED_STOP: &str = "stalled";
 
@@ -1205,6 +1206,26 @@ fn interrupted_stop(recovery_queued: bool, internally_stalled: bool) -> &'static
         STALLED_STOP
     } else {
         CANCELED_STOP
+    }
+}
+
+/// Preserve who canceled the run, including a cancellation returned as an outcome.
+///
+/// AgencyProxy can settle `Run::cancel` with an ordinary outcome instead of an
+/// error. The local classification therefore has to accompany that outcome:
+/// owner Stop remains terminal, internal recovery remains a reconnect or
+/// stall, and only an unrequested provider cancellation becomes interrupted.
+fn reported_stop(stop: &Stop, local_cancellation: Option<&str>) -> String {
+    match stop {
+        Stop::Completed => "completed".into(),
+        Stop::Error => "error".into(),
+        Stop::Other(other) if matches!(other.as_str(), "canceled" | "cancelled") => {
+            local_cancellation.unwrap_or(INTERRUPTED_STOP).into()
+        }
+        Stop::Other(other) => other.clone(),
+        // `Stop` is non-exhaustive. A later reason should remain visible
+        // instead of being flattened into a generic error.
+        other => format!("{other:?}"),
     }
 }
 
@@ -11440,15 +11461,14 @@ async fn drive_run(
             let stop = if cleanup_error.is_some() {
                 "error".to_string()
             } else {
-                match &outcome.stop {
-                    Stop::Completed => "completed".to_string(),
-                    Stop::Error => "error".to_string(),
-                    Stop::Other(other) => other.clone(),
-                    // `Stop` is #[non_exhaustive]: a stop reason added by a later
-                    // crate release must reach the transcript as itself rather than
-                    // be flattened into "error".
-                    other => format!("{other:?}"),
-                }
+                let local_cancellation = cancelled.then(|| {
+                    if cleanup_timed_out {
+                        "cleanup timed out after 30 seconds"
+                    } else {
+                        interrupted_stop(stalled_injection, idle_stalled || stalled_injection)
+                    }
+                });
+                reported_stop(&outcome.stop, local_cancellation)
             };
             measurement
                 .finish(&tables, &observed_session, &stop, &outcome.usage)
@@ -12770,6 +12790,30 @@ mod tests {
         assert_eq!(interrupted_stop(true, true), RECONNECTED_STOP);
         assert_eq!(interrupted_stop(false, true), STALLED_STOP);
         assert_eq!(interrupted_stop(false, false), CANCELED_STOP);
+    }
+
+    #[test]
+    fn provider_cancellation_is_retryable_but_owner_stop_remains_terminal() {
+        assert_eq!(
+            reported_stop(&Stop::Other("canceled".into()), None),
+            INTERRUPTED_STOP
+        );
+        assert_eq!(
+            reported_stop(&Stop::Other("cancelled".into()), None),
+            INTERRUPTED_STOP
+        );
+        assert_eq!(
+            reported_stop(&Stop::Other("canceled".into()), Some(CANCELED_STOP)),
+            CANCELED_STOP
+        );
+        assert_eq!(
+            reported_stop(&Stop::Other("canceled".into()), Some(RECONNECTED_STOP)),
+            RECONNECTED_STOP
+        );
+        assert_eq!(
+            reported_stop(&Stop::Other("length".into()), Some(CANCELED_STOP)),
+            "length"
+        );
     }
 
     #[test]
