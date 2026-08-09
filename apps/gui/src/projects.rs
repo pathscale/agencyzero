@@ -9942,7 +9942,7 @@ fn read_only_proxy_request(
         model: model.into(),
         prompt,
         is_command: false,
-        system: None,
+        system: Some(crate::per_turn::DISCOVERY_GUARD.to_string()),
         permission: "read_only".into(),
         effort: None,
         extra_thinking: None,
@@ -12770,6 +12770,25 @@ mod tests {
         assert_eq!(parse_review_agent(Some("codex")), Ok(Agent::Codex));
         assert_eq!(parse_review_agent(Some("copilot")), Ok(Agent::Copilot));
         assert!(parse_review_agent(Some("unknown")).is_err());
+    }
+
+    #[test]
+    fn every_review_provider_receives_the_discovery_guard() {
+        for agent in [Agent::Claude, Agent::Codex, Agent::Copilot] {
+            let request = read_only_proxy_request(
+                agent,
+                "review this diff".into(),
+                "/workspace",
+                &["/repo".into()],
+                "",
+                None,
+            );
+            assert_eq!(
+                request.system.as_deref(),
+                Some(crate::per_turn::DISCOVERY_GUARD),
+                "{agent:?} review omitted the discovery guard"
+            );
+        }
     }
 
     #[tokio::test]
