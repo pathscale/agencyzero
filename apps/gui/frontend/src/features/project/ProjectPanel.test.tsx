@@ -1,7 +1,7 @@
 import { fireEvent, render, waitFor, within } from "@solidjs/testing-library";
 import { Show } from "solid-js";
 import { describe, expect, it, vi } from "vitest";
-import { ProjectPanel } from "~/features/project/ProjectPanel";
+import { itemPage, PROJECT_ITEM_PAGE_SIZE, ProjectPanel } from "~/features/project/ProjectPanel";
 import { prefs } from "~/stores/prefs";
 import { useWorkspace, type Workspace, WorkspaceProvider } from "~/stores/workspace";
 import type { Project } from "~/types";
@@ -21,6 +21,50 @@ const PROJECT: Project = {
 };
 
 describe("the project side panel", () => {
+  it("bounds the initially mounted item list", () => {
+    const items = Array.from({ length: PROJECT_ITEM_PAGE_SIZE + 5 }, (_, index) => index);
+
+    expect(itemPage(items, PROJECT_ITEM_PAGE_SIZE)).toEqual(items.slice(0, PROJECT_ITEM_PAGE_SIZE));
+    expect(itemPage(items, PROJECT_ITEM_PAGE_SIZE * 2)).toEqual(items);
+  });
+
+  it("pages a large live item list without hiding the remaining rows", async () => {
+    let workspace!: Workspace;
+
+    function Gate() {
+      workspace = useWorkspace();
+      return (
+        <Show when={workspace.state.boot.status === "ready"}>
+          <ProjectPanel project={{ ...PROJECT, id: "worktable" }} />
+        </Show>
+      );
+    }
+
+    const screen = render(() => (
+      <WorkspaceProvider>
+        <Gate />
+      </WorkspaceProvider>
+    ));
+    await waitFor(() => expect(workspace.state.boot.status).toBe("ready"), { timeout: 5_000 });
+
+    for (let index = 0; index < PROJECT_ITEM_PAGE_SIZE + 5; index += 1) {
+      await workspace.actions.createItem("worktable", `Paged item ${index}`);
+    }
+
+    await waitFor(() =>
+      expect(screen.container.querySelectorAll("[data-item-id]")).toHaveLength(
+        PROJECT_ITEM_PAGE_SIZE,
+      ),
+    );
+    const more = screen.getByRole("button", { name: /Show \d+ more items/ });
+    fireEvent.click(more);
+    await waitFor(() =>
+      expect(screen.container.querySelectorAll("[data-item-id]").length).toBeGreaterThan(
+        PROJECT_ITEM_PAGE_SIZE,
+      ),
+    );
+  });
+
   it("fills its clipped shell so the panel owns a bounded scroll area", async () => {
     let workspace!: Workspace;
 
@@ -189,6 +233,13 @@ describe("the project side panel", () => {
     await workspace.actions.setItemStatus("cafe-0", "questions");
     await workspace.actions.answerQuestion("q-block", true);
 
+    const initialReplies = await screen.findAllByRole("button", {
+      name: "Reply to the question for Legacy-data scan on prod snapshot",
+    });
+    expect(initialReplies).toHaveLength(1);
+    const row = screen.container.querySelector('[data-item-id="cafe-0"]');
+    if (!row) throw new Error("question item row is missing");
+    fireEvent.pointerEnter(row);
     const replies = await screen.findAllByRole("button", {
       name: "Reply to the question for Legacy-data scan on prod snapshot",
     });
@@ -198,7 +249,6 @@ describe("the project side panel", () => {
     if (!reply) throw new Error("persistent reply action is missing");
     expect(reply.className).toContain("size-[22px]");
     expect(reply.className).toContain("border-warning/65");
-    const row = screen.container.querySelector('[data-item-id="cafe-0"]');
     expect(row?.querySelector('use[href="#i-circle-help"]')).not.toBeNull();
     fireEvent.click(reply);
 
