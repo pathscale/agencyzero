@@ -26,12 +26,11 @@
 use agent_abstraction::{Agent, Decision, Event, Stop};
 use serde::{Deserialize, Serialize};
 use std::process::Stdio;
-use tauri::{AppHandle, Emitter, Manager, State};
+use tauri::{Emitter, Manager, State};
 use tokio::io::{AsyncRead, AsyncReadExt};
 // `execute` on a select builder is a trait method.
 use worktable::prelude::*;
 
-use crate::AppState;
 use crate::db::schema::message::{FinalizeByIdQuery, MessageRow};
 use crate::db::schema::project::{DirsByIdQuery, NameByIdQuery, PinnedByIdQuery, ProjectRow};
 use crate::db::schema::project_item::{
@@ -42,6 +41,7 @@ use crate::db::schema::project_item::{
 use crate::db::schema::reply_checkpoint::ReplyCheckpointRow;
 use crate::db::schema::task_log::TaskLogRow;
 use crate::db::tables::Tables;
+use crate::{AppHandle, AppState};
 
 // — wire shapes ————————————————————————————————————————————————————
 

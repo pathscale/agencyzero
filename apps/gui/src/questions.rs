@@ -7,10 +7,11 @@
 //! `blocking` (the agent is stopped until answered), `passive` (answer when free).
 
 use serde::Serialize;
-use tauri::{AppHandle, Emitter};
+use tauri::Emitter;
 // `execute` on a select builder is a trait method.
 use worktable::prelude::*;
 
+use crate::AppHandle;
 use crate::db::schema::question::{QuestionAnsweredByIdQuery, QuestionRow};
 use crate::db::tables::Tables;
 

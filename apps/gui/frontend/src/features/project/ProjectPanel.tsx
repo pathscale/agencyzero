@@ -1125,7 +1125,10 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
   }
 
   return (
-    <div class="az-scroll flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto px-2 pt-1.5 pb-2.5">
+    <div
+      data-item-list
+      class="az-scroll flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto overflow-x-hidden px-2 pt-1.5 pb-2.5"
+    >
       <Show when={props.items.length > 3}>
         <div class="mb-1 flex items-center gap-2 border-az-hairline-soft border-b bg-az-inset px-2.5 py-1.5">
           <Icon name="search" class="shrink-0 text-[12px] text-primary/70" />
@@ -1320,7 +1323,7 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
                   aria-label={tx("Edit the description for {name}", { name: item.title })}
                   aria-expanded={descriptionDraft()?.item.id === item.id}
                   aria-controls={`item-description-${item.id}`}
-                  class={`relative z-10 flex size-[22px] shrink-0 items-center justify-center rounded-md border transition-colors hover:border-primary/70 hover:bg-primary/20 ${
+                  class={`relative flex size-[22px] shrink-0 items-center justify-center rounded-md border transition-colors hover:border-primary/70 hover:bg-primary/20 ${
                     descriptionDraft()?.item.id === item.id || item.context?.trim()
                       ? "border-primary/45 bg-primary/14 text-primary"
                       : "border-primary/20 bg-primary/5 text-az-muted"
@@ -1342,7 +1345,7 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
                       ? tx("Open the fork for {name}", { name: item.title })
                       : tx("Fork {name} into a fresh chat", { name: item.title })
                   }
-                  class={`relative z-10 flex size-[22px] shrink-0 items-center justify-center rounded-md border transition-colors hover:border-primary/70 hover:bg-primary/20 disabled:opacity-30 ${
+                  class={`relative flex size-[22px] shrink-0 items-center justify-center rounded-md border transition-colors hover:border-primary/70 hover:bg-primary/20 disabled:opacity-30 ${
                     forkFor(item.id)
                       ? "border-primary/55 bg-primary/18 text-primary"
                       : "border-primary/30 bg-primary/8 text-primary/80"
@@ -1594,7 +1597,15 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
             role="dialog"
             aria-modal="true"
             aria-labelledby="item-context-title"
-            class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-8 backdrop-blur-[2px]"
+            class="fixed z-50 flex items-center justify-center bg-black/60 p-8 backdrop-blur-[2px]"
+            style={{
+              position: "fixed",
+              top: "0px",
+              left: "0px",
+              width: "100vw",
+              height: "100vh",
+              "z-index": "50",
+            }}
             onClick={(event) => event.currentTarget === event.target && setContextDraft(null)}
             onKeyDown={(event) => event.key === "Escape" && setContextDraft(null)}
           >

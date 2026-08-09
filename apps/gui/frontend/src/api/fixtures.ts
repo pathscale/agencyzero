@@ -303,7 +303,7 @@ export const RUNNING: RunningTask[] = [
     projectId: "worktable",
     itemId: "worktable-0",
     name: "Search",
-    label: "rg reinsert_on_update",
+    label: "git grep reinsert_on_update",
     startedAt: ago(3_000),
     isCancelable: true,
   },
