@@ -206,7 +206,7 @@ export function HomeTab(): JSX.Element {
                   class="flex items-center gap-3 rounded-[11px] border border-az-hairline bg-base-300 px-3 py-2.5 text-left transition-colors hover:border-primary/40"
                 >
                   <Icon name="folder-git-2" class="shrink-0 text-[15px] text-primary" />
-                  <div class="flex min-w-0 flex-col gap-0.5">
+                  <div class="flex min-w-0 flex-1 flex-col gap-0.5">
                     <span class="truncate font-semibold text-[12.5px] text-base-content">
                       {project.name}
                     </span>
