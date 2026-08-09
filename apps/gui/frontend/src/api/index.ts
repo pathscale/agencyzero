@@ -5,6 +5,14 @@ import { createMockApi } from "./mock";
 import { createTauriApi } from "./tauri";
 
 export type { AgencyZeroApi, AppEvent, AppEvents, TaskLogPage, Unlisten } from "./client";
+export {
+  agencyProxyProtocols,
+  type McpClientOptions,
+  type McpSocket,
+  type McpSocketFactory,
+  type McpToolResult,
+  McpWebSocketClient,
+} from "./mcp";
 
 /**
  * The `AgencyZeroApi` method names, mapped to the Rust command each one invokes.
