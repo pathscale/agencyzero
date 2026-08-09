@@ -1,5 +1,10 @@
+use brotli::CompressorWriter;
 use std::fs;
+use std::io::Write;
 use std::path::{Path, PathBuf};
+
+const CSS_MARKER: &str = "__AGENCYZERO_EMBEDDED_CSS__";
+const JS_URL: &str = "tauri://localhost/__agencyzero__/app.js";
 
 fn only_asset(dir: &Path, extension: &str) -> PathBuf {
     let mut matches = fs::read_dir(dir)
@@ -18,16 +23,36 @@ fn only_asset(dir: &Path, extension: &str) -> PathBuf {
     asset
 }
 
+fn compress_asset(path: &Path, output: &Path, quality: u32) -> usize {
+    let input =
+        fs::read(path).unwrap_or_else(|error| panic!("could not read {}: {error}", path.display()));
+    let mut compressed = Vec::new();
+    {
+        let mut encoder = CompressorWriter::new(&mut compressed, 4096, quality, 22);
+        encoder
+            .write_all(&input)
+            .unwrap_or_else(|error| panic!("could not compress {}: {error}", path.display()));
+    }
+    fs::write(output, compressed)
+        .unwrap_or_else(|error| panic!("could not write {}: {error}", output.display()));
+    input.len()
+}
+
 fn main() {
     let manifest = PathBuf::from(std::env::var_os("CARGO_MANIFEST_DIR").unwrap());
     let dist = manifest.join("../gui/dist");
     let css_path = only_asset(&dist.join("static/css"), "css");
     let js_path = only_asset(&dist.join("static/js"), "js");
-    let css = fs::read_to_string(&css_path)
-        .unwrap_or_else(|error| panic!("could not read {}: {error}", css_path.display()));
-    let javascript = fs::read_to_string(&js_path)
-        .unwrap_or_else(|error| panic!("could not read {}: {error}", js_path.display()))
-        .replace("</script", "<\\/script");
+    let output_dir = PathBuf::from(std::env::var_os("OUT_DIR").unwrap());
+    let quality = if std::env::var("PROFILE").as_deref() == Ok("release") {
+        9
+    } else {
+        2
+    };
+    let css_brotli = output_dir.join("embedded.css.br");
+    let js_brotli = output_dir.join("embedded.js.br");
+    let css_len = compress_asset(&css_path, &css_brotli, quality);
+    let js_len = compress_asset(&js_path, &js_brotli, quality);
     let ipc_probe = r##"
       <script>
         (async () => {
@@ -50,14 +75,24 @@ fn main() {
       </script>
     "##;
     let html = format!(
-        "<!DOCTYPE html><html><head><title>AgencyZero Blitz Preview</title><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><style>{css}</style></head><body><div id=\"root\"></div>{ipc_probe}<script>{javascript}</script></body></html>"
+        "<!DOCTYPE html><html><head><title>AgencyZero Blitz Preview</title><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><style>{CSS_MARKER}</style></head><body><div id=\"root\"></div>{ipc_probe}<script src=\"{JS_URL}\"></script></body></html>"
     );
 
-    let generated = format!("pub const EMBEDDED_HTML: &str = {html:?};\n");
-    let output = PathBuf::from(std::env::var_os("OUT_DIR").unwrap()).join("embedded.rs");
+    let generated = format!(
+        "pub const EMBEDDED_SHELL_HTML: &str = {html:?};\n\
+         pub const EMBEDDED_CSS_MARKER: &str = {CSS_MARKER:?};\n\
+         pub const EMBEDDED_JS_URL: &str = {JS_URL:?};\n\
+         pub const EMBEDDED_BROTLI_QUALITY: u32 = {quality};\n\
+         pub const EMBEDDED_CSS_LEN: usize = {css_len};\n\
+         pub const EMBEDDED_JS_LEN: usize = {js_len};\n\
+         pub const EMBEDDED_CSS_BROTLI: &[u8] = include_bytes!(concat!(env!(\"OUT_DIR\"), \"/embedded.css.br\"));\n\
+         pub const EMBEDDED_JS_BROTLI: &[u8] = include_bytes!(concat!(env!(\"OUT_DIR\"), \"/embedded.js.br\"));\n"
+    );
+    let output = output_dir.join("embedded.rs");
     fs::write(&output, generated)
         .unwrap_or_else(|error| panic!("could not write {}: {error}", output.display()));
 
-    println!("cargo:rerun-if-changed={}", dist.display());
+    println!("cargo:rerun-if-changed={}", css_path.display());
+    println!("cargo:rerun-if-changed={}", js_path.display());
     tauri_build::build();
 }
