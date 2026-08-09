@@ -73,6 +73,9 @@ jobs:
         run: bun install --frozen-lockfile
         working-directory: apps/gui/frontend
 
+      - name: Build the AgencyProxy sidecar
+        run: scripts/stage-agency-proxy-sidecar.sh
+
       - name: Build experimental bundle
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}

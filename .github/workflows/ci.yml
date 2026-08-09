@@ -82,6 +82,9 @@ jobs:
           bun install --frozen-lockfile
           bun run build
 
+      - name: Build the AgencyProxy sidecar
+        run: scripts/stage-agency-proxy-sidecar.sh
+
       - run: cargo fmt --all --check
       - run: cargo clippy --workspace --all-targets --all-features -- -D warnings
       - run: cargo test --workspace --all-features

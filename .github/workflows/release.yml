@@ -123,6 +123,9 @@ jobs:
         run: bun install --frozen-lockfile
         working-directory: apps/gui/frontend
 
+      - name: Build the AgencyProxy sidecar
+        run: scripts/stage-agency-proxy-sidecar.sh
+
       # Ad-hoc signed, and nothing here decides that: `signingIdentity: "-"` in
       # tauri.conf.json does. Notarization needs a current Apple Developer
       # Program membership and ours has lapsed.
