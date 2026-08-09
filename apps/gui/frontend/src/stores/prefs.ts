@@ -19,6 +19,8 @@ const DEFAULTS: UiPrefs = {
   projectPanelVisible: true,
   itemSortBy: "status",
   itemSortDirection: "asc",
+  homeSortBy: "status",
+  homeSortDirection: "asc",
   lastExtraThinking: true,
   // Settings starts collapsed: working directories are set once and then left
   // alone, while the other three change while you watch.
@@ -90,6 +92,20 @@ function normalize(stored: Partial<UiPrefs>): UiPrefs {
       stored.itemSortDirection === "asc" || stored.itemSortDirection === "desc"
         ? stored.itemSortDirection
         : DEFAULTS.itemSortDirection,
+    homeSortBy:
+      stored.homeSortBy === "status" ||
+      stored.homeSortBy === "time" ||
+      stored.homeSortBy === "turns"
+        ? stored.homeSortBy
+        : stored.itemSortBy === "status" || stored.itemSortBy === "time"
+          ? stored.itemSortBy
+          : DEFAULTS.homeSortBy,
+    homeSortDirection:
+      stored.homeSortDirection === "asc" || stored.homeSortDirection === "desc"
+        ? stored.homeSortDirection
+        : stored.itemSortDirection === "asc" || stored.itemSortDirection === "desc"
+          ? stored.itemSortDirection
+          : DEFAULTS.homeSortDirection,
     taskPlacement:
       stored.taskPlacement === "panel" ||
       stored.taskPlacement === "dock" ||

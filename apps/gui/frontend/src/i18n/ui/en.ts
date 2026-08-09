@@ -372,6 +372,8 @@ const en = {
   "Sort items": "Sort items",
   "Sort projects and items": "Sort projects and items",
   "Toggle item sort between status and time": "Toggle item sort between status and time",
+  "Cycle Home sort between status, time, and turns":
+    "Cycle Home sort between status, time, and turns",
   Status: "Status",
   Time: "Time",
   "Sort descending": "Sort descending",
