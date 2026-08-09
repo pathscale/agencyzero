@@ -1,6 +1,12 @@
 import { fireEvent, render, waitFor } from "@solidjs/testing-library";
 import { describe, expect, it, vi } from "vitest";
-import { CleanupRowActions, HomeTab, TASK_CLEANUP_PROMPT } from "~/features/home/HomeTab";
+import {
+  CleanupRowActions,
+  HOME_PROJECT_PAGE_SIZE,
+  HomeTab,
+  projectPage,
+  TASK_CLEANUP_PROMPT,
+} from "~/features/home/HomeTab";
 import { setPrefs } from "~/stores/prefs";
 import { useWorkspace, type Workspace, WorkspaceProvider } from "~/stores/workspace";
 
@@ -24,6 +30,15 @@ async function mountHome() {
 }
 
 describe("Home item rows", () => {
+  it("bounds the initially mounted project list", () => {
+    const projects = Array.from({ length: HOME_PROJECT_PAGE_SIZE + 5 }, (_, index) => index);
+
+    expect(projectPage(projects, HOME_PROJECT_PAGE_SIZE)).toEqual(
+      projects.slice(0, HOME_PROJECT_PAGE_SIZE),
+    );
+    expect(projectPage(projects, HOME_PROJECT_PAGE_SIZE * 2)).toEqual(projects);
+  });
+
   it("reserves one status column so the trailing item actions align", async () => {
     const screen = await mountHome();
     const statusControls = screen.getAllByRole("button", { name: /^Change the status of / });
