@@ -2105,12 +2105,13 @@ function createWorkspace() {
     ]);
   }
 
-  const send = async (
+  const sendKnownMessage = async (
     projectId: string,
     body: string,
     study?: StudyTurnMetadata,
     replyQuestionId?: string,
     itemId?: string,
+    retryMessageId?: string,
   ): Promise<void> => {
     const tab = state.tabs.find((candidate) => candidate.projectId === projectId);
     requireReadyAgent(tab?.agent ?? defaultAgent());
@@ -2121,12 +2122,12 @@ function createWorkspace() {
      * that a message vanishing into it looks like the app dropping it.
      */
     if (state.compacting[projectId]) {
-      enqueue(projectId, body, "compacting", study, undefined, replyQuestionId, itemId);
+      enqueue(projectId, body, "compacting", study, retryMessageId, replyQuestionId, itemId);
       return;
     }
 
     if ((state.queued[projectId] ?? []).length > 0) {
-      enqueue(projectId, body, "busy", study, undefined, replyQuestionId, itemId);
+      enqueue(projectId, body, "busy", study, retryMessageId, replyQuestionId, itemId);
       const runningAgent = state.runStatus[projectId]?.agent;
       if (
         isBusy(projectId) &&
@@ -2144,7 +2145,7 @@ function createWorkspace() {
       runningAgent !== undefined &&
       !capabilitiesFor(runningAgent)?.liveFollowUp
     ) {
-      enqueue(projectId, body, "busy", study, undefined, replyQuestionId, itemId);
+      enqueue(projectId, body, "busy", study, retryMessageId, replyQuestionId, itemId);
       return;
     }
 
@@ -2157,16 +2158,28 @@ function createWorkspace() {
      * back.
      */
     try {
-      await dispatch(projectId, body, study, undefined, replyQuestionId, itemId);
+      await dispatch(projectId, body, study, retryMessageId, replyQuestionId, itemId);
     } catch (cause) {
       const reason = queueReason(cause);
       if (reason) {
-        enqueue(projectId, body, reason, study, undefined, replyQuestionId, itemId);
+        enqueue(projectId, body, reason, study, retryMessageId, replyQuestionId, itemId);
         return;
       }
       throw cause;
     }
   };
+
+  const send = (
+    projectId: string,
+    body: string,
+    study?: StudyTurnMetadata,
+    replyQuestionId?: string,
+    itemId?: string,
+  ): Promise<void> => sendKnownMessage(projectId, body, study, replyQuestionId, itemId);
+
+  /** Replay one persisted prompt without appending a second transcript row. */
+  const retry = (projectId: string, messageId: string, body: string): Promise<void> =>
+    sendKnownMessage(projectId, body, undefined, undefined, undefined, messageId);
 
   /**
    * Send the oldest queued prompt, once the slot frees.
@@ -2257,6 +2270,7 @@ function createWorkspace() {
     createProject,
     forkItem,
     send,
+    retry,
     sendTaskPrompt,
     async resetTaskManager() {
       await client().resetTaskManager();

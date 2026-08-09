@@ -78,4 +78,18 @@ describe("queued live follow-ups", () => {
     await waitFor(() => expect(queueHarness.send).toHaveBeenCalledTimes(2));
     expect(workspace.state.queued.agencyzero).toHaveLength(0);
   });
+
+  it("retries the persisted user row instead of appending the prompt again", async () => {
+    const workspace = await mountWorkspace();
+
+    await workspace.actions.retry("agencyzero", "msg-interrupted", "continue the audit");
+
+    expect(queueHarness.send).toHaveBeenCalledWith(
+      expect.objectContaining({
+        projectId: "agencyzero",
+        body: "continue the audit",
+        retryMessageId: "msg-interrupted",
+      }),
+    );
+  });
 });

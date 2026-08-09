@@ -266,17 +266,17 @@ export function TranscriptPane(props: {
                        * questions in does not shift what "the last turn" means.
                        *
                        * The prompt the failed turn was answering is the nearest
-                       * user message above it. Resent through the ordinary send
-                       * path so the retry is a real turn — persisted, moderated,
-                       * and resumed on the same session — not a special case.
+                       * user message above it. Retry reuses that durable row so
+                       * recovery resumes the session without drawing a second
+                       * copy of the owner's request in the transcript.
                        */
                       const index = item().index;
                       if (index !== props.messages.length - 1) return undefined;
                       for (let at = index - 1; at >= 0; at--) {
                         const earlier = props.messages[at];
                         if (earlier.author === "user") {
-                          const body = earlier.body;
-                          return () => void actions.send(props.project.id, body);
+                          return () =>
+                            void actions.retry(props.project.id, earlier.id, earlier.body);
                         }
                       }
                       return undefined;
