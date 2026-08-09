@@ -22,7 +22,7 @@ import type { AgencyZeroApi, AppEvents, Unlisten } from "./client";
  */
 let sequence = 0;
 
-async function call<T>(command: string, args?: Record<string, unknown>): Promise<T> {
+async function tauriCall<T>(command: string, args?: Record<string, unknown>): Promise<T> {
   const id = ++sequence;
   const startedAt = performance.now();
   const took = () => Math.round(performance.now() - startedAt);
@@ -38,7 +38,18 @@ async function call<T>(command: string, args?: Record<string, unknown>): Promise
   }
 }
 
-export function createTauriApi(): AgencyZeroApi {
+export type CommandCaller = <T>(
+  command: string,
+  args?: Record<string, unknown>,
+) => Promise<T>;
+
+export type EventListener = <E extends keyof AppEvents>(
+  event: E,
+  handler: (payload: AppEvents[E]) => void,
+) => Promise<Unlisten>;
+
+/** Build the typed application API over any command and event transport. */
+export function createCommandApi(call: CommandCaller, on: EventListener): AgencyZeroApi {
   return {
     listProjects: () => call("list_projects"),
     getHomeSnapshot: () => call("get_home_snapshot"),
@@ -147,13 +158,14 @@ export function createTauriApi(): AgencyZeroApi {
     listApprovalRules: (projectId) => call("list_approval_rules", { projectId }),
     clearApprovalRules: (projectId) => call("clear_approval_rules", { projectId }),
 
-    async on<E extends keyof AppEvents>(
-      event: E,
-      handler: (payload: AppEvents[E]) => void,
-    ): Promise<Unlisten> {
-      const unlisten = await listen<AppEvents[E]>(event, ({ payload }) => handler(payload));
-      log.debug(`listening for ${event}`);
-      return () => unlisten();
-    },
+    on,
   };
+}
+
+export function createTauriApi(): AgencyZeroApi {
+  return createCommandApi(tauriCall, async (event, handler) => {
+    const unlisten = await listen<AppEvents[typeof event]>(event, ({ payload }) => handler(payload));
+    log.debug(`listening for ${event}`);
+    return () => unlisten();
+  });
 }
