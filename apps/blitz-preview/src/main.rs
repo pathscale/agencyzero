@@ -61,6 +61,23 @@ impl ScriptFetcher for EmbeddedScriptFetcher {
     }
 }
 
+#[cfg(not(test))]
+struct CapturedScriptFetcher {
+    url: String,
+    javascript: String,
+}
+
+#[cfg(not(test))]
+impl ScriptFetcher for CapturedScriptFetcher {
+    fn fetch(&self, url: &Url) -> Result<String, FetchError> {
+        if url.as_str() == self.url {
+            Ok(self.javascript.clone())
+        } else {
+            DefaultScriptFetcher.fetch(url)
+        }
+    }
+}
+
 fn decompress_utf8(compressed: &[u8], label: &str) -> Result<String, String> {
     let mut decoder = Decompressor::new(compressed, 4096);
     let mut decoded = String::new();
@@ -85,6 +102,57 @@ fn create_document(url: &str) -> Result<ScriptDocument, String> {
 }
 
 #[cfg(not(test))]
+fn create_dist_document(dist: &std::path::Path, url: &str) -> Result<ScriptDocument, String> {
+    fn asset_url<'a>(html: &'a str, attribute: &str) -> Result<&'a str, String> {
+        let marker = format!("{attribute}=\"");
+        let start = html
+            .find(&marker)
+            .map(|index| index + marker.len())
+            .ok_or_else(|| format!("index.html has no {attribute} asset"))?;
+        let end = html[start..]
+            .find('"')
+            .map(|index| start + index)
+            .ok_or_else(|| format!("index.html has an unterminated {attribute} asset"))?;
+        Ok(&html[start..end])
+    }
+
+    fn read_brotli_asset(dist: &std::path::Path, url: &str, label: &str) -> Result<String, String> {
+        let relative = url.split('?').next().unwrap_or(url).trim_start_matches('/');
+        let path = dist.join(relative);
+        let compressed = fs::read(&path)
+            .map_err(|error| format!("could not read {}: {error}", path.display()))?;
+        decompress_utf8(&compressed, label)
+    }
+
+    trace(&format!("external dist loading: {}", dist.display()));
+    let index_path = dist.join("index.html");
+    let index = fs::read_to_string(&index_path)
+        .map_err(|error| format!("could not read {}: {error}", index_path.display()))?;
+    let javascript_url = asset_url(&index, "src")?;
+    let stylesheet_url = asset_url(&index, "href")?;
+    let css = read_brotli_asset(dist, stylesheet_url, "external CSS")?;
+    let javascript = read_brotli_asset(dist, javascript_url, "external JavaScript")?;
+    let html = format!(
+        "<!doctype html><html><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><style>{css}</style></head><body><div id=\"root\"></div><script src=\"{javascript_url}\"></script></body></html>"
+    );
+    let base_url = Url::parse(url).map_err(|error| format!("invalid capture URL: {error}"))?;
+    let script_url = base_url
+        .join(javascript_url)
+        .map_err(|error| format!("invalid JavaScript asset URL: {error}"))?
+        .to_string();
+    let config = DocumentConfig {
+        base_url: Some(url.into()),
+        ..DocumentConfig::default()
+    };
+    Ok(
+        ScriptDocument::from_html(&html, config).with_fetcher(CapturedScriptFetcher {
+            url: script_url,
+            javascript,
+        }),
+    )
+}
+
+#[cfg(not(test))]
 fn capture_preview(output: &std::path::Path) -> Result<(), String> {
     use anyrender::render_to_buffer;
     use anyrender_vello_cpu::VelloCpuImageRenderer;
@@ -105,7 +173,10 @@ fn capture_preview(output: &std::path::Path) -> Result<(), String> {
     let height = dimension("AGENCYZERO_BLITZ_CAPTURE_HEIGHT", 900)?;
 
     trace("headless capture started");
-    let mut document = create_document("tauri://localhost/")?;
+    let mut document = match std::env::var_os("BLITZ_CAPTURE_DIST") {
+        Some(dist) => create_dist_document(std::path::Path::new(&dist), "tauri://localhost/")?,
+        None => create_document("tauri://localhost/")?,
+    };
     document
         .inner_mut()
         .set_viewport(Viewport::new(width, height, 1.0, ColorScheme::Dark));
