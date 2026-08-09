@@ -90,14 +90,25 @@ fn capture_preview(output: &std::path::Path) -> Result<(), String> {
     use anyrender_vello_cpu::VelloCpuImageRenderer;
     use blitz_paint::paint_scene;
 
-    const WIDTH: u32 = 1344;
-    const HEIGHT: u32 = 900;
+    fn dimension(variable: &str, default: u32) -> Result<u32, String> {
+        let Ok(value) = std::env::var(variable) else {
+            return Ok(default);
+        };
+        value
+            .parse::<u32>()
+            .ok()
+            .filter(|value| *value > 0)
+            .ok_or_else(|| format!("{variable} must be a positive integer, got {value:?}"))
+    }
+
+    let width = dimension("AGENCYZERO_BLITZ_CAPTURE_WIDTH", 1344)?;
+    let height = dimension("AGENCYZERO_BLITZ_CAPTURE_HEIGHT", 900)?;
 
     trace("headless capture started");
     let mut document = create_document("tauri://localhost/")?;
     document
         .inner_mut()
-        .set_viewport(Viewport::new(WIDTH, HEIGHT, 1.0, ColorScheme::Dark));
+        .set_viewport(Viewport::new(width, height, 1.0, ColorScheme::Dark));
     document.execute_scripts();
 
     // The fixture backend deliberately resolves commands after 90 ms. Drive
@@ -111,15 +122,15 @@ fn capture_preview(output: &std::path::Path) -> Result<(), String> {
     let mut doc = document.inner_mut();
     doc.resolve(0.0);
     let buffer = render_to_buffer::<VelloCpuImageRenderer, _>(
-        |scene| paint_scene(scene, &mut doc, 1.0, WIDTH, HEIGHT, 0, 0),
-        WIDTH,
-        HEIGHT,
+        |scene| paint_scene(scene, &mut doc, 1.0, width, height, 0, 0),
+        width,
+        height,
     );
     drop(doc);
 
     let file = std::fs::File::create(output)
         .map_err(|error| format!("could not create {}: {error}", output.display()))?;
-    let mut encoder = png::Encoder::new(file, WIDTH, HEIGHT);
+    let mut encoder = png::Encoder::new(file, width, height);
     encoder.set_color(png::ColorType::Rgba);
     encoder.set_depth(png::BitDepth::Eight);
     let mut writer = encoder
