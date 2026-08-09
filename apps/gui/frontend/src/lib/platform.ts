@@ -11,3 +11,8 @@ export function isTauri(): boolean {
   if (typeof window === "undefined") return false;
   return "__TAURI_INTERNALS__" in window || "__TAURI__" in window;
 }
+
+/** True only in the native Boa/Blitz shell, never in WebKit or browser dev. */
+export function isBlitz(): boolean {
+  return typeof window !== "undefined" && window.__AGENCYZERO_BLITZ__ === true;
+}

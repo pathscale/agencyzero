@@ -206,4 +206,28 @@ describe("keyboard", () => {
     );
     expect(workspace.state.tabs.filter((tab) => tab.kind === "draft")).toHaveLength(0);
   });
+
+  it("cycles tabs on cmd+1 and cmd+2 in Blitz", async () => {
+    const globals = window as unknown as Record<string, unknown>;
+    const { workspace } = await mountStrip();
+    workspace.actions.focus("worktable");
+
+    try {
+      globals.__TAURI_INTERNALS__ = {};
+      globals.__AGENCYZERO_BLITZ__ = true;
+
+      window.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "2", code: "Digit2", metaKey: true, bubbles: true }),
+      );
+      await waitFor(() => expect(workspace.state.activeKey).toBe("cafe"));
+
+      window.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "1", code: "Digit1", metaKey: true, bubbles: true }),
+      );
+      await waitFor(() => expect(workspace.state.activeKey).toBe("worktable"));
+    } finally {
+      delete globals.__AGENCYZERO_BLITZ__;
+      delete globals.__TAURI_INTERNALS__;
+    }
+  });
 });
