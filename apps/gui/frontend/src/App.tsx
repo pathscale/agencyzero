@@ -119,6 +119,18 @@ export function Workspace(): JSX.Element {
             <HomeTab />
           </div>
 
+          <div
+            data-retained-tab="settings"
+            aria-hidden={activeTab().kind !== "settings"}
+            class={
+              activeTab().kind === "settings"
+                ? "pointer-events-auto visible col-start-1 row-start-1 flex min-h-0 min-w-0"
+                : "pointer-events-none invisible col-start-1 row-start-1 flex min-h-0 min-w-0"
+            }
+          >
+            <SettingsTab />
+          </div>
+
           <For each={retainedProjects()}>
             {(projectId) => {
               const view = createMemo(() => {
@@ -146,12 +158,15 @@ export function Workspace(): JSX.Element {
             }}
           </For>
 
-          <Show when={activeTab().kind !== "home" && activeTab().kind !== "project"}>
+          <Show
+            when={
+              activeTab().kind !== "home" &&
+              activeTab().kind !== "project" &&
+              activeTab().kind !== "settings"
+            }
+          >
             <div class="col-start-1 row-start-1 flex min-h-0 min-w-0">
               <Switch>
-                <Match when={activeTab().kind === "settings"}>
-                  <SettingsTab />
-                </Match>
                 <Match when={activeTab().kind === "analytics"}>
                   <AnalyticsTab />
                 </Match>

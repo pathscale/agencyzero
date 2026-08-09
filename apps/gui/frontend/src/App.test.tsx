@@ -33,7 +33,7 @@ describe("startup", () => {
     expect(RETAINED_PROJECT_LIMIT).toBe(8);
   });
 
-  it("retains Home and all visited projects in a normal tab strip", async () => {
+  it("retains Home, Settings, and all visited projects in a normal tab strip", async () => {
     let workspace!: WorkspaceStore;
 
     function Probe() {
@@ -61,6 +61,13 @@ describe("startup", () => {
     ).map((node) => node.dataset.retainedProject);
     expect(retained).toEqual(["worktable", "cafe", "agencyzero"]);
     expect(screen.container.querySelector('[data-retained-tab="home"]')).not.toBeNull();
+    const settings = screen.container.querySelector<HTMLElement>('[data-retained-tab="settings"]');
+    expect(settings).not.toBeNull();
+    expect(settings?.getAttribute("aria-hidden")).toBe("true");
+
+    workspace.actions.openSettings();
+    await waitFor(() => expect(workspace.state.activeKey).toBe("settings"));
+    expect(settings?.getAttribute("aria-hidden")).toBe("false");
   });
 
   it("shows a branded workspace splash while hydration is in progress", () => {
