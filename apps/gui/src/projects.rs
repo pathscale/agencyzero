@@ -4562,6 +4562,20 @@ async fn write_partial_reply(
 /// cost is noise and the loss window is invisible.
 const PARTIAL_FLUSH_EVERY: std::time::Duration = std::time::Duration::from_millis(200);
 
+/// Keep an owner interjection from accidentally becoming the end of a live turn.
+///
+/// Interactive providers receive a steer as a new user message. Without the
+/// app-authored context below, a short status question can look like a complete
+/// replacement task, so the provider answers it and settles even though the
+/// work it interrupted is still active. Explicit owner control still wins: a
+/// stop, pause, or replacement changes the remaining work instead of resuming
+/// it.
+fn mid_turn_owner_context(body: &str) -> String {
+    format!(
+        "AgencyZero mid-turn delivery note (app-authored): This message arrived while you were already working. Treat it as an addition unless the owner explicitly stops, pauses, or replaces the existing work. Answer any question, then continue all still-authorized work and active task or item work in this same turn. Do not yield merely because you answered the question.\n\nOwner's mid-turn message follows:\n{body}"
+    )
+}
+
 /// Deliver a mid-turn message into the open turn, per 0.3.6's contract.
 ///
 /// The user row is already in the transcript — rendering happened on send and
@@ -4588,7 +4602,7 @@ async fn deliver_injection(
             original_body,
             reply_question_id,
             message_id,
-        } => match control.send(&body).await {
+        } => match control.send(&mid_turn_owner_context(&body)).await {
             Ok(()) => {
                 emit_message_receipt(app, project_id, &message_id, "read");
                 note_io(
@@ -13224,6 +13238,15 @@ mod tests {
         assert!(body.contains("Mid-turn code review from claude"));
         assert!(body.contains(markdown));
         assert!(!body.contains("\"body\":"), "Markdown is not JSON encoded");
+    }
+
+    #[test]
+    fn owner_question_steer_preserves_the_running_work_obligation() {
+        let prompt = mid_turn_owner_context("is the benchmark still running?");
+
+        assert!(prompt.contains("continue all still-authorized work"));
+        assert!(prompt.contains("explicitly stops, pauses, or replaces"));
+        assert!(prompt.ends_with("is the benchmark still running?"));
     }
 
     #[test]
