@@ -153,6 +153,14 @@ References:
 - Compute outset-shadow compositing bounds from actual outset shadows only. Never union with `Rect::ZERO`, and never let inset shadows enlarge the outset layer.
 - Add deterministic headless hover and scroll positioning so interaction styles can be regression-captured.
 - Migrate the Tauri Blitz runtime to the Vello/wgpu window renderer.
+- Keep `AutoVsync` and a two-frame surface queue, but never fence on
+  `device.poll(wait_indefinitely())` after each present. Use a non-blocking poll so CPU scene work
+  and GPU execution can overlap.
+- Record the display mode, active-scroll frame intervals, missed refresh intervals, style/layout,
+  paint-scene, and renderer time from the real window.
+- Keep the CPU image renderer behind an opt-in capture feature. The normal 0.3.59 bundle uses thin
+  LTO and symbol stripping, reducing the measured app from 45 MiB to 28 MiB without size-oriented
+  optimization levels that could harm interaction latency.
 
 ## Performance gates
 
