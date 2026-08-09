@@ -58,8 +58,9 @@ export function HomeTab(): JSX.Element {
   const ordered = createMemo(() =>
     sortProjects(
       state.projects.filter((project) => project.forkedFrom === null),
-      prefs.itemSortBy,
-      prefs.itemSortDirection,
+      prefs.homeSortBy,
+      prefs.homeSortDirection,
+      state.turnCounts,
     ),
   );
 
@@ -299,6 +300,12 @@ export function CleanupRowActions(props: {
 
 /** Home sorts its project groups and each group's items with one durable preference. */
 function HomeItemSortControls(): JSX.Element {
+  const nextSort = () => {
+    const order = ["status", "time", "turns"] as const;
+    const current = order.indexOf(prefs.homeSortBy);
+    setPrefs("homeSortBy", order[(current + 1) % order.length]);
+  };
+
   return (
     <fieldset
       class="ml-auto flex shrink-0 items-center gap-1 border-0 p-0"
@@ -306,24 +313,26 @@ function HomeItemSortControls(): JSX.Element {
     >
       <button
         type="button"
-        onClick={() => setPrefs("itemSortBy", prefs.itemSortBy === "status" ? "time" : "status")}
+        onClick={nextSort}
         class="rounded-md border border-az-hairline bg-az-inset px-1.5 py-0.5 font-medium text-[10.5px] text-az-muted transition-colors hover:text-az-strong"
-        title={tx("Toggle item sort between status and time")}
+        title={tx("Cycle Home sort between status, time, and turns")}
       >
-        {tx(prefs.itemSortBy === "status" ? "Status" : "Time")}
+        {tx(
+          prefs.homeSortBy === "status" ? "Status" : prefs.homeSortBy === "time" ? "Time" : "Turns",
+        )}
       </button>
       <button
         type="button"
         onClick={() =>
-          setPrefs("itemSortDirection", prefs.itemSortDirection === "asc" ? "desc" : "asc")
+          setPrefs("homeSortDirection", prefs.homeSortDirection === "asc" ? "desc" : "asc")
         }
         class="flex size-5 items-center justify-center rounded-md border border-az-hairline bg-az-inset text-az-muted transition-colors hover:text-az-strong"
-        aria-label={tx(prefs.itemSortDirection === "asc" ? "Sort descending" : "Sort ascending")}
-        title={tx(prefs.itemSortDirection === "asc" ? "Ascending" : "Descending")}
+        aria-label={tx(prefs.homeSortDirection === "asc" ? "Sort descending" : "Sort ascending")}
+        title={tx(prefs.homeSortDirection === "asc" ? "Ascending" : "Descending")}
       >
         <Icon
           name="arrow-up"
-          class={`text-[11px] transition-transform ${prefs.itemSortDirection === "desc" ? "rotate-180" : ""}`}
+          class={`text-[11px] transition-transform ${prefs.homeSortDirection === "desc" ? "rotate-180" : ""}`}
         />
       </button>
     </fieldset>
@@ -1170,11 +1179,11 @@ function ProjectGroup(props: {
       (item) =>
         item.archived && state.projects.some((project) => project.forkedFrom?.itemId === item.id),
     );
-    return sortItems(
-      [...visible, ...archivedForkAnchors],
-      prefs.itemSortBy,
-      prefs.itemSortDirection,
-    );
+    const combined = [...visible, ...archivedForkAnchors];
+    if (prefs.homeSortBy === "turns") {
+      return combined.sort((left, right) => left.order - right.order);
+    }
+    return sortItems(combined, prefs.homeSortBy, prefs.homeSortDirection);
   };
   const openCount = () =>
     items().filter((item) => item.status !== "finished" && item.status !== "canceled").length;

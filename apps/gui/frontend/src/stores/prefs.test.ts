@@ -43,6 +43,8 @@ describe("workspace layout", () => {
       {
         itemSortBy: "unknown",
         itemSortDirection: "sideways",
+        homeSortBy: "unknown",
+        homeSortDirection: "sideways",
         taskPlacement: "somewhere",
       } as unknown as Parameters<typeof restorePortablePrefs>[0],
       "invalid-enums",
@@ -50,6 +52,8 @@ describe("workspace layout", () => {
 
     expect(prefs.itemSortBy).toBe("status");
     expect(prefs.itemSortDirection).toBe("asc");
+    expect(prefs.homeSortBy).toBe("status");
+    expect(prefs.homeSortDirection).toBe("asc");
     expect(prefs.taskPlacement).toBe("panel");
   });
 

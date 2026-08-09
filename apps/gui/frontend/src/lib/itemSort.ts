@@ -3,6 +3,7 @@ import type { Project, ProjectItem, UiPrefs } from "~/types";
 
 export type ItemSortBy = UiPrefs["itemSortBy"];
 export type ItemSortDirection = UiPrefs["itemSortDirection"];
+export type HomeSortBy = UiPrefs["homeSortBy"];
 
 /**
  * Home is a project-grouped list, so its sort controls must move both layers.
@@ -11,12 +12,17 @@ export type ItemSortDirection = UiPrefs["itemSortDirection"];
  */
 export function sortProjects(
   source: readonly Project[],
-  by: ItemSortBy,
+  by: HomeSortBy,
   direction: ItemSortDirection,
+  turnCounts: Readonly<Record<string, number>> = {},
 ): Project[] {
   const projects = [...source];
   const sign = direction === "asc" ? 1 : -1;
   projects.sort((left, right) => {
+    if (by === "turns") {
+      const turns = (turnCounts[left.id] ?? 0) - (turnCounts[right.id] ?? 0);
+      return (turns === 0 ? left.order - right.order : turns) * sign;
+    }
     if (by === "status") {
       const status = ITEM_LADDER.indexOf(left.status) - ITEM_LADDER.indexOf(right.status);
       return (status === 0 ? left.order - right.order : status) * sign;

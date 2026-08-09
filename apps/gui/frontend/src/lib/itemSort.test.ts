@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { sortItems } from "~/lib/itemSort";
-import type { ProjectItem, ProjectStatus } from "~/types";
+import { sortItems, sortProjects } from "~/lib/itemSort";
+import type { Project, ProjectItem, ProjectStatus } from "~/types";
 
 function item(id: string, status: ProjectStatus, order: number, updatedAt?: string): ProjectItem {
   return { id, projectId: "project", title: id, status, order, reference: null, updatedAt };
@@ -46,5 +46,37 @@ describe("item sorting", () => {
 
     expect(sortItems(legacy, "time", "asc").map((row) => row.id)).toEqual(["first", "last"]);
     expect(sortItems(legacy, "time", "desc").map((row) => row.id)).toEqual(["last", "first"]);
+  });
+});
+
+describe("Home project sorting", () => {
+  const project = (id: string, order: number): Project => ({
+    id,
+    name: id,
+    status: "active",
+    order,
+    dirs: [],
+    pinned: false,
+    moderatorEnabled: false,
+    forkedFrom: null,
+    sessionId: null,
+    sessions: {},
+    lastActivityAt: "",
+  });
+
+  it("orders project groups by aggregate turns with durable order as the tie break", () => {
+    const projects = [project("zero", 0), project("busy-later", 2), project("busy-earlier", 1)];
+    const turns = { "busy-later": 7, "busy-earlier": 7 };
+
+    expect(sortProjects(projects, "turns", "asc", turns).map((row) => row.id)).toEqual([
+      "zero",
+      "busy-earlier",
+      "busy-later",
+    ]);
+    expect(sortProjects(projects, "turns", "desc", turns).map((row) => row.id)).toEqual([
+      "busy-later",
+      "busy-earlier",
+      "zero",
+    ]);
   });
 });

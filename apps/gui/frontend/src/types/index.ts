@@ -931,6 +931,9 @@ export interface UiPrefs {
   /** The compact two-toggle sort state for project item lists. */
   itemSortBy: "status" | "time";
   itemSortDirection: "asc" | "desc";
+  /** Home project-group sorting, including aggregate turn count. */
+  homeSortBy: "status" | "time" | "turns";
+  homeSortDirection: "asc" | "desc";
   /**
    * The last "Extra Thinking" choice, so a new tab starts where the last one
    * was left. On by default, like the composer control it seeds.

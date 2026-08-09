@@ -90,8 +90,8 @@ describe("Home item rows", () => {
   });
 
   it("sorts the Home project groups instead of leaving the dominant rows fixed", async () => {
-    setPrefs("itemSortBy", "status");
-    setPrefs("itemSortDirection", "asc");
+    setPrefs("homeSortBy", "status");
+    setPrefs("homeSortDirection", "asc");
     const screen = await mountHome();
     const controls = screen.getByRole("group", { name: "Sort projects and items" });
     const [by, direction] = Array.from(controls.querySelectorAll("button"));
@@ -107,6 +107,10 @@ describe("Home item rows", () => {
     fireEvent.click(by);
     expect(by).toHaveTextContent("Time");
     expect(projectOrder()).toEqual(["worktable", "cafe", "agencyzero"]);
+
+    fireEvent.click(by);
+    expect(by).toHaveTextContent("Turns");
+    expect(projectOrder()).toEqual(["cafe", "worktable", "agencyzero"]);
   });
 
   it("expands one item description and closes it when another item receives focus", async () => {

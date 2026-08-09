@@ -357,6 +357,7 @@ const zh = {
   "Sort items": "事项排序",
   "Sort projects and items": "项目和事项排序",
   "Toggle item sort between status and time": "在状态和时间排序间切换",
+  "Cycle Home sort between status, time, and turns": "在状态、时间和轮次排序间循环切换",
   Status: "状态",
   Time: "时间",
   "Sort descending": "降序排列",
