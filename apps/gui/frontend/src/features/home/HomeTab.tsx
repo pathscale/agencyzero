@@ -18,6 +18,13 @@ import { prefs, setPrefs, togglePanelSection } from "~/stores/prefs";
 import { TASK_MANAGER_ID, useWorkspace } from "~/stores/workspace";
 import type { Project, ProjectItem } from "~/types";
 
+export const HOME_PROJECT_PAGE_SIZE = 30;
+export const HOME_RECENT_PAGE_SIZE = 20;
+
+export function projectPage<T>(projects: readonly T[], limit: number): T[] {
+  return projects.slice(0, Math.max(0, limit));
+}
+
 const STATUS_TONE: Record<ProjectItem["status"], string> = {
   active: "font-semibold text-primary",
   new: "text-az-muted",
@@ -51,6 +58,8 @@ export function HomeTab(): JSX.Element {
   const { state, actions, itemsFor, tabStatus } = useWorkspace();
   const [query, setQuery] = createSignal("");
   const [descriptionItemId, setDescriptionItemId] = createSignal<string | null>(null);
+  const [projectLimit, setProjectLimit] = createSignal(HOME_PROJECT_PAGE_SIZE);
+  const [recentLimit, setRecentLimit] = createSignal(HOME_RECENT_PAGE_SIZE);
 
   // Item forks are dedicated child chats, reachable beneath their parent item.
   // Showing them here as peers would turn one project into a pile of apparent
@@ -84,6 +93,9 @@ export function HomeTab(): JSX.Element {
     [...ordered()].sort((a, b) => b.lastActivityAt.localeCompare(a.lastActivityAt)),
   );
 
+  const visibleMatches = createMemo(() => projectPage(matches(), projectLimit()));
+  const visibleRecent = createMemo(() => projectPage(recent(), recentLimit()));
+
   return (
     <div class="flex min-w-0 flex-1 gap-3">
       <Panel class="flex min-w-0 flex-1 flex-col">
@@ -111,7 +123,10 @@ export function HomeTab(): JSX.Element {
               <input
                 type="search"
                 value={query()}
-                onInput={(event) => setQuery(event.currentTarget.value)}
+                onInput={(event) => {
+                  setQuery(event.currentTarget.value);
+                  setProjectLimit(HOME_PROJECT_PAGE_SIZE);
+                }}
                 placeholder={tx("Search projects and items…")}
                 aria-label={tx("Search projects and items")}
                 class="min-w-0 flex-1 bg-transparent text-[12.5px] text-base-content placeholder:text-az-muted focus:outline-none"
@@ -126,7 +141,7 @@ export function HomeTab(): JSX.Element {
         </div>
 
         <div class="az-scroll flex min-h-0 flex-1 flex-col gap-2.5 px-3.5 pb-3.5">
-          <For each={matches()}>
+          <For each={visibleMatches()}>
             {(project) => (
               <ProjectGroup
                 project={project}
@@ -139,6 +154,17 @@ export function HomeTab(): JSX.Element {
             <p class="px-2 py-6 text-center text-[12.5px] text-az-muted">
               {tx("Nothing matches “{query}”", { query: query() })}
             </p>
+          </Show>
+          <Show when={matches().length > visibleMatches().length}>
+            <button
+              type="button"
+              onClick={() => setProjectLimit((limit) => limit + HOME_PROJECT_PAGE_SIZE)}
+              class="flex-none rounded-xl border border-primary/24 bg-primary/8 px-3.5 py-2.5 font-semibold text-[12px] text-primary transition-colors hover:bg-primary/14"
+            >
+              {tx("Show {count} more projects", {
+                count: Math.min(HOME_PROJECT_PAGE_SIZE, matches().length - visibleMatches().length),
+              })}
+            </button>
           </Show>
         </div>
       </Panel>
@@ -198,7 +224,7 @@ export function HomeTab(): JSX.Element {
           class={prefs.panelSections.recent ? "flex min-h-0 flex-1 flex-col" : "flex-none"}
         >
           <div class="az-scroll flex min-h-0 flex-1 flex-col gap-2 px-3 pt-3 pb-3">
-            <For each={recent()}>
+            <For each={visibleRecent()}>
               {(project) => (
                 <button
                   type="button"
@@ -222,6 +248,17 @@ export function HomeTab(): JSX.Element {
                 </button>
               )}
             </For>
+            <Show when={recent().length > visibleRecent().length}>
+              <button
+                type="button"
+                onClick={() => setRecentLimit((limit) => limit + HOME_RECENT_PAGE_SIZE)}
+                class="rounded-[11px] border border-primary/24 bg-primary/8 px-3 py-2 font-semibold text-[11.5px] text-primary transition-colors hover:bg-primary/14"
+              >
+                {tx("Show {count} more projects", {
+                  count: Math.min(HOME_RECENT_PAGE_SIZE, recent().length - visibleRecent().length),
+                })}
+              </button>
+            </Show>
           </div>
         </SectionPanel>
 

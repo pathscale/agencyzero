@@ -10,6 +10,7 @@ const en = {
     "Design fixtures — the Rust commands are not implemented yet",
   "New project": "New project",
   "Show {count} earlier messages": "Show {count} earlier messages",
+  "Show {count} more projects": "Show {count} more projects",
   "Update available: {version} — install from Settings":
     "Update available: {version} — install from Settings",
   "Scroll tabs left": "Scroll tabs left",
