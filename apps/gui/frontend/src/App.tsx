@@ -195,6 +195,7 @@ export function Workspace(): JSX.Element {
       <CloseConfirm
         isOpen={shell.isClosing()}
         error={shell.closeError()}
+        quitsProxy={shell.quitsProxy()}
         onCancel={shell.cancelClose}
         onConfirm={shell.confirmClose}
       />

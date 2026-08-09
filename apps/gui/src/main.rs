@@ -174,6 +174,7 @@ const IMPLEMENTED: &[&str] = &[
     "get_build_info",
     "get_persistence_failure",
     "quit_app",
+    "quit_app_and_proxy",
     "relaunch_app",
     "list_agent_io",
     "get_io_persist",
@@ -336,9 +337,35 @@ fn write_restart_resume(state: &AppState, project_id: &str, actor: &str) -> Resu
         .map_err(|error| format!("could not publish restart-resume marker: {error}"))
 }
 
-fn read_restart_resume(config_dir: &std::path::Path) -> Option<RestartResume> {
+fn take_restart_resume(config_dir: &std::path::Path) -> Option<RestartResume> {
     let path = restart_resume_path(config_dir);
-    let raw = std::fs::read(&path).ok()?;
+    let consuming = path.with_extension("json.consuming");
+    if !path.is_file() {
+        return None;
+    }
+    if let Err(error) = std::fs::rename(&path, &consuming) {
+        crate::log!(
+            log::Level::Error,
+            "boot",
+            "could not consume {} exactly once: {error}",
+            path.display()
+        );
+        return None;
+    }
+    let raw = match std::fs::read(&consuming) {
+        Ok(raw) => raw,
+        Err(error) => {
+            crate::log!(
+                log::Level::Warn,
+                "boot",
+                "could not read consumed restart marker {}: {error}",
+                consuming.display()
+            );
+            let _ = std::fs::remove_file(&consuming);
+            return None;
+        }
+    };
+    let _ = std::fs::remove_file(&consuming);
     match serde_json::from_slice(&raw) {
         Ok(marker) => Some(marker),
         Err(error) => {
@@ -346,7 +373,7 @@ fn read_restart_resume(config_dir: &std::path::Path) -> Option<RestartResume> {
                 log::Level::Warn,
                 "boot",
                 "could not decode {}: {error}",
-                path.display()
+                consuming.display()
             );
             None
         }
@@ -399,10 +426,7 @@ async fn resume_after_restart(app: AppHandle, marker: RestartResume) {
         study: None,
     };
     match projects::send_message(app.clone(), input, state).await {
-        Ok(_) => {
-            let _ = std::fs::remove_file(restart_resume_path(&app.state::<AppState>().config_dir));
-            crate::log!(log::Level::Info, "boot", "restart-resume run started");
-        }
+        Ok(_) => crate::log!(log::Level::Info, "boot", "restart-resume run started"),
         Err(error) => crate::log!(
             log::Level::Error,
             "boot",
@@ -586,6 +610,34 @@ mod restart_resume_tests {
 
         assert_eq!(marker.project_id, "project-origin");
         assert_eq!(marker.agent, settings.default_agent);
+    }
+
+    #[test]
+    fn a_restart_marker_is_consumed_once_even_when_resume_cannot_start() {
+        let dir = std::env::temp_dir().join(format!(
+            "az-restart-marker-{}-{}",
+            std::process::id(),
+            uuid::Uuid::now_v7()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        let marker = RestartResume {
+            project_id: "project-origin".into(),
+            agent: "codex".into(),
+            model: "gpt-5.6-sol".into(),
+            permission: "auto".into(),
+            effort: "high".into(),
+            prompt: RESTART_RESUME_PROMPT.into(),
+        };
+        std::fs::write(
+            restart_resume_path(&dir),
+            serde_json::to_vec(&marker).unwrap(),
+        )
+        .unwrap();
+
+        assert!(take_restart_resume(&dir).is_some());
+        assert!(take_restart_resume(&dir).is_none());
+        assert!(!restart_resume_path(&dir).exists());
+        let _ = std::fs::remove_dir_all(dir);
     }
 }
 
@@ -1186,6 +1238,27 @@ async fn quit_app(app: AppHandle, state: State<'_, AppState>) -> Result<(), Stri
     Ok(())
 }
 
+/// Terminate AgencyProxy, let its run handlers settle, drain WorkTable, then
+/// exit the GUI. Ordinary Quit deliberately leaves the proxy alive.
+#[tauri::command]
+async fn quit_app_and_proxy(app: AppHandle, state: State<'_, AppState>) -> Result<(), String> {
+    state.proxy.terminate().await?;
+
+    let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(15);
+    while state.live_run_count() != 0 {
+        if tokio::time::Instant::now() >= deadline {
+            return Err(
+                "AgencyProxy stopped, but AgencyZero is still settling terminated runs; try Quit Both again in a moment"
+                    .into(),
+            );
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(25)).await;
+    }
+    state.drain_tables_once().await?;
+    app.exit(0);
+    Ok(())
+}
+
 /// The persisted settings record, or the defaults on a first run.
 ///
 /// A record that fails to parse is replaced by the defaults rather than failing
@@ -1350,6 +1423,7 @@ const CLOSE_TAB: &str = "close-tab";
 const NEXT_TAB: &str = "next-tab";
 const PREV_TAB: &str = "prev-tab";
 const QUIT: &str = "quit";
+const QUIT_ALL: &str = "quit-all";
 const RESTART: &str = "restart";
 
 /// The application menu.
@@ -1368,6 +1442,8 @@ fn build_menu<R: Runtime>(app: &tauri::AppHandle<R>) -> tauri::Result<Menu<R>> {
     let quit = MenuItemBuilder::with_id(QUIT, "Quit AgencyZero")
         .accelerator("CmdOrCtrl+Q")
         .build(app)?;
+    let quit_all =
+        MenuItemBuilder::with_id(QUIT_ALL, "Quit AgencyZero & AgencyProxy…").build(app)?;
     // No accelerator: restarting is deliberate, not something to fat-finger.
     let restart = MenuItemBuilder::with_id(RESTART, "Restart into Build on Disk").build(app)?;
 
@@ -1394,6 +1470,7 @@ fn build_menu<R: Runtime>(app: &tauri::AppHandle<R>) -> tauri::Result<Menu<R>> {
         .show_all()
         .separator()
         .item(&restart)
+        .item(&quit_all)
         .item(&quit)
         .build()?;
 
@@ -1855,6 +1932,7 @@ fn main() {
             study::clear_study_events,
             relaunch_app,
             quit_app,
+            quit_app_and_proxy,
             set_settings,
             list_agent_status,
             models::list_models,
@@ -2083,7 +2161,7 @@ fn main() {
                 &tables,
                 &live_proxy_runs,
             ));
-            let restart_resume = read_restart_resume(&config_dir);
+            let restart_resume = take_restart_resume(&config_dir);
             app.manage(AppState {
                 tables: Arc::new(tables),
                 proxy,
@@ -2225,6 +2303,7 @@ fn main() {
                 // Quit asks rather than exits. The webview owns the confirmation
                 // because it is the side that knows what is still running.
                 QUIT => "menu:quit",
+                QUIT_ALL => "menu:quit-all",
                 RESTART => "menu:restart",
                 _ => return,
             };

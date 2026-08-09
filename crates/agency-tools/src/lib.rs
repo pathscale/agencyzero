@@ -548,6 +548,147 @@ pub fn list_items_with_descriptions(
     Ok(rows)
 }
 
+/// One provider-session ownership row from the app's key/value table.
+///
+/// Empty session ids are included because an explicit reset is materially
+/// different from a key that was never created, and that distinction is the
+/// evidence needed when recovering a session from a pre-migration snapshot.
+#[derive(Clone, Debug, Serialize)]
+pub struct SessionOut {
+    pub project_id: String,
+    pub agent: String,
+    pub session_id: String,
+    pub updated_at: String,
+}
+
+/// A provider session present in a retained WorkTable snapshot but not owned
+/// by the current project row. This is the actionable recovery view: project
+/// name, both pointers, and every snapshot that independently confirms the
+/// candidate.
+#[derive(Debug, Serialize)]
+pub struct SessionRecoveryOut {
+    pub project_id: String,
+    pub project_name: String,
+    pub agent: String,
+    pub current_session_id: String,
+    pub current_updated_at: String,
+    pub recoverable_session_id: String,
+    pub recoverable_updated_at: String,
+    pub snapshots: Vec<String>,
+    pub action: String,
+}
+
+fn provider_session_key(key: &str) -> Option<(&str, &str)> {
+    if let Some(project) = key.strip_prefix("session:codex:") {
+        Some(("codex", project))
+    } else if let Some(project) = key.strip_prefix("session:copilot:") {
+        Some(("copilot", project))
+    } else {
+        key.strip_prefix("session:")
+            .filter(|project| !project.contains(':'))
+            .map(|project| ("claude", project))
+    }
+}
+
+/// Provider-session ownership, optionally narrowed to one project.
+///
+/// # Errors
+/// Returns WorkTable's read error when the key/value scan fails.
+pub fn list_sessions(kv: &KvWorkTable, project: Option<&str>) -> eyre::Result<Vec<SessionOut>> {
+    let mut rows: Vec<SessionOut> = kv
+        .select_all()
+        .execute()?
+        .into_iter()
+        .filter_map(|row| {
+            let (agent, project_id) = provider_session_key(&row.key)?;
+            if project.is_some_and(|wanted| wanted != project_id) {
+                return None;
+            }
+            Some(SessionOut {
+                project_id: project_id.to_string(),
+                agent: agent.to_string(),
+                session_id: row.value,
+                updated_at: row.updated_at,
+            })
+        })
+        .collect();
+    rows.sort_by(|left, right| {
+        left.project_id
+            .cmp(&right.project_id)
+            .then_with(|| left.agent.cmp(&right.agent))
+    });
+    Ok(rows)
+}
+
+/// Sessions recoverable from retained snapshot rows.
+///
+/// Identical candidates in multiple snapshots collapse into one report row,
+/// with every confirming snapshot named. A different non-empty current pointer
+/// is reported as `inspect_divergence`; an absent or explicitly empty pointer
+/// is a direct `restore_snapshot_session` candidate.
+///
+/// # Errors
+/// Returns WorkTable's read error when project names cannot be scanned.
+pub fn session_recovery_report(
+    projects: &ProjectWorkTable,
+    current: &[SessionOut],
+    snapshots: &[(String, Vec<SessionOut>)],
+    project: Option<&str>,
+) -> eyre::Result<Vec<SessionRecoveryOut>> {
+    use std::collections::{BTreeMap, HashMap};
+
+    let names: HashMap<String, String> = projects
+        .select_all()
+        .execute()?
+        .into_iter()
+        .map(|row| (row.id, row.name))
+        .collect();
+    let current: HashMap<(String, String), &SessionOut> = current
+        .iter()
+        .map(|row| ((row.project_id.clone(), row.agent.clone()), row))
+        .collect();
+    let mut candidates: BTreeMap<(String, String, String), SessionRecoveryOut> = BTreeMap::new();
+
+    for (snapshot, rows) in snapshots {
+        for row in rows {
+            if row.session_id.is_empty() || project.is_some_and(|wanted| wanted != row.project_id) {
+                continue;
+            }
+            let owned = current.get(&(row.project_id.clone(), row.agent.clone()));
+            if owned.is_some_and(|current| current.session_id == row.session_id) {
+                continue;
+            }
+            let key = (
+                row.project_id.clone(),
+                row.agent.clone(),
+                row.session_id.clone(),
+            );
+            let report = candidates.entry(key).or_insert_with(|| SessionRecoveryOut {
+                project_id: row.project_id.clone(),
+                project_name: names.get(&row.project_id).cloned().unwrap_or_default(),
+                agent: row.agent.clone(),
+                current_session_id: owned.map_or_else(String::new, |row| row.session_id.clone()),
+                current_updated_at: owned.map_or_else(String::new, |row| row.updated_at.clone()),
+                recoverable_session_id: row.session_id.clone(),
+                recoverable_updated_at: row.updated_at.clone(),
+                snapshots: Vec::new(),
+                action: if owned.is_none_or(|row| row.session_id.is_empty()) {
+                    "restore_snapshot_session".into()
+                } else {
+                    "inspect_divergence".into()
+                },
+            });
+            if !report.snapshots.contains(snapshot) {
+                report.snapshots.push(snapshot.clone());
+            }
+            if row.updated_at > report.recoverable_updated_at {
+                report.recoverable_updated_at.clone_from(&row.updated_at);
+            }
+        }
+    }
+    Ok(candidates.into_values().collect())
+}
+
 /// One transcript row as the CLI prints it.
 ///
 /// The body is reported by length rather than printed: a transcript is the

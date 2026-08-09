@@ -18,6 +18,9 @@ pub const KEY: &str = "settings";
 #[serde(rename_all = "camelCase", default)]
 pub struct GlobalSettings {
     pub default_agent: String,
+    /// Interface language. Persisted in WorkTable with every other owner
+    /// setting; the Blitz document has no browser database of its own.
+    pub locale: String,
     /// Where a new project runs, and the parent of any directory it creates.
     ///
     /// Empty means "not chosen yet", which resolves to `$HOME/AgencyZero` at
@@ -372,6 +375,7 @@ impl Default for GlobalSettings {
         };
         GlobalSettings {
             default_agent: "claude".into(),
+            locale: "en".into(),
             workspace_root: String::new(),
             agent_proxy_binary: String::new(),
             models: BTreeMap::from([
@@ -552,6 +556,9 @@ pub fn normalize(settings: &mut GlobalSettings) {
     }
     if !settings.ui_preferences.is_object() {
         settings.ui_preferences = empty_object();
+    }
+    if !matches!(settings.locale.as_str(), "en" | "zh" | "es" | "pt" | "fr") {
+        settings.locale = "en".into();
     }
     if !matches!(
         settings.agent_restart_policy.as_str(),
@@ -767,6 +774,7 @@ mod tests {
         let json = serde_json::to_string(&GlobalSettings::default()).expect("should serialize");
         let back: GlobalSettings = serde_json::from_str(&json).expect("should deserialize");
         assert_eq!(back.models["claude"].default, "sonnet");
+        assert_eq!(back.locale, "en");
         assert_eq!(back.task_manager.agent, "codex");
         assert_eq!(back.task_manager.model, "gpt-5.6-luna");
         assert_eq!(back.task_manager.effort, "low");
@@ -817,6 +825,7 @@ mod tests {
         let old = r#"{"defaultAgent":"codex","taskManager":{"model":"haiku","effort":"medium","dirs":[]}}"#;
         let loaded: GlobalSettings = serde_json::from_str(old).expect("should tolerate absence");
         assert_eq!(loaded.default_agent, "codex");
+        assert_eq!(loaded.locale, "en");
         assert_eq!(loaded.task_manager.agent, "codex");
         assert_eq!(loaded.task_manager.permission, "ask");
         assert!(!loaded.study_analytics.enabled);

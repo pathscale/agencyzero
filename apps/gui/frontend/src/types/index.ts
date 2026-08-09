@@ -575,6 +575,8 @@ export interface StudyTurnMetadata {
 /** One record, persisted. Every new tab starts from it. */
 export interface GlobalSettings {
   defaultAgent: Agent;
+  /** Interface language, persisted in the WorkTable settings row. */
+  locale: "en" | "zh" | "es" | "pt" | "fr";
   /**
    * Where a new project runs. Empty means not chosen, which resolves to
    * `$HOME/AgencyZero` at read time rather than being frozen into the record.
@@ -634,7 +636,7 @@ export interface GlobalSettings {
   workspaceTabs: WorkspaceTabs | null;
   /** False only for a genuinely new store until its welcome flow completes. */
   onboardingCompleted: boolean;
-  /** Stable webview preferences copied into the store for portable backups. */
+  /** Stable UI preferences persisted in WorkTable and included in backups. */
   uiPreferences: Partial<PortableUiPrefs>;
   /** Capture id used to apply a restored preference snapshot exactly once. */
   uiPreferencesRevision: string;

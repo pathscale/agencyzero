@@ -28,12 +28,11 @@ describe("interface languages", () => {
     expect(Object.keys(uiZh).sort()).toEqual(Object.keys(uiEn).sort());
   });
 
-  it("switches translations and persists the selected language", async () => {
+  it("switches translations in memory", async () => {
     await i18n.setLocale("es");
 
     expect(i18n.locale).toBe("es");
     expect(i18n.t("appearance.light")).toBe("Claro");
-    expect(localStorage.getItem("agencyzero:locale")).toBe("es");
 
     await i18n.setLocale("en");
   });

@@ -356,6 +356,8 @@ export interface AgencyZeroApi {
   installUpdate(): Promise<void>;
   /** Drain persistence asynchronously, then exit the native app. */
   quitApp(): Promise<void>;
+  /** Terminate AgencyProxy, drain persistence, then exit the native app. */
+  quitAppAndProxy(): Promise<void>;
   /**
    * Drain the store and restart into whatever binary is on disk at the app's
    * own path — the second half of a rebuild. Never resolves: the process is

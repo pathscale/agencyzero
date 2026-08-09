@@ -1153,6 +1153,7 @@ export function createMockApi(): AgencyZeroApi {
 
     // A browser preview has no native process to quit.
     quitApp: () => settle(undefined),
+    quitAppAndProxy: () => settle(undefined),
 
     // A browser tab cannot exec itself; the button is greyed off-Tauri anyway.
     relaunchApp: () => settle(undefined),

@@ -216,12 +216,37 @@ impl AgencyProxy {
 
     /// Close admission, let every live run finish, then keep the daemon stopped.
     pub async fn stop(&self) -> Result<Status, String> {
+        self.shutdown(ShutdownMode::Drain, "Stopped by user").await
+    }
+
+    /// Cancel live runs, close admission, and keep the daemon stopped.
+    pub async fn terminate(&self) -> Result<Status, String> {
+        if matches!(
+            self.connection_state(),
+            ConnectionState::Crashed | ConnectionState::Stopped
+        ) {
+            return self.disconnected_status("Stopped with AgencyZero".into());
+        }
+        // Quitting both must not start a daemon merely so it can stop it. A
+        // cold manager can still attach to a proxy left by an earlier GUI, but
+        // an absent socket means there is nothing to terminate.
+        if self.connection_state() == ConnectionState::Cold
+            && tokio::net::UnixStream::connect(&self.socket_path)
+                .await
+                .is_err()
+        {
+            self.set_connection_state(ConnectionState::Stopped);
+            return self.disconnected_status("AgencyProxy was not running".into());
+        }
+        self.shutdown(ShutdownMode::Terminate, "Stopped with AgencyZero")
+            .await
+    }
+
+    async fn shutdown(&self, mode: ShutdownMode, detail: &str) -> Result<Status, String> {
         let client = self.connect().await?;
         if client.version().minor >= 3 {
             match client
-                .request(ClientMessage::Shutdown {
-                    mode: ShutdownMode::Drain,
-                })
+                .request(ClientMessage::Shutdown { mode })
                 .await
                 .map_err(|error| error.to_string())?
             {
@@ -229,7 +254,7 @@ impl AgencyProxy {
                 response => return Err(response_error(response)),
             }
         } else {
-            shutdown_legacy_proxy(&client, ShutdownMode::Drain).await?;
+            shutdown_legacy_proxy(&client, mode).await?;
         }
         self.set_connection_state(ConnectionState::Stopped);
         drop(client);
@@ -239,7 +264,7 @@ impl AgencyProxy {
         {
             tokio::time::sleep(Duration::from_millis(100)).await;
         }
-        self.disconnected_status("Stopped by user".into())
+        self.disconnected_status(detail.into())
     }
 
     pub async fn probe_providers(&self) -> Result<Vec<ProviderStatus>, String> {
@@ -415,7 +440,10 @@ impl AgencyProxy {
             connected: false,
             active_runs: 0,
             retained_runs: 0,
-            binary: self.binary_name()?,
+            // A stopped or absent daemon does not need a runnable binary. In
+            // particular, Quit Both must succeed when there was no sidecar to
+            // terminate and a development checkout has not built one yet.
+            binary: self.binary_name().unwrap_or_else(|_| "AgencyProxy".into()),
             socket: self.socket_path.to_string_lossy().into_owned(),
             detail: Some(detail),
         })
@@ -797,6 +825,27 @@ mod tests {
             proxy.failure_message(),
             "socket bind failed: operation not permitted"
         );
+    }
+
+    #[tokio::test]
+    async fn terminating_an_absent_proxy_does_not_start_one() {
+        let dir = std::env::temp_dir().join(format!(
+            "agency-proxy-absent-{}-{}",
+            std::process::id(),
+            uuid::Uuid::now_v7()
+        ));
+        std::fs::create_dir_all(&dir).expect("create temp directory");
+        let proxy = AgencyProxy::new(&dir, None);
+
+        let status = proxy
+            .terminate()
+            .await
+            .expect("absent proxy is already stopped");
+
+        assert!(!status.connected);
+        assert_eq!(proxy.connection_state(), ConnectionState::Stopped);
+        assert!(!proxy.socket_path.exists());
+        let _ = std::fs::remove_dir_all(dir);
     }
 
     #[test]

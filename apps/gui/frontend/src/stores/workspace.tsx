@@ -17,6 +17,7 @@ import { PERMISSION_ORDER } from "~/lib/labels";
 import { describeError, installGlobalErrorLogging, log } from "~/lib/log";
 import { usageTotals } from "~/lib/stats";
 import { applyTheme } from "~/lib/theme";
+import { i18n } from "~/stores/i18n";
 import {
   markPortablePrefsCurrent,
   portablePrefsSnapshot,
@@ -422,9 +423,9 @@ function createWorkspace() {
   const [api, setApi] = createSignal<AgencyZeroApi | null>(null);
   const unlisteners: Unlisten[] = [];
 
-  /** Monotonic ticket for settings writes; see `saveSettings`. */
-  let settingsWrite = 0;
+  /** Settings writes are serialized so each full response can safely win. */
   let settingsWriteTail: Promise<void> = Promise.resolve();
+  let taskManagerWrite = 0;
   let itemRevealRevision = 0;
   /** Last project (or Home) focused before a utility tab covered it. */
   let lastPortableActiveKey = "home";
@@ -479,26 +480,29 @@ function createWorkspace() {
   }
 
   /**
-   * Settings autosave, and each response replaces the whole record, so two
-   * quick changes racing must not let the slower response revert local state.
-   * The backend separately serializes the read-merge-write itself.
+   * Settings autosave, and each response replaces the whole record. Queueing
+   * requests here keeps their local application in the same order as the
+   * backend's read-merge-write. Skipping an earlier response when a later write
+   * is merely queued leaves callers observing stale state after their awaited
+   * save, which the UI-preference autosave made particularly easy to trigger.
    */
   async function saveSettings(patch: Parameters<AgencyZeroApi["setSettings"]>[0]): Promise<void> {
-    const ticket = ++settingsWrite;
+    const taskManagerTicket = patch.taskManager ? ++taskManagerWrite : taskManagerWrite;
     const request = settingsWriteTail.then(() => client().setSettings(patch));
     settingsWriteTail = request.then(
       () => undefined,
       () => undefined,
     );
     const next = await request;
-    if (ticket !== settingsWrite) return;
     batch(() => {
       setState("settings", next);
       reconcileTabModels(next);
     });
     if (patch.taskManager) {
       const taskManager = await client().getTaskManager();
-      if (ticket === settingsWrite) setState("taskManagerSession", taskManager.sessionId);
+      if (taskManagerTicket === taskManagerWrite) {
+        setState("taskManagerSession", taskManager.sessionId);
+      }
     }
     // The record is the only source for the palette, so the document follows
     // whatever came back rather than what was optimistically sent.
@@ -554,6 +558,24 @@ function createWorkspace() {
     void persistWorkspaceTabs().catch((cause) =>
       log.warn(`could not persist open project tabs: ${describeError(cause)}`),
     );
+  });
+
+  let prefsWriteTimer: ReturnType<typeof setTimeout> | undefined;
+  createEffect(() => {
+    if (state.boot.status !== "ready" || !state.settings) return;
+    const snapshot = portablePrefsSnapshot();
+    if (JSON.stringify(snapshot) === JSON.stringify(state.settings.uiPreferences)) return;
+    if (prefsWriteTimer) clearTimeout(prefsWriteTimer);
+    prefsWriteTimer = setTimeout(() => {
+      prefsWriteTimer = undefined;
+      const revision = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      void saveSettings({ uiPreferences: snapshot, uiPreferencesRevision: revision })
+        .then(() => markPortablePrefsCurrent(revision))
+        .catch((cause) => log.warn(`could not persist UI preferences: ${describeError(cause)}`));
+    }, 250);
+  });
+  onCleanup(() => {
+    if (prefsWriteTimer) clearTimeout(prefsWriteTimer);
   });
 
   // — derived ————————————————————————————————————————————————————
@@ -858,6 +880,7 @@ function createWorkspace() {
       // the designed palette, so a saved theme arriving late would show as a
       // flash of the old colours on every launch.
       restorePortablePrefs(settings.uiPreferences, settings.uiPreferencesRevision);
+      await i18n.setLocale(settings.locale);
       applyTheme(settings.theme);
 
       batch(() => {
@@ -2349,6 +2372,7 @@ function createWorkspace() {
     checkForUpdate,
     installUpdate: () => client().installUpdate(),
     quitApp: () => client().quitApp(),
+    quitAppAndProxy: () => client().quitAppAndProxy(),
     relaunchApp: () => client().relaunchApp(),
     cancelTask: (toolCallId: string) => client().cancelTask(toolCallId),
     cancelRun: (projectId: string) => client().cancelRun(projectId),

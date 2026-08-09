@@ -147,6 +147,7 @@ export function createCommandApi(call: CommandCaller, on: EventListener): Agency
     checkForUpdate: () => call("check_for_update"),
     installUpdate: () => call("install_update"),
     quitApp: () => call("quit_app"),
+    quitAppAndProxy: () => call("quit_app_and_proxy"),
     relaunchApp: () => call("relaunch_app"),
     getTaskManager: () => call("get_task_manager"),
     resetTaskManager: () => call("reset_task_manager"),

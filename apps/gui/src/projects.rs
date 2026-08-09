@@ -1172,13 +1172,14 @@ async fn record_started_session(
     Ok(true)
 }
 
-/// Whether a failed run proved that its persisted resume pointer is unusable.
+/// Whether an internal failure happened before a resumed turn became live.
 ///
-/// A deliberate stop before the first real turn event says nothing about the
-/// session, so it keeps the pointer. An idle timeout or a rejected live steer
-/// does: the resumed process accepted neither the opening prompt nor the
-/// follow-up. Retrying that same pointer only repeats the dead wait.
-fn should_forget_unresponsive_resume(
+/// This used to authorize clearing the provider-session pointer. A timeout is
+/// not proof that the provider rejected the session: proxy reconnects, runtime
+/// restarts, and provider startup can all cross the same deadline. Keep the
+/// pointer and surface a stalled turn instead. Starting fresh remains an
+/// explicit owner action through Reset session.
+fn unresponsive_resume_was_not_disproven(
     resume: Option<&str>,
     opening_message_read: bool,
     stalled_injection: bool,
@@ -4699,30 +4700,6 @@ fn emit_message_receipt(app: &AppHandle, project_id: &str, message_id: &str, sta
     );
 }
 
-/// Requeue the durable opening message after proving its resume pointer is bad.
-///
-/// The existing `run:inject_failed` path already retries a persisted user row
-/// without appending it twice. Reusing it here makes idle recovery real rather
-/// than merely clearing the session and waiting for the owner to discover that
-/// they must press Reset and resend. The cleared session bounds this to one
-/// automatic retry: a fresh run has no non-empty resume pointer to discard.
-fn unresponsive_opening_retry(
-    tables: &Tables,
-    project_id: &str,
-    message_id: &str,
-) -> Option<serde_json::Value> {
-    let row = tables.message.select(message_id.to_string())?;
-    if row.project_id != project_id || row.author != "user" {
-        return None;
-    }
-    Some(serde_json::json!({
-        "projectId": project_id,
-        "messageId": message_id,
-        "body": full_body(tables, message_id, &row.body),
-        "replyQuestionId": reply_for_message(tables, message_id),
-    }))
-}
-
 /// Persist a new user message, or recover the exact row whose live steer was
 /// rejected after it had already been rendered.
 ///
@@ -5668,6 +5645,20 @@ const APPROVAL_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30 
 /// returns. Bound that startup separately so the existing fresh-session retry
 /// happens before the owner has to diagnose and reset it by hand.
 const RUN_START_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(45);
+
+/// A retained thread can be large enough that the provider spends meaningful
+/// time reopening it before `turn/start` appears. Five minutes matches the
+/// ordinary live-idle allowance: it still bounds a genuinely dead resume,
+/// without erasing or repeatedly cancelling a valid large conversation.
+const RESUMED_RUN_START_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5 * 60);
+
+fn run_start_timeout(resume: Option<&str>) -> std::time::Duration {
+    if resume.is_some_and(|session| !session.is_empty()) {
+        RESUMED_RUN_START_TIMEOUT
+    } else {
+        RUN_START_TIMEOUT
+    }
+}
 
 /// How long a live run may emit *nothing* after it starts before it is treated
 /// as wedged.
@@ -10621,7 +10612,8 @@ async fn drive_run(
     // Before the turn begins this is an absolute startup bound: thread setup
     // events do not extend it. After the first real turn event it becomes the
     // ordinary sliding idle deadline.
-    let mut idle_deadline = tokio::time::Instant::now() + RUN_START_TIMEOUT;
+    let start_timeout = run_start_timeout(resume.as_deref());
+    let mut idle_deadline = tokio::time::Instant::now() + start_timeout;
     loop {
         let wake = tokio::select! {
             event = run.recv() => match event {
@@ -10673,7 +10665,7 @@ async fn drive_run(
                         crate::log::Level::Warn,
                         "run",
                         "{project_id}: the provider opened but its turn did not start within {}s — stopping it for fresh-session recovery",
-                        RUN_START_TIMEOUT.as_secs()
+                        start_timeout.as_secs()
                     );
                 }
                 cancelled = true;
@@ -11749,57 +11741,32 @@ async fn drive_run(
         // the run happened to finish first (then it is the `Ok` arm above).
         Err(error) if cancelled => {
             let mut recovery_queued = stalled_injection;
-            /*
-             * A poisoned native session used to survive this exact recovery
-             * path. The failed live message was queued, the run was torn down,
-             * and the queued retry resumed the same pointer and wedged again.
-             * Only forget it when the provider never emitted even one event
-             * and recovery, rather than the owner, caused the cancellation.
-             */
-            if should_forget_unresponsive_resume(
+            if unresponsive_resume_was_not_disproven(
                 resume.as_deref(),
                 opening_message_read,
                 stalled_injection,
                 idle_stalled,
             ) {
-                match tables
-                    .kv_put(&agent_session_key(&project_id, agent), String::new())
-                    .await
-                {
-                    Ok(()) => {
-                        clear_partial_reply(&tables, &project_id).await;
-                        crate::log!(
-                            crate::log::Level::Warn,
-                            "run",
-                            "{project_id}: forgot an unresponsive {} session; the queued retry starts fresh",
-                            agent_wire_name(agent)
-                        );
-                        note_io(
-                            &app,
-                            &io,
-                            &project_id,
-                            "received",
-                            "recovery",
-                            "the resumed session accepted no messages; the retry starts fresh",
-                        );
-                        if let Some(retry) =
-                            unresponsive_opening_retry(&tables, &project_id, &turn_id)
-                            && app.emit("run:inject_failed", retry).is_ok()
-                        {
-                            recovery_queued = true;
-                        }
-                        if let Some(row) = tables.project.select(project_id.clone()) {
-                            let _ = app.emit(
-                                "project:updated",
-                                with_session(ProjectDto::from(row), &tables),
-                            );
-                        }
-                    }
-                    Err(clear_error) => crate::log!(
-                        crate::log::Level::Error,
-                        "run",
-                        "{project_id}: could not forget the unresponsive session: {clear_error}"
-                    ),
+                crate::log!(
+                    crate::log::Level::Warn,
+                    "run",
+                    "{project_id}: preserved the unresponsive {} session; only an explicit owner reset may start fresh",
+                    agent_wire_name(agent)
+                );
+                note_io(
+                    &app,
+                    &io,
+                    &project_id,
+                    "received",
+                    "recovery",
+                    "the resumed turn did not become live; its session was preserved for retry or explicit owner reset",
+                );
+                // A startup timeout has no independently queued message. It is
+                // a visible stalled turn whose Retry keeps the same pointer.
+                // A failed live steer was already durably queued by the
+                // injection path and retains its existing recovery signal.
+                if idle_stalled && !stalled_injection {
+                    recovery_queued = false;
                 }
             }
             let stop = if cleanup_timed_out {
@@ -12834,39 +12801,51 @@ mod tests {
     }
 
     #[test]
-    fn only_recovery_before_the_first_turn_event_forgets_a_resume() {
-        assert!(should_forget_unresponsive_resume(
+    fn internal_failure_before_the_first_turn_event_preserves_a_resume() {
+        assert!(unresponsive_resume_was_not_disproven(
             Some("thread-stuck"),
             false,
             true,
             false
         ));
-        assert!(should_forget_unresponsive_resume(
+        assert!(unresponsive_resume_was_not_disproven(
             Some("thread-stuck"),
             false,
             false,
             true
         ));
 
-        assert!(!should_forget_unresponsive_resume(
+        assert!(!unresponsive_resume_was_not_disproven(
             Some("thread-healthy"),
             true,
             true,
             false
         ));
-        assert!(!should_forget_unresponsive_resume(
+        assert!(!unresponsive_resume_was_not_disproven(
             Some("thread-stopped-by-owner"),
             false,
             false,
             false
         ));
-        assert!(!should_forget_unresponsive_resume(None, false, true, false));
-        assert!(!should_forget_unresponsive_resume(
+        assert!(!unresponsive_resume_was_not_disproven(
+            None, false, true, false
+        ));
+        assert!(!unresponsive_resume_was_not_disproven(
             Some(""),
             false,
             true,
             false
         ));
+    }
+
+    #[test]
+    fn a_resumed_thread_gets_the_live_idle_allowance_to_start() {
+        assert_eq!(run_start_timeout(None), RUN_START_TIMEOUT);
+        assert_eq!(run_start_timeout(Some("")), RUN_START_TIMEOUT);
+        assert_eq!(
+            run_start_timeout(Some("019fe585-684c-7240-82b9-7b1a02d25983")),
+            RESUMED_RUN_START_TIMEOUT
+        );
     }
 
     #[test]
@@ -12937,48 +12916,6 @@ mod tests {
             }
         ));
         assert!(event_proves_turn_started(Agent::Claude, false, &opened));
-    }
-
-    #[tokio::test]
-    async fn unresponsive_resume_requeues_the_existing_opening_message() {
-        let dir = std::env::temp_dir().join(format!(
-            "az-unresponsive-retry-{}-{}",
-            std::process::id(),
-            chrono::Utc::now().timestamp_nanos_opt().unwrap_or_default()
-        ));
-        let tables = Tables::open(&dir).await.expect("retry store opens");
-        let body = "continue without duplicating this message";
-        tables
-            .message
-            .insert(MessageRow {
-                id: "opening-message".into(),
-                project_id: "project-retry".into(),
-                item_id: String::new(),
-                author: "user".into(),
-                agent: "codex".into(),
-                moderation: String::new(),
-                model: String::new(),
-                permission: String::new(),
-                usage: String::new(),
-                stop: "completed".into(),
-                exit_code: -1,
-                body: body.into(),
-                created_at: "2026-08-08T03:13:52Z".into(),
-            })
-            .expect("opening message persists");
-
-        let retry = unresponsive_opening_retry(&tables, "project-retry", "opening-message")
-            .expect("opening message is retryable");
-        assert_eq!(retry["projectId"], "project-retry");
-        assert_eq!(retry["messageId"], "opening-message");
-        assert_eq!(retry["body"], body);
-        assert!(retry["replyQuestionId"].is_null());
-        assert!(
-            unresponsive_opening_retry(&tables, "another-project", "opening-message").is_none(),
-            "a retry id cannot cross projects"
-        );
-
-        let _ = std::fs::remove_dir_all(dir);
     }
 
     #[tokio::test]

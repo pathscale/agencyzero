@@ -6,6 +6,7 @@ import { useWorkspace } from "~/stores/workspace";
 export type CloseConfirmProps = {
   isOpen: boolean;
   error?: string;
+  quitsProxy?: boolean;
   onCancel: () => void;
   onConfirm: () => void;
 };
@@ -40,7 +41,7 @@ export function CloseConfirm(props: CloseConfirmProps): JSX.Element {
         role="dialog"
         aria-modal="true"
         aria-labelledby="close-confirm-title"
-        class="absolute inset-0 z-50 flex items-center justify-center bg-black/55 p-8 backdrop-blur-[2px]"
+        class="absolute inset-0 z-50 flex items-center justify-center bg-black/55 p-8"
         onClick={(event) => event.currentTarget === event.target && props.onCancel()}
         onKeyDown={(event) => event.key === "Escape" && props.onCancel()}
       >
@@ -49,7 +50,13 @@ export function CloseConfirm(props: CloseConfirmProps): JSX.Element {
             <div class="flex items-baseline gap-2.5">
               <Icon name="info" class="relative top-0.5 text-[15px] text-primary" />
               <h2 id="close-confirm-title" class="font-semibold text-[14.5px] text-az-title">
-                {tx(props.error ? "Could not safely quit" : "Work is still in progress")}
+                {tx(
+                  props.error
+                    ? "Could not safely quit"
+                    : props.quitsProxy
+                      ? "Quit AgencyZero and AgencyProxy?"
+                      : "Work is still in progress",
+                )}
               </h2>
             </div>
 
@@ -91,7 +98,11 @@ export function CloseConfirm(props: CloseConfirmProps): JSX.Element {
                     </span>
                     {". "}
                   </Show>
-                  {tx("Quitting cancels every run and its whole process group.")}
+                  {tx(
+                    props.quitsProxy
+                      ? "Quitting both cancels every run and stops AgencyProxy."
+                      : "AgencyProxy remains running so active work can continue.",
+                  )}
                 </Show>
               </p>
             </Show>
@@ -111,7 +122,7 @@ export function CloseConfirm(props: CloseConfirmProps): JSX.Element {
                   onClick={props.onConfirm}
                   class="rounded-lg bg-primary px-3.5 py-1.5 font-semibold text-[12.5px] text-primary-content transition-colors hover:bg-az-primary-hover"
                 >
-                  {tx("Exit now")}
+                  {tx(props.quitsProxy ? "Quit both" : "Exit now")}
                 </button>
               </Show>
             </div>

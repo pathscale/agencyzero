@@ -572,6 +572,7 @@ export const QUESTIONS: Question[] = [
 
 export const SETTINGS: GlobalSettings = {
   defaultAgent: "claude",
+  locale: "en",
   // Empty is "not chosen yet". Rust resolves it to $HOME/AgencyZero on read.
   workspaceRoot: "",
   agentProxyBinary: "",

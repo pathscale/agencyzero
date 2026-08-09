@@ -1,4 +1,5 @@
-import { createI18n } from "@pathscale/ui/components/language-switcher";
+import type { I18nStore } from "@pathscale/ui/components/language-switcher";
+import { createSignal } from "solid-js";
 import en from "~/i18n/en";
 import es from "~/i18n/es";
 import fr from "~/i18n/fr";
@@ -31,13 +32,49 @@ const CATALOGUES: Record<SupportedLanguage, Record<string, unknown>> = {
  * because this is a desktop app that must change language without a network.
  * English remains the source and fallback as more screens migrate off literals.
  */
-export const i18n = createI18n({
+const [locale, setLocaleSignal] = createSignal<SupportedLanguage>("en");
+const [translations, setTranslations] = createSignal<Record<string, unknown>>(en);
+const [isLoading, setIsLoading] = createSignal(false);
+
+function nestedTranslation(source: unknown, path: string): string {
+  let value = source;
+  for (const key of path.split(".")) {
+    if (!value || typeof value !== "object") return path;
+    value = (value as Record<string, unknown>)[key];
+  }
+  return typeof value === "string" ? value : path;
+}
+
+/**
+ * Language state without browser persistence.
+ *
+ * The shared switcher's default store writes localStorage. AgencyZero's
+ * durable owner settings belong in WorkTable, so this same UI contract keeps
+ * language in memory and Workspace persists each selection through
+ * `set_settings`.
+ */
+export const i18n: I18nStore = {
+  get locale() {
+    return locale();
+  },
+  get isLoading() {
+    return isLoading();
+  },
+  t: (key) => nestedTranslation(translations(), key),
+  async setLocale(requested) {
+    const selected = SUPPORTED_LANGUAGES.includes(requested as SupportedLanguage)
+      ? (requested as SupportedLanguage)
+      : "en";
+    setIsLoading(true);
+    setTranslations(CATALOGUES[selected]);
+    setLocaleSignal(selected);
+    setIsLoading(false);
+  },
+  async init() {},
   languages: SUPPORTED_LANGUAGES.map((code) => ({ code, name: NAMES[code] })),
-  defaultLanguage: "en",
-  storageKey: "agencyzero:locale",
-  initialTranslations: en,
-  loadTranslations: async (locale) => CATALOGUES[locale as SupportedLanguage] ?? CATALOGUES.en,
-});
+  languageNames: NAMES,
+  supportedCodes: [...SUPPORTED_LANGUAGES],
+};
 
 export const t = i18n.t;
 

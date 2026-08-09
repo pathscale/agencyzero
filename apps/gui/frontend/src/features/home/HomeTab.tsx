@@ -1109,7 +1109,7 @@ function GroupItemRow(props: {
             role="dialog"
             aria-modal="true"
             aria-labelledby={`home-fork-title-${props.item.id}`}
-            class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-8 backdrop-blur-[2px]"
+            class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-8"
             onClick={(event) => event.currentTarget === event.target && setForkDraft(null)}
             onKeyDown={(event) => event.key === "Escape" && setForkDraft(null)}
           >

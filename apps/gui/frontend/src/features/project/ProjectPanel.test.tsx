@@ -141,12 +141,16 @@ describe("the project side panel", () => {
     await waitFor(() => expect(workspace.state.boot.status).toBe("ready"), { timeout: 5_000 });
 
     fireEvent.click(screen.getAllByLabelText(/Fork .* into a fresh chat/)[0]);
-    const context = await screen.findByLabelText("Description / sub-items");
+    await waitFor(() => expect(document.body.querySelector('[role="dialog"]')).not.toBeNull());
+    const dialog = document.body.querySelector('[role="dialog"]') as HTMLElement;
+    expect(dialog.className).not.toContain("backdrop-blur");
+    expect(within(dialog).getByRole("heading", { name: "Prepare item fork" })).toBeVisible();
+    const context = within(dialog).getByLabelText("Description / sub-items");
     expect((context as HTMLTextAreaElement).value).toContain("Details / sub-items");
     fireEvent.input(context, {
       target: { value: "Preserve the owner decision and run the focused tests." },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Start fork" }));
+    fireEvent.click(within(dialog).getByRole("button", { name: "Start fork" }));
 
     await waitFor(() =>
       expect(workspace.state.projects.some((project) => project.forkedFrom?.itemId)).toBe(true),

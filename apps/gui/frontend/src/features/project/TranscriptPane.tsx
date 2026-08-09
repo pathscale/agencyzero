@@ -82,7 +82,7 @@ export function TranscriptPane(props: {
   streaming: string;
 }): JSX.Element {
   const { state, actions } = useWorkspace();
-  let scroller!: HTMLDivElement;
+  let scroller!: HTMLElement;
   const streamingAgent = () =>
     state.runStatus[props.project.id]?.agent ??
     [...props.messages]
@@ -101,17 +101,23 @@ export function TranscriptPane(props: {
   const [pinned, setPinned] = createSignal(true);
   const [visibleEntries, setVisibleEntries] = createSignal(TRANSCRIPT_PAGE_SIZE);
   let lastScrollTop = 0;
+  let userScrollIntent = false;
+  const markScrollIntent = (): void => {
+    userScrollIntent = true;
+  };
   const trackScroll = (): void => {
     const top = scroller.scrollTop;
     const nearTail = scroller.scrollHeight - top - scroller.clientHeight < 48;
     if (nearTail) {
       setPinned(true);
-    } else if (top < lastScrollTop - 1) {
-      // Only an actual upward movement disengages tail following. Layout and
-      // streamed-content growth can increase the distance from the tail
-      // without the owner moving at all.
+    } else if (top < lastScrollTop - 1 && userScrollIntent) {
+      // Only owner input disengages tail following. Window resizing and text
+      // reflow can clamp scrollTop upward and dispatch a scroll event of their
+      // own; treating that as reading intent is the intermittent jump that
+      // leaves an otherwise pinned transcript just above the bottom.
       setPinned(false);
     }
+    userScrollIntent = false;
     lastScrollTop = top;
   };
 
@@ -250,9 +256,18 @@ export function TranscriptPane(props: {
      * to survive crossing the gaps between them. Marking only the bubbles left
      * every gap unselectable, and a drag over one collapsed the selection.
      */
-    <div
+    <section
       ref={scroller}
+      aria-label={tx("Conversation")}
+      tabindex="0"
       onScroll={trackScroll}
+      onWheel={markScrollIntent}
+      onPointerDown={markScrollIntent}
+      onPointerMove={(event) => event.buttons !== 0 && markScrollIntent()}
+      onTouchMove={markScrollIntent}
+      onKeyDown={(event) => {
+        if (["ArrowUp", "PageUp", "Home"].includes(event.key)) markScrollIntent();
+      }}
       data-selectable
       class="az-scroll flex min-h-0 flex-1 flex-col gap-4 overflow-x-hidden px-6 pt-14 pb-2 leading-relaxed"
     >
@@ -271,7 +286,10 @@ export function TranscriptPane(props: {
         <Show when={visibleTimeline().hidden > 0}>
           <button
             type="button"
-            onClick={() => setVisibleEntries((count) => count + TRANSCRIPT_PAGE_SIZE)}
+            onClick={() => {
+              setPinned(false);
+              setVisibleEntries((count) => count + TRANSCRIPT_PAGE_SIZE);
+            }}
             class="mx-auto rounded-full border border-az-hairline-strong px-3 py-1 text-[11px] text-az-muted transition-colors hover:border-primary/50 hover:text-az-body"
           >
             {tx("Show {count} earlier messages", {
@@ -398,7 +416,7 @@ export function TranscriptPane(props: {
           )}
         </Show>
       </Show>
-    </div>
+    </section>
   );
 }
 

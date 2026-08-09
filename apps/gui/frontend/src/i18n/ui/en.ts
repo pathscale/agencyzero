@@ -929,6 +929,14 @@ const en = {
     "Review these proposals before removing anything.",
   "Keep {name}": "Keep {name}",
   Keep: "Keep",
+  "Quit AgencyZero and AgencyProxy?": "Quit AgencyZero and AgencyProxy?",
+  "Quitting both cancels every run and stops AgencyProxy.":
+    "Quitting both cancels every run and stops AgencyProxy.",
+  "AgencyProxy remains running so active work can continue.":
+    "AgencyProxy remains running so active work can continue.",
+  "Quit both": "Quit both",
+  "Attached: {session}": "Attached: {session}",
+  Change: "Change",
 } as const;
 
 export default en;

@@ -899,6 +899,14 @@ const zh = {
   "Review these proposals before removing anything.": "删除任何项目之前，请先查看这些建议。",
   "Keep {name}": "保留 {name}",
   Keep: "保留",
+  "Quit AgencyZero and AgencyProxy?": "退出 AgencyZero 和 AgencyProxy？",
+  "Quitting both cancels every run and stops AgencyProxy.":
+    "同时退出会取消所有运行，并停止 AgencyProxy。",
+  "AgencyProxy remains running so active work can continue.":
+    "AgencyProxy 会继续运行，使进行中的工作能够继续。",
+  "Quit both": "同时退出",
+  "Attached: {session}": "已连接：{session}",
+  Change: "更改",
 } satisfies Record<keyof typeof en, string>;
 
 export default zh;

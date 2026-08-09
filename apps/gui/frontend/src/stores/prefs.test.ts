@@ -99,19 +99,10 @@ describe("workspace layout", () => {
     setPrefs("replyQuestionIds", "project:abc", "");
   });
 
-  it("restores portable preferences when Web Storage is unavailable", () => {
-    const storage = window.localStorage;
-    Object.defineProperty(window, "localStorage", { writable: true, value: undefined });
-
-    try {
-      setPrefs("uiSize", "extra-large");
-      expect(() => preparePortablePrefsRestore()).not.toThrow();
-      expect(() =>
-        restorePortablePrefs({ uiSize: "normal" }, "backup-without-web-storage"),
-      ).not.toThrow();
-      expect(prefs.uiSize).toBe("normal");
-    } finally {
-      Object.defineProperty(window, "localStorage", { writable: true, value: storage });
-    }
+  it("restores portable preferences from a WorkTable settings snapshot", () => {
+    setPrefs("uiSize", "extra-large");
+    expect(() => preparePortablePrefsRestore()).not.toThrow();
+    expect(() => restorePortablePrefs({ uiSize: "normal" }, "worktable-backup")).not.toThrow();
+    expect(prefs.uiSize).toBe("normal");
   });
 });

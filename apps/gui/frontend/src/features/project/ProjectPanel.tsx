@@ -1,5 +1,6 @@
 import { Toggle } from "@pathscale/ui";
 import { createEffect, createMemo, createSignal, For, type JSX, Show } from "solid-js";
+import { Portal } from "solid-js/web";
 import { NOTES_BUDGET } from "~/api/client";
 import { Icon } from "~/components/Icon";
 import { SectionPanel } from "~/components/Panel";
@@ -517,7 +518,12 @@ function SettingsSection(props: { project: Project }): JSX.Element {
 
         {/* Codex is the agent whose sessions wedge and get recovered by id, so
             it is the default here; the id field takes any provider's session. */}
-        <ResumeSession projectId={props.project.id} agent="codex" running={isRunning()} />
+        <ResumeSession
+          projectId={props.project.id}
+          agent="codex"
+          running={isRunning()}
+          currentSession={props.project.sessions.codex}
+        />
 
         <div class="flex gap-[7px] pt-0.5 text-[11px] text-az-faint leading-[1.5]">
           <Icon name="info" class="relative top-0.5 shrink-0 text-[12px]" />
@@ -795,7 +801,12 @@ function ResetSession(props: { project: Project; running: boolean }): JSX.Elemen
  * point is to attach a session when the project has none, or a different one.
  * Disabled while a run is live, which the backend also refuses.
  */
-function ResumeSession(props: { projectId: string; agent: string; running: boolean }): JSX.Element {
+function ResumeSession(props: {
+  projectId: string;
+  agent: string;
+  running: boolean;
+  currentSession?: string | null;
+}): JSX.Element {
   const { actions } = useWorkspace();
   const [open, setOpen] = createSignal(false);
   const [id, setId] = createSignal("");
@@ -823,7 +834,9 @@ function ResumeSession(props: { projectId: string; agent: string; running: boole
         <span class="min-w-0 flex-1 text-[12px] text-az-body">
           {tx("Resume a session by id")}
           <span class="mt-px block text-[11px] text-az-muted">
-            {tx("Attach a session recovered by its id so the next message continues it")}
+            {props.currentSession
+              ? tx("Attached: {session}", { session: props.currentSession })
+              : tx("Attach a session recovered by its id so the next message continues it")}
           </span>
         </span>
         <button
@@ -833,7 +846,7 @@ function ResumeSession(props: { projectId: string; agent: string; running: boole
           title={props.running ? tx("Cancel the active run first") : undefined}
           onClick={() => setOpen((value) => !value)}
         >
-          {tx("Resume")}
+          {tx(props.currentSession ? "Change" : "Resume")}
         </button>
       </div>
       <Show when={open()}>
@@ -1634,94 +1647,88 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
 
       <Show when={contextDraft()}>
         {(draft) => (
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="item-context-title"
-            class="fixed z-50 flex items-center justify-center bg-black/60 p-8 backdrop-blur-[2px]"
-            style={{
-              position: "fixed",
-              top: "0px",
-              left: "0px",
-              width: "100vw",
-              height: "100vh",
-              "z-index": "50",
-            }}
-            onClick={(event) => event.currentTarget === event.target && setContextDraft(null)}
-            onKeyDown={(event) => event.key === "Escape" && setContextDraft(null)}
-          >
-            <section class="az-ring flex max-h-full w-full max-w-[620px] flex-col overflow-hidden rounded-[17px] bg-base-200 shadow-[0_24px_80px_rgba(0,0,0,.65)]">
-              <header class="flex items-start gap-3 border-az-hairline-soft border-b px-5 py-4">
-                <div class="flex size-9 shrink-0 items-center justify-center rounded-[11px] border border-primary/28 bg-primary/10 text-primary">
-                  <Icon name="git-fork" class="text-[17px]" />
+          <Portal>
+            <div
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="item-context-title"
+              class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-8"
+              onClick={(event) => event.currentTarget === event.target && setContextDraft(null)}
+              onKeyDown={(event) => event.key === "Escape" && setContextDraft(null)}
+            >
+              <section class="az-ring flex max-h-full w-full max-w-[620px] flex-col overflow-hidden rounded-[17px] bg-base-200 shadow-[0_24px_80px_rgba(0,0,0,.65)]">
+                <header class="flex items-start gap-3 border-az-hairline-soft border-b px-5 py-4">
+                  <div class="flex size-9 shrink-0 items-center justify-center rounded-[11px] border border-primary/28 bg-primary/10 text-primary">
+                    <Icon name="git-fork" class="text-[17px]" />
+                  </div>
+                  <div class="min-w-0 flex-1">
+                    <h2 id="item-context-title" class="font-semibold text-[14.5px] text-az-title">
+                      {draft().startFork ? tx("Prepare item fork") : tx("Edit item description")}
+                    </h2>
+                    <p class="mt-0.5 truncate text-[12px] text-az-muted">{draft().item.title}</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setContextDraft(null)}
+                    aria-label={tx("Cancel")}
+                    class="rounded-lg p-1.5 text-az-muted hover:bg-white/6 hover:text-base-content"
+                  >
+                    <Icon name="x" class="text-[15px]" />
+                  </button>
+                </header>
+                <div class="flex min-h-0 flex-col gap-2 px-5 py-4">
+                  <div class="flex items-center justify-between gap-3">
+                    <label for="item-description" class="font-semibold text-[12.5px] text-az-body">
+                      {tx("Description / sub-items")}
+                    </label>
+                    <span class="font-mono text-[10.5px] text-az-faint">
+                      {draft().context.length} / {NOTES_BUDGET}
+                    </span>
+                  </div>
+                  <textarea
+                    id="item-description"
+                    autofocus
+                    value={draft().context}
+                    maxLength={NOTES_BUDGET}
+                    onInput={(event) =>
+                      setContextDraft({
+                        item: draft().item,
+                        context: event.currentTarget.value,
+                        startFork: draft().startFork,
+                      })
+                    }
+                    placeholder={tx(
+                      "Describe constraints, acceptance criteria, decisions, and useful pointers…",
+                    )}
+                    class="az-scroll min-h-[220px] resize-y rounded-xl border border-primary/24 bg-az-inset px-3.5 py-3 text-[12.5px] text-az-body leading-[1.55] outline-none placeholder:text-az-faint focus:border-primary/55"
+                  />
+                  <p class="text-[11px] text-az-muted leading-[1.5]">
+                    {tx(
+                      "Sent when this item starts in a fresh fork or focused run. Ordinary compact item snapshots omit it.",
+                    )}{" "}
+                    {tx("Use one Markdown bullet or checklist line per sub-item.")}
+                  </p>
                 </div>
-                <div class="min-w-0 flex-1">
-                  <h2 id="item-context-title" class="font-semibold text-[14.5px] text-az-title">
-                    {draft().startFork ? tx("Prepare item fork") : tx("Edit item description")}
-                  </h2>
-                  <p class="mt-0.5 truncate text-[12px] text-az-muted">{draft().item.title}</p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setContextDraft(null)}
-                  aria-label={tx("Cancel")}
-                  class="rounded-lg p-1.5 text-az-muted hover:bg-white/6 hover:text-base-content"
-                >
-                  <Icon name="x" class="text-[15px]" />
-                </button>
-              </header>
-              <div class="flex min-h-0 flex-col gap-2 px-5 py-4">
-                <div class="flex items-center justify-between gap-3">
-                  <label for="item-description" class="font-semibold text-[12.5px] text-az-body">
-                    {tx("Description / sub-items")}
-                  </label>
-                  <span class="font-mono text-[10.5px] text-az-faint">
-                    {draft().context.length} / {NOTES_BUDGET}
-                  </span>
-                </div>
-                <textarea
-                  id="item-description"
-                  autofocus
-                  value={draft().context}
-                  maxLength={NOTES_BUDGET}
-                  onInput={(event) =>
-                    setContextDraft({
-                      item: draft().item,
-                      context: event.currentTarget.value,
-                      startFork: draft().startFork,
-                    })
-                  }
-                  placeholder={tx(
-                    "Describe constraints, acceptance criteria, decisions, and useful pointers…",
-                  )}
-                  class="az-scroll min-h-[220px] resize-y rounded-xl border border-primary/24 bg-az-inset px-3.5 py-3 text-[12.5px] text-az-body leading-[1.55] outline-none placeholder:text-az-faint focus:border-primary/55"
-                />
-                <p class="text-[11px] text-az-muted leading-[1.5]">
-                  {tx(
-                    "Sent when this item starts in a fresh fork or focused run. Ordinary compact item snapshots omit it.",
-                  )}{" "}
-                  {tx("Use one Markdown bullet or checklist line per sub-item.")}
-                </p>
-              </div>
-              <footer class="flex items-center justify-end gap-2 border-az-hairline-soft border-t px-5 py-3.5">
-                <button
-                  type="button"
-                  onClick={() => setContextDraft(null)}
-                  class="rounded-lg border border-az-hairline px-3 py-1.5 text-[12px] text-az-body hover:border-primary/35"
-                >
-                  {tx("Cancel")}
-                </button>
-                <button
-                  type="button"
-                  disabled={forkingId() === draft().item.id}
-                  onClick={() => void saveContext()}
-                  class="rounded-lg border border-primary/45 bg-primary/18 px-3 py-1.5 font-semibold text-[12px] text-primary hover:bg-primary/25 disabled:opacity-40"
-                >
-                  {draft().startFork ? tx("Start fork") : tx("Save description")}
-                </button>
-              </footer>
-            </section>
-          </div>
+                <footer class="flex items-center justify-end gap-2 border-az-hairline-soft border-t px-5 py-3.5">
+                  <button
+                    type="button"
+                    onClick={() => setContextDraft(null)}
+                    class="rounded-lg border border-az-hairline px-3 py-1.5 text-[12px] text-az-body hover:border-primary/35"
+                  >
+                    {tx("Cancel")}
+                  </button>
+                  <button
+                    type="button"
+                    disabled={forkingId() === draft().item.id}
+                    onClick={() => void saveContext()}
+                    class="rounded-lg border border-primary/45 bg-primary/18 px-3 py-1.5 font-semibold text-[12px] text-primary hover:bg-primary/25 disabled:opacity-40"
+                  >
+                    {draft().startFork ? tx("Start fork") : tx("Save description")}
+                  </button>
+                </footer>
+              </section>
+            </div>
+          </Portal>
         )}
       </Show>
     </div>
