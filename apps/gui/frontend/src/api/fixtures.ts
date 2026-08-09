@@ -562,6 +562,7 @@ export const QUESTIONS: Question[] = [
   {
     id: "q-block",
     projectId: "cafe",
+    itemId: "cafe-0",
     text: "Fork codex, or keep patching the integration?",
     urgency: "blocking",
     answered: false,
