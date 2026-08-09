@@ -88,6 +88,8 @@ describe("transcript resize anchoring", () => {
       clientHeight: { configurable: true, get: () => 400 },
       scrollHeight: { configurable: true, get: () => scrollHeight },
     });
+    scroller.scrollTop = 600;
+    fireEvent.scroll(scroller);
     scroller.scrollTop = 200;
     scroller.scrollLeft = 24;
     fireEvent.scroll(scroller);
@@ -98,5 +100,41 @@ describe("transcript resize anchoring", () => {
 
     expect(scroller.scrollTop).toBe(200);
     expect(scroller.scrollLeft).toBe(0);
+  });
+
+  it("re-anchors after streamed DOM content changes while still pinned", async () => {
+    let notifyMutation: MutationCallback | undefined;
+    vi.stubGlobal(
+      "MutationObserver",
+      class {
+        constructor(callback: MutationCallback) {
+          notifyMutation = callback;
+        }
+        observe() {}
+        disconnect() {}
+      },
+    );
+
+    const screen = render(() => (
+      <WorkspaceProvider>
+        <Harness />
+      </WorkspaceProvider>
+    ));
+    await waitFor(() => expect(screen.container.querySelector("[data-selectable]")).not.toBeNull());
+
+    const scroller = screen.container.querySelector("[data-selectable]") as HTMLDivElement;
+    let scrollHeight = 1_000;
+    Object.defineProperties(scroller, {
+      clientHeight: { configurable: true, get: () => 400 },
+      scrollHeight: { configurable: true, get: () => scrollHeight },
+    });
+    scroller.scrollTop = 600;
+    fireEvent.scroll(scroller);
+
+    scrollHeight = 1_180;
+    notifyMutation?.([], {} as MutationObserver);
+    await Promise.resolve();
+
+    expect(scroller.scrollTop).toBe(1_180);
   });
 });
