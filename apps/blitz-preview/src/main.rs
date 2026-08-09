@@ -1,5 +1,7 @@
-use blitz_dom::DocumentConfig;
+use blitz_dom::{Document, DocumentConfig};
 use blitz_script::{DefaultScriptFetcher, FetchError, ScriptDocument, ScriptFetcher};
+#[cfg(not(test))]
+use blitz_traits::shell::{ColorScheme, Viewport};
 use brotli::Decompressor;
 #[cfg(not(test))]
 use std::fs::{self, OpenOptions};
@@ -82,6 +84,57 @@ fn create_document(url: &str) -> Result<ScriptDocument, String> {
     Ok(document)
 }
 
+#[cfg(not(test))]
+fn capture_preview(output: &std::path::Path) -> Result<(), String> {
+    use anyrender::render_to_buffer;
+    use anyrender_vello_cpu::VelloCpuImageRenderer;
+    use blitz_paint::paint_scene;
+
+    const WIDTH: u32 = 1344;
+    const HEIGHT: u32 = 900;
+
+    trace("headless capture started");
+    let mut document = create_document("tauri://localhost/")?;
+    document
+        .inner_mut()
+        .set_viewport(Viewport::new(WIDTH, HEIGHT, 1.0, ColorScheme::Dark));
+    document.execute_scripts();
+
+    // The fixture backend deliberately resolves commands after 90 ms. Drive
+    // those same timers until the production workspace reaches its ready DOM.
+    for _ in 0..8 {
+        std::thread::sleep(std::time::Duration::from_millis(100));
+        document.eval("void 0");
+        document.poll(None);
+    }
+
+    let mut doc = document.inner_mut();
+    doc.resolve(0.0);
+    let buffer = render_to_buffer::<VelloCpuImageRenderer, _>(
+        |scene| paint_scene(scene, &mut doc, 1.0, WIDTH, HEIGHT, 0, 0),
+        WIDTH,
+        HEIGHT,
+    );
+    drop(doc);
+
+    let file = std::fs::File::create(output)
+        .map_err(|error| format!("could not create {}: {error}", output.display()))?;
+    let mut encoder = png::Encoder::new(file, WIDTH, HEIGHT);
+    encoder.set_color(png::ColorType::Rgba);
+    encoder.set_depth(png::BitDepth::Eight);
+    let mut writer = encoder
+        .write_header()
+        .map_err(|error| format!("could not start PNG capture: {error}"))?;
+    writer
+        .write_image_data(&buffer)
+        .map_err(|error| format!("could not write PNG capture: {error}"))?;
+    writer
+        .finish()
+        .map_err(|error| format!("could not finish PNG capture: {error}"))?;
+    trace(&format!("headless capture completed: {}", output.display()));
+    Ok(())
+}
+
 #[tauri::command]
 fn greet(name: String) -> String {
     format!("Hello, {name}!")
@@ -95,6 +148,17 @@ fn list_capabilities() -> Vec<String> {
 fn main() {
     reset_trace();
     trace("main entered");
+    #[cfg(not(test))]
+    {
+        if let Some(output) = std::env::var_os("AGENCYZERO_BLITZ_CAPTURE") {
+            let output = std::path::PathBuf::from(output);
+            if let Err(error) = capture_preview(&output) {
+                trace(&format!("headless capture failed: {error}"));
+                std::process::exit(1);
+            }
+            return;
+        }
+    }
     set_runtime_trace(trace);
     trace("runtime trace configured");
     set_document_factory(create_document);
@@ -112,7 +176,6 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use blitz_dom::Document;
     use std::collections::HashSet;
 
     #[test]
@@ -152,15 +215,38 @@ mod tests {
     }
 
     fn assert_production_icon_uses_resolve() {
+        fn count_painted_paths(group: &usvg::Group) -> usize {
+            group
+                .children()
+                .iter()
+                .map(|node| match node {
+                    usvg::Node::Group(group) => count_painted_paths(group),
+                    usvg::Node::Path(path)
+                        if path.is_visible()
+                            && (path.fill().is_some() || path.stroke().is_some()) =>
+                    {
+                        1
+                    }
+                    usvg::Node::Path(_) => 0,
+                    usvg::Node::Image(_) | usvg::Node::Text(_) => 0,
+                })
+                .sum()
+        }
+
         let mut document = create_document("tauri://localhost/").unwrap();
         document.execute_scripts();
+        for _ in 0..8 {
+            std::thread::sleep(std::time::Duration::from_millis(100));
+            document.eval("void 0");
+            document.poll(None);
+        }
         document.inner_mut().resolve(0.0);
 
         let doc = document.inner();
         let use_ids = doc.query_selector_all("svg use").unwrap();
         assert!(
-            !use_ids.is_empty(),
-            "production bundle rendered no SVG uses"
+            use_ids.len() > 20,
+            "production workspace did not finish rendering"
         );
 
         let mut svg_ids = HashSet::new();
@@ -184,14 +270,14 @@ mod tests {
             "no visible SVG ancestors found for uses"
         );
         for svg_id in svg_ids {
-            let tree = doc
-                .get_node(svg_id)
-                .and_then(|node| node.element_data())
+            let node = doc.get_node(svg_id).unwrap();
+            let tree = node
+                .element_data()
                 .and_then(|element| element.svg_data())
                 .expect("visible SVG use was not parsed as an image");
             assert!(
-                !tree.root().children().is_empty(),
-                "visible SVG use parsed to an empty image"
+                count_painted_paths(tree.root()) > 0,
+                "visible SVG use parsed without any paintable paths"
             );
         }
     }
