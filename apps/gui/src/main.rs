@@ -1344,6 +1344,7 @@ fn greet(name: &str) -> String {
 
 /// Menu ids the frontend answers for. Each becomes a `menu:<id>` event.
 const NEW_PROJECT: &str = "new-project";
+const NEW_PROJECT_TYPING: &str = "new-project-typing";
 const SETTINGS: &str = "settings";
 const CLOSE_TAB: &str = "close-tab";
 const NEXT_TAB: &str = "next-tab";
@@ -1406,17 +1407,19 @@ fn build_menu<R: Runtime>(app: &tauri::AppHandle<R>) -> tauri::Result<Menu<R>> {
         .select_all()
         .build()?;
 
-    // The standard "new" shortcut, and the only one that costs nothing: macOS
-    // reserves a Ctrl-letter set for text editing (Ctrl+A E B F P N K T), so
-    // any Ctrl accelerator takes one of those away from every text field.
-    //
-    // Ctrl+T is *also* bound to this, in the webview rather than here, see
-    // frontend/src/features/tabs/shortcuts.ts. Leaving it out of the menu is
-    // what lets the keydown reach the page, which is the only way it can fire
-    // while the composer has focus.
+    // Cmd+N is the standard new-project shortcut. Ctrl+T is the established
+    // typing shortcut; it is deliberately claimed below even though macOS
+    // normally reserves it for transpose-characters.
     let new_project = MenuItemBuilder::with_id(NEW_PROJECT, "New Project")
         .accelerator("CmdOrCtrl+N")
         .build(app)?;
+    // Keep the established typing shortcut in the native menu as well. WebKit
+    // delivered Ctrl+T to the page, but AppKit can interpret it as the standard
+    // `transpose:` text command before the Blitz document sees a keydown.
+    let new_project_typing =
+        MenuItemBuilder::with_id(NEW_PROJECT_TYPING, "New Project with Ctrl+T")
+            .accelerator("Ctrl+T")
+            .build(app)?;
     // Cmd+S is free here: nothing in a tabbed agent window saves a document.
     //
     // Home has deliberately *not* been given Cmd+H. macOS reserves it for Hide
@@ -1447,6 +1450,7 @@ fn build_menu<R: Runtime>(app: &tauri::AppHandle<R>) -> tauri::Result<Menu<R>> {
 
     let tab_menu = SubmenuBuilder::new(app, "Tabs")
         .item(&new_project)
+        .item(&new_project_typing)
         .item(&settings)
         .separator()
         .item(&close_tab)
@@ -2213,7 +2217,7 @@ fn main() {
         })
         .on_menu_event(|app, event| {
             let topic = match event.id().as_ref() {
-                NEW_PROJECT => "menu:new-project",
+                NEW_PROJECT | NEW_PROJECT_TYPING => "menu:new-project",
                 SETTINGS => "menu:settings",
                 CLOSE_TAB => "menu:close-tab",
                 NEXT_TAB => "menu:next-tab",

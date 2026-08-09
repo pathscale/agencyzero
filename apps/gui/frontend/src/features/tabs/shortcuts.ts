@@ -16,11 +16,10 @@ import { useWorkspace } from "~/stores/workspace";
  * ⌃T and ⌃N were poor accelerators: macOS gives every text field an emacs-style
  * set (⌃A ⌃E ⌃B ⌃F ⌃P ⌃N ⌃K ⌃T) and an accelerator takes one away.
  *
- * **Webview bindings** (⌃T) are handled here on a plain keydown. Nothing in
- * the menu claims the combination, so the key reaches the DOM first: this fires
- * wherever focus is, the composer included, and `preventDefault()` stops the
- * text field acting on it. That is how ⌃T works inside the text area at all:
- * by *not* being a menu item, which costs it the menu-bar listing.
+ * **Webview bindings** (⌃T) are handled here on a plain keydown. The native
+ * menu also carries the same action because AppKit may interpret Ctrl+T as its
+ * standard `transpose:` command before Blitz produces a DOM keydown. WebKit's
+ * keydown remains the fast path; the menu is the native fallback.
  *
  * Matched on `code` as well as `key` so a layout that puts something else on
  * that physical key still works.
@@ -71,8 +70,8 @@ export function useTabShortcuts(): void {
 
     if (event.altKey || event.shiftKey) return;
 
-    // ⌃T, the second way to open a new project, and the one that works while
-    // you are typing. Transpose-characters is the deliberate cost.
+    // ⌃T, the second way to open a new project. The native menu duplicates it
+    // for Blitz builds where AppKit consumes the text-editing chord first.
     if (event.ctrlKey && !event.metaKey && (event.key === "t" || event.code === "KeyT")) {
       event.preventDefault();
       actions.openDraft();
