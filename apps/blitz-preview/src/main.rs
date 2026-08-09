@@ -297,12 +297,6 @@ fn main() {
     reset_trace();
     trace("main entered");
     #[cfg(not(test))]
-    // SAFETY: this is the first operation in `main`, before the runtime starts any threads.
-    unsafe {
-        std::env::set_var("BLITZ_FRAME_STATS", "1");
-        std::env::set_var("BLITZ_FRAME_STATS_FILE", TRACE_PATH);
-    }
-    #[cfg(not(test))]
     {
         if let Some(output) = std::env::var_os("AGENCYZERO_BLITZ_CAPTURE") {
             #[cfg(feature = "capture")]
