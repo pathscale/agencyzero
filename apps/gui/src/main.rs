@@ -2192,9 +2192,10 @@ fn main() {
                 .filter(|path| !path.is_empty())
                 .map(PathBuf::from);
             #[cfg(feature = "blitz-runtime")]
-            let blitz_control_enabled = std::env::var("TAURI_BLITZ_CONTROL")
-                .ok()
-                .is_some_and(|value| matches!(value.as_str(), "1" | "true"))
+            let blitz_control_enabled = std::env::args().any(|arg| arg == "--blitz-control")
+                || std::env::var("TAURI_BLITZ_CONTROL")
+                    .ok()
+                    .is_some_and(|value| matches!(value.as_str(), "1" | "true"))
                 || persisted_settings
                     .as_ref()
                     .is_some_and(|settings| settings.blitz_control_enabled);

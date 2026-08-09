@@ -53,7 +53,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "935150865e51419c31f10d441dbadb6eac0330f08ee5c60fc28324bdd1e84af2"
 dependencies = [
  "agency-proxy-protocol",
- "endpoint-libs",
+ "endpoint-libs 2.1.4",
  "futures",
  "serde_json",
  "thiserror 2.0.19",
@@ -72,7 +72,7 @@ dependencies = [
 
 [[package]]
 name = "agency-tools"
-version = "0.5.4"
+version = "0.5.5"
 dependencies = [
  "derive_more 2.1.1",
  "dirs",
@@ -827,11 +827,11 @@ dependencies = [
 
 [[package]]
 name = "az-core"
-version = "0.5.4"
+version = "0.5.5"
 
 [[package]]
 name = "az-gui"
-version = "0.5.4"
+version = "0.5.5"
 dependencies = [
  "agency-proxy-client",
  "agency-proxy-protocol",
@@ -868,7 +868,7 @@ dependencies = [
 
 [[package]]
 name = "az-mcp-proxy"
-version = "0.5.4"
+version = "0.5.5"
 dependencies = [
  "az-core",
 ]
@@ -2695,6 +2695,21 @@ dependencies = [
  "tracing-opentelemetry",
  "tracing-subscriber",
  "urlencoding",
+]
+
+[[package]]
+name = "endpoint-libs"
+version = "2.1.5"
+source = "git+https://github.com/pathscale/endpoint-libs.git?rev=85833797465d745362d6340673768ef439fb2811#85833797465d745362d6340673768ef439fb2811"
+dependencies = [
+ "async-trait",
+ "bytes",
+ "eyre",
+ "futures",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tokio-util",
 ]
 
 [[package]]
@@ -8098,16 +8113,23 @@ dependencies = [
 [[package]]
 name = "tauri-runtime-blitz"
 version = "0.1.0"
-source = "git+https://github.com/pathscale/tauri-runtime-blitz.git?rev=c3e2645f8ad34f246b0233eaaddc1e733aceae59#c3e2645f8ad34f246b0233eaaddc1e733aceae59"
+source = "git+https://github.com/pathscale/tauri-runtime-blitz.git?rev=b6c1d1b4099d75e356a7827952d2956bb1a139b1#b6c1d1b4099d75e356a7827952d2956bb1a139b1"
 dependencies = [
  "anyrender_vello",
+ "blitz-dom",
  "blitz-script",
  "blitz-shell",
+ "blitz-traits",
+ "endpoint-libs 2.1.5",
  "http",
+ "keyboard-types 0.7.0",
  "raw-window-handle",
+ "serde",
+ "serde_json",
  "tauri",
  "tauri-runtime",
  "tauri-utils",
+ "tokio",
  "url",
  "winit",
 ]
@@ -10645,7 +10667,7 @@ dependencies = [
 
 [[package]]
 name = "wt-migrate"
-version = "0.5.4"
+version = "0.5.5"
 dependencies = [
  "chrono",
  "derive_more 2.1.1",

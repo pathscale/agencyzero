@@ -115,6 +115,8 @@ export function SettingsTab(): JSX.Element {
   >(null);
   const [proxyNote, setProxyNote] = createSignal("");
   const [terminateArmed, setTerminateArmed] = createSignal(false);
+  const [blitzControlPending, setBlitzControlPending] = createSignal(false);
+  const [blitzControlError, setBlitzControlError] = createSignal("");
 
   const refreshProxy = (): void => {
     setProxyAction("refresh");
@@ -168,6 +170,15 @@ export function SettingsTab(): JSX.Element {
       .then(() => setProxyNote(tx("AgencyProxy stopped")))
       .catch((cause) => setProxyNote(describeError(cause)))
       .finally(() => setProxyAction(null));
+  };
+
+  const setBlitzControl = (enabled: boolean): void => {
+    setBlitzControlPending(true);
+    setBlitzControlError("");
+    void actions
+      .saveSettings({ blitzControlEnabled: enabled })
+      .catch((cause) => setBlitzControlError(describeError(cause)))
+      .finally(() => setBlitzControlPending(false));
   };
 
   /**
@@ -761,13 +772,31 @@ export function SettingsTab(): JSX.Element {
                   label={tx("Local Blitz control")}
                   hint={tx("off by default; off removes the MCP socket and discovery descriptor")}
                 >
-                  <SettingToggle
-                    label={tx("Enable local Blitz control")}
-                    checked={current().blitzControlEnabled}
-                    onChange={(blitzControlEnabled) =>
-                      void actions.saveSettings({ blitzControlEnabled })
-                    }
-                  />
+                  <div class="flex flex-col items-end gap-1">
+                    <SettingToggle
+                      label={tx("Enable local Blitz control")}
+                      checked={current().blitzControlEnabled}
+                      disabled={blitzControlPending()}
+                      onChange={setBlitzControl}
+                    />
+                    <span
+                      role={blitzControlError() ? "alert" : "status"}
+                      class={`max-w-[260px] text-right text-[10.5px] ${
+                        blitzControlError()
+                          ? "text-error"
+                          : current().blitzControlEnabled
+                            ? "text-success"
+                            : "text-az-muted"
+                      }`}
+                    >
+                      {blitzControlError() ||
+                        (blitzControlPending()
+                          ? tx("Applying local control…")
+                          : current().blitzControlEnabled
+                            ? tx("Listening on local MCP socket")
+                            : tx("Local control disabled"))}
+                    </span>
+                  </div>
                 </Row>
                 <Row
                   label={tx("Open source")}

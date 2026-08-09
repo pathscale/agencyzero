@@ -941,6 +941,9 @@ const en = {
   "off by default; off removes the MCP socket and discovery descriptor":
     "off by default; off removes the MCP socket and discovery descriptor",
   "Enable local Blitz control": "Enable local Blitz control",
+  "Applying local control…": "Applying local control…",
+  "Listening on local MCP socket": "Listening on local MCP socket",
+  "Local control disabled": "Local control disabled",
 } as const;
 
 export default en;

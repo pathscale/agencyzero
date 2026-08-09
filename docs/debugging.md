@@ -122,9 +122,9 @@ descriptor location deterministic, launch through LaunchServices with:
 
 ```sh
 open -n \
-  --env TAURI_BLITZ_CONTROL=1 \
   --env TAURI_BLITZ_CONTROL_DESCRIPTOR="$PWD/target/blitz-control.json" \
-  "$PWD/target/release/bundle/macos/AgencyZero.app"
+  "$PWD/target/release/bundle/macos/AgencyZero.app" \
+  --args --blitz-control
 ```
 
 Do not execute `Contents/MacOS/az-gui` directly. On current macOS that process

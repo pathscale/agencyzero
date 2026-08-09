@@ -911,6 +911,9 @@ const zh = {
   "off by default; off removes the MCP socket and discovery descriptor":
     "默认关闭；关闭时会移除 MCP 套接字和发现描述文件",
   "Enable local Blitz control": "启用本地 Blitz 控制",
+  "Applying local control…": "正在应用本地控制…",
+  "Listening on local MCP socket": "正在监听本地 MCP 套接字",
+  "Local control disabled": "本地控制已停用",
 } satisfies Record<keyof typeof en, string>;
 
 export default zh;
