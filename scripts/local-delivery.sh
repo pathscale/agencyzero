@@ -4,6 +4,12 @@ set -eu
 
 repo_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 mode=${1:-verify}
+rust_target=$(rustc -vV | sed -n 's/^host: //p')
+
+if [ -z "$rust_target" ]; then
+  echo "could not determine the Rust host target" >&2
+  exit 1
+fi
 
 if [ "${2:-}" = "--offline" ] || [ "${1:-}" = "--offline" ]; then
   export CARGO_NET_OFFLINE=true
@@ -65,22 +71,24 @@ case "$mode" in
     (
       cd "$repo_root/apps/gui"
       run_tauri build \
+        --target "$rust_target" \
         --config tauri.dev.conf.json \
         --config '{"bundle":{"createUpdaterArtifacts":false}}' \
         --no-sign
     )
-    echo "$repo_root/target/release/bundle/macos/AgencyZero Dev.app"
+    echo "$repo_root/target/$rust_target/release/bundle/macos/AgencyZero Dev.app"
     ;;
   experimental)
     echo "==> AgencyZero Experimental.app"
     (
       cd "$repo_root/apps/gui"
       run_tauri build \
+        --target "$rust_target" \
         --features experimental \
         --config tauri.experimental.conf.json \
         --config '{"bundle":{"createUpdaterArtifacts":false}}' \
         --no-sign
     )
-    echo "$repo_root/target/release/bundle/macos/AgencyZero Experimental.app"
+    echo "$repo_root/target/$rust_target/release/bundle/macos/AgencyZero Experimental.app"
     ;;
 esac
