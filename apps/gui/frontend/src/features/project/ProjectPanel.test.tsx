@@ -1,4 +1,4 @@
-import { fireEvent, render, waitFor } from "@solidjs/testing-library";
+import { fireEvent, render, waitFor, within } from "@solidjs/testing-library";
 import { Show } from "solid-js";
 import { describe, expect, it, vi } from "vitest";
 import { ProjectPanel } from "~/features/project/ProjectPanel";
@@ -198,6 +198,8 @@ describe("the project side panel", () => {
     if (!reply) throw new Error("persistent reply action is missing");
     expect(reply.className).toContain("size-[22px]");
     expect(reply.className).toContain("border-warning/65");
+    const row = screen.container.querySelector('[data-item-id="cafe-0"]');
+    expect(row?.querySelector('use[href="#i-circle-help"]')).not.toBeNull();
     fireEvent.click(reply);
 
     await waitFor(() => expect(prefs.replyQuestionIds.cafe).toBe("q-block"));
@@ -236,5 +238,35 @@ describe("the project side panel", () => {
 
     await waitFor(() => expect(send).toHaveBeenCalled());
     expect(send.mock.calls.at(-1)?.[4]).toBe("agencyzero-0");
+  });
+
+  it("stacks an item status with its issue or pull-request reference", async () => {
+    let workspace!: Workspace;
+
+    function Gate() {
+      workspace = useWorkspace();
+      return (
+        <Show when={workspace.state.boot.status === "ready"}>
+          <ProjectPanel project={{ ...PROJECT, id: "worktable" }} />
+        </Show>
+      );
+    }
+
+    const screen = render(() => (
+      <WorkspaceProvider>
+        <Gate />
+      </WorkspaceProvider>
+    ));
+    await waitFor(() => expect(workspace.state.boot.status).toBe("ready"), { timeout: 5_000 });
+    await workspace.actions.setItemStatus("worktable-0", "shipped");
+    await workspace.actions.setItemIssue(
+      "worktable-0",
+      "https://github.com/pathscale/WorkTable/issues/58",
+    );
+
+    const row = screen.container.querySelector('[data-item-id="worktable-0"]');
+    if (!row) throw new Error("item row is missing");
+    expect(within(row as HTMLElement).getByText("(Shipped)")).toBeInTheDocument();
+    expect(within(row as HTMLElement).getByText("(issue #58)")).toBeInTheDocument();
   });
 });

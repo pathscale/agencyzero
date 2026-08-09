@@ -1242,7 +1242,7 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
                       {item.title}
                     </span>
                     <span
-                      class={`shrink-0 text-[11px] ${
+                      class={`flex shrink-0 flex-col items-end text-[10.5px] leading-[1.2] ${
                         item.status === "active"
                           ? "font-semibold text-primary"
                           : item.status === "shipped"
@@ -1255,16 +1255,13 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
                       }`}
                     >
                       {/*
-                    A shipped row shows its pull request instead of the word,
-                    because the number is the thing you need to go and check.
-                    Amber rather than green: shipped is a claim awaiting your
-                    verdict, and colouring it as done is exactly the mistake
-                    this state exists to prevent.
+                    Status is never replaced by its reference. A shipped row
+                    needs both facts: what state the work claims and which PR
+                    the owner should inspect. The wider panel lets those stack
+                    without taking another column from the title.
                   */}
-                      <Show
-                        when={item.reference}
-                        fallback={item.archived ? tx("archived") : statusSuffix(item.status)}
-                      >
+                      <span>{item.archived ? tx("archived") : statusSuffix(item.status)}</span>
+                      <Show when={item.reference}>
                         {(reference) => (
                           <Show
                             when={issueUrl(reference())}

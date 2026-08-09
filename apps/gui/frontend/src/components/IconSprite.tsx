@@ -13,6 +13,7 @@ export type IconName =
   | "arrow-up"
   | "check"
   | "copy"
+  | "circle-help"
   | "pencil"
   | "terminal"
   | "gauge"
@@ -61,6 +62,11 @@ export function IconSprite(): JSX.Element {
       </symbol>
       <symbol id="i-check" viewBox="0 0 24 24">
         <path d="M20 6 9 17l-5-5" />
+      </symbol>
+      <symbol id="i-circle-help" viewBox="0 0 24 24">
+        <circle cx="12" cy="12" r="9" />
+        <path d="M9.6 9a2.6 2.6 0 1 1 4.5 1.8c-1.3 1.2-2.1 1.6-2.1 3.2" />
+        <path d="M12 18h.01" />
       </symbol>
       <symbol id="i-chevron-down" viewBox="0 0 24 24">
         <path d="m6 9 6 6 6-6" />

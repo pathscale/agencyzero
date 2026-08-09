@@ -82,7 +82,7 @@ export const STATUS_LABELS: Record<ProjectStatus, string> = {
   pending: "Pending",
   planning: "Planning",
   active: "Active",
-  questions: "Open questions",
+  questions: "Question",
   shipped: "Shipped",
   finished: "Finished",
   canceled: "Canceled",

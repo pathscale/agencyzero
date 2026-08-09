@@ -132,7 +132,7 @@ export function TranscriptPane(props: {
     const index = ordered.findIndex((question) => question.id === id);
     return index >= 0 ? index + 1 : 0;
   };
-  const openQuestions = () => questionsFor().filter((question) => !question.answered);
+  const openQuestion = () => nextOpenQuestion(questionsFor());
   const turnLabels = createMemo(() => agentTurnLabels(props.messages));
   const timeline = createMemo(() => {
     const questions = questionsFor()
@@ -310,8 +310,8 @@ export function TranscriptPane(props: {
         </Show>
 
         {/* The run's vital signs, from send to stop: elapsed, size, what the
-            agent is doing, whether the words so far are safe in the store —
-            and the way out. */}
+         * agent is doing, whether the words so far are safe in the store —
+         * and the way out. */}
         <Show when={state.runStatus[props.project.id]}>
           {(status) => (
             <RunStatusLine
@@ -323,15 +323,33 @@ export function TranscriptPane(props: {
         </Show>
 
         {/* The unresolved ask is the conversation's current action, so it is
-            always the last authored content rather than floating above the
-            reply that introduced it. Once answered, it moves into `timeline`
-            immediately above the owner's response. */}
-        <For each={openQuestions()}>
-          {(question) => <QuestionCard question={question} number={questionNumber(question.id)} />}
-        </For>
+         * always the last authored content rather than floating above the
+         * reply that introduced it. Once answered, it moves into `timeline`
+         * immediately above the owner's response. */}
+        <Show when={openQuestion()}>
+          {(question) => (
+            <QuestionCard question={question()} number={questionNumber(question().id)} />
+          )}
+        </Show>
       </Show>
     </div>
   );
+}
+
+/**
+ * Present one durable owner decision at a time. A project may accumulate many
+ * questions, but stacking every card makes none of them readable. Stable
+ * chronological order means dismissing or answering the visible card reveals
+ * the next without reshuffling the queue.
+ */
+export function nextOpenQuestion(questions: Question[]): Question | undefined {
+  return [...questions]
+    .filter((question) => !question.answered)
+    .sort((left, right) =>
+      left.createdAt === right.createdAt
+        ? left.id.localeCompare(right.id)
+        : left.createdAt.localeCompare(right.createdAt),
+    )[0];
 }
 
 /**

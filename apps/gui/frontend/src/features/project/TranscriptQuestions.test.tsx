@@ -1,7 +1,7 @@
 import { fireEvent, render, waitFor } from "@solidjs/testing-library";
 import { Show } from "solid-js";
 import { describe, expect, it } from "vitest";
-import { TranscriptPane } from "~/features/project/TranscriptPane";
+import { nextOpenQuestion, TranscriptPane } from "~/features/project/TranscriptPane";
 import { prefs, setPrefs } from "~/stores/prefs";
 import { useWorkspace, WorkspaceProvider } from "~/stores/workspace";
 
@@ -23,6 +23,37 @@ function TranscriptHarness() {
 }
 
 describe("transcript questions", () => {
+  it("shows only the oldest unanswered question in a stacked backlog", () => {
+    const next = nextOpenQuestion([
+      {
+        id: "q-later",
+        projectId: "cafe",
+        text: "Later",
+        urgency: "blocking",
+        answered: false,
+        createdAt: "2026-08-05T02:00:00Z",
+      },
+      {
+        id: "q-answered",
+        projectId: "cafe",
+        text: "Done",
+        urgency: "blocking",
+        answered: true,
+        createdAt: "2026-08-05T00:00:00Z",
+      },
+      {
+        id: "q-first",
+        projectId: "cafe",
+        text: "First",
+        urgency: "passive",
+        answered: false,
+        createdAt: "2026-08-05T01:00:00Z",
+      },
+    ]);
+
+    expect(next?.id).toBe("q-first");
+  });
+
   it("keeps an open question at the bottom and labels it as a question", async () => {
     setPrefs("openTabKeys", ["cafe"]);
     const screen = render(() => (
