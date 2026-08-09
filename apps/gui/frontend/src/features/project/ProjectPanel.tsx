@@ -16,6 +16,12 @@ import { prefs, setPrefs, togglePanelSection } from "~/stores/prefs";
 import { useNow, useWorkspace } from "~/stores/workspace";
 import type { Project, ProjectItem, Question, RunningTask } from "~/types";
 
+export const PROJECT_ITEM_PAGE_SIZE = 12;
+
+export function itemPage<T>(items: readonly T[], limit: number): T[] {
+  return items.slice(0, Math.max(0, limit));
+}
+
 /**
  * The project's right-hand column: Items · Running · Task log · Agent I/O ·
  * Settings.
@@ -950,6 +956,9 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
    * when rows 2 and 4 are invisible.
    */
   const [query, setQuery] = createSignal("");
+  const [itemLimit, setItemLimit] = createSignal(PROJECT_ITEM_PAGE_SIZE);
+  const [hoveredItemId, setHoveredItemId] = createSignal<string | null>(null);
+  const [focusedItemId, setFocusedItemId] = createSignal<string | null>(null);
   const shown = createMemo(() => {
     const needle = query().trim().toLowerCase();
     const items = needle
@@ -957,6 +966,7 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
       : props.items;
     return sortItems(items, prefs.itemSortBy, prefs.itemSortDirection);
   });
+  const visibleShown = createMemo(() => itemPage(shown(), itemLimit()));
   const filtering = () => query().trim().length > 0;
 
   createEffect(() => {
@@ -964,6 +974,10 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
     target?.revision;
     if (!target || !props.items.some((item) => item.id === target.id)) return;
     setQuery("");
+    const targetIndex = shown().findIndex((item) => item.id === target.id);
+    if (targetIndex >= 0) {
+      setItemLimit((limit) => Math.max(limit, targetIndex + 1));
+    }
     queueMicrotask(() => {
       const row = document.querySelector<HTMLElement>(`[data-item-id="${target.id}"]`);
       row?.scrollIntoView?.({ block: "nearest", behavior: "smooth" });
@@ -1135,7 +1149,10 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
           <input
             type="text"
             value={query()}
-            onInput={(event) => setQuery(event.currentTarget.value)}
+            onInput={(event) => {
+              setQuery(event.currentTarget.value);
+              setItemLimit(PROJECT_ITEM_PAGE_SIZE);
+            }}
             placeholder={tx("Filter items…")}
             aria-label={tx("Filter items")}
             class="min-w-0 flex-1 bg-transparent text-[12px] text-az-body outline-none placeholder:text-az-faint"
@@ -1143,7 +1160,10 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
           <Show when={filtering()}>
             <button
               type="button"
-              onClick={() => setQuery("")}
+              onClick={() => {
+                setQuery("");
+                setItemLimit(PROJECT_ITEM_PAGE_SIZE);
+              }}
               aria-label={tx("Clear the filter")}
               class="shrink-0 rounded-md p-0.5 text-az-faint transition-colors hover:text-az-body"
             >
@@ -1157,7 +1177,7 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
           {tx("No item matches “{query}”", { query: query().trim() })}
         </p>
       </Show>
-      <For each={shown()}>
+      <For each={visibleShown()}>
         {(item, index) => (
           <Show
             when={editingId() !== item.id}
@@ -1180,9 +1200,17 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
               <div
                 data-item-id={item.id}
                 tabIndex={-1}
+                onPointerEnter={() => setHoveredItemId(item.id)}
+                onPointerLeave={() => setHoveredItemId(null)}
                 onFocusIn={() => {
+                  setFocusedItemId(item.id);
                   if (descriptionDraft() && descriptionDraft()?.item.id !== item.id) {
                     setDescriptionDraft(null);
+                  }
+                }}
+                onFocusOut={(event) => {
+                  if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+                    setFocusedItemId(null);
                   }
                 }}
                 /*
@@ -1395,114 +1423,116 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
                  * keeps the icons legible where they overlap a long title. These
                  * act on the row, they are not part of reading it.
                  */}
-                <div
-                  class={`absolute inset-y-0 flex items-center justify-end gap-1 rounded-r-[9px] bg-gradient-to-l from-60% from-base-300 to-transparent pr-2 pl-6 opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100 ${
-                    item.status === "questions" ? "right-[74px]" : "right-[50px]"
-                  }`}
-                >
-                  <Show when={item.status !== "finished"}>
+                <Show when={hoveredItemId() === item.id || focusedItemId() === item.id}>
+                  <div
+                    class={`absolute inset-y-0 flex items-center justify-end gap-1 rounded-r-[9px] bg-gradient-to-l from-60% from-base-300 to-transparent pr-2 pl-6 ${
+                      item.status === "questions" ? "right-[74px]" : "right-[50px]"
+                    }`}
+                  >
+                    <Show when={item.status !== "finished"}>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const question = questionFor(item);
+                          if (question) replyTo(question);
+                          else run(item);
+                        }}
+                        // Not gated on isLive: the mock serves sendMessage the same
+                        // as the composer does, so the preview can exercise this.
+                        disabled={!questionFor(item) && isRunning()}
+                        title={
+                          questionFor(item)
+                            ? tx("Reply to this item's question")
+                            : isRunning()
+                              ? tx("A run is already in flight on this project")
+                              : tx("Send this item to the agent, on this project's session")
+                        }
+                        aria-label={
+                          questionFor(item)
+                            ? tx("Reply to the question for {name}", { name: item.title })
+                            : tx("Run {name}", { name: item.title })
+                        }
+                        class={`shrink-0 rounded-md border p-1 transition-colors disabled:opacity-30 ${
+                          questionFor(item)
+                            ? "border-warning/55 bg-warning/18 text-warning hover:border-warning hover:bg-warning/30"
+                            : "border-transparent text-az-faint hover:border-primary/25 hover:bg-primary/12 hover:text-primary"
+                        }`}
+                      >
+                        <Icon
+                          name={questionFor(item) ? "message-square-dashed" : "play"}
+                          class="text-[12px]"
+                        />
+                      </button>
+                    </Show>
+                    {/* Revealed on hover: the controls all the time would be louder
+                than the titles they act on. */}
                     <button
                       type="button"
                       onClick={() => {
-                        const question = questionFor(item);
-                        if (question) replyTo(question);
-                        else run(item);
+                        const current = issueUrl(item.reference ?? "") ?? "";
+                        const url = window.prompt(tx("GitHub issue URL"), current)?.trim();
+                        if (!url) return;
+                        void actions
+                          .setItemIssue(item.id, url)
+                          .catch((cause) =>
+                            log.error(`could not link the issue: ${describeError(cause)}`),
+                          );
                       }}
-                      // Not gated on isLive: the mock serves sendMessage the same
-                      // as the composer does, so the preview can exercise this.
-                      disabled={!questionFor(item) && isRunning()}
-                      title={
-                        questionFor(item)
-                          ? tx("Reply to this item's question")
-                          : isRunning()
-                            ? tx("A run is already in flight on this project")
-                            : tx("Send this item to the agent, on this project's session")
-                      }
-                      aria-label={
-                        questionFor(item)
-                          ? tx("Reply to the question for {name}", { name: item.title })
-                          : tx("Run {name}", { name: item.title })
-                      }
-                      class={`shrink-0 rounded-md border p-1 transition-colors disabled:opacity-30 ${
-                        questionFor(item)
-                          ? "border-warning/55 bg-warning/18 text-warning hover:border-warning hover:bg-warning/30"
-                          : "border-transparent text-az-faint hover:border-primary/25 hover:bg-primary/12 hover:text-primary"
-                      }`}
+                      aria-label={tx("Link a GitHub issue to {name}", { name: item.title })}
+                      title={tx("Link a GitHub issue")}
+                      class="shrink-0 rounded-md p-1 text-az-faint transition-colors hover:text-primary"
                     >
-                      <Icon
-                        name={questionFor(item) ? "message-square-dashed" : "play"}
-                        class="text-[12px]"
-                      />
-                    </button>
-                  </Show>
-                  {/* Revealed on hover: the controls all the time would be louder
-                than the titles they act on. */}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const current = issueUrl(item.reference ?? "") ?? "";
-                      const url = window.prompt(tx("GitHub issue URL"), current)?.trim();
-                      if (!url) return;
-                      void actions
-                        .setItemIssue(item.id, url)
-                        .catch((cause) =>
-                          log.error(`could not link the issue: ${describeError(cause)}`),
-                        );
-                    }}
-                    aria-label={tx("Link a GitHub issue to {name}", { name: item.title })}
-                    title={tx("Link a GitHub issue")}
-                    class="shrink-0 rounded-md p-1 text-az-faint opacity-0 transition-[color,opacity] hover:text-primary group-hover:opacity-100"
-                  >
-                    <Icon name="git-pull-request" class="text-[11px]" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setEditTitle(item.title);
-                      setEditingId(item.id);
-                    }}
-                    aria-label={tx("Edit {name}", { name: item.title })}
-                    title={tx("Edit this item")}
-                    class="shrink-0 rounded-md p-1 text-az-faint opacity-0 transition-[color,opacity] hover:text-az-body group-hover:opacity-100"
-                  >
-                    <Icon name="pencil" class="text-[11px]" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      void actions
-                        .deleteItem(item.id)
-                        .catch((cause) =>
-                          log.error(`could not delete the item: ${describeError(cause)}`),
-                        )
-                    }
-                    aria-label={tx("Delete {name}", { name: item.title })}
-                    title={tx("Delete this item")}
-                    class="shrink-0 rounded-md p-1 text-az-faint opacity-0 transition-[color,opacity] hover:text-error group-hover:opacity-100"
-                  >
-                    <Icon name="x" class="text-[12px]" />
-                  </button>
-                  <div class="flex shrink-0 flex-col opacity-0 transition-opacity group-hover:opacity-100">
-                    <button
-                      type="button"
-                      onClick={() => move(index(), -1)}
-                      disabled={filtering() || index() === 0}
-                      aria-label={tx("Move {name} up", { name: item.title })}
-                      class="rounded-sm px-0.5 text-az-faint transition-colors hover:text-az-body disabled:opacity-25"
-                    >
-                      <Icon name="chevron-up" class="text-[10px]" />
+                      <Icon name="git-pull-request" class="text-[11px]" />
                     </button>
                     <button
                       type="button"
-                      onClick={() => move(index(), 1)}
-                      disabled={filtering() || index() === props.items.length - 1}
-                      aria-label={tx("Move {name} down", { name: item.title })}
-                      class="rounded-sm px-0.5 text-az-faint transition-colors hover:text-az-body disabled:opacity-25"
+                      onClick={() => {
+                        setEditTitle(item.title);
+                        setEditingId(item.id);
+                      }}
+                      aria-label={tx("Edit {name}", { name: item.title })}
+                      title={tx("Edit this item")}
+                      class="shrink-0 rounded-md p-1 text-az-faint transition-colors hover:text-az-body"
                     >
-                      <Icon name="chevron-down" class="text-[10px]" />
+                      <Icon name="pencil" class="text-[11px]" />
                     </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        void actions
+                          .deleteItem(item.id)
+                          .catch((cause) =>
+                            log.error(`could not delete the item: ${describeError(cause)}`),
+                          )
+                      }
+                      aria-label={tx("Delete {name}", { name: item.title })}
+                      title={tx("Delete this item")}
+                      class="shrink-0 rounded-md p-1 text-az-faint transition-colors hover:text-error"
+                    >
+                      <Icon name="x" class="text-[12px]" />
+                    </button>
+                    <div class="flex shrink-0 flex-col">
+                      <button
+                        type="button"
+                        onClick={() => move(index(), -1)}
+                        disabled={filtering() || index() === 0}
+                        aria-label={tx("Move {name} up", { name: item.title })}
+                        class="rounded-sm px-0.5 text-az-faint transition-colors hover:text-az-body disabled:opacity-25"
+                      >
+                        <Icon name="chevron-up" class="text-[10px]" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => move(index(), 1)}
+                        disabled={filtering() || index() === props.items.length - 1}
+                        aria-label={tx("Move {name} down", { name: item.title })}
+                        class="rounded-sm px-0.5 text-az-faint transition-colors hover:text-az-body disabled:opacity-25"
+                      >
+                        <Icon name="chevron-down" class="text-[10px]" />
+                      </button>
+                    </div>
                   </div>
-                </div>
+                </Show>
               </div>
               <Show when={descriptionDraft()?.item.id === item.id ? descriptionDraft() : null}>
                 {(draft) => (
@@ -1562,6 +1592,17 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
           </Show>
         )}
       </For>
+      <Show when={shown().length > visibleShown().length}>
+        <button
+          type="button"
+          onClick={() => setItemLimit((limit) => limit + PROJECT_ITEM_PAGE_SIZE)}
+          class="mt-1 flex-none rounded-[9px] border border-primary/24 bg-primary/8 px-2.5 py-2 font-semibold text-[11.5px] text-primary transition-colors hover:bg-primary/14"
+        >
+          {tx("Show {count} more items", {
+            count: Math.min(PROJECT_ITEM_PAGE_SIZE, shown().length - visibleShown().length),
+          })}
+        </button>
+      </Show>
 
       <Show
         when={adding()}

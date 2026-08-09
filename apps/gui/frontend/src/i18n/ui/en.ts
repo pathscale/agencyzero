@@ -11,6 +11,7 @@ const en = {
   "New project": "New project",
   "Show {count} earlier messages": "Show {count} earlier messages",
   "Show {count} more projects": "Show {count} more projects",
+  "Show {count} more items": "Show {count} more items",
   "Update available: {version} — install from Settings":
     "Update available: {version} — install from Settings",
   "Scroll tabs left": "Scroll tabs left",
