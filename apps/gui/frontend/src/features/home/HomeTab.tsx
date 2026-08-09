@@ -1003,7 +1003,15 @@ function GroupItemRow(props: {
             <Icon name="git-fork" class="text-[12px]" />
             <Show when={fork()}>{tx("Forked")}</Show>
           </button>
-          <span class={`shrink-0 text-[11.5px] ${STATUS_TONE[props.item.status]}`}>
+          {/*
+            Keep the status edge where it was while reserving one consistent
+            column for every label. Without the fixed width, shorter labels
+            pull the description and fork controls to the right, so their
+            columns visibly wander from row to row.
+          */}
+          <span
+            class={`w-[96px] shrink-0 text-right text-[11.5px] ${STATUS_TONE[props.item.status]}`}
+          >
             {statusSuffix(props.item.status)}
           </span>
         </div>

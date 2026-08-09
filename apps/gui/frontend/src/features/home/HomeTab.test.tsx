@@ -24,6 +24,15 @@ async function mountHome() {
 }
 
 describe("Home item rows", () => {
+  it("reserves one status column so the trailing item actions align", async () => {
+    const screen = await mountHome();
+    const statusControls = screen.getAllByRole("button", { name: /^Change the status of / });
+
+    for (const control of statusControls) {
+      expect(control.parentElement?.lastElementChild).toHaveClass("w-[96px]", "text-right");
+    }
+  });
+
   it("always exposes Clean-up and stages proposals through Task Manager", async () => {
     const screen = await mountHome();
     const send = vi.spyOn(screen.workspace.actions, "sendTaskPrompt").mockResolvedValue(undefined);
