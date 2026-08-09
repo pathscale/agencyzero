@@ -214,7 +214,7 @@ pub(crate) struct AppState {
 }
 
 const RESTART_RESUME_FILE: &str = "restart-resume.json";
-const RESTART_RESUME_PROMPT: &str = "Resume the work interrupted by the AgencyZero restart. Re-read the current item list, durable project memory, and working tree, then continue until the work is complete or an owner decision is genuinely required.";
+const RESTART_RESUME_PROMPT: &str = "AgencyZero self-restart continuation (app-authored; not written by the owner): Resume the work interrupted by the agent-triggered AgencyZero restart. Re-read the current item list, durable project memory, and working tree, then continue until the work is complete or an owner decision is genuinely required.";
 
 #[derive(Debug, serde::Deserialize, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -428,15 +428,10 @@ pub(crate) fn schedule_agent_restart(
         )
         .map_err(|_| "a lifecycle action is already scheduled".to_string())?;
 
-    if let Err(error) = write_restart_resume(&state, project_id, actor) {
-        state
-            .agent_restart_scheduled
-            .store(false, std::sync::atomic::Ordering::Release);
-        return Err(error);
-    }
-
     let handle = app.clone();
     let mode = mode.to_string();
+    let project_id = project_id.to_string();
+    let actor = actor.to_string();
     tauri::async_runtime::spawn(async move {
         let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(600);
         loop {
@@ -462,6 +457,24 @@ pub(crate) fn schedule_agent_restart(
             }
         }
 
+        // Arm automatic continuation only when this agent-authored lifecycle
+        // action is actually about to execute. Writing the marker when the
+        // restart was merely scheduled let a normal manual quit/reopen consume
+        // stale intent and fabricate a user turn the owner never sent.
+        let state = handle.state::<AppState>();
+        if let Err(error) = write_restart_resume(&state, &project_id, &actor) {
+            state
+                .agent_restart_scheduled
+                .store(false, std::sync::atomic::Ordering::Release);
+            crate::log!(
+                log::Level::Error,
+                "boot",
+                "could not arm agent restart: {error}"
+            );
+            let _ = handle.emit("app:restart-failed", error);
+            return;
+        }
+
         let result = if mode == "update" {
             crate::update::install_update_now(&handle).await
         } else {
@@ -470,6 +483,7 @@ pub(crate) fn schedule_agent_restart(
         };
         if let Err(error) = result {
             let state = handle.state::<AppState>();
+            let _ = std::fs::remove_file(restart_resume_path(&state.config_dir));
             state
                 .agent_restart_scheduled
                 .store(false, std::sync::atomic::Ordering::Release);
@@ -492,6 +506,12 @@ mod restart_resume_tests {
 
         assert_eq!(marker.project_id, "project-origin");
         assert_eq!(marker.agent, "codex");
+        assert!(
+            marker
+                .prompt
+                .starts_with("AgencyZero self-restart continuation (app-authored")
+        );
+        assert!(marker.prompt.contains("not written by the owner"));
         assert_eq!(
             marker.model,
             settings.models.get("codex").unwrap().default,
