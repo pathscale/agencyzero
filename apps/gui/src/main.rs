@@ -40,11 +40,15 @@ pub(crate) type AppHandle = tauri::AppHandle<tauri_runtime_blitz::BlitzRuntime>;
 pub(crate) type AppHandle = tauri::AppHandle<tauri::Wry>;
 
 #[cfg(feature = "blitz-runtime")]
-fn standard_identity_dir(bundle_dir: PathBuf) -> PathBuf {
-    bundle_dir
-        .parent()
-        .map(|parent| parent.join("com.pathscale.agencyzero"))
-        .unwrap_or(bundle_dir)
+fn blitz_profile_dir(bundle_dir: PathBuf) -> PathBuf {
+    if cfg!(feature = "experimental") {
+        bundle_dir
+    } else {
+        bundle_dir
+            .parent()
+            .map(|parent| parent.join("com.pathscale.agencyzero"))
+            .unwrap_or(bundle_dir)
+    }
 }
 
 use crate::db::location::{self, DataLocation};
@@ -638,6 +642,26 @@ mod restart_resume_tests {
         assert!(take_restart_resume(&dir).is_none());
         assert!(!restart_resume_path(&dir).exists());
         let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[cfg(feature = "blitz-runtime")]
+    #[test]
+    fn blitz_profile_routing_never_collapses_experimental_into_stable() {
+        let experimental = PathBuf::from(
+            "/Users/example/Library/Application Support/com.pathscale.agencyzero.experimental",
+        );
+        let routed = blitz_profile_dir(experimental.clone());
+
+        if cfg!(feature = "experimental") {
+            assert_eq!(routed, experimental);
+        } else {
+            assert_eq!(
+                routed,
+                PathBuf::from(
+                    "/Users/example/Library/Application Support/com.pathscale.agencyzero"
+                )
+            );
+        }
     }
 }
 
@@ -1964,17 +1988,15 @@ fn main() {
                 .app_data_dir()
                 .map_err(|error| format!("no data directory: {error}"))?;
 
-            // The separately named Blitz test bundle must not share a bundle
-            // identifier with the WebKit app: LaunchServices otherwise
-            // activates whichever process already owns that identity. The
-            // owner normally runs the experimental profile, so this standard
-            // build uses the non-experimental profile's real store. That keeps
-            // backend behavior realistic while allowing both apps to run for
-            // side-by-side renderer testing.
+            // The separately named standard Blitz test bundle uses the stable
+            // profile so side-by-side renderer testing exercises real data.
+            // Experimental is deliberately excluded: its bundle-derived path
+            // is its profile boundary, and collapsing it into stable makes the
+            // owner's entire Experimental project list appear to disappear.
             #[cfg(feature = "blitz-runtime")]
-            let config_dir = standard_identity_dir(config_dir);
+            let config_dir = blitz_profile_dir(config_dir);
             #[cfg(feature = "blitz-runtime")]
-            let data_dir = standard_identity_dir(data_dir);
+            let data_dir = blitz_profile_dir(data_dir);
 
             // Before anything that can fail, so whatever happens next is on the
             // record. Opening the tables is the first thing that can, and it is
