@@ -98,8 +98,11 @@ scripts/local-delivery.sh experimental
 
 Add `--offline` when every dependency is already cached and GitHub or a package
 registry is unavailable. The bundle modes disable updater artifacts and signing;
-they are for local testing, never distribution. Each prints the completed `.app`
-path, so no CI run or deployment is required to exercise a change.
+they are for local testing, never distribution. Each publishes and prints the
+completed `.app` under `target/release/bundle/macos`, so no CI run or deployment
+is required to exercise a change. On ARM Macs the script compiles through
+Cargo's target-triple staging directory to select the matching sidecar, then
+moves the completed bundle into that canonical local-launch path.
 
 ## Distribution
 

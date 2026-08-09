@@ -42,6 +42,21 @@ run_tauri() {
   fi
 }
 
+publish_bundle() {
+  built_bundle=$1
+  published_bundle=$2
+
+  # The installed Tauri CLI is x86_64 while this Rust host and its sidecar are
+  # ARM, so `--target` is required. Cargo stages that bundle below the target
+  # triple; publish it to the canonical local-launch path only after bundling
+  # succeeds, moving rather than copying so no duplicate app remains.
+  if [ "$built_bundle" != "$published_bundle" ]; then
+    rm -rf "$published_bundle"
+    mkdir -p "$(dirname "$published_bundle")"
+    mv "$built_bundle" "$published_bundle"
+  fi
+}
+
 echo "==> frontend"
 (
   cd "$repo_root/apps/gui/frontend"
@@ -76,7 +91,10 @@ case "$mode" in
         --config '{"bundle":{"createUpdaterArtifacts":false}}' \
         --no-sign
     )
-    echo "$repo_root/target/$rust_target/release/bundle/macos/AgencyZero Dev.app"
+    publish_bundle \
+      "$repo_root/target/$rust_target/release/bundle/macos/AgencyZero Dev.app" \
+      "$repo_root/target/release/bundle/macos/AgencyZero Dev.app"
+    echo "$repo_root/target/release/bundle/macos/AgencyZero Dev.app"
     ;;
   experimental)
     echo "==> AgencyZero Experimental.app"
@@ -89,6 +107,9 @@ case "$mode" in
         --config '{"bundle":{"createUpdaterArtifacts":false}}' \
         --no-sign
     )
-    echo "$repo_root/target/$rust_target/release/bundle/macos/AgencyZero Experimental.app"
+    publish_bundle \
+      "$repo_root/target/$rust_target/release/bundle/macos/AgencyZero Experimental.app" \
+      "$repo_root/target/release/bundle/macos/AgencyZero Experimental.app"
+    echo "$repo_root/target/release/bundle/macos/AgencyZero Experimental.app"
     ;;
 esac

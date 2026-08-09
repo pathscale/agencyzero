@@ -21,6 +21,18 @@ pub const DISCOVERY_GUARD: &str = "No rg, ever and no broad scanning. Never invo
 download rg. Search only explicitly scoped repositories, directories, or files with narrow \
 alternatives.";
 
+/// The non-overridable continuity rule sent to every provider for every project.
+///
+/// Owner questions and status checks are additions to a live work obligation,
+/// not implicit cancellation. This does not broaden scope: unrelated backlog
+/// rows remain inert until the owner starts or authorizes them.
+pub const WORK_CONTINUITY_GUARD: &str = "Do not yield early merely because the owner asks a \
+question or requests status while actionable, still-authorized work remains. Answer the question \
+briefly, then continue that work in the same turn. Yield only when the request is complete, the \
+owner explicitly stops, pauses, or replaces it, or progress is genuinely blocked on a decision \
+only the owner can make. Before yielding, state which terminal condition applies and why no \
+actionable work remains. Open backlog items alone do not authorize unrelated work.";
+
 /// The file a user drops beside their settings to replace the built-in text.
 pub const OVERRIDE_FILE: &str = "AgencyZeroPerTurn.md";
 
@@ -38,9 +50,9 @@ by a decision only the owner can make. Waiting on CI, review, or another backgro
 is not a stopping point: continue with the next safe, non-blocking issue already in scope. If \
 progress requires owner input, ask a tracked question.";
 
-/// The per-turn instructions to inject: the universal discovery guard followed
-/// by the user's override when present and non-blank, otherwise the embedded
-/// default.
+/// The per-turn instructions to inject: the universal discovery and work
+/// continuity guards followed by the user's override when present and
+/// non-blank, otherwise the embedded default.
 ///
 /// `config_dir` is the directory the app writes settings into, so the override
 /// travels with a data-directory move the same way settings do. A file that
@@ -62,7 +74,10 @@ pub fn instructions(
             "{{agent_finished_retention_turns}}",
             &agent_finished_retention_turns.to_string(),
         );
-    let instructions = format!("{DISCOVERY_GUARD}\n\n{}", workflow.trim());
+    let instructions = format!(
+        "{DISCOVERY_GUARD}\n\n{WORK_CONTINUITY_GUARD}\n\n{}",
+        workflow.trim()
+    );
     if announce_start {
         format!("{STARTUP_VISIBILITY}\n\n{instructions}")
     } else {
@@ -113,7 +128,23 @@ mod tests {
 
         let effective = instructions(&dir, 2, false);
         assert!(effective.starts_with(DISCOVERY_GUARD));
+        assert!(effective.contains(WORK_CONTINUITY_GUARD));
         assert!(effective.ends_with("my own rules"));
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn work_continuity_guard_is_non_overridable_and_does_not_broaden_scope() {
+        let dir = std::env::temp_dir().join(format!("az-work-continuity-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).expect("temp dir");
+        std::fs::write(dir.join(OVERRIDE_FILE), "my own rules").expect("write override");
+
+        let effective = instructions(&dir, 2, false);
+        assert!(effective.contains(WORK_CONTINUITY_GUARD));
+        assert!(effective.contains("then continue that work in the same turn"));
+        assert!(effective.contains("state which terminal condition applies"));
+        assert!(effective.contains("Open backlog items alone do not authorize unrelated work"));
 
         let _ = std::fs::remove_dir_all(&dir);
     }
@@ -131,11 +162,13 @@ mod tests {
 
         assert_eq!(
             instructions(&dir, 2, false),
-            format!("{DISCOVERY_GUARD}\n\nmy own rules")
+            format!("{DISCOVERY_GUARD}\n\n{WORK_CONTINUITY_GUARD}\n\nmy own rules")
         );
         assert_eq!(
             instructions(&dir, 2, true),
-            format!("{STARTUP_VISIBILITY}\n\n{DISCOVERY_GUARD}\n\nmy own rules")
+            format!(
+                "{STARTUP_VISIBILITY}\n\n{DISCOVERY_GUARD}\n\n{WORK_CONTINUITY_GUARD}\n\nmy own rules"
+            )
         );
 
         let _ = std::fs::remove_dir_all(&dir);
@@ -150,7 +183,7 @@ mod tests {
         assert_eq!(
             instructions(&dir, 2, false),
             format!(
-                "{DISCOVERY_GUARD}\n\n{}",
+                "{DISCOVERY_GUARD}\n\n{WORK_CONTINUITY_GUARD}\n\n{}",
                 EMBEDDED
                     .replace("{{agent_finished_retention_turns}}", "2")
                     .trim()
@@ -162,7 +195,7 @@ mod tests {
         assert_eq!(
             instructions(&dir, 2, false),
             format!(
-                "{DISCOVERY_GUARD}\n\n{}",
+                "{DISCOVERY_GUARD}\n\n{WORK_CONTINUITY_GUARD}\n\n{}",
                 EMBEDDED
                     .replace("{{agent_finished_retention_turns}}", "2")
                     .trim()
