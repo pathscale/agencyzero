@@ -168,10 +168,34 @@ export function portablePrefsSnapshot(): PortableUiPrefs {
   return portable;
 }
 
+let portableRevisionFallback = "";
+
+function readPortableRevision(): string {
+  try {
+    if (typeof localStorage !== "undefined") {
+      return localStorage.getItem(PORTABLE_REVISION_KEY) ?? "";
+    }
+  } catch {
+    // Blitz has no Web Storage, and a webview may deny access to it.
+  }
+  return portableRevisionFallback;
+}
+
+function writePortableRevision(revision: string): void {
+  portableRevisionFallback = revision;
+  try {
+    if (typeof localStorage === "undefined") return;
+    if (revision) localStorage.setItem(PORTABLE_REVISION_KEY, revision);
+    else localStorage.removeItem(PORTABLE_REVISION_KEY);
+  } catch {
+    // The in-memory marker still prevents repeat application this launch.
+  }
+}
+
 /** Apply a restored preference snapshot without replacing local unfinished text. */
 export function restorePortablePrefs(stored: Partial<PortableUiPrefs>, revision: string): void {
   if (!revision || Object.keys(stored).length === 0) return;
-  if (localStorage.getItem(PORTABLE_REVISION_KEY) === revision) return;
+  if (readPortableRevision() === revision) return;
   setPrefs(
     normalize({
       ...stored,
@@ -179,17 +203,17 @@ export function restorePortablePrefs(stored: Partial<PortableUiPrefs>, revision:
       replyQuestionIds: prefs.replyQuestionIds,
     }),
   );
-  localStorage.setItem(PORTABLE_REVISION_KEY, revision);
+  writePortableRevision(revision);
 }
 
 /** Mark the local snapshot current after capturing it into this same store. */
 export function markPortablePrefsCurrent(revision: string): void {
-  if (revision) localStorage.setItem(PORTABLE_REVISION_KEY, revision);
+  if (revision) writePortableRevision(revision);
 }
 
 /** Force a selected backup's snapshot to apply after the restore relaunch. */
 export function preparePortablePrefsRestore(): void {
-  localStorage.removeItem(PORTABLE_REVISION_KEY);
+  writePortableRevision("");
 }
 
 export function togglePanelSection(section: keyof UiPrefs["panelSections"]): void {
