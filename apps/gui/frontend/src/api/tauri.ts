@@ -38,10 +38,7 @@ async function tauriCall<T>(command: string, args?: Record<string, unknown>): Pr
   }
 }
 
-export type CommandCaller = <T>(
-  command: string,
-  args?: Record<string, unknown>,
-) => Promise<T>;
+export type CommandCaller = <T>(command: string, args?: Record<string, unknown>) => Promise<T>;
 
 export type EventListener = <E extends keyof AppEvents>(
   event: E,
@@ -164,7 +161,9 @@ export function createCommandApi(call: CommandCaller, on: EventListener): Agency
 
 export function createTauriApi(): AgencyZeroApi {
   return createCommandApi(tauriCall, async (event, handler) => {
-    const unlisten = await listen<AppEvents[typeof event]>(event, ({ payload }) => handler(payload));
+    const unlisten = await listen<AppEvents[typeof event]>(event, ({ payload }) =>
+      handler(payload),
+    );
     log.debug(`listening for ${event}`);
     return () => unlisten();
   });
