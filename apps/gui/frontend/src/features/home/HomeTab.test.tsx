@@ -1,7 +1,6 @@
 import { fireEvent, render, waitFor } from "@solidjs/testing-library";
-import { createSignal } from "solid-js";
 import { describe, expect, it, vi } from "vitest";
-import { CleanupReview, HomeTab, TASK_CLEANUP_PROMPT } from "~/features/home/HomeTab";
+import { CleanupRowActions, HomeTab, TASK_CLEANUP_PROMPT } from "~/features/home/HomeTab";
 import { setPrefs } from "~/stores/prefs";
 import { useWorkspace, type Workspace, WorkspaceProvider } from "~/stores/workspace";
 
@@ -33,58 +32,40 @@ describe("Home item rows", () => {
     fireEvent.click(screen.getByRole("button", { name: "Clean-up" }));
 
     await waitFor(() => expect(send).toHaveBeenCalledWith(TASK_CLEANUP_PROMPT, undefined, true));
-    expect(TASK_CLEANUP_PROMPT).toContain("items.retire");
+    expect(TASK_CLEANUP_PROMPT).toContain('{"deleteItemIds"');
+    expect(TASK_CLEANUP_PROMPT).toContain("do not inspect files");
     expect(screen.queryByRole("button", { name: "Confirm delete" })).toBeNull();
   });
 
-  it("keeps cleanup proposals intact until the explicit confirm button", async () => {
-    const onKeep = vi.fn(async (_id: string) => undefined);
+  it("reviews each cleanup proposal on its own item row", async () => {
+    const onKeep = vi.fn(async () => undefined);
     const onConfirm = vi.fn(async () => undefined);
-    const candidate = {
-      projectName: "WorkTable",
-      item: {
-        id: "item-review-delete",
-        projectId: "worktable",
-        title: "Review before deleting",
-        status: "planning" as const,
-        order: 0,
-        reference: null,
-        deleteProposed: true,
-      },
+    const item = {
+      id: "item-review-delete",
+      projectId: "worktable",
+      title: "Review before deleting",
+      status: "planning" as const,
+      order: 0,
+      reference: null,
+      deleteProposed: true,
     };
-    const second = {
-      projectName: "AgencyZero",
-      item: {
-        ...candidate.item,
-        id: "item-delete-this",
-        projectId: "agencyzero",
-        title: "Delete this one",
-      },
-    };
-    const [candidates, setCandidates] = createSignal([candidate, second]);
     const screen = render(() => (
-      <CleanupReview
-        candidates={candidates()}
-        onKeep={async (id) => {
-          await onKeep(id);
-          setCandidates((current) => current.filter(({ item }) => item.id !== id));
-        }}
+      <CleanupRowActions
+        item={item}
+        onKeep={onKeep}
         onConfirm={onConfirm}
       />
     ));
 
-    expect(screen.getByText("2 marked Delete")).toBeTruthy();
-    expect(screen.getByText("Review before deleting")).toBeTruthy();
     expect(screen.getByRole("checkbox", { name: "Delete Review before deleting" })).toBeChecked();
     expect(onConfirm).not.toHaveBeenCalled();
 
     fireEvent.click(screen.getByRole("checkbox", { name: "Delete Review before deleting" }));
-    await waitFor(() => expect(onKeep).toHaveBeenCalledWith("item-review-delete"));
-    expect(screen.queryByRole("checkbox", { name: "Delete Review before deleting" })).toBeNull();
+    await waitFor(() => expect(onKeep).toHaveBeenCalledOnce());
     expect(onConfirm).not.toHaveBeenCalled();
 
-    fireEvent.click(screen.getByRole("button", { name: "Confirm delete" }));
-    await waitFor(() => expect(onConfirm).toHaveBeenCalledWith(["item-delete-this"]));
+    fireEvent.click(screen.getByRole("button", { name: "Confirm" }));
+    await waitFor(() => expect(onConfirm).toHaveBeenCalledOnce());
   });
 
   it("sorts legacy Home items by time and direction instead of only changing the labels", async () => {

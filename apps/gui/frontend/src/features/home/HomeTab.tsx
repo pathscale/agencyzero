@@ -33,9 +33,11 @@ const STATUS_TONE: Record<ProjectItem["status"], string> = {
 };
 
 export const TASK_CLEANUP_PROMPT = `Review every current project item and clean up the task list.
-Propose deletion for obsolete, duplicate, superseded, or fully delivered items with the exact items.retire directive and the item's id.
+Propose deletion for items in small inactive, duplicate, or superseded projects, or projects with a fully_delivered item.
 Do not delete projects, do not change unrelated items, and do not treat a proposal as final deletion.
-The owner will review every item marked Delete and confirm or keep it separately.`;
+The owner will review every item marked Delete and confirm or keep it separately.
+Use only the supplied JSON package; do not inspect files or call tools.
+Return JSON only in this exact shape: {"deleteItemIds":["item-id"]}.`;
 
 /**
  * Home: every project with its items, plus Pinned and Recent.
@@ -81,14 +83,6 @@ export function HomeTab(): JSX.Element {
     [...ordered()].sort((a, b) => b.lastActivityAt.localeCompare(a.lastActivityAt)),
   );
 
-  const proposedDeletes = createMemo(() =>
-    ordered().flatMap((project) =>
-      itemsFor(project.id)
-        .filter((item) => item.deleteProposed)
-        .map((item) => ({ item, projectName: project.name })),
-    ),
-  );
-
   return (
     <div class="flex min-w-0 flex-1 gap-3">
       <Panel class="flex min-w-0 flex-1 flex-col">
@@ -128,13 +122,6 @@ export function HomeTab(): JSX.Element {
           </div>
 
           <TaskManagerStatus />
-          <CleanupReview
-            candidates={proposedDeletes()}
-            onKeep={(id) => actions.unmarkItemDeletion(id)}
-            onConfirm={async (ids) => {
-              for (const id of ids) await actions.deleteItem(id);
-            }}
-          />
         </div>
 
         <div class="az-scroll flex min-h-0 flex-1 flex-col gap-2.5 px-3.5 pb-3.5">
@@ -262,107 +249,51 @@ export function HomeTab(): JSX.Element {
   );
 }
 
-export interface CleanupCandidate {
+/** Review one cleanup proposal where the item already lives. */
+export function CleanupRowActions(props: {
   item: ProjectItem;
-  projectName: string;
-}
-
-/**
- * Task Manager deletion proposals stay here until the owner reviews them.
- * Merely rendering this panel performs no mutation; Confirm is the sole path
- * that turns the visible proposal set into deletions.
- */
-export function CleanupReview(props: {
-  candidates: CleanupCandidate[];
-  onKeep: (id: string) => Promise<unknown>;
-  onConfirm: (ids: string[]) => Promise<unknown>;
+  onKeep: () => Promise<unknown>;
+  onConfirm: () => Promise<unknown>;
 }): JSX.Element {
-  const [isConfirming, setIsConfirming] = createSignal(false);
-  const [error, setError] = createSignal<string | null>(null);
+  const [busy, setBusy] = createSignal<"keep" | "delete" | null>(null);
 
-  const keep = async (id: string): Promise<boolean> => {
-    setError(null);
+  const run = async (kind: "keep" | "delete", action: () => Promise<unknown>) => {
+    setBusy(kind);
     try {
-      await props.onKeep(id);
-      return true;
-    } catch (cause) {
-      setError(describeError(cause));
-      return false;
-    }
-  };
-
-  const confirm = async (): Promise<void> => {
-    if (isConfirming() || props.candidates.length === 0) return;
-    const ids = props.candidates.map(({ item }) => item.id);
-    setError(null);
-    setIsConfirming(true);
-    try {
-      await props.onConfirm(ids);
-    } catch (cause) {
-      setError(describeError(cause));
+      await action();
     } finally {
-      setIsConfirming(false);
+      setBusy(null);
     }
   };
 
   return (
-    <Show when={props.candidates.length > 0}>
-      <section
-        aria-label={tx("Review proposed item deletions")}
-        class="flex flex-col gap-2 rounded-[11px] border border-warning/45 bg-warning/8 px-3 py-2.5"
+    <div class="flex shrink-0 items-center gap-1 rounded-md border border-warning/35 bg-warning/8 px-1.5 py-0.5">
+      <label class="flex cursor-pointer items-center gap-1 font-semibold text-[10.5px] text-warning">
+        <input
+          type="checkbox"
+          checked
+          disabled={busy() !== null}
+          aria-label={tx("Delete {name}", { name: props.item.title })}
+          class="checkbox checkbox-xs checkbox-error"
+          onChange={(event) => {
+            if (event.currentTarget.checked) return;
+            const checkbox = event.currentTarget;
+            void run("keep", props.onKeep).catch(() => {
+              checkbox.checked = true;
+            });
+          }}
+        />
+        {tx("Delete")}
+      </label>
+      <button
+        type="button"
+        disabled={busy() !== null}
+        onClick={() => void run("delete", props.onConfirm)}
+        class="rounded border border-error/35 px-1.5 py-px font-semibold text-[10px] text-error hover:bg-error/12 disabled:opacity-50"
       >
-        <div class="flex items-center gap-2">
-          <Icon name="shield" class="shrink-0 text-[14px] text-warning" />
-          <span class="font-semibold text-[12px] text-az-strong">
-            {tx("{count} marked Delete", { count: props.candidates.length })}
-          </span>
-          <span class="text-[11px] text-az-muted">
-            {tx("Review these proposals before removing anything.")}
-          </span>
-          <button
-            type="button"
-            onClick={() => void confirm()}
-            disabled={isConfirming()}
-            class="ml-auto rounded-md border border-error/45 bg-error/12 px-2.5 py-1 font-semibold text-[11px] text-error transition-colors hover:bg-error/22 disabled:opacity-50"
-          >
-            {isConfirming() ? tx("Deleting…") : tx("Confirm delete")}
-          </button>
-        </div>
-        <div class="flex flex-wrap gap-1.5">
-          <For each={props.candidates}>
-            {({ item, projectName }) => (
-              <label class="flex cursor-pointer items-center gap-1.5 rounded-md border border-warning/30 bg-az-inset px-2 py-1 text-[11px] text-az-body">
-                <input
-                  type="checkbox"
-                  checked
-                  aria-label={tx("Delete {name}", { name: item.title })}
-                  class="checkbox checkbox-xs checkbox-error"
-                  onChange={(event) => {
-                    if (event.currentTarget.checked) return;
-                    const checkbox = event.currentTarget;
-                    void keep(item.id).then((kept) => {
-                      if (!kept) checkbox.checked = true;
-                    });
-                  }}
-                />
-                <span class="max-w-[360px] truncate">
-                  <span class="text-az-muted">{projectName} · </span>
-                  {item.title}
-                </span>
-                <span class="font-semibold text-error">{tx("Delete")}</span>
-              </label>
-            )}
-          </For>
-        </div>
-        <Show when={error()}>
-          {(message) => (
-            <p role="alert" class="text-[11px] text-error">
-              {message()}
-            </p>
-          )}
-        </Show>
-      </section>
-    </Show>
+        {busy() === "delete" ? tx("Deleting…") : tx("Confirm")}
+      </button>
+    </div>
   );
 }
 
@@ -970,9 +901,11 @@ function GroupItemRow(props: {
             </span>
           </button>
           <Show when={props.item.deleteProposed}>
-            <span class="shrink-0 rounded-md border border-warning/35 bg-warning/10 px-1.5 py-0.5 font-semibold text-[10.5px] text-warning">
-              {tx("Delete")}
-            </span>
+            <CleanupRowActions
+              item={props.item}
+              onKeep={() => actions.unmarkItemDeletion(props.item.id)}
+              onConfirm={() => actions.deleteItem(props.item.id)}
+            />
           </Show>
           <button
             type="button"
@@ -986,19 +919,23 @@ function GroupItemRow(props: {
           >
             <Icon name="pencil" class="text-[11px]" />
           </button>
-          <button
-            type="button"
-            onClick={() =>
-              void actions
-                .deleteItem(props.item.id)
-                .catch((cause) => log.error(`could not delete the item: ${describeError(cause)}`))
-            }
-            aria-label={tx("Delete {name}", { name: props.item.title })}
-            title={tx("Delete this item")}
-            class="shrink-0 rounded-md p-0.5 text-az-faint opacity-0 transition-[color,opacity] hover:text-error group-hover:opacity-100"
-          >
-            <Icon name="x" class="text-[12px]" />
-          </button>
+          <Show when={!props.item.deleteProposed}>
+            <button
+              type="button"
+              onClick={() =>
+                void actions
+                  .deleteItem(props.item.id)
+                  .catch((cause) =>
+                    log.error(`could not delete the item: ${describeError(cause)}`),
+                  )
+              }
+              aria-label={tx("Delete {name}", { name: props.item.title })}
+              title={tx("Delete this item")}
+              class="shrink-0 rounded-md p-0.5 text-az-faint opacity-0 transition-[color,opacity] hover:text-error group-hover:opacity-100"
+            >
+              <Icon name="x" class="text-[12px]" />
+            </button>
+          </Show>
           <button
             type="button"
             onClick={() => void toggleDescription()}

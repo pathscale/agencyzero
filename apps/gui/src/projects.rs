@@ -5600,6 +5600,9 @@ const RUN_START_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(45
 /// recoverable stall, not a failed run: the session resumes.
 const RUN_IDLE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5 * 60);
 
+/// Home cleanup is one classification request, never an open-ended agent turn.
+const TASK_CLEANUP_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
+
 /// The live run in each project: a reservation that there is at most one, and
 /// the signal that stops it.
 ///
@@ -5893,6 +5896,93 @@ fn task_manager_snapshot(tables: &crate::db::tables::Tables) -> String {
         }
     }
     block
+}
+
+/// Compact, complete input for the bounded Home cleanup classifier.
+///
+/// Unlike the conversational snapshot, this is machine-shaped and contains no
+/// instructions that invite repository inspection. The model gets every open
+/// row it needs in one request and can answer without a tool call.
+fn task_cleanup_package(tables: &crate::db::tables::Tables) -> String {
+    let mut projects: Vec<ProjectRow> = tables.project.select_all().execute().unwrap_or_default();
+    projects.sort_by_key(|row| row.position);
+
+    let mut packaged_projects = Vec::new();
+    for project in projects {
+        let mut rows: Vec<ProjectItemRow> = tables
+            .project_item
+            .select_by_project_id(project.id.clone())
+            .execute()
+            .unwrap_or_default()
+            .into_iter()
+            .filter(|item| item.status != "finished" && item.status != "canceled")
+            .collect();
+        rows.sort_by_key(|row| row.position);
+        let items = rows
+            .into_iter()
+            .map(|item| {
+                let context = item_context(tables, &item.id);
+                serde_json::json!({
+                    "id": item.id,
+                    "status": item.status,
+                    "title": item.title,
+                    "context": truncate_on_char_boundary(&context, 400),
+                })
+            })
+            .collect::<Vec<_>>();
+        packaged_projects.push(serde_json::json!({
+            "id": project.id,
+            "name": project.name,
+            "status": project.status,
+            "lastActivityAt": project.last_activity_at,
+            "items": items,
+        }));
+    }
+    serde_json::json!({ "projects": packaged_projects }).to_string()
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct TaskCleanupResult {
+    delete_item_ids: Vec<String>,
+}
+
+fn parse_task_cleanup_result(body: &str) -> Result<Vec<String>, String> {
+    let trimmed = body.trim();
+    let json = trimmed
+        .strip_prefix("```json")
+        .or_else(|| trimmed.strip_prefix("```"))
+        .and_then(|rest| rest.strip_suffix("```"))
+        .map(str::trim)
+        .unwrap_or(trimmed);
+    let result: TaskCleanupResult = serde_json::from_str(json)
+        .map_err(|error| format!("cleanup returned invalid JSON: {error}"))?;
+    let mut ids = result.delete_item_ids;
+    ids.sort();
+    ids.dedup();
+    Ok(ids)
+}
+
+async fn apply_task_cleanup_result(
+    app: &AppHandle,
+    tables: &Tables,
+    body: &str,
+) -> Result<Vec<String>, String> {
+    let ids = parse_task_cleanup_result(body)?;
+    for id in &ids {
+        let row = tables
+            .project_item
+            .select(id.clone())
+            .ok_or_else(|| format!("cleanup named unknown item {id}"))?;
+        if row.status == "finished" || row.status == "canceled" {
+            return Err(format!("cleanup named closed item {id}"));
+        }
+    }
+    for id in &ids {
+        let item = propose_item_delete(tables, id).await?;
+        let _ = app.emit("item:updated", item);
+    }
+    Ok(ids)
 }
 
 /// Spend over the ranges Settings displays, summed from the usage ledger.
@@ -9881,7 +9971,12 @@ async fn drive_run(
     let include_surface_scaffold = per_turn_instructions
         .as_deref()
         .is_none_or(|instructions| !crate::per_turn::covers_surface(instructions));
-    let prompt = if is_task_manager {
+    let prompt = if is_task_manager && stateless {
+        format!(
+            "{prompt}\n\nInput JSON package:\n{}",
+            task_cleanup_package(&tables)
+        )
+    } else if is_task_manager {
         /*
          * The current lists ride along with every prompt. Without them the
          * model only knows what its own conversation remembers, so "delete
@@ -10414,6 +10509,9 @@ async fn drive_run(
     // Set when the idle deadline trips: a run that went silent long enough to be
     // treated as wedged. Recovered like a stall rather than reported as a crash.
     let mut idle_stalled = false;
+    let cleanup_deadline =
+        (stateless && is_task_manager).then(|| tokio::time::Instant::now() + TASK_CLEANUP_TIMEOUT);
+    let mut cleanup_timed_out = false;
 
     /// What woke the loop: an agent event, or a message to queue for the
     /// independent delivery worker. Keeping receipt waits off this task is
@@ -10447,6 +10545,22 @@ async fn drive_run(
                 // session instead of waiting behind a dead app-server forever.
                 cancelled = true;
                 stalled_injection = true;
+                break;
+            }
+            () = async {
+                match cleanup_deadline.as_ref() {
+                    Some(deadline) => tokio::time::sleep_until(*deadline).await,
+                    None => std::future::pending::<()>().await,
+                }
+            } => {
+                crate::log!(
+                    crate::log::Level::Warn,
+                    "tasks",
+                    "Home cleanup exceeded {}s; stopping its one-shot run",
+                    TASK_CLEANUP_TIMEOUT.as_secs()
+                );
+                cancelled = true;
+                cleanup_timed_out = true;
                 break;
             }
             () = tokio::time::sleep_until(idle_deadline) => {
@@ -11201,7 +11315,9 @@ async fn drive_run(
             &project_id,
             "sent",
             "cancel",
-            if idle_stalled && !opening_message_read {
+            if cleanup_timed_out {
+                "Home cleanup reached its 30-second deadline; stopping the one-shot run"
+            } else if idle_stalled && !opening_message_read {
                 "the provider opened its session but never started the turn — stopping it so the opening message can retry fresh"
             } else if idle_stalled {
                 "the run went idle with no output for too long, likely wedged on a command that never returns; stopped so the session can resume"
@@ -11272,26 +11388,56 @@ async fn drive_run(
              * text remains the fallback for a run that never streamed.
              */
             let used_streamed_body = !streamed_text.trim().is_empty();
-            let body = if used_streamed_body {
+            let mut body = if used_streamed_body {
                 streamed_text
             } else {
                 outcome.text.clone()
             };
             // Earlier slices were persisted when owner messages arrived. Only
             // the text since the last boundary belongs in the terminal row.
-            let final_chunk_body = if used_streamed_body {
+            let mut final_chunk_body = if used_streamed_body {
                 streamed_chunk
             } else {
                 outcome.text.clone()
             };
-            let stop = match &outcome.stop {
-                Stop::Completed => "completed".to_string(),
-                Stop::Error => "error".to_string(),
-                Stop::Other(other) => other.clone(),
-                // `Stop` is #[non_exhaustive]: a stop reason added by a later
-                // crate release must reach the transcript as itself rather than
-                // be flattened into "error".
-                other => format!("{other:?}"),
+            let cleanup_error = if stateless && is_task_manager {
+                match apply_task_cleanup_result(&app, &tables, &body).await {
+                    Ok(ids) => {
+                        body = if ids.is_empty() {
+                            "Cleanup found no deletion candidates.".into()
+                        } else {
+                            format!(
+                                "Cleanup proposed {} item deletion(s) for owner review:\n{}",
+                                ids.len(),
+                                ids.join("\n")
+                            )
+                        };
+                        final_chunk_body.clone_from(&body);
+                        None
+                    }
+                    Err(error) => {
+                        body = format!(
+                            "Cleanup result was rejected. No proposals were applied. {error}"
+                        );
+                        final_chunk_body.clone_from(&body);
+                        Some(error)
+                    }
+                }
+            } else {
+                None
+            };
+            let stop = if cleanup_error.is_some() {
+                "error".to_string()
+            } else {
+                match &outcome.stop {
+                    Stop::Completed => "completed".to_string(),
+                    Stop::Error => "error".to_string(),
+                    Stop::Other(other) => other.clone(),
+                    // `Stop` is #[non_exhaustive]: a stop reason added by a later
+                    // crate release must reach the transcript as itself rather than
+                    // be flattened into "error".
+                    other => format!("{other:?}"),
+                }
             };
             measurement
                 .finish(&tables, &observed_session, &stop, &outcome.usage)
@@ -11560,7 +11706,11 @@ async fn drive_run(
                     ),
                 }
             }
-            let stop = interrupted_stop(recovery_queued, idle_stalled || stalled_injection);
+            let stop = if cleanup_timed_out {
+                "cleanup timed out after 30 seconds"
+            } else {
+                interrupted_stop(recovery_queued, idle_stalled || stalled_injection)
+            };
             measurement
                 .finish(&tables, &observed_session, stop, &turn_usage)
                 .await;
@@ -11577,7 +11727,11 @@ async fn drive_run(
              * Keep it on the message and in the ledger, while still skipping
              * harvest because this is not a finished answer.
              */
-            let mut visible_chunk = without_incomplete_prompt_syntax_tail(&streamed_chunk);
+            let mut visible_chunk = if cleanup_timed_out {
+                "Cleanup stopped after 30 seconds without a complete result. No new deletion proposals were applied.".into()
+            } else {
+                without_incomplete_prompt_syntax_tail(&streamed_chunk)
+            };
             if stop == RECONNECTED_STOP && visible_chunk.trim().is_empty() {
                 visible_chunk = "Reconnected".into();
             }
@@ -14975,6 +15129,22 @@ mod tests {
 
         tables.shutdown().await.expect("proposal store drains");
         let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn cleanup_accepts_only_the_bounded_json_result_shape() {
+        assert_eq!(
+            parse_task_cleanup_result(r#"{"deleteItemIds":["item-b","item-a","item-a"]}"#,)
+                .expect("valid cleanup result parses"),
+            vec!["item-a".to_string(), "item-b".to_string()]
+        );
+        assert!(
+            parse_task_cleanup_result(
+                r#"{"deleteItemIds":["item-a"],"deleteProjectIds":["project-a"]}"#,
+            )
+            .is_err(),
+            "extra authority must make the whole result inert"
+        );
     }
 
     #[tokio::test]
