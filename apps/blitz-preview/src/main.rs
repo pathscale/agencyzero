@@ -210,6 +210,46 @@ fn capture_preview(output: &std::path::Path) -> Result<(), String> {
             trace(&format!("headless capture script step {index} completed"));
         }
     }
+    if let Ok(scroll_y) = std::env::var("BLITZ_CAPTURE_SCROLL_Y") {
+        let scroll_y = scroll_y
+            .trim()
+            .parse::<f64>()
+            .map_err(|error| format!("invalid capture scroll offset: {error}"))?;
+        document.inner_mut().resolve(0.0);
+        let mut doc = document.inner_mut();
+        let selector = std::env::var("BLITZ_CAPTURE_SCROLL_SELECTOR").ok();
+        let changed = if let Some(selector) = selector.as_deref() {
+            let node_id = doc
+                .query_selector(selector)
+                .map_err(|error| format!("invalid capture scroll selector: {error:?}"))?
+                .ok_or_else(|| format!("capture scroll selector matched no node: {selector}"))?;
+            doc.scroll_node_by_has_changed(node_id, 0.0, -scroll_y, |_| {})
+        } else {
+            doc.scroll_viewport_by_has_changed(0.0, -scroll_y)
+        };
+        drop(doc);
+        trace(&format!(
+            "headless capture scrolled to y={scroll_y} with selector={selector:?}; changed={changed}"
+        ));
+    }
+    if let Ok(point) = std::env::var("BLITZ_CAPTURE_HOVER") {
+        let (x, y) = point
+            .split_once(',')
+            .ok_or_else(|| "BLITZ_CAPTURE_HOVER must be formatted as x,y".to_owned())?;
+        let x = x
+            .trim()
+            .parse::<f32>()
+            .map_err(|error| format!("invalid hover x coordinate: {error}"))?;
+        let y = y
+            .trim()
+            .parse::<f32>()
+            .map_err(|error| format!("invalid hover y coordinate: {error}"))?;
+        document.inner_mut().resolve(0.0);
+        let changed = document.inner_mut().set_hover_to(x, y);
+        trace(&format!(
+            "headless capture hover applied at {x},{y}; changed={changed}"
+        ));
+    }
     document.eval(
         "const status = document.getElementById('native-ipc-status'); if (status && status.parentNode) status.parentNode.removeChild(status);",
     );
