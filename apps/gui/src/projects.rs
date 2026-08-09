@@ -3101,11 +3101,21 @@ fn state_snapshot(
     include_surface_scaffold: bool,
 ) -> String {
     let requested_verbosity = project_verbosity(tables, project_id);
-    let mut items: Vec<ProjectItemRow> = tables
-        .project_item
-        .select_by_project_id(project_id.to_string())
-        .execute()
-        .unwrap_or_default()
+    let is_task_manager = project_id == crate::tasks::TASK_MANAGER_ID;
+    let item_rows = if is_task_manager {
+        tables
+            .project_item
+            .select_all()
+            .execute()
+            .unwrap_or_default()
+    } else {
+        tables
+            .project_item
+            .select_by_project_id(project_id.to_string())
+            .execute()
+            .unwrap_or_default()
+    };
+    let mut items: Vec<ProjectItemRow> = item_rows
         .into_iter()
         .filter(|row| {
             row.status != "finished"
@@ -3113,7 +3123,11 @@ fn state_snapshot(
                 && !item_is_archived(tables, &row.id)
         })
         .collect();
-    items.sort_by_key(|row| row.position);
+    items.sort_by(|left, right| {
+        left.project_id
+            .cmp(&right.project_id)
+            .then(left.position.cmp(&right.position))
+    });
 
     let prs: Vec<crate::db::schema::pull_request::PullRequestRow> = crate::prs::canonical_rows(
         tables
@@ -3137,8 +3151,44 @@ fn state_snapshot(
     };
 
     let mut out = String::new();
-    if project_id == crate::tasks::TASK_MANAGER_ID {
-        out.push_str("Home Task Manager uses this same authoring surface for every mutation.");
+    if is_task_manager {
+        out.push_str("Home Task Manager uses this same authoring surface for every mutation.\n");
+        let projects: std::collections::HashMap<String, String> = tables
+            .project
+            .select_all()
+            .execute()
+            .unwrap_or_default()
+            .into_iter()
+            .map(|project| (project.id, project.name))
+            .collect();
+        let missing: Vec<&ProjectItemRow> = items
+            .iter()
+            .filter(|row| item_context(tables, &row.id).trim().is_empty())
+            .collect();
+        if missing.is_empty() {
+            out.push_str("Every open item across every project has a description.");
+        } else {
+            out.push_str(
+                "Open items missing descriptions across projects. Use items.describe with the exact id:\n",
+            );
+            const MISSING_DESCRIPTION_CAP: usize = 160;
+            for row in missing.iter().take(MISSING_DESCRIPTION_CAP) {
+                let project = projects
+                    .get(&row.project_id)
+                    .map(String::as_str)
+                    .unwrap_or(row.project_id.as_str());
+                out.push_str(&format!(
+                    "  {} · {} · {} · {}\n",
+                    row.id, project, row.status, row.title
+                ));
+            }
+            if missing.len() > MISSING_DESCRIPTION_CAP {
+                out.push_str(&format!(
+                    "  ... {} more undescribed items omitted\n",
+                    missing.len() - MISSING_DESCRIPTION_CAP
+                ));
+            }
+        }
     } else if items.is_empty() {
         out.push_str("This project has no open items.");
     } else if verbosity == Verbosity::Minimal {
@@ -3305,6 +3355,7 @@ fn state_snapshot(
          <ps @agency:items.state(id: \"<id>\", status: \"shipped\", pr: \"https://github.com/owner/repo/pull/66\")>\n\
          <ps @agency:items.add(ref: \"t1\", title: \"<one line>\", status: \"planning\")>\n\
          <ps @agency:items.add(project: \"<project id or exact name>\", ref: \"t2\", title: \"<one line>\")>\n\
+         <ps @agency:items.describe(id: \"<id>\", description: \"<concise context>\")>\n\
          <ps @agency:items.retire(id: \"<id>\")>\n\
          <ps @agency:settings.update(key: \"theme.accent\", value: \"#2196F3\")>\n\
          <ps @agency:ask(text: \"<your question>\", urgency: \"blocking\")>\n\
@@ -14392,6 +14443,59 @@ mod tests {
             "the stable system copy should remove a material recurring suffix"
         );
 
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[tokio::test]
+    async fn task_manager_snapshot_lists_undescribed_items_across_projects() {
+        let dir = std::env::temp_dir().join(format!(
+            "az-task-descriptions-{}-{}",
+            std::process::id(),
+            uuid::Uuid::now_v7()
+        ));
+        let tables = Tables::open(&dir).await.expect("description store opens");
+        for project in [
+            project_row("project-a", "AgencyZero"),
+            project_row("project-b", "WorkTable"),
+        ] {
+            tables.project.insert(project).expect("project inserts");
+        }
+        for item in [
+            ProjectItemRow {
+                id: "item-missing".into(),
+                project_id: "project-a".into(),
+                title: "Needs an owner-visible outcome".into(),
+                status: "planning".into(),
+                position: 0,
+                reference: String::new(),
+            },
+            ProjectItemRow {
+                id: "item-described".into(),
+                project_id: "project-b".into(),
+                title: "Already explained".into(),
+                status: "active".into(),
+                position: 0,
+                reference: String::new(),
+            },
+        ] {
+            tables.project_item.insert(item).expect("item inserts");
+        }
+        tables
+            .kv_put(
+                &item_context_key("item-described"),
+                "Keep this existing description".into(),
+            )
+            .await
+            .expect("description writes");
+
+        let snapshot = state_snapshot(&tables, crate::tasks::TASK_MANAGER_ID, None, true, true);
+
+        assert!(snapshot.contains("item-missing · AgencyZero · planning"));
+        assert!(snapshot.contains("Needs an owner-visible outcome"));
+        assert!(!snapshot.contains("item-described"));
+        assert!(snapshot.contains("@agency:items.describe"));
+
+        tables.shutdown().await.expect("description store drains");
         let _ = std::fs::remove_dir_all(dir);
     }
 
