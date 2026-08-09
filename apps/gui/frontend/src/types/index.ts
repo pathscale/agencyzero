@@ -632,6 +632,8 @@ export interface GlobalSettings {
   agentSettingsUpdates: boolean;
   /** Agent lifecycle authority, disabled until the owner delegates it. */
   agentRestartPolicy: "disabled" | "restart" | "restart_and_update";
+  /** Complete local Blitz MCP control interface; off means no listener or descriptor. */
+  blitzControlEnabled: boolean;
   /** Project tabs included in store backups. Null identifies an older record. */
   workspaceTabs: WorkspaceTabs | null;
   /** False only for a genuinely new store until its welcome flow completes. */

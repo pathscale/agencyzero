@@ -4,6 +4,7 @@ import {
   prefs,
   preparePortablePrefsRestore,
   restorePortablePrefs,
+  samePortablePrefs,
   setPrefs,
   UI_SCALES,
 } from "~/stores/prefs";
@@ -37,6 +38,20 @@ describe("colour mode", () => {
 });
 
 describe("workspace layout", () => {
+  it("treats reordered backend preference keys as the same JSON value", () => {
+    const local = {
+      panelSections: { usage: true, settings: false },
+      openTabKeys: ["agencyzero", "worktable"],
+    };
+    const backend = {
+      openTabKeys: ["agencyzero", "worktable"],
+      panelSections: { settings: false, usage: true },
+    };
+
+    expect(samePortablePrefs(local, backend)).toBe(true);
+    expect(samePortablePrefs(local, { ...backend, openTabKeys: ["worktable"] })).toBe(false);
+  });
+
   it("normalizes restored enum preferences before controls consume them", () => {
     preparePortablePrefsRestore();
     restorePortablePrefs(

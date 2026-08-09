@@ -24,6 +24,7 @@ import {
   prefs,
   preparePortablePrefsRestore,
   restorePortablePrefs,
+  samePortablePrefs,
   setPrefs,
 } from "~/stores/prefs";
 import type {
@@ -564,7 +565,7 @@ function createWorkspace() {
   createEffect(() => {
     if (state.boot.status !== "ready" || !state.settings) return;
     const snapshot = portablePrefsSnapshot();
-    if (JSON.stringify(snapshot) === JSON.stringify(state.settings.uiPreferences)) return;
+    if (samePortablePrefs(snapshot, state.settings.uiPreferences)) return;
     if (prefsWriteTimer) clearTimeout(prefsWriteTimer);
     prefsWriteTimer = setTimeout(() => {
       prefsWriteTimer = undefined;

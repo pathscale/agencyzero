@@ -70,6 +70,22 @@ export function transcriptTail<T>(
   return { hidden, visible: entries.slice(hidden) };
 }
 
+export function shouldRevealEarlier(
+  scrollTop: number,
+  hidden: number,
+  ownerIntent: boolean,
+): boolean {
+  return ownerIntent && hidden > 0 && scrollTop <= 48;
+}
+
+export function anchoredScrollTop(
+  previousTop: number,
+  previousHeight: number,
+  nextHeight: number,
+): number {
+  return previousTop + Math.max(0, nextHeight - previousHeight);
+}
+
 /**
  * The conversation. Three voices, three shapes:
  * you (a right-aligned bubble), the agent (plain prose), and the moderator
@@ -102,15 +118,34 @@ export function TranscriptPane(props: {
   const [visibleEntries, setVisibleEntries] = createSignal(TRANSCRIPT_PAGE_SIZE);
   let lastScrollTop = 0;
   let userScrollIntent = false;
+  let revealingEarlier = false;
+  let revealFrame: number | undefined;
   const markScrollIntent = (): void => {
     userScrollIntent = true;
   };
+  const revealEarlier = (): void => {
+    if (revealingEarlier || visibleTimeline().hidden === 0) return;
+    revealingEarlier = true;
+    setPinned(false);
+    const previousHeight = scroller.scrollHeight;
+    const previousTop = scroller.scrollTop;
+    setVisibleEntries((count) => count + TRANSCRIPT_PAGE_SIZE);
+    const restoreAnchor = (): void => {
+      revealFrame = undefined;
+      scroller.scrollTop = anchoredScrollTop(previousTop, previousHeight, scroller.scrollHeight);
+      lastScrollTop = scroller.scrollTop;
+      revealingEarlier = false;
+    };
+    if (typeof requestAnimationFrame === "undefined") queueMicrotask(restoreAnchor);
+    else revealFrame = requestAnimationFrame(restoreAnchor);
+  };
   const trackScroll = (): void => {
     const top = scroller.scrollTop;
+    const ownerIntent = userScrollIntent;
     const nearTail = scroller.scrollHeight - top - scroller.clientHeight < 48;
     if (nearTail) {
       setPinned(true);
-    } else if (top < lastScrollTop - 1 && userScrollIntent) {
+    } else if (top < lastScrollTop - 1 && ownerIntent) {
       // Only owner input disengages tail following. Window resizing and text
       // reflow can clamp scrollTop upward and dispatch a scroll event of their
       // own; treating that as reading intent is the intermittent jump that
@@ -119,6 +154,7 @@ export function TranscriptPane(props: {
     }
     userScrollIntent = false;
     lastScrollTop = top;
+    if (shouldRevealEarlier(top, visibleTimeline().hidden, ownerIntent)) revealEarlier();
   };
 
   let followFrame: number | undefined;
@@ -175,6 +211,9 @@ export function TranscriptPane(props: {
     mutationObserver?.disconnect();
     if (followFrame !== undefined && typeof cancelAnimationFrame !== "undefined") {
       cancelAnimationFrame(followFrame);
+    }
+    if (revealFrame !== undefined && typeof cancelAnimationFrame !== "undefined") {
+      cancelAnimationFrame(revealFrame);
     }
   });
 
@@ -286,10 +325,7 @@ export function TranscriptPane(props: {
         <Show when={visibleTimeline().hidden > 0}>
           <button
             type="button"
-            onClick={() => {
-              setPinned(false);
-              setVisibleEntries((count) => count + TRANSCRIPT_PAGE_SIZE);
-            }}
+            onClick={revealEarlier}
             class="mx-auto rounded-full border border-az-hairline-strong px-3 py-1 text-[11px] text-az-muted transition-colors hover:border-primary/50 hover:text-az-body"
           >
             {tx("Show {count} earlier messages", {

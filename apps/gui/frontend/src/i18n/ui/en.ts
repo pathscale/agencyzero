@@ -937,6 +937,10 @@ const en = {
   "Quit both": "Quit both",
   "Attached: {session}": "Attached: {session}",
   Change: "Change",
+  "Local Blitz control": "Local Blitz control",
+  "off by default; off removes the MCP socket and discovery descriptor":
+    "off by default; off removes the MCP socket and discovery descriptor",
+  "Enable local Blitz control": "Enable local Blitz control",
 } as const;
 
 export default en;

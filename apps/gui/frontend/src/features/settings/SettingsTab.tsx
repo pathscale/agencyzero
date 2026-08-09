@@ -758,6 +758,18 @@ export function SettingsTab(): JSX.Element {
                   />
                 </Row>
                 <Row
+                  label={tx("Local Blitz control")}
+                  hint={tx("off by default; off removes the MCP socket and discovery descriptor")}
+                >
+                  <SettingToggle
+                    label={tx("Enable local Blitz control")}
+                    checked={current().blitzControlEnabled}
+                    onChange={(blitzControlEnabled) =>
+                      void actions.saveSettings({ blitzControlEnabled })
+                    }
+                  />
+                </Row>
+                <Row
                   label={tx("Open source")}
                   hint={tx("If AgencyZero is useful, a GitHub star helps more people find it.")}
                 >

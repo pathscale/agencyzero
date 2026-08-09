@@ -145,6 +145,43 @@ export function portablePrefsSnapshot(): PortableUiPrefs {
   return portable;
 }
 
+/**
+ * Compare JSON-shaped preference records structurally.
+ *
+ * Rust stores these preferences as `serde_json::Value`, whose object key order
+ * is not part of the value contract. Comparing `JSON.stringify` output made a
+ * response with reordered keys look different forever, so the 250 ms autosave
+ * wrote the same settings row continuously while the app was idle.
+ */
+export function samePortablePrefs(left: unknown, right: unknown): boolean {
+  if (left === right) return true;
+
+  if (Array.isArray(left) || Array.isArray(right)) {
+    return (
+      Array.isArray(left) &&
+      Array.isArray(right) &&
+      left.length === right.length &&
+      left.every((value, index) => samePortablePrefs(value, right[index]))
+    );
+  }
+
+  if (left === null || right === null || typeof left !== "object" || typeof right !== "object") {
+    return false;
+  }
+
+  const leftRecord = left as Record<string, unknown>;
+  const rightRecord = right as Record<string, unknown>;
+  const leftKeys = Object.keys(leftRecord);
+  const rightKeys = Object.keys(rightRecord);
+  return (
+    leftKeys.length === rightKeys.length &&
+    leftKeys.every(
+      (key) =>
+        Object.hasOwn(rightRecord, key) && samePortablePrefs(leftRecord[key], rightRecord[key]),
+    )
+  );
+}
+
 let portableRevisionFallback = "";
 
 function readPortableRevision(): string {

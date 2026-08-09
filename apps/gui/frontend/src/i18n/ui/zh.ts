@@ -907,6 +907,10 @@ const zh = {
   "Quit both": "同时退出",
   "Attached: {session}": "已连接：{session}",
   Change: "更改",
+  "Local Blitz control": "本地 Blitz 控制",
+  "off by default; off removes the MCP socket and discovery descriptor":
+    "默认关闭；关闭时会移除 MCP 套接字和发现描述文件",
+  "Enable local Blitz control": "启用本地 Blitz 控制",
 } satisfies Record<keyof typeof en, string>;
 
 export default zh;

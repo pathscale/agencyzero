@@ -1,6 +1,14 @@
 import { Toggle } from "@pathscale/ui";
-import { createEffect, createMemo, createSignal, For, type JSX, Show } from "solid-js";
-import { Portal } from "solid-js/web";
+import {
+  createEffect,
+  createMemo,
+  createSignal,
+  For,
+  type JSX,
+  onCleanup,
+  onMount,
+  Show,
+} from "solid-js";
 import { NOTES_BUDGET } from "~/api/client";
 import { Icon } from "~/components/Icon";
 import { SectionPanel } from "~/components/Panel";
@@ -21,6 +29,36 @@ export const PROJECT_ITEM_PAGE_SIZE = 12;
 
 export function itemPage<T>(items: readonly T[], limit: number): T[] {
   return items.slice(0, Math.max(0, limit));
+}
+
+/**
+ * Move a live Solid subtree under `body` without using a Portal.
+ *
+ * Retained project views establish containing blocks, which otherwise trap a
+ * `position: fixed` backdrop inside one panel. Moving the already-bound node
+ * preserves Solid/Blitz listeners while giving the dialog viewport geometry.
+ */
+function AppModal(props: {
+  labelledBy: string;
+  onDismiss: () => void;
+  children: JSX.Element;
+}): JSX.Element {
+  let root!: HTMLDivElement;
+  onMount(() => document.body.append(root));
+  onCleanup(() => root.remove());
+  return (
+    <div
+      ref={root}
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby={props.labelledBy}
+      class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-8"
+      onClick={(event) => event.currentTarget === event.target && props.onDismiss()}
+      onKeyDown={(event) => event.key === "Escape" && props.onDismiss()}
+    >
+      {props.children}
+    </div>
+  );
 }
 
 /**
@@ -1647,88 +1685,82 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
 
       <Show when={contextDraft()}>
         {(draft) => (
-          <Portal>
-            <div
-              role="dialog"
-              aria-modal="true"
-              aria-labelledby="item-context-title"
-              class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-8"
-              onClick={(event) => event.currentTarget === event.target && setContextDraft(null)}
-              onKeyDown={(event) => event.key === "Escape" && setContextDraft(null)}
-            >
-              <section class="az-ring flex max-h-full w-full max-w-[620px] flex-col overflow-hidden rounded-[17px] bg-base-200 shadow-[0_24px_80px_rgba(0,0,0,.65)]">
-                <header class="flex items-start gap-3 border-az-hairline-soft border-b px-5 py-4">
-                  <div class="flex size-9 shrink-0 items-center justify-center rounded-[11px] border border-primary/28 bg-primary/10 text-primary">
-                    <Icon name="git-fork" class="text-[17px]" />
-                  </div>
-                  <div class="min-w-0 flex-1">
-                    <h2 id="item-context-title" class="font-semibold text-[14.5px] text-az-title">
-                      {draft().startFork ? tx("Prepare item fork") : tx("Edit item description")}
-                    </h2>
-                    <p class="mt-0.5 truncate text-[12px] text-az-muted">{draft().item.title}</p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setContextDraft(null)}
-                    aria-label={tx("Cancel")}
-                    class="rounded-lg p-1.5 text-az-muted hover:bg-white/6 hover:text-base-content"
-                  >
-                    <Icon name="x" class="text-[15px]" />
-                  </button>
-                </header>
-                <div class="flex min-h-0 flex-col gap-2 px-5 py-4">
-                  <div class="flex items-center justify-between gap-3">
-                    <label for="item-description" class="font-semibold text-[12.5px] text-az-body">
-                      {tx("Description / sub-items")}
-                    </label>
-                    <span class="font-mono text-[10.5px] text-az-faint">
-                      {draft().context.length} / {NOTES_BUDGET}
-                    </span>
-                  </div>
-                  <textarea
-                    id="item-description"
-                    autofocus
-                    value={draft().context}
-                    maxLength={NOTES_BUDGET}
-                    onInput={(event) =>
-                      setContextDraft({
-                        item: draft().item,
-                        context: event.currentTarget.value,
-                        startFork: draft().startFork,
-                      })
-                    }
-                    placeholder={tx(
-                      "Describe constraints, acceptance criteria, decisions, and useful pointers…",
-                    )}
-                    class="az-scroll min-h-[220px] resize-y rounded-xl border border-primary/24 bg-az-inset px-3.5 py-3 text-[12.5px] text-az-body leading-[1.55] outline-none placeholder:text-az-faint focus:border-primary/55"
-                  />
-                  <p class="text-[11px] text-az-muted leading-[1.5]">
-                    {tx(
-                      "Sent when this item starts in a fresh fork or focused run. Ordinary compact item snapshots omit it.",
-                    )}{" "}
-                    {tx("Use one Markdown bullet or checklist line per sub-item.")}
-                  </p>
+          <AppModal
+            labelledBy="item-context-title"
+            onDismiss={() => setContextDraft(null)}
+          >
+            <section class="az-ring flex max-h-full w-full max-w-[620px] flex-col overflow-hidden rounded-[17px] bg-base-200 shadow-[0_24px_80px_rgba(0,0,0,.65)]">
+              <header class="flex items-start gap-3 border-az-hairline-soft border-b px-5 py-4">
+                <div class="flex size-9 shrink-0 items-center justify-center rounded-[11px] border border-primary/28 bg-primary/10 text-primary">
+                  <Icon name="git-fork" class="text-[17px]" />
                 </div>
-                <footer class="flex items-center justify-end gap-2 border-az-hairline-soft border-t px-5 py-3.5">
-                  <button
-                    type="button"
-                    onClick={() => setContextDraft(null)}
-                    class="rounded-lg border border-az-hairline px-3 py-1.5 text-[12px] text-az-body hover:border-primary/35"
-                  >
-                    {tx("Cancel")}
-                  </button>
-                  <button
-                    type="button"
-                    disabled={forkingId() === draft().item.id}
-                    onClick={() => void saveContext()}
-                    class="rounded-lg border border-primary/45 bg-primary/18 px-3 py-1.5 font-semibold text-[12px] text-primary hover:bg-primary/25 disabled:opacity-40"
-                  >
-                    {draft().startFork ? tx("Start fork") : tx("Save description")}
-                  </button>
-                </footer>
-              </section>
-            </div>
-          </Portal>
+                <div class="min-w-0 flex-1">
+                  <h2 id="item-context-title" class="font-semibold text-[14.5px] text-az-title">
+                    {draft().startFork ? tx("Prepare item fork") : tx("Edit item description")}
+                  </h2>
+                  <p class="mt-0.5 truncate text-[12px] text-az-muted">{draft().item.title}</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setContextDraft(null)}
+                  aria-label={tx("Cancel")}
+                  class="rounded-lg p-1.5 text-az-muted hover:bg-white/6 hover:text-base-content"
+                >
+                  <Icon name="x" class="text-[15px]" />
+                </button>
+              </header>
+              <div class="flex min-h-0 flex-col gap-2 px-5 py-4">
+                <div class="flex items-center justify-between gap-3">
+                  <label for="item-description" class="font-semibold text-[12.5px] text-az-body">
+                    {tx("Description / sub-items")}
+                  </label>
+                  <span class="font-mono text-[10.5px] text-az-faint">
+                    {draft().context.length} / {NOTES_BUDGET}
+                  </span>
+                </div>
+                <textarea
+                  id="item-description"
+                  autofocus
+                  value={draft().context}
+                  maxLength={NOTES_BUDGET}
+                  onInput={(event) =>
+                    setContextDraft({
+                      item: draft().item,
+                      context: event.currentTarget.value,
+                      startFork: draft().startFork,
+                    })
+                  }
+                  placeholder={tx(
+                    "Describe constraints, acceptance criteria, decisions, and useful pointers…",
+                  )}
+                  class="az-scroll min-h-[220px] resize-y rounded-xl border border-primary/24 bg-az-inset px-3.5 py-3 text-[12.5px] text-az-body leading-[1.55] outline-none placeholder:text-az-faint focus:border-primary/55"
+                />
+                <p class="text-[11px] text-az-muted leading-[1.5]">
+                  {tx(
+                    "Sent when this item starts in a fresh fork or focused run. Ordinary compact item snapshots omit it.",
+                  )}{" "}
+                  {tx("Use one Markdown bullet or checklist line per sub-item.")}
+                </p>
+              </div>
+              <footer class="flex items-center justify-end gap-2 border-az-hairline-soft border-t px-5 py-3.5">
+                <button
+                  type="button"
+                  onClick={() => setContextDraft(null)}
+                  class="rounded-lg border border-az-hairline px-3 py-1.5 text-[12px] text-az-body hover:border-primary/35"
+                >
+                  {tx("Cancel")}
+                </button>
+                <button
+                  type="button"
+                  disabled={forkingId() === draft().item.id}
+                  onClick={() => void saveContext()}
+                  class="rounded-lg border border-primary/45 bg-primary/18 px-3 py-1.5 font-semibold text-[12px] text-primary hover:bg-primary/25 disabled:opacity-40"
+                >
+                  {draft().startFork ? tx("Start fork") : tx("Save description")}
+                </button>
+              </footer>
+            </section>
+          </AppModal>
         )}
       </Show>
     </div>

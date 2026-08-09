@@ -83,6 +83,10 @@ pub struct GlobalSettings {
     /// authority until the owner explicitly delegates it.
     #[serde(default = "default_agent_restart_policy")]
     pub agent_restart_policy: String,
+    /// Whether the complete local Blitz MCP control interface is listening.
+    /// Off means there is no socket or discovery descriptor.
+    #[serde(default)]
+    pub blitz_control_enabled: bool,
     /// The project-tab arrangement that travels with a store backup.
     ///
     /// `None` identifies a settings row written before this field existed, so
@@ -420,6 +424,7 @@ impl Default for GlobalSettings {
             automatic_update_checks: true,
             agent_settings_updates: false,
             agent_restart_policy: "disabled".into(),
+            blitz_control_enabled: false,
             workspace_tabs: None,
             onboarding_completed: Some(false),
             ui_preferences: empty_object(),

@@ -622,6 +622,7 @@ export const SETTINGS: GlobalSettings = {
   automaticUpdateChecks: true,
   agentSettingsUpdates: false,
   agentRestartPolicy: "disabled",
+  blitzControlEnabled: false,
   workspaceTabs: null,
   onboardingCompleted: true,
   uiPreferences: {},

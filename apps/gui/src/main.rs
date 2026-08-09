@@ -1385,7 +1385,19 @@ pub(crate) async fn apply_settings_patch(
         .map(|boundary| study::record_boundary(&state.tables, &parsed.study_analytics, boundary))
         .transpose()?;
 
+    #[cfg(feature = "blitz-runtime")]
+    let control_changed = previous.blitz_control_enabled != parsed.blitz_control_enabled;
+    #[cfg(feature = "blitz-runtime")]
+    if control_changed {
+        tauri_runtime_blitz::set_agent_control_enabled(parsed.blitz_control_enabled)
+            .map_err(|error| format!("could not update local Blitz control: {error}"))?;
+    }
+
     if let Err(error) = state.tables.kv_put(settings::KEY, merged.to_string()).await {
+        #[cfg(feature = "blitz-runtime")]
+        if control_changed {
+            let _ = tauri_runtime_blitz::set_agent_control_enabled(previous.blitz_control_enabled);
+        }
         if let Some(id) = boundary_id
             && let Err(cleanup) = state.tables.study_event.delete(id).await
         {
@@ -2171,12 +2183,21 @@ fn main() {
                 );
             }
 
-            let configured_proxy = tables
+            let persisted_settings = tables
                 .kv_get(settings::KEY)
-                .and_then(|raw| serde_json::from_str::<GlobalSettings>(&raw).ok())
-                .map(|settings| settings.agent_proxy_binary)
+                .and_then(|raw| serde_json::from_str::<GlobalSettings>(&raw).ok());
+            let configured_proxy = persisted_settings
+                .as_ref()
+                .map(|settings| settings.agent_proxy_binary.clone())
                 .filter(|path| !path.is_empty())
                 .map(PathBuf::from);
+            #[cfg(feature = "blitz-runtime")]
+            let blitz_control_enabled = std::env::var("TAURI_BLITZ_CONTROL")
+                .ok()
+                .is_some_and(|value| matches!(value.as_str(), "1" | "true"))
+                || persisted_settings
+                    .as_ref()
+                    .is_some_and(|settings| settings.blitz_control_enabled);
             let proxy = Arc::new(agent_proxy::AgencyProxy::new(&config_dir, configured_proxy));
             // A checkpoint backed by a still-live proxy run remains a live
             // draft. Only orphaned checkpoints become `interrupted` rows.
@@ -2213,6 +2234,36 @@ fn main() {
                 location,
                 _store_lock: store_lock,
             });
+
+            #[cfg(feature = "blitz-runtime")]
+            {
+                tauri_runtime_blitz::set_agent_control_enabled(blitz_control_enabled)
+                    .map_err(|error| format!("could not apply local Blitz control setting: {error}"))?;
+                let relaunch_handle = app.handle().clone();
+                tauri_runtime_blitz::set_agent_control_handler(move |request| match request {
+                    tauri_runtime_blitz::control_protocol::AgentControlRequest::Relaunch => {
+                        let handle = relaunch_handle.clone();
+                        tauri::async_runtime::spawn(async move {
+                            let state = handle.state::<AppState>();
+                            if let Err(error) = restart_after_drain(&handle, &state).await {
+                                crate::log!(
+                                    log::Level::Error,
+                                    "boot",
+                                    "control-requested relaunch failed before Angel handoff: {error}"
+                                );
+                            }
+                        });
+                        tauri_runtime_blitz::control_protocol::DebugResponse::Ack
+                    }
+                    _ => tauri_runtime_blitz::control_protocol::DebugResponse::Error(
+                        tauri_runtime_blitz::control_protocol::DebugError {
+                            code: "unsupportedEmbedderAction".into(),
+                            message: "AgencyZero delegates only relaunch to its restart Angel"
+                                .into(),
+                        },
+                    ),
+                });
+            }
 
             // WorkTable persistence is asynchronous. A worker panic once left
             // the UI accepting writes for twenty minutes and surfaced only
