@@ -136,9 +136,7 @@ describe("local debug control", () => {
 
     fireEvent.click(toggle);
 
-    await waitFor(() =>
-      expect(screen.workspace.state.settings?.blitzControlEnabled).toBe(true),
-    );
+    await waitFor(() => expect(screen.workspace.state.settings?.blitzControlEnabled).toBe(true));
     await waitFor(() => expect(screen.getByText("Listening on local MCP socket")).toBeTruthy());
   });
 });

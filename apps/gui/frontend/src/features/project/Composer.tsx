@@ -600,11 +600,20 @@ export function Composer(props: ComposerProps): JSX.Element {
   function resize(): void {
     field.style.height = "auto";
     const ceiling = expanded() ? 420 : 168;
-    const floor = expanded() ? 240 : 0;
+    // A retained or just-restored view can briefly report scrollHeight = 0.
+    // Zero used to collapse the field completely until Expand supplied its
+    // 240px floor. Keep one writable line in compact mode even while layout is
+    // settling; the next input or reactive draft update measures it again.
+    const floor = expanded() ? 240 : 22;
     field.style.height = `${Math.max(floor, Math.min(field.scrollHeight, ceiling))}px`;
   }
 
   createEffect(() => {
+    // A keyed draft can change without an input event when the user returns to
+    // a tab. Track it here so a restored long prompt is measured just like one
+    // typed into the field. Waiting a microtask lets the controlled value land
+    // before scrollHeight is read.
+    draft();
     expanded();
     queueMicrotask(() => resize());
   });
@@ -869,6 +878,7 @@ export function Composer(props: ComposerProps): JSX.Element {
           <textarea
             ref={field}
             rows={1}
+            wrap="soft"
             value={draft()}
             placeholder={props.placeholder}
             aria-label={props.placeholder}
@@ -883,7 +893,7 @@ export function Composer(props: ComposerProps): JSX.Element {
               event.preventDefault();
               void submit();
             }}
-            class={`az-scroll w-full resize-none overflow-x-hidden bg-transparent text-base-content leading-[1.45] placeholder:text-az-faint focus:outline-none ${
+            class={`az-scroll w-full min-w-0 resize-none overflow-x-hidden whitespace-pre-wrap break-words bg-transparent text-base-content leading-[1.45] placeholder:text-az-faint focus:outline-none ${
               props.size === "lg" ? "text-[15px]" : "text-[14.5px]"
             }`}
           />

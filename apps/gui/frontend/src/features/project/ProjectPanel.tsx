@@ -1685,10 +1685,7 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
 
       <Show when={contextDraft()}>
         {(draft) => (
-          <AppModal
-            labelledBy="item-context-title"
-            onDismiss={() => setContextDraft(null)}
-          >
+          <AppModal labelledBy="item-context-title" onDismiss={() => setContextDraft(null)}>
             <section class="az-ring flex max-h-full w-full max-w-[620px] flex-col overflow-hidden rounded-[17px] bg-base-200 shadow-[0_24px_80px_rgba(0,0,0,.65)]">
               <header class="flex items-start gap-3 border-az-hairline-soft border-b px-5 py-4">
                 <div class="flex size-9 shrink-0 items-center justify-center rounded-[11px] border border-primary/28 bg-primary/10 text-primary">
