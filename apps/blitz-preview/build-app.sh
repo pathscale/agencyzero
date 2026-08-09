@@ -34,4 +34,9 @@ if command -v codesign >/dev/null 2>&1; then
   codesign --force --deep --sign - "$bundle_dir"
 fi
 
+# Finder displays the outer bundle timestamp, but copying files only updates
+# Contents. Refresh the wrapper after signing so a rebuilt preview cannot look
+# older than the executable it contains.
+touch "$bundle_dir"
+
 echo "$bundle_dir"
