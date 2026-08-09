@@ -80,7 +80,7 @@ jobs:
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
-        run: bunx --yes @tauri-apps/cli@^2.11 build --features experimental --config tauri.experimental.conf.json
+        run: bunx --yes @tauri-apps/cli@^2.11 build --features experimental,blitz-runtime --config tauri.experimental.conf.json
         working-directory: apps/gui
 
       - name: Normalize updater artifact name

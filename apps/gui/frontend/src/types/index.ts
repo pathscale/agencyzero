@@ -852,6 +852,7 @@ export interface UsageAnalytics {
  */
 export interface BuildInfo {
   version: string;
+  runtime: "blitz" | "wry";
   gitSha: string;
   builtAt: string;
 }

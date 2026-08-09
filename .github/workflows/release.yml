@@ -147,7 +147,7 @@ jobs:
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
-        run: bunx --yes @tauri-apps/cli@^2.11 build
+        run: bunx --yes @tauri-apps/cli@^2.11 build --features blitz-runtime
         working-directory: apps/gui
 
       # Two failures worth catching here. The signature one was live in this

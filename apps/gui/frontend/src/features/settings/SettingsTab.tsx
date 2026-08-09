@@ -1899,7 +1899,7 @@ function BuildStamp(): JSX.Element {
     <Show when={build()} fallback={<span class="text-[12px] text-az-faint">—</span>}>
       {(info) => (
         <span class="font-mono text-[11.5px] text-az-body">
-          {info().version} · {info().gitSha} {tx("· built")} {info().builtAt}
+          {info().version} · {info().runtime} · {info().gitSha} {tx("· built")} {info().builtAt}
         </span>
       )}
     </Show>

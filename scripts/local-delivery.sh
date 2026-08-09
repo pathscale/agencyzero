@@ -17,14 +17,14 @@ if [ "${2:-}" = "--offline" ] || [ "${1:-}" = "--offline" ]; then
 fi
 
 case "$mode" in
-  verify | dev | experimental) ;;
+  verify | dev | stable | experimental) ;;
   -h | --help)
-    echo "usage: scripts/local-delivery.sh [verify|dev|experimental] [--offline]"
+    echo "usage: scripts/local-delivery.sh [verify|dev|stable|experimental] [--offline]"
     exit 0
     ;;
   *)
     echo "unknown mode: $mode" >&2
-    echo "usage: scripts/local-delivery.sh [verify|dev|experimental] [--offline]" >&2
+    echo "usage: scripts/local-delivery.sh [verify|dev|stable|experimental] [--offline]" >&2
     exit 2
     ;;
 esac
@@ -96,13 +96,28 @@ case "$mode" in
       "$repo_root/target/release/bundle/macos/AgencyZero Dev.app"
     echo "$repo_root/target/release/bundle/macos/AgencyZero Dev.app"
     ;;
+  stable)
+    echo "==> AgencyZero.app"
+    (
+      cd "$repo_root/apps/gui"
+      run_tauri build \
+        --target "$rust_target" \
+        --features blitz-runtime \
+        --config '{"bundle":{"createUpdaterArtifacts":false}}' \
+        --no-sign
+    )
+    publish_bundle \
+      "$repo_root/target/$rust_target/release/bundle/macos/AgencyZero.app" \
+      "$repo_root/target/release/bundle/macos/AgencyZero.app"
+    echo "$repo_root/target/release/bundle/macos/AgencyZero.app"
+    ;;
   experimental)
     echo "==> AgencyZero Experimental.app"
     (
       cd "$repo_root/apps/gui"
       run_tauri build \
         --target "$rust_target" \
-        --features experimental \
+        --features experimental,blitz-runtime \
         --config tauri.experimental.conf.json \
         --config '{"bundle":{"createUpdaterArtifacts":false}}' \
         --no-sign

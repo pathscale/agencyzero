@@ -661,12 +661,18 @@ fn list_capabilities() -> Vec<String> {
 #[serde(rename_all = "camelCase")]
 struct BuildInfo {
     version: &'static str,
+    runtime: &'static str,
     git_sha: &'static str,
     built_at: &'static str,
 }
 
 const BUILD: BuildInfo = BuildInfo {
     version: az_core::VERSION,
+    runtime: if cfg!(feature = "blitz-runtime") {
+        "blitz"
+    } else {
+        "wry"
+    },
     git_sha: env!("AZ_GIT_SHA"),
     built_at: env!("AZ_BUILT_AT"),
 };
