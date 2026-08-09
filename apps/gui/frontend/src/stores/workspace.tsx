@@ -604,15 +604,12 @@ function createWorkspace() {
     if (open.some((question) => question.urgency === "blocking")) return "blocked";
 
     /*
-     * An item left on `questions` is the older way to say "stopped, owner
-     * needed" — `items.state(id, status: "questions")`, distinct from an
-     * `@agency:ask` row. The principle is one: any tab that needs a human turns
-     * red. So this gates the dot too, not just the question entity, and a
-     * project an agent parked on a question does not read as quiet.
+     * Item workflow state does not gate the tab. A backlog item can remain on
+     * `questions` while the agent works on another item, and it can outlive
+     * the tracked question that originally prompted it. Only a live approval,
+     * moderation hold, or unanswered tracked question above means this tab is
+     * actually waiting on the owner.
      */
-    if ((state.items[projectId] ?? []).some((item) => item.status === "questions")) {
-      return "blocked";
-    }
     /*
      * Only a limit that actually refused something counts as blocked. The
      * provider also emits an "allowed" heartbeat mid-run, and treating that as a
