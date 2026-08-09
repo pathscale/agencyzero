@@ -407,12 +407,12 @@ describe("tabStatus", () => {
   });
 
   /*
-   * The older attention signal: an item moved to `questions` by
-   * `items.state`, distinct from an `@agency:ask` row. Any tab that needs a
-   * human turns red, so this gates the dot too. `worktable` is active; parking
-   * an item on `questions` must make it blocked rather than leave it ready.
+   * An item's workflow state is backlog metadata, not proof the current tab is
+   * blocked. It can remain on `questions` after its tracked question is
+   * answered or while the agent works on another item. Only a live unanswered
+   * question or approval should turn the tab red.
    */
-  it("reports a project with an item on questions as blocked", async () => {
+  it("does not let an item on questions leave the tab falsely blocked", async () => {
     const workspace = await mountWorkspace();
     await workspace.actions.cancelRun("worktable");
     await waitFor(() => expect(workspace.tabStatus("worktable")).toBe("ready"));
@@ -420,7 +420,7 @@ describe("tabStatus", () => {
     const item = workspace.state.items.worktable[0];
     await workspace.actions.setItemStatus(item.id, "questions");
 
-    await waitFor(() => expect(workspace.tabStatus("worktable")).toBe("blocked"));
+    await waitFor(() => expect(workspace.tabStatus("worktable")).toBe("ready"));
   });
 });
 
