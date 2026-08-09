@@ -14,7 +14,7 @@ import { describeError, log } from "~/lib/log";
 import { tx } from "~/stores/i18n";
 import { prefs, setPrefs, togglePanelSection } from "~/stores/prefs";
 import { useNow, useWorkspace } from "~/stores/workspace";
-import type { Project, ProjectItem, RunningTask } from "~/types";
+import type { Project, ProjectItem, Question, RunningTask } from "~/types";
 
 /**
  * The project's right-hand column: Items · Running · Task log · Agent I/O ·
@@ -46,7 +46,7 @@ export function ProjectPanel(props: { project: Project }): JSX.Element {
   });
 
   return (
-    <div class="az-scroll flex h-full min-h-0 w-[322px] flex-none flex-col gap-2.5 overflow-y-auto overscroll-contain">
+    <div class="az-scroll flex h-full min-h-0 w-[332px] flex-none flex-col gap-2.5 overflow-y-auto overscroll-contain">
       <SectionPanel
         icon="list-checks"
         title={tx("Items")}
@@ -1008,6 +1008,26 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
   const isRunning = () => (state.running[props.projectId] ?? []).length > 0;
 
   /**
+   * Prefer an unanswered question, but keep the newest dismissed one reachable.
+   * Dismiss closes the inline card; it must not strand an item whose workflow
+   * status still says the owner owes it a reply.
+   */
+  function questionFor(item: ProjectItem): Question | undefined {
+    return [...(state.questions[props.projectId] ?? [])]
+      .filter((question) => question.itemId === item.id)
+      .sort((left, right) => {
+        if (left.answered !== right.answered) return left.answered ? 1 : -1;
+        return right.createdAt === left.createdAt
+          ? right.id.localeCompare(left.id)
+          : right.createdAt.localeCompare(left.createdAt);
+      })[0];
+  }
+
+  function replyTo(question: Question): void {
+    actions.selectQuestionReply(question.projectId, question.id);
+  }
+
+  /**
    * The flywheel closer: an item becomes a prompt on this project's own
    * session, so a harvested finding is one click from being worked instead of
    * being re-typed. The item is marked active in the same motion — the run
@@ -1207,7 +1227,7 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
                   >
                     <ItemMarker status={item.status} />
                   </button>
-                  <div class="flex min-w-0 flex-1 items-center gap-2 px-2.5 py-1 text-left">
+                  <div class="flex min-w-0 flex-1 items-center gap-1.5 px-1.5 py-1 text-left">
                     <span
                       data-selectable
                       title={item.title}
@@ -1303,7 +1323,7 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
                   aria-label={tx("Edit the description for {name}", { name: item.title })}
                   aria-expanded={descriptionDraft()?.item.id === item.id}
                   aria-controls={`item-description-${item.id}`}
-                  class={`relative z-10 flex size-6 shrink-0 items-center justify-center rounded-md border transition-colors hover:border-primary/70 hover:bg-primary/20 ${
+                  class={`relative z-10 flex size-[22px] shrink-0 items-center justify-center rounded-md border transition-colors hover:border-primary/70 hover:bg-primary/20 ${
                     descriptionDraft()?.item.id === item.id || item.context?.trim()
                       ? "border-primary/45 bg-primary/14 text-primary"
                       : "border-primary/20 bg-primary/5 text-az-muted"
@@ -1325,14 +1345,49 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
                       ? tx("Open the fork for {name}", { name: item.title })
                       : tx("Fork {name} into a fresh chat", { name: item.title })
                   }
-                  class={`relative z-10 mr-1 flex size-6 shrink-0 items-center justify-center rounded-md border transition-colors hover:border-primary/70 hover:bg-primary/20 disabled:opacity-30 ${
+                  class={`relative z-10 flex size-[22px] shrink-0 items-center justify-center rounded-md border transition-colors hover:border-primary/70 hover:bg-primary/20 disabled:opacity-30 ${
                     forkFor(item.id)
                       ? "border-primary/55 bg-primary/18 text-primary"
                       : "border-primary/30 bg-primary/8 text-primary/80"
-                  }`}
+                  } ${item.status === "questions" ? "" : "mr-1"}`}
                 >
                   <Icon name="git-fork" class="text-[13px]" />
                 </button>
+                <Show when={item.status === "questions"}>
+                  <Show
+                    when={questionFor(item)}
+                    fallback={
+                      <button
+                        type="button"
+                        onClick={() => run(item)}
+                        disabled={isRunning()}
+                        title={
+                          isRunning()
+                            ? tx("A run is already in flight on this project")
+                            : tx("No unanswered question — work on this item")
+                        }
+                        aria-label={tx("Work on {name}; it has no unanswered question", {
+                          name: item.title,
+                        })}
+                        class="relative z-10 mr-1 flex size-[22px] shrink-0 items-center justify-center rounded-md border border-primary/55 bg-primary/18 text-primary transition-colors hover:border-primary hover:bg-primary/28 disabled:opacity-30"
+                      >
+                        <Icon name="play" class="text-[11px]" />
+                      </button>
+                    }
+                  >
+                    {(question) => (
+                      <button
+                        type="button"
+                        onClick={() => replyTo(question())}
+                        title={tx("Reply to this item's question")}
+                        aria-label={tx("Reply to the question for {name}", { name: item.title })}
+                        class="relative z-10 mr-1 flex size-[22px] shrink-0 items-center justify-center rounded-md border border-warning/65 bg-warning/22 text-warning shadow-[0_0_0_1px_rgb(from_var(--color-warning)_r_g_b/.08)] transition-colors hover:border-warning hover:bg-warning/34 focus-visible:border-warning focus-visible:bg-warning/34"
+                      >
+                        <Icon name="message-square-dashed" class="text-[12px]" />
+                      </button>
+                    )}
+                  </Show>
+                </Show>
                 {/*
                  * Absolutely positioned over the row's right end, only ink when
                  * hovered or busy. Out of the layout flow entirely so the title
@@ -1340,23 +1395,44 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
                  * keeps the icons legible where they overlap a long title. These
                  * act on the row, they are not part of reading it.
                  */}
-                <div class="absolute inset-y-0 right-16 flex items-center justify-end gap-1 rounded-r-[9px] bg-gradient-to-l from-60% from-base-300 to-transparent pr-2 pl-6 opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100">
+                <div
+                  class={`absolute inset-y-0 flex items-center justify-end gap-1 rounded-r-[9px] bg-gradient-to-l from-60% from-base-300 to-transparent pr-2 pl-6 opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100 ${
+                    item.status === "questions" ? "right-[74px]" : "right-[50px]"
+                  }`}
+                >
                   <Show when={item.status !== "finished"}>
                     <button
                       type="button"
-                      onClick={() => run(item)}
+                      onClick={() => {
+                        const question = questionFor(item);
+                        if (question) replyTo(question);
+                        else run(item);
+                      }}
                       // Not gated on isLive: the mock serves sendMessage the same
                       // as the composer does, so the preview can exercise this.
-                      disabled={isRunning()}
+                      disabled={!questionFor(item) && isRunning()}
                       title={
-                        isRunning()
-                          ? tx("A run is already in flight on this project")
-                          : tx("Send this item to the agent, on this project's session")
+                        questionFor(item)
+                          ? tx("Reply to this item's question")
+                          : isRunning()
+                            ? tx("A run is already in flight on this project")
+                            : tx("Send this item to the agent, on this project's session")
                       }
-                      aria-label={tx("Run {name}", { name: item.title })}
-                      class="shrink-0 rounded-md p-1 text-az-faint transition-colors hover:bg-primary/12 hover:text-primary disabled:opacity-30"
+                      aria-label={
+                        questionFor(item)
+                          ? tx("Reply to the question for {name}", { name: item.title })
+                          : tx("Run {name}", { name: item.title })
+                      }
+                      class={`shrink-0 rounded-md border p-1 transition-colors disabled:opacity-30 ${
+                        questionFor(item)
+                          ? "border-warning/55 bg-warning/18 text-warning hover:border-warning hover:bg-warning/30"
+                          : "border-transparent text-az-faint hover:border-primary/25 hover:bg-primary/12 hover:text-primary"
+                      }`}
                     >
-                      <Icon name="play" class="text-[12px]" />
+                      <Icon
+                        name={questionFor(item) ? "message-square-dashed" : "play"}
+                        class="text-[12px]"
+                      />
                     </button>
                   </Show>
                   {/* Revealed on hover: the controls all the time would be louder

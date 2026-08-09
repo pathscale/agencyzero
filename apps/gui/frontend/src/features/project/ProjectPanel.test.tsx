@@ -1,7 +1,8 @@
 import { fireEvent, render, waitFor } from "@solidjs/testing-library";
 import { Show } from "solid-js";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { ProjectPanel } from "~/features/project/ProjectPanel";
+import { prefs } from "~/stores/prefs";
 import { useWorkspace, type Workspace, WorkspaceProvider } from "~/stores/workspace";
 import type { Project } from "~/types";
 
@@ -160,5 +161,80 @@ describe("the project side panel", () => {
       ).toContain("Profile prompt cache"),
     );
     expect(workspace.state.projects.some((project) => project.forkedFrom?.itemId)).toBe(false);
+  });
+
+  it("keeps a dismissed item question reachable from a clear third action", async () => {
+    let workspace!: Workspace;
+
+    function Gate() {
+      workspace = useWorkspace();
+      const project = () => workspace.state.projects.find((candidate) => candidate.id === "cafe");
+      return (
+        <Show when={workspace.state.boot.status === "ready" && project()}>
+          {(readyProject) => <ProjectPanel project={readyProject()} />}
+        </Show>
+      );
+    }
+
+    const screen = render(() => (
+      <WorkspaceProvider>
+        <Gate />
+      </WorkspaceProvider>
+    ));
+    await waitFor(() => expect(workspace.state.boot.status).toBe("ready"), { timeout: 5_000 });
+    workspace.actions.openProject("cafe");
+    await waitFor(() => expect(workspace.state.questions.cafe?.[0]?.id).toBe("q-block"), {
+      timeout: 5_000,
+    });
+    await workspace.actions.setItemStatus("cafe-0", "questions");
+    await workspace.actions.answerQuestion("q-block", true);
+
+    const replies = await screen.findAllByRole("button", {
+      name: "Reply to the question for Legacy-data scan on prod snapshot",
+    });
+    expect(replies).toHaveLength(2);
+    const reply = replies.find((button) => button.className.includes("size-[22px]"));
+    expect(reply).toBeDefined();
+    if (!reply) throw new Error("persistent reply action is missing");
+    expect(reply.className).toContain("size-[22px]");
+    expect(reply.className).toContain("border-warning/65");
+    fireEvent.click(reply);
+
+    await waitFor(() => expect(prefs.replyQuestionIds.cafe).toBe("q-block"));
+  });
+
+  it("offers to work a questions item when no tracked question exists", async () => {
+    let workspace!: Workspace;
+
+    function Gate() {
+      workspace = useWorkspace();
+      const project = () =>
+        workspace.state.projects.find((candidate) => candidate.id === "agencyzero");
+      return (
+        <Show when={workspace.state.boot.status === "ready" && project()}>
+          {(readyProject) => <ProjectPanel project={readyProject()} />}
+        </Show>
+      );
+    }
+
+    const screen = render(() => (
+      <WorkspaceProvider>
+        <Gate />
+      </WorkspaceProvider>
+    ));
+    await waitFor(() => expect(workspace.state.items.agencyzero?.length).toBeGreaterThan(0), {
+      timeout: 5_000,
+    });
+    const send = vi.spyOn(workspace.actions, "send");
+    await workspace.actions.setItemStatus("agencyzero-0", "questions");
+
+    const work = await screen.findByRole("button", {
+      name: "Work on Solid + @pathscale/ui frontend scaffold; it has no unanswered question",
+    });
+    expect(work.className).toContain("size-[22px]");
+    fireEvent.click(work);
+
+    await waitFor(() => expect(send).toHaveBeenCalled());
+    expect(send.mock.calls.at(-1)?.[4]).toBe("agencyzero-0");
   });
 });

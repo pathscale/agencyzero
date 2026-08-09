@@ -52,9 +52,7 @@ export function ProjectTab(props: { tab: Tab; project: Project }): JSX.Element {
   const replyQuestion = createMemo(() => {
     const selected = prefs.replyQuestionIds[props.project.id];
     if (!selected) return undefined;
-    return (state.questions[props.project.id] ?? []).find(
-      (question) => question.id === selected && !question.answered,
-    );
+    return (state.questions[props.project.id] ?? []).find((question) => question.id === selected);
   });
   const replyQuestionNumber = createMemo(() => {
     const selected = replyQuestion();
