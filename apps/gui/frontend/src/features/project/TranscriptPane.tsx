@@ -86,8 +86,37 @@ export function TranscriptPane(props: {
    * bottom re-engages the follow.
    */
   const [pinned, setPinned] = createSignal(true);
+  let lastScrollTop = 0;
   const trackScroll = (): void => {
-    setPinned(scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight < 48);
+    const top = scroller.scrollTop;
+    const nearTail = scroller.scrollHeight - top - scroller.clientHeight < 48;
+    if (nearTail) {
+      setPinned(true);
+    } else if (top < lastScrollTop - 1) {
+      // Only an actual upward movement disengages tail following. Layout and
+      // streamed-content growth can increase the distance from the tail
+      // without the owner moving at all.
+      setPinned(false);
+    }
+    lastScrollTop = top;
+  };
+
+  let followFrame: number | undefined;
+  const followTail = (): void => {
+    if (!untrack(pinned)) return;
+    const moveToTail = (): void => {
+      if (!untrack(pinned)) return;
+      scroller.scrollTop = scroller.scrollHeight;
+      lastScrollTop = scroller.scrollTop;
+    };
+    queueMicrotask(moveToTail);
+    if (typeof requestAnimationFrame !== "undefined") {
+      if (followFrame !== undefined) cancelAnimationFrame(followFrame);
+      followFrame = requestAnimationFrame(() => {
+        followFrame = undefined;
+        moveToTail();
+      });
+    }
   };
 
   /*
@@ -99,21 +128,35 @@ export function TranscriptPane(props: {
    * who deliberately scrolled up exactly where they were.
    */
   let resizeObserver: ResizeObserver | undefined;
+  let mutationObserver: MutationObserver | undefined;
   onMount(() => {
-    if (typeof ResizeObserver === "undefined") return;
-    resizeObserver = new ResizeObserver(() => {
-      // A width transition can leave an overflow-hidden element with a real,
-      // retained horizontal offset. The bar is invisible but the first words
-      // are clipped off the left edge until another layout happens.
-      scroller.scrollLeft = 0;
-      if (!untrack(pinned)) return;
-      queueMicrotask(() => {
-        scroller.scrollTop = scroller.scrollHeight;
+    if (typeof ResizeObserver !== "undefined") {
+      resizeObserver = new ResizeObserver(() => {
+        // A width transition can leave an overflow-hidden element with a real,
+        // retained horizontal offset. The bar is invisible but the first words
+        // are clipped off the left edge until another layout happens.
+        scroller.scrollLeft = 0;
+        followTail();
       });
-    });
-    resizeObserver.observe(scroller);
+      resizeObserver.observe(scroller);
+    }
+    if (typeof MutationObserver !== "undefined") {
+      mutationObserver = new MutationObserver(followTail);
+      mutationObserver.observe(scroller, {
+        childList: true,
+        characterData: true,
+        subtree: true,
+      });
+    }
+    followTail();
   });
-  onCleanup(() => resizeObserver?.disconnect());
+  onCleanup(() => {
+    resizeObserver?.disconnect();
+    mutationObserver?.disconnect();
+    if (followFrame !== undefined && typeof cancelAnimationFrame !== "undefined") {
+      cancelAnimationFrame(followFrame);
+    }
+  });
 
   /*
    * The transcript is one timeline, not "messages, then a pile of questions".
@@ -181,10 +224,7 @@ export function TranscriptPane(props: {
     props.streaming;
     void state.runStatus[props.project.id];
     void (state.questions[props.project.id] ?? []).filter((question) => !question.answered).length;
-    if (!untrack(pinned)) return;
-    queueMicrotask(() => {
-      scroller.scrollTop = scroller.scrollHeight;
-    });
+    followTail();
   });
 
   return (
