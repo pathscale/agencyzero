@@ -8,7 +8,7 @@ use std::io::Read;
 use std::io::Write;
 #[cfg(not(test))]
 use std::time::{SystemTime, UNIX_EPOCH};
-use tauri_runtime_blitz::{builder, set_document_factory};
+use tauri_runtime_blitz::{builder, set_document_factory, set_runtime_trace};
 use url::Url;
 
 include!(concat!(env!("OUT_DIR"), "/embedded.rs"));
@@ -95,6 +95,8 @@ fn list_capabilities() -> Vec<String> {
 fn main() {
     reset_trace();
     trace("main entered");
+    set_runtime_trace(trace);
+    trace("runtime trace configured");
     set_document_factory(create_document);
     trace("document factory configured");
 
