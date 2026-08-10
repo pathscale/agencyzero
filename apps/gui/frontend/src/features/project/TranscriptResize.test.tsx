@@ -24,6 +24,43 @@ function Harness() {
 describe("transcript resize anchoring", () => {
   afterEach(() => vi.unstubAllGlobals());
 
+  it("lands at the tail when Blitz finishes initial layout one frame late", async () => {
+    const frames: FrameRequestCallback[] = [];
+    vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => {
+      frames.push(callback);
+      return frames.length;
+    });
+    vi.stubGlobal("cancelAnimationFrame", () => {});
+
+    const screen = render(() => (
+      <WorkspaceProvider>
+        <Harness />
+      </WorkspaceProvider>
+    ));
+    await waitFor(() => expect(screen.container.querySelector("[data-selectable]")).not.toBeNull());
+
+    const scroller = screen.container.querySelector("[data-selectable]") as HTMLDivElement;
+    let scrollHeight = 0;
+    Object.defineProperties(scroller, {
+      clientHeight: { configurable: true, get: () => 400 },
+      scrollHeight: { configurable: true, get: () => scrollHeight },
+    });
+
+    const firstLayout = frames.splice(0);
+    firstLayout.forEach((callback) => {
+      callback(0);
+    });
+    expect(scroller.scrollTop).toBe(0);
+
+    scrollHeight = 1_000;
+    const settledLayout = frames.splice(0);
+    settledLayout.forEach((callback) => {
+      callback(16);
+    });
+
+    expect(scroller.scrollTop).toBe(1_000);
+  });
+
   it("keeps a pinned transcript at the tail when its width changes", async () => {
     let notifyResize: ResizeObserverCallback | undefined;
     vi.stubGlobal(

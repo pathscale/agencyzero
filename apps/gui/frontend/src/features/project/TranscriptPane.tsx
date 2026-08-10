@@ -168,10 +168,18 @@ export function TranscriptPane(props: {
     queueMicrotask(moveToTail);
     if (typeof requestAnimationFrame !== "undefined") {
       if (followFrame !== undefined) cancelAnimationFrame(followFrame);
-      followFrame = requestAnimationFrame(() => {
-        followFrame = undefined;
-        moveToTail();
-      });
+      const afterLayout = (remaining: number): void => {
+        followFrame = requestAnimationFrame(() => {
+          followFrame = undefined;
+          moveToTail();
+          // Blitz can commit the initial DOM in one frame and finish its first
+          // layout in the next. A single callback then reads the old height and
+          // leaves a newly opened transcript at the top. Retry once after that
+          // layout without turning this into an open-ended animation loop.
+          if (remaining > 1 && untrack(pinned)) afterLayout(remaining - 1);
+        });
+      };
+      afterLayout(2);
     }
   };
 
