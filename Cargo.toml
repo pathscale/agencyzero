@@ -60,14 +60,13 @@ debug = 0
 incremental = true
 
 [profile.release]
-# Symbols on purpose, for the performance work.
+# Stripped for release. Symbols were kept on through the performance work
+# because `sample` and Instruments attribute time to them: without symbols the
+# whole app collapses into one `???` frame, which is how the 2026-08-10 profile
+# managed 1036 samples inside az-gui without naming a single function in it.
 #
-# `sample`, Instruments and any profiler attribute time to symbols. Stripped,
-# the entire app collapses into one `???` frame: the 2026-08-10 profile showed
-# 1036 samples inside az-gui and could not name a single function in it, while
-# the allocator frames it called were perfectly legible. Flip this back when
-# the hunt is over; it costs bundle size, not speed.
-strip = false
+# Flip back to `false` for a profiling session; it costs bundle size, not speed.
+strip = true
 debug = 1
 # Release runners retain `target` through rust-cache. Incremental artifacts make
 # the next standard or experimental bundle reuse unchanged Tauri dependencies.
