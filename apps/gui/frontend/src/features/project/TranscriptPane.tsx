@@ -964,8 +964,18 @@ export function RunStatusLine(props: {
  * cannot be mistaken for the user bubble, which is `base-300` and right-aligned.
  * The corner tail mirrors the user's, pointing the other way.
  */
+/*
+ * `min-w-0` and `overflow-hidden` alongside the cap.
+ *
+ * `max-w-[88%]` bounds the bubble, but a child sizing to its max-content
+ * ignores that and draws past the painted background: the text ran on while
+ * the bubble ended, which reads as text escaping its own message. The first
+ * forces the child to take the bubble's width rather than its content's, the
+ * second makes any remaining overflow visible as clipping rather than as text
+ * floating over the page.
+ */
 const AGENT_BUBBLE =
-  "flex max-w-[88%] flex-col gap-2 self-start rounded-[16px_16px_16px_6px] border border-az-bubble-edge bg-az-bubble px-4 py-3";
+  "flex min-w-0 max-w-[88%] flex-col gap-2 self-start overflow-hidden rounded-[16px_16px_16px_6px] border border-az-bubble-edge bg-az-bubble px-4 py-3";
 
 /* 14px rather than 13.5, and 1.75 rather than 1.7: this is the longest-running
  * prose in the window and it was set smaller and tighter than the user's own

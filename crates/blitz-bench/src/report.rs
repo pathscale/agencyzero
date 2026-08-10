@@ -199,7 +199,7 @@ pub fn show_nodes(nodes: &[SemanticNode], inspect_ms: f64) {
     }
     // Stable sort on count alone, so ties keep first-seen order exactly as the
     // Python's stable sort did.
-    counts.sort_by(|left, right| right.1.cmp(&left.1));
+    counts.sort_by_key(|(_, count)| std::cmp::Reverse(*count));
     let top: Vec<String> = counts
         .iter()
         .take(8)
@@ -210,7 +210,7 @@ pub fn show_nodes(nodes: &[SemanticNode], inspect_ms: f64) {
 }
 
 /// Ack latency for a burst of driven events.
-pub fn show_latencies(what: &str, count: usize, latencies: &mut Vec<f64>) {
+pub fn show_latencies(what: &str, count: usize, latencies: &mut [f64]) {
     latencies.sort_by(|a, b| a.partial_cmp(b).expect("latencies are finite"));
     let mean = latencies.iter().sum::<f64>() / latencies.len() as f64;
     // Index as the Python did, including its off-by-one, so the reported p95
