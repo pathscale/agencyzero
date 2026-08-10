@@ -38,7 +38,7 @@ anyrender = { package = "ps-anyrender", path = "../ps-anyrender/crates/anyrender
 [patch."https://github.com/pathscale/ps-anyrender.git"]
 anyrender = { package = "ps-anyrender", path = "../ps-anyrender/crates/anyrender" }
 anyrender_vello = { package = "ps-anyrender-vello", path = "../ps-anyrender/crates/anyrender_vello" }
-anyrender_vello_hybrid = { path = "../ps-anyrender/crates/anyrender_vello_hybrid" }
+anyrender_vello_hybrid = { package = "ps-anyrender-vello-hybrid", path = "../ps-anyrender/crates/anyrender_vello_hybrid" }
 
 [patch."https://github.com/pathscale/ps-blitz.git"]
 blitz-dom = { package = "ps-blitz-dom", path = "../ps-blitz-render/packages/blitz-dom" }
