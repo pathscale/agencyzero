@@ -170,6 +170,89 @@ These commands validate every recovered row and never modify the source.
 agency-tools list-messages`). None will ever write into a store the GUI has
 open; the lock sees to it.
 
+## Recovering lost provider-session pointers
+
+A project's provider session is not a column on the project row. It is a `kv`
+entry, and the key is provider-specific:
+
+| Provider | Key |
+|---|---|
+| Claude | `session:<project-id>` (the legacy bare key, kept so existing projects resume) |
+| Codex | `session:codex:<project-id>` |
+| Copilot | `session:copilot:<project-id>` |
+
+When one of these goes missing the project still holds its whole transcript, so
+nothing looks broken until the next prompt, which starts a fresh conversation
+instead of resuming. The old conversation is orphaned rather than deleted: it
+is still on disk under `~/.claude/projects`, and only the pointer to it is gone.
+
+**The rolling snapshots do not help here.** They are taken at boot, so a loss
+that happened before the last boot is faithfully carried into
+`db.snapshot-1` and `db.snapshot-2`. Confirm rather than assume, by reading
+each one:
+
+```sh
+AZ_DATA_DIR="$HOME/Library/Application Support/com.pathscale.agencyzero/db.snapshot-1" \
+  agency-tools list-sessions
+```
+
+`AZ_DATA_DIR` is the store directory itself, not the directory containing it.
+Pointing it one level up reads as an empty store, which looks exactly like a
+total loss and is not one.
+
+### Where the old values still are
+
+The `kv` table's data file keeps superseded and deleted records as bytes long
+after the row stops being live, and it stores each record as key, value and
+timestamp laid out end to end. So a lost pointer is usually still readable:
+
+```sh
+strings -t d "$HOME/Library/Application Support/com.pathscale.agencyzero/db/kv/.wt.data" \
+  | grep -oE 'session:proj-[0-9a-f-]{36}[0-9a-f-]{36}[0-9-]{10}T[0-9:.]+\+[0-9:]+'
+```
+
+Each hit reads as `session:` then the project id, then the session id, then the
+`updated_at` stamp. Group by project and take the newest record with a nonempty
+value: that is the pointer as it stood before the loss. A record whose value is
+empty between the two ids is a reset, not a corruption, and it is the reason
+the newest record is not always the one to restore.
+
+The same file also holds `session-run:` records, which carry a JSON blob naming
+`projectId`, `sessionId`, `agent` and `status`. They are a second, independent
+witness when a project's `session:` history is ambiguous.
+
+### Validate before writing
+
+A recovered id is only worth restoring if the conversation still exists:
+
+```sh
+find ~/.claude/projects -name "<session-id>.jsonl"
+```
+
+Check every candidate, not a sample. Real recovered ids match a file on disk at
+essentially a 100% rate, because they were issued by the CLI that wrote those
+files, so a batch that only partly matches means the extraction is wrong and
+should not be written anywhere.
+
+### Writing them back
+
+```sh
+wt-migrate restore-session <store> <project-id> <claude|codex> <session-id>
+```
+
+It refuses when the project already points at a different nonempty session, so
+it can never silently redirect a live conversation, and a rerun on an
+already-restored project is a no-op rather than a second write.
+
+Before any of it, obey the rules at the top of this file: confirm nothing holds
+the store, and take a backup.
+
+```sh
+lsof +D "$HOME/Library/Application Support/com.pathscale.agencyzero/db"
+```
+
+Empty output means nothing holds it. Any output at all means stop.
+
 ## The incident this file is made of
 
 A column was added without bumping the schema fingerprint (misread rows), the
