@@ -29,7 +29,7 @@ and how to launch directly when you need `log-phase-times` on stdout.
 | `cargo run -q -p blitz-bench -- type 20` | Cost per keystroke, as a delta rather than a total |
 | `cargo run -q -p blitz-bench -- click Settings` | Cost of one click, such as a tab switch |
 | `cargo run -q -p blitz-bench -- nodes` | Tree size, which is the input to every layout cost |
-| `sample <pid> 20 1 -f out.txt` | Native stack profile. Works because `strip = false` |
+| `sample <pid> 20 1 -f out.txt` | Native stack profile. Needs a symbols build, see below |
 | direct launch, stdout to a file | Per-phase resolve timings from `log-phase-times` |
 
 The bench drives the app through the inspector's MCP socket, so a measurement is

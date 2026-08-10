@@ -201,15 +201,16 @@ conclusion worth keeping was framed as a before and after rather than a figure.
 
 ## Native profiling
 
-`strip = false` is set in the root `Cargo.toml` for this work, so the binary is
-symbolized and `sample` names functions:
+Release builds are stripped, so `sample` reports a single `???` frame and names
+nothing. Symbols are an environment override rather than a manifest edit, so a
+profiling build cannot be committed by accident:
 
 ```sh
-sample $(pgrep -f "macos/AgencyZero.app/Contents/MacOS/az-gui" | head -1) 20 1 -f out.txt
+CARGO_PROFILE_RELEASE_STRIP=false CARGO_PROFILE_RELEASE_DEBUG=1 \
+  scripts/local-delivery.sh stable
 ```
 
-Stripped, the whole app collapses into one `???` frame. If profiles stop naming
-functions, that flag was reverted.
+If a profile stops naming functions, it was built without that override.
 
 ## Building without breaking the build
 
