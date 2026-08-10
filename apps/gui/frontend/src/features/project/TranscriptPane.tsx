@@ -1295,16 +1295,25 @@ function SystemNote(props: { message: Message }): JSX.Element {
   const failed = () => props.message.stop !== "completed";
 
   return (
-    <div class="group flex items-center gap-3 py-0.5">
+    <div class="group flex min-w-0 items-center gap-3 py-0.5">
       <span class="h-px flex-1 bg-az-hairline" />
       <span
         data-selectable
-        class={`flex items-center gap-1.5 text-center text-[11.5px] ${
+        class={`flex min-w-0 items-center gap-1.5 text-center text-[11.5px] ${
           failed() ? "text-error" : "text-az-muted"
         }`}
       >
         <Icon name={failed() ? "info" : "sparkles"} class="relative top-px shrink-0 text-[12px]" />
-        {props.message.body}
+        {/*
+          `min-w-0` and a truncating span, because the cost beside it is
+          `shrink-0`. A flex child will not shrink below its content width
+          without `min-w-0`, so a long note (a compaction naming how many
+          rules it kept) grew past the row and ran underneath the cost
+          readout instead of ending in an ellipsis.
+        */}
+        <span class="min-w-0 truncate" title={props.message.body}>
+          {props.message.body}
+        </span>
         <MessageCost message={props.message} />
       </span>
       {/* These notes carry the one thing most worth copying out of a
