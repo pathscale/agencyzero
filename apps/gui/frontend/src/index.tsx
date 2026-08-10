@@ -14,7 +14,7 @@ enablePopmotion(animate);
 // effect supplies `data-color-mode`; `data-theme` remains the stable identity
 // @pathscale/ui and Tailwind resolve against.
 document.documentElement.setAttribute("data-theme", "agencyzero");
-document.documentElement.toggleAttribute("data-blitz-renderer", isBlitz());
+if (isBlitz()) document.documentElement.setAttribute("data-blitz-renderer", "");
 void i18n.init();
 
 const root = document.getElementById("root");
