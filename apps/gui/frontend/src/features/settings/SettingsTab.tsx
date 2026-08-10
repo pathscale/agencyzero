@@ -3,6 +3,7 @@ import {
   createContext,
   createEffect,
   createMemo,
+  createRoot,
   createSignal,
   For,
   type JSX,
@@ -78,6 +79,13 @@ const AGENT_USE = {
  * which is the same coupling written out longhand.
  */
 const [settingsQuery, setSettingsQuery] = createSignal("");
+
+createRoot(() => {
+  createEffect(() => {
+    // Any query at all, including one being typed, needs every row present.
+    if (settingsQuery().trim() !== "") revealAllSections();
+  });
+});
 
 /** Whether some label or hint answers what is being searched for. */
 function matchesSearch(text: string): boolean {
@@ -2220,20 +2228,33 @@ function CostSection(): JSX.Element {
  * once. Sections still never unmount once mounted, so search keeps working.
  */
 const SETTINGS_FIRST_PAINT = 3;
-const SETTINGS_PER_TICK = 2;
+
+/**
+ * How far below the viewport a section is built in advance, in pixels.
+ *
+ * Enough that a scroll finds it already there, small enough that opening the
+ * tab does not build the whole page.
+ */
+const SETTINGS_PREBUILD_PX = 600;
 
 let settingsMounted = 0;
-let settingsScheduled = false;
 const [settingsBudget, setSettingsBudget] = createSignal(SETTINGS_FIRST_PAINT);
 
-/** Let the next few sections in, once the current commit has been painted. */
-function scheduleSettingsMount(): void {
-  if (settingsScheduled) return;
-  settingsScheduled = true;
-  setTimeout(() => {
-    settingsScheduled = false;
-    setSettingsBudget((budget) => budget + SETTINGS_PER_TICK);
-  }, 0);
+/**
+ * Reveal every section, for search.
+ *
+ * A section that is not mounted has no rows, and rows are what report whether
+ * they match a query. Rather than teach search to work without them, a query
+ * simply mounts everything: searching is deliberate and occasional, opening
+ * the tab is neither.
+ */
+function revealAllSections(): void {
+  setSettingsBudget((budget) => Math.max(budget, settingsMounted));
+}
+
+/** Admit sections up to and including `ordinal`. Never gives one back. */
+function admitSection(ordinal: number): void {
+  setSettingsBudget((budget) => (ordinal < budget ? budget : ordinal + 1));
 }
 
 function Section(props: {
@@ -2260,10 +2281,35 @@ function Section(props: {
   // Claim a slot in mount order. Stable for the life of the component, so a
   // section never gives its place back and cannot flicker out once shown.
   const ordinal = settingsMounted++;
-  const mounted = createMemo(() => {
-    const ready = ordinal < settingsBudget();
-    if (!ready) scheduleSettingsMount();
-    return ready;
+  let shell: HTMLDivElement | undefined;
+  /*
+   * Mounted once it has been reached, and never unmounted after.
+   *
+   * Seventeen sections and around four thousand nodes were built in the commit
+   * that opened the tab, while about three of them fit on screen. Staggering
+   * that over several ticks moved the cost around without removing it. This
+   * removes it: a section off the bottom of the page is not built until the
+   * reader approaches it.
+   */
+  const mounted = createMemo(() => ordinal < settingsBudget());
+  onMount(() => {
+    if (!shell) return;
+    const scroller = shell.closest(".az-scroll");
+    if (!scroller) {
+      // No scroll container to measure against, so build rather than risk a
+      // section that can never appear.
+      admitSection(ordinal);
+      return;
+    }
+    const check = (): void => {
+      if (mounted() || !shell) return;
+      const top = shell.getBoundingClientRect().top;
+      const limit = scroller.getBoundingClientRect().bottom + SETTINGS_PREBUILD_PX;
+      if (top <= limit) admitSection(ordinal);
+    };
+    check();
+    scroller.addEventListener("scroll", check, { passive: true });
+    onCleanup(() => scroller.removeEventListener("scroll", check));
   });
   const titleMatches = createMemo(() => matchesSearch(`${props.title} ${props.hint}`));
   const visible = () => settingsQuery().trim() === "" || titleMatches() || hits().size > 0;
@@ -2278,7 +2324,7 @@ function Section(props: {
 
   return (
     <SearchScope.Provider value={{ titleMatches, report }}>
-      <Panel class="flex-none rounded-[13px]" classList={{ hidden: !visible() }}>
+      <Panel ref={shell} class="flex-none rounded-[13px]" classList={{ hidden: !visible() }}>
         <div class="flex flex-wrap items-baseline gap-x-2.5 gap-y-1 px-3.5 pt-3 pb-2.5">
           <Icon name={props.icon} class="relative top-0.5 text-[14px] text-primary" />
           <h2
