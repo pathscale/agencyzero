@@ -974,8 +974,14 @@ export function RunStatusLine(props: {
  * second makes any remaining overflow visible as clipping rather than as text
  * floating over the page.
  */
+/* No `min-w-0` or `overflow-hidden` here. Both were added to stop long words
+ * escaping the bubble, and under Blitz they let a `self-start` child collapse
+ * to zero width instead: the agent's messages rendered, measured nothing and
+ * were clipped away entirely, so the transcript looked empty. Wrapping belongs
+ * to the text, and `MessageBody` already carries `break-words` and
+ * `[overflow-wrap:anywhere]` for it. */
 const AGENT_BUBBLE =
-  "flex min-w-0 max-w-[88%] flex-col gap-2 self-start overflow-hidden rounded-[16px_16px_16px_6px] border border-az-bubble-edge bg-az-bubble px-4 py-3";
+  "flex max-w-[88%] flex-col gap-2 self-start rounded-[16px_16px_16px_6px] border border-az-bubble-edge bg-az-bubble px-4 py-3";
 
 /* 14px rather than 13.5, and 1.75 rather than 1.7: this is the longest-running
  * prose in the window and it was set smaller and tighter than the user's own
