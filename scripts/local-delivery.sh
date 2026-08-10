@@ -42,6 +42,38 @@ run_tauri() {
   fi
 }
 
+pin_inspector_env() {
+  # The inspector is only reachable if the app knows where to put its control
+  # socket, and passing that with `open --env` does not survive the two launches
+  # that actually happen: a Finder launch, and the restart angel re-executing
+  # the binary after a rebuild (see docs/angel-restart.md). Both start the
+  # process without the shell environment, so the socket lands in $TMPDIR under
+  # an instance-specific name and every tool then attaches to whichever stale
+  # descriptor sorts last.
+  #
+  # LSEnvironment is read by launchd from the bundle itself, so it holds for
+  # every way the app can start. Applied here rather than in tauri.conf.json
+  # because this belongs to a local diagnostics build and must never ship.
+  bundle=$1
+  plist="$bundle/Contents/Info.plist"
+  plutil -remove LSEnvironment "$plist" >/dev/null 2>&1 || true
+  plutil -insert LSEnvironment -xml \
+    "<dict>
+       <key>BLITZ_INCREMENTAL</key><string>1</string>
+       <key>TAURI_BLITZ_CONTROL_DESCRIPTOR</key><string>$repo_root/target/blitz-control.json</string>
+     </dict>" "$plist"
+  # Editing Info.plist after bundling invalidates the signature, and macOS then
+  # refuses to launch the app at all: `open` fails with -54 and nothing starts.
+  # The bundle is ad-hoc signed to begin with, so re-signing ad-hoc restores it
+  # without needing an identity.
+  codesign --force --sign - --options runtime "$bundle" >/dev/null 2>&1
+  codesign --verify --strict "$bundle" || {
+    echo "bundle signature is invalid after pinning the inspector env" >&2
+    exit 1
+  }
+  echo "==> pinned inspector env in $(basename "$bundle")"
+}
+
 publish_bundle() {
   built_bundle=$1
   published_bundle=$2
@@ -93,6 +125,7 @@ case "$mode" in
     publish_bundle \
       "$repo_root/target/$rust_target/release/bundle/macos/AgencyZero.app" \
       "$repo_root/target/release/bundle/macos/AgencyZero.app"
+    pin_inspector_env "$repo_root/target/release/bundle/macos/AgencyZero.app"
     echo "$repo_root/target/release/bundle/macos/AgencyZero.app"
     ;;
   experimental)
