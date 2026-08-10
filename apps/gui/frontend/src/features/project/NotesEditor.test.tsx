@@ -47,7 +47,7 @@ function mount() {
     workspace = useWorkspace();
     return (
       <Show when={workspace.state.boot.status === "ready"}>
-        <ProjectPanel project={PROJECT} />
+        <ProjectPanel project={PROJECT} agent="codex" />
       </Show>
     );
   }

@@ -12,7 +12,7 @@ import {
 import { createStore, produce, reconcile } from "solid-js/store";
 import type { AgencyZeroApi, AppEvents, Unlisten } from "~/api";
 import { selectApi } from "~/api";
-import { ITEM_REFERENCE_EVENT } from "~/lib/itemReference";
+import { setItemReferenceHandler } from "~/lib/itemReference";
 import { PERMISSION_ORDER } from "~/lib/labels";
 import { describeError, installGlobalErrorLogging, log } from "~/lib/log";
 import { usageTotals } from "~/lib/stats";
@@ -1533,7 +1533,12 @@ function createWorkspace() {
          * it is the normal stop/yield path, and the backend has already kept
          * any partial reply and usage it received.
          */
-        if (stop !== "completed" && stop !== "canceled" && !failureAlreadyPersisted) {
+        if (
+          stop !== "completed" &&
+          stop !== "canceled" &&
+          stop !== "reconnected" &&
+          !failureAlreadyPersisted
+        ) {
           appendMessage({
             id: `run-error-${Date.now()}`,
             projectId,
@@ -1673,12 +1678,7 @@ function createWorkspace() {
     return true;
   }
 
-  const onItemReference = (event: Event): void => {
-    const id = (event as CustomEvent<{ id?: unknown }>).detail?.id;
-    if (typeof id === "string") revealItem(id);
-  };
-  window.addEventListener(ITEM_REFERENCE_EVENT, onItemReference);
-  onCleanup(() => window.removeEventListener(ITEM_REFERENCE_EVENT, onItemReference));
+  onCleanup(setItemReferenceHandler(revealItem));
 
   /** The gear opens Settings as a real tab you can leave open — never a modal. */
   function openSettings(): void {

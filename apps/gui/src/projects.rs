@@ -1206,6 +1206,10 @@ fn claude_rejected_resume(agent: Agent, resume: Option<&str>, error: &str) -> bo
         })
 }
 
+fn missing_resume_retry_key(turn_id: &str) -> String {
+    format!("missing-resume-retry:{turn_id}")
+}
+
 const CANCELED_STOP: &str = "canceled";
 const INTERRUPTED_STOP: &str = "interrupted";
 const RECONNECTED_STOP: &str = "reconnected";
@@ -1295,6 +1299,22 @@ fn agent_wire_name(agent: Agent) -> &'static str {
 /// injected user message establishes a visible block boundary.
 fn needs_text_break(streamed_any: bool, last_was_text: bool) -> bool {
     streamed_any && !last_was_text
+}
+
+/// Whether an event actually separates two visible assistant prose blocks.
+///
+/// Provider bookkeeping can arrive between arbitrary text deltas. Treating a
+/// usage update or message-boundary notification as visible structure inserted
+/// blank paragraphs in the middle of sentences. Only activity the transcript
+/// conceptually places between prose blocks may reset adjacency.
+fn event_breaks_text_adjacency(event: &Event) -> bool {
+    matches!(
+        event,
+        Event::Thinking(_)
+            | Event::ToolCall { .. }
+            | Event::ToolResult { .. }
+            | Event::ApprovalRequest(_)
+    )
 }
 
 /// Move an unfinished, standalone Prompt Syntax line out of a chunk that is
@@ -10763,6 +10783,7 @@ async fn drive_run(
             opening_message_read = true;
         }
         let is_text = matches!(&event, Event::Text(_));
+        let breaks_text_adjacency = event_breaks_text_adjacency(&event);
         // An owner message can arrive while an approval event is being handled.
         // Preserve adjacency after that event only when it bisected a PS line.
         let mut preserve_text_adjacency = false;
@@ -10813,7 +10834,7 @@ async fn drive_run(
                             approval.tool
                         ),
                     );
-                    last_was_text = is_text;
+                    last_was_text = false;
                     continue;
                 }
 
@@ -11402,7 +11423,11 @@ async fn drive_run(
             }
             _ => {}
         }
-        last_was_text = is_text || preserve_text_adjacency;
+        if is_text || preserve_text_adjacency {
+            last_was_text = true;
+        } else if breaks_text_adjacency {
+            last_was_text = false;
+        }
         // The approval arm can learn about a stop mid-question; honour it
         // here rather than waiting for the next event that may never come.
         if cancelled {
@@ -11512,6 +11537,9 @@ async fn drive_run(
 
     match result {
         Ok(outcome) => {
+            // A successful reopen ends any bounded transient-resume recovery
+            // for this persisted owner message.
+            let _ = tables.kv.delete(missing_resume_retry_key(&turn_id)).await;
             /*
              * The body is what the user watched stream, block breaks and all.
              * `outcome.text` is the provider's settled answer, which can be
@@ -11882,43 +11910,58 @@ async fn drive_run(
             let rejected_resume = claude_rejected_resume(agent, resume.as_deref(), &error_text);
             let mut visible_error = error_text.clone();
             if rejected_resume {
-                let key = agent_session_key(&project_id, agent);
-                // A later session must win even if a delayed failure arrives.
-                // Ordinarily the one-run slot makes this equality automatic;
-                // keeping it explicit makes the destructive scope auditable.
-                if tables.kv_get(&key).as_deref() == resume.as_deref() {
-                    match tables.kv_put(&key, String::new()).await {
-                        Ok(()) => {
-                            visible_error = "Claude could not reopen its saved conversation. Resume was reset; Retry starts a fresh Claude session.".into();
-                            crate::log!(
-                                crate::log::Level::Warn,
-                                "run",
-                                "{project_id}: Claude rejected resume {}; cleared only that provider pointer",
-                                resume.as_deref().unwrap_or_default()
-                            );
-                            note_io(
-                                &app,
-                                &io,
-                                &project_id,
-                                "received",
-                                "recovery",
-                                &visible_error,
-                            );
-                            if let Some(row) = tables.project.select(project_id.clone()) {
-                                let _ = app.emit(
-                                    "project:updated",
-                                    with_session(ProjectDto::from(row), &tables),
-                                );
-                            }
-                        }
-                        Err(clear_error) => {
-                            crate::log!(
-                                crate::log::Level::Error,
-                                "run",
-                                "{project_id}: Claude rejected resume but its pointer could not be cleared: {clear_error}"
-                            );
-                        }
+                let retry_key = missing_resume_retry_key(&turn_id);
+                let attempt = tables
+                    .kv_get(&retry_key)
+                    .and_then(|value| value.parse::<u32>().ok())
+                    .unwrap_or(0)
+                    .saturating_add(1);
+                let opening = tables
+                    .message
+                    .select(turn_id.clone())
+                    .filter(|row| row.project_id == project_id && row.author == "user");
+                if let (Some(delay), Some(row)) =
+                    (crate::retry::interactive_delay(attempt), opening)
+                {
+                    let _ = tables.kv_put(&retry_key, attempt.to_string()).await;
+                    tokio::time::sleep(delay).await;
+                    let body = full_body(&tables, &row.id, &row.body);
+                    if app
+                        .emit(
+                            "run:inject_failed",
+                            serde_json::json!({
+                                "projectId": project_id,
+                                "messageId": row.id,
+                                "body": body,
+                                "replyQuestionId": reply_for_message(&tables, &turn_id),
+                            }),
+                        )
+                        .is_ok()
+                    {
+                        visible_error = RECONNECTED_STOP.into();
+                        crate::log!(
+                            crate::log::Level::Warn,
+                            "run",
+                            "{project_id}: Claude temporarily rejected resume {}; preserving it and retrying the same message (attempt {attempt}/{})",
+                            resume.as_deref().unwrap_or_default(),
+                            crate::retry::MAX_RECOVERY_RETRIES
+                        );
+                        note_io(
+                            &app,
+                            &io,
+                            &project_id,
+                            "received",
+                            "recovery",
+                            format!(
+                                "Claude temporarily rejected the stored conversation; preserving it and retrying the same message after {}ms (attempt {attempt}/{})",
+                                delay.as_millis(),
+                                crate::retry::MAX_RECOVERY_RETRIES
+                            ),
+                        );
                     }
+                } else {
+                    let _ = tables.kv.delete(retry_key).await;
+                    visible_error = "Claude temporarily could not reopen its saved conversation. The session was preserved; Retry will try the same session again.".into();
                 }
             }
             measurement
@@ -12935,7 +12978,7 @@ mod tests {
     }
 
     #[test]
-    fn only_claudes_explicit_rejection_clears_the_matching_resume() {
+    fn only_claudes_explicit_rejection_recognizes_the_matching_resume() {
         let session = "5be5be0a-0cf7-4c2b-abc3-f2637236ed11";
         let error = format!(
             "claude-code reported a failed turn: No conversation found with session ID: {session}"
@@ -14382,6 +14425,19 @@ mod tests {
         assert!(!needs_text_break(true, true));
         assert!(needs_text_break(true, false));
         assert!(!needs_text_break(false, false));
+
+        assert!(!event_breaks_text_adjacency(&Event::MessageBoundary));
+        assert!(!event_breaks_text_adjacency(&Event::Usage(
+            agent_abstraction::Usage::default()
+        )));
+        assert!(event_breaks_text_adjacency(&Event::Thinking(
+            "checking".into()
+        )));
+        assert!(event_breaks_text_adjacency(&Event::ToolCall {
+            id: Some("tool-1".into()),
+            name: "shell".into(),
+            input: serde_json::json!({"command": "true"}),
+        }));
     }
 
     #[test]

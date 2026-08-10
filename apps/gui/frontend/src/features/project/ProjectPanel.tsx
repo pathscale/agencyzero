@@ -15,7 +15,7 @@ import { describeError, log } from "~/lib/log";
 import { tx } from "~/stores/i18n";
 import { prefs, setPrefs, togglePanelSection } from "~/stores/prefs";
 import { useNow, useWorkspace } from "~/stores/workspace";
-import type { Project, ProjectItem, Question, RunningTask } from "~/types";
+import type { Agent, Project, ProjectItem, Question, RunningTask } from "~/types";
 
 export const PROJECT_ITEM_PAGE_SIZE = 12;
 
@@ -31,7 +31,7 @@ export function itemPage<T>(items: readonly T[], limit: number): T[] {
  * install rather than per project, so the panel you left open stays open when
  * you switch tabs.
  */
-export function ProjectPanel(props: { project: Project }): JSX.Element {
+export function ProjectPanel(props: { project: Project; agent: Agent }): JSX.Element {
   const { state, itemsFor, openItemCount } = useWorkspace();
 
   const running = () => state.running[props.project.id] ?? [];
@@ -132,7 +132,7 @@ export function ProjectPanel(props: { project: Project }): JSX.Element {
       {/* Last, deliberately: directories and the moderator toggle are set once
           and revisited rarely, and they were costing the working sections the
           top of the column. */}
-      <SettingsSection project={props.project} />
+      <SettingsSection project={props.project} agent={props.agent} />
     </div>
   );
 }
@@ -368,7 +368,7 @@ const IO_TONE: Record<string, string> = {
  * Model and permission are deliberately absent: they are per tab and live only
  * in the composer, which is the note this section ends on.
  */
-function SettingsSection(props: { project: Project }): JSX.Element {
+function SettingsSection(props: { project: Project; agent: Agent }): JSX.Element {
   const { state, actions, isLive } = useWorkspace();
   const [adding, setAdding] = createSignal(false);
   const [path, setPath] = createSignal("");
@@ -516,13 +516,15 @@ function SettingsSection(props: { project: Project }): JSX.Element {
 
         <div class="my-0.5 h-px bg-az-hairline-soft" />
 
-        {/* Codex is the agent whose sessions wedge and get recovered by id, so
-            it is the default here; the id field takes any provider's session. */}
         <ResumeSession
           projectId={props.project.id}
-          agent="codex"
+          agent={props.agent}
           running={isRunning()}
-          currentSession={props.project.sessions.codex}
+          currentSession={
+            props.agent === "claude"
+              ? (props.project.sessions.claude ?? props.project.sessionId)
+              : props.project.sessions[props.agent]
+          }
         />
 
         <div class="flex gap-[7px] pt-0.5 text-[11px] text-az-faint leading-[1.5]">

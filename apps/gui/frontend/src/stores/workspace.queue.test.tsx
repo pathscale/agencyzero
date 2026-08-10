@@ -92,4 +92,38 @@ describe("queued live follow-ups", () => {
       }),
     );
   });
+
+  it("automatically retries the opening row after a rejected provider session", async () => {
+    const workspace = await mountWorkspace();
+
+    queueHarness.handlers.get("run:inject_failed")?.({
+      projectId: "agencyzero",
+      messageId: "msg-session-rejected",
+      body: "continue on the same session",
+    });
+    expect(workspace.state.queued.agencyzero).toEqual([
+      expect.objectContaining({
+        messageId: "msg-session-rejected",
+        body: "continue on the same session",
+      }),
+    ]);
+
+    queueHarness.handlers.get("run:stopped")?.({
+      projectId: "agencyzero",
+      agent: "claude",
+      model: "claude-opus-5",
+      permission: "auto",
+      stop: "reconnected",
+      exitCode: null,
+    });
+
+    await waitFor(() => expect(queueHarness.send).toHaveBeenCalledTimes(2), { timeout: 2_000 });
+    expect(queueHarness.send).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        projectId: "agencyzero",
+        body: "continue on the same session",
+        retryMessageId: "msg-session-rejected",
+      }),
+    );
+  });
 });

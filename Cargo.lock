@@ -72,7 +72,7 @@ dependencies = [
 
 [[package]]
 name = "agency-tools"
-version = "0.5.8"
+version = "0.5.9"
 dependencies = [
  "derive_more 2.1.1",
  "dirs",
@@ -827,17 +827,18 @@ dependencies = [
 
 [[package]]
 name = "az-core"
-version = "0.5.8"
+version = "0.5.9"
 
 [[package]]
 name = "az-gui"
-version = "0.5.8"
+version = "0.5.9"
 dependencies = [
  "agency-proxy-client",
  "agency-proxy-protocol",
  "agent-abstraction",
  "agent-experimental",
  "az-core",
+ "backon",
  "blitz-dom",
  "blitz-script",
  "brotli",
@@ -868,9 +869,18 @@ dependencies = [
 
 [[package]]
 name = "az-mcp-proxy"
-version = "0.5.8"
+version = "0.5.9"
 dependencies = [
  "az-core",
+]
+
+[[package]]
+name = "backon"
+version = "1.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cffb0e931875b666fc4fcb20fee52e9bbd1ef836fd9e9e04ec21555f9f85f7ef"
+dependencies = [
+ "fastrand",
 ]
 
 [[package]]
@@ -10667,7 +10677,7 @@ dependencies = [
 
 [[package]]
 name = "wt-migrate"
-version = "0.5.8"
+version = "0.5.9"
 dependencies = [
  "chrono",
  "derive_more 2.1.1",

@@ -599,14 +599,33 @@ export function Composer(props: ComposerProps): JSX.Element {
   /** Grow with the content up to a ceiling, then scroll — no jumping layout. */
   function resize(): void {
     field.style.height = "auto";
-    const ceiling = expanded() ? 420 : 168;
+    const modeCeiling = expanded() ? 420 : 168;
     // A retained or just-restored view can briefly report scrollHeight = 0.
     // Zero used to collapse the field completely until Expand supplied its
     // 240px floor. Keep one writable line in compact mode even while layout is
     // settling; the next input or reactive draft update measures it again.
     const floor = expanded() ? 240 : 22;
+    // Keep the prompt and its controls inside short windows. The expanded
+    // editor may use more room, but must never consume the whole viewport.
+    const viewportCeiling = Math.max(floor, Math.floor(window.innerHeight * 0.45));
+    const ceiling = Math.min(modeCeiling, viewportCeiling, visibleRows() * 22);
+    field.style.maxHeight = `${ceiling}px`;
     field.style.height = `${Math.max(floor, Math.min(field.scrollHeight, ceiling))}px`;
   }
+
+  // Blitz currently reports textarea scrollHeight inconsistently after a
+  // controlled value changes. A reactive rows value gives its native layout a
+  // reliable intrinsic height, while resize() remains the pixel-exact WebKit
+  // path. Both are bounded by the same viewport budget.
+  const visibleRows = createMemo(() => {
+    const wrapped = draft()
+      .split("\n")
+      .reduce((total, line) => total + Math.max(1, Math.ceil(Math.max(1, line.length) / 92)), 0);
+    const floor = expanded() ? 11 : 1;
+    const modeCeiling = expanded() ? 18 : 7;
+    const viewportCeiling = Math.max(floor, Math.floor((window.innerHeight * 0.45) / 22));
+    return Math.max(floor, Math.min(wrapped, modeCeiling, viewportCeiling));
+  });
 
   createEffect(() => {
     // A keyed draft can change without an input event when the user returns to
@@ -875,28 +894,34 @@ export function Composer(props: ComposerProps): JSX.Element {
             number={props.replyQuestionNumber}
             onRemove={props.onCancelQuestionReply}
           />
-          <textarea
-            ref={field}
-            rows={1}
-            wrap="soft"
-            value={draft()}
-            placeholder={props.placeholder}
-            aria-label={props.placeholder}
-            onInput={(event) => {
-              remember(event.currentTarget.value);
-              resize();
-            }}
-            onKeyDown={(event) => {
-              // Enter sends; Shift+Enter is a newline. Standard for a chat box,
-              // and the reason this is a textarea rather than an input.
-              if (event.key !== "Enter" || event.shiftKey) return;
-              event.preventDefault();
-              void submit();
-            }}
-            class={`az-scroll w-full min-w-0 resize-none overflow-x-hidden whitespace-pre-wrap break-words bg-transparent text-base-content leading-[1.45] placeholder:text-az-faint focus:outline-none ${
-              props.size === "lg" ? "text-[15px]" : "text-[14.5px]"
-            }`}
-          />
+          <div
+            data-prompt-viewport
+            class="min-w-0 overflow-hidden"
+            style={{ height: `${visibleRows() * 22}px` }}
+          >
+            <textarea
+              ref={field}
+              rows={visibleRows()}
+              wrap="soft"
+              value={draft()}
+              placeholder={props.placeholder}
+              aria-label={props.placeholder}
+              onInput={(event) => {
+                remember(event.currentTarget.value);
+                resize();
+              }}
+              onKeyDown={(event) => {
+                // Enter sends; Shift+Enter is a newline. Standard for a chat box,
+                // and the reason this is a textarea rather than an input.
+                if (event.key !== "Enter" || event.shiftKey) return;
+                event.preventDefault();
+                void submit();
+              }}
+              class={`az-scroll block max-h-full w-full min-w-0 resize-none overflow-y-auto overflow-x-hidden whitespace-pre-wrap break-words bg-transparent text-base-content leading-[1.45] placeholder:text-az-faint focus:outline-none ${
+                props.size === "lg" ? "text-[15px]" : "text-[14.5px]"
+              }`}
+            />
+          </div>
 
           <Show when={advanced()}>
             <div class="rounded-lg border border-az-hairline bg-base-300/45 px-3 py-2">

@@ -428,10 +428,10 @@ export interface AppEvents {
   /** The active provider channel can now accept an ordered live follow-up. */
   "run:ready": { projectId: string };
   /**
-   * A message sent into a live run could not be delivered — the turn settled
-   * in the race window. The words are already in the transcript; this hands
-   * them back so the store can queue them for a fresh turn the agent will
-   * actually hear.
+   * A message could not enter its intended provider turn, either because a
+   * live turn settled in the delivery race or because its stored session was
+   * rejected. The words are already in the transcript; this hands them back so
+   * the store can queue the same row for a fresh turn the agent will hear.
    */
   "run:inject_failed": {
     projectId: string;

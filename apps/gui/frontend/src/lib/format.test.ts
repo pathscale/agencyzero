@@ -30,6 +30,11 @@ describe("relativeTime", () => {
   it("does not render an unparseable timestamp as a date near 1970", () => {
     expect(relativeTime("not a date", NOW)).toBe("—");
   });
+
+  it("parses WorkTable microsecond timestamps on millisecond-only engines", () => {
+    expect(relativeTime("2026-07-29T11:56:00.123456+00:00", NOW)).toBe("3 min ago");
+    expect(countdown("2026-07-29T12:04:00.123456+00:00", NOW)).toBe("5m");
+  });
 });
 
 describe("elapsed", () => {

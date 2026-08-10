@@ -9,6 +9,7 @@
 //! that cohort has to reinstall by hand, so this lands in the same change as
 //! the first published bundle, not after it.
 
+use backon::Retryable;
 use serde::Serialize;
 use tauri::{Manager, State};
 use tauri_plugin_updater::UpdaterExt;
@@ -31,7 +32,11 @@ pub(crate) struct AvailableUpdate {
 #[tauri::command]
 pub(crate) async fn check_for_update(app: AppHandle) -> Result<Option<AvailableUpdate>, String> {
     let updater = app.updater().map_err(|e| e.to_string())?;
-    let found = updater.check().await.map_err(|e| e.to_string())?;
+    let found = (|| updater.check())
+        .retry(crate::retry::interactive_backoff())
+        .sleep(tokio::time::sleep)
+        .await
+        .map_err(|e| e.to_string())?;
 
     Ok(found.map(|update| AvailableUpdate {
         version: update.version.clone(),
@@ -71,7 +76,12 @@ async fn install_update_now_with_state(app: &AppHandle, state: &AppState) -> Res
     }
 
     let updater = app.updater().map_err(|e| e.to_string())?;
-    let Some(update) = updater.check().await.map_err(|e| e.to_string())? else {
+    let Some(update) = (|| updater.check())
+        .retry(crate::retry::interactive_backoff())
+        .sleep(tokio::time::sleep)
+        .await
+        .map_err(|e| e.to_string())?
+    else {
         return Err("no update available".to_string());
     };
 

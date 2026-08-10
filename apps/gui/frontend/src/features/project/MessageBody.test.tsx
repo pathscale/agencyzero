@@ -1,6 +1,7 @@
 import { fireEvent, render } from "@solidjs/testing-library";
 import { describe, expect, it } from "vitest";
 import { InlineText, MessageBody, splitBlocks } from "~/features/project/MessageBody";
+import { setItemReferenceHandler } from "~/lib/itemReference";
 
 describe("MessageBody", () => {
   it("splits on blank lines into paragraphs", () => {
@@ -56,10 +57,9 @@ describe("MessageBody", () => {
   it("turns a full item id into a compact in-app link", () => {
     const id = "item-ea97826a-9d9a-4e3e-879b-ae2660c8d789";
     let revealed = "";
-    const listener = (event: Event) => {
-      revealed = (event as CustomEvent<{ id: string }>).detail.id;
-    };
-    window.addEventListener("agencyzero:item-reference", listener);
+    const removeHandler = setItemReferenceHandler((itemId) => {
+      revealed = itemId;
+    });
     const screen = render(() => <MessageBody body={`Resume ${id} next.`} />);
 
     const link = screen.getByRole("button", { name: `Open item ${id}` });
@@ -67,7 +67,7 @@ describe("MessageBody", () => {
     fireEvent.click(link);
     expect(revealed).toBe(id);
 
-    window.removeEventListener("agencyzero:item-reference", listener);
+    removeHandler();
   });
 
   it("keeps item ids inside code inert", () => {

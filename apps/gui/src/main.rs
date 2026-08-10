@@ -16,6 +16,7 @@ mod projects;
 mod prs;
 mod questions;
 mod quota;
+mod retry;
 mod settings;
 mod store_backup;
 mod study;

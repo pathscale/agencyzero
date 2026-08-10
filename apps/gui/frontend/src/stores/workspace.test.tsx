@@ -1,6 +1,7 @@
 import { render, waitFor } from "@solidjs/testing-library";
 import { beforeEach, describe, expect, it } from "vitest";
 import { SETTINGS, setClaudeUsageError, setSyncProjectError } from "~/api/fixtures";
+import { revealItemReference } from "~/lib/itemReference";
 import { prefs, setPrefs } from "~/stores/prefs";
 import {
   claudeUsageBackoffMs,
@@ -173,6 +174,19 @@ describe("startup", () => {
 });
 
 describe("item reference routing", () => {
+  it("routes the transcript module directly into the mounted workspace", async () => {
+    const workspace = await mountWorkspace();
+    setPrefs("projectPanelVisible", false);
+    setPrefs("panelSections", "items", false);
+
+    revealItemReference("cafe-0");
+
+    expect(workspace.state.activeKey).toBe("cafe");
+    expect(workspace.state.itemReveal?.id).toBe("cafe-0");
+    expect(prefs.projectPanelVisible).toBe(true);
+    expect(prefs.panelSections.items).toBe(true);
+  });
+
   it("opens the owning project and reveals its Items panel", async () => {
     const workspace = await mountWorkspace();
     setPrefs("projectPanelVisible", false);

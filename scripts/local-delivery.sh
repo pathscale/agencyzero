@@ -17,14 +17,14 @@ if [ "${2:-}" = "--offline" ] || [ "${1:-}" = "--offline" ]; then
 fi
 
 case "$mode" in
-  verify | dev | stable | blitz-debug | experimental-debug | experimental) ;;
+  verify | stable | experimental) ;;
   -h | --help)
-    echo "usage: scripts/local-delivery.sh [verify|dev|stable|blitz-debug|experimental-debug|experimental] [--offline]"
+    echo "usage: scripts/local-delivery.sh [verify|stable|experimental] [--offline]"
     exit 0
     ;;
   *)
     echo "unknown mode: $mode" >&2
-    echo "usage: scripts/local-delivery.sh [verify|dev|stable|blitz-debug|experimental-debug|experimental] [--offline]" >&2
+    echo "usage: scripts/local-delivery.sh [verify|stable|experimental] [--offline]" >&2
     exit 2
     ;;
 esac
@@ -57,43 +57,6 @@ publish_bundle() {
   fi
 }
 
-# The inspector build is the tight fix/build/test loop, not a delivery gate.
-# Keep it incremental: callers run the focused test for the code they changed,
-# then rebuild only the frontend and Blitz bundle. The full suite remains in
-# verify/dev/stable/experimental before anything is delivered.
-if [ "$mode" = "blitz-debug" ]; then
-  echo "==> AgencyZero.app (Blitz inspector)"
-  (
-    cd "$repo_root/apps/gui"
-    run_tauri build \
-      --target "$rust_target" \
-      --features blitz-inspector \
-      --config '{"bundle":{"createUpdaterArtifacts":false}}'
-  )
-  publish_bundle \
-    "$repo_root/target/$rust_target/release/bundle/macos/AgencyZero.app" \
-    "$repo_root/target/release/bundle/macos/AgencyZero.app"
-  echo "$repo_root/target/release/bundle/macos/AgencyZero.app"
-  exit 0
-fi
-
-if [ "$mode" = "experimental-debug" ]; then
-  echo "==> AgencyZero Experimental.app (Blitz inspector)"
-  (
-    cd "$repo_root/apps/gui"
-    run_tauri build \
-      --target "$rust_target" \
-      --features experimental,blitz-inspector \
-      --config tauri.experimental.conf.json \
-      --config '{"bundle":{"createUpdaterArtifacts":false}}'
-  )
-  publish_bundle \
-    "$repo_root/target/$rust_target/release/bundle/macos/AgencyZero Experimental.app" \
-    "$repo_root/target/release/bundle/macos/AgencyZero Experimental.app"
-  echo "$repo_root/target/release/bundle/macos/AgencyZero Experimental.app"
-  exit 0
-fi
-
 echo "==> frontend"
 (
   cd "$repo_root/apps/gui/frontend"
@@ -118,27 +81,13 @@ case "$mode" in
   verify)
     echo "==> verified"
     ;;
-  dev)
-    echo "==> AgencyZero Dev.app"
-    (
-      cd "$repo_root/apps/gui"
-      run_tauri build \
-        --target "$rust_target" \
-        --config tauri.dev.conf.json \
-        --config '{"bundle":{"createUpdaterArtifacts":false}}'
-    )
-    publish_bundle \
-      "$repo_root/target/$rust_target/release/bundle/macos/AgencyZero Dev.app" \
-      "$repo_root/target/release/bundle/macos/AgencyZero Dev.app"
-    echo "$repo_root/target/release/bundle/macos/AgencyZero Dev.app"
-    ;;
   stable)
-    echo "==> AgencyZero.app"
+    echo "==> AgencyZero.app (Blitz inspector)"
     (
       cd "$repo_root/apps/gui"
       run_tauri build \
         --target "$rust_target" \
-        --features blitz-runtime \
+        --features blitz-inspector \
         --config '{"bundle":{"createUpdaterArtifacts":false}}'
     )
     publish_bundle \
