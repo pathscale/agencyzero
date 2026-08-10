@@ -1190,6 +1190,22 @@ fn unresponsive_resume_was_not_disproven(
         && (stalled_injection || idle_stalled)
 }
 
+/// Whether Claude explicitly rejected the exact conversation this run resumed.
+///
+/// A timeout is ambiguous and preserves the pointer above. This response is not:
+/// Claude names the unusable id in its terminal record, so keeping it would make
+/// every press of Retry deterministically resume the same missing conversation.
+/// Match both the provider and the id so an unrelated model or server failure can
+/// never erase a healthy resume pointer.
+fn claude_rejected_resume(agent: Agent, resume: Option<&str>, error: &str) -> bool {
+    agent == Agent::Claude
+        && resume.is_some_and(|session| {
+            !session.is_empty()
+                && error.contains("No conversation found with session ID:")
+                && error.contains(session)
+        })
+}
+
 const CANCELED_STOP: &str = "canceled";
 const INTERRUPTED_STOP: &str = "interrupted";
 const RECONNECTED_STOP: &str = "reconnected";
@@ -11863,6 +11879,48 @@ async fn drive_run(
         }
         Err(error) => {
             let error_text = error.to_string();
+            let rejected_resume = claude_rejected_resume(agent, resume.as_deref(), &error_text);
+            let mut visible_error = error_text.clone();
+            if rejected_resume {
+                let key = agent_session_key(&project_id, agent);
+                // A later session must win even if a delayed failure arrives.
+                // Ordinarily the one-run slot makes this equality automatic;
+                // keeping it explicit makes the destructive scope auditable.
+                if tables.kv_get(&key).as_deref() == resume.as_deref() {
+                    match tables.kv_put(&key, String::new()).await {
+                        Ok(()) => {
+                            visible_error = "Claude could not reopen its saved conversation. Resume was reset; Retry starts a fresh Claude session.".into();
+                            crate::log!(
+                                crate::log::Level::Warn,
+                                "run",
+                                "{project_id}: Claude rejected resume {}; cleared only that provider pointer",
+                                resume.as_deref().unwrap_or_default()
+                            );
+                            note_io(
+                                &app,
+                                &io,
+                                &project_id,
+                                "received",
+                                "recovery",
+                                &visible_error,
+                            );
+                            if let Some(row) = tables.project.select(project_id.clone()) {
+                                let _ = app.emit(
+                                    "project:updated",
+                                    with_session(ProjectDto::from(row), &tables),
+                                );
+                            }
+                        }
+                        Err(clear_error) => {
+                            crate::log!(
+                                crate::log::Level::Error,
+                                "run",
+                                "{project_id}: Claude rejected resume but its pointer could not be cleared: {clear_error}"
+                            );
+                        }
+                    }
+                }
+            }
             measurement
                 .finish(&tables, &observed_session, &error_text, &turn_usage)
                 .await;
@@ -11896,11 +11954,11 @@ async fn drive_run(
              * the partial message and in the durable ledger.
              */
             let mut visible_chunk = without_incomplete_prompt_syntax_tail(&streamed_chunk);
-            if visible_chunk.trim().is_empty() && is_cybersecurity_refusal(&error_text) {
+            if visible_chunk.trim().is_empty() && is_cybersecurity_refusal(&visible_error) {
                 // Keep the exact refusal durably in the transcript. The
                 // session-local stopped event disappears on restart, which
                 // makes a safety decision too easy to miss.
-                visible_chunk = error_text.clone();
+                visible_chunk = visible_error.clone();
             }
             if !visible_chunk.trim().is_empty() || has_accountable_usage(&turn_usage) {
                 match persist_terminal_agent_chunk(
@@ -11911,7 +11969,7 @@ async fn drive_run(
                     last_chunk_id.as_deref(),
                     AgentMessageOutcome {
                         usage: usage_json(&turn_usage),
-                        stop: error_text.clone(),
+                        stop: visible_error.clone(),
                         exit_code: -1,
                     },
                 )
@@ -11939,7 +11997,7 @@ async fn drive_run(
                 agent,
                 &model,
                 &permission,
-                error_text,
+                visible_error,
                 None,
             );
         }
@@ -12874,6 +12932,28 @@ mod tests {
             true,
             false
         ));
+    }
+
+    #[test]
+    fn only_claudes_explicit_rejection_clears_the_matching_resume() {
+        let session = "5be5be0a-0cf7-4c2b-abc3-f2637236ed11";
+        let error = format!(
+            "claude-code reported a failed turn: No conversation found with session ID: {session}"
+        );
+
+        assert!(claude_rejected_resume(Agent::Claude, Some(session), &error));
+        assert!(!claude_rejected_resume(
+            Agent::Claude,
+            Some("different-session"),
+            &error
+        ));
+        assert!(!claude_rejected_resume(Agent::Codex, Some(session), &error));
+        assert!(!claude_rejected_resume(
+            Agent::Claude,
+            Some(session),
+            "claude-code reported a failed turn: API Error: 529 Overloaded"
+        ));
+        assert!(!claude_rejected_resume(Agent::Claude, None, &error));
     }
 
     #[test]
