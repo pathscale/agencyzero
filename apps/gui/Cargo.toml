@@ -42,15 +42,15 @@ eyre = "0.6"
 rkyv = { version = "0.8.9", features = ["uuid-1"] }
 derive_more = { version = "2.0.1", features = ["from", "error", "display", "debug", "into"] }
 futures = "0.3"
-backon = { path = "/private/tmp/az-backon/backon-1.6.0", default-features = false }
+backon = { version = "1.6.0", default-features = false }
 libc = "0.2"
 uuid = "1"
 chrono = { version = "0.4", default-features = false, features = ["clock", "serde", "std"] }
 tokio = { version = "1", features = ["process", "rt-multi-thread", "time"] }
 tauri = { version = "2", features = [] }
 tauri-runtime-blitz = { path = "../../../tauri-runtime-blitz/crates/tauri-runtime-blitz", optional = true }
-blitz-dom = { path = "../../../ps-blitz-render/packages/blitz-dom", features = ["system-fonts", "incremental", "log-phase-times"], optional = true }
-blitz-script = { path = "../../../ps-blitz-render/packages/blitz-script", features = ["system-fonts"], optional = true }
+blitz-dom = { package = "ps-blitz-dom", path = "../../../ps-blitz-render/packages/blitz-dom", features = ["system-fonts", "incremental", "log-phase-times"], optional = true }
+blitz-script = { package = "ps-blitz-script", path = "../../../ps-blitz-render/packages/blitz-script", features = ["system-fonts"], optional = true }
 brotli = { version = "8.0.4", default-features = false, features = ["std"], optional = true }
 url = { version = "2.5.8", optional = true }
 tauri-plugin-updater = "2"
