@@ -240,9 +240,16 @@ impl AgencyProxy {
         self.status().await
     }
 
-    /// Close admission, let every live run finish, then keep the daemon stopped.
+    /// Cancel live runs, close admission, and keep the daemon stopped.
+    ///
+    /// `Terminate`, not `Drain`. Drain lets every active run "finish
+    /// naturally", which is the one thing a wedged run never does: the daemon
+    /// stays up, Settings keeps reporting it running, and the owner is left
+    /// killing the process by hand. A button labelled Stop has to stop it, and
+    /// the runs it is holding are exactly why the owner pressed it.
     pub async fn stop(&self) -> Result<Status, String> {
-        self.shutdown(ShutdownMode::Drain, "Stopped by user").await
+        self.shutdown(ShutdownMode::Terminate, "Stopped by user")
+            .await
     }
 
     /// Cancel live runs, close admission, and keep the daemon stopped.
@@ -284,10 +291,22 @@ impl AgencyProxy {
         }
         self.set_connection_state(ConnectionState::Stopped);
         drop(client);
+        // Bounded. This used to spin until the socket refused connections,
+        // which is fine when the daemon exits and never returns when it does
+        // not: the command that was supposed to stop the proxy hangs instead,
+        // and Settings sits on a spinner with no way forward.
+        let deadline = std::time::Instant::now() + SHUTDOWN_CONFIRMATION;
         while tokio::net::UnixStream::connect(&self.socket_path)
             .await
             .is_ok()
         {
+            if std::time::Instant::now() >= deadline {
+                return Err(format!(
+                    "AgencyProxy accepted the shutdown but was still listening after {}s; \
+                     it may be held by a run that will not end",
+                    SHUTDOWN_CONFIRMATION.as_secs()
+                ));
+            }
             tokio::time::sleep(Duration::from_millis(100)).await;
         }
         self.disconnected_status(detail.into())
@@ -365,6 +384,27 @@ impl AgencyProxy {
             .map_err(|_| "AgencyProxy configuration is unavailable".to_string())?
             .clone();
         let binary = proxy_binary(configured_binary.as_deref())?;
+        // Which proxy is about to run, and how old it is. A daemon outlives the
+        // GUI that spawned it, so a rebuilt sidecar and a running one are
+        // routinely different builds. Without this, "the fix is in the bundle"
+        // and "the fix is in the process answering me" look identical.
+        crate::log!(
+            crate::log::Level::Info,
+            "proxy",
+            "spawning {} (source: {}, built {})",
+            binary.display(),
+            if configured_binary.is_some() {
+                "configured"
+            } else if std::env::var_os("AGENCY_PROXY_BIN").is_some() {
+                "AGENCY_PROXY_BIN"
+            } else {
+                "bundled beside az-gui"
+            },
+            std::fs::metadata(&binary)
+                .and_then(|meta| meta.modified())
+                .map(|at| chrono::DateTime::<chrono::Utc>::from(at).to_rfc3339())
+                .unwrap_or_else(|_| "unknown".into())
+        );
         if let Some(parent) = self.socket_path.parent() {
             std::fs::create_dir_all(parent).map_err(|error| {
                 format!("could not create AgencyProxy runtime directory: {error}")
@@ -792,14 +832,140 @@ impl ProxyRun {
                 .await
                 .map_err(|error| error.to_string())?,
         )?;
-        while self.terminal.is_none() {
-            let _ = self.recv().await;
+        /*
+         * Bounded, unlike `finish`. The reason anyone cancels is a run that
+         * stopped behaving, and a provider wedged on a command that never
+         * returns may never emit a terminal event at all. Waiting for one
+         * without a deadline is an await that never completes: the run slot
+         * stays held, the project keeps reporting a live run, and pressing
+         * Stop again does nothing because the first press is still parked in
+         * this loop. That is the cancel button appearing to do nothing while
+         * the log cheerfully records "stop requested".
+         *
+         * The proxy has accepted the cancel by this point, so it owns tearing
+         * the process down. What this deadline governs is only how long the
+         * GUI waits to hear about it before releasing the slot.
+         */
+        // Ask first whether there is anything left to wait for.
+        //
+        // A run the proxy has already finished emits no further events, and its
+        // terminal event is long gone from this attachment's cursor. Waiting
+        // for one is waiting forever, which is what made Stop look inert: the
+        // GUI was holding a run slot for a run that died minutes earlier, and
+        // every press queued behind an event that could never arrive.
+        if let Ok(ServerResponse::Runs { runs }) =
+            self.client.request(ClientMessage::ListRuns).await
+        {
+            let known = runs.iter().find(|run| run.run_id == self.run_id);
+            let ended = match known {
+                Some(run) => !matches!(
+                    run.state,
+                    agency_proxy_protocol::RunState::Running
+                        | agency_proxy_protocol::RunState::Starting
+                        | agency_proxy_protocol::RunState::WaitingApproval
+                        | agency_proxy_protocol::RunState::Finishing
+                ),
+                // Unknown to the proxy: it cannot still be running.
+                None => true,
+            };
+            if ended {
+                crate::log!(
+                    crate::log::Level::Info,
+                    "proxy",
+                    "{}: nothing to cancel, the proxy reports {}",
+                    self.run_id.0,
+                    known.map_or("no such run".to_string(), |run| format!("{:?}", run.state))
+                );
+                return self.terminal.take().unwrap_or_else(|| {
+                    Err(format!(
+                        "the run had already ended ({}); the project was released",
+                        known.map_or("unknown to AgencyProxy".to_string(), |run| format!(
+                            "{:?}",
+                            run.state
+                        ))
+                    ))
+                });
+            }
         }
+        crate::log!(
+            crate::log::Level::Info,
+            "proxy",
+            "{}: CancelRun accepted; waiting for a terminal event",
+            self.run_id.0
+        );
+        let waiting_since = std::time::Instant::now();
+        let mut seen = 0u32;
+        while self.terminal.is_none() {
+            if tokio::time::timeout(CANCEL_CONFIRMATION, self.recv())
+                .await
+                .is_err()
+            {
+                crate::log!(
+                    crate::log::Level::Warn,
+                    "proxy",
+                    "{}: no terminal event {}ms after CancelRun ({} further event(s) seen, last sequence {}).                      The daemon answering this socket does not terminate canceled runs.",
+                    self.run_id.0,
+                    waiting_since.elapsed().as_millis(),
+                    seen,
+                    self.latest_sequence
+                );
+                // What the proxy itself believes about this run. "Running with
+                // events still flowing" and "silent and wedged" are different
+                // bugs, and the GUI cannot tell them apart from out here.
+                if let Ok(ServerResponse::Runs { runs }) =
+                    self.client.request(ClientMessage::ListRuns).await
+                {
+                    match runs.iter().find(|run| run.run_id == self.run_id) {
+                        Some(run) => crate::log!(
+                            crate::log::Level::Warn,
+                            "proxy",
+                            "{}: the proxy still lists this run as {:?}",
+                            self.run_id.0,
+                            run.state
+                        ),
+                        None => crate::log!(
+                            crate::log::Level::Warn,
+                            "proxy",
+                            "{}: the proxy no longer lists this run, yet sent no terminal event",
+                            self.run_id.0
+                        ),
+                    }
+                }
+                return Err(format!(
+                    "AgencyProxy accepted the cancel but reported no outcome within {}s; \
+                     the run slot was released so the project is usable again",
+                    CANCEL_CONFIRMATION.as_secs()
+                ));
+            }
+            seen = seen.saturating_add(1);
+        }
+        crate::log!(
+            crate::log::Level::Info,
+            "proxy",
+            "{}: terminal event after {}ms",
+            self.run_id.0,
+            waiting_since.elapsed().as_millis()
+        );
         self.terminal
             .take()
             .unwrap_or_else(|| Err("AgencyProxy canceled without a terminal outcome".into()))
     }
 }
+
+/// How long a shutdown waits for the daemon to stop listening.
+///
+/// Generous, because a cooperative terminate has provider process groups to
+/// tear down, but finite: an unbounded wait turns "Stop" into a command that
+/// never returns.
+const SHUTDOWN_CONFIRMATION: Duration = Duration::from_secs(15);
+
+/// How long a cancel waits for the proxy to confirm before releasing the slot.
+///
+/// Long enough for a healthy provider to tear down and report, short enough
+/// that a wedged one does not hold the project hostage. The cancel itself is
+/// already accepted by the proxy when this starts, so expiring it loses the
+/// outcome, never the teardown.
+const CANCEL_CONFIRMATION: Duration = Duration::from_secs(10);
 
 fn event_from_wire(event: RunEvent) -> Result<Option<Event>, String> {
     let event = match event {

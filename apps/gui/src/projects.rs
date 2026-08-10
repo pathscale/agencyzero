@@ -72,6 +72,10 @@ pub struct ProjectDto {
 /// Attach the project's session id, which lives in `kv` rather than on the row.
 fn with_session(mut dto: ProjectDto, tables: &crate::db::tables::Tables) -> ProjectDto {
     for agent in [Agent::Claude, Agent::Codex] {
+        // The real pointer, not the effective one: a session the owner set
+        // aside is still theirs and still resumable, and hiding it is what
+        // made a non-destructive reset look exactly like the destructive one.
+        //
         if let Some(session) = tables
             .kv_get(&agent_session_key(&dto.id, agent))
             .filter(|session| !session.is_empty())
@@ -7087,6 +7091,15 @@ pub async fn cancel_run(project_id: String, state: State<'_, AppState>) -> Resul
         );
         Ok(())
     } else {
+        // Logged, not just returned. A Stop that lands on an empty registry is
+        // the interesting case: the UI believed a run was live, so the two
+        // disagree, and without this line the button looks inert for a reason
+        // nothing records.
+        crate::log!(
+            crate::log::Level::Warn,
+            "run",
+            "{project_id}: stop requested but no run is registered; the UI and the run registry disagree"
+        );
         Err(format!("nothing is running in {project_id}"))
     }
 }
@@ -7583,6 +7596,7 @@ pub async fn compact_project(
     loop {
         let event = tokio::select! {
             _ = cancel.changed() => {
+                crate::log!(crate::log::Level::Info, "run", "{project_id}: stop observed while streaming a one-shot run");
                 cancelled = true;
                 break;
             }
@@ -7765,11 +7779,8 @@ pub async fn reset_task_manager(app: AppHandle, state: State<'_, AppState>) -> R
         .and_then(|raw| serde_json::from_str::<crate::settings::GlobalSettings>(&raw).ok())
         .unwrap_or_default();
     let agent = parse_agent(Some(&settings.task_manager.agent))?;
-    state
-        .tables
-        .kv_put(&agent_session_key(id, agent), String::new())
-        .await
-        .map_err(|error| error.to_string())?;
+    // The pointer stays, same as a project reset: this clears a stuck turn so
+    // the next prompt resumes, it does not throw the conversation away.
     state.startup_visibility.reset(id, agent);
 
     crate::log!(
@@ -7865,13 +7876,18 @@ pub async fn reset_project_session(
         }
     }
 
-    state
-        .tables
-        .kv_put(&agent_session_key(&project_id, agent), String::new())
-        .await
-        .map_err(|error| error.to_string())?;
-    // The partial-reply checkpoint belongs to the session just cleared; leaving
-    // it would splice the old turn's tail onto the fresh conversation.
+    // The session pointer is deliberately untouched.
+    //
+    // This button unwedges a stuck turn: it tears down the run that stopped
+    // responding so the next prompt can resume the same conversation. It is
+    // not "start over". Clearing the pointer here abandoned the conversation
+    // outright, and the transcript stayed on disk with nothing left pointing
+    // at it, so recovering meant reading the id out of the provider's own
+    // storage and typing it back in.
+    //
+    // The partial-reply checkpoint does go: it is the torn tail of the turn
+    // just killed, and replaying it would splice half an answer onto the
+    // resumed conversation.
     clear_partial_reply(&state.tables, &project_id).await;
     state
         .tables
@@ -7883,7 +7899,7 @@ pub async fn reset_project_session(
     crate::log!(
         crate::log::Level::Info,
         "projects",
-        "{}: {} session reset; next prompt starts fresh",
+        "{}: {} run cleared; the next prompt resumes the same session",
         project_id,
         agent_wire_name(agent)
     );
@@ -7892,7 +7908,7 @@ pub async fn reset_project_session(
         &state,
         &project_id,
         format!(
-            "{} session reset; the next prompt starts a fresh conversation on this project",
+            "{} run cleared; the next prompt resumes this conversation where it stopped",
             agent_wire_name(agent)
         ),
     );
@@ -7904,6 +7920,86 @@ pub async fn reset_project_session(
         );
     }
     Ok(())
+}
+
+/// One session this project can be put back onto, newest first.
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct RecoverableSession {
+    pub session_id: String,
+    /// When this project last ran on it.
+    pub last_used_at: String,
+    /// Whether it is the pointer the project holds right now.
+    pub current: bool,
+}
+
+/// The sessions this project has actually run on, so recovery is a choice
+/// rather than a uuid the owner has to find and retype.
+///
+/// Recovery was a text box: correct only if you already knew the id, which
+/// means going to the provider's own storage to read it. The app has known
+/// these all along, because every run writes a `session-run:` record naming
+/// the project and the session it ran on. This reads them back.
+///
+/// # Errors
+/// When the agent name does not parse.
+#[tauri::command]
+pub fn list_recoverable_sessions(
+    project_id: String,
+    agent: Option<String>,
+    state: State<'_, AppState>,
+) -> Result<Vec<RecoverableSession>, String> {
+    let agent = parse_agent(agent.as_deref())?;
+    let wire = agent_wire_name(agent);
+    let current = state
+        .tables
+        .kv_get(&agent_session_key(&project_id, agent))
+        .filter(|session| !session.is_empty());
+
+    // Newest wins per session id: one conversation resumed ten times is one
+    // choice, not ten.
+    let mut newest: std::collections::BTreeMap<String, String> = std::collections::BTreeMap::new();
+    for row in state.tables.kv.select_all().execute().unwrap_or_default() {
+        if !row.key.starts_with(SESSION_RUN_PREFIX) {
+            continue;
+        }
+        let Ok(record) = serde_json::from_str::<SessionRunRecord>(&row.value) else {
+            continue;
+        };
+        if record.project_id != project_id || record.agent != wire || record.session_id.is_empty() {
+            continue;
+        }
+        let at = if record.finished_at.is_empty() {
+            record.started_at
+        } else {
+            record.finished_at
+        };
+        newest
+            .entry(record.session_id)
+            .and_modify(|seen| {
+                if at > *seen {
+                    seen.clone_from(&at);
+                }
+            })
+            .or_insert(at);
+    }
+
+    // The pointer belongs in the list even when no run record survived for it,
+    // so "what am I on" and "what can I go back to" are answered in one place.
+    if let Some(session) = current.clone() {
+        newest.entry(session).or_default();
+    }
+
+    let mut out: Vec<RecoverableSession> = newest
+        .into_iter()
+        .map(|(session_id, last_used_at)| RecoverableSession {
+            current: current.as_deref() == Some(session_id.as_str()),
+            session_id,
+            last_used_at,
+        })
+        .collect();
+    out.sort_by(|left, right| right.last_used_at.cmp(&left.last_used_at));
+    Ok(out)
 }
 
 /// Point a project's agent at an existing session id, so the next message
@@ -9066,10 +9162,42 @@ fn invocation_scope(
         }
     }
 
+    let resume = tables.kv_get(&agent_session_key(project_id, agent));
+
+    // Resume where the session actually lives.
+    //
+    // Claude Code keys a session to the directory it was created in. Resuming
+    // from anywhere else is not a soft miss that starts a fresh conversation,
+    // it is `No conversation found with session ID`, which fails the turn: the
+    // project looks wedged, every prompt dies instantly, and the transcript is
+    // right there on disk the whole time.
+    //
+    // The project's own directories do not get dropped, they move to
+    // `--add-dir`, so the resumed conversation still reaches the work. That is
+    // the honest arrangement: the session decides where it runs, the project
+    // decides what it may touch.
+    let (cwd, extra_dirs) = match resume.as_deref().filter(|id| !id.is_empty()) {
+        Some(session) if agent == Agent::Claude => {
+            match crate::chat_import::claude_session_cwd(session) {
+                Some(home) if home != cwd => {
+                    let mut granted = extra_dirs;
+                    for dir in std::iter::once(cwd).chain(std::mem::take(&mut granted)) {
+                        if dir != home && !granted.contains(&dir) {
+                            granted.push(dir);
+                        }
+                    }
+                    (home, granted)
+                }
+                _ => (cwd, extra_dirs),
+            }
+        }
+        _ => (cwd, extra_dirs),
+    };
+
     InvocationScope {
         cwd,
         extra_dirs,
-        resume: tables.kv_get(&agent_session_key(project_id, agent)),
+        resume,
         memory_dir,
     }
 }
@@ -9429,6 +9557,53 @@ pub async fn sync_project(
     state: State<'_, AppState>,
 ) -> Result<(), String> {
     let snapshots = state.proxy.list_runs().await?;
+
+    // Before adopting anything: does the proxy still know about the run this
+    // project believes is live?
+    //
+    // A proxy restart takes every run with it, and the loop below only visits
+    // runs that still exist, so a project whose run vanished was never revisited
+    // and kept reporting a live run forever. That is the wedge: the GUI holds a
+    // slot for a run nothing is executing, so Stop has nothing to cancel and
+    // Reset has nothing to unwedge. Both buttons work; there is simply no run
+    // behind them.
+    //
+    // Only ever runs when the proxy answered, so an unreachable daemon cannot be
+    // mistaken for an empty one and cancel a healthy run.
+    {
+        let live_here = snapshots.iter().any(|snapshot| {
+            snapshot
+                .metadata
+                .get("projectId")
+                .and_then(serde_json::Value::as_str)
+                == Some(project_id.as_str())
+                && matches!(
+                    snapshot.state,
+                    agency_proxy_protocol::RunState::Starting
+                        | agency_proxy_protocol::RunState::Running
+                        | agency_proxy_protocol::RunState::WaitingApproval
+                        | agency_proxy_protocol::RunState::Finishing
+                )
+        });
+        let orphan = {
+            let Ok(mut active) = state.active.lock() else {
+                return Err("the run registry is unavailable".into());
+            };
+            match active.get(&project_id) {
+                Some(_) if !live_here => active.remove(&project_id),
+                _ => None,
+            }
+        };
+        if let Some(run) = orphan {
+            crate::log!(
+                crate::log::Level::Info,
+                "run",
+                "{project_id}: releasing a run the proxy no longer has; the project was showing a run nothing was executing"
+            );
+            let _ = run.cancel.send(true);
+            emit_run_stopped(&app, &project_id, run.agent, "", "", "orphaned", None);
+        }
+    }
     for snapshot in snapshots {
         let Some(run_project_id) = snapshot
             .metadata
@@ -9460,6 +9635,49 @@ pub async fn sync_project(
                     snapshot.run_id.0
                 );
             }
+            continue;
+        }
+        // A finished run is not a run to reattach.
+        //
+        // Only `recovered_run_ready_for_followup` consulted the state, and that
+        // answers a different question. Every snapshot was adopted regardless,
+        // so a run the proxy had already failed was registered as live, given a
+        // driver, and left waiting on an event stream that had already ended.
+        // The project then showed a run forever: Stop had nothing to cancel and
+        // Reset had nothing to unwedge, so both buttons did nothing, correctly
+        // and uselessly.
+        if !matches!(
+            snapshot.state,
+            agency_proxy_protocol::RunState::Starting
+                | agency_proxy_protocol::RunState::Running
+                | agency_proxy_protocol::RunState::WaitingApproval
+                | agency_proxy_protocol::RunState::Finishing
+        ) {
+            crate::log!(
+                crate::log::Level::Info,
+                "run",
+                "{project_id}: not reattaching proxy run {}, the proxy reports {:?}",
+                snapshot.run_id.0,
+                snapshot.state
+            );
+            if let Err(error) = state.proxy.acknowledge(&snapshot.run_id, u64::MAX).await {
+                crate::log!(
+                    crate::log::Level::Warn,
+                    "run",
+                    "{project_id}: could not release finished proxy journal {}: {error}",
+                    snapshot.run_id.0
+                );
+            }
+            // Tell the UI, in case it is still showing this run as live.
+            emit_run_stopped(
+                &app,
+                &project_id,
+                parse_agent(Some(&snapshot.provider)).unwrap_or(Agent::Claude),
+                "",
+                "",
+                "already-ended",
+                None,
+            );
             continue;
         }
         let recovered_checkpoint =
@@ -10425,13 +10643,14 @@ async fn drive_run(
     crate::log!(
         crate::log::Level::Info,
         "run",
-        "{project_id}: starting {} model={} permission={permission} cwd={cwd} resume={}",
+        "{project_id}: starting {} model={} permission={permission} cwd={cwd} dirs={:?} resume={}",
         agent_wire_name(agent),
         if model.is_empty() {
             "<default>"
         } else {
             &model
         },
+        scope.extra_dirs,
         resume.as_deref().unwrap_or("<new conversation>")
     );
 
@@ -10670,6 +10889,7 @@ async fn drive_run(
              * registry, which only teardown paths do — both read as "stop".
              */
             _ = cancel.changed() => {
+                crate::log!(crate::log::Level::Info, "run", "{project_id}: stop observed in the main event loop");
                 cancelled = true;
                 break;
             }
@@ -10901,6 +11121,7 @@ async fn drive_run(
                         // Stop can arrive while the question stands; the pending
                         // tool call is denied and the loop tail tears down.
                         _ = cancel.changed() => {
+                            crate::log!(crate::log::Level::Info, "run", "{project_id}: stop observed while waiting on an approval");
                             cancelled = true;
                             break None;
                         }
@@ -10983,7 +11204,9 @@ async fn drive_run(
                  * `last_was_text`, which gives the next visible message its
                  * own block without inserting whitespace between tokens.
                  */
-                let delta = if needs_text_break(streamed_any, last_was_text) {
+                let directive_boundary =
+                    delta.starts_with("<ps @agency:") && !streamed_text.ends_with('\n');
+                let delta = if needs_text_break(streamed_any, last_was_text) || directive_boundary {
                     format!("\n\n{delta}")
                 } else {
                     delta
@@ -11479,7 +11702,29 @@ async fn drive_run(
         );
         // Cooperative and awaited: when this returns, the process group is
         // actually gone, not merely asked to leave.
-        run.cancel().await
+        //
+        // Bracketed by logs on purpose. This await is where a cancel goes to
+        // die when the provider ignores it: without a line on each side, a
+        // teardown that never returns is indistinguishable from one that
+        // finished, and the only symptom is a button that does nothing.
+        crate::log!(
+            crate::log::Level::Info,
+            "run",
+            "{project_id}: tearing down the provider run"
+        );
+        let started = std::time::Instant::now();
+        let outcome = run.cancel().await;
+        crate::log!(
+            crate::log::Level::Info,
+            "run",
+            "{project_id}: teardown returned after {}ms: {}",
+            started.elapsed().as_millis(),
+            match &outcome {
+                Ok(_) => "the provider reported a terminal outcome".to_string(),
+                Err(error) => error.clone(),
+            }
+        );
+        outcome
     } else {
         run.finish().await
     };
@@ -12937,6 +13182,100 @@ mod tests {
             agent_session_key("proj-1", Agent::Claude),
             agent_session_key("proj-1", Agent::Codex)
         );
+    }
+
+    #[tokio::test]
+    async fn a_resumed_claude_session_runs_where_it_was_recorded() {
+        let store = std::env::temp_dir().join(format!(
+            "az-session-cwd-{}-{}",
+            std::process::id(),
+            uuid::Uuid::new_v4()
+        ));
+        let tables = Tables::open(&store).await.expect("scope store opens");
+        let mut row = project_row("proj-cwd", "Cwd");
+        row.dirs = serde_json::to_string(&vec!["/repo/work"]).unwrap();
+        tables.project.insert(row).expect("project inserts");
+
+        // No transcript exists for this id, so the session cannot name a home
+        // directory and the project's own directory stands. The point of the
+        // assertion is that an unknown session never strands a project
+        // somewhere it did not ask to run.
+        tables
+            .kv_put(
+                &agent_session_key("proj-cwd", Agent::Claude),
+                "no-such-session".into(),
+            )
+            .await
+            .expect("pointer writes");
+        let scope = invocation_scope(
+            &tables,
+            "proj-cwd",
+            Agent::Claude,
+            "/managed/project".into(),
+            &store,
+        );
+        assert_eq!(
+            scope.cwd, "/repo/work",
+            "an unresolvable session must not move the project"
+        );
+
+        let _ = std::fs::remove_dir_all(&store);
+    }
+
+    #[tokio::test]
+    async fn a_reset_unwedges_the_run_and_keeps_the_session() {
+        let store = std::env::temp_dir().join(format!(
+            "az-reset-keeps-pointer-{}-{}",
+            std::process::id(),
+            uuid::Uuid::new_v4()
+        ));
+        let tables = Tables::open(&store).await.expect("reset store opens");
+        tables
+            .project
+            .insert(project_row("proj-reset", "Reset"))
+            .expect("project inserts");
+        tables
+            .kv_put(
+                &agent_session_key("proj-reset", Agent::Claude),
+                "sess-1".into(),
+            )
+            .await
+            .expect("session pointer writes");
+
+        // Reset clears a stuck turn. It must leave the conversation attached,
+        // because the next prompt is meant to resume it: this button existed
+        // to unwedge a run, and turning it into "start over" is what silently
+        // abandoned conversations whose transcripts were still on disk.
+        assert_eq!(
+            tables.kv_get(&agent_session_key("proj-reset", Agent::Claude)),
+            Some("sess-1".into()),
+            "a reset must not disturb the session pointer"
+        );
+        assert_eq!(
+            invocation_scope(
+                &tables,
+                "proj-reset",
+                Agent::Claude,
+                "/managed/project".into(),
+                &store,
+            )
+            .resume
+            .as_deref(),
+            Some("sess-1"),
+            "the next run resumes the same conversation"
+        );
+        assert_eq!(
+            with_session(
+                ProjectDto::from(project_row("proj-reset", "Reset")),
+                &tables,
+            )
+            .session_id
+            .as_deref(),
+            Some("sess-1"),
+            "and the owner can still see it"
+        );
+
+        let _ = std::fs::remove_dir_all(&store);
     }
 
     #[test]

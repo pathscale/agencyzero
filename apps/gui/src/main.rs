@@ -175,6 +175,7 @@ const IMPLEMENTED: &[&str] = &[
     "get_project_verbosity",
     "set_project_verbosity",
     "reset_project_session",
+    "list_recoverable_sessions",
     "adopt_session",
     "get_build_info",
     "get_persistence_failure",
@@ -1517,6 +1518,14 @@ fn build_menu<R: Runtime>(app: &tauri::AppHandle<R>) -> tauri::Result<Menu<R>> {
         .item(&quit)
         .build()?;
 
+    // AppKit's predefined edit items consume Cmd+X/C/V/A before the custom
+    // runtime receives a key event, but Blitz's text editor is the component
+    // that actually owns selection and clipboard state. Keep the standard
+    // native menu for WebKit; leave its Blitz counterpart accelerator-free so
+    // the renderer can handle the shortcuts instead of silently dropping them.
+    #[cfg(feature = "blitz-runtime")]
+    let edit_menu = SubmenuBuilder::new(app, "Edit").build()?;
+    #[cfg(not(feature = "blitz-runtime"))]
     let edit_menu = SubmenuBuilder::new(app, "Edit")
         .undo()
         .redo()
@@ -1959,6 +1968,7 @@ fn main() {
             projects::get_project_verbosity,
             projects::set_project_verbosity,
             projects::reset_project_session,
+            projects::list_recoverable_sessions,
             projects::adopt_session,
             get_build_info,
             get_persistence_failure,
