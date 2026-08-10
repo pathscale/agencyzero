@@ -173,7 +173,7 @@ export function QuestionReplyPill(props: {
       {(question) => (
         <span
           title={question().text}
-          class="flex w-fit items-center gap-1.5 rounded-full border border-primary/35 bg-primary/10 py-1 pr-1.5 pl-2.5 text-[11.5px]"
+          class="flex w-fit max-w-full items-center gap-1.5 self-start rounded-full border border-primary/35 bg-primary/10 py-1 pr-1.5 pl-2.5 text-[11.5px]"
         >
           <Icon name="message-square-dashed" class="shrink-0 text-[11px] text-primary" />
           <span class="shrink-0 font-semibold text-primary">
