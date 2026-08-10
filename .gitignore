@@ -13,3 +13,4 @@ node_modules
 # Scratch working notes, never committed
 *.local.md
 /review.md
+__pycache__/
