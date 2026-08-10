@@ -256,12 +256,48 @@ would have cost a day.
   inspector runs have it. Converting the loop to "event driven" wins nothing
   because it already is.
 
+### 6. The layout cost is taffy cache thrash, not invalidation breadth
+
+`resolve` now prints what it recomputed, not just what it took:
+
+```
+computed 16842/4899 nodes, 15 caches cleared]: 7.8ms    <- one keystroke
+computed     0/4899 nodes,  0 caches cleared]: 1.2ms    <- idle
+```
+
+Fifteen caches cleared, and **16,842 `compute_child_layout` calls on a 4,899
+node tree**: 3.4x the whole document from fifteen dirty nodes. The invalidation
+is already tight, so narrowing damage further cannot help. Taffy keys its cache
+on available space, and intrinsic sizing re-descends the subtree with values
+that never match what was stored, so the cache absorbs almost nothing.
+
+That is the thing to fix, and it is one level below anything tried so far.
+
+Absolute numbers move with composer content: the same keystroke costs 22 ms with
+sixty characters in the field and 12 ms when empty, because the textarea's own
+measurement grows. Compare within one state, never across.
+
+### 7. Settings is a JavaScript cost, not a layout one
+
+Switching to Settings: **150 ms in `event:click`, of which 32 ms is layout.** The
+resolves it triggers are small (27 nodes computed, 592 µs). The remaining ~118 ms
+is component construction, which matches the earlier attribution during the first
+open. Do not look for this one in the engine.
+
+Tabs are retained, not unmounted: inactive tabs get `class="hidden"` in
+[`App.tsx`](../apps/gui/src/App.tsx), which is `display: none`. Taffy skips them,
+so they cost memory and style but not layout, and "cache the neighbouring tabs"
+is already what happens. The cost lands when a tab is shown and its whole
+subtree lays out at once.
+
 ## What is still open
 
-- **The `layout` phase of a script-forced resolve.** 18 ms, and the single
-  largest cost in the application today. Split taffy's pass the way
-  `layout:flush_from_script` split the flush, and answer why one textarea's
-  `height: auto` costs 50x a frame resolve.
+- **Taffy cache misses during intrinsic sizing.** 16,842 recomputations from 15
+  dirty nodes, and the single largest engine cost in the application.
+- **Settings' ~118 ms of component construction.** Application-side.
+- **Memory.** 819 MB RSS on a fresh stable instance with a 4,899 node tree, and
+  3.9 GB on a long-running Experimental one. Unexplained, and worth explaining
+  before anything is added that retains more.
 - **The mount stall.** One `poll_hook` call measured 812 ms, and worst-case
   figures of 785 ms to 1369 ms still show up once per session. Steady state is
   0.67 ms, so this is one event, not a per-frame cost.
