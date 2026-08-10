@@ -20,6 +20,7 @@ import { useWorkspace } from "~/stores/workspace";
 export function useAppShell(): {
   isClosing: Accessor<boolean>;
   closeError: Accessor<string>;
+  quitsProxy: Accessor<boolean>;
   persistenceFailure: Accessor<string>;
   cancelClose: () => void;
   confirmClose: () => void;
@@ -27,11 +28,13 @@ export function useAppShell(): {
   const { state, actions } = useWorkspace();
   const [isClosing, setIsClosing] = createSignal(false);
   const [closeError, setCloseError] = createSignal("");
+  const [quitsProxy, setQuitsProxy] = createSignal(false);
   const [persistenceFailure, setPersistenceFailure] = createSignal("");
 
   const cancelClose = () => {
     setIsClosing(false);
     setCloseError("");
+    setQuitsProxy(false);
   };
 
   const confirmClose = () => {
@@ -41,7 +44,8 @@ export function useAppShell(): {
     // macOS keeps receiving events instead of showing a beachball. A drain
     // failure must keep the process alive: destroying the window in this catch
     // was exactly how a visibly clean quit discarded a failed checkpoint clear.
-    void actions.quitApp().catch((cause) => {
+    const quit = quitsProxy() ? actions.quitAppAndProxy() : actions.quitApp();
+    void quit.catch((cause) => {
       const detail = describeError(cause);
       log.error(`safe quit was blocked: ${detail}`);
       setCloseError(detail);
@@ -50,6 +54,20 @@ export function useAppShell(): {
   };
 
   const requestClose = confirmClose;
+  const requestQuitAll = () => {
+    setCloseError("");
+    if ((state.agencyProxy?.activeRuns ?? 0) === 0) {
+      setQuitsProxy(false);
+      void actions.quitAppAndProxy().catch((cause) => {
+        setCloseError(describeError(cause));
+        setQuitsProxy(true);
+        setIsClosing(true);
+      });
+      return;
+    }
+    setQuitsProxy(true);
+    setIsClosing(true);
+  };
 
   onMount(() => {
     if (!isTauri()) return;
@@ -70,6 +88,7 @@ export function useAppShell(): {
     track(listen("menu:prev-tab", () => actions.cycleTab(-1)));
     track(listen("menu:next-tab", () => actions.cycleTab(1)));
     track(listen("menu:quit", requestClose));
+    track(listen("menu:quit-all", requestQuitAll));
     // Register first, then query the retained backend failure. This ordering
     // covers both sides of startup without a gap where an event can be lost.
     void (async () => {
@@ -109,5 +128,5 @@ export function useAppShell(): {
     });
   });
 
-  return { isClosing, closeError, persistenceFailure, cancelClose, confirmClose };
+  return { isClosing, closeError, quitsProxy, persistenceFailure, cancelClose, confirmClose };
 }

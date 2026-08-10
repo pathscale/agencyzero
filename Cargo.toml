@@ -2,6 +2,7 @@
 resolver = "3"
 members = [
     "apps/gui",
+    "crates/blitz-bench",
     "crates/core",
     "crates/mcp-proxy",
     "crates/wt-migrate",
@@ -9,7 +10,7 @@ members = [
 ]
 
 [workspace.package]
-version = "0.5.2"
+version = "0.5.12"
 edition = "2024"
 publish = false
 
@@ -19,6 +20,18 @@ az-core = { path = "crates/core" }
 # Heavy deps are declared per-crate on purpose: only apps/gui pulls in the
 # Tauri stack, so agent/proxy builds never trigger a webview toolchain build.
 
+# Local debugging only, alongside the path overrides in apps/gui/Cargo.toml.
+# `tauri-runtime-blitz` takes blitz-dom and blitz-script by path but blitz-shell
+# and blitz-traits from git at the same rev. Cargo treats those as two distinct
+# crates, so the same trait exists twice and `ScriptDocument` stops satisfying
+# `Document`, which reads as eleven unrelated type errors inside a dependency
+# nobody edited. Redirect the git source at the checkout the paths already use.
+# Same reason as the ps-blitz patch below: a local checkout so the present mode
+# can be switched at runtime. FIFO blocks the main thread in `present`, which
+# stalls event handling for a whole refresh interval per frame.
+# The hybrid backend takes `anyrender` from crates.io while the vello backend
+# takes the patched git one, which gives two copies of the trait and a renderer
+# that cannot satisfy it. Pin both to the same checkout.
 [profile.dev]
 # GUI diagnostics come from logs and backtraces. Generating full symbol tables
 # for WebKit and Tauri dependencies dominated clean local check time.
@@ -31,7 +44,25 @@ debug = 0
 incremental = true
 
 [profile.release]
+# Stripped for release, and profiling is an override rather than an edit.
+#
+# `sample` and Instruments attribute time to symbols, so a stripped binary
+# profiles as a single `???` frame: the 2026-08-10 profile took 1036 samples
+# inside az-gui without naming one function in it. That made it tempting to keep
+# symbols on permanently, which is how a debugging setting ends up shipping.
+#
+# Cargo reads profile settings from the environment, so a profiling build needs
+# no manifest change and cannot be committed by accident:
+#
+#   CARGO_PROFILE_RELEASE_STRIP=false CARGO_PROFILE_RELEASE_DEBUG=1 \
+#     scripts/local-delivery.sh stable
+#
+# That works through the tauri wrapper too, and there is no second profile to
+# drift out of step with this one.
 strip = true
+# Generating debug info that `strip` then discards costs build time and buys
+# nothing. The override above turns both back on together.
+debug = 0
 # Release runners retain `target` through rust-cache. Incremental artifacts make
 # the next standard or experimental bundle reuse unchanged Tauri dependencies.
 incremental = true

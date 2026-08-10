@@ -16,6 +16,7 @@ mod projects;
 mod prs;
 mod questions;
 mod quota;
+mod retry;
 mod settings;
 mod store_backup;
 mod study;
@@ -40,11 +41,15 @@ pub(crate) type AppHandle = tauri::AppHandle<tauri_runtime_blitz::BlitzRuntime>;
 pub(crate) type AppHandle = tauri::AppHandle<tauri::Wry>;
 
 #[cfg(feature = "blitz-runtime")]
-fn standard_identity_dir(bundle_dir: PathBuf) -> PathBuf {
-    bundle_dir
-        .parent()
-        .map(|parent| parent.join("com.pathscale.agencyzero"))
-        .unwrap_or(bundle_dir)
+fn blitz_profile_dir(bundle_dir: PathBuf) -> PathBuf {
+    if cfg!(feature = "experimental") {
+        bundle_dir
+    } else {
+        bundle_dir
+            .parent()
+            .map(|parent| parent.join("com.pathscale.agencyzero"))
+            .unwrap_or(bundle_dir)
+    }
 }
 
 use crate::db::location::{self, DataLocation};
@@ -170,10 +175,12 @@ const IMPLEMENTED: &[&str] = &[
     "get_project_verbosity",
     "set_project_verbosity",
     "reset_project_session",
+    "list_recoverable_sessions",
     "adopt_session",
     "get_build_info",
     "get_persistence_failure",
     "quit_app",
+    "quit_app_and_proxy",
     "relaunch_app",
     "list_agent_io",
     "get_io_persist",
@@ -336,9 +343,35 @@ fn write_restart_resume(state: &AppState, project_id: &str, actor: &str) -> Resu
         .map_err(|error| format!("could not publish restart-resume marker: {error}"))
 }
 
-fn read_restart_resume(config_dir: &std::path::Path) -> Option<RestartResume> {
+fn take_restart_resume(config_dir: &std::path::Path) -> Option<RestartResume> {
     let path = restart_resume_path(config_dir);
-    let raw = std::fs::read(&path).ok()?;
+    let consuming = path.with_extension("json.consuming");
+    if !path.is_file() {
+        return None;
+    }
+    if let Err(error) = std::fs::rename(&path, &consuming) {
+        crate::log!(
+            log::Level::Error,
+            "boot",
+            "could not consume {} exactly once: {error}",
+            path.display()
+        );
+        return None;
+    }
+    let raw = match std::fs::read(&consuming) {
+        Ok(raw) => raw,
+        Err(error) => {
+            crate::log!(
+                log::Level::Warn,
+                "boot",
+                "could not read consumed restart marker {}: {error}",
+                consuming.display()
+            );
+            let _ = std::fs::remove_file(&consuming);
+            return None;
+        }
+    };
+    let _ = std::fs::remove_file(&consuming);
     match serde_json::from_slice(&raw) {
         Ok(marker) => Some(marker),
         Err(error) => {
@@ -346,7 +379,7 @@ fn read_restart_resume(config_dir: &std::path::Path) -> Option<RestartResume> {
                 log::Level::Warn,
                 "boot",
                 "could not decode {}: {error}",
-                path.display()
+                consuming.display()
             );
             None
         }
@@ -399,10 +432,7 @@ async fn resume_after_restart(app: AppHandle, marker: RestartResume) {
         study: None,
     };
     match projects::send_message(app.clone(), input, state).await {
-        Ok(_) => {
-            let _ = std::fs::remove_file(restart_resume_path(&app.state::<AppState>().config_dir));
-            crate::log!(log::Level::Info, "boot", "restart-resume run started");
-        }
+        Ok(_) => crate::log!(log::Level::Info, "boot", "restart-resume run started"),
         Err(error) => crate::log!(
             log::Level::Error,
             "boot",
@@ -587,6 +617,54 @@ mod restart_resume_tests {
         assert_eq!(marker.project_id, "project-origin");
         assert_eq!(marker.agent, settings.default_agent);
     }
+
+    #[test]
+    fn a_restart_marker_is_consumed_once_even_when_resume_cannot_start() {
+        let dir = std::env::temp_dir().join(format!(
+            "az-restart-marker-{}-{}",
+            std::process::id(),
+            uuid::Uuid::now_v7()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        let marker = RestartResume {
+            project_id: "project-origin".into(),
+            agent: "codex".into(),
+            model: "gpt-5.6-sol".into(),
+            permission: "auto".into(),
+            effort: "high".into(),
+            prompt: RESTART_RESUME_PROMPT.into(),
+        };
+        std::fs::write(
+            restart_resume_path(&dir),
+            serde_json::to_vec(&marker).unwrap(),
+        )
+        .unwrap();
+
+        assert!(take_restart_resume(&dir).is_some());
+        assert!(take_restart_resume(&dir).is_none());
+        assert!(!restart_resume_path(&dir).exists());
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[cfg(feature = "blitz-runtime")]
+    #[test]
+    fn blitz_profile_routing_never_collapses_experimental_into_stable() {
+        let experimental = PathBuf::from(
+            "/Users/example/Library/Application Support/com.pathscale.agencyzero.experimental",
+        );
+        let routed = blitz_profile_dir(experimental.clone());
+
+        if cfg!(feature = "experimental") {
+            assert_eq!(routed, experimental);
+        } else {
+            assert_eq!(
+                routed,
+                PathBuf::from(
+                    "/Users/example/Library/Application Support/com.pathscale.agencyzero"
+                )
+            );
+        }
+    }
 }
 
 /// Which commands Rust answers. See [`IMPLEMENTED`].
@@ -609,12 +687,18 @@ fn list_capabilities() -> Vec<String> {
 #[serde(rename_all = "camelCase")]
 struct BuildInfo {
     version: &'static str,
+    runtime: &'static str,
     git_sha: &'static str,
     built_at: &'static str,
 }
 
 const BUILD: BuildInfo = BuildInfo {
     version: az_core::VERSION,
+    runtime: if cfg!(feature = "blitz-runtime") {
+        "blitz"
+    } else {
+        "wry"
+    },
     git_sha: env!("AZ_GIT_SHA"),
     built_at: env!("AZ_BUILT_AT"),
 };
@@ -1186,6 +1270,27 @@ async fn quit_app(app: AppHandle, state: State<'_, AppState>) -> Result<(), Stri
     Ok(())
 }
 
+/// Terminate AgencyProxy, let its run handlers settle, drain WorkTable, then
+/// exit the GUI. Ordinary Quit deliberately leaves the proxy alive.
+#[tauri::command]
+async fn quit_app_and_proxy(app: AppHandle, state: State<'_, AppState>) -> Result<(), String> {
+    state.proxy.terminate().await?;
+
+    let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(15);
+    while state.live_run_count() != 0 {
+        if tokio::time::Instant::now() >= deadline {
+            return Err(
+                "AgencyProxy stopped, but AgencyZero is still settling terminated runs; try Quit Both again in a moment"
+                    .into(),
+            );
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(25)).await;
+    }
+    state.drain_tables_once().await?;
+    app.exit(0);
+    Ok(())
+}
+
 /// The persisted settings record, or the defaults on a first run.
 ///
 /// A record that fails to parse is replaced by the defaults rather than failing
@@ -1282,7 +1387,19 @@ pub(crate) async fn apply_settings_patch(
         .map(|boundary| study::record_boundary(&state.tables, &parsed.study_analytics, boundary))
         .transpose()?;
 
+    #[cfg(feature = "blitz-runtime")]
+    let control_changed = previous.blitz_control_enabled != parsed.blitz_control_enabled;
+    #[cfg(feature = "blitz-runtime")]
+    if control_changed {
+        tauri_runtime_blitz::set_agent_control_enabled(parsed.blitz_control_enabled)
+            .map_err(|error| format!("could not update local Blitz control: {error}"))?;
+    }
+
     if let Err(error) = state.tables.kv_put(settings::KEY, merged.to_string()).await {
+        #[cfg(feature = "blitz-runtime")]
+        if control_changed {
+            let _ = tauri_runtime_blitz::set_agent_control_enabled(previous.blitz_control_enabled);
+        }
         if let Some(id) = boundary_id
             && let Err(cleanup) = state.tables.study_event.delete(id).await
         {
@@ -1350,6 +1467,7 @@ const CLOSE_TAB: &str = "close-tab";
 const NEXT_TAB: &str = "next-tab";
 const PREV_TAB: &str = "prev-tab";
 const QUIT: &str = "quit";
+const QUIT_ALL: &str = "quit-all";
 const RESTART: &str = "restart";
 
 /// The application menu.
@@ -1368,6 +1486,8 @@ fn build_menu<R: Runtime>(app: &tauri::AppHandle<R>) -> tauri::Result<Menu<R>> {
     let quit = MenuItemBuilder::with_id(QUIT, "Quit AgencyZero")
         .accelerator("CmdOrCtrl+Q")
         .build(app)?;
+    let quit_all =
+        MenuItemBuilder::with_id(QUIT_ALL, "Quit AgencyZero & AgencyProxy…").build(app)?;
     // No accelerator: restarting is deliberate, not something to fat-finger.
     let restart = MenuItemBuilder::with_id(RESTART, "Restart into Build on Disk").build(app)?;
 
@@ -1394,9 +1514,18 @@ fn build_menu<R: Runtime>(app: &tauri::AppHandle<R>) -> tauri::Result<Menu<R>> {
         .show_all()
         .separator()
         .item(&restart)
+        .item(&quit_all)
         .item(&quit)
         .build()?;
 
+    // AppKit's predefined edit items consume Cmd+X/C/V/A before the custom
+    // runtime receives a key event, but Blitz's text editor is the component
+    // that actually owns selection and clipboard state. Keep the standard
+    // native menu for WebKit; leave its Blitz counterpart accelerator-free so
+    // the renderer can handle the shortcuts instead of silently dropping them.
+    #[cfg(feature = "blitz-runtime")]
+    let edit_menu = SubmenuBuilder::new(app, "Edit").build()?;
+    #[cfg(not(feature = "blitz-runtime"))]
     let edit_menu = SubmenuBuilder::new(app, "Edit")
         .undo()
         .redo()
@@ -1839,6 +1968,7 @@ fn main() {
             projects::get_project_verbosity,
             projects::set_project_verbosity,
             projects::reset_project_session,
+            projects::list_recoverable_sessions,
             projects::adopt_session,
             get_build_info,
             get_persistence_failure,
@@ -1855,6 +1985,7 @@ fn main() {
             study::clear_study_events,
             relaunch_app,
             quit_app,
+            quit_app_and_proxy,
             set_settings,
             list_agent_status,
             models::list_models,
@@ -1880,17 +2011,15 @@ fn main() {
                 .app_data_dir()
                 .map_err(|error| format!("no data directory: {error}"))?;
 
-            // The separately named Blitz test bundle must not share a bundle
-            // identifier with the WebKit app: LaunchServices otherwise
-            // activates whichever process already owns that identity. The
-            // owner normally runs the experimental profile, so this standard
-            // build uses the non-experimental profile's real store. That keeps
-            // backend behavior realistic while allowing both apps to run for
-            // side-by-side renderer testing.
+            // The separately named standard Blitz test bundle uses the stable
+            // profile so side-by-side renderer testing exercises real data.
+            // Experimental is deliberately excluded: its bundle-derived path
+            // is its profile boundary, and collapsing it into stable makes the
+            // owner's entire Experimental project list appear to disappear.
             #[cfg(feature = "blitz-runtime")]
-            let config_dir = standard_identity_dir(config_dir);
+            let config_dir = blitz_profile_dir(config_dir);
             #[cfg(feature = "blitz-runtime")]
-            let data_dir = standard_identity_dir(data_dir);
+            let data_dir = blitz_profile_dir(data_dir);
 
             // Before anything that can fail, so whatever happens next is on the
             // record. Opening the tables is the first thing that can, and it is
@@ -2065,12 +2194,22 @@ fn main() {
                 );
             }
 
-            let configured_proxy = tables
+            let persisted_settings = tables
                 .kv_get(settings::KEY)
-                .and_then(|raw| serde_json::from_str::<GlobalSettings>(&raw).ok())
-                .map(|settings| settings.agent_proxy_binary)
+                .and_then(|raw| serde_json::from_str::<GlobalSettings>(&raw).ok());
+            let configured_proxy = persisted_settings
+                .as_ref()
+                .map(|settings| settings.agent_proxy_binary.clone())
                 .filter(|path| !path.is_empty())
                 .map(PathBuf::from);
+            #[cfg(feature = "blitz-runtime")]
+            let blitz_control_enabled = std::env::args().any(|arg| arg == "--blitz-control")
+                || std::env::var("TAURI_BLITZ_CONTROL")
+                    .ok()
+                    .is_some_and(|value| matches!(value.as_str(), "1" | "true"))
+                || persisted_settings
+                    .as_ref()
+                    .is_some_and(|settings| settings.blitz_control_enabled);
             let proxy = Arc::new(agent_proxy::AgencyProxy::new(&config_dir, configured_proxy));
             // A checkpoint backed by a still-live proxy run remains a live
             // draft. Only orphaned checkpoints become `interrupted` rows.
@@ -2083,7 +2222,7 @@ fn main() {
                 &tables,
                 &live_proxy_runs,
             ));
-            let restart_resume = read_restart_resume(&config_dir);
+            let restart_resume = take_restart_resume(&config_dir);
             app.manage(AppState {
                 tables: Arc::new(tables),
                 proxy,
@@ -2107,6 +2246,36 @@ fn main() {
                 location,
                 _store_lock: store_lock,
             });
+
+            #[cfg(feature = "blitz-runtime")]
+            {
+                tauri_runtime_blitz::set_agent_control_enabled(blitz_control_enabled)
+                    .map_err(|error| format!("could not apply local Blitz control setting: {error}"))?;
+                let relaunch_handle = app.handle().clone();
+                tauri_runtime_blitz::set_agent_control_handler(move |request| match request {
+                    tauri_runtime_blitz::control_protocol::AgentControlRequest::Relaunch => {
+                        let handle = relaunch_handle.clone();
+                        tauri::async_runtime::spawn(async move {
+                            let state = handle.state::<AppState>();
+                            if let Err(error) = restart_after_drain(&handle, &state).await {
+                                crate::log!(
+                                    log::Level::Error,
+                                    "boot",
+                                    "control-requested relaunch failed before Angel handoff: {error}"
+                                );
+                            }
+                        });
+                        tauri_runtime_blitz::control_protocol::DebugResponse::Ack
+                    }
+                    _ => tauri_runtime_blitz::control_protocol::DebugResponse::Error(
+                        tauri_runtime_blitz::control_protocol::DebugError {
+                            code: "unsupportedEmbedderAction".into(),
+                            message: "AgencyZero delegates only relaunch to its restart Angel"
+                                .into(),
+                        },
+                    ),
+                });
+            }
 
             // WorkTable persistence is asynchronous. A worker panic once left
             // the UI accepting writes for twenty minutes and surfaced only
@@ -2225,6 +2394,7 @@ fn main() {
                 // Quit asks rather than exits. The webview owns the confirmation
                 // because it is the side that knows what is still running.
                 QUIT => "menu:quit",
+                QUIT_ALL => "menu:quit-all",
                 RESTART => "menu:restart",
                 _ => return,
             };

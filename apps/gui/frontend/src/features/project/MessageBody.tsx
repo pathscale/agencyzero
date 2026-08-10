@@ -1,5 +1,5 @@
 import { PromptSyntaxParser } from "promptsyntax";
-import { createSignal, For, type JSX, Show } from "solid-js";
+import { createMemo, createSignal, For, type JSX, Show } from "solid-js";
 import { Icon } from "~/components/Icon";
 import { isItemId, itemReferenceLabel, revealItemReference } from "~/lib/itemReference";
 import { describeError, log } from "~/lib/log";
@@ -213,6 +213,18 @@ function extractProseStructures(text: string): Block[] {
  * code rather than dropping it, because half a command shown as prose is worse
  * than half a command shown as a command.
  */
+/** Whether a re-parsed block is unchanged, so its DOM can be left alone. */
+function sameBlock(a: Block, b: Block): boolean {
+  if (a.kind !== b.kind) return false;
+  if (a.kind === "code" && b.kind === "code") {
+    return a.text === b.text && a.lang === b.lang;
+  }
+  if (a.kind === "table" && b.kind === "table") {
+    return JSON.stringify(a) === JSON.stringify(b);
+  }
+  return "text" in a && "text" in b ? a.text === b.text : false;
+}
+
 export function splitBlocks(body: string): Block[] {
   /*
    * Line by line rather than by regex. The obvious pattern for this wants `$`
@@ -289,10 +301,41 @@ export function splitBlocks(body: string): Block[] {
 }
 
 export function MessageBody(props: { body: string; class?: string }): JSX.Element {
-  const blocks = () => splitBlocks(props.body);
+  /*
+   * Memoised, and identity-stable block by block.
+   *
+   * This was a plain function, so it re-parsed the whole body on every read and
+   * handed `<For>` brand-new objects each time. A streaming reply changes
+   * `body` on every token, so every token re-parsed the entire message and
+   * rebuilt every block, including the ones that had not changed. That is
+   * quadratic in reply length and it is what made long replies crawl.
+   *
+   * Only the final block grows while text streams, so reusing the earlier
+   * blocks keeps their DOM alive and leaves one block to update.
+   */
+  let previous: Block[] = [];
+  const blocks = createMemo(() => {
+    const next = splitBlocks(props.body);
+    const reconciled = next.map((block, index) => {
+      const before = previous[index];
+      return before && sameBlock(before, block) ? before : block;
+    });
+    previous = reconciled;
+    return reconciled;
+  });
 
   return (
-    <div class={`flex flex-col gap-2.5 ${props.class ?? ""}`} data-selectable>
+    /*
+      `min-w-0` and `break-words`: a flex child will not shrink below its
+      content width without the first, and an unbroken run of characters (a
+      long identifier, a url, a wall of one repeated letter) has no break
+      opportunity without the second. Between them, message text stayed at its
+      natural width and drew straight past the edge of its own bubble.
+    */
+    <div
+      class={`flex min-w-0 flex-col gap-2.5 break-words [overflow-wrap:anywhere] ${props.class ?? ""}`}
+      data-selectable
+    >
       <For each={blocks()}>
         {(block) =>
           block.kind === "code" ? (

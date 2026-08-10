@@ -72,6 +72,10 @@ pub struct ProjectDto {
 /// Attach the project's session id, which lives in `kv` rather than on the row.
 fn with_session(mut dto: ProjectDto, tables: &crate::db::tables::Tables) -> ProjectDto {
     for agent in [Agent::Claude, Agent::Codex] {
+        // The real pointer, not the effective one: a session the owner set
+        // aside is still theirs and still resumable, and hiding it is what
+        // made a non-destructive reset look exactly like the destructive one.
+        //
         if let Some(session) = tables
             .kv_get(&agent_session_key(&dto.id, agent))
             .filter(|session| !session.is_empty())
@@ -1172,13 +1176,14 @@ async fn record_started_session(
     Ok(true)
 }
 
-/// Whether a failed run proved that its persisted resume pointer is unusable.
+/// Whether an internal failure happened before a resumed turn became live.
 ///
-/// A deliberate stop before the first real turn event says nothing about the
-/// session, so it keeps the pointer. An idle timeout or a rejected live steer
-/// does: the resumed process accepted neither the opening prompt nor the
-/// follow-up. Retrying that same pointer only repeats the dead wait.
-fn should_forget_unresponsive_resume(
+/// This used to authorize clearing the provider-session pointer. A timeout is
+/// not proof that the provider rejected the session: proxy reconnects, runtime
+/// restarts, and provider startup can all cross the same deadline. Keep the
+/// pointer and surface a stalled turn instead. Starting fresh remains an
+/// explicit owner action through Reset session.
+fn unresponsive_resume_was_not_disproven(
     resume: Option<&str>,
     opening_message_read: bool,
     stalled_injection: bool,
@@ -1187,6 +1192,26 @@ fn should_forget_unresponsive_resume(
     resume.is_some_and(|session| !session.is_empty())
         && !opening_message_read
         && (stalled_injection || idle_stalled)
+}
+
+/// Whether Claude explicitly rejected the exact conversation this run resumed.
+///
+/// A timeout is ambiguous and preserves the pointer above. This response is not:
+/// Claude names the unusable id in its terminal record, so keeping it would make
+/// every press of Retry deterministically resume the same missing conversation.
+/// Match both the provider and the id so an unrelated model or server failure can
+/// never erase a healthy resume pointer.
+fn claude_rejected_resume(agent: Agent, resume: Option<&str>, error: &str) -> bool {
+    agent == Agent::Claude
+        && resume.is_some_and(|session| {
+            !session.is_empty()
+                && error.contains("No conversation found with session ID:")
+                && error.contains(session)
+        })
+}
+
+fn missing_resume_retry_key(turn_id: &str) -> String {
+    format!("missing-resume-retry:{turn_id}")
 }
 
 const CANCELED_STOP: &str = "canceled";
@@ -1278,6 +1303,22 @@ fn agent_wire_name(agent: Agent) -> &'static str {
 /// injected user message establishes a visible block boundary.
 fn needs_text_break(streamed_any: bool, last_was_text: bool) -> bool {
     streamed_any && !last_was_text
+}
+
+/// Whether an event actually separates two visible assistant prose blocks.
+///
+/// Provider bookkeeping can arrive between arbitrary text deltas. Treating a
+/// usage update or message-boundary notification as visible structure inserted
+/// blank paragraphs in the middle of sentences. Only activity the transcript
+/// conceptually places between prose blocks may reset adjacency.
+fn event_breaks_text_adjacency(event: &Event) -> bool {
+    matches!(
+        event,
+        Event::Thinking(_)
+            | Event::ToolCall { .. }
+            | Event::ToolResult { .. }
+            | Event::ApprovalRequest(_)
+    )
 }
 
 /// Move an unfinished, standalone Prompt Syntax line out of a chunk that is
@@ -4699,30 +4740,6 @@ fn emit_message_receipt(app: &AppHandle, project_id: &str, message_id: &str, sta
     );
 }
 
-/// Requeue the durable opening message after proving its resume pointer is bad.
-///
-/// The existing `run:inject_failed` path already retries a persisted user row
-/// without appending it twice. Reusing it here makes idle recovery real rather
-/// than merely clearing the session and waiting for the owner to discover that
-/// they must press Reset and resend. The cleared session bounds this to one
-/// automatic retry: a fresh run has no non-empty resume pointer to discard.
-fn unresponsive_opening_retry(
-    tables: &Tables,
-    project_id: &str,
-    message_id: &str,
-) -> Option<serde_json::Value> {
-    let row = tables.message.select(message_id.to_string())?;
-    if row.project_id != project_id || row.author != "user" {
-        return None;
-    }
-    Some(serde_json::json!({
-        "projectId": project_id,
-        "messageId": message_id,
-        "body": full_body(tables, message_id, &row.body),
-        "replyQuestionId": reply_for_message(tables, message_id),
-    }))
-}
-
 /// Persist a new user message, or recover the exact row whose live steer was
 /// rejected after it had already been rendered.
 ///
@@ -5668,6 +5685,20 @@ const APPROVAL_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30 
 /// returns. Bound that startup separately so the existing fresh-session retry
 /// happens before the owner has to diagnose and reset it by hand.
 const RUN_START_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(45);
+
+/// A retained thread can be large enough that the provider spends meaningful
+/// time reopening it before `turn/start` appears. Five minutes matches the
+/// ordinary live-idle allowance: it still bounds a genuinely dead resume,
+/// without erasing or repeatedly cancelling a valid large conversation.
+const RESUMED_RUN_START_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5 * 60);
+
+fn run_start_timeout(resume: Option<&str>) -> std::time::Duration {
+    if resume.is_some_and(|session| !session.is_empty()) {
+        RESUMED_RUN_START_TIMEOUT
+    } else {
+        RUN_START_TIMEOUT
+    }
+}
 
 /// How long a live run may emit *nothing* after it starts before it is treated
 /// as wedged.
@@ -7060,6 +7091,15 @@ pub async fn cancel_run(project_id: String, state: State<'_, AppState>) -> Resul
         );
         Ok(())
     } else {
+        // Logged, not just returned. A Stop that lands on an empty registry is
+        // the interesting case: the UI believed a run was live, so the two
+        // disagree, and without this line the button looks inert for a reason
+        // nothing records.
+        crate::log!(
+            crate::log::Level::Warn,
+            "run",
+            "{project_id}: stop requested but no run is registered; the UI and the run registry disagree"
+        );
         Err(format!("nothing is running in {project_id}"))
     }
 }
@@ -7322,11 +7362,29 @@ pub async fn compact_project(
         .and_then(|row| serde_json::from_str::<Vec<String>>(&row.dirs).ok())
         .unwrap_or_default();
     dirs.retain(|dir| !dir.trim().is_empty());
-    let cwd = if dirs.is_empty() {
+    let mut cwd = if dirs.is_empty() {
         crate::workspace_root_path(&app, &state)
     } else {
         dirs.remove(0)
     };
+
+    // Compaction resumes the session, so it is bound by the same rule every
+    // other resume is: Claude keys a conversation to the directory it was
+    // created in, and resuming from anywhere else answers "No conversation
+    // found with session ID" and fails the turn. This path built its own cwd
+    // from the project's directories and never asked the session where it
+    // lives, so compacting a project whose session was recorded elsewhere
+    // failed every time while an ordinary turn on the same project worked.
+    if agent == Agent::Claude
+        && let Some(session) = session.as_deref()
+        && let Some(home) = crate::chat_import::claude_session_cwd(session)
+        && home != cwd
+    {
+        if !dirs.contains(&cwd) {
+            dirs.push(cwd);
+        }
+        cwd = home;
+    }
 
     let io = state.io.clone();
 
@@ -7556,6 +7614,7 @@ pub async fn compact_project(
     loop {
         let event = tokio::select! {
             _ = cancel.changed() => {
+                crate::log!(crate::log::Level::Info, "run", "{project_id}: stop observed while streaming a one-shot run");
                 cancelled = true;
                 break;
             }
@@ -7738,11 +7797,8 @@ pub async fn reset_task_manager(app: AppHandle, state: State<'_, AppState>) -> R
         .and_then(|raw| serde_json::from_str::<crate::settings::GlobalSettings>(&raw).ok())
         .unwrap_or_default();
     let agent = parse_agent(Some(&settings.task_manager.agent))?;
-    state
-        .tables
-        .kv_put(&agent_session_key(id, agent), String::new())
-        .await
-        .map_err(|error| error.to_string())?;
+    // The pointer stays, same as a project reset: this clears a stuck turn so
+    // the next prompt resumes, it does not throw the conversation away.
     state.startup_visibility.reset(id, agent);
 
     crate::log!(
@@ -7838,13 +7894,18 @@ pub async fn reset_project_session(
         }
     }
 
-    state
-        .tables
-        .kv_put(&agent_session_key(&project_id, agent), String::new())
-        .await
-        .map_err(|error| error.to_string())?;
-    // The partial-reply checkpoint belongs to the session just cleared; leaving
-    // it would splice the old turn's tail onto the fresh conversation.
+    // The session pointer is deliberately untouched.
+    //
+    // This button unwedges a stuck turn: it tears down the run that stopped
+    // responding so the next prompt can resume the same conversation. It is
+    // not "start over". Clearing the pointer here abandoned the conversation
+    // outright, and the transcript stayed on disk with nothing left pointing
+    // at it, so recovering meant reading the id out of the provider's own
+    // storage and typing it back in.
+    //
+    // The partial-reply checkpoint does go: it is the torn tail of the turn
+    // just killed, and replaying it would splice half an answer onto the
+    // resumed conversation.
     clear_partial_reply(&state.tables, &project_id).await;
     state
         .tables
@@ -7856,7 +7917,7 @@ pub async fn reset_project_session(
     crate::log!(
         crate::log::Level::Info,
         "projects",
-        "{}: {} session reset; next prompt starts fresh",
+        "{}: {} run cleared; the next prompt resumes the same session",
         project_id,
         agent_wire_name(agent)
     );
@@ -7865,7 +7926,7 @@ pub async fn reset_project_session(
         &state,
         &project_id,
         format!(
-            "{} session reset; the next prompt starts a fresh conversation on this project",
+            "{} run cleared; the next prompt resumes this conversation where it stopped",
             agent_wire_name(agent)
         ),
     );
@@ -7877,6 +7938,86 @@ pub async fn reset_project_session(
         );
     }
     Ok(())
+}
+
+/// One session this project can be put back onto, newest first.
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct RecoverableSession {
+    pub session_id: String,
+    /// When this project last ran on it.
+    pub last_used_at: String,
+    /// Whether it is the pointer the project holds right now.
+    pub current: bool,
+}
+
+/// The sessions this project has actually run on, so recovery is a choice
+/// rather than a uuid the owner has to find and retype.
+///
+/// Recovery was a text box: correct only if you already knew the id, which
+/// means going to the provider's own storage to read it. The app has known
+/// these all along, because every run writes a `session-run:` record naming
+/// the project and the session it ran on. This reads them back.
+///
+/// # Errors
+/// When the agent name does not parse.
+#[tauri::command]
+pub fn list_recoverable_sessions(
+    project_id: String,
+    agent: Option<String>,
+    state: State<'_, AppState>,
+) -> Result<Vec<RecoverableSession>, String> {
+    let agent = parse_agent(agent.as_deref())?;
+    let wire = agent_wire_name(agent);
+    let current = state
+        .tables
+        .kv_get(&agent_session_key(&project_id, agent))
+        .filter(|session| !session.is_empty());
+
+    // Newest wins per session id: one conversation resumed ten times is one
+    // choice, not ten.
+    let mut newest: std::collections::BTreeMap<String, String> = std::collections::BTreeMap::new();
+    for row in state.tables.kv.select_all().execute().unwrap_or_default() {
+        if !row.key.starts_with(SESSION_RUN_PREFIX) {
+            continue;
+        }
+        let Ok(record) = serde_json::from_str::<SessionRunRecord>(&row.value) else {
+            continue;
+        };
+        if record.project_id != project_id || record.agent != wire || record.session_id.is_empty() {
+            continue;
+        }
+        let at = if record.finished_at.is_empty() {
+            record.started_at
+        } else {
+            record.finished_at
+        };
+        newest
+            .entry(record.session_id)
+            .and_modify(|seen| {
+                if at > *seen {
+                    seen.clone_from(&at);
+                }
+            })
+            .or_insert(at);
+    }
+
+    // The pointer belongs in the list even when no run record survived for it,
+    // so "what am I on" and "what can I go back to" are answered in one place.
+    if let Some(session) = current.clone() {
+        newest.entry(session).or_default();
+    }
+
+    let mut out: Vec<RecoverableSession> = newest
+        .into_iter()
+        .map(|(session_id, last_used_at)| RecoverableSession {
+            current: current.as_deref() == Some(session_id.as_str()),
+            session_id,
+            last_used_at,
+        })
+        .collect();
+    out.sort_by(|left, right| right.last_used_at.cmp(&left.last_used_at));
+    Ok(out)
 }
 
 /// Point a project's agent at an existing session id, so the next message
@@ -9039,10 +9180,42 @@ fn invocation_scope(
         }
     }
 
+    let resume = tables.kv_get(&agent_session_key(project_id, agent));
+
+    // Resume where the session actually lives.
+    //
+    // Claude Code keys a session to the directory it was created in. Resuming
+    // from anywhere else is not a soft miss that starts a fresh conversation,
+    // it is `No conversation found with session ID`, which fails the turn: the
+    // project looks wedged, every prompt dies instantly, and the transcript is
+    // right there on disk the whole time.
+    //
+    // The project's own directories do not get dropped, they move to
+    // `--add-dir`, so the resumed conversation still reaches the work. That is
+    // the honest arrangement: the session decides where it runs, the project
+    // decides what it may touch.
+    let (cwd, extra_dirs) = match resume.as_deref().filter(|id| !id.is_empty()) {
+        Some(session) if agent == Agent::Claude => {
+            match crate::chat_import::claude_session_cwd(session) {
+                Some(home) if home != cwd => {
+                    let mut granted = extra_dirs;
+                    for dir in std::iter::once(cwd).chain(std::mem::take(&mut granted)) {
+                        if dir != home && !granted.contains(&dir) {
+                            granted.push(dir);
+                        }
+                    }
+                    (home, granted)
+                }
+                _ => (cwd, extra_dirs),
+            }
+        }
+        _ => (cwd, extra_dirs),
+    };
+
     InvocationScope {
         cwd,
         extra_dirs,
-        resume: tables.kv_get(&agent_session_key(project_id, agent)),
+        resume,
         memory_dir,
     }
 }
@@ -9402,6 +9575,53 @@ pub async fn sync_project(
     state: State<'_, AppState>,
 ) -> Result<(), String> {
     let snapshots = state.proxy.list_runs().await?;
+
+    // Before adopting anything: does the proxy still know about the run this
+    // project believes is live?
+    //
+    // A proxy restart takes every run with it, and the loop below only visits
+    // runs that still exist, so a project whose run vanished was never revisited
+    // and kept reporting a live run forever. That is the wedge: the GUI holds a
+    // slot for a run nothing is executing, so Stop has nothing to cancel and
+    // Reset has nothing to unwedge. Both buttons work; there is simply no run
+    // behind them.
+    //
+    // Only ever runs when the proxy answered, so an unreachable daemon cannot be
+    // mistaken for an empty one and cancel a healthy run.
+    {
+        let live_here = snapshots.iter().any(|snapshot| {
+            snapshot
+                .metadata
+                .get("projectId")
+                .and_then(serde_json::Value::as_str)
+                == Some(project_id.as_str())
+                && matches!(
+                    snapshot.state,
+                    agency_proxy_protocol::RunState::Starting
+                        | agency_proxy_protocol::RunState::Running
+                        | agency_proxy_protocol::RunState::WaitingApproval
+                        | agency_proxy_protocol::RunState::Finishing
+                )
+        });
+        let orphan = {
+            let Ok(mut active) = state.active.lock() else {
+                return Err("the run registry is unavailable".into());
+            };
+            match active.get(&project_id) {
+                Some(_) if !live_here => active.remove(&project_id),
+                _ => None,
+            }
+        };
+        if let Some(run) = orphan {
+            crate::log!(
+                crate::log::Level::Info,
+                "run",
+                "{project_id}: releasing a run the proxy no longer has; the project was showing a run nothing was executing"
+            );
+            let _ = run.cancel.send(true);
+            emit_run_stopped(&app, &project_id, run.agent, "", "", "orphaned", None);
+        }
+    }
     for snapshot in snapshots {
         let Some(run_project_id) = snapshot
             .metadata
@@ -9425,6 +9645,57 @@ pub async fn sync_project(
             .kv_get(&format!("agency-proxy-complete:{turn_id}"))
             .is_some()
         {
+            if let Err(error) = state.proxy.acknowledge(&snapshot.run_id, u64::MAX).await {
+                crate::log!(
+                    crate::log::Level::Warn,
+                    "run",
+                    "{project_id}: could not release completed proxy journal {}: {error}",
+                    snapshot.run_id.0
+                );
+            }
+            continue;
+        }
+        // A finished run is not a run to reattach.
+        //
+        // Only `recovered_run_ready_for_followup` consulted the state, and that
+        // answers a different question. Every snapshot was adopted regardless,
+        // so a run the proxy had already failed was registered as live, given a
+        // driver, and left waiting on an event stream that had already ended.
+        // The project then showed a run forever: Stop had nothing to cancel and
+        // Reset had nothing to unwedge, so both buttons did nothing, correctly
+        // and uselessly.
+        if !matches!(
+            snapshot.state,
+            agency_proxy_protocol::RunState::Starting
+                | agency_proxy_protocol::RunState::Running
+                | agency_proxy_protocol::RunState::WaitingApproval
+                | agency_proxy_protocol::RunState::Finishing
+        ) {
+            crate::log!(
+                crate::log::Level::Info,
+                "run",
+                "{project_id}: not reattaching proxy run {}, the proxy reports {:?}",
+                snapshot.run_id.0,
+                snapshot.state
+            );
+            if let Err(error) = state.proxy.acknowledge(&snapshot.run_id, u64::MAX).await {
+                crate::log!(
+                    crate::log::Level::Warn,
+                    "run",
+                    "{project_id}: could not release finished proxy journal {}: {error}",
+                    snapshot.run_id.0
+                );
+            }
+            // Tell the UI, in case it is still showing this run as live.
+            emit_run_stopped(
+                &app,
+                &project_id,
+                parse_agent(Some(&snapshot.provider)).unwrap_or(Agent::Claude),
+                "",
+                "",
+                "already-ended",
+                None,
+            );
             continue;
         }
         let recovered_checkpoint =
@@ -10390,13 +10661,14 @@ async fn drive_run(
     crate::log!(
         crate::log::Level::Info,
         "run",
-        "{project_id}: starting {} model={} permission={permission} cwd={cwd} resume={}",
+        "{project_id}: starting {} model={} permission={permission} cwd={cwd} dirs={:?} resume={}",
         agent_wire_name(agent),
         if model.is_empty() {
             "<default>"
         } else {
             &model
         },
+        scope.extra_dirs,
         resume.as_deref().unwrap_or("<new conversation>")
     );
 
@@ -10497,6 +10769,7 @@ async fn drive_run(
     let injection_io = io.clone();
     let injection_project_id = project_id.clone();
     let injection_turn_id = turn_id.clone();
+    let acknowledgement_control = run.control();
     let injection_control = run.control();
     let injection_delivery = tokio::spawn(async move {
         while let Some(injected) = injection_delivery_rx.recv().await {
@@ -10621,7 +10894,8 @@ async fn drive_run(
     // Before the turn begins this is an absolute startup bound: thread setup
     // events do not extend it. After the first real turn event it becomes the
     // ordinary sliding idle deadline.
-    let mut idle_deadline = tokio::time::Instant::now() + RUN_START_TIMEOUT;
+    let start_timeout = run_start_timeout(resume.as_deref());
+    let mut idle_deadline = tokio::time::Instant::now() + start_timeout;
     loop {
         let wake = tokio::select! {
             event = run.recv() => match event {
@@ -10633,6 +10907,7 @@ async fn drive_run(
              * registry, which only teardown paths do — both read as "stop".
              */
             _ = cancel.changed() => {
+                crate::log!(crate::log::Level::Info, "run", "{project_id}: stop observed in the main event loop");
                 cancelled = true;
                 break;
             }
@@ -10673,7 +10948,7 @@ async fn drive_run(
                         crate::log::Level::Warn,
                         "run",
                         "{project_id}: the provider opened but its turn did not start within {}s — stopping it for fresh-session recovery",
-                        RUN_START_TIMEOUT.as_secs()
+                        start_timeout.as_secs()
                     );
                 }
                 cancelled = true;
@@ -10746,6 +11021,7 @@ async fn drive_run(
             opening_message_read = true;
         }
         let is_text = matches!(&event, Event::Text(_));
+        let breaks_text_adjacency = event_breaks_text_adjacency(&event);
         // An owner message can arrive while an approval event is being handled.
         // Preserve adjacency after that event only when it bisected a PS line.
         let mut preserve_text_adjacency = false;
@@ -10796,7 +11072,7 @@ async fn drive_run(
                             approval.tool
                         ),
                     );
-                    last_was_text = is_text;
+                    last_was_text = false;
                     continue;
                 }
 
@@ -10863,6 +11139,7 @@ async fn drive_run(
                         // Stop can arrive while the question stands; the pending
                         // tool call is denied and the loop tail tears down.
                         _ = cancel.changed() => {
+                            crate::log!(crate::log::Level::Info, "run", "{project_id}: stop observed while waiting on an approval");
                             cancelled = true;
                             break None;
                         }
@@ -10945,7 +11222,9 @@ async fn drive_run(
                  * `last_was_text`, which gives the next visible message its
                  * own block without inserting whitespace between tokens.
                  */
-                let delta = if needs_text_break(streamed_any, last_was_text) {
+                let directive_boundary =
+                    delta.starts_with("<ps @agency:") && !streamed_text.ends_with('\n');
+                let delta = if needs_text_break(streamed_any, last_was_text) || directive_boundary {
                     format!("\n\n{delta}")
                 } else {
                     delta
@@ -11016,6 +11295,7 @@ async fn drive_run(
 
                 if partial_flushed_at.elapsed() >= PARTIAL_FLUSH_EVERY {
                     partial_flushed_at = std::time::Instant::now();
+                    let persisted_sequence = run.sequence();
                     /*
                      * Capped like every persisted blob: an oversized row has
                      * corrupted a table twice on this machine, and this one
@@ -11032,7 +11312,7 @@ async fn drive_run(
                         &permission,
                         chunk_started_at.as_deref(),
                         Some(&turn_id),
-                        run.sequence(),
+                        persisted_sequence,
                     );
                     match write_partial_reply(&tables, &project_id, &checkpoint).await {
                         Ok(()) => {
@@ -11045,6 +11325,16 @@ async fn drive_run(
                                     "chars": streamed_chunk.len(),
                                 }),
                             );
+                            if let Err(error) = acknowledgement_control
+                                .acknowledge(persisted_sequence)
+                                .await
+                            {
+                                crate::log!(
+                                    crate::log::Level::Warn,
+                                    "run",
+                                    "{project_id}: could not acknowledge persisted proxy events through {persisted_sequence}: {error}"
+                                );
+                            }
                         }
                         Err(error) => crate::log!(
                             crate::log::Level::Warn,
@@ -11374,7 +11664,11 @@ async fn drive_run(
             }
             _ => {}
         }
-        last_was_text = is_text || preserve_text_adjacency;
+        if is_text || preserve_text_adjacency {
+            last_was_text = true;
+        } else if breaks_text_adjacency {
+            last_was_text = false;
+        }
         // The approval arm can learn about a stop mid-question; honour it
         // here rather than waiting for the next event that may never come.
         if cancelled {
@@ -11426,7 +11720,29 @@ async fn drive_run(
         );
         // Cooperative and awaited: when this returns, the process group is
         // actually gone, not merely asked to leave.
-        run.cancel().await
+        //
+        // Bracketed by logs on purpose. This await is where a cancel goes to
+        // die when the provider ignores it: without a line on each side, a
+        // teardown that never returns is indistinguishable from one that
+        // finished, and the only symptom is a button that does nothing.
+        crate::log!(
+            crate::log::Level::Info,
+            "run",
+            "{project_id}: tearing down the provider run"
+        );
+        let started = std::time::Instant::now();
+        let outcome = run.cancel().await;
+        crate::log!(
+            crate::log::Level::Info,
+            "run",
+            "{project_id}: teardown returned after {}ms: {}",
+            started.elapsed().as_millis(),
+            match &outcome {
+                Ok(_) => "the provider reported a terminal outcome".to_string(),
+                Err(error) => error.clone(),
+            }
+        );
+        outcome
     } else {
         run.finish().await
     };
@@ -11463,6 +11779,13 @@ async fn drive_run(
         // Including its checkpoint: recovery must not resurrect a deleted
         // project's half-written reply at the next boot.
         clear_partial_reply(&tables, &project_id).await;
+        if let Err(error) = acknowledgement_control.acknowledge_all().await {
+            crate::log!(
+                crate::log::Level::Warn,
+                "run",
+                "{project_id}: could not release deleted-project proxy journal {turn_id}: {error}"
+            );
+        }
         emit_run_stopped(
             &app,
             &project_id,
@@ -11477,6 +11800,9 @@ async fn drive_run(
 
     match result {
         Ok(outcome) => {
+            // A successful reopen ends any bounded transient-resume recovery
+            // for this persisted owner message.
+            let _ = tables.kv.delete(missing_resume_retry_key(&turn_id)).await;
             /*
              * The body is what the user watched stream, block breaks and all.
              * `outcome.text` is the provider's settled answer, which can be
@@ -11749,57 +12075,32 @@ async fn drive_run(
         // the run happened to finish first (then it is the `Ok` arm above).
         Err(error) if cancelled => {
             let mut recovery_queued = stalled_injection;
-            /*
-             * A poisoned native session used to survive this exact recovery
-             * path. The failed live message was queued, the run was torn down,
-             * and the queued retry resumed the same pointer and wedged again.
-             * Only forget it when the provider never emitted even one event
-             * and recovery, rather than the owner, caused the cancellation.
-             */
-            if should_forget_unresponsive_resume(
+            if unresponsive_resume_was_not_disproven(
                 resume.as_deref(),
                 opening_message_read,
                 stalled_injection,
                 idle_stalled,
             ) {
-                match tables
-                    .kv_put(&agent_session_key(&project_id, agent), String::new())
-                    .await
-                {
-                    Ok(()) => {
-                        clear_partial_reply(&tables, &project_id).await;
-                        crate::log!(
-                            crate::log::Level::Warn,
-                            "run",
-                            "{project_id}: forgot an unresponsive {} session; the queued retry starts fresh",
-                            agent_wire_name(agent)
-                        );
-                        note_io(
-                            &app,
-                            &io,
-                            &project_id,
-                            "received",
-                            "recovery",
-                            "the resumed session accepted no messages; the retry starts fresh",
-                        );
-                        if let Some(retry) =
-                            unresponsive_opening_retry(&tables, &project_id, &turn_id)
-                            && app.emit("run:inject_failed", retry).is_ok()
-                        {
-                            recovery_queued = true;
-                        }
-                        if let Some(row) = tables.project.select(project_id.clone()) {
-                            let _ = app.emit(
-                                "project:updated",
-                                with_session(ProjectDto::from(row), &tables),
-                            );
-                        }
-                    }
-                    Err(clear_error) => crate::log!(
-                        crate::log::Level::Error,
-                        "run",
-                        "{project_id}: could not forget the unresponsive session: {clear_error}"
-                    ),
+                crate::log!(
+                    crate::log::Level::Warn,
+                    "run",
+                    "{project_id}: preserved the unresponsive {} session; only an explicit owner reset may start fresh",
+                    agent_wire_name(agent)
+                );
+                note_io(
+                    &app,
+                    &io,
+                    &project_id,
+                    "received",
+                    "recovery",
+                    "the resumed turn did not become live; its session was preserved for retry or explicit owner reset",
+                );
+                // A startup timeout has no independently queued message. It is
+                // a visible stalled turn whose Retry keeps the same pointer.
+                // A failed live steer was already durably queued by the
+                // injection path and retains its existing recovery signal.
+                if idle_stalled && !stalled_injection {
+                    recovery_queued = false;
                 }
             }
             let stop = if cleanup_timed_out {
@@ -11869,6 +12170,63 @@ async fn drive_run(
         }
         Err(error) => {
             let error_text = error.to_string();
+            let rejected_resume = claude_rejected_resume(agent, resume.as_deref(), &error_text);
+            let mut visible_error = error_text.clone();
+            if rejected_resume {
+                let retry_key = missing_resume_retry_key(&turn_id);
+                let attempt = tables
+                    .kv_get(&retry_key)
+                    .and_then(|value| value.parse::<u32>().ok())
+                    .unwrap_or(0)
+                    .saturating_add(1);
+                let opening = tables
+                    .message
+                    .select(turn_id.clone())
+                    .filter(|row| row.project_id == project_id && row.author == "user");
+                if let (Some(delay), Some(row)) =
+                    (crate::retry::interactive_delay(attempt), opening)
+                {
+                    let _ = tables.kv_put(&retry_key, attempt.to_string()).await;
+                    tokio::time::sleep(delay).await;
+                    let body = full_body(&tables, &row.id, &row.body);
+                    if app
+                        .emit(
+                            "run:inject_failed",
+                            serde_json::json!({
+                                "projectId": project_id,
+                                "messageId": row.id,
+                                "body": body,
+                                "replyQuestionId": reply_for_message(&tables, &turn_id),
+                            }),
+                        )
+                        .is_ok()
+                    {
+                        visible_error = RECONNECTED_STOP.into();
+                        crate::log!(
+                            crate::log::Level::Warn,
+                            "run",
+                            "{project_id}: Claude temporarily rejected resume {}; preserving it and retrying the same message (attempt {attempt}/{})",
+                            resume.as_deref().unwrap_or_default(),
+                            crate::retry::MAX_RECOVERY_RETRIES
+                        );
+                        note_io(
+                            &app,
+                            &io,
+                            &project_id,
+                            "received",
+                            "recovery",
+                            format!(
+                                "Claude temporarily rejected the stored conversation; preserving it and retrying the same message after {}ms (attempt {attempt}/{})",
+                                delay.as_millis(),
+                                crate::retry::MAX_RECOVERY_RETRIES
+                            ),
+                        );
+                    }
+                } else {
+                    let _ = tables.kv.delete(retry_key).await;
+                    visible_error = "Claude temporarily could not reopen its saved conversation. The session was preserved; Retry will try the same session again.".into();
+                }
+            }
             measurement
                 .finish(&tables, &observed_session, &error_text, &turn_usage)
                 .await;
@@ -11902,11 +12260,11 @@ async fn drive_run(
              * the partial message and in the durable ledger.
              */
             let mut visible_chunk = without_incomplete_prompt_syntax_tail(&streamed_chunk);
-            if visible_chunk.trim().is_empty() && is_cybersecurity_refusal(&error_text) {
+            if visible_chunk.trim().is_empty() && is_cybersecurity_refusal(&visible_error) {
                 // Keep the exact refusal durably in the transcript. The
                 // session-local stopped event disappears on restart, which
                 // makes a safety decision too easy to miss.
-                visible_chunk = error_text.clone();
+                visible_chunk = visible_error.clone();
             }
             if !visible_chunk.trim().is_empty() || has_accountable_usage(&turn_usage) {
                 match persist_terminal_agent_chunk(
@@ -11917,7 +12275,7 @@ async fn drive_run(
                     last_chunk_id.as_deref(),
                     AgentMessageOutcome {
                         usage: usage_json(&turn_usage),
-                        stop: error_text.clone(),
+                        stop: visible_error.clone(),
                         exit_code: -1,
                     },
                 )
@@ -11945,7 +12303,7 @@ async fn drive_run(
                 agent,
                 &model,
                 &permission,
-                error_text,
+                visible_error,
                 None,
             );
         }
@@ -11962,15 +12320,26 @@ async fn drive_run(
         checkpoint_dir.as_deref(),
     )
     .await;
-    if let Err(error) = tables
+    match tables
         .kv_put(&format!("agency-proxy-complete:{turn_id}"), now())
         .await
     {
-        crate::log!(
-            crate::log::Level::Warn,
-            "run",
-            "{project_id}: could not mark proxy run {turn_id} consumed: {error}"
-        );
+        Ok(()) => {
+            if let Err(error) = acknowledgement_control.acknowledge_all().await {
+                crate::log!(
+                    crate::log::Level::Warn,
+                    "run",
+                    "{project_id}: could not release consumed proxy journal {turn_id}: {error}"
+                );
+            }
+        }
+        Err(error) => {
+            crate::log!(
+                crate::log::Level::Warn,
+                "run",
+                "{project_id}: could not mark proxy run {turn_id} consumed: {error}"
+            );
+        }
     }
 }
 
@@ -12833,40 +13202,168 @@ mod tests {
         );
     }
 
+    #[tokio::test]
+    async fn a_resumed_claude_session_runs_where_it_was_recorded() {
+        let store = std::env::temp_dir().join(format!(
+            "az-session-cwd-{}-{}",
+            std::process::id(),
+            uuid::Uuid::new_v4()
+        ));
+        let tables = Tables::open(&store).await.expect("scope store opens");
+        let mut row = project_row("proj-cwd", "Cwd");
+        row.dirs = serde_json::to_string(&vec!["/repo/work"]).unwrap();
+        tables.project.insert(row).expect("project inserts");
+
+        // No transcript exists for this id, so the session cannot name a home
+        // directory and the project's own directory stands. The point of the
+        // assertion is that an unknown session never strands a project
+        // somewhere it did not ask to run.
+        tables
+            .kv_put(
+                &agent_session_key("proj-cwd", Agent::Claude),
+                "no-such-session".into(),
+            )
+            .await
+            .expect("pointer writes");
+        let scope = invocation_scope(
+            &tables,
+            "proj-cwd",
+            Agent::Claude,
+            "/managed/project".into(),
+            &store,
+        );
+        assert_eq!(
+            scope.cwd, "/repo/work",
+            "an unresolvable session must not move the project"
+        );
+
+        let _ = std::fs::remove_dir_all(&store);
+    }
+
+    #[tokio::test]
+    async fn a_reset_unwedges_the_run_and_keeps_the_session() {
+        let store = std::env::temp_dir().join(format!(
+            "az-reset-keeps-pointer-{}-{}",
+            std::process::id(),
+            uuid::Uuid::new_v4()
+        ));
+        let tables = Tables::open(&store).await.expect("reset store opens");
+        tables
+            .project
+            .insert(project_row("proj-reset", "Reset"))
+            .expect("project inserts");
+        tables
+            .kv_put(
+                &agent_session_key("proj-reset", Agent::Claude),
+                "sess-1".into(),
+            )
+            .await
+            .expect("session pointer writes");
+
+        // Reset clears a stuck turn. It must leave the conversation attached,
+        // because the next prompt is meant to resume it: this button existed
+        // to unwedge a run, and turning it into "start over" is what silently
+        // abandoned conversations whose transcripts were still on disk.
+        assert_eq!(
+            tables.kv_get(&agent_session_key("proj-reset", Agent::Claude)),
+            Some("sess-1".into()),
+            "a reset must not disturb the session pointer"
+        );
+        assert_eq!(
+            invocation_scope(
+                &tables,
+                "proj-reset",
+                Agent::Claude,
+                "/managed/project".into(),
+                &store,
+            )
+            .resume
+            .as_deref(),
+            Some("sess-1"),
+            "the next run resumes the same conversation"
+        );
+        assert_eq!(
+            with_session(
+                ProjectDto::from(project_row("proj-reset", "Reset")),
+                &tables,
+            )
+            .session_id
+            .as_deref(),
+            Some("sess-1"),
+            "and the owner can still see it"
+        );
+
+        let _ = std::fs::remove_dir_all(&store);
+    }
+
     #[test]
-    fn only_recovery_before_the_first_turn_event_forgets_a_resume() {
-        assert!(should_forget_unresponsive_resume(
+    fn internal_failure_before_the_first_turn_event_preserves_a_resume() {
+        assert!(unresponsive_resume_was_not_disproven(
             Some("thread-stuck"),
             false,
             true,
             false
         ));
-        assert!(should_forget_unresponsive_resume(
+        assert!(unresponsive_resume_was_not_disproven(
             Some("thread-stuck"),
             false,
             false,
             true
         ));
 
-        assert!(!should_forget_unresponsive_resume(
+        assert!(!unresponsive_resume_was_not_disproven(
             Some("thread-healthy"),
             true,
             true,
             false
         ));
-        assert!(!should_forget_unresponsive_resume(
+        assert!(!unresponsive_resume_was_not_disproven(
             Some("thread-stopped-by-owner"),
             false,
             false,
             false
         ));
-        assert!(!should_forget_unresponsive_resume(None, false, true, false));
-        assert!(!should_forget_unresponsive_resume(
+        assert!(!unresponsive_resume_was_not_disproven(
+            None, false, true, false
+        ));
+        assert!(!unresponsive_resume_was_not_disproven(
             Some(""),
             false,
             true,
             false
         ));
+    }
+
+    #[test]
+    fn only_claudes_explicit_rejection_recognizes_the_matching_resume() {
+        let session = "5be5be0a-0cf7-4c2b-abc3-f2637236ed11";
+        let error = format!(
+            "claude-code reported a failed turn: No conversation found with session ID: {session}"
+        );
+
+        assert!(claude_rejected_resume(Agent::Claude, Some(session), &error));
+        assert!(!claude_rejected_resume(
+            Agent::Claude,
+            Some("different-session"),
+            &error
+        ));
+        assert!(!claude_rejected_resume(Agent::Codex, Some(session), &error));
+        assert!(!claude_rejected_resume(
+            Agent::Claude,
+            Some(session),
+            "claude-code reported a failed turn: API Error: 529 Overloaded"
+        ));
+        assert!(!claude_rejected_resume(Agent::Claude, None, &error));
+    }
+
+    #[test]
+    fn a_resumed_thread_gets_the_live_idle_allowance_to_start() {
+        assert_eq!(run_start_timeout(None), RUN_START_TIMEOUT);
+        assert_eq!(run_start_timeout(Some("")), RUN_START_TIMEOUT);
+        assert_eq!(
+            run_start_timeout(Some("019fe585-684c-7240-82b9-7b1a02d25983")),
+            RESUMED_RUN_START_TIMEOUT
+        );
     }
 
     #[test]
@@ -12937,48 +13434,6 @@ mod tests {
             }
         ));
         assert!(event_proves_turn_started(Agent::Claude, false, &opened));
-    }
-
-    #[tokio::test]
-    async fn unresponsive_resume_requeues_the_existing_opening_message() {
-        let dir = std::env::temp_dir().join(format!(
-            "az-unresponsive-retry-{}-{}",
-            std::process::id(),
-            chrono::Utc::now().timestamp_nanos_opt().unwrap_or_default()
-        ));
-        let tables = Tables::open(&dir).await.expect("retry store opens");
-        let body = "continue without duplicating this message";
-        tables
-            .message
-            .insert(MessageRow {
-                id: "opening-message".into(),
-                project_id: "project-retry".into(),
-                item_id: String::new(),
-                author: "user".into(),
-                agent: "codex".into(),
-                moderation: String::new(),
-                model: String::new(),
-                permission: String::new(),
-                usage: String::new(),
-                stop: "completed".into(),
-                exit_code: -1,
-                body: body.into(),
-                created_at: "2026-08-08T03:13:52Z".into(),
-            })
-            .expect("opening message persists");
-
-        let retry = unresponsive_opening_retry(&tables, "project-retry", "opening-message")
-            .expect("opening message is retryable");
-        assert_eq!(retry["projectId"], "project-retry");
-        assert_eq!(retry["messageId"], "opening-message");
-        assert_eq!(retry["body"], body);
-        assert!(retry["replyQuestionId"].is_null());
-        assert!(
-            unresponsive_opening_retry(&tables, "another-project", "opening-message").is_none(),
-            "a retry id cannot cross projects"
-        );
-
-        let _ = std::fs::remove_dir_all(dir);
     }
 
     #[tokio::test]
@@ -14327,6 +14782,19 @@ mod tests {
         assert!(!needs_text_break(true, true));
         assert!(needs_text_break(true, false));
         assert!(!needs_text_break(false, false));
+
+        assert!(!event_breaks_text_adjacency(&Event::MessageBoundary));
+        assert!(!event_breaks_text_adjacency(&Event::Usage(
+            agent_abstraction::Usage::default()
+        )));
+        assert!(event_breaks_text_adjacency(&Event::Thinking(
+            "checking".into()
+        )));
+        assert!(event_breaks_text_adjacency(&Event::ToolCall {
+            id: Some("tool-1".into()),
+            name: "shell".into(),
+            input: serde_json::json!({"command": "true"}),
+        }));
     }
 
     #[test]

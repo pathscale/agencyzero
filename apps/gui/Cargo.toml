@@ -15,7 +15,9 @@ blitz-runtime = [
     "dep:tauri-runtime-blitz",
     "dep:url",
 ]
-blitz-inspector = ["blitz-runtime", "tauri-runtime-blitz/debug-control"]
+blitz-inspector = ["blitz-runtime", "tauri-runtime-blitz/diagnostics"]
+# The lighter render pipeline, for measuring against the default Vello one.
+blitz-hybrid = ["blitz-inspector", "tauri-runtime-blitz/hybrid-renderer"]
 
 [build-dependencies]
 brotli = { version = "8.0.4", default-features = false, features = ["std"] }
@@ -25,8 +27,8 @@ tauri-build = { version = "2", features = [] }
 # Carries the store forward when a column changes; see crates/wt-migrate.
 wt-migrate = { path = "../../crates/wt-migrate" }
 agent-abstraction = "0.4.15"
-agency-proxy-client = "=0.1.4"
-agency-proxy-protocol = "=0.1.4"
+agency-proxy-client = "=0.1.5"
+agency-proxy-protocol = "=0.1.5"
 agent-experimental = { git = "https://gitlab.com/anonymous-28282828282/agent-experimental.git", rev = "f04ee035d9f243eb0c2dadb03829f827bb87d918", default-features = false, optional = true }
 promptsyntax = "0.1.0"
 shlex = "1.3"
@@ -40,14 +42,15 @@ eyre = "0.6"
 rkyv = { version = "0.8.9", features = ["uuid-1"] }
 derive_more = { version = "2.0.1", features = ["from", "error", "display", "debug", "into"] }
 futures = "0.3"
+backon = { version = "1.6.0", default-features = false }
 libc = "0.2"
 uuid = "1"
 chrono = { version = "0.4", default-features = false, features = ["clock", "serde", "std"] }
 tokio = { version = "1", features = ["process", "rt-multi-thread", "time"] }
 tauri = { version = "2", features = [] }
-tauri-runtime-blitz = { git = "https://github.com/pathscale/tauri-runtime-blitz.git", rev = "c3e2645f8ad34f246b0233eaaddc1e733aceae59", optional = true }
-blitz-dom = { git = "https://github.com/pathscale/ps-blitz.git", rev = "30faf47191530dac80e4ddeec77174a41184a729", features = ["system-fonts"], optional = true }
-blitz-script = { git = "https://github.com/pathscale/ps-blitz.git", rev = "30faf47191530dac80e4ddeec77174a41184a729", features = ["system-fonts"], optional = true }
+tauri-runtime-blitz = { path = "../../../tauri-runtime-blitz/crates/tauri-runtime-blitz", optional = true }
+blitz-dom = { package = "ps-blitz-dom", git = "https://github.com/pathscale/ps-blitz.git", rev = "40d0153770a17c5456ac222b89bbb318601bb99d", features = ["system-fonts", "incremental", "log-phase-times"], optional = true }
+blitz-script = { package = "ps-blitz-script", git = "https://github.com/pathscale/ps-blitz.git", rev = "40d0153770a17c5456ac222b89bbb318601bb99d", features = ["system-fonts"], optional = true }
 brotli = { version = "8.0.4", default-features = false, features = ["std"], optional = true }
 url = { version = "2.5.8", optional = true }
 tauri-plugin-updater = "2"

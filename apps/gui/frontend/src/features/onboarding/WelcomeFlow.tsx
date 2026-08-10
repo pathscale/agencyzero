@@ -199,7 +199,7 @@ export function WelcomeFlow(): JSX.Element {
 
   return (
     <Show when={visible()}>
-      <div class="absolute inset-0 z-50 flex items-center justify-center bg-black/72 px-6 py-8 backdrop-blur-[3px]">
+      <div class="absolute inset-0 z-50 flex items-center justify-center bg-black/72 px-6 py-8">
         <section
           role="dialog"
           aria-modal="true"

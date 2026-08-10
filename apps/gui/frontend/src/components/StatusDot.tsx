@@ -87,7 +87,9 @@ const ITEM_DOT: Record<ProjectStatus, string> = {
   new: "border-[1.5px] border-primary/30",
   // Legacy, and deliberately the dimmest: it means nobody has classified this.
   pending: "border-[1.5px] border-white/22",
-  planning: "border-[1.5px] border-dashed border-info",
+  // Rendered as SVG below. CSS's four-sided dashed border degenerates into
+  // one arc and a dot at this size in Blitz.
+  planning: "",
   active: "az-halo-primary bg-primary",
   // Amber and haloed: the one state that is asking the reader for something.
   questions: "az-halo-warning border-[1.5px] border-warning bg-warning/45",
@@ -106,10 +108,17 @@ export function ItemMarker(props: { status: ProjectStatus }): JSX.Element {
       fallback={<Icon name="circle-help" class="shrink-0 text-[13px] text-warning" />}
     >
       <Show
-        when={props.status !== "finished"}
-        fallback={<Icon name="check" class="relative top-0.5 shrink-0 text-[12px] text-success" />}
+        when={props.status !== "planning"}
+        fallback={<Icon name="circle-dashed" class="shrink-0 text-[12px] text-info" />}
       >
-        <span class={`size-2 shrink-0 rounded-full ${ITEM_DOT[props.status] ?? ITEM_DOT.new}`} />
+        <Show
+          when={props.status !== "finished"}
+          fallback={
+            <Icon name="check" class="relative top-0.5 shrink-0 text-[12px] text-success" />
+          }
+        >
+          <span class={`size-2 shrink-0 rounded-full ${ITEM_DOT[props.status] ?? ITEM_DOT.new}`} />
+        </Show>
       </Show>
     </Show>
   );

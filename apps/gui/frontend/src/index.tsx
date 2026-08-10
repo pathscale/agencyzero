@@ -4,6 +4,7 @@ import { enablePopmotion } from "@pathscale/ui/motion";
 import { animate } from "popmotion";
 import { render } from "solid-js/web";
 import App from "./App";
+import { isBlitz } from "./lib/platform";
 import { i18n } from "./stores/i18n";
 
 // Without a driver, every @pathscale/ui animation snaps to its end state.
@@ -13,6 +14,7 @@ enablePopmotion(animate);
 // effect supplies `data-color-mode`; `data-theme` remains the stable identity
 // @pathscale/ui and Tailwind resolve against.
 document.documentElement.setAttribute("data-theme", "agencyzero");
+if (isBlitz()) document.documentElement.setAttribute("data-blitz-renderer", "");
 void i18n.init();
 
 const root = document.getElementById("root");

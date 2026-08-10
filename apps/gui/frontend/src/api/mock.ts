@@ -1143,7 +1143,12 @@ export function createMockApi(): AgencyZeroApi {
 
     // A fixture stamp, shaped like the real one so the Settings row renders.
     getBuildInfo: () =>
-      settle({ version: "0.1.0", gitSha: "fixture00", builtAt: "2026-07-30 00:00:00" }),
+      settle({
+        version: "0.1.0",
+        runtime: "blitz",
+        gitSha: "fixture00",
+        builtAt: "2026-07-30 00:00:00",
+      }),
 
     // A fixture update, so the nudge and the install row are reviewable in
     // the browser preview. The real command asks the CDN manifest.
@@ -1153,6 +1158,7 @@ export function createMockApi(): AgencyZeroApi {
 
     // A browser preview has no native process to quit.
     quitApp: () => settle(undefined),
+    quitAppAndProxy: () => settle(undefined),
 
     // A browser tab cannot exec itself; the button is greyed off-Tauri anyway.
     relaunchApp: () => settle(undefined),

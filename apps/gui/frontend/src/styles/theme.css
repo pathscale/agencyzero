@@ -396,6 +396,20 @@
   }
 
   /*
+   * Blitz 30faf47 starts a selection drag for `auto`, but its explicit
+   * `UserSelect::Text` branch currently falls through without entering
+   * selection mode. Keep WebKit's required `text` opt-in above and feed Blitz
+   * `auto` on the same islands until the renderer-side branch is corrected.
+   * Every descendant is covered because the native hit node may be an inline
+   * child rather than the bubble carrying `data-selectable`.
+   */
+  html[data-blitz-renderer] [data-selectable],
+  html[data-blitz-renderer] [data-selectable] * {
+    user-select: auto;
+    -webkit-user-select: auto;
+  }
+
+  /*
    * Controls stay unselectable even inside one, so dragging across a transcript
    * does not sweep "Copy", "Retry" and "Cancel" into what you paste.
    */
@@ -486,9 +500,11 @@
   }
 
   /*
-   * A quiet traveling accent on the composer edge. It borrows the motion cue
-   * from 24x.ai without importing its silver MetalBorder treatment: this stays
-   * in AgencyZero's selected accent and works against either neutral sheen.
+   * A static accent on the composer edge. This used to animate forever.
+   * Blitz correctly treated that CSS animation as an active document and kept
+   * submitting full frames while the app was otherwise idle, consuming a full
+   * core for decoration alone. Keep the same accent distribution without an
+   * idle render loop.
    */
   .az-ring-composer {
     background-image: linear-gradient(
@@ -501,15 +517,8 @@
       rgb(from var(--color-primary) r g b / 16%) 78%,
       rgb(var(--az-sheen) / 5%) 100%
     );
-    background-position: 100% 50%;
+    background-position: 50% 50%;
     background-size: 240% 100%;
-    animation: az-composer-ring-drift 12s ease-in-out infinite alternate;
-  }
-
-  @keyframes az-composer-ring-drift {
-    to {
-      background-position: -100% 50%;
-    }
   }
 
   /* Status dots carry a soft halo when the state is live rather than historic. */

@@ -121,6 +121,7 @@ const COMMAND_FOR: Record<CommandMethod, string> = {
   checkForUpdate: "check_for_update",
   installUpdate: "install_update",
   quitApp: "quit_app",
+  quitAppAndProxy: "quit_app_and_proxy",
   relaunchApp: "relaunch_app",
   getTaskManager: "get_task_manager",
   resetTaskManager: "reset_task_manager",

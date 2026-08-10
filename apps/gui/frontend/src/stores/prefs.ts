@@ -2,9 +2,6 @@ import { createEffect } from "solid-js";
 import { createStore } from "solid-js/store";
 import type { PortableUiPrefs, UiPrefs } from "~/types";
 
-const STORAGE_KEY = "agencyzero:ui-prefs";
-const PORTABLE_REVISION_KEY = "agencyzero:portable-ui-prefs-revision";
-
 export const UI_SCALES: Record<UiPrefs["uiSize"], number> = {
   normal: 1,
   large: 1.08,
@@ -117,35 +114,15 @@ function normalize(stored: Partial<UiPrefs>): UiPrefs {
   };
 }
 
-function load(): UiPrefs {
-  if (typeof localStorage === "undefined") return DEFAULTS;
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return DEFAULTS;
-    return normalize(JSON.parse(raw) as Partial<UiPrefs>);
-  } catch {
-    // A prefs file we can't read is not worth failing a launch over.
-    return DEFAULTS;
-  }
-}
-
 /**
- * GUI-local preferences: which sections are open, what a new tab starts with,
+ * UI preferences: which sections are open, what a new tab starts with, and
  * where the window was left.
  *
- * Deliberately outside the Project and ProjectItem model — these are per
- * install, not per project, and they must not travel with a session.
+ * WorkTable's settings row is the sole durable source. This store starts from
+ * defaults and is hydrated before the workspace paints; no browser database
+ * exists in the pure-Rust Blitz runtime.
  */
-const [prefs, setPrefs] = createStore<UiPrefs>(load());
-
-createEffect(() => {
-  if (typeof localStorage === "undefined") return;
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(prefs));
-  } catch {
-    // Storage full or blocked — the app still works, it just forgets.
-  }
-});
+const [prefs, setPrefs] = createStore<UiPrefs>(DEFAULTS);
 
 createEffect(() => {
   if (typeof document === "undefined") return;
@@ -168,28 +145,51 @@ export function portablePrefsSnapshot(): PortableUiPrefs {
   return portable;
 }
 
+/**
+ * Compare JSON-shaped preference records structurally.
+ *
+ * Rust stores these preferences as `serde_json::Value`, whose object key order
+ * is not part of the value contract. Comparing `JSON.stringify` output made a
+ * response with reordered keys look different forever, so the 250 ms autosave
+ * wrote the same settings row continuously while the app was idle.
+ */
+export function samePortablePrefs(left: unknown, right: unknown): boolean {
+  if (left === right) return true;
+
+  if (Array.isArray(left) || Array.isArray(right)) {
+    return (
+      Array.isArray(left) &&
+      Array.isArray(right) &&
+      left.length === right.length &&
+      left.every((value, index) => samePortablePrefs(value, right[index]))
+    );
+  }
+
+  if (left === null || right === null || typeof left !== "object" || typeof right !== "object") {
+    return false;
+  }
+
+  const leftRecord = left as Record<string, unknown>;
+  const rightRecord = right as Record<string, unknown>;
+  const leftKeys = Object.keys(leftRecord);
+  const rightKeys = Object.keys(rightRecord);
+  return (
+    leftKeys.length === rightKeys.length &&
+    leftKeys.every(
+      (key) =>
+        Object.hasOwn(rightRecord, key) && samePortablePrefs(leftRecord[key], rightRecord[key]),
+    )
+  );
+}
+
 let portableRevisionFallback = "";
 
 function readPortableRevision(): string {
-  try {
-    if (typeof localStorage !== "undefined") {
-      return localStorage.getItem(PORTABLE_REVISION_KEY) ?? "";
-    }
-  } catch {
-    // Blitz has no Web Storage, and a webview may deny access to it.
-  }
   return portableRevisionFallback;
 }
 
 function writePortableRevision(revision: string): void {
   portableRevisionFallback = revision;
-  try {
-    if (typeof localStorage === "undefined") return;
-    if (revision) localStorage.setItem(PORTABLE_REVISION_KEY, revision);
-    else localStorage.removeItem(PORTABLE_REVISION_KEY);
-  } catch {
-    // The in-memory marker still prevents repeat application this launch.
-  }
 }
 
 /** Apply a restored preference snapshot without replacing local unfinished text. */

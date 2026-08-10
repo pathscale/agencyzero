@@ -63,6 +63,7 @@ function type(field: HTMLTextAreaElement, value: string) {
 
 afterEach(() => {
   AGENT_STATUS.find((status) => status.agent === "claude")!.state = "connected";
+  vi.unstubAllGlobals();
 });
 
 describe("Composer", () => {
@@ -175,8 +176,38 @@ describe("Composer", () => {
   });
 
   it("never shows a horizontal scrollbar in the prompt field", async () => {
+    const { field, booted, container } = mount();
+    expect(field).toHaveAttribute("wrap", "soft");
+    expect(field).toHaveClass(
+      "min-w-0",
+      "max-h-full",
+      "overflow-x-hidden",
+      "overflow-y-auto",
+      "whitespace-pre-wrap",
+      "break-words",
+    );
+    expect(container.querySelector("[data-prompt-viewport]")).toHaveClass("overflow-hidden");
+    await booted();
+  });
+
+  it("keeps one writable line when layout briefly reports zero height", async () => {
     const { field, booted } = mount();
-    expect(field).toHaveClass("overflow-x-hidden");
+    Object.defineProperty(field, "scrollHeight", { configurable: true, value: 0 });
+
+    fireEvent.input(field, { target: { value: "still writable" } });
+
+    expect(field.style.height).toBe("22px");
+    await booted();
+  });
+
+  it("remeasures a long draft restored reactively for the active tab", async () => {
+    setPrefs("composerDrafts", {});
+    const { field, booted } = mount({ draftKey: "project:restored" });
+    Object.defineProperty(field, "scrollHeight", { configurable: true, value: 112 });
+
+    setPrefs("composerDrafts", "project:restored", "a restored prompt ".repeat(80));
+
+    await waitFor(() => expect(field.style.height).toBe("112px"));
     await booted();
   });
 
@@ -187,9 +218,27 @@ describe("Composer", () => {
     fireEvent.click(screen.getByLabelText("Expand the prompt"));
     await waitFor(() => expect(prefs.expandedComposerKeys).toContain("project:abc"));
     await waitFor(() => expect(screen.field.style.height).toBe("240px"));
+    expect(screen.field).toHaveAttribute("rows", "11");
+    expect(screen.container.querySelector("[data-prompt-viewport]")).toHaveStyle({
+      height: "240px",
+    });
 
     fireEvent.click(screen.getByLabelText("Restore the prompt size"));
     await waitFor(() => expect(prefs.expandedComposerKeys).not.toContain("project:abc"));
+    await screen.booted();
+  });
+
+  it("keeps an expanded long prompt inside a short window", async () => {
+    vi.stubGlobal("innerHeight", 640);
+    setPrefs("expandedComposerKeys", []);
+    const screen = mount({ draftKey: "project:short-window" });
+    Object.defineProperty(screen.field, "scrollHeight", { configurable: true, value: 900 });
+
+    fireEvent.click(screen.getByLabelText("Expand the prompt"));
+
+    await waitFor(() => expect(screen.field.style.height).toBe("240px"));
+    expect(screen.field.style.maxHeight).toBe("240px");
+    expect(screen.field).toHaveAttribute("rows", "11");
     await screen.booted();
   });
 

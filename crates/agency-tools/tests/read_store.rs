@@ -189,6 +189,73 @@ async fn items_filter_and_search() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn provider_sessions_report_ownership_and_explicit_resets() {
+    let dir = temp_store("sessions");
+    write_descriptions(
+        &dir,
+        vec![
+            KvRow {
+                key: "session:proj-a".into(),
+                value: "claude-session".into(),
+                updated_at: "2026-08-09T00:00:00Z".into(),
+            },
+            KvRow {
+                key: "session:codex:proj-a".into(),
+                value: String::new(),
+                updated_at: "2026-08-10T00:00:00Z".into(),
+            },
+            KvRow {
+                key: "session-run:run-a".into(),
+                value: "not provider ownership".into(),
+                updated_at: "2026-08-10T00:00:01Z".into(),
+            },
+        ],
+    )
+    .await;
+
+    let kv = agency_tools::open_kv(&dir).await.unwrap();
+    let sessions = agency_tools::list_sessions(&kv, Some("proj-a")).unwrap();
+    assert_eq!(sessions.len(), 2);
+    assert_eq!(sessions[0].agent, "claude");
+    assert_eq!(sessions[0].session_id, "claude-session");
+    assert_eq!(sessions[1].agent, "codex");
+    assert_eq!(sessions[1].session_id, "");
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn snapshot_session_audit_names_and_deduplicates_recovery_candidates() {
+    let dir = temp_store("session-audit");
+    write_projects(&dir, vec![project("proj-a", "Research", 1)]).await;
+    let projects = agency_tools::open_projects(&dir).await.unwrap();
+    let current = vec![agency_tools::SessionOut {
+        project_id: "proj-a".into(),
+        agent: "codex".into(),
+        session_id: String::new(),
+        updated_at: "2026-08-10T00:00:00Z".into(),
+    }];
+    let recovered = agency_tools::SessionOut {
+        project_id: "proj-a".into(),
+        agent: "codex".into(),
+        session_id: "019fe585-684c-7240-82b9-7b1a02d25983".into(),
+        updated_at: "2026-08-09T17:27:05Z".into(),
+    };
+    let snapshots = vec![
+        ("snapshot-1".into(), vec![recovered.clone()]),
+        ("snapshot-2".into(), vec![recovered]),
+    ];
+
+    let report =
+        agency_tools::session_recovery_report(&projects, &current, &snapshots, Some("proj-a"))
+            .unwrap();
+
+    assert_eq!(report.len(), 1);
+    assert_eq!(report[0].project_name, "Research");
+    assert_eq!(report[0].current_session_id, "");
+    assert_eq!(report[0].action, "restore_snapshot_session");
+    assert_eq!(report[0].snapshots, ["snapshot-1", "snapshot-2"]);
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn missing_store_reads_empty_and_creates_nothing() {
     let dir = temp_store("missing").join("never-written");
 

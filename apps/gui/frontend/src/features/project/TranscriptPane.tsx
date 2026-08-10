@@ -59,15 +59,149 @@ function holdBackPartialDirective(text: string): string {
 
 const TRANSCRIPT_PAGE_SIZE = 12;
 
+/**
+ * The ceiling on mounted rows, in pages.
+ *
+ * Revealing earlier messages used to only ever grow the window, and nothing
+ * shrank it: reading up through a two hundred message thread mounted every row
+ * it passed and kept them for the rest of the session. Every later layout then
+ * paid for a tree that no one was looking at, which made the transcript the
+ * largest single lever on tree size in the window.
+ *
+ * Past this many rows a reveal slides instead of growing: a page appears above
+ * and the page furthest below the reader is dropped, so the transcript costs
+ * the same whether the thread holds forty messages or four thousand. Four
+ * pages is roughly four screenfuls, which is as far as anyone reads in one
+ * movement before they start scrolling again.
+ */
+export const TRANSCRIPT_MAX_ENTRIES = TRANSCRIPT_PAGE_SIZE * 4;
+
+/** One row of the transcript: a message, or an answered question above it. */
+type TimelineEntry =
+  | { kind: "message"; at: string; message: Message; index: number }
+  | { kind: "question"; at: string; question: Question };
+
+/**
+ * The row's durable identity.
+ *
+ * Doubles as the wrapper cache key and as the handle the mounted window holds
+ * its lower edge by. It has to be the underlying row's id rather than a
+ * position, because the timeline grows underneath a reader who is scrolled up.
+ */
+function entryKey(entry: TimelineEntry): string {
+  return entry.kind === "message" ? `m:${entry.message.id}` : `q:${entry.question.id}`;
+}
+
+/**
+ * Whether a cached row can be reused, meaning `<For>` must not rebuild it.
+ *
+ * Compares the fields the row is built from rather than the wrapper, because
+ * the wrapper is what we are trying to keep stable. The underlying message or
+ * question is compared by reference: the store replaces it on change, so a
+ * changed row fails this and correctly gets a new identity.
+ */
+function sameEntry(a: TimelineEntry, b: TimelineEntry): boolean {
+  if (a.kind !== b.kind || a.at !== b.at) return false;
+  if (a.kind === "message" && b.kind === "message") {
+    return a.message === b.message && a.index === b.index;
+  }
+  if (a.kind === "question" && b.kind === "question") {
+    return a.question === b.question;
+  }
+  return false;
+}
+
+/**
+ * The mounted slice of the timeline, bounded at both ends.
+ *
+ * `visibleCount` is how much the reader has asked to see and `trailingHidden`
+ * is how many of the newest rows have been dropped to pay for it. Both are
+ * clamped here rather than at the call sites, so the window cannot exceed the
+ * ceiling however the signals behind them got there. The bound is a property
+ * of this function, not a discipline the caller has to keep.
+ */
 export function transcriptTail<T>(
   entries: T[],
   visibleCount: number,
+  trailingHidden = 0,
 ): {
   hidden: number;
+  trailing: number;
   visible: T[];
 } {
-  const hidden = Math.max(0, entries.length - Math.max(1, visibleCount));
-  return { hidden, visible: entries.slice(hidden) };
+  const size = Math.min(Math.max(1, visibleCount), TRANSCRIPT_MAX_ENTRIES);
+  const trailing = Math.max(0, Math.min(trailingHidden, entries.length - size));
+  const end = entries.length - trailing;
+  const hidden = Math.max(0, end - size);
+  return { hidden, trailing, visible: entries.slice(hidden, end) };
+}
+
+export function shouldRevealEarlier(
+  scrollTop: number,
+  hidden: number,
+  ownerIntent: boolean,
+): boolean {
+  return ownerIntent && hidden > 0 && scrollTop <= 48;
+}
+
+/**
+ * The mirror of `shouldRevealEarlier` for the bottom edge, which only exists
+ * once the window has started sliding and there are newer rows below it.
+ * Owner intent is required on both edges for the same reason: reflow and
+ * resize clamp scrollTop on their own and must not page the transcript.
+ */
+export function shouldRevealLater(
+  distanceToTail: number,
+  trailing: number,
+  ownerIntent: boolean,
+): boolean {
+  return ownerIntent && trailing > 0 && distanceToTail <= 48;
+}
+
+export function anchoredScrollTop(
+  previousTop: number,
+  previousHeight: number,
+  nextHeight: number,
+): number {
+  return previousTop + Math.max(0, nextHeight - previousHeight);
+}
+
+/**
+ * Scroll offset that leaves the anchor row under the same pixel it occupied.
+ *
+ * `gap` is the row's top edge measured from the scroller's top edge. A slide
+ * adds rows above and drops rows below in one commit, so the change in total
+ * height says nothing about how far the row the reader is looking at actually
+ * moved; the row's own displacement does, in both directions.
+ */
+export function anchoredToRow(currentTop: number, previousGap: number, nextGap: number): number {
+  return Math.max(0, currentTop + nextGap - previousGap);
+}
+
+/** How far the row's top edge sits below the scroller's top edge, right now. */
+function rowGap(scroller: HTMLElement, row: Element): number {
+  return row.getBoundingClientRect().top - scroller.getBoundingClientRect().top;
+}
+
+/**
+ * The topmost row still inside the viewport, which is the one the reader is
+ * looking at and therefore the one to keep still. Undefined when there is
+ * nothing laid out to measure, which is every headless test.
+ *
+ * The reveal affordances are skipped deliberately. They bracket the rows, so
+ * at the top of the scroller the "show earlier" button is the first thing the
+ * viewport touches, and anchoring on it would hold the button still and push a
+ * whole page of prose down past the reader: the exact yank this is here to
+ * prevent, at the one moment the reveal always fires.
+ */
+export function viewportAnchor(scroller: HTMLElement): { row: Element; gap: number } | undefined {
+  const box = scroller.getBoundingClientRect();
+  for (const row of Array.from(scroller.children)) {
+    if (row.hasAttribute("data-transcript-edge")) continue;
+    const rect = row.getBoundingClientRect();
+    if (rect.bottom > box.top) return { row, gap: rect.top - box.top };
+  }
+  return undefined;
 }
 
 /**
@@ -82,7 +216,7 @@ export function TranscriptPane(props: {
   streaming: string;
 }): JSX.Element {
   const { state, actions } = useWorkspace();
-  let scroller!: HTMLDivElement;
+  let scroller!: HTMLElement;
   const streamingAgent = () =>
     state.runStatus[props.project.id]?.agent ??
     [...props.messages]
@@ -100,19 +234,105 @@ export function TranscriptPane(props: {
    */
   const [pinned, setPinned] = createSignal(true);
   const [visibleEntries, setVisibleEntries] = createSignal(TRANSCRIPT_PAGE_SIZE);
+  /*
+   * The newest row the window is allowed to mount, by key, once the window has
+   * reached its ceiling and begun sliding. Undefined means the window ends at
+   * the tail, which is the normal state and the only one that follows new
+   * messages.
+   *
+   * A key rather than a count from the end: while the reader is up in the
+   * history the agent keeps appending, and a count would walk the window one
+   * row towards the tail per streamed message, pulling the text out from under
+   * them. A key holds still. A key whose row no longer exists (a compaction can
+   * replace a stretch of thread) resolves to no trailing rows, so the window
+   * quietly falls back to the tail rather than showing a gap it cannot place.
+   */
+  const [windowEdge, setWindowEdge] = createSignal<string | undefined>();
   let lastScrollTop = 0;
+  let userScrollIntent = false;
+  let slidingWindow = false;
+  let revealFrame: number | undefined;
+  const markScrollIntent = (): void => {
+    userScrollIntent = true;
+  };
+  /*
+   * Move the mounted window, then put the reader back where they were.
+   *
+   * Anchoring on a row rather than on `scrollHeight` is what makes sliding
+   * possible at all: a slide adds a page above and drops a page below in one
+   * commit, so the height delta is the difference between two unrelated pages
+   * of prose and says nothing about the displacement the reader would feel.
+   * The height fallback covers the case where no row is laid out to measure.
+   */
+  const slideWindow = (move: () => void): void => {
+    if (slidingWindow) return;
+    slidingWindow = true;
+    const previousHeight = scroller.scrollHeight;
+    const previousTop = scroller.scrollTop;
+    const anchor = viewportAnchor(scroller);
+    move();
+    const restoreAnchor = (): void => {
+      revealFrame = undefined;
+      scroller.scrollTop = anchor?.row.isConnected
+        ? anchoredToRow(scroller.scrollTop, anchor.gap, rowGap(scroller, anchor.row))
+        : anchoredScrollTop(previousTop, previousHeight, scroller.scrollHeight);
+      lastScrollTop = scroller.scrollTop;
+      slidingWindow = false;
+    };
+    if (typeof requestAnimationFrame === "undefined") queueMicrotask(restoreAnchor);
+    else revealFrame = requestAnimationFrame(restoreAnchor);
+  };
+  const revealEarlier = (): void => {
+    const view = visibleTimeline();
+    if (slidingWindow || view.hidden === 0) return;
+    setPinned(false);
+    slideWindow(() => {
+      const size = untrack(visibleEntries);
+      if (size < TRANSCRIPT_MAX_ENTRIES) {
+        setVisibleEntries(Math.min(TRANSCRIPT_MAX_ENTRIES, size + TRANSCRIPT_PAGE_SIZE));
+        return;
+      }
+      // At the ceiling the page revealed above is paid for by dropping the
+      // page furthest below the reader. This is the eviction: without it the
+      // window only grew and a long read mounted the whole thread.
+      const entries = untrack(timeline);
+      const edge = entries.length - view.trailing - 1 - TRANSCRIPT_PAGE_SIZE;
+      setWindowEdge(entryKey(entries[Math.max(0, edge)]));
+    });
+  };
+  const revealLater = (): void => {
+    const view = visibleTimeline();
+    if (slidingWindow || view.trailing === 0) return;
+    slideWindow(() => {
+      const entries = untrack(timeline);
+      const edge =
+        entries.length - view.trailing - 1 + Math.min(TRANSCRIPT_PAGE_SIZE, view.trailing);
+      // Reaching the newest row hands the window back to the tail, so arriving
+      // messages mount again and the follow can re-engage on the next scroll.
+      setWindowEdge(edge >= entries.length - 1 ? undefined : entryKey(entries[edge]));
+    });
+  };
   const trackScroll = (): void => {
     const top = scroller.scrollTop;
-    const nearTail = scroller.scrollHeight - top - scroller.clientHeight < 48;
-    if (nearTail) {
+    const ownerIntent = userScrollIntent;
+    const view = visibleTimeline();
+    const toTail = scroller.scrollHeight - top - scroller.clientHeight;
+    // Reaching the bottom of a slid window is not reaching the conversation:
+    // pinning there would follow a tail that is not mounted, leaving the
+    // transcript apparently frozen on old messages while it claims to be live.
+    if (toTail < 48 && view.trailing === 0) {
       setPinned(true);
-    } else if (top < lastScrollTop - 1) {
-      // Only an actual upward movement disengages tail following. Layout and
-      // streamed-content growth can increase the distance from the tail
-      // without the owner moving at all.
+    } else if (top < lastScrollTop - 1 && ownerIntent) {
+      // Only owner input disengages tail following. Window resizing and text
+      // reflow can clamp scrollTop upward and dispatch a scroll event of their
+      // own; treating that as reading intent is the intermittent jump that
+      // leaves an otherwise pinned transcript just above the bottom.
       setPinned(false);
     }
+    userScrollIntent = false;
     lastScrollTop = top;
+    if (shouldRevealEarlier(top, view.hidden, ownerIntent)) revealEarlier();
+    else if (shouldRevealLater(toTail, view.trailing, ownerIntent)) revealLater();
   };
 
   let followFrame: number | undefined;
@@ -126,10 +346,18 @@ export function TranscriptPane(props: {
     queueMicrotask(moveToTail);
     if (typeof requestAnimationFrame !== "undefined") {
       if (followFrame !== undefined) cancelAnimationFrame(followFrame);
-      followFrame = requestAnimationFrame(() => {
-        followFrame = undefined;
-        moveToTail();
-      });
+      const afterLayout = (remaining: number): void => {
+        followFrame = requestAnimationFrame(() => {
+          followFrame = undefined;
+          moveToTail();
+          // Blitz can commit the initial DOM in one frame and finish its first
+          // layout in the next. A single callback then reads the old height and
+          // leaves a newly opened transcript at the top. Retry once after that
+          // layout without turning this into an open-ended animation loop.
+          if (remaining > 1 && untrack(pinned)) afterLayout(remaining - 1);
+        });
+      };
+      afterLayout(2);
     }
   };
 
@@ -170,6 +398,9 @@ export function TranscriptPane(props: {
     if (followFrame !== undefined && typeof cancelAnimationFrame !== "undefined") {
       cancelAnimationFrame(followFrame);
     }
+    if (revealFrame !== undefined && typeof cancelAnimationFrame !== "undefined") {
+      cancelAnimationFrame(revealFrame);
+    }
   });
 
   /*
@@ -191,23 +422,58 @@ export function TranscriptPane(props: {
   };
   const openQuestion = () => nextOpenQuestion(questionsFor());
   const turnLabels = createMemo(() => agentTurnLabels(props.messages));
+  /*
+   * Stable identities, deliberately.
+   *
+   * `<For>` reconciles by object reference. This memo used to build a fresh
+   * wrapper for every row on every recompute, and `props.messages` changes on
+   * every streaming token, so each token tore down and rebuilt the entire
+   * visible transcript rather than updating one row. That is why the header
+   * chip jumped, why panels lost their expanded state, and why scrolling was
+   * never smooth: the rows under the cursor were being destroyed and recreated
+   * continuously.
+   *
+   * Reusing a wrapper whenever its underlying row is unchanged means only the
+   * row that actually changed gets a new identity, so only that row rebuilds.
+   */
+  const entryCache = new Map<string, TimelineEntry>();
+  const stableEntry = (key: string, next: TimelineEntry): TimelineEntry => {
+    const previous = entryCache.get(key);
+    if (previous && sameEntry(previous, next)) return previous;
+    entryCache.set(key, next);
+    return next;
+  };
+
   const timeline = createMemo(() => {
     const questions = questionsFor()
       .filter((question) => question.answered)
       .map((q) => {
         const reply = props.messages.find((message) => message.replyToQuestionId === q.id);
-        return {
+        return stableEntry(`q:${q.id}`, {
           kind: "question" as const,
           at: reply?.createdAt ?? q.createdAt,
           question: q,
-        };
+        });
       });
-    const messages = props.messages.map((message, index) => ({
-      kind: "message" as const,
-      at: message.createdAt,
-      message,
-      index,
-    }));
+    const messages = props.messages.map((message, index) =>
+      stableEntry(`m:${message.id}`, {
+        kind: "message" as const,
+        at: message.createdAt,
+        message,
+        index,
+      }),
+    );
+    // Rows that no longer exist must not pin their wrapper alive: a long
+    // session would otherwise accumulate one entry per message ever seen.
+    if (entryCache.size > messages.length + questions.length) {
+      const live = new Set([
+        ...props.messages.map((message) => `m:${message.id}`),
+        ...questionsFor().map((question) => `q:${question.id}`),
+      ]);
+      for (const key of [...entryCache.keys()]) {
+        if (!live.has(key)) entryCache.delete(key);
+      }
+    }
     return [...messages, ...questions].sort((a, b) => {
       if (a.at !== b.at) return a.at < b.at ? -1 : 1;
       // A linked ask shares its reply's timestamp and sits immediately above
@@ -229,7 +495,15 @@ export function TranscriptPane(props: {
       return 0;
     });
   });
-  const visibleTimeline = createMemo(() => transcriptTail(timeline(), visibleEntries()));
+  const visibleTimeline = createMemo(() => {
+    const entries = timeline();
+    const edge = windowEdge();
+    // The scan only runs while the reader is holding a position up in the
+    // history, which is rare and short-lived; the ordinary tail case never
+    // touches the list.
+    const at = edge === undefined ? -1 : entries.findIndex((entry) => entryKey(entry) === edge);
+    return transcriptTail(entries, visibleEntries(), at === -1 ? 0 : entries.length - 1 - at);
+  });
 
   // Follow the tail as content arrives: new messages, streaming deltas, the
   // status line appearing. Reading these is what subscribes the effect;
@@ -250,9 +524,18 @@ export function TranscriptPane(props: {
      * to survive crossing the gaps between them. Marking only the bubbles left
      * every gap unselectable, and a drag over one collapsed the selection.
      */
-    <div
+    <section
       ref={scroller}
+      aria-label={tx("Conversation")}
+      tabindex="0"
       onScroll={trackScroll}
+      onWheel={markScrollIntent}
+      onPointerDown={markScrollIntent}
+      onPointerMove={(event) => event.buttons !== 0 && markScrollIntent()}
+      onTouchMove={markScrollIntent}
+      onKeyDown={(event) => {
+        if (["ArrowUp", "PageUp", "Home"].includes(event.key)) markScrollIntent();
+      }}
       data-selectable
       class="az-scroll flex min-h-0 flex-1 flex-col gap-4 overflow-x-hidden px-6 pt-14 pb-2 leading-relaxed"
     >
@@ -271,7 +554,8 @@ export function TranscriptPane(props: {
         <Show when={visibleTimeline().hidden > 0}>
           <button
             type="button"
-            onClick={() => setVisibleEntries((count) => count + TRANSCRIPT_PAGE_SIZE)}
+            onClick={revealEarlier}
+            data-transcript-edge
             class="mx-auto rounded-full border border-az-hairline-strong px-3 py-1 text-[11px] text-az-muted transition-colors hover:border-primary/50 hover:text-az-body"
           >
             {tx("Show {count} earlier messages", {
@@ -353,6 +637,22 @@ export function TranscriptPane(props: {
             </Switch>
           )}
         </For>
+        {/* The counterpart to "show earlier", and the only visible sign that
+            the window slid: below it the transcript jumps forward to whatever
+            is live, so the seam has to be named rather than left as a silent
+            discontinuity. Scrolling into it reveals the next page anyway. */}
+        <Show when={visibleTimeline().trailing > 0}>
+          <button
+            type="button"
+            onClick={revealLater}
+            data-transcript-edge
+            class="mx-auto rounded-full border border-az-hairline-strong px-3 py-1 text-[11px] text-az-muted transition-colors hover:border-primary/50 hover:text-az-body"
+          >
+            {tx("Show {count} newer messages", {
+              count: Math.min(TRANSCRIPT_PAGE_SIZE, visibleTimeline().trailing),
+            })}
+          </button>
+        </Show>
         {/* The run is blocked on this question; it renders where you read. */}
         <Show when={state.pendingApprovals[props.project.id]}>
           {(approval) => <ApprovalCard projectId={props.project.id} approval={approval()} />}
@@ -398,7 +698,7 @@ export function TranscriptPane(props: {
           )}
         </Show>
       </Show>
-    </div>
+    </section>
   );
 }
 
@@ -664,8 +964,18 @@ export function RunStatusLine(props: {
  * cannot be mistaken for the user bubble, which is `base-300` and right-aligned.
  * The corner tail mirrors the user's, pointing the other way.
  */
+/*
+ * `min-w-0` and `overflow-hidden` alongside the cap.
+ *
+ * `max-w-[88%]` bounds the bubble, but a child sizing to its max-content
+ * ignores that and draws past the painted background: the text ran on while
+ * the bubble ended, which reads as text escaping its own message. The first
+ * forces the child to take the bubble's width rather than its content's, the
+ * second makes any remaining overflow visible as clipping rather than as text
+ * floating over the page.
+ */
 const AGENT_BUBBLE =
-  "flex max-w-[88%] flex-col gap-2 self-start rounded-[16px_16px_16px_6px] border border-az-bubble-edge bg-az-bubble px-4 py-3";
+  "flex min-w-0 max-w-[88%] flex-col gap-2 self-start overflow-hidden rounded-[16px_16px_16px_6px] border border-az-bubble-edge bg-az-bubble px-4 py-3";
 
 /* 14px rather than 13.5, and 1.75 rather than 1.7: this is the longest-running
  * prose in the window and it was set smaller and tighter than the user's own
@@ -995,16 +1305,25 @@ function SystemNote(props: { message: Message }): JSX.Element {
   const failed = () => props.message.stop !== "completed";
 
   return (
-    <div class="group flex items-center gap-3 py-0.5">
+    <div class="group flex min-w-0 items-center gap-3 py-0.5">
       <span class="h-px flex-1 bg-az-hairline" />
       <span
         data-selectable
-        class={`flex items-center gap-1.5 text-center text-[11.5px] ${
+        class={`flex min-w-0 items-center gap-1.5 text-center text-[11.5px] ${
           failed() ? "text-error" : "text-az-muted"
         }`}
       >
         <Icon name={failed() ? "info" : "sparkles"} class="relative top-px shrink-0 text-[12px]" />
-        {props.message.body}
+        {/*
+          `min-w-0` and a truncating span, because the cost beside it is
+          `shrink-0`. A flex child will not shrink below its content width
+          without `min-w-0`, so a long note (a compaction naming how many
+          rules it kept) grew past the row and ran underneath the cost
+          readout instead of ending in an ellipsis.
+        */}
+        <span class="min-w-0 truncate" title={props.message.body}>
+          {props.message.body}
+        </span>
         <MessageCost message={props.message} />
       </span>
       {/* These notes carry the one thing most worth copying out of a

@@ -126,6 +126,21 @@ describe("AgencyProxy lifecycle", () => {
   });
 });
 
+describe("local debug control", () => {
+  it("shows whether the local MCP socket is listening", async () => {
+    const screen = await mountSettings();
+    const toggle = screen.getByLabelText("Enable local Blitz control") as HTMLInputElement;
+
+    expect(toggle.checked).toBe(false);
+    expect(screen.getByText("Local control disabled")).toBeTruthy();
+
+    fireEvent.click(toggle);
+
+    await waitFor(() => expect(screen.workspace.state.settings?.blitzControlEnabled).toBe(true));
+    await waitFor(() => expect(screen.getByText("Listening on local MCP socket")).toBeTruthy());
+  });
+});
+
 describe("cost warning settings", () => {
   it("persists a per-turn warning threshold across the full slider range", async () => {
     const screen = await mountSettings();

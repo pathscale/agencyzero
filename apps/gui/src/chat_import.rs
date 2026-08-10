@@ -669,6 +669,40 @@ pub fn discover() -> Result<Vec<SourceStatus>, String> {
     Ok(vec![claude_desktop, claude_code, chatgpt_desktop, codex])
 }
 
+/// The working directory a Claude Code session was recorded in.
+///
+/// Claude Code scopes a session to the directory it was created in: resuming
+/// from anywhere else answers `No conversation found with session ID`, which
+/// fails the turn outright rather than starting a fresh one. The transcript
+/// records the directory on every line, so the session itself is the authority
+/// on where it can be resumed.
+///
+/// `None` when no transcript exists or it names no directory, which callers
+/// must read as "resume wherever the project would have run anyway" rather
+/// than as an error.
+#[must_use]
+pub fn claude_session_cwd(session_id: &str) -> Option<String> {
+    let home = home().ok()?;
+    let transcript = find_session(&home.join(".claude/projects"), "jsonl", session_id)?;
+    let file = std::fs::File::open(transcript).ok()?;
+    // The first line that names one wins: a session cannot move, and reading
+    // the whole transcript to answer this would cost megabytes per run.
+    for line in std::io::BufRead::lines(std::io::BufReader::new(file)).take(64) {
+        let Ok(line) = line else { break };
+        let Ok(value) = serde_json::from_str::<serde_json::Value>(&line) else {
+            continue;
+        };
+        let cwd = value
+            .get("cwd")
+            .or_else(|| value.get("payload").and_then(|payload| payload.get("cwd")))
+            .and_then(serde_json::Value::as_str);
+        if let Some(cwd) = cwd.filter(|cwd| !cwd.is_empty()) {
+            return Some(cwd.to_string());
+        }
+    }
+    None
+}
+
 fn find_session(root: &Path, extension: &str, id: &str) -> Option<PathBuf> {
     collect(root, extension).into_iter().find(|path| {
         path.file_stem()

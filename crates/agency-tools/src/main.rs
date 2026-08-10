@@ -24,6 +24,12 @@ enum Command {
         project: Option<String>,
         bodies: bool,
     },
+    ListSessions {
+        project: Option<String>,
+    },
+    AuditSessions {
+        project: Option<String>,
+    },
     Usage {
         project: Option<String>,
     },
@@ -44,6 +50,11 @@ commands:
   list-messages [--project ID] [--bodies]
                              one row per message, oldest first, with the usage
                              the turn reported
+  list-sessions [--project ID]
+                             provider-session ownership, including empty resets
+  audit-sessions [--project ID]
+                             current pointers missing from db.snapshot-1/2,
+                             with project names and exact recovery candidates
   usage [--project ID]       token/cost rollup: whole-store totals, the single
                              largest turn, and per-model / per-day breakdowns
 
@@ -96,6 +107,16 @@ fn parse_args(args: &[String]) -> Result<Command, String> {
             return Ok(Command::ListMessages {
                 project: project_filter(&mut kept.iter())?,
                 bodies,
+            });
+        }
+        "list-sessions" => {
+            return Ok(Command::ListSessions {
+                project: project_filter(args)?,
+            });
+        }
+        "audit-sessions" => {
+            return Ok(Command::AuditSessions {
+                project: project_filter(args)?,
             });
         }
         "search-items" => {
@@ -178,6 +199,34 @@ fn run(command: Command) -> eyre::Result<()> {
                     bodies,
                 )?)
             }
+            Command::ListSessions { project } => {
+                let kv = agency_tools::open_kv(&dir).await?;
+                print_lines(&agency_tools::list_sessions(&kv, project.as_deref())?)
+            }
+            Command::AuditSessions { project } => {
+                let projects = agency_tools::open_projects(&dir).await?;
+                let current = agency_tools::open_kv(&dir).await?;
+                let current = agency_tools::list_sessions(&current, project.as_deref())?;
+                let name = dir
+                    .file_name()
+                    .and_then(|name| name.to_str())
+                    .unwrap_or("db");
+                let mut snapshots = Vec::new();
+                for suffix in ["snapshot-1", "snapshot-2"] {
+                    let path = dir.with_file_name(format!("{name}.{suffix}"));
+                    let table = agency_tools::open_kv(&path).await?;
+                    snapshots.push((
+                        suffix.to_string(),
+                        agency_tools::list_sessions(&table, None)?,
+                    ));
+                }
+                print_lines(&agency_tools::session_recovery_report(
+                    &projects,
+                    &current,
+                    &snapshots,
+                    project.as_deref(),
+                )?)
+            }
             Command::Usage { project } => {
                 let ledger = agency_tools::open_usage(&dir).await?;
                 let cache = agency_tools::open_usage_cache(&dir).await?;
@@ -239,6 +288,18 @@ mod tests {
         assert_eq!(
             parse_args(&args(&["list-rules", "--project=proj-1"])),
             Ok(Command::ListRules {
+                project: Some("proj-1".into())
+            })
+        );
+        assert_eq!(
+            parse_args(&args(&["list-sessions", "--project", "proj-1"])),
+            Ok(Command::ListSessions {
+                project: Some("proj-1".into())
+            })
+        );
+        assert_eq!(
+            parse_args(&args(&["audit-sessions", "--project", "proj-1"])),
+            Ok(Command::AuditSessions {
                 project: Some("proj-1".into())
             })
         );

@@ -236,11 +236,11 @@ describe("light mode", () => {
     expect(CSS).not.toMatch(/rgb\(255 255 255 \/ 0\.1[25]\)/);
   });
 
-  it("animates the composer edge slowly and respects the selected accent", () => {
+  it("keeps the composer accent static so idle Blitz views stop redrawing", () => {
     const rule = CSS.match(/\.az-ring-composer\s*\{([\s\S]*?)\n {2}\}/)?.[1] ?? "";
 
     expect(rule).toContain("var(--color-primary)");
-    expect(rule).toContain("12s ease-in-out");
-    expect(CSS).toContain("@keyframes az-composer-ring-drift");
+    expect(rule).not.toContain("animation:");
+    expect(CSS).not.toContain("@keyframes az-composer-ring-drift");
   });
 });

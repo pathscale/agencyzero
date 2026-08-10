@@ -1,4 +1,4 @@
-import { fireEvent, render, waitFor } from "@solidjs/testing-library";
+import { fireEvent, render, waitFor, within } from "@solidjs/testing-library";
 import { describe, expect, it, vi } from "vitest";
 import {
   CleanupRowActions,
@@ -151,9 +151,12 @@ describe("Home item rows", () => {
     const screen = await mountHome();
 
     fireEvent.click(screen.getAllByRole("button", { name: /^Fork .* into a fresh chat$/ })[0]);
-    const description = await screen.findByLabelText("Description / sub-items");
+    const dialog = await within(document.body).findByRole("dialog");
+    expect(dialog.parentElement).toBe(document.body);
+    const modal = within(dialog);
+    const description = await modal.findByLabelText("Description / sub-items");
     expect((description as HTMLTextAreaElement).value).toContain("Details / sub-items");
-    expect(screen.getByRole("button", { name: "Start fork" })).toBeTruthy();
+    expect(modal.getByRole("button", { name: "Start fork" })).toBeTruthy();
   });
 
   it("keeps item forks nested instead of adding top-level project groups", async () => {

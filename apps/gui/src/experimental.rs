@@ -6,6 +6,8 @@
 
 use agency_proxy_protocol::RunRequest;
 use agent_abstraction::Agent;
+#[cfg(all(feature = "experimental", target_os = "macos"))]
+use backon::Retryable;
 
 /// One provider-defined Claude usage window.
 #[derive(serde::Serialize)]
@@ -116,7 +118,11 @@ pub async fn claude_usage() -> Result<ClaudeUsageDto, String> {
     {
         let client = agent_experimental::claude_usage::ClaudeManagedUsageClient::new()
             .map_err(|error| error.to_string())?;
-        let usage = client.fetch().await.map_err(|error| error.to_string())?;
+        let usage = (|| client.fetch())
+            .retry(crate::retry::interactive_backoff())
+            .sleep(tokio::time::sleep)
+            .await
+            .map_err(|error| error.to_string())?;
 
         Ok(ClaudeUsageDto {
             five_hour: usage.five_hour.map(usage_window),

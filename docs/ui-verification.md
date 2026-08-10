@@ -70,3 +70,6 @@ updater, WorkTable persistence) does not exist in fixture mode. For those:
   and even then, ask the owner before anything appears on screen;
 - otherwise build + typecheck + test, then ask the owner to look, with one
   precise sentence about what to check. A human glance takes seconds.
+
+For desktop debugging, runtime selection, isolated data profiles, Blitz control,
+and performance evidence, see [Debugging AgencyZero desktop runtimes](debugging.md).

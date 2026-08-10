@@ -4,6 +4,12 @@ const MINUTE = 60_000;
 const HOUR = 60 * MINUTE;
 const DAY = 24 * HOUR;
 
+/** Parse WorkTable's microsecond ISO stamps on engines limited to milliseconds. */
+function timestamp(iso: string): number {
+  const normalized = iso.replace(/(\.\d{3})\d+(?=(?:Z|[+-]\d{2}:\d{2})$)/, "$1");
+  return Date.parse(normalized);
+}
+
 /**
  * "2 min ago" / "yesterday" — the Recent list and the agent-probe footer.
  *
@@ -11,7 +17,7 @@ const DAY = 24 * HOUR;
  * relative timestamp is noise in a window you leave open all day.
  */
 export function relativeTime(iso: string, now = Date.now()): string {
-  const then = Date.parse(iso);
+  const then = timestamp(iso);
   if (Number.isNaN(then)) return "—";
 
   const delta = now - then;
@@ -27,7 +33,7 @@ export function relativeTime(iso: string, now = Date.now()): string {
 
 /** "0:41" — the elapsed counter on a running tool call. */
 export function elapsed(startedAtIso: string, now = Date.now()): string {
-  const started = Date.parse(startedAtIso);
+  const started = timestamp(startedAtIso);
   if (Number.isNaN(started)) return "0:00";
 
   const seconds = Math.max(0, Math.floor((now - started) / 1000));
@@ -133,7 +139,7 @@ export function isSuccessfulStop(stop: string): boolean {
 /** "resets 14:20" on the rate-limit pill. */
 export function clockTime(iso: string | null): string {
   if (!iso) return "";
-  const at = new Date(iso);
+  const at = new Date(timestamp(iso));
   if (Number.isNaN(at.getTime())) return "";
   return `${String(at.getHours()).padStart(2, "0")}:${String(at.getMinutes()).padStart(2, "0")}`;
 }
@@ -148,7 +154,7 @@ export function clockTime(iso: string | null): string {
  */
 export function countdown(iso: string | null, now = Date.now()): string {
   if (!iso) return "";
-  const at = Date.parse(iso);
+  const at = timestamp(iso);
   if (Number.isNaN(at)) return "";
 
   const delta = at - now;

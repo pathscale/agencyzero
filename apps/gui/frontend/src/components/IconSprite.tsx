@@ -14,6 +14,7 @@ export type IconName =
   | "check"
   | "copy"
   | "circle-help"
+  | "circle-dashed"
   | "pencil"
   | "terminal"
   | "gauge"
@@ -67,6 +68,9 @@ export function IconSprite(): JSX.Element {
         <circle cx="12" cy="12" r="9" />
         <path d="M9.6 9a2.6 2.6 0 1 1 4.5 1.8c-1.3 1.2-2.1 1.6-2.1 3.2" />
         <path d="M12 18h.01" />
+      </symbol>
+      <symbol id="i-circle-dashed" viewBox="0 0 24 24">
+        <circle cx="12" cy="12" r="8" stroke-dasharray="4 3" />
       </symbol>
       <symbol id="i-chevron-down" viewBox="0 0 24 24">
         <path d="m6 9 6 6 6-6" />

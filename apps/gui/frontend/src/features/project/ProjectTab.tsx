@@ -5,8 +5,7 @@ import { Panel } from "~/components/Panel";
 import { Composer } from "~/features/project/Composer";
 import { ProjectPanel } from "~/features/project/ProjectPanel";
 import { TranscriptPane } from "~/features/project/TranscriptPane";
-import { providerUsageLabel } from "~/features/shell/UsageReadout";
-import { AGENT_LABELS, rateLimitLabel } from "~/lib/labels";
+import { AGENT_LABELS } from "~/lib/labels";
 import { describeError, log } from "~/lib/log";
 import { turnCostTotals } from "~/lib/pricing";
 import {
@@ -19,15 +18,13 @@ import {
 } from "~/lib/stats";
 import { tx } from "~/stores/i18n";
 import { prefs, setPrefs } from "~/stores/prefs";
-import { QUEUE_REASONS, reviewRunKey, useNow, useWorkspace } from "~/stores/workspace";
+import { QUEUE_REASONS, reviewRunKey, useWorkspace } from "~/stores/workspace";
 import type { Agent, Project, PullRequest, Tab } from "~/types";
 
 /**
  * A project tab: the conversation on the left, the accordion on the right.
  *
- * The header carries whatever is true of the whole tab right now — a rate
- * limit, in the provider's own wording — so it is visible without reading back
- * through the transcript.
+ * The header carries the tab's active model, usage, and native session.
  */
 /** A real, finite count — an absent field is `undefined`, which is not null. */
 function isCount(value: number | null): value is number {
@@ -37,7 +34,6 @@ function isCount(value: number | null): value is number {
 export function ProjectTab(props: { tab: Tab; project: Project }): JSX.Element {
   const { state, actions, promptModels, effortsFor, permissionsFor, capabilitiesFor, isLive } =
     useWorkspace();
-  const now = useNow();
   const forkInfo = createMemo(() => {
     const link = props.project.forkedFrom;
     if (!link?.itemId) return null;
@@ -48,7 +44,8 @@ export function ProjectTab(props: { tab: Tab; project: Project }): JSX.Element {
     return { parent, item, parentId: link.projectId, itemId: link.itemId };
   });
 
-  const messages = () => state.messages[props.project.id] ?? [];
+  const hydratedMessages = () => state.messages[props.project.id];
+  const messages = () => hydratedMessages() ?? [];
   const replyQuestion = createMemo(() => {
     const selected = prefs.replyQuestionIds[props.project.id];
     if (!selected) return undefined;
@@ -83,20 +80,6 @@ export function ProjectTab(props: { tab: Tab; project: Project }): JSX.Element {
       (capabilitiesFor(agent)?.liveFollowUp ?? false)
     );
   };
-  /*
-   * A refusal, or a warning that one is coming. Not the heartbeat: the provider
-   * emits a record on healthy runs too, with status `allowed`, and rendering
-   * that as an orange warning told you a run was limited when it was not.
-   *
-   * The warning used to be dropped here along with the heartbeat, which threw
-   * away the one report you can still act on. A refusal is news after the fact.
-   */
-  const rateLimit = () => {
-    const selectedAgent = state.runStatus[props.project.id]?.agent ?? props.tab.agent;
-    const limit = state.rateLimits[props.project.id]?.[selectedAgent];
-    return limit?.isBlocking || limit?.isWarning ? limit : undefined;
-  };
-
   /**
    * The composer's usage line: this project's running total.
    *
@@ -121,6 +104,11 @@ export function ProjectTab(props: { tab: Tab; project: Project }): JSX.Element {
   const costs = createMemo(() => turnCostTotals(state.pricing, tabMessages()));
   const conversationTotals = createMemo(() => usageTotals(messages()));
   const likelyCacheBreak = createMemo(() => cacheBreak(tabMessages()));
+  // Boot provides a cheap project turn count before the full transcript is
+  // hydrated. Use it to reserve the totals chip immediately; otherwise every
+  // tab switch briefly removes the chip and adds it back after listMessages.
+  const headerTurns = () =>
+    hydratedMessages() === undefined ? (state.turnCounts[props.project.id] ?? 0) : totals().turns;
 
   /** Why the cost reads as it does, for the hover on the header figure. */
   const costTitle = () => {
@@ -160,49 +148,6 @@ export function ProjectTab(props: { tab: Tab; project: Project }): JSX.Element {
       return isCount(it.contextTokens) ? `${compactCount(it.contextTokens)} ctx` : "—";
     }
     return `${compactCount(it.contextTokens ?? 0)} / ${compactCount(it.contextWindow ?? 0)} ctx · ${Math.round(share * 100)}%`;
-  });
-
-  /** Warm the 7-day readout as it fills: above 90% is error, above 70% warning. */
-  const severityFor = (percent: number | null): "low" | "mid" | "high" => {
-    if (percent === null) return "low";
-    if (percent >= 90) return "high";
-    if (percent >= 70) return "mid";
-    return "low";
-  };
-
-  /** The active tab's provider only, beside the turn count it constrains. */
-  const providerUsage = createMemo<{
-    label: string;
-    title: string;
-    severity: "low" | "mid" | "high";
-  } | null>(() => {
-    if (props.tab.agent === "claude") {
-      const window = state.claudeUsage?.sevenDay;
-      if (!window) return null;
-      const percent = Math.min(100, Math.max(0, window.utilization));
-      return {
-        label: providerUsageLabel("Claude", percent, window.resetsAt, now()),
-        title: window.resetsAt ?? "",
-        severity: severityFor(percent),
-      };
-    }
-
-    const windows = state.quota?.agents.find((entry) => entry.agent === "codex")?.windows ?? [];
-    const window = windows.reduce<(typeof windows)[number] | null>(
-      (longest, candidate) =>
-        (candidate.windowMinutes ?? 0) > (longest?.windowMinutes ?? 0) ? candidate : longest,
-      null,
-    );
-    if (!window) return null;
-    const reported =
-      window.usedFraction !== null && Number.isFinite(window.usedFraction)
-        ? Math.round(Math.min(1, Math.max(0, window.usedFraction)) * 100)
-        : null;
-    return {
-      label: providerUsageLabel("Codex", reported, window.resetsAt, now()),
-      title: window.resetsAt ?? "",
-      severity: severityFor(reported),
-    };
   });
 
   return (
@@ -254,59 +199,47 @@ export function ProjectTab(props: { tab: Tab; project: Project }): JSX.Element {
             Conversation totals float at the chat's top-right. Absolute
             positioning keeps the title row available to the project name while
             leaving next-turn controls in the composer.
-          */}
-            <Show when={totals().turns > 0}>
-              <span class="absolute top-full right-3 z-20 flex min-w-0 max-w-[calc(100%-1.5rem)] items-center gap-2 overflow-hidden rounded-b-lg border border-primary/38 border-t-0 bg-base-200 px-3 py-1 font-mono text-[11px] text-az-muted shadow-[0_7px_18px_rgba(0,0,0,0.38)]">
-                {/* No leading agent label: the 7-day readout at the end already says
+            */}
+            <span
+              data-turn-totals
+              aria-hidden={headerTurns() <= 0}
+              class={`absolute top-full right-3 z-20 flex w-[270px] max-w-[calc(100%-1.5rem)] items-center gap-1.5 overflow-hidden rounded-b-lg border border-primary/38 border-t-0 bg-base-200 px-3 py-1 font-mono text-[11px] text-az-muted shadow-[0_7px_18px_rgba(0,0,0,0.38)] ${headerTurns() <= 0 ? "invisible" : ""}`}
+            >
+              {/* No leading agent label: the 7-day readout at the end already says
                 "Claude 7d …", so a "Claude ·" prefix here was the same word
                 twice. The turn count leads instead. */}
-                <Show when={totals().turns > 0}>
-                  <span class="font-semibold text-az-body">
-                    {tx("Turn")} {totals().turns}
-                  </span>
-                  <span class="text-az-faint">·</span>
-                  {/* The session's summed consumption — where the tokens went. The
+              <span class="w-[58px] shrink-0 font-semibold text-az-body">
+                {tx("Turn")} {headerTurns()}
+              </span>
+              <span class="text-az-faint">·</span>
+              {/* The session's summed consumption — where the tokens went. The
                   context readout under the composer answers a different
                   question (how full the window is), so both exist. Coloured
                   accent, not flat grey: these are the numbers worth reading. */}
-                  <span title={costTitle()} class="font-semibold text-accent">
-                    {compactCount(totals().tokens)} {tx("tok")}
-                  </span>
-                  <span class="text-az-faint">·</span>
-                  {/* A leading ~ marks a partial total (some turns reported no
+              <span
+                title={costTitle()}
+                class="w-[82px] shrink-0 text-right font-semibold text-accent"
+              >
+                {hydratedMessages() === undefined ? "—" : compactCount(totals().tokens)} {tx("tok")}
+              </span>
+              <span class="text-az-faint">·</span>
+              {/* A leading ~ marks a partial total (some turns reported no
                   usage) without stealing a whole word from a tight header — the
                   hover still explains it. */}
-                  <span
-                    title={
-                      totals().reported < totals().turns
-                        ? tx("Some turns reported no usage")
-                        : costTitle()
-                    }
-                    class="font-semibold text-accent"
-                  >
-                    {costs().missing > 0 || costs().estimated ? "~" : ""}
-                    {costLabel(costs().usd)}
-                  </span>
+              <span
+                title={
+                  totals().reported < totals().turns
+                    ? tx("Some turns reported no usage")
+                    : costTitle()
+                }
+                class="w-[62px] shrink-0 text-right font-semibold text-accent"
+              >
+                <Show when={hydratedMessages() !== undefined} fallback="—">
+                  {costs().missing > 0 || costs().estimated ? "~" : ""}
+                  {costLabel(costs().usd)}
                 </Show>
               </span>
-            </Show>
-
-            <Show when={providerUsage()}>
-              {(usage) => (
-                <span
-                  class={`min-w-0 max-w-[300px] shrink truncate rounded-md border px-2.5 py-1 font-mono font-semibold text-[10.5px] ${
-                    usage().severity === "high"
-                      ? "border-error/32 bg-error/10 text-error"
-                      : usage().severity === "mid"
-                        ? "border-warning/32 bg-warning/10 text-warning"
-                        : "border-primary/20 bg-az-inset text-az-body"
-                  }`}
-                  title={usage().title}
-                >
-                  {usage().label}
-                </span>
-              )}
-            </Show>
+            </span>
 
             <Show when={likelyCacheBreak()}>
               <span
@@ -326,25 +259,6 @@ export function ProjectTab(props: { tab: Tab; project: Project }): JSX.Element {
                   : (props.project.sessions[props.tab.agent] ?? null)
               }
             />
-
-            <Show when={rateLimit()}>
-              {(limit) => (
-                /*
-                 * One line, in words, and nothing else.
-                 *
-                 * It read `allowed_warning (seven_day) · resets 21:00`, which is
-                 * the provider's status word, the provider's window name and a
-                 * time, wrapped onto two lines in a pill. Three facts where one
-                 * was wanted: whether to slow down. The window and the reset are
-                 * dropped, and `whitespace-nowrap` is what keeps the pill on one
-                 * line however narrow the header gets.
-                 */
-                <div class="mr-1.5 flex items-center gap-[7px] whitespace-nowrap rounded-full border border-warning/34 bg-warning/15 px-2.5 py-1 text-[11.5px]">
-                  <Icon name="pause" class="text-[12px] text-warning" />
-                  <span class="font-semibold text-warning">{rateLimitLabel(limit().message)}</span>
-                </div>
-              )}
-            </Show>
           </header>
 
           <TranscriptPane
@@ -492,13 +406,13 @@ export function ProjectTab(props: { tab: Tab; project: Project }): JSX.Element {
       <Show when={!forkInfo()}>
         <div
           aria-hidden={!prefs.projectPanelVisible}
-          class={`min-h-0 flex-none overflow-hidden transition-[width,margin,opacity,transform] duration-200 ease-out motion-reduce:transition-none ${
+          class={`min-h-0 flex-none overflow-hidden ${
             prefs.projectPanelVisible
               ? "ml-4 w-[332px] translate-x-0 opacity-100"
               : "pointer-events-none ml-0 w-0 translate-x-3 opacity-0"
           }`}
         >
-          <ProjectPanel project={props.project} />
+          <ProjectPanel project={props.project} agent={props.tab.agent} />
         </div>
       </Show>
     </div>
@@ -521,7 +435,7 @@ export function ProjectPanelToggle(props: { visible: boolean; onToggle: () => vo
       aria-pressed={props.visible}
       aria-label={label()}
       title={label()}
-      class="absolute top-1/2 left-full z-20 flex h-9 w-1.5 -translate-y-1/2 items-center justify-center rounded-r-md border border-primary/40 border-l-0 bg-primary/20 text-primary transition-[color,background-color,border-color,transform] duration-200 hover:translate-x-px hover:border-primary/60 hover:bg-primary/30 motion-reduce:transition-none"
+      class="absolute top-1/2 left-full z-20 flex h-9 w-1.5 -translate-y-1/2 items-center justify-center rounded-r-md border border-primary/40 border-l-0 bg-primary/20 text-primary transition-colors duration-200 hover:border-primary/60 hover:bg-primary/30 motion-reduce:transition-none"
     >
       <Icon
         name="chevron-right"

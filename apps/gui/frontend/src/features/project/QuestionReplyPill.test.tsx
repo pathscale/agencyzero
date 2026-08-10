@@ -18,6 +18,7 @@ describe("question reply pill", () => {
     const pill = screen.getByText("Reply to #3").parentElement;
 
     expect(pill).toHaveAttribute("title", QUESTION.text);
+    expect(pill).toHaveClass("w-fit", "max-w-full", "self-start");
     expect(screen.queryByText(QUESTION.text)).not.toBeInTheDocument();
   });
 });

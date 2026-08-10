@@ -3,6 +3,7 @@ import {
   createContext,
   createEffect,
   createMemo,
+  createRoot,
   createSignal,
   For,
   type JSX,
@@ -79,6 +80,13 @@ const AGENT_USE = {
  */
 const [settingsQuery, setSettingsQuery] = createSignal("");
 
+createRoot(() => {
+  createEffect(() => {
+    // Any query at all, including one being typed, needs every row present.
+    if (settingsQuery().trim() !== "") revealAllSections();
+  });
+});
+
 /** Whether some label or hint answers what is being searched for. */
 function matchesSearch(text: string): boolean {
   const needle = settingsQuery().trim().toLowerCase();
@@ -115,6 +123,8 @@ export function SettingsTab(): JSX.Element {
   >(null);
   const [proxyNote, setProxyNote] = createSignal("");
   const [terminateArmed, setTerminateArmed] = createSignal(false);
+  const [blitzControlPending, setBlitzControlPending] = createSignal(false);
+  const [blitzControlError, setBlitzControlError] = createSignal("");
 
   const refreshProxy = (): void => {
     setProxyAction("refresh");
@@ -168,6 +178,15 @@ export function SettingsTab(): JSX.Element {
       .then(() => setProxyNote(tx("AgencyProxy stopped")))
       .catch((cause) => setProxyNote(describeError(cause)))
       .finally(() => setProxyAction(null));
+  };
+
+  const setBlitzControl = (enabled: boolean): void => {
+    setBlitzControlPending(true);
+    setBlitzControlError("");
+    void actions
+      .saveSettings({ blitzControlEnabled: enabled })
+      .catch((cause) => setBlitzControlError(describeError(cause)))
+      .finally(() => setBlitzControlPending(false));
   };
 
   /**
@@ -756,6 +775,36 @@ export function SettingsTab(): JSX.Element {
                       void actions.saveSettings({ agentRestartPolicy })
                     }
                   />
+                </Row>
+                <Row
+                  label={tx("Local Blitz control")}
+                  hint={tx("off by default; off removes the MCP socket and discovery descriptor")}
+                >
+                  <div class="flex flex-col items-end gap-1">
+                    <SettingToggle
+                      label={tx("Enable local Blitz control")}
+                      checked={current().blitzControlEnabled}
+                      disabled={blitzControlPending()}
+                      onChange={setBlitzControl}
+                    />
+                    <span
+                      role={blitzControlError() ? "alert" : "status"}
+                      class={`max-w-[260px] text-right text-[10.5px] ${
+                        blitzControlError()
+                          ? "text-error"
+                          : current().blitzControlEnabled
+                            ? "text-success"
+                            : "text-az-muted"
+                      }`}
+                    >
+                      {blitzControlError() ||
+                        (blitzControlPending()
+                          ? tx("Applying local control…")
+                          : current().blitzControlEnabled
+                            ? tx("Listening on local MCP socket")
+                            : tx("Local control disabled"))}
+                    </span>
+                  </div>
                 </Row>
                 <Row
                   label={tx("Open source")}
@@ -1899,7 +1948,7 @@ function BuildStamp(): JSX.Element {
     <Show when={build()} fallback={<span class="text-[12px] text-az-faint">—</span>}>
       {(info) => (
         <span class="font-mono text-[11.5px] text-az-body">
-          {info().version} · {info().gitSha} {tx("· built")} {info().builtAt}
+          {info().version} · {info().runtime} · {info().gitSha} {tx("· built")} {info().builtAt}
         </span>
       )}
     </Show>
@@ -2164,6 +2213,50 @@ function CostSection(): JSX.Element {
   );
 }
 
+/*
+ * How many sections render in the first commit, and how many follow per tick.
+ *
+ * Every section is mounted and hidden with a class rather than unmounted, so
+ * search can ask each row whether it matches. That is the right call for
+ * search and the wrong one for opening the tab: all seventeen sections and
+ * around a thousand controls were built in a single synchronous commit, which
+ * measured 1388ms the first time Settings was opened and 53ms every time
+ * after. The tree is the same either way; the difference is whether it arrives
+ * in one commit or several.
+ *
+ * Staggering it costs nothing in the end state and makes the tab appear at
+ * once. Sections still never unmount once mounted, so search keeps working.
+ */
+const SETTINGS_FIRST_PAINT = 3;
+
+/**
+ * How far below the viewport a section is built in advance, in pixels.
+ *
+ * Enough that a scroll finds it already there, small enough that opening the
+ * tab does not build the whole page.
+ */
+const SETTINGS_PREBUILD_PX = 600;
+
+let settingsMounted = 0;
+const [settingsBudget, setSettingsBudget] = createSignal(SETTINGS_FIRST_PAINT);
+
+/**
+ * Reveal every section, for search.
+ *
+ * A section that is not mounted has no rows, and rows are what report whether
+ * they match a query. Rather than teach search to work without them, a query
+ * simply mounts everything: searching is deliberate and occasional, opening
+ * the tab is neither.
+ */
+function revealAllSections(): void {
+  setSettingsBudget((budget) => Math.max(budget, settingsMounted));
+}
+
+/** Admit sections up to and including `ordinal`. Never gives one back. */
+function admitSection(ordinal: number): void {
+  setSettingsBudget((budget) => (ordinal < budget ? budget : ordinal + 1));
+}
+
 function Section(props: {
   icon: IconProps["name"];
   title: string;
@@ -2185,6 +2278,39 @@ function Section(props: {
    * then never learn that a later query does match one of them.
    */
   const [hits, setHits] = createSignal(new Set<string>());
+  // Claim a slot in mount order. Stable for the life of the component, so a
+  // section never gives its place back and cannot flicker out once shown.
+  const ordinal = settingsMounted++;
+  let shell: HTMLDivElement | undefined;
+  /*
+   * Mounted once it has been reached, and never unmounted after.
+   *
+   * Seventeen sections and around four thousand nodes were built in the commit
+   * that opened the tab, while about three of them fit on screen. Staggering
+   * that over several ticks moved the cost around without removing it. This
+   * removes it: a section off the bottom of the page is not built until the
+   * reader approaches it.
+   */
+  const mounted = createMemo(() => ordinal < settingsBudget());
+  onMount(() => {
+    if (!shell) return;
+    const scroller = shell.closest(".az-scroll");
+    if (!scroller) {
+      // No scroll container to measure against, so build rather than risk a
+      // section that can never appear.
+      admitSection(ordinal);
+      return;
+    }
+    const check = (): void => {
+      if (mounted() || !shell) return;
+      const top = shell.getBoundingClientRect().top;
+      const limit = scroller.getBoundingClientRect().bottom + SETTINGS_PREBUILD_PX;
+      if (top <= limit) admitSection(ordinal);
+    };
+    check();
+    scroller.addEventListener("scroll", check, { passive: true });
+    onCleanup(() => scroller.removeEventListener("scroll", check));
+  });
   const titleMatches = createMemo(() => matchesSearch(`${props.title} ${props.hint}`));
   const visible = () => settingsQuery().trim() === "" || titleMatches() || hits().size > 0;
   const report = (label: string, hit: boolean): void => {
@@ -2198,7 +2324,7 @@ function Section(props: {
 
   return (
     <SearchScope.Provider value={{ titleMatches, report }}>
-      <Panel class="flex-none rounded-[13px]" classList={{ hidden: !visible() }}>
+      <Panel ref={shell} class="flex-none rounded-[13px]" classList={{ hidden: !visible() }}>
         <div class="flex flex-wrap items-baseline gap-x-2.5 gap-y-1 px-3.5 pt-3 pb-2.5">
           <Icon name={props.icon} class="relative top-0.5 text-[14px] text-primary" />
           <h2
@@ -2226,7 +2352,12 @@ function Section(props: {
           inert={props.pending ? "" : undefined}
           classList={{ "pointer-events-none opacity-45": !!props.pending }}
         >
-          {props.children}
+          {/*
+            Deferred, not conditional. Once a section has mounted it stays
+            mounted, so this only ever runs during the first few ticks after
+            the tab opens and never takes a row away from search afterwards.
+          */}
+          <Show when={mounted()}>{props.children}</Show>
         </div>
       </Panel>
     </SearchScope.Provider>

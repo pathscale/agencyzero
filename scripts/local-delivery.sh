@@ -17,14 +17,14 @@ if [ "${2:-}" = "--offline" ] || [ "${1:-}" = "--offline" ]; then
 fi
 
 case "$mode" in
-  verify | dev | experimental) ;;
+  verify | stable | experimental | experimental-inspector) ;;
   -h | --help)
-    echo "usage: scripts/local-delivery.sh [verify|dev|experimental] [--offline]"
+    echo "usage: scripts/local-delivery.sh [verify|stable|experimental|experimental-inspector] [--offline]"
     exit 0
     ;;
   *)
     echo "unknown mode: $mode" >&2
-    echo "usage: scripts/local-delivery.sh [verify|dev|experimental] [--offline]" >&2
+    echo "usage: scripts/local-delivery.sh [verify|stable|experimental|experimental-inspector] [--offline]" >&2
     exit 2
     ;;
 esac
@@ -40,6 +40,38 @@ run_tauri() {
     echo "cargo-tauri is not installed; run: cargo install tauri-cli --locked" >&2
     exit 1
   fi
+}
+
+pin_inspector_env() {
+  # The inspector is only reachable if the app knows where to put its control
+  # socket, and passing that with `open --env` does not survive the two launches
+  # that actually happen: a Finder launch, and the restart angel re-executing
+  # the binary after a rebuild (see docs/angel-restart.md). Both start the
+  # process without the shell environment, so the socket lands in $TMPDIR under
+  # an instance-specific name and every tool then attaches to whichever stale
+  # descriptor sorts last.
+  #
+  # LSEnvironment is read by launchd from the bundle itself, so it holds for
+  # every way the app can start. Applied here rather than in tauri.conf.json
+  # because this belongs to a local diagnostics build and must never ship.
+  bundle=$1
+  plist="$bundle/Contents/Info.plist"
+  plutil -remove LSEnvironment "$plist" >/dev/null 2>&1 || true
+  plutil -insert LSEnvironment -xml \
+    "<dict>
+       <key>BLITZ_INCREMENTAL</key><string>1</string>
+       <key>TAURI_BLITZ_CONTROL_DESCRIPTOR</key><string>$repo_root/target/blitz-control.json</string>
+     </dict>" "$plist"
+  # Editing Info.plist after bundling invalidates the signature, and macOS then
+  # refuses to launch the app at all: `open` fails with -54 and nothing starts.
+  # The bundle is ad-hoc signed to begin with, so re-signing ad-hoc restores it
+  # without needing an identity.
+  codesign --force --sign - --options runtime "$bundle" >/dev/null 2>&1
+  codesign --verify --strict "$bundle" || {
+    echo "bundle signature is invalid after pinning the inspector env" >&2
+    exit 1
+  }
+  echo "==> pinned inspector env in $(basename "$bundle")"
 }
 
 publish_bundle() {
@@ -81,20 +113,20 @@ case "$mode" in
   verify)
     echo "==> verified"
     ;;
-  dev)
-    echo "==> AgencyZero Dev.app"
+  stable)
+    echo "==> AgencyZero.app (Blitz inspector)"
     (
       cd "$repo_root/apps/gui"
       run_tauri build \
         --target "$rust_target" \
-        --config tauri.dev.conf.json \
-        --config '{"bundle":{"createUpdaterArtifacts":false}}' \
-        --no-sign
+        --features blitz-inspector \
+        --config '{"bundle":{"createUpdaterArtifacts":false}}'
     )
     publish_bundle \
-      "$repo_root/target/$rust_target/release/bundle/macos/AgencyZero Dev.app" \
-      "$repo_root/target/release/bundle/macos/AgencyZero Dev.app"
-    echo "$repo_root/target/release/bundle/macos/AgencyZero Dev.app"
+      "$repo_root/target/$rust_target/release/bundle/macos/AgencyZero.app" \
+      "$repo_root/target/release/bundle/macos/AgencyZero.app"
+    pin_inspector_env "$repo_root/target/release/bundle/macos/AgencyZero.app"
+    echo "$repo_root/target/release/bundle/macos/AgencyZero.app"
     ;;
   experimental)
     echo "==> AgencyZero Experimental.app"
@@ -102,10 +134,29 @@ case "$mode" in
       cd "$repo_root/apps/gui"
       run_tauri build \
         --target "$rust_target" \
-        --features experimental \
+        --features experimental,blitz-runtime \
         --config tauri.experimental.conf.json \
-        --config '{"bundle":{"createUpdaterArtifacts":false}}' \
-        --no-sign
+        --config '{"bundle":{"createUpdaterArtifacts":false}}'
+    )
+    publish_bundle \
+      "$repo_root/target/$rust_target/release/bundle/macos/AgencyZero Experimental.app" \
+      "$repo_root/target/release/bundle/macos/AgencyZero Experimental.app"
+    echo "$repo_root/target/release/bundle/macos/AgencyZero Experimental.app"
+    ;;
+  experimental-inspector)
+    # Same bundle as `experimental`, plus the Blitz diagnostics surface, which
+    # is what makes the renderer controllable and debuggable from outside.
+    # `blitz-inspector` already implies `blitz-runtime`, so naming both would
+    # be redundant rather than additive. It publishes over the same path, so
+    # the build stamp in Settings is what tells the two apart once installed.
+    echo "==> AgencyZero Experimental.app (Blitz inspector)"
+    (
+      cd "$repo_root/apps/gui"
+      run_tauri build \
+        --target "$rust_target" \
+        --features experimental,blitz-inspector \
+        --config tauri.experimental.conf.json \
+        --config '{"bundle":{"createUpdaterArtifacts":false}}'
     )
     publish_bundle \
       "$repo_root/target/$rust_target/release/bundle/macos/AgencyZero Experimental.app" \

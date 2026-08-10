@@ -35,7 +35,7 @@ describe("the project side panel", () => {
       workspace = useWorkspace();
       return (
         <Show when={workspace.state.boot.status === "ready"}>
-          <ProjectPanel project={{ ...PROJECT, id: "worktable" }} />
+          <ProjectPanel project={{ ...PROJECT, id: "worktable" }} agent="codex" />
         </Show>
       );
     }
@@ -73,7 +73,7 @@ describe("the project side panel", () => {
       return (
         <Show when={workspace.state.boot.status === "ready"}>
           <div data-testid="shell" class="h-[320px] overflow-hidden">
-            <ProjectPanel project={PROJECT} />
+            <ProjectPanel project={PROJECT} agent="codex" />
           </div>
         </Show>
       );
@@ -97,6 +97,42 @@ describe("the project side panel", () => {
     expect(items?.className).toContain("min-h-[52px]");
   });
 
+  it("adopts a recovered session into the active Claude provider", async () => {
+    let workspace!: Workspace;
+    const recovered = "f462e5c2-d5dd-42bd-a462-63256e2adf99";
+
+    function Gate() {
+      workspace = useWorkspace();
+      return (
+        <Show when={workspace.state.boot.status === "ready"}>
+          <ProjectPanel
+            project={{ ...PROJECT, sessions: { claude: "existing-claude-session" } }}
+            agent="claude"
+          />
+        </Show>
+      );
+    }
+
+    const screen = render(() => (
+      <WorkspaceProvider>
+        <Gate />
+      </WorkspaceProvider>
+    ));
+    await waitFor(() => expect(workspace.state.boot.status).toBe("ready"), { timeout: 5_000 });
+    const adopt = vi.spyOn(workspace.actions, "adoptSession").mockResolvedValue();
+    const expandSettings = screen.queryByRole("button", { name: "Expand Settings" });
+    if (expandSettings) fireEvent.click(expandSettings);
+
+    expect(screen.getByText("Attached: existing-claude-session")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Change" }));
+    fireEvent.input(screen.getByPlaceholderText("session id, e.g. 019fc95e-…"), {
+      target: { value: recovered },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Attach" }));
+
+    await waitFor(() => expect(adopt).toHaveBeenCalledWith(PROJECT.id, "claude", recovered));
+  });
+
   it("keeps the lower-token fork action visible without waiting for hover", async () => {
     let workspace!: Workspace;
 
@@ -104,7 +140,7 @@ describe("the project side panel", () => {
       workspace = useWorkspace();
       return (
         <Show when={workspace.state.boot.status === "ready"}>
-          <ProjectPanel project={{ ...PROJECT, id: "worktable" }} />
+          <ProjectPanel project={{ ...PROJECT, id: "worktable" }} agent="codex" />
         </Show>
       );
     }
@@ -128,7 +164,7 @@ describe("the project side panel", () => {
       workspace = useWorkspace();
       return (
         <Show when={workspace.state.boot.status === "ready"}>
-          <ProjectPanel project={{ ...PROJECT, id: "worktable" }} />
+          <ProjectPanel project={{ ...PROJECT, id: "worktable" }} agent="codex" />
         </Show>
       );
     }
@@ -141,12 +177,17 @@ describe("the project side panel", () => {
     await waitFor(() => expect(workspace.state.boot.status).toBe("ready"), { timeout: 5_000 });
 
     fireEvent.click(screen.getAllByLabelText(/Fork .* into a fresh chat/)[0]);
-    const context = await screen.findByLabelText("Description / sub-items");
+    await waitFor(() => expect(document.body.querySelector('[role="dialog"]')).not.toBeNull());
+    const dialog = document.body.querySelector('[role="dialog"]') as HTMLElement;
+    expect(dialog.parentElement).toBe(document.body);
+    expect(dialog.className).not.toContain("backdrop-blur");
+    expect(within(dialog).getByRole("heading", { name: "Prepare item fork" })).toBeVisible();
+    const context = within(dialog).getByLabelText("Description / sub-items");
     expect((context as HTMLTextAreaElement).value).toContain("Details / sub-items");
     fireEvent.input(context, {
       target: { value: "Preserve the owner decision and run the focused tests." },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Start fork" }));
+    fireEvent.click(within(dialog).getByRole("button", { name: "Start fork" }));
 
     await waitFor(() =>
       expect(workspace.state.projects.some((project) => project.forkedFrom?.itemId)).toBe(true),
@@ -165,7 +206,7 @@ describe("the project side panel", () => {
       workspace = useWorkspace();
       return (
         <Show when={workspace.state.boot.status === "ready"}>
-          <ProjectPanel project={{ ...PROJECT, id: "worktable" }} />
+          <ProjectPanel project={{ ...PROJECT, id: "worktable" }} agent="codex" />
         </Show>
       );
     }
@@ -215,7 +256,7 @@ describe("the project side panel", () => {
       const project = () => workspace.state.projects.find((candidate) => candidate.id === "cafe");
       return (
         <Show when={workspace.state.boot.status === "ready" && project()}>
-          {(readyProject) => <ProjectPanel project={readyProject()} />}
+          {(readyProject) => <ProjectPanel project={readyProject()} agent="codex" />}
         </Show>
       );
     }
@@ -264,7 +305,7 @@ describe("the project side panel", () => {
         workspace.state.projects.find((candidate) => candidate.id === "agencyzero");
       return (
         <Show when={workspace.state.boot.status === "ready" && project()}>
-          {(readyProject) => <ProjectPanel project={readyProject()} />}
+          {(readyProject) => <ProjectPanel project={readyProject()} agent="codex" />}
         </Show>
       );
     }
@@ -297,7 +338,7 @@ describe("the project side panel", () => {
       workspace = useWorkspace();
       return (
         <Show when={workspace.state.boot.status === "ready"}>
-          <ProjectPanel project={{ ...PROJECT, id: "worktable" }} />
+          <ProjectPanel project={{ ...PROJECT, id: "worktable" }} agent="codex" />
         </Show>
       );
     }

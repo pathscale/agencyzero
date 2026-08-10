@@ -10,6 +10,7 @@ const en = {
     "Design fixtures — the Rust commands are not implemented yet",
   "New project": "New project",
   "Show {count} earlier messages": "Show {count} earlier messages",
+  "Show {count} newer messages": "Show {count} newer messages",
   "Show {count} more projects": "Show {count} more projects",
   "Show {count} more items": "Show {count} more items",
   "Update available: {version} — install from Settings":
@@ -929,6 +930,21 @@ const en = {
     "Review these proposals before removing anything.",
   "Keep {name}": "Keep {name}",
   Keep: "Keep",
+  "Quit AgencyZero and AgencyProxy?": "Quit AgencyZero and AgencyProxy?",
+  "Quitting both cancels every run and stops AgencyProxy.":
+    "Quitting both cancels every run and stops AgencyProxy.",
+  "AgencyProxy remains running so active work can continue.":
+    "AgencyProxy remains running so active work can continue.",
+  "Quit both": "Quit both",
+  "Attached: {session}": "Attached: {session}",
+  Change: "Change",
+  "Local Blitz control": "Local Blitz control",
+  "off by default; off removes the MCP socket and discovery descriptor":
+    "off by default; off removes the MCP socket and discovery descriptor",
+  "Enable local Blitz control": "Enable local Blitz control",
+  "Applying local control…": "Applying local control…",
+  "Listening on local MCP socket": "Listening on local MCP socket",
+  "Local control disabled": "Local control disabled",
 } as const;
 
 export default en;

@@ -173,7 +173,7 @@ export function QuestionReplyPill(props: {
       {(question) => (
         <span
           title={question().text}
-          class="flex w-fit items-center gap-1.5 rounded-full border border-primary/35 bg-primary/10 py-1 pr-1.5 pl-2.5 text-[11.5px]"
+          class="flex w-fit max-w-full items-center gap-1.5 self-start rounded-full border border-primary/35 bg-primary/10 py-1 pr-1.5 pl-2.5 text-[11.5px]"
         >
           <Icon name="message-square-dashed" class="shrink-0 text-[11px] text-primary" />
           <span class="shrink-0 font-semibold text-primary">
@@ -417,6 +417,7 @@ export function Composer(props: ComposerProps): JSX.Element {
     }));
   };
   let field!: HTMLTextAreaElement;
+  const [promptHeight, setPromptHeight] = createSignal(22);
 
   // Sending while a run is live is allowed again — the store queues it and
   // sends when the run lands, so Enter never starts a second run and never
@@ -599,12 +600,41 @@ export function Composer(props: ComposerProps): JSX.Element {
   /** Grow with the content up to a ceiling, then scroll — no jumping layout. */
   function resize(): void {
     field.style.height = "auto";
-    const ceiling = expanded() ? 420 : 168;
-    const floor = expanded() ? 240 : 0;
-    field.style.height = `${Math.max(floor, Math.min(field.scrollHeight, ceiling))}px`;
+    // Expanded is a deliberate fixed workspace. Letting its measured content
+    // drive height made it jump while the owner was typing.
+    const modeCeiling = expanded() ? 240 : 168;
+    // A retained or just-restored view can briefly report scrollHeight = 0.
+    // Zero used to collapse the field completely until Expand supplied its
+    // 240px floor. Keep one writable line in compact mode even while layout is
+    // settling; the next input or reactive draft update measures it again.
+    const floor = expanded() ? 240 : 22;
+    // Keep the prompt and its controls inside short windows. The expanded
+    // editor may use more room, but must never consume the whole viewport.
+    const viewportCeiling = Math.max(floor, Math.floor(window.innerHeight * 0.45));
+    const ceiling = Math.min(modeCeiling, viewportCeiling);
+    field.style.maxHeight = `${ceiling}px`;
+    const height = Math.max(floor, Math.min(field.scrollHeight || floor, ceiling));
+    field.style.height = `${height}px`;
+    setPromptHeight(height);
   }
 
+  // `rows` is only the intrinsic fallback. Wrapped height comes from the
+  // textarea's measured scrollHeight above; guessing one line per 92
+  // characters made ordinary typing jump the composer at arbitrary thresholds.
+  const visibleRows = createMemo(() => {
+    const explicitLines = Math.max(1, draft().split("\n").length);
+    const floor = expanded() ? 11 : 1;
+    const modeCeiling = expanded() ? 18 : 7;
+    const viewportCeiling = Math.max(floor, Math.floor((window.innerHeight * 0.45) / 22));
+    return Math.max(floor, Math.min(explicitLines, modeCeiling, viewportCeiling));
+  });
+
   createEffect(() => {
+    // A keyed draft can change without an input event when the user returns to
+    // a tab. Track it here so a restored long prompt is measured just like one
+    // typed into the field. Waiting a microtask lets the controlled value land
+    // before scrollHeight is read.
+    draft();
     expanded();
     queueMicrotask(() => resize());
   });
@@ -866,27 +896,35 @@ export function Composer(props: ComposerProps): JSX.Element {
             number={props.replyQuestionNumber}
             onRemove={props.onCancelQuestionReply}
           />
-          <textarea
-            ref={field}
-            rows={1}
-            value={draft()}
-            placeholder={props.placeholder}
-            aria-label={props.placeholder}
-            onInput={(event) => {
-              remember(event.currentTarget.value);
-              resize();
-            }}
-            onKeyDown={(event) => {
-              // Enter sends; Shift+Enter is a newline. Standard for a chat box,
-              // and the reason this is a textarea rather than an input.
-              if (event.key !== "Enter" || event.shiftKey) return;
-              event.preventDefault();
-              void submit();
-            }}
-            class={`az-scroll w-full resize-none overflow-x-hidden bg-transparent text-base-content leading-[1.45] placeholder:text-az-faint focus:outline-none ${
-              props.size === "lg" ? "text-[15px]" : "text-[14.5px]"
-            }`}
-          />
+          <div
+            data-prompt-viewport
+            class="min-w-0 overflow-hidden"
+            style={{ height: `${promptHeight()}px` }}
+          >
+            <textarea
+              ref={field}
+              autofocus={props.autofocus}
+              rows={visibleRows()}
+              wrap="soft"
+              value={draft()}
+              placeholder={props.placeholder}
+              aria-label={props.placeholder}
+              onInput={(event) => {
+                remember(event.currentTarget.value);
+                resize();
+              }}
+              onKeyDown={(event) => {
+                // Enter sends; Shift+Enter is a newline. Standard for a chat box,
+                // and the reason this is a textarea rather than an input.
+                if (event.key !== "Enter" || event.shiftKey) return;
+                event.preventDefault();
+                void submit();
+              }}
+              class={`az-scroll block max-h-full w-full min-w-0 resize-none overflow-y-auto overflow-x-hidden whitespace-pre-wrap break-words bg-transparent text-base-content leading-[1.45] [overflow-wrap:anywhere] placeholder:text-az-faint focus:outline-none ${
+                props.size === "lg" ? "text-[15px]" : "text-[14.5px]"
+              }`}
+            />
+          </div>
 
           <Show when={advanced()}>
             <div class="rounded-lg border border-az-hairline bg-base-300/45 px-3 py-2">

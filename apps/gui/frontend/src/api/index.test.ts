@@ -37,6 +37,7 @@ const IMPLEMENTED = [
   "reset_project_session",
   "adopt_session",
   "quit_app",
+  "quit_app_and_proxy",
 ];
 
 describe("selectApi", () => {
@@ -111,6 +112,7 @@ describe("selectApi", () => {
     expect(live.has("addDir")).toBe(true);
     expect(live.has("removeDir")).toBe(true);
     expect(live.has("quitApp")).toBe(true);
+    expect(live.has("quitAppAndProxy")).toBe(true);
     expect(live.has("pricingTable")).toBe(true);
     expect(live.has("resetProjectSession")).toBe(true);
     // Not in IMPLEMENTED, so it stays on the mock and the UI greys it out.

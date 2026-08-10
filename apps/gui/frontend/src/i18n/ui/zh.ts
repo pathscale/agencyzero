@@ -11,6 +11,7 @@ const zh = {
   "Design fixtures — the Rust commands are not implemented yet": "设计样例 — Rust 命令尚未实现",
   "New project": "新建项目",
   "Show {count} earlier messages": "显示前 {count} 条消息",
+  "Show {count} newer messages": "显示后 {count} 条消息",
   "Show {count} more projects": "再显示 {count} 个项目",
   "Show {count} more items": "再显示 {count} 个任务",
   "Update available: {version} — install from Settings": "有可用更新：{version} — 请从设置中安装",
@@ -899,6 +900,21 @@ const zh = {
   "Review these proposals before removing anything.": "删除任何项目之前，请先查看这些建议。",
   "Keep {name}": "保留 {name}",
   Keep: "保留",
+  "Quit AgencyZero and AgencyProxy?": "退出 AgencyZero 和 AgencyProxy？",
+  "Quitting both cancels every run and stops AgencyProxy.":
+    "同时退出会取消所有运行，并停止 AgencyProxy。",
+  "AgencyProxy remains running so active work can continue.":
+    "AgencyProxy 会继续运行，使进行中的工作能够继续。",
+  "Quit both": "同时退出",
+  "Attached: {session}": "已连接：{session}",
+  Change: "更改",
+  "Local Blitz control": "本地 Blitz 控制",
+  "off by default; off removes the MCP socket and discovery descriptor":
+    "默认关闭；关闭时会移除 MCP 套接字和发现描述文件",
+  "Enable local Blitz control": "启用本地 Blitz 控制",
+  "Applying local control…": "正在应用本地控制…",
+  "Listening on local MCP socket": "正在监听本地 MCP 套接字",
+  "Local control disabled": "本地控制已停用",
 } satisfies Record<keyof typeof en, string>;
 
 export default zh;

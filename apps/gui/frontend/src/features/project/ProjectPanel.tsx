@@ -1,6 +1,7 @@
 import { Toggle } from "@pathscale/ui";
 import { createEffect, createMemo, createSignal, For, type JSX, Show } from "solid-js";
 import { NOTES_BUDGET } from "~/api/client";
+import { AppModal } from "~/components/AppModal";
 import { Icon } from "~/components/Icon";
 import { SectionPanel } from "~/components/Panel";
 import { PillMenu } from "~/components/PillMenu";
@@ -14,7 +15,7 @@ import { describeError, log } from "~/lib/log";
 import { tx } from "~/stores/i18n";
 import { prefs, setPrefs, togglePanelSection } from "~/stores/prefs";
 import { useNow, useWorkspace } from "~/stores/workspace";
-import type { Project, ProjectItem, Question, RunningTask } from "~/types";
+import type { Agent, Project, ProjectItem, Question, RunningTask } from "~/types";
 
 export const PROJECT_ITEM_PAGE_SIZE = 12;
 
@@ -30,7 +31,7 @@ export function itemPage<T>(items: readonly T[], limit: number): T[] {
  * install rather than per project, so the panel you left open stays open when
  * you switch tabs.
  */
-export function ProjectPanel(props: { project: Project }): JSX.Element {
+export function ProjectPanel(props: { project: Project; agent: Agent }): JSX.Element {
   const { state, itemsFor, openItemCount } = useWorkspace();
 
   const running = () => state.running[props.project.id] ?? [];
@@ -131,7 +132,7 @@ export function ProjectPanel(props: { project: Project }): JSX.Element {
       {/* Last, deliberately: directories and the moderator toggle are set once
           and revisited rarely, and they were costing the working sections the
           top of the column. */}
-      <SettingsSection project={props.project} />
+      <SettingsSection project={props.project} agent={props.agent} />
     </div>
   );
 }
@@ -367,7 +368,7 @@ const IO_TONE: Record<string, string> = {
  * Model and permission are deliberately absent: they are per tab and live only
  * in the composer, which is the note this section ends on.
  */
-function SettingsSection(props: { project: Project }): JSX.Element {
+function SettingsSection(props: { project: Project; agent: Agent }): JSX.Element {
   const { state, actions, isLive } = useWorkspace();
   const [adding, setAdding] = createSignal(false);
   const [path, setPath] = createSignal("");
@@ -515,9 +516,16 @@ function SettingsSection(props: { project: Project }): JSX.Element {
 
         <div class="my-0.5 h-px bg-az-hairline-soft" />
 
-        {/* Codex is the agent whose sessions wedge and get recovered by id, so
-            it is the default here; the id field takes any provider's session. */}
-        <ResumeSession projectId={props.project.id} agent="codex" running={isRunning()} />
+        <ResumeSession
+          projectId={props.project.id}
+          agent={props.agent}
+          running={isRunning()}
+          currentSession={
+            props.agent === "claude"
+              ? (props.project.sessions.claude ?? props.project.sessionId)
+              : props.project.sessions[props.agent]
+          }
+        />
 
         <div class="flex gap-[7px] pt-0.5 text-[11px] text-az-faint leading-[1.5]">
           <Icon name="info" class="relative top-0.5 shrink-0 text-[12px]" />
@@ -795,7 +803,12 @@ function ResetSession(props: { project: Project; running: boolean }): JSX.Elemen
  * point is to attach a session when the project has none, or a different one.
  * Disabled while a run is live, which the backend also refuses.
  */
-function ResumeSession(props: { projectId: string; agent: string; running: boolean }): JSX.Element {
+function ResumeSession(props: {
+  projectId: string;
+  agent: string;
+  running: boolean;
+  currentSession?: string | null;
+}): JSX.Element {
   const { actions } = useWorkspace();
   const [open, setOpen] = createSignal(false);
   const [id, setId] = createSignal("");
@@ -823,7 +836,9 @@ function ResumeSession(props: { projectId: string; agent: string; running: boole
         <span class="min-w-0 flex-1 text-[12px] text-az-body">
           {tx("Resume a session by id")}
           <span class="mt-px block text-[11px] text-az-muted">
-            {tx("Attach a session recovered by its id so the next message continues it")}
+            {props.currentSession
+              ? tx("Attached: {session}", { session: props.currentSession })
+              : tx("Attach a session recovered by its id so the next message continues it")}
           </span>
         </span>
         <button
@@ -833,7 +848,7 @@ function ResumeSession(props: { projectId: string; agent: string; running: boole
           title={props.running ? tx("Cancel the active run first") : undefined}
           onClick={() => setOpen((value) => !value)}
         >
-          {tx("Resume")}
+          {tx(props.currentSession ? "Change" : "Resume")}
         </button>
       </div>
       <Show when={open()}>
@@ -980,8 +995,8 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
     }
     queueMicrotask(() => {
       const row = document.querySelector<HTMLElement>(`[data-item-id="${target.id}"]`);
-      row?.scrollIntoView?.({ block: "nearest", behavior: "smooth" });
-      row?.focus({ preventScroll: true });
+      row?.scrollIntoView?.();
+      row?.focus();
     });
   });
 
@@ -1063,21 +1078,24 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
     );
   }
 
-  async function openFork(item: ProjectItem): Promise<void> {
+  function openFork(item: ProjectItem): void {
     const existing = forkFor(item.id);
     if (existing) {
       actions.openProject(existing.id);
       return;
     }
-    setForkingId(item.id);
-    try {
-      const context = await actions.getItemContext(item.id);
-      setContextDraft({ item, context: context || defaultItemDescription(item), startFork: true });
-    } catch (cause) {
-      log.error(`could not load the item context: ${describeError(cause)}`);
-    } finally {
-      setForkingId(null);
-    }
+    const fallback = defaultItemDescription(item);
+    setContextDraft({ item, context: fallback, startFork: true });
+    void actions
+      .getItemContext(item.id)
+      .then((context) => {
+        const current = contextDraft();
+        // A delayed load must not overwrite text the owner has already typed.
+        if (current?.item.id === item.id && current.context === fallback) {
+          setContextDraft({ item, context: context || fallback, startFork: true });
+        }
+      })
+      .catch((cause) => log.error(`could not load the item context: ${describeError(cause)}`));
   }
 
   async function toggleDescription(item: ProjectItem): Promise<void> {
@@ -1112,8 +1130,16 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
     if (!draft) return;
     setForkingId(draft.item.id);
     try {
-      await actions.setItemContext(draft.item.id, draft.context);
-      if (draft.startFork) await actions.forkItem(draft.item.id);
+      if (draft.startFork) {
+        try {
+          await actions.setItemContext(draft.item.id, draft.context);
+        } catch (cause) {
+          log.error(`could not save the fork context: ${describeError(cause)}`);
+        }
+        await actions.forkItem(draft.item.id);
+      } else {
+        await actions.setItemContext(draft.item.id, draft.context);
+      }
       setContextDraft(null);
     } catch (cause) {
       log.error(`could not save the item description: ${describeError(cause)}`);
@@ -1361,7 +1387,7 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
                 </button>
                 <button
                   type="button"
-                  onClick={() => void openFork(item)}
+                  onClick={() => openFork(item)}
                   disabled={forkingId() === item.id}
                   title={
                     forkFor(item.id)
@@ -1634,23 +1660,8 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
 
       <Show when={contextDraft()}>
         {(draft) => (
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="item-context-title"
-            class="fixed z-50 flex items-center justify-center bg-black/60 p-8 backdrop-blur-[2px]"
-            style={{
-              position: "fixed",
-              top: "0px",
-              left: "0px",
-              width: "100vw",
-              height: "100vh",
-              "z-index": "50",
-            }}
-            onClick={(event) => event.currentTarget === event.target && setContextDraft(null)}
-            onKeyDown={(event) => event.key === "Escape" && setContextDraft(null)}
-          >
-            <section class="az-ring flex max-h-full w-full max-w-[620px] flex-col overflow-hidden rounded-[17px] bg-base-200 shadow-[0_24px_80px_rgba(0,0,0,.65)]">
+          <AppModal labelledBy="item-context-title" onDismiss={() => setContextDraft(null)}>
+            <section class="az-ring flex max-h-full w-[620px] max-w-full flex-none flex-col overflow-hidden rounded-[17px] bg-base-200 shadow-[0_24px_80px_rgba(0,0,0,.65)]">
               <header class="flex items-start gap-3 border-az-hairline-soft border-b px-5 py-4">
                 <div class="flex size-9 shrink-0 items-center justify-center rounded-[11px] border border-primary/28 bg-primary/10 text-primary">
                   <Icon name="git-fork" class="text-[17px]" />
@@ -1721,7 +1732,7 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
                 </button>
               </footer>
             </section>
-          </div>
+          </AppModal>
         )}
       </Show>
     </div>
