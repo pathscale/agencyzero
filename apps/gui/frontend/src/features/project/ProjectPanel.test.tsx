@@ -143,6 +143,7 @@ describe("the project side panel", () => {
     fireEvent.click(screen.getAllByLabelText(/Fork .* into a fresh chat/)[0]);
     await waitFor(() => expect(document.body.querySelector('[role="dialog"]')).not.toBeNull());
     const dialog = document.body.querySelector('[role="dialog"]') as HTMLElement;
+    expect(dialog.parentElement).toBe(document.body);
     expect(dialog.className).not.toContain("backdrop-blur");
     expect(within(dialog).getByRole("heading", { name: "Prepare item fork" })).toBeVisible();
     const context = within(dialog).getByLabelText("Description / sub-items");

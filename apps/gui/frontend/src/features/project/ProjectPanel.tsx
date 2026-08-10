@@ -1,15 +1,7 @@
 import { Toggle } from "@pathscale/ui";
-import {
-  createEffect,
-  createMemo,
-  createSignal,
-  For,
-  type JSX,
-  onCleanup,
-  onMount,
-  Show,
-} from "solid-js";
+import { createEffect, createMemo, createSignal, For, type JSX, Show } from "solid-js";
 import { NOTES_BUDGET } from "~/api/client";
+import { AppModal } from "~/components/AppModal";
 import { Icon } from "~/components/Icon";
 import { SectionPanel } from "~/components/Panel";
 import { PillMenu } from "~/components/PillMenu";
@@ -29,36 +21,6 @@ export const PROJECT_ITEM_PAGE_SIZE = 12;
 
 export function itemPage<T>(items: readonly T[], limit: number): T[] {
   return items.slice(0, Math.max(0, limit));
-}
-
-/**
- * Move a live Solid subtree under `body` without using a Portal.
- *
- * Retained project views establish containing blocks, which otherwise trap a
- * `position: fixed` backdrop inside one panel. Moving the already-bound node
- * preserves Solid/Blitz listeners while giving the dialog viewport geometry.
- */
-function AppModal(props: {
-  labelledBy: string;
-  onDismiss: () => void;
-  children: JSX.Element;
-}): JSX.Element {
-  let root!: HTMLDivElement;
-  onMount(() => document.body.append(root));
-  onCleanup(() => root.remove());
-  return (
-    <div
-      ref={root}
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby={props.labelledBy}
-      class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-8"
-      onClick={(event) => event.currentTarget === event.target && props.onDismiss()}
-      onKeyDown={(event) => event.key === "Escape" && props.onDismiss()}
-    >
-      {props.children}
-    </div>
-  );
 }
 
 /**

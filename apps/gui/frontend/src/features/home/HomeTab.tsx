@@ -1,5 +1,6 @@
 import { createMemo, createSignal, For, type JSX, Show } from "solid-js";
 import { NOTES_BUDGET } from "~/api/client";
+import { AppModal } from "~/components/AppModal";
 import { EditableTitle } from "~/components/EditableTitle";
 import { Icon } from "~/components/Icon";
 import { Panel, SectionPanel } from "~/components/Panel";
@@ -1105,13 +1106,9 @@ function GroupItemRow(props: {
           )}
         </Show>
         <Show when={forkDraft() !== null}>
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby={`home-fork-title-${props.item.id}`}
-            class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-8"
-            onClick={(event) => event.currentTarget === event.target && setForkDraft(null)}
-            onKeyDown={(event) => event.key === "Escape" && setForkDraft(null)}
+          <AppModal
+            labelledBy={`home-fork-title-${props.item.id}`}
+            onDismiss={() => setForkDraft(null)}
           >
             <section class="az-ring flex max-h-full w-full max-w-[620px] flex-col overflow-hidden rounded-[17px] bg-base-200 shadow-[0_24px_80px_rgba(0,0,0,.65)]">
               <header class="flex items-start gap-3 border-az-hairline-soft border-b px-5 py-4">
@@ -1184,7 +1181,7 @@ function GroupItemRow(props: {
                 </button>
               </footer>
             </section>
-          </div>
+          </AppModal>
         </Show>
       </div>
     </Show>
