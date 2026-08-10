@@ -7362,11 +7362,29 @@ pub async fn compact_project(
         .and_then(|row| serde_json::from_str::<Vec<String>>(&row.dirs).ok())
         .unwrap_or_default();
     dirs.retain(|dir| !dir.trim().is_empty());
-    let cwd = if dirs.is_empty() {
+    let mut cwd = if dirs.is_empty() {
         crate::workspace_root_path(&app, &state)
     } else {
         dirs.remove(0)
     };
+
+    // Compaction resumes the session, so it is bound by the same rule every
+    // other resume is: Claude keys a conversation to the directory it was
+    // created in, and resuming from anywhere else answers "No conversation
+    // found with session ID" and fails the turn. This path built its own cwd
+    // from the project's directories and never asked the session where it
+    // lives, so compacting a project whose session was recorded elsewhere
+    // failed every time while an ordinary turn on the same project worked.
+    if agent == Agent::Claude
+        && let Some(session) = session.as_deref()
+        && let Some(home) = crate::chat_import::claude_session_cwd(session)
+        && home != cwd
+    {
+        if !dirs.contains(&cwd) {
+            dirs.push(cwd);
+        }
+        cwd = home;
+    }
 
     let io = state.io.clone();
 

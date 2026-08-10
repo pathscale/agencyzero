@@ -60,12 +60,16 @@ export function SectionPanel(props: SectionPanelProps): JSX.Element {
         (the log's "Clear"), and nesting that inside a button would be invalid
         HTML. The toggle is the button that fills the rest of the row.
       */}
-      <div class="flex items-center gap-2.5 px-3.5 py-3 transition-colors hover:bg-white/4">
+      <div class="flex items-center justify-start gap-2.5 px-3.5 py-3 transition-colors hover:bg-white/4">
         <button
           type="button"
           onClick={props.onToggle}
           aria-expanded={props.isOpen}
-          class="flex min-w-0 flex-1 items-center gap-2.5 text-left"
+          // `justify-start` explicitly, rather than relying on the flex
+          // default. Every section header rendered centred, which is what a
+          // missing or differently defaulted `justify-content` looks like, and
+          // stating it costs nothing where it was already correct.
+          class="flex min-w-0 flex-1 items-center justify-start gap-2.5 text-left"
         >
           <Show when={props.trailing}>{props.trailing}</Show>
           <Show when={props.icon}>

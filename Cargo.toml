@@ -40,12 +40,12 @@ anyrender_vello = { path = "../ps-anyrender/crates/anyrender_vello" }
 anyrender_vello_hybrid = { path = "../ps-anyrender/crates/anyrender_vello_hybrid" }
 
 [patch."https://github.com/pathscale/ps-blitz.git"]
-blitz-dom = { path = "../ps-blitz-az-30faf/packages/blitz-dom" }
-blitz-html = { path = "../ps-blitz-az-30faf/packages/blitz-html" }
-blitz-paint = { path = "../ps-blitz-az-30faf/packages/blitz-paint" }
-blitz-script = { path = "../ps-blitz-az-30faf/packages/blitz-script" }
-blitz-shell = { path = "../ps-blitz-az-30faf/packages/blitz-shell" }
-blitz-traits = { path = "../ps-blitz-az-30faf/packages/blitz-traits" }
+blitz-dom = { path = "../ps-blitz-render/packages/blitz-dom" }
+blitz-html = { path = "../ps-blitz-render/packages/blitz-html" }
+blitz-paint = { path = "../ps-blitz-render/packages/blitz-paint" }
+blitz-script = { path = "../ps-blitz-render/packages/blitz-script" }
+blitz-shell = { path = "../ps-blitz-render/packages/blitz-shell" }
+blitz-traits = { path = "../ps-blitz-render/packages/blitz-traits" }
 
 [profile.dev]
 # GUI diagnostics come from logs and backtraces. Generating full symbol tables

@@ -599,7 +599,6 @@ export function Composer(props: ComposerProps): JSX.Element {
 
   /** Grow with the content up to a ceiling, then scroll — no jumping layout. */
   function resize(): void {
-    field.style.height = "auto";
     // Expanded is a deliberate fixed workspace. Letting its measured content
     // drive height made it jump while the owner was typing.
     const modeCeiling = expanded() ? 240 : 168;
@@ -613,8 +612,24 @@ export function Composer(props: ComposerProps): JSX.Element {
     const viewportCeiling = Math.max(floor, Math.floor(window.innerHeight * 0.45));
     const ceiling = Math.min(modeCeiling, viewportCeiling);
     field.style.maxHeight = `${ceiling}px`;
+    // Shrink to the floor before measuring, rather than to `auto`.
+    //
+    // Reading scrollHeight forces a synchronous layout, and under `auto` the
+    // textarea is intrinsically sized, so every one of the fourteen flex
+    // containers above it has to measure its children to find out how tall it
+    // became. Measured on 2026-08-10: one keystroke recomputed 140 nodes
+    // 16,842 times, about 120 passes each, for 18ms of layout. A definite
+    // height needs no intrinsic pass at all.
+    //
+    // Shrinking still works because scrollHeight reports the full content
+    // height whenever the content overflows the box, which it does at the
+    // floor. That is the only reason `auto` was needed here.
+    field.style.height = `${floor}px`;
     const height = Math.max(floor, Math.min(field.scrollHeight || floor, ceiling));
-    field.style.height = `${height}px`;
+    // Writing the same value back would dirty layout again for nothing, and
+    // typing within one line is the common case.
+    const target = `${height}px`;
+    if (field.style.height !== target) field.style.height = target;
     setPromptHeight(height);
   }
 
