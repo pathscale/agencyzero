@@ -8,6 +8,7 @@ wheel events at a fixed cadence, then reports the frame window that resulted.
 Usage:
   scripts/blitz-bench.py scroll [ticks] [delta]
   scripts/blitz-bench.py type [keys] [selector-substring]
+  scripts/blitz-bench.py click [name-substring]
   scripts/blitz-bench.py nodes
   scripts/blitz-bench.py idle
 
@@ -244,6 +245,47 @@ def type_keys(ins, count, want):
     return 0
 
 
+def click_named(ins, want):
+    """Price a single click, such as switching to a tab.
+
+    A tab switch flips `display: none` to `flex` over that tab's whole subtree,
+    so taffy lays out in one pass everything the tab retained while hidden. That
+    is a different cost from typing and needs its own measurement.
+    """
+    res = ins.call(
+        "blitz.agent.control",
+        {"command": "inspect", "params": {"root": None, "max_depth": 40}},
+    )
+    found = (res or {}).get("result", {}).get("structuredContent", {}).get("value", {}).get("nodes", [])
+    targets = [
+        node
+        for node in found
+        if want.lower() in (node.get("name") or "").lower()
+        and node.get("visible")
+        and node.get("enabled")
+    ]
+    if not targets:
+        print(f"no visible, enabled node whose name contains {want!r}", file=sys.stderr)
+        return 2
+    target = targets[0]
+    print(f"clicking node {target['id']} role={target.get('role')} name={(target.get('name') or '')[:50]!r}")
+
+    before = metrics(ins)
+    started = time.time()
+    ins.call(
+        "blitz.agent.control",
+        {"command": "act", "params": {"action": "click", "params": {"node_id": target["id"]}}},
+    )
+    ack = (time.time() - started) * 1000
+    time.sleep(0.5)
+    after = metrics(ins)
+    print(f"click acked in {ack:.1f}ms")
+    show("before", before)
+    show("after", after)
+    show_delta(before, after, 1)
+    return 0
+
+
 def main():
     mode = sys.argv[1] if len(sys.argv) > 1 else "idle"
     ins = connect()
@@ -253,6 +295,10 @@ def main():
     if mode == "idle":
         show("idle", metrics(ins))
         return 0
+    if mode == "click":
+        want = sys.argv[2] if len(sys.argv) > 2 else "Settings"
+        nodes(ins)
+        return click_named(ins, want)
     if mode == "type":
         count = int(sys.argv[2]) if len(sys.argv) > 2 else 20
         want = sys.argv[3] if len(sys.argv) > 3 else ""
