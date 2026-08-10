@@ -291,10 +291,51 @@ so they cost memory and style but not layout, and "cache the neighbouring tabs"
 is already what happens. The cost lands when a tab is shown and its whole
 subtree lays out at once.
 
+### 8. The layout cost does not come from anything the frontend does
+
+Three fixes were tried against the typing cost. All three were built, shipped
+and measured, and all three changed **nothing**:
+
+| Attempt | Result |
+|---|---|
+| Narrow the parent `restyle_subtree` in `set_attribute` | 18.17 → 18.90 ms, noise |
+| Measure the composer against a definite height, not `auto` | identical |
+| Memoise the cost chip's text so keystrokes stop rewriting it | identical |
+
+Identical is meant literally. Every run of every build reported **16,842
+recomputations over 140 distinct nodes, 18,158 of 35,000 cache lookups hit, 52%,
+15 caches cleared**, to the digit.
+
+That determinism is the finding. The layout pass is byte-identical regardless of
+what the application writes during a keystroke, so no frontend change can move
+it. What remains is the one thing common to every keystroke: the textarea's own
+`value` write, which goes through `set_attribute` and inserts `ALL_DAMAGE` on the
+node plus `restyle_subtree` on its parent. A textarea is a layout leaf sized from
+`rows` and `cols`, so its content cannot change its box, yet a value write
+damages it as though it could.
+
+The hotspots are named, and they are composer chrome rather than the transcript:
+
+```
+2703:div(Block)x460  2332:span(Block)x371  2346:span(Block)x371
+2334:span(Block)x371 2450:span(Flex)x287   2445:span(Block)x287
+```
+
+`2450` is the cost-estimate chip. It is recomputed hundreds of times even when
+its text is memoised and never rewritten, which is what rules the frontend out.
+
+The next experiment is engine-side and narrow: stop a `value` write on a text
+input from inserting `ALL_DAMAGE` and from restyling the parent's subtree, since
+neither can change that leaf's box, and see whether the 140-node region stops
+being invalidated. It needs visual verification, which the broken screenshot
+route cannot provide.
+
 ## What is still open
 
-- **Taffy cache misses during intrinsic sizing.** 16,842 recomputations from 15
-  dirty nodes, and the single largest engine cost in the application.
+- **What a textarea `value` write damages.** The only remaining candidate, and
+  the only thing that varies with nothing.
+- **Taffy cache misses.** 16,842 recomputations from 15 dirty nodes, 52% hit
+  rate, and the single largest engine cost in the application.
 - **Settings' ~118 ms of component construction.** Application-side.
 - **Memory.** 819 MB RSS on a fresh stable instance with a 4,899 node tree, and
   3.9 GB on a long-running Experimental one. Unexplained, and worth explaining
