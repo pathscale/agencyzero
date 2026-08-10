@@ -1015,6 +1015,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "blitz-bench"
+version = "0.5.10"
+dependencies = [
+ "blitz-control-protocol",
+ "endpoint-libs 2.1.5",
+ "eyre",
+ "serde",
+ "serde_json",
+ "tokio",
+]
+
+[[package]]
 name = "blitz-control-protocol"
 version = "0.1.0"
 dependencies = [
@@ -7085,6 +7097,7 @@ version = "1.0.151"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c841b55ecdae098c80dcae9cf767f6f8a0c2cdb3416bbef72181df4d0fe73f14"
 dependencies = [
+ "indexmap 2.14.0",
  "itoa",
  "memchr",
  "serde",

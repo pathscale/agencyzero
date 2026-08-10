@@ -81,12 +81,22 @@ pkill -f "macos/AgencyZero.app/Contents/MacOS/az-gui"
 ## The ready-made tools
 
 ```sh
-scripts/blitz-probe.py frames            # one-shot metrics read
-scripts/blitz-probe.py tree              # semantic tree
-BENCH_PACE=0 scripts/blitz-bench.py scroll 200 -100   # driven scroll, then metrics
-scripts/blitz-bench.py type 20           # driven typing, cost per keystroke
-scripts/blitz-bench.py nodes             # tree size and role histogram
+cargo run -q -p blitz-bench -- frames    # one-shot metrics read
+cargo run -q -p blitz-bench -- tree      # semantic tree
+BENCH_PACE=0 cargo run -q -p blitz-bench -- scroll 200 -100   # driven scroll, then metrics
+cargo run -q -p blitz-bench -- type 20   # driven typing, cost per keystroke
+cargo run -q -p blitz-bench -- nodes     # tree size and role histogram
 ```
+
+`blitz-bench` speaks the protocol through
+[`blitz-control-protocol`](../../tauri-runtime-blitz/crates/blitz-control-protocol),
+which is the **server's own** definition of the wire rather than a second copy
+of it. That is not tidiness: the Python hand-wrote this JSON and got the
+adjacent tagging of `AgentAction` wrong, which presented as a hung app, and its
+`tree` mode sent `maxDepth` where the server wants `max_depth` and had been
+answering `invalid debug frame` rather than a tree. Both are now compile errors.
+The tool stays out of the Tauri dependency tree on purpose: 48 crates against
+the gui's 650, so measuring never means building a renderer.
 
 `type` focuses the first visible text field, drives real key events, and reports
 the **delta** in script attribution across the run rather than the totals. Use it

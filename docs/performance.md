@@ -24,10 +24,11 @@ and how to launch directly when you need `log-phase-times` on stdout.
 
 | Tool | What it answers |
 |---|---|
-| `scripts/blitz-probe.py frames` | One-shot read of the current frame window |
-| `BENCH_PACE=0 scripts/blitz-bench.py scroll 200 -100` | Drives a fixed interaction and reports what it cost |
-| `scripts/blitz-bench.py type 20` | Cost per keystroke, as a delta rather than a total |
-| `scripts/blitz-bench.py nodes` | Tree size, which is the input to every layout cost |
+| `cargo run -q -p blitz-bench -- frames` | One-shot read of the current frame window |
+| `BENCH_PACE=0 cargo run -q -p blitz-bench -- scroll 200 -100` | Drives a fixed interaction and reports what it cost |
+| `cargo run -q -p blitz-bench -- type 20` | Cost per keystroke, as a delta rather than a total |
+| `cargo run -q -p blitz-bench -- click Settings` | Cost of one click, such as a tab switch |
+| `cargo run -q -p blitz-bench -- nodes` | Tree size, which is the input to every layout cost |
 | `sample <pid> 20 1 -f out.txt` | Native stack profile. Works because `strip = false` |
 | direct launch, stdout to a file | Per-phase resolve timings from `log-phase-times` |
 
@@ -73,7 +74,7 @@ Each of these produced a confident, wrong conclusion before it was caught.
    check is the binary's mtime, not the exit code you think you saw.
 7. **Cumulative attribution hides the interaction you are measuring.** The
    `script.breakdown` totals run since launch, so a keystroke sits under startup
-   and everything done before it. `blitz-bench.py type` reports the delta across
+   and everything done before it. `blitz-bench type` reports the delta across
    the run; without a delta the first reading said typing cost 198 ms, and the
    truth was 22 ms with the rest belonging to earlier shortcuts.
 8. **The probe attaches to whichever descriptor sorts last.** Unpinned, the
@@ -309,7 +310,7 @@ subtree lays out at once.
   reproducible. Other heavy views are still reported slow and are not yet
   attributed. Anything that measures geometry after mutating (autosize, scroll
   restoration, virtualised lists) pays the same forced resolve, so measure with
-  `blitz-bench.py type` first and check whether `layout:flush_from_script`
+  `blitz-bench type` first and check whether `layout:flush_from_script`
   dominates before assuming a new cause.
 
 `set_final_layout` and the poll loop were listed here and are now ruled out; see
