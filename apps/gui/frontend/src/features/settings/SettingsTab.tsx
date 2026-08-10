@@ -2205,6 +2205,37 @@ function CostSection(): JSX.Element {
   );
 }
 
+/*
+ * How many sections render in the first commit, and how many follow per tick.
+ *
+ * Every section is mounted and hidden with a class rather than unmounted, so
+ * search can ask each row whether it matches. That is the right call for
+ * search and the wrong one for opening the tab: all seventeen sections and
+ * around a thousand controls were built in a single synchronous commit, which
+ * measured 1388ms the first time Settings was opened and 53ms every time
+ * after. The tree is the same either way; the difference is whether it arrives
+ * in one commit or several.
+ *
+ * Staggering it costs nothing in the end state and makes the tab appear at
+ * once. Sections still never unmount once mounted, so search keeps working.
+ */
+const SETTINGS_FIRST_PAINT = 3;
+const SETTINGS_PER_TICK = 2;
+
+let settingsMounted = 0;
+let settingsScheduled = false;
+const [settingsBudget, setSettingsBudget] = createSignal(SETTINGS_FIRST_PAINT);
+
+/** Let the next few sections in, once the current commit has been painted. */
+function scheduleSettingsMount(): void {
+  if (settingsScheduled) return;
+  settingsScheduled = true;
+  setTimeout(() => {
+    settingsScheduled = false;
+    setSettingsBudget((budget) => budget + SETTINGS_PER_TICK);
+  }, 0);
+}
+
 function Section(props: {
   icon: IconProps["name"];
   title: string;
@@ -2226,6 +2257,14 @@ function Section(props: {
    * then never learn that a later query does match one of them.
    */
   const [hits, setHits] = createSignal(new Set<string>());
+  // Claim a slot in mount order. Stable for the life of the component, so a
+  // section never gives its place back and cannot flicker out once shown.
+  const ordinal = settingsMounted++;
+  const mounted = createMemo(() => {
+    const ready = ordinal < settingsBudget();
+    if (!ready) scheduleSettingsMount();
+    return ready;
+  });
   const titleMatches = createMemo(() => matchesSearch(`${props.title} ${props.hint}`));
   const visible = () => settingsQuery().trim() === "" || titleMatches() || hits().size > 0;
   const report = (label: string, hit: boolean): void => {
@@ -2267,7 +2306,12 @@ function Section(props: {
           inert={props.pending ? "" : undefined}
           classList={{ "pointer-events-none opacity-45": !!props.pending }}
         >
-          {props.children}
+          {/*
+            Deferred, not conditional. Once a section has mounted it stays
+            mounted, so this only ever runs during the first few ticks after
+            the tab opens and never takes a row away from search afterwards.
+          */}
+          <Show when={mounted()}>{props.children}</Show>
         </div>
       </Panel>
     </SearchScope.Provider>
