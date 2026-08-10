@@ -72,7 +72,7 @@ dependencies = [
 
 [[package]]
 name = "agency-tools"
-version = "0.5.10"
+version = "0.5.11"
 dependencies = [
  "derive_more 2.1.1",
  "dirs",
@@ -788,11 +788,11 @@ dependencies = [
 
 [[package]]
 name = "az-core"
-version = "0.5.10"
+version = "0.5.11"
 
 [[package]]
 name = "az-gui"
-version = "0.5.10"
+version = "0.5.11"
 dependencies = [
  "agency-proxy-client",
  "agency-proxy-protocol",
@@ -830,7 +830,7 @@ dependencies = [
 
 [[package]]
 name = "az-mcp-proxy"
-version = "0.5.10"
+version = "0.5.11"
 dependencies = [
  "az-core",
 ]
@@ -963,7 +963,7 @@ dependencies = [
 
 [[package]]
 name = "blitz-bench"
-version = "0.5.10"
+version = "0.5.11"
 dependencies = [
  "blitz-control-protocol",
  "endpoint-libs 2.1.5",
@@ -5800,8 +5800,7 @@ dependencies = [
 [[package]]
 name = "ps-anyrender-svg"
 version = "0.13.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "49e97e1d85862e3a0e42ea6156b217da35b99d13bacf407338b1eae87209193a"
+source = "git+https://github.com/pathscale/ps-anyrender.git?rev=7d0e61b3587a#7d0e61b3587a86083df35aec1bb4d67d9f915eda"
 dependencies = [
  "image",
  "kurbo",
@@ -5830,8 +5829,7 @@ dependencies = [
 [[package]]
 name = "ps-anyrender-vello-cpu"
 version = "0.15.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c9ce9c0715870ccbcdfe60eec1063f98e2d6c622774a91d7d0afbed2297a4a43"
+source = "git+https://github.com/pathscale/ps-anyrender.git?rev=7d0e61b3587a#7d0e61b3587a86083df35aec1bb4d67d9f915eda"
 dependencies = [
  "debug_timer",
  "glifo",
@@ -10729,7 +10727,7 @@ dependencies = [
 
 [[package]]
 name = "wt-migrate"
-version = "0.5.10"
+version = "0.5.11"
 dependencies = [
  "chrono",
  "derive_more 2.1.1",
