@@ -72,7 +72,7 @@ dependencies = [
 
 [[package]]
 name = "agency-tools"
-version = "0.5.6"
+version = "0.5.8"
 dependencies = [
  "derive_more 2.1.1",
  "dirs",
@@ -827,11 +827,11 @@ dependencies = [
 
 [[package]]
 name = "az-core"
-version = "0.5.6"
+version = "0.5.8"
 
 [[package]]
 name = "az-gui"
-version = "0.5.6"
+version = "0.5.8"
 dependencies = [
  "agency-proxy-client",
  "agency-proxy-protocol",
@@ -868,7 +868,7 @@ dependencies = [
 
 [[package]]
 name = "az-mcp-proxy"
-version = "0.5.6"
+version = "0.5.8"
 dependencies = [
  "az-core",
 ]
@@ -10667,7 +10667,7 @@ dependencies = [
 
 [[package]]
 name = "wt-migrate"
-version = "0.5.6"
+version = "0.5.8"
 dependencies = [
  "chrono",
  "derive_more 2.1.1",
