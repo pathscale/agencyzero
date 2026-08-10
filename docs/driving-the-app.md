@@ -29,17 +29,39 @@ scripts/local-delivery.sh stable        # builds with blitz-inspector
 ```
 
 ```sh
-cd /Users/revenge/code/agencyzero && open -n \
-  --env BLITZ_INCREMENTAL=1 \
-  --env TAURI_BLITZ_CONTROL_DESCRIPTOR=/Users/revenge/code/agencyzero/target/blitz-control.json \
-  /Users/revenge/code/agencyzero/target/release/bundle/macos/AgencyZero.app
+open -n /Users/revenge/code/agencyzero/target/release/bundle/macos/AgencyZero.app
 ```
 
-`open` does not inherit the shell environment, so every `--env` matters. Pinning
-the descriptor matters too: unpinned it lands in
-`$TMPDIR/tauri-blitz-agent/<instance>.json`, which is ambiguous once several
-instances have run, and the runtime only forwards this one variable across its
-own relaunch.
+**No `--env` is needed any more.** `local-delivery.sh stable` writes
+`BLITZ_INCREMENTAL` and `TAURI_BLITZ_CONTROL_DESCRIPTOR` into the bundle's
+`Info.plist` under `LSEnvironment`, which launchd applies to every way the app
+can start, then re-signs the bundle.
+
+That replaces `open --env`, which reached neither launch that matters: a Finder
+launch, and the restart angel re-executing the binary after a rebuild (see
+[angel-restart.md](angel-restart.md)). Both start the process without the shell
+environment, the descriptor then lands in
+`$TMPDIR/tauri-blitz-agent/<instance>.json`, and tooling attaches to whichever
+stale file sorts last, which is how a probe ends up reading a dead pid.
+
+If you launch some other way, set the two variables yourself and check the `pid`
+in the descriptor against `pgrep` before trusting any number. Running the binary
+directly is also useful, because it is the only way to see `log-phase-times`
+output, which goes to stdout and is discarded by a Finder launch:
+
+```sh
+BLITZ_INCREMENTAL=1 \
+TAURI_BLITZ_CONTROL_DESCRIPTOR=/Users/revenge/code/agencyzero/target/blitz-control.json \
+  target/release/bundle/macos/AgencyZero.app/Contents/MacOS/az-gui > phases.log 2>&1 &
+```
+
+Those lines are what attributed the typing cost to taffy:
+`Resolve(1): 18ms (style: 167us, damage: 84us, ..., layout: 18ms, ...)`.
+
+**Never edit a built bundle's `Info.plist` without re-signing it.** It
+invalidates the ad-hoc signature and macOS then refuses to launch the app: `open`
+fails with `-54` and nothing starts. `codesign --force --sign - --options runtime
+<bundle>` repairs it.
 
 Add the debug driver only if you need `execute/sync` or element queries:
 
@@ -62,8 +84,20 @@ pkill -f "macos/AgencyZero.app/Contents/MacOS/az-gui"
 scripts/blitz-probe.py frames            # one-shot metrics read
 scripts/blitz-probe.py tree              # semantic tree
 BENCH_PACE=0 scripts/blitz-bench.py scroll 200 -100   # driven scroll, then metrics
+scripts/blitz-bench.py type 20           # driven typing, cost per keystroke
 scripts/blitz-bench.py nodes             # tree size and role histogram
 ```
+
+`type` focuses the first visible text field, drives real key events, and reports
+the **delta** in script attribution across the run rather than the totals. Use it
+for anything that measures geometry after mutating: scrolling never touches the
+composer's autosize path, which is where the per-keystroke cost lives. Pass a
+substring as the second argument to pick a specific field, for example
+`type 20 "Ask, or type"`.
+
+Attribution is cumulative since launch, so only the delta describes the
+interaction. `poll_hook` in a delta is the observer's own cost, because reading
+metrics polls the script loop; it is labelled as such in the output.
 
 `BENCH_PACE` is the delay between driven events. **Leave it at 0 when measuring a
 ceiling**: the default paces at 1/60s, and the reported frame interval then
@@ -85,8 +119,20 @@ Requests are JSON-RPC. Tool calls look like:
 **Field naming is inconsistent and will cost you half an hour.** The frame
 wrapper is camelCase (`requestId`), but fields *inside* protocol variants are
 snake_case (`max_depth`, `delta_y`, `node_id`), because `rename_all` on those
-enums renames the variants, not their fields. A wrong name produces a silent
-timeout, never an error.
+enums renames the variants, not their fields.
+
+A wrong name used to produce a silent timeout. The server did answer, with
+`id: null`, and a JSON-RPC client matches responses by id, so a correct error
+was delivered and then discarded while the caller blocked forever. Getting one
+field wrong therefore presented as a hung application. The id is now recovered
+from the frame before the typed decode consumes it, so **a malformed request
+comes back as an error naming the field.** If you are talking to an older build,
+that is not a hang.
+
+The other half of this trap is nesting. `AgentAction` is adjacently tagged
+(`tag = "action", content = "params"`), so a variant's own fields sit under
+`params`, and `Input` nests a second `params` inside that. The examples below
+are correct; copy them rather than reconstructing them.
 
 ### The calls worth knowing
 
@@ -158,7 +204,7 @@ functions, that flag was reverted.
 ## Building without breaking the build
 
 The engine is consumed through local path checkouts patched in the root
-`Cargo.toml`: `ps-blitz-az-30faf`, `tauri-runtime-blitz`, `ps-anyrender`.
+`Cargo.toml`: `ps-blitz-render`, `tauri-runtime-blitz`, `ps-anyrender`.
 
 - `cargo fmt --check` gates the bundle build. Unformatted code in **any** of
   those checkouts fails the app build with a diff that looks unrelated to what
