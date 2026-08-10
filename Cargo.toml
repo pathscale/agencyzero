@@ -10,7 +10,7 @@ members = [
 ]
 
 [workspace.package]
-version = "0.5.11"
+version = "0.5.12"
 edition = "2024"
 publish = false
 
@@ -32,22 +32,6 @@ az-core = { path = "crates/core" }
 # The hybrid backend takes `anyrender` from crates.io while the vello backend
 # takes the patched git one, which gives two copies of the trait and a renderer
 # that cannot satisfy it. Pin both to the same checkout.
-[patch.crates-io]
-anyrender = { package = "ps-anyrender", path = "../ps-anyrender/crates/anyrender" }
-
-[patch."https://github.com/pathscale/ps-anyrender.git"]
-anyrender = { package = "ps-anyrender", path = "../ps-anyrender/crates/anyrender" }
-anyrender_vello = { package = "ps-anyrender-vello", path = "../ps-anyrender/crates/anyrender_vello" }
-anyrender_vello_hybrid = { package = "ps-anyrender-vello-hybrid", path = "../ps-anyrender/crates/anyrender_vello_hybrid" }
-
-[patch."https://github.com/pathscale/ps-blitz.git"]
-blitz-dom = { package = "ps-blitz-dom", path = "../ps-blitz-render/packages/blitz-dom" }
-blitz-html = { package = "ps-blitz-html", path = "../ps-blitz-render/packages/blitz-html" }
-blitz-paint = { package = "ps-blitz-paint", path = "../ps-blitz-render/packages/blitz-paint" }
-blitz-script = { package = "ps-blitz-script", path = "../ps-blitz-render/packages/blitz-script" }
-blitz-shell = { package = "ps-blitz-shell", path = "../ps-blitz-render/packages/blitz-shell" }
-blitz-traits = { package = "ps-blitz-traits", path = "../ps-blitz-render/packages/blitz-traits" }
-
 [profile.dev]
 # GUI diagnostics come from logs and backtraces. Generating full symbol tables
 # for WebKit and Tauri dependencies dominated clean local check time.

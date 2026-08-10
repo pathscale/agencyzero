@@ -72,7 +72,7 @@ dependencies = [
 
 [[package]]
 name = "agency-tools"
-version = "0.5.11"
+version = "0.5.12"
 dependencies = [
  "derive_more 2.1.1",
  "dirs",
@@ -769,11 +769,11 @@ dependencies = [
 
 [[package]]
 name = "az-core"
-version = "0.5.11"
+version = "0.5.12"
 
 [[package]]
 name = "az-gui"
-version = "0.5.11"
+version = "0.5.12"
 dependencies = [
  "agency-proxy-client",
  "agency-proxy-protocol",
@@ -811,7 +811,7 @@ dependencies = [
 
 [[package]]
 name = "az-mcp-proxy"
-version = "0.5.11"
+version = "0.5.12"
 dependencies = [
  "az-core",
 ]
@@ -944,7 +944,7 @@ dependencies = [
 
 [[package]]
 name = "blitz-bench"
-version = "0.5.11"
+version = "0.5.12"
 dependencies = [
  "blitz-control-protocol",
  "endpoint-libs 2.1.5",
@@ -5771,6 +5771,8 @@ dependencies = [
 [[package]]
 name = "ps-anyrender"
 version = "0.12.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4563bed05182e9deb9d24dfbd66d28a2792314c68f8afa857038f3fc47e504ae"
 dependencies = [
  "kurbo",
  "peniko",
@@ -5794,6 +5796,8 @@ dependencies = [
 [[package]]
 name = "ps-anyrender-vello"
 version = "0.13.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "faf64df00ea2ee9ba296f6a102c4603d490803012e01f6abf714ce51a1734e8a"
 dependencies = [
  "debug_timer",
  "futures-channel",
@@ -5826,6 +5830,8 @@ dependencies = [
 [[package]]
 name = "ps-anyrender-vello-hybrid"
 version = "0.9.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5964b4e2352d788f907608285cc8c17e4ae54f3116474bc99349e7a7a8627fd8"
 dependencies = [
  "debug_timer",
  "futures-channel",
@@ -5845,6 +5851,7 @@ dependencies = [
 [[package]]
 name = "ps-blitz-debug-control"
 version = "0.3.0-beta.3"
+source = "git+https://github.com/pathscale/ps-blitz.git?rev=40d0153770a17c5456ac222b89bbb318601bb99d#40d0153770a17c5456ac222b89bbb318601bb99d"
 dependencies = [
  "getrandom 0.4.3",
  "serde",
@@ -5854,6 +5861,7 @@ dependencies = [
 [[package]]
 name = "ps-blitz-dom"
 version = "0.3.0-beta.3"
+source = "git+https://github.com/pathscale/ps-blitz.git?rev=40d0153770a17c5456ac222b89bbb318601bb99d#40d0153770a17c5456ac222b89bbb318601bb99d"
 dependencies = [
  "accesskit",
  "app_units",
@@ -5896,6 +5904,7 @@ dependencies = [
 [[package]]
 name = "ps-blitz-html"
 version = "0.3.0-beta.3"
+source = "git+https://github.com/pathscale/ps-blitz.git?rev=40d0153770a17c5456ac222b89bbb318601bb99d#40d0153770a17c5456ac222b89bbb318601bb99d"
 dependencies = [
  "html5ever 0.39.0",
  "ps-blitz-dom",
@@ -5906,6 +5915,7 @@ dependencies = [
 [[package]]
 name = "ps-blitz-paint"
 version = "0.3.0-beta.3"
+source = "git+https://github.com/pathscale/ps-blitz.git?rev=40d0153770a17c5456ac222b89bbb318601bb99d#40d0153770a17c5456ac222b89bbb318601bb99d"
 dependencies = [
  "color",
  "euclid",
@@ -5925,6 +5935,7 @@ dependencies = [
 [[package]]
 name = "ps-blitz-script"
 version = "0.3.0-beta.3"
+source = "git+https://github.com/pathscale/ps-blitz.git?rev=40d0153770a17c5456ac222b89bbb318601bb99d#40d0153770a17c5456ac222b89bbb318601bb99d"
 dependencies = [
  "base64 0.22.1",
  "boa_engine",
@@ -5951,6 +5962,7 @@ dependencies = [
 [[package]]
 name = "ps-blitz-shell"
 version = "0.3.0-beta.3"
+source = "git+https://github.com/pathscale/ps-blitz.git?rev=40d0153770a17c5456ac222b89bbb318601bb99d#40d0153770a17c5456ac222b89bbb318601bb99d"
 dependencies = [
  "android-activity",
  "arboard",
@@ -5971,6 +5983,7 @@ dependencies = [
 [[package]]
 name = "ps-blitz-traits"
 version = "0.3.0-beta.3"
+source = "git+https://github.com/pathscale/ps-blitz.git?rev=40d0153770a17c5456ac222b89bbb318601bb99d#40d0153770a17c5456ac222b89bbb318601bb99d"
 dependencies = [
  "atomic_refcell",
  "bitflags 2.13.1",
@@ -5986,10 +5999,12 @@ dependencies = [
 [[package]]
 name = "ps-debug-timer"
 version = "0.1.3"
+source = "git+https://github.com/pathscale/ps-blitz.git?rev=40d0153770a17c5456ac222b89bbb318601bb99d#40d0153770a17c5456ac222b89bbb318601bb99d"
 
 [[package]]
 name = "ps-stylo-taffy"
 version = "0.3.0-beta.3"
+source = "git+https://github.com/pathscale/ps-blitz.git?rev=40d0153770a17c5456ac222b89bbb318601bb99d#40d0153770a17c5456ac222b89bbb318601bb99d"
 dependencies = [
  "stylo",
  "stylo_atoms",
@@ -5999,6 +6014,8 @@ dependencies = [
 [[package]]
 name = "ps-wgpu-context"
 version = "0.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2089c166b3c856d7c1d542725a09b392d1ff9609cf1998ee1c07154825cfe79c"
 dependencies = [
  "futures-intrusive",
  "wgpu",
@@ -10729,7 +10746,7 @@ dependencies = [
 
 [[package]]
 name = "wt-migrate"
-version = "0.5.11"
+version = "0.5.12"
 dependencies = [
  "chrono",
  "derive_more 2.1.1",
