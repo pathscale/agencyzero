@@ -200,48 +200,46 @@ export function ProjectTab(props: { tab: Tab; project: Project }): JSX.Element {
             positioning keeps the title row available to the project name while
             leaving next-turn controls in the composer.
             */}
-            <Show when={headerTurns() > 0}>
-              <span
-                data-turn-totals
-                class="absolute top-full right-3 z-20 flex w-[270px] max-w-[calc(100%-1.5rem)] items-center gap-1.5 overflow-hidden rounded-b-lg border border-primary/38 border-t-0 bg-base-200 px-3 py-1 font-mono text-[11px] text-az-muted shadow-[0_7px_18px_rgba(0,0,0,0.38)]"
-              >
-                {/* No leading agent label: the 7-day readout at the end already says
+            <span
+              data-turn-totals
+              aria-hidden={headerTurns() <= 0}
+              class={`absolute top-full right-3 z-20 flex w-[270px] max-w-[calc(100%-1.5rem)] items-center gap-1.5 overflow-hidden rounded-b-lg border border-primary/38 border-t-0 bg-base-200 px-3 py-1 font-mono text-[11px] text-az-muted shadow-[0_7px_18px_rgba(0,0,0,0.38)] ${headerTurns() <= 0 ? "invisible" : ""}`}
+            >
+              {/* No leading agent label: the 7-day readout at the end already says
                 "Claude 7d …", so a "Claude ·" prefix here was the same word
                 twice. The turn count leads instead. */}
-                <span class="w-[58px] shrink-0 font-semibold text-az-body">
-                  {tx("Turn")} {headerTurns()}
-                </span>
-                <span class="text-az-faint">·</span>
-                {/* The session's summed consumption — where the tokens went. The
+              <span class="w-[58px] shrink-0 font-semibold text-az-body">
+                {tx("Turn")} {headerTurns()}
+              </span>
+              <span class="text-az-faint">·</span>
+              {/* The session's summed consumption — where the tokens went. The
                   context readout under the composer answers a different
                   question (how full the window is), so both exist. Coloured
                   accent, not flat grey: these are the numbers worth reading. */}
-                <span
-                  title={costTitle()}
-                  class="w-[82px] shrink-0 text-right font-semibold text-accent"
-                >
-                  {hydratedMessages() === undefined ? "—" : compactCount(totals().tokens)}{" "}
-                  {tx("tok")}
-                </span>
-                <span class="text-az-faint">·</span>
-                {/* A leading ~ marks a partial total (some turns reported no
+              <span
+                title={costTitle()}
+                class="w-[82px] shrink-0 text-right font-semibold text-accent"
+              >
+                {hydratedMessages() === undefined ? "—" : compactCount(totals().tokens)} {tx("tok")}
+              </span>
+              <span class="text-az-faint">·</span>
+              {/* A leading ~ marks a partial total (some turns reported no
                   usage) without stealing a whole word from a tight header — the
                   hover still explains it. */}
-                <span
-                  title={
-                    totals().reported < totals().turns
-                      ? tx("Some turns reported no usage")
-                      : costTitle()
-                  }
-                  class="w-[62px] shrink-0 text-right font-semibold text-accent"
-                >
-                  <Show when={hydratedMessages() !== undefined} fallback="—">
-                    {costs().missing > 0 || costs().estimated ? "~" : ""}
-                    {costLabel(costs().usd)}
-                  </Show>
-                </span>
+              <span
+                title={
+                  totals().reported < totals().turns
+                    ? tx("Some turns reported no usage")
+                    : costTitle()
+                }
+                class="w-[62px] shrink-0 text-right font-semibold text-accent"
+              >
+                <Show when={hydratedMessages() !== undefined} fallback="—">
+                  {costs().missing > 0 || costs().estimated ? "~" : ""}
+                  {costLabel(costs().usd)}
+                </Show>
               </span>
-            </Show>
+            </span>
 
             <Show when={likelyCacheBreak()}>
               <span
@@ -408,7 +406,7 @@ export function ProjectTab(props: { tab: Tab; project: Project }): JSX.Element {
       <Show when={!forkInfo()}>
         <div
           aria-hidden={!prefs.projectPanelVisible}
-          class={`min-h-0 flex-none overflow-hidden transition-[width,margin,opacity,transform] duration-200 ease-out motion-reduce:transition-none ${
+          class={`min-h-0 flex-none overflow-hidden ${
             prefs.projectPanelVisible
               ? "ml-4 w-[332px] translate-x-0 opacity-100"
               : "pointer-events-none ml-0 w-0 translate-x-3 opacity-0"
@@ -437,7 +435,7 @@ export function ProjectPanelToggle(props: { visible: boolean; onToggle: () => vo
       aria-pressed={props.visible}
       aria-label={label()}
       title={label()}
-      class="absolute top-1/2 left-full z-20 flex h-9 w-1.5 -translate-y-1/2 items-center justify-center rounded-r-md border border-primary/40 border-l-0 bg-primary/20 text-primary transition-[color,background-color,border-color,transform] duration-200 hover:translate-x-px hover:border-primary/60 hover:bg-primary/30 motion-reduce:transition-none"
+      class="absolute top-1/2 left-full z-20 flex h-9 w-1.5 -translate-y-1/2 items-center justify-center rounded-r-md border border-primary/40 border-l-0 bg-primary/20 text-primary transition-colors duration-200 hover:border-primary/60 hover:bg-primary/30 motion-reduce:transition-none"
     >
       <Icon
         name="chevron-right"

@@ -64,11 +64,11 @@ fn main() -> ExitCode {
         };
     }
 
-    if args.first().map(String::as_str) == Some("restore-session") {
+    if args.first().map(String::as_str) == Some("clear-fresh-session") {
         args.remove(0);
-        let [target, project, agent, session] = args.as_slice() else {
+        let [target, project, agent] = args.as_slice() else {
             eprintln!(
-                "usage: wt-migrate restore-session <target-store> <project-id> <claude|codex> <session-id>"
+                "usage: wt-migrate clear-fresh-session <target-store> <project-id> <claude|codex|copilot>"
             );
             return ExitCode::from(2);
         };
@@ -86,8 +86,41 @@ fn main() -> ExitCode {
             .enable_time()
             .build()
             .expect("runtime");
-        return match runtime.block_on(wt_migrate::restore_provider_session(
-            &target, project, agent, session,
+        return match runtime.block_on(wt_migrate::clear_fresh_session(&target, project, agent)) {
+            Ok(()) => ExitCode::SUCCESS,
+            Err(error) => {
+                eprintln!("could not clear the pending reset: {error:#}");
+                ExitCode::FAILURE
+            }
+        };
+    }
+
+    if args.first().map(String::as_str) == Some("restore-session") {
+        args.remove(0);
+        let force = args.iter().any(|arg| arg == "--force");
+        args.retain(|arg| arg != "--force");
+        let [target, project, agent, session] = args.as_slice() else {
+            eprintln!(
+                "usage: wt-migrate restore-session <target-store> <project-id> <claude|codex> <session-id> [--force]"
+            );
+            return ExitCode::from(2);
+        };
+        let target = PathBuf::from(target);
+        let _target_lock = match wt_migrate::lock_store(&target) {
+            Ok(lock) => lock,
+            Err(message) => {
+                eprintln!("{message}");
+                return ExitCode::FAILURE;
+            }
+        };
+        let runtime = tokio::runtime::Builder::new_multi_thread()
+            .worker_threads(2)
+            .enable_io()
+            .enable_time()
+            .build()
+            .expect("runtime");
+        return match runtime.block_on(wt_migrate::restore_provider_session_forced(
+            &target, project, agent, session, force,
         )) {
             Ok(()) => {
                 println!("restored {agent} session {session} for {project}");

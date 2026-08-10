@@ -995,8 +995,8 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
     }
     queueMicrotask(() => {
       const row = document.querySelector<HTMLElement>(`[data-item-id="${target.id}"]`);
-      row?.scrollIntoView?.({ block: "nearest", behavior: "smooth" });
-      row?.focus({ preventScroll: true });
+      row?.scrollIntoView?.();
+      row?.focus();
     });
   });
 
@@ -1078,21 +1078,24 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
     );
   }
 
-  async function openFork(item: ProjectItem): Promise<void> {
+  function openFork(item: ProjectItem): void {
     const existing = forkFor(item.id);
     if (existing) {
       actions.openProject(existing.id);
       return;
     }
-    setForkingId(item.id);
-    try {
-      const context = await actions.getItemContext(item.id);
-      setContextDraft({ item, context: context || defaultItemDescription(item), startFork: true });
-    } catch (cause) {
-      log.error(`could not load the item context: ${describeError(cause)}`);
-    } finally {
-      setForkingId(null);
-    }
+    const fallback = defaultItemDescription(item);
+    setContextDraft({ item, context: fallback, startFork: true });
+    void actions
+      .getItemContext(item.id)
+      .then((context) => {
+        const current = contextDraft();
+        // A delayed load must not overwrite text the owner has already typed.
+        if (current?.item.id === item.id && current.context === fallback) {
+          setContextDraft({ item, context: context || fallback, startFork: true });
+        }
+      })
+      .catch((cause) => log.error(`could not load the item context: ${describeError(cause)}`));
   }
 
   async function toggleDescription(item: ProjectItem): Promise<void> {
@@ -1127,8 +1130,16 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
     if (!draft) return;
     setForkingId(draft.item.id);
     try {
-      await actions.setItemContext(draft.item.id, draft.context);
-      if (draft.startFork) await actions.forkItem(draft.item.id);
+      if (draft.startFork) {
+        try {
+          await actions.setItemContext(draft.item.id, draft.context);
+        } catch (cause) {
+          log.error(`could not save the fork context: ${describeError(cause)}`);
+        }
+        await actions.forkItem(draft.item.id);
+      } else {
+        await actions.setItemContext(draft.item.id, draft.context);
+      }
       setContextDraft(null);
     } catch (cause) {
       log.error(`could not save the item description: ${describeError(cause)}`);
@@ -1376,7 +1387,7 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
                 </button>
                 <button
                   type="button"
-                  onClick={() => void openFork(item)}
+                  onClick={() => openFork(item)}
                   disabled={forkingId() === item.id}
                   title={
                     forkFor(item.id)

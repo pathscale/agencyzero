@@ -16,6 +16,8 @@ blitz-runtime = [
     "dep:url",
 ]
 blitz-inspector = ["blitz-runtime", "tauri-runtime-blitz/diagnostics"]
+# The lighter render pipeline, for measuring against the default Vello one.
+blitz-hybrid = ["blitz-inspector", "tauri-runtime-blitz/hybrid-renderer"]
 
 [build-dependencies]
 brotli = { version = "8.0.4", default-features = false, features = ["std"] }
@@ -40,15 +42,15 @@ eyre = "0.6"
 rkyv = { version = "0.8.9", features = ["uuid-1"] }
 derive_more = { version = "2.0.1", features = ["from", "error", "display", "debug", "into"] }
 futures = "0.3"
-backon = { version = "1.6", default-features = false }
+backon = { path = "/private/tmp/az-backon/backon-1.6.0", default-features = false }
 libc = "0.2"
 uuid = "1"
 chrono = { version = "0.4", default-features = false, features = ["clock", "serde", "std"] }
 tokio = { version = "1", features = ["process", "rt-multi-thread", "time"] }
 tauri = { version = "2", features = [] }
-tauri-runtime-blitz = { git = "https://github.com/pathscale/tauri-runtime-blitz.git", rev = "b6c1d1b4099d75e356a7827952d2956bb1a139b1", optional = true }
-blitz-dom = { git = "https://github.com/pathscale/ps-blitz.git", rev = "30faf47191530dac80e4ddeec77174a41184a729", features = ["system-fonts"], optional = true }
-blitz-script = { git = "https://github.com/pathscale/ps-blitz.git", rev = "30faf47191530dac80e4ddeec77174a41184a729", features = ["system-fonts"], optional = true }
+tauri-runtime-blitz = { path = "../../../tauri-runtime-blitz/crates/tauri-runtime-blitz", optional = true }
+blitz-dom = { path = "../../../ps-blitz-az-30faf/packages/blitz-dom", features = ["system-fonts", "incremental", "log-phase-times"], optional = true }
+blitz-script = { path = "../../../ps-blitz-az-30faf/packages/blitz-script", features = ["system-fonts"], optional = true }
 brotli = { version = "8.0.4", default-features = false, features = ["std"], optional = true }
 url = { version = "2.5.8", optional = true }
 tauri-plugin-updater = "2"

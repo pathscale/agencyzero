@@ -689,6 +689,22 @@ pub async fn restore_provider_session(
     agent: &str,
     session_id: &str,
 ) -> eyre::Result<()> {
+    restore_provider_session_forced(target, project_id, agent, session_id, false).await
+}
+
+/// As [`restore_provider_session`], but `force` allows redirecting a project
+/// that already points somewhere else.
+///
+/// The guard exists because silently repointing a live conversation is the
+/// worse failure. Correcting a pointer that was written to the wrong project
+/// is the case it gets in the way of, so that case has to say so explicitly.
+pub async fn restore_provider_session_forced(
+    target: &Path,
+    project_id: &str,
+    agent: &str,
+    session_id: &str,
+    force: bool,
+) -> eyre::Result<()> {
     use app_schema::kv::{KvPersistenceEngine, KvRow, KvWorkTable};
 
     if session_id.is_empty() {
@@ -713,6 +729,7 @@ pub async fn restore_provider_session(
         .find(|row| row.key == key)
         && !existing.value.is_empty()
         && existing.value != session_id
+        && !force
     {
         return Err(eyre::eyre!(
             "{agent} already points at another nonempty session: {}",
@@ -723,6 +740,56 @@ pub async fn restore_provider_session(
         .upsert(KvRow {
             key,
             value: session_id.to_string(),
+            updated_at: chrono::Utc::now().to_rfc3339(),
+        })
+        .await?;
+    table
+        .wait_for_ops()
+        .await
+        .map_err(|error| eyre::eyre!("kv persistence failed: {error}"))?;
+    table
+        .close()
+        .await
+        .map_err(|error| eyre::eyre!("could not close kv table: {error}"))?;
+    Ok(())
+}
+
+/// Drop a pending-reset marker, so the project resumes its pointer again.
+///
+/// The marker shadows a perfectly good session id: the pointer survives a
+/// reset, but every reader that asks "what continues next" is told nothing
+/// does. Clearing it is the difference between a session that is present and
+/// one that is merely stored.
+pub async fn clear_fresh_session(target: &Path, project_id: &str, agent: &str) -> eyre::Result<()> {
+    use app_schema::kv::{KvPersistenceEngine, KvRow, KvWorkTable};
+
+    let key = format!("fresh-session-next:{agent}:{project_id}");
+    let config = DiskConfig::new_with_table_name(
+        target.to_string_lossy().into_owned(),
+        KvWorkTable::name_snake_case(),
+        KvWorkTable::version(),
+    );
+    let engine = KvPersistenceEngine::new(config).await?;
+    let table = KvWorkTable::load(engine).await?;
+    let existing = table
+        .select_all()
+        .execute()?
+        .into_iter()
+        .find(|row| row.key == key);
+    match existing {
+        None => {
+            println!("no pending reset for {agent} on {project_id}");
+            return Ok(());
+        }
+        Some(row) => println!("clearing pending reset (value {:?})", row.value),
+    }
+    // Emptied rather than deleted: the reader tests for "1", so an empty value
+    // is already "no pending reset", and it avoids a delete on a table this
+    // tool has no other reason to remove rows from.
+    table
+        .upsert(KvRow {
+            key,
+            value: String::new(),
             updated_at: chrono::Utc::now().to_rfc3339(),
         })
         .await?;

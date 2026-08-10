@@ -417,6 +417,7 @@ export function Composer(props: ComposerProps): JSX.Element {
     }));
   };
   let field!: HTMLTextAreaElement;
+  const [promptHeight, setPromptHeight] = createSignal(22);
 
   // Sending while a run is live is allowed again — the store queues it and
   // sends when the run lands, so Enter never starts a second run and never
@@ -599,7 +600,9 @@ export function Composer(props: ComposerProps): JSX.Element {
   /** Grow with the content up to a ceiling, then scroll — no jumping layout. */
   function resize(): void {
     field.style.height = "auto";
-    const modeCeiling = expanded() ? 420 : 168;
+    // Expanded is a deliberate fixed workspace. Letting its measured content
+    // drive height made it jump while the owner was typing.
+    const modeCeiling = expanded() ? 240 : 168;
     // A retained or just-restored view can briefly report scrollHeight = 0.
     // Zero used to collapse the field completely until Expand supplied its
     // 240px floor. Keep one writable line in compact mode even while layout is
@@ -608,23 +611,22 @@ export function Composer(props: ComposerProps): JSX.Element {
     // Keep the prompt and its controls inside short windows. The expanded
     // editor may use more room, but must never consume the whole viewport.
     const viewportCeiling = Math.max(floor, Math.floor(window.innerHeight * 0.45));
-    const ceiling = Math.min(modeCeiling, viewportCeiling, visibleRows() * 22);
+    const ceiling = Math.min(modeCeiling, viewportCeiling);
     field.style.maxHeight = `${ceiling}px`;
-    field.style.height = `${Math.max(floor, Math.min(field.scrollHeight, ceiling))}px`;
+    const height = Math.max(floor, Math.min(field.scrollHeight || floor, ceiling));
+    field.style.height = `${height}px`;
+    setPromptHeight(height);
   }
 
-  // Blitz currently reports textarea scrollHeight inconsistently after a
-  // controlled value changes. A reactive rows value gives its native layout a
-  // reliable intrinsic height, while resize() remains the pixel-exact WebKit
-  // path. Both are bounded by the same viewport budget.
+  // `rows` is only the intrinsic fallback. Wrapped height comes from the
+  // textarea's measured scrollHeight above; guessing one line per 92
+  // characters made ordinary typing jump the composer at arbitrary thresholds.
   const visibleRows = createMemo(() => {
-    const wrapped = draft()
-      .split("\n")
-      .reduce((total, line) => total + Math.max(1, Math.ceil(Math.max(1, line.length) / 92)), 0);
+    const explicitLines = Math.max(1, draft().split("\n").length);
     const floor = expanded() ? 11 : 1;
     const modeCeiling = expanded() ? 18 : 7;
     const viewportCeiling = Math.max(floor, Math.floor((window.innerHeight * 0.45) / 22));
-    return Math.max(floor, Math.min(wrapped, modeCeiling, viewportCeiling));
+    return Math.max(floor, Math.min(explicitLines, modeCeiling, viewportCeiling));
   });
 
   createEffect(() => {
@@ -897,10 +899,11 @@ export function Composer(props: ComposerProps): JSX.Element {
           <div
             data-prompt-viewport
             class="min-w-0 overflow-hidden"
-            style={{ height: `${visibleRows() * 22}px` }}
+            style={{ height: `${promptHeight()}px` }}
           >
             <textarea
               ref={field}
+              autofocus={props.autofocus}
               rows={visibleRows()}
               wrap="soft"
               value={draft()}

@@ -220,7 +220,7 @@ describe("Composer", () => {
     await waitFor(() => expect(screen.field.style.height).toBe("240px"));
     expect(screen.field).toHaveAttribute("rows", "11");
     expect(screen.container.querySelector("[data-prompt-viewport]")).toHaveStyle({
-      height: "242px",
+      height: "240px",
     });
 
     fireEvent.click(screen.getByLabelText("Restore the prompt size"));
@@ -236,8 +236,8 @@ describe("Composer", () => {
 
     fireEvent.click(screen.getByLabelText("Expand the prompt"));
 
-    await waitFor(() => expect(screen.field.style.height).toBe("242px"));
-    expect(screen.field.style.maxHeight).toBe("242px");
+    await waitFor(() => expect(screen.field.style.height).toBe("240px"));
+    expect(screen.field.style.maxHeight).toBe("240px");
     expect(screen.field).toHaveAttribute("rows", "11");
     await screen.booted();
   });

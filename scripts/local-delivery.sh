@@ -17,14 +17,14 @@ if [ "${2:-}" = "--offline" ] || [ "${1:-}" = "--offline" ]; then
 fi
 
 case "$mode" in
-  verify | stable | experimental) ;;
+  verify | stable | experimental | experimental-inspector) ;;
   -h | --help)
-    echo "usage: scripts/local-delivery.sh [verify|stable|experimental] [--offline]"
+    echo "usage: scripts/local-delivery.sh [verify|stable|experimental|experimental-inspector] [--offline]"
     exit 0
     ;;
   *)
     echo "unknown mode: $mode" >&2
-    echo "usage: scripts/local-delivery.sh [verify|stable|experimental] [--offline]" >&2
+    echo "usage: scripts/local-delivery.sh [verify|stable|experimental|experimental-inspector] [--offline]" >&2
     exit 2
     ;;
 esac
@@ -102,6 +102,26 @@ case "$mode" in
       run_tauri build \
         --target "$rust_target" \
         --features experimental,blitz-runtime \
+        --config tauri.experimental.conf.json \
+        --config '{"bundle":{"createUpdaterArtifacts":false}}'
+    )
+    publish_bundle \
+      "$repo_root/target/$rust_target/release/bundle/macos/AgencyZero Experimental.app" \
+      "$repo_root/target/release/bundle/macos/AgencyZero Experimental.app"
+    echo "$repo_root/target/release/bundle/macos/AgencyZero Experimental.app"
+    ;;
+  experimental-inspector)
+    # Same bundle as `experimental`, plus the Blitz diagnostics surface, which
+    # is what makes the renderer controllable and debuggable from outside.
+    # `blitz-inspector` already implies `blitz-runtime`, so naming both would
+    # be redundant rather than additive. It publishes over the same path, so
+    # the build stamp in Settings is what tells the two apart once installed.
+    echo "==> AgencyZero Experimental.app (Blitz inspector)"
+    (
+      cd "$repo_root/apps/gui"
+      run_tauri build \
+        --target "$rust_target" \
+        --features experimental,blitz-inspector \
         --config tauri.experimental.conf.json \
         --config '{"bundle":{"createUpdaterArtifacts":false}}'
     )

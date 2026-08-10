@@ -56,6 +56,15 @@ export function useAppShell(): {
   const requestClose = confirmClose;
   const requestQuitAll = () => {
     setCloseError("");
+    if ((state.agencyProxy?.activeRuns ?? 0) === 0) {
+      setQuitsProxy(false);
+      void actions.quitAppAndProxy().catch((cause) => {
+        setCloseError(describeError(cause));
+        setQuitsProxy(true);
+        setIsClosing(true);
+      });
+      return;
+    }
     setQuitsProxy(true);
     setIsClosing(true);
   };
