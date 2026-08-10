@@ -7,10 +7,15 @@ wheel events at a fixed cadence, then reports the frame window that resulted.
 
 Usage:
   scripts/blitz-bench.py scroll [ticks] [delta]
+  scripts/blitz-bench.py type [keys] [selector-substring]
   scripts/blitz-bench.py nodes
   scripts/blitz-bench.py idle
 
 Every run prints one line per timing series so two runs can be diffed directly.
+
+Script attribution is cumulative since launch, so the totals include startup and
+every interaction before this one. `type` reports the delta across the run
+instead: what this interaction cost, per source, and what it cost per keystroke.
 """
 import importlib.util
 import json
@@ -123,6 +128,122 @@ def scroll(ins, ticks, delta):
     )
 
 
+def breakdown_of(val):
+    """Script attribution as {label: (calls, total_ms, worst_ms)}."""
+    script = val.get("script") or {}
+    return {
+        row["label"]: (row["calls"], row["totalMs"], row["worstMs"])
+        for row in (script.get("breakdown") or [])
+    }
+
+
+def show_delta(before, after, events):
+    """What this run cost, per source. Cumulative totals hide the interaction.
+
+    Reading metrics itself polls the script loop, so `poll_hook` carries the
+    observer's own cost and is reported but not attributed to the interaction.
+    """
+    start, end = breakdown_of(before), breakdown_of(after)
+    rows = []
+    for label, (calls, total, worst) in end.items():
+        prev_calls, prev_total, _ = start.get(label, (0, 0.0, 0.0))
+        d_calls, d_total = calls - prev_calls, total - prev_total
+        if d_calls or d_total > 0.01:
+            rows.append((d_total, label, d_calls, worst))
+    rows.sort(reverse=True)
+    print(f"\ncost of this run ({events} events):")
+    if not rows:
+        print("    nothing attributed: did the interaction reach the app?")
+        return
+    for total, label, calls, worst in rows:
+        per = f"{total / events:8.2f}" if events else "       -"
+        note = "   <- observer" if label == "poll_hook" else ""
+        print(
+            f"    {label[:34]:34} calls={calls:6} total={total:9.2f}ms "
+            f"per_event={per}ms worst={worst:7.2f}ms{note}"
+        )
+
+
+def find_text_field(ins, want):
+    """The first enabled, visible textbox whose name mentions `want`."""
+    res = ins.call(
+        "blitz.agent.control",
+        {"command": "inspect", "params": {"root": None, "max_depth": 40}},
+    )
+    found = (res or {}).get("result", {}).get("structuredContent", {}).get("value", {}).get("nodes", [])
+    fields = [
+        node
+        for node in found
+        if node.get("role") in ("textbox", "textarea", "input")
+        and node.get("enabled")
+        and node.get("visible")
+    ]
+    if want:
+        named = [n for n in fields if want.lower() in (n.get("name") or "").lower()]
+        if named:
+            return named[0]
+    return fields[0] if fields else None
+
+
+def type_keys(ins, count, want):
+    """Drive real key events into a focused text field and price them.
+
+    Typing is the interaction the composer autosizes on: it writes
+    style.height, reads scrollHeight, and writes it again, so every keystroke
+    forces a synchronous layout resolve. Scrolling never exercises that path.
+    """
+    field = find_text_field(ins, want)
+    if not field:
+        print("no enabled, visible text field found; open a tab with a composer", file=sys.stderr)
+        return 2
+    print(f"typing into node {field['id']} role={field.get('role')} name={(field.get('name') or '')[:40]!r}")
+    # AgentAction is adjacently tagged (tag = "action", content = "params"), so
+    # the variant's fields nest under `params`. Putting node_id at the top level
+    # deserialises to nothing and the server answers with silence, not an error.
+    ins.call(
+        "blitz.agent.control",
+        {"command": "act", "params": {"action": "click", "params": {"node_id": field["id"]}}},
+    )
+    time.sleep(0.2)
+
+    before = metrics(ins)
+    latencies = []
+    for index in range(count):
+        letter = "abcdefghijklmnopqrstuvwxyz"[index % 26]
+        started = time.time()
+        for phase in ("down", "up"):
+            ins.call(
+                "blitz.agent.control",
+                {
+                    "command": "act",
+                    "params": {
+                        "action": "input",
+                        "params": {
+                            "input": "key",
+                            "phase": phase,
+                            "key": letter,
+                            "code": f"Key{letter.upper()}",
+                            "modifiers": NO_MODS,
+                        },
+                    },
+                },
+            )
+        latencies.append((time.time() - started) * 1000)
+        if PACE > 0:
+            time.sleep(PACE)
+    after = metrics(ins)
+
+    latencies.sort()
+    print(
+        f"drove {count} keystrokes: ack mean={statistics.mean(latencies):.2f}ms "
+        f"p95={latencies[int(len(latencies) * 0.95) - 1]:.2f}ms max={latencies[-1]:.2f}ms"
+    )
+    show("before", before)
+    show("after", after)
+    show_delta(before, after, count)
+    return 0
+
+
 def main():
     mode = sys.argv[1] if len(sys.argv) > 1 else "idle"
     ins = connect()
@@ -132,6 +253,11 @@ def main():
     if mode == "idle":
         show("idle", metrics(ins))
         return 0
+    if mode == "type":
+        count = int(sys.argv[2]) if len(sys.argv) > 2 else 20
+        want = sys.argv[3] if len(sys.argv) > 3 else ""
+        nodes(ins)
+        return type_keys(ins, count, want)
     if mode == "scroll":
         ticks = int(sys.argv[2]) if len(sys.argv) > 2 else 120
         delta = float(sys.argv[3]) if len(sys.argv) > 3 else -80.0
