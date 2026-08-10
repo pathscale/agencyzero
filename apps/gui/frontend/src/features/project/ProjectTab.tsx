@@ -6,7 +6,7 @@ import { Composer } from "~/features/project/Composer";
 import { ProjectPanel } from "~/features/project/ProjectPanel";
 import { TranscriptPane } from "~/features/project/TranscriptPane";
 import { providerUsageLabel } from "~/features/shell/UsageReadout";
-import { AGENT_LABELS, rateLimitLabel } from "~/lib/labels";
+import { AGENT_LABELS } from "~/lib/labels";
 import { describeError, log } from "~/lib/log";
 import { turnCostTotals } from "~/lib/pricing";
 import {
@@ -25,9 +25,7 @@ import type { Agent, Project, PullRequest, Tab } from "~/types";
 /**
  * A project tab: the conversation on the left, the accordion on the right.
  *
- * The header carries whatever is true of the whole tab right now — a rate
- * limit, in the provider's own wording — so it is visible without reading back
- * through the transcript.
+ * The header carries the tab's active model, usage, and native session.
  */
 /** A real, finite count — an absent field is `undefined`, which is not null. */
 function isCount(value: number | null): value is number {
@@ -83,20 +81,6 @@ export function ProjectTab(props: { tab: Tab; project: Project }): JSX.Element {
       (capabilitiesFor(agent)?.liveFollowUp ?? false)
     );
   };
-  /*
-   * A refusal, or a warning that one is coming. Not the heartbeat: the provider
-   * emits a record on healthy runs too, with status `allowed`, and rendering
-   * that as an orange warning told you a run was limited when it was not.
-   *
-   * The warning used to be dropped here along with the heartbeat, which threw
-   * away the one report you can still act on. A refusal is news after the fact.
-   */
-  const rateLimit = () => {
-    const selectedAgent = state.runStatus[props.project.id]?.agent ?? props.tab.agent;
-    const limit = state.rateLimits[props.project.id]?.[selectedAgent];
-    return limit?.isBlocking || limit?.isWarning ? limit : undefined;
-  };
-
   /**
    * The composer's usage line: this project's running total.
    *
@@ -326,25 +310,6 @@ export function ProjectTab(props: { tab: Tab; project: Project }): JSX.Element {
                   : (props.project.sessions[props.tab.agent] ?? null)
               }
             />
-
-            <Show when={rateLimit()}>
-              {(limit) => (
-                /*
-                 * One line, in words, and nothing else.
-                 *
-                 * It read `allowed_warning (seven_day) · resets 21:00`, which is
-                 * the provider's status word, the provider's window name and a
-                 * time, wrapped onto two lines in a pill. Three facts where one
-                 * was wanted: whether to slow down. The window and the reset are
-                 * dropped, and `whitespace-nowrap` is what keeps the pill on one
-                 * line however narrow the header gets.
-                 */
-                <div class="mr-1.5 flex items-center gap-[7px] whitespace-nowrap rounded-full border border-warning/34 bg-warning/15 px-2.5 py-1 text-[11.5px]">
-                  <Icon name="pause" class="text-[12px] text-warning" />
-                  <span class="font-semibold text-warning">{rateLimitLabel(limit().message)}</span>
-                </div>
-              )}
-            </Show>
           </header>
 
           <TranscriptPane
