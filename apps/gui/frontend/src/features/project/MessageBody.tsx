@@ -325,7 +325,17 @@ export function MessageBody(props: { body: string; class?: string }): JSX.Elemen
   });
 
   return (
-    <div class={`flex flex-col gap-2.5 ${props.class ?? ""}`} data-selectable>
+    /*
+      `min-w-0` and `break-words`: a flex child will not shrink below its
+      content width without the first, and an unbroken run of characters (a
+      long identifier, a url, a wall of one repeated letter) has no break
+      opportunity without the second. Between them, message text stayed at its
+      natural width and drew straight past the edge of its own bubble.
+    */
+    <div
+      class={`flex min-w-0 flex-col gap-2.5 break-words ${props.class ?? ""}`}
+      data-selectable
+    >
       <For each={blocks()}>
         {(block) =>
           block.kind === "code" ? (

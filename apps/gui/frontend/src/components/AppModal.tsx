@@ -21,7 +21,13 @@ export function AppModal(props: {
       role="dialog"
       aria-modal="true"
       aria-labelledby={props.labelledBy}
-      class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-8"
+      /*
+        A dialog sizes itself. `w-full` against a centering flex parent left
+        the panel at its min-content width, which wrapped the description one
+        word per line and pushed the buttons over the text, so children now
+        carry an explicit width and this only positions them.
+      */
+      class="fixed inset-0 z-50 flex items-center justify-center overflow-auto bg-black/60 p-8"
       onClick={(event) => event.currentTarget === event.target && props.onDismiss()}
       onKeyDown={(event) => event.key === "Escape" && props.onDismiss()}
     >

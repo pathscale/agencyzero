@@ -1110,7 +1110,7 @@ function GroupItemRow(props: {
             labelledBy={`home-fork-title-${props.item.id}`}
             onDismiss={() => setForkDraft(null)}
           >
-            <section class="az-ring flex max-h-full w-full max-w-[620px] flex-col overflow-hidden rounded-[17px] bg-base-200 shadow-[0_24px_80px_rgba(0,0,0,.65)]">
+            <section class="az-ring flex max-h-full w-[620px] max-w-full flex-none flex-col overflow-hidden rounded-[17px] bg-base-200 shadow-[0_24px_80px_rgba(0,0,0,.65)]">
               <header class="flex items-start gap-3 border-az-hairline-soft border-b px-5 py-4">
                 <div class="flex size-9 shrink-0 items-center justify-center rounded-[11px] border border-primary/28 bg-primary/10 text-primary">
                   <Icon name="git-fork" class="text-[17px]" />
