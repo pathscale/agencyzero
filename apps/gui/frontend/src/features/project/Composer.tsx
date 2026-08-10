@@ -920,7 +920,7 @@ export function Composer(props: ComposerProps): JSX.Element {
                 event.preventDefault();
                 void submit();
               }}
-              class={`az-scroll block max-h-full w-full min-w-0 resize-none overflow-y-auto overflow-x-hidden whitespace-pre-wrap break-words [overflow-wrap:anywhere] bg-transparent text-base-content leading-[1.45] placeholder:text-az-faint focus:outline-none ${
+              class={`az-scroll block max-h-full w-full min-w-0 resize-none overflow-y-auto overflow-x-hidden whitespace-pre-wrap break-words bg-transparent text-base-content leading-[1.45] [overflow-wrap:anywhere] placeholder:text-az-faint focus:outline-none ${
                 props.size === "lg" ? "text-[15px]" : "text-[14.5px]"
               }`}
             />

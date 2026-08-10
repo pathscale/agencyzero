@@ -332,10 +332,7 @@ export function MessageBody(props: { body: string; class?: string }): JSX.Elemen
       opportunity without the second. Between them, message text stayed at its
       natural width and drew straight past the edge of its own bubble.
     */
-    <div
-      class={`flex min-w-0 flex-col gap-2.5 break-words ${props.class ?? ""}`}
-      data-selectable
-    >
+    <div class={`flex min-w-0 flex-col gap-2.5 break-words ${props.class ?? ""}`} data-selectable>
       <For each={blocks()}>
         {(block) =>
           block.kind === "code" ? (
