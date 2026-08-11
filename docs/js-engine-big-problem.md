@@ -89,6 +89,44 @@ the settled prefix, and re-parse only from the last blank line onward. That is
 the step that takes the per-token cost from O(body) to O(tail), and it is not
 any of the five steps listed below.
 
+### Measured, and fixed: 142x
+
+Done 2026-08-11. `bun run bench` in `apps/gui/frontend`
+([`streamingParse.bench.ts`](../apps/gui/frontend/src/features/project/streamingParse.bench.ts)),
+timing what `MessageBody` actually does: parse every prefix of a reply arriving
+in 4-character deltas.
+
+| chars | full reparse | incremental | gain |
+| --- | --- | --- | --- |
+| 5,000 | 38.4 ms | 2.2 ms | 17.7x |
+| 10,000 | 150.7 ms `x3.93` | 4.1 ms `x1.91` | 36.5x |
+| 20,000 | 586.0 ms `x3.89` | 8.0 ms `x1.95` | 72.9x |
+| 40,000 | 2348.0 ms `x4.01` | 16.4 ms `x2.05` | **142.8x** |
+
+The ratio columns are the result, not the totals. Doubling the body used to
+cost four times as much, which is the definition of the quadratic this document
+is named for. It now costs twice as much. **A 40KB reply spent 2.3 seconds in
+the parse and now spends 16ms.**
+
+`createStreamingSplitter` keeps the blocks for everything up to the last blank
+line and parses only what follows, so each character is parsed into a settled
+block exactly once. A fence open across the boundary blocks the advance,
+because a fence closed later turns settled prose into code retroactively. The
+prefix is validated in constant time, by length and by the characters
+immediately before the boundary; comparing all of it would reintroduce the cost
+being removed, and a validation miss falls back to a full reparse, so it is slow
+rather than wrong.
+
+The equivalence test is the part that matters: every prefix of every body is
+required to parse identically to a full reparse, across a fence spanning a
+blank line, a table, a list, an unterminated fence and stray blank runs.
+
+**Note what this did not touch.** Pass 1, the Boa concatenation, is untouched
+and is still O(body) per token. So is `holdBackPartialDirective`. Those are
+steps 1 and 3, and they are now the whole of the remaining cost on the JS side.
+Step 1 is still not worth doing as written, for the reasons above; step 3 is,
+and it is small.
+
 ### What to do instead
 
 1. **Step 2 first.** Split prose on blank lines, bounding passes 3 to 6 to one
