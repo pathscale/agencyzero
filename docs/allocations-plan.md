@@ -445,7 +445,71 @@ What it cannot answer: draw commands. Layers are the countable part of scene
 complexity today; fill and stroke counts are not tallied anywhere, and adding
 that tally is only worth it if the layer count comes back small.
 
-**Result:**
+**Result, 0.5.31, 2026-08-11. 351 layers per scene, depth 8, and it never
+moves.**
+
+Fourteen consecutive sample windows, idle and through 120 wheel events, every
+one of them:
+
+```
+layers_wanted_max=351 layers_used_max=351 layer_depth_max=8
+```
+
+Two things fall out of that before any timing.
+
+`wanted == used`, so the limit is never reached and no clipping is being
+silently skipped. The correctness worry this step was watching for is not
+happening.
+
+And the count does not move with content. A scroll that repaints an entirely
+different part of the list pushes the same 351 layers, so this is structural
+chrome, not the scrolled document. Whatever generates it is in the frame around
+the content.
+
+### The A/B: 44% of the frame
+
+`LAYER_LIMIT` cut from 1024 to 8 makes a clean experiment, because a refused
+layer does not change what is painted. `maybe_push_layer` returns false, the
+matching pop is skipped, and `paint_layer` still runs: the scene emits the same
+draw commands minus 342 push/pop pairs. Culling is done separately against
+`clip_rect` in `render_element`, so nothing is being drawn less either.
+
+Same bench, same build, same session:
+
+| `blitz-bench scroll` | 351 layers | 9 layers |
+| --- | --- | --- |
+| `scene` | 2.35ms | **1.24ms** |
+| `renderer` | 4.73ms | **2.65ms** |
+| `total` | 8.08ms | **4.52ms** |
+| active fps | 53.3 | 59.9 |
+
+**Clip and opacity layers are 3.56ms of an 8.08ms frame.** They cost about
+equally on both sides of the boundary: roughly half the scene encode and
+roughly half the renderer. That is the ceiling on this lever, and it is the
+largest single item found in this document since resolve.
+
+It is a ceiling, not a target. Those layers are doing real work; the question
+the next step has to answer is how many of them are load-bearing.
+
+Caveat worth keeping: the limited build renders wrong, and obviously so —
+nothing is clipped to its container. It is a measurement, never a build to
+look at. It was launched in front of the owner without that warning, which
+read as a broken app rather than as an experiment.
+
+### What to read next
+
+Which CSS produces 351. There are five call sites, and they are not equal:
+
+- `render.rs:382` and `:424` — the element clip and the scrollport
+- `render.rs:448` — per child
+- `render/box_shadow.rs:47`
+- `render/background.rs:146`
+
+A per-site tally is a handful of counters and would say whether this is one
+pattern repeated across the chrome, which could be fixed once, or genuinely
+351 distinct clips. Do that before designing anything: a fix aimed at the
+wrong site wins nothing, and the flatness of the count across scroll says the
+answer is a small number of repeated structures.
 
 ---
 
