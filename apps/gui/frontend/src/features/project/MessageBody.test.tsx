@@ -1,7 +1,12 @@
 import { fireEvent, render } from "@solidjs/testing-library";
 import { createSignal } from "solid-js";
 import { describe, expect, it } from "vitest";
-import { InlineText, MessageBody, splitBlocks } from "~/features/project/MessageBody";
+import {
+  createStreamingSplitter,
+  InlineText,
+  MessageBody,
+  splitBlocks,
+} from "~/features/project/MessageBody";
 import { setItemReferenceHandler } from "~/lib/itemReference";
 
 describe("MessageBody", () => {
@@ -25,6 +30,40 @@ describe("MessageBody", () => {
       "Two.",
       "Three.",
     ]);
+  });
+
+  it("parses a streaming reply exactly as a full reparse would, at every prefix", () => {
+    // The incremental splitter is only worth having if it is indistinguishable
+    // from splitBlocks, so compare them at every delta rather than at the end.
+    // The bodies below are chosen for the cases that can break a settled
+    // prefix: a fence spanning a blank line (prose settled early would become
+    // code once the fence closes), a table, a list, and an unterminated fence.
+    const bodies = [
+      "One.\n\nTwo.\n\nThree.",
+      "Intro.\n\n```rust\nlet a = 1;\n\nlet b = 2;\n```\n\nAfter the fence.",
+      "Before.\n\n| a | b |\n|---|---|\n| 1 | 2 |\n\nAfter.",
+      "Lead in.\n\n- one\n- two\n\nTrailing prose.",
+      "Cut off mid stream.\n\n```sh\nnever closed",
+      "\n\n\nleading blanks\n\n\n\ntrailing blanks\n\n",
+    ];
+
+    for (const body of bodies) {
+      const split = createStreamingSplitter();
+      for (let at = 1; at <= body.length; at += 1) {
+        const prefix = body.slice(0, at);
+        expect(split(prefix), `body ${JSON.stringify(body)} at ${at}`).toEqual(splitBlocks(prefix));
+      }
+    }
+  });
+
+  it("reparses from scratch when the body is not an extension of what it settled", () => {
+    // One closure per message is the intent, but a reused one must not splice
+    // the tail of a new reply onto the settled blocks of an old one.
+    const split = createStreamingSplitter();
+    split("First message.\n\nWith a settled paragraph.\n\nAnd a tail.");
+    expect(split("A different message entirely.")).toEqual(
+      splitBlocks("A different message entirely."),
+    );
   });
 
   it("holds a finished paragraph still while the next one grows", () => {

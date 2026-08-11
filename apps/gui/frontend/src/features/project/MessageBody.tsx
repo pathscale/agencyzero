@@ -251,6 +251,17 @@ function sameBlock(a: Block, b: Block): boolean {
 }
 
 export function splitBlocks(body: string): Block[] {
+  return parseBlocks(body).blocks;
+}
+
+/**
+ * As [`splitBlocks`], and also whether the body ended with a fence still open.
+ *
+ * The streaming splitter needs that second answer: a prefix is only safe to
+ * treat as final if no fence spans its end, since a fence opened before the
+ * boundary and closed after it turns prose into code retroactively.
+ */
+function parseBlocks(body: string): { blocks: Block[]; openFence: boolean } {
   /*
    * Line by line rather than by regex. The obvious pattern for this wants `$`
    * to mean "end of the block", and with the `/m` flag it means "end of any
@@ -322,7 +333,82 @@ export function splitBlocks(body: string): Block[] {
   if (code === null) flushProse();
   else blocks.push({ kind: "code", text: code.join("\n"), lang });
 
-  return blocks;
+  return { blocks, openFence: code !== null };
+}
+
+/** How much of the settled prefix is re-checked before it is trusted. */
+const BOUNDARY_SAMPLE = 32;
+
+/**
+ * A `splitBlocks` that only parses what has changed.
+ *
+ * `MessageBody` re-parsed `props.body` on every token, and `splitBlocks` splits
+ * the whole body into lines however few blocks come out, so a reply arriving in
+ * 4-character deltas paid for its entire length on every delta. Measured with
+ * `streamingParse.bench.ts`: 40.5ms at 5,000 characters and 2,400.8ms at
+ * 40,000, a factor of about 4 for every doubling. Textbook quadratic.
+ *
+ * A paragraph closed by a blank line can never change again, so everything up
+ * to the last blank line is final and re-parsing it is provably wasted. This
+ * keeps those blocks and parses only the tail after them. Each character is
+ * parsed into a settled block exactly once, so the amortised cost per token is
+ * the length of the tail rather than the length of the reply.
+ *
+ * Two things it does not claim to be. Blocks are still concatenated per token,
+ * which is O(number of blocks) and therefore still quadratic in paragraph
+ * count — 166 paragraphs against 12,500 tokens is about 2 million operations,
+ * against the 312 million characters this removes, so it is left alone until it
+ * shows up in a measurement. And a fence open across the boundary blocks the
+ * advance entirely, because a fence closed later turns settled prose into code
+ * retroactively; a reply that is one long unterminated fence gets no benefit,
+ * correctly.
+ */
+export function createStreamingSplitter(): (body: string) => Block[] {
+  let settledChars = 0;
+  let settledBlocks: Block[] = [];
+  let boundary = "";
+
+  return (body: string): Block[] => {
+    /*
+     * Validate the prefix before trusting it, but in constant time.
+     *
+     * Comparing the whole settled prefix would reintroduce exactly the O(body)
+     * per token this exists to remove. Streaming is append-only, so the cases
+     * worth catching are a shorter body and a different message reusing this
+     * closure; a length check and the characters immediately before the
+     * boundary catch both. A miss costs correctness, so the fallback is a full
+     * reparse rather than a partial one.
+     */
+    const stale =
+      settledChars > body.length ||
+      (settledChars > 0 &&
+        body.slice(Math.max(0, settledChars - BOUNDARY_SAMPLE), settledChars) !== boundary);
+    if (stale) {
+      settledChars = 0;
+      settledBlocks = [];
+      boundary = "";
+    }
+
+    const tail = body.slice(settledChars);
+    const parsed = parseBlocks(tail);
+    const blocks = settledChars === 0 ? parsed.blocks : [...settledBlocks, ...parsed.blocks];
+
+    // Advance the boundary to just past the last blank line in the tail. The
+    // text before it is parsed once, here, and never looked at again.
+    const lastBreak = tail.lastIndexOf("\n\n");
+    if (lastBreak > 0) {
+      const candidate = tail.slice(0, lastBreak + 2);
+      const settledParse = parseBlocks(candidate);
+      if (!settledParse.openFence) {
+        settledBlocks =
+          settledChars === 0 ? settledParse.blocks : [...settledBlocks, ...settledParse.blocks];
+        settledChars += candidate.length;
+        boundary = body.slice(Math.max(0, settledChars - BOUNDARY_SAMPLE), settledChars);
+      }
+    }
+
+    return blocks;
+  };
 }
 
 export function MessageBody(props: { body: string; class?: string }): JSX.Element {
@@ -339,10 +425,15 @@ export function MessageBody(props: { body: string; class?: string }): JSX.Elemen
    * blocks keeps their DOM alive and leaves one block to update.
    */
   let previous: Block[] = [];
+  const split = createStreamingSplitter();
   const blocks = createMemo(() => {
-    const next = splitBlocks(props.body);
+    const next = split(props.body);
     const reconciled = next.map((block, index) => {
       const before = previous[index];
+      // Identity first. A settled block is handed back as the same object every
+      // token, so this short-circuits the text comparison for the whole prefix
+      // rather than comparing every paragraph against itself.
+      if (before === block) return before;
       return before && sameBlock(before, block) ? before : block;
     });
     previous = reconciled;
