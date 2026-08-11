@@ -15,7 +15,23 @@ blitz-runtime = [
     "dep:tauri-runtime-blitz",
     "dep:url",
 ]
-blitz-inspector = ["blitz-runtime", "tauri-runtime-blitz/diagnostics"]
+# Per-frame phase timings belong here, not on the dependency line.
+#
+# On the base `blitz-dom` line they were compiled into every release build,
+# which builds `--features blitz-runtime`. That is a `HashMap` entry per
+# `compute_child_layout` (16,842 of them per keystroke, measured), a `Vec` of
+# every distinct node sorted once a frame, and a `format!` plus a locked
+# `stdout` write per frame — into a descriptor a Finder-launched bundle throws
+# away.
+#
+# It also distorted what it measured. `note_computed` is called from inside
+# `compute_child_layout`, so its cost is charged to the layout phase: the one
+# phase that dominates every reading taken so far.
+blitz-inspector = [
+    "blitz-runtime",
+    "blitz-dom/log-phase-times",
+    "tauri-runtime-blitz/diagnostics",
+]
 # The lighter render pipeline, for measuring against the default Vello one.
 blitz-hybrid = ["blitz-inspector", "tauri-runtime-blitz/hybrid-renderer"]
 
@@ -49,7 +65,7 @@ chrono = { version = "0.4", default-features = false, features = ["clock", "serd
 tokio = { version = "1", features = ["process", "rt-multi-thread", "time"] }
 tauri = { version = "2", features = [] }
 tauri-runtime-blitz = { git = "https://github.com/pathscale/tauri-runtime-blitz.git", rev = "cf9b75ccab95cb715ab649bab0ca775719c7d780", optional = true }
-blitz-dom = { package = "ps-blitz-dom", git = "https://github.com/pathscale/ps-blitz.git", rev = "40d0153770a17c5456ac222b89bbb318601bb99d", features = ["system-fonts", "incremental", "log-phase-times"], optional = true }
+blitz-dom = { package = "ps-blitz-dom", git = "https://github.com/pathscale/ps-blitz.git", rev = "40d0153770a17c5456ac222b89bbb318601bb99d", features = ["system-fonts", "incremental"], optional = true }
 blitz-script = { package = "ps-blitz-script", git = "https://github.com/pathscale/ps-blitz.git", rev = "40d0153770a17c5456ac222b89bbb318601bb99d", features = ["system-fonts"], optional = true }
 brotli = { version = "8.0.4", default-features = false, features = ["std"], optional = true }
 url = { version = "2.5.8", optional = true }
