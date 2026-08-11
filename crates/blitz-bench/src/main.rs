@@ -33,10 +33,12 @@ usage: blitz-bench <mode> [args]
 
   nodes                       tree size and a role histogram
   idle                        one metrics read, as a frame-window summary
+  drift [seconds]             what the app does while nothing happens (default 20)
   frames                      one metrics read, laid out for reading
   metrics                     the raw metrics response
   tree                        the semantic tree
   layout [name-substr]        live boxes: x, y, w, h per named node
+  spill [h|v] [tolerance]     boxes that stick out of their container, worst first
   watch [seconds]             stream metrics/console/runtimeErrors (default 20)
   scroll [ticks] [delta]      paced wheel events, then metrics (default 120 -80)
   type [count] [name-substr]  drive real keystrokes into a text field (default 20)
@@ -159,6 +161,127 @@ async fn layout(client: &mut Client, want: &str) -> Result<()> {
             "no named node matched {want:?} ({} in the tree)",
             nodes.len()
         );
+    }
+    Ok(())
+}
+
+/// Every box that sticks out of the box that contains it, worst first.
+///
+/// The reason this exists: "text spills past its container" is a claim about
+/// one node's relationship to another node, and a three-element fixture cannot
+/// express it. Two candidate mechanisms were built as fixtures and both were
+/// refuted, which proved only that those two fixtures were wrong. The running
+/// document already knows the answer; nothing asked it.
+///
+/// Horizontal by default, because vertical overflow is how a scroll container
+/// works and would bury the signal. `spill v` includes the vertical axis.
+async fn spill(client: &mut Client, axis: &str, tolerance: f64) -> Result<()> {
+    let (snapshot, elapsed) = inspect(client).await?;
+    let boxes: HashMap<u64, [f64; 4]> = snapshot
+        .nodes
+        .iter()
+        .filter_map(|node| node.bounds.map(|bounds| (node.id, bounds)))
+        .collect();
+
+    // A spilling node is almost always an unnamed generic, so the row is
+    // unreadable without saying what it sits inside. Walk up to the nearest
+    // ancestor that carries a name.
+    let by_id: HashMap<u64, &SemanticNode> =
+        snapshot.nodes.iter().map(|node| (node.id, node)).collect();
+    let describe = |mut id: u64| -> String {
+        for _ in 0..12 {
+            let Some(node) = by_id.get(&id) else { break };
+            if !node.name.is_empty() {
+                return format!(
+                    "in {} \"{}\"",
+                    node.role,
+                    node.name.chars().take(60).collect::<String>()
+                );
+            }
+            let Some(parent) = node.parent else { break };
+            id = parent;
+        }
+        String::from("(no named ancestor)")
+    };
+
+    let vertical = axis.starts_with('v') || axis.starts_with('a');
+    let mut by_owner: HashMap<String, (usize, f64)> = HashMap::new();
+    let mut rows: Vec<(f64, String)> = Vec::new();
+    for node in &snapshot.nodes {
+        let (Some(child), Some(parent_id)) = (node.bounds, node.parent) else {
+            continue;
+        };
+        let Some(parent) = boxes.get(&parent_id) else {
+            continue;
+        };
+        // A zero-sized parent is a node that has not been laid out, not a
+        // container something escaped from.
+        if parent[2] <= 0.0 || parent[3] <= 0.0 || child[2] <= 0.0 {
+            continue;
+        }
+        let left = parent[0] - child[0];
+        let right = (child[0] + child[2]) - (parent[0] + parent[2]);
+        let mut worst = left.max(right);
+        let mut how = if right >= left { "right" } else { "left" };
+        if vertical {
+            let top = parent[1] - child[1];
+            let bottom = (child[1] + child[3]) - (parent[1] + parent[3]);
+            if top > worst {
+                worst = top;
+                how = "top";
+            }
+            if bottom > worst {
+                worst = bottom;
+                how = "bottom";
+            }
+        }
+        if worst <= tolerance {
+            continue;
+        }
+        let owner = describe(parent_id);
+        let entry = by_owner.entry(owner).or_insert((0, 0.0));
+        entry.0 += 1;
+        entry.1 = entry.1.max(worst);
+        rows.push((
+            worst,
+            format!(
+                "{:>8.1}px {how:<6} {:<11} child[{:.0},{:.0} {:.0}x{:.0}] parent[{:.0},{:.0} {:.0}x{:.0}]  {} {}",
+                worst,
+                node.role,
+                child[0], child[1], child[2], child[3],
+                parent[0], parent[1], parent[2], parent[3],
+                node.name.chars().take(40).collect::<String>(),
+                describe(parent_id),
+            ),
+        ));
+    }
+    rows.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
+
+    println!(
+        "{} nodes inspected in {elapsed:.1}ms, {} axis, tolerance {tolerance}px",
+        snapshot.nodes.len(),
+        if vertical { "both" } else { "horizontal" }
+    );
+    if rows.is_empty() {
+        println!("nothing sticks out of its container");
+    }
+    for (_, row) in rows.iter().take(40) {
+        println!("{row}");
+    }
+    if rows.len() > 40 {
+        println!("... and {} more", rows.len() - 40);
+    }
+    // The per-row list is dominated by whichever container repeats most, so
+    // the grouping is what says where to look. A `truncate` row overflows by
+    // design and clips in paint; a container that appears here once, deep in
+    // the transcript, does not.
+    if !by_owner.is_empty() {
+        let mut owners: Vec<(String, (usize, f64))> = by_owner.into_iter().collect();
+        owners.sort_by(|a, b| b.1.1.partial_cmp(&a.1.1).unwrap_or(std::cmp::Ordering::Equal));
+        println!("\nby container, worst first:");
+        for (owner, (count, worst)) in owners {
+            println!("  {count:>4} nodes  worst {worst:>7.1}px  {owner}");
+        }
     }
     Ok(())
 }
@@ -424,7 +547,34 @@ async fn main() -> Result<()> {
         "nodes" => {
             nodes(&mut client).await?;
         }
+        "spill" => {
+            let axis = args.get(1).map(String::as_str).unwrap_or("h");
+            let tolerance: f64 = args.get(2).and_then(|v| v.parse().ok()).unwrap_or(0.5);
+            spill(&mut client, axis, tolerance).await?;
+        }
         "idle" => report::show("idle", &metrics(&mut client).await?),
+        // Every counter the app publishes is cumulative since launch, and a
+        // mount costs thousands of DOM writes. Reading them once and calling
+        // the total a rate is how "3,698 attribute writes" got recorded as 230
+        // a second when it was actually the startup mount, counted once.
+        // Two reads and a subtraction is the only honest way to ask what an
+        // idle app is still doing.
+        "drift" => {
+            let seconds: f64 = args.get(1).and_then(|v| v.parse().ok()).unwrap_or(20.0);
+            let before = metrics(&mut client).await?;
+            println!("== holding still for {seconds}s, nothing driven ==");
+            tokio::time::sleep(Duration::from_secs_f64(seconds)).await;
+            let after = metrics(&mut client).await?;
+            let frames_of = |m: &RendererMetrics| {
+                m.frame_window.as_ref().map(|w| w.frames_total).unwrap_or(0)
+            };
+            let frames = frames_of(&after).saturating_sub(frames_of(&before));
+            println!(
+                "frames={frames} over {seconds}s = {:.1}fps with no input",
+                frames as f64 / seconds
+            );
+            report::show_delta(&before, &after, 0);
+        }
         "click" => {
             let want = args.get(1).map(String::as_str).unwrap_or("Settings");
             nodes(&mut client).await?;
