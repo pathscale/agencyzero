@@ -67,9 +67,9 @@ the app. Leave it until something measures it there.
 
 | # | Item | Detail |
 |---|---|---|
-| 1 | Move `log-phase-times` off the base `blitz-dom` dependency onto `blitz-inspector`. One line, removes per-frame work from the shipping app, cleans the baseline. | [allocations.md](allocations.md) |
+| 1 | ~~Move `log-phase-times` off the base `blitz-dom` dependency onto `blitz-inspector`.~~ **Done** 2026-08-11, `apps/gui/Cargo.toml:33`. | [allocations.md](allocations.md) |
 | 2 | ~~Bound the streaming tail block: split prose on blank lines in `extractProseStructures`.~~ **Done** 2026-08-11, along with the incremental parse that followed it. See "Done" below before re-issuing this. | [js-engine-big-problem.md](js-engine-big-problem.md) |
-| 3 | Two cheap memory measurements: `vmmap`/`heap` on a live instance, and distinct versus total attribute values on a tree. | [allocations.md](allocations.md), [blink-what-we-can-learn.md](blink-what-we-can-learn.md) section 7 |
+| 3 | **Half done.** ~~`vmmap`/`heap` on a live instance~~ (done: 855MB, `MALLOC_SMALL` 552M, GPU-side only 67M). Still open: distinct versus total attribute values on a tree. | [allocations.md](allocations.md), [blink-what-we-can-learn.md](blink-what-we-can-learn.md) section 7 |
 | 4 | Make Stylo snapshots updatable (`document.rs:1258`). A correctness fix, and it unblocks the invalidation work. | [style-invalidation-we-already-ship.md](style-invalidation-we-already-ship.md) |
 | 5 | Clamp animation-driven redraw to a lower cadence (`blitz-shell/src/window.rs:614`). Best value per line available. | [animation-gap.md](animation-gap.md) |
 | 6 | Try mimalloc as the global allocator. One line, measure, keep or drop. | [allocations.md](allocations.md) |
