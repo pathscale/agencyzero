@@ -533,6 +533,7 @@ const en = {
     "The latest comparable turn reported zero cache reads after a substantial cached turn. This can increase usage, but the provider does not expose the cause.",
   "cache miss?": "cache miss?",
   "Drop this queued message": "Drop this queued message",
+  "Drop this queued compaction": "Drop this queued compaction",
   "Ask, or type / for commands…": "Ask, or type / for commands…",
   copied: "copied",
   "GitHub ›": "GitHub ›",
