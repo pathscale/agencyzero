@@ -20,6 +20,15 @@
  */
 import { describe, it } from "vitest";
 import { createStreamingSplitter, splitBlocks } from "~/features/project/MessageBody";
+import { holdBackPartialDirective } from "~/features/project/TranscriptPane";
+
+/** The whole-body scan `holdBackPartialDirective` used to do, for comparison. */
+function unboundedHoldBack(text: string): string {
+  const open = text.lastIndexOf("<ps");
+  if (open === -1) return text;
+  const closed = text.indexOf(">", open);
+  return closed === -1 ? text.slice(0, open) : text;
+}
 
 /** A reply shaped like the ones agents actually send: prose, blank lines, no fences. */
 function reply(chars: number): string {
@@ -88,6 +97,44 @@ describe("streaming parse cost", () => {
     console.log(
       `\nstreaming reply, ${DELTA}-char deltas\n` +
         ` chars        full          incremental        gain\n${rows.join("\n")}\n`,
+    );
+  }, 120_000);
+
+  it("reports the whole per-token render cost, parse plus directive scan", () => {
+    // What the app actually pays per token on the JS side, minus the Boa
+    // concatenation, which cannot be reached from here.
+    const DELTA = 4;
+    const sizes = [10_000, 40_000];
+    const rows: string[] = [];
+
+    streamCost(reply(2_000), DELTA, splitBlocks);
+
+    for (const size of sizes) {
+      const body = reply(size);
+
+      const beforeSplit = createStreamingSplitter();
+      const before = streamCost(body, DELTA, (text) => {
+        // Order as the component runs it: hold back, then parse the result.
+        return beforeSplit(unboundedHoldBack(text));
+      });
+
+      const afterSplit = createStreamingSplitter();
+      const after = streamCost(body, DELTA, (text) => afterSplit(holdBackPartialDirective(text)));
+
+      rows.push(
+        [
+          String(size).padStart(6),
+          `${before.toFixed(1).padStart(8)} ms`,
+          `${after.toFixed(1).padStart(8)} ms`,
+          `${(before / after).toFixed(1)}x`,
+        ].join("  "),
+      );
+    }
+
+    // biome-ignore lint/suspicious/noConsole: a benchmark reports by printing
+    console.log(
+      `\nhold-back scan, over the incremental parse\n` +
+        ` chars   whole-body   last-line    gain\n${rows.join("\n")}\n`,
     );
   }, 120_000);
 });

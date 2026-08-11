@@ -48,11 +48,36 @@ const STARTERS = () => [
  * whatever it left behind). A `<ps` that never closes just stays hidden, which
  * is the right outcome for a directive: the user never authored it to read.
  */
-function holdBackPartialDirective(text: string): string {
-  const open = text.lastIndexOf("<ps");
-  if (open === -1) return text;
+export function holdBackPartialDirective(text: string): string {
+  /*
+   * Only the last line is searched, and that is the whole cost story.
+   *
+   * This runs on every streaming token. `lastIndexOf("<ps")` over the whole
+   * body has to reach the start of the string before it can report a miss, and
+   * a miss is the common case — most replies contain no directive at all — so
+   * the scan was O(body) per token, which is the same quadratic the parse had.
+   *
+   * A directive is a line: `isPromptSyntaxDirectiveLine` in MessageBody takes
+   * one line and requires the directive to span it exactly. So an unterminated
+   * `<ps` can only be on the last line, and searching earlier lines could never
+   * find one that mattered. The bound is exact, not a heuristic window.
+   *
+   * The one body this does not help is a reply with no newline anywhere, where
+   * the last line is the whole reply. That is also the body for which the
+   * answer genuinely depends on all of it.
+   */
+  const lineStart = text.lastIndexOf("\n") + 1;
+  const line = lineStart === 0 ? text : text.slice(lineStart);
+
+  // The *last* `<ps` on that line, not the first: `<ps a> <ps b` is a complete
+  // directive followed by a partial one, and it is the partial one that has to
+  // be held back.
+  const openInLine = line.lastIndexOf("<ps");
+  if (openInLine === -1) return text;
+
   // A closing `>` after the last `<ps` means the directive is complete; nothing
   // to withhold. Only an unterminated trailing `<ps...` is held.
+  const open = lineStart + openInLine;
   const closed = text.indexOf(">", open);
   return closed === -1 ? text.slice(0, open) : text;
 }
