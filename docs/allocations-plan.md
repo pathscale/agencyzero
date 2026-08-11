@@ -27,6 +27,13 @@ node-leak fix in ps-blitz, so treat them as void rather than as a comparison.
 Status key: `[ ]` not started, `[~]` in progress, `[x]` done, `[-]` dropped
 (with the reason).
 
+> **Read [step 10](#10-the-frame-rate-was-the-benchmarks-own-pacing) before any
+> fps or `missed_refreshes` figure in this document.** `blitz-bench scroll`
+> paced itself at 60Hz and said so nowhere, so every frame-rate number recorded
+> below describes the harness. Unpaced, the app runs at 120fps with no missed
+> refreshes. The millisecond phase timings are unaffected and still stand; the
+> frame rates and the "missing a refresh" counts do not.
+
 ---
 
 ## 0. Make the measuring tool reliable — blocks everything below
@@ -574,7 +581,85 @@ clipped. The first is a vello question, the second is ours.
 One caveat on the arithmetic above: the 9-layer number was taken on the build
 before the background fix, so the middle row and the last row come from
 different binaries. Re-running `LAYER_LIMIT=8` on the current build would turn
-that inference into a measurement, and has not been done.
+that inference into a measurement.
+
+**Re-run 2026-08-11, and the single-run numbers above were unreliable.** The
+first `scroll` after a launch is cold and reads several milliseconds high;
+repeated runs settle. Three runs each, on one binary:
+
+| layers | frame total, repeated |
+| --- | --- |
+| 39 | 7.39, 7.40, 7.53 |
+| 9 | 4.95, 4.85, 4.88 |
+
+So the ~30 remaining clips are worth about **2.5ms**, not the 3.3ms inferred
+across two binaries. The shape of the conclusion holds and the arithmetic in it
+did not: take three runs, discard the first.
+
+---
+
+## 10. The frame rate was the benchmark's own pacing
+
+`[x]` **Measured 2026-08-11.** Every fps figure in this document, back to the
+24.7 in step 5, describes `blitz-bench`, not the application.
+
+`scroll` sleeps `1.0 / 60.0` between wheel events
+([`main.rs:58`](../crates/blitz-bench/src/main.rs:58)), so it asks for about 60
+frames a second and gets about 53 once the sleep overhead counts. It printed
+nothing about this, and `fps` and `missed_refreshes` were reported directly
+underneath, so the numbers read as an application failing badly on a 120Hz
+display.
+
+`BENCH_PACE=0` removes the sleep. Same build, same scroll, three runs:
+
+| | paced (default) | unpaced |
+| --- | --- | --- |
+| fps | 53.2 | **120.6, 120.8, 114.6** |
+| missed refreshes | 234/256 | **0, 0, 2 of 256** |
+| `interval` | 18.99ms | **8.28, 8.35, 8.35ms** |
+| `resolve` | 0.92ms | 0.28ms |
+| `scene` | 2.15ms | 1.28ms |
+| `renderer` | 4.54ms | 6.71ms |
+| `total` | 7.39ms | 8.24ms |
+
+8.33ms is one refresh period at 120Hz. **The app runs at the display's full
+rate and drops nothing.**
+
+### What this retires, and what survives
+
+Retired: "24.7 fps", "38.2 fps", "52.3 fps", "136 of 239 frames missing a
+refresh", and every sentence in this document built on them. The application
+was never missing those refreshes; it was being asked for frames 60 times a
+second and delivering them.
+
+Also retired, and it was mine: step 7 concluded "the backpressure hypothesis is
+dead, this is work, not vsync." That was measured under pacing, where there is
+no backpressure to find because the app is idle between events. Unpaced,
+`renderer` *rises* from 4.54ms to 6.71ms while everything else falls, which is
+exactly what waiting on a full swapchain looks like. The phase split inside
+that figure was real work for that condition; the generalisation was not.
+
+Surviving: every millisecond phase timing. `resolve`, `scene` and `renderer` are
+measured per presented frame and do not care why the frame was requested. The
+keystroke result, the node leak, the layer costs and the memory split all stand.
+
+### What it changes about priorities
+
+The budget is 8.33ms and unpaced `total` is 8.24ms, so the headroom is thin
+rather than absent, and it is thin against 120Hz rather than 60. That makes the
+2.5ms of clip cost in step 9 worth more, not less: it is the difference between
+sitting at the edge of the budget and having a third of it spare.
+
+But the honest statement of the problem changed. This was being worked as "the
+app cannot keep up." It keeps up. The question is how much room is left when
+the content is heavier than a scroll of the current view, and that is a
+different experiment than any run so far.
+
+**Instrument fixed rather than remembered.** `scroll` now prints its pace above
+the numbers that pace governs, and names `BENCH_PACE=0`. A harness invisible in
+its own output is precisely the distorting instrument the second rule at the
+top of this document is about, and it went unnoticed for the length of a
+workstream.
 
 ---
 
