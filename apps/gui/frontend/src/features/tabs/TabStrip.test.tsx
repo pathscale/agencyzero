@@ -25,7 +25,7 @@ async function mountStrip() {
 
 // Boot restores only remembered tabs now; these scenarios want them all open.
 beforeEach(() => {
-  setPrefs("openTabKeys", ["worktable", "cafe", "agencyzero"]);
+  setPrefs("openTabKeys", ["worktable", "cafe", "quux"]);
 });
 
 describe("TabStrip", () => {
@@ -44,7 +44,7 @@ describe("TabStrip", () => {
    */
   it("renders Home plus a tab per project", async () => {
     const { getByRole } = await mountStrip();
-    for (const label of ["Home", "WorkTable", "api.support.cafe", "agencyzero"]) {
+    for (const label of ["Home", "foo.bar", "baz.qux", "quux.dev"]) {
       expect(getByRole("button", { name: label })).toBeInTheDocument();
     }
   });
@@ -59,9 +59,9 @@ describe("TabStrip", () => {
   it("mounts a close button on every closable tab, not just the active one", async () => {
     const { getByLabelText } = await mountStrip();
 
-    expect(getByLabelText("Close WorkTable")).toBeInTheDocument();
-    expect(getByLabelText("Close api.support.cafe")).toBeInTheDocument();
-    expect(getByLabelText("Close agencyzero")).toBeInTheDocument();
+    expect(getByLabelText("Close foo.bar")).toBeInTheDocument();
+    expect(getByLabelText("Close baz.qux")).toBeInTheDocument();
+    expect(getByLabelText("Close quux.dev")).toBeInTheDocument();
   });
 
   it("gives Home no close button, because Home is not closable", async () => {
@@ -74,9 +74,9 @@ describe("TabStrip", () => {
     workspace.actions.focus("worktable");
 
     await waitFor(() => {
-      expect(getByLabelText("Close WorkTable").className).toContain("opacity-100");
-      expect(getByLabelText("Close agencyzero").className).toContain("opacity-0");
-      expect(getByLabelText("Close agencyzero").className).toContain("group-hover:opacity-100");
+      expect(getByLabelText("Close foo.bar").className).toContain("opacity-100");
+      expect(getByLabelText("Close quux.dev").className).toContain("opacity-0");
+      expect(getByLabelText("Close quux.dev").className).toContain("group-hover:opacity-100");
     });
   });
 
@@ -89,10 +89,10 @@ describe("TabStrip", () => {
    */
   it("renders a bold sizing ghost beside every visible label", async () => {
     const { getByLabelText } = await mountStrip();
-    const pill = getByLabelText("Close WorkTable").parentElement!;
+    const pill = getByLabelText("Close foo.bar").parentElement!;
 
     const ghost = pill.querySelector('[aria-hidden="true"].invisible');
-    expect(ghost).toHaveTextContent("WorkTable");
+    expect(ghost).toHaveTextContent("foo.bar");
     expect(ghost?.className).toContain("font-semibold");
   });
 
@@ -103,22 +103,22 @@ describe("TabStrip", () => {
     await waitFor(() => {
       const current = container.querySelectorAll('[aria-current="page"]');
       expect(current).toHaveLength(1);
-      expect(current[0]).toHaveTextContent("api.support.cafe");
+      expect(current[0]).toHaveTextContent("baz.qux");
     });
   });
 
   it("clicking a tab selects it", async () => {
     const { getByRole, workspace } = await mountStrip();
-    getByRole("button", { name: "agencyzero" }).click();
+    getByRole("button", { name: "quux.dev" }).click();
 
-    await waitFor(() => expect(workspace.state.activeKey).toBe("agencyzero"));
+    await waitFor(() => expect(workspace.state.activeKey).toBe("quux"));
   });
 
   it("clicking a close button closes that tab without selecting it", async () => {
     const { getByLabelText, workspace } = await mountStrip();
     workspace.actions.focus("home");
 
-    getByLabelText("Close agencyzero").click();
+    getByLabelText("Close quux.dev").click();
 
     await waitFor(() => {
       expect(workspace.state.tabs.map((tab) => tab.key)).toEqual(["home", "worktable", "cafe"]);
@@ -133,7 +133,7 @@ describe("TabStrip", () => {
 
   it("keeps the close button out of the drag gesture", async () => {
     const { getByLabelText } = await mountStrip();
-    expect(getByLabelText("Close WorkTable")).toHaveAttribute("data-no-drag");
+    expect(getByLabelText("Close foo.bar")).toHaveAttribute("data-no-drag");
   });
 });
 

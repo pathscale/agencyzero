@@ -13,9 +13,9 @@ describe("projects", () => {
   it("serves the design fixtures in manual order", async () => {
     const projects = await api.listProjects();
     expect(projects.map((project) => project.name)).toEqual([
-      "WorkTable",
-      "api.support.cafe",
-      "agencyzero",
+      "foo.bar",
+      "baz.qux",
+      "quux.dev",
     ]);
   });
 
@@ -23,7 +23,7 @@ describe("projects", () => {
     const first = await api.listProjects();
     first[0].name = "clobbered";
     const second = await api.listProjects();
-    expect(second[0].name).toBe("WorkTable");
+    expect(second[0].name).toBe("foo.bar");
   });
 
   it("broadcasts a creation, and records the first message as the user's", async () => {
@@ -45,10 +45,10 @@ describe("projects", () => {
     const updated = vi.fn();
     await api.on("project:updated", updated);
 
-    const reordered = await api.reorderProjects(["agencyzero", "worktable", "cafe"]);
+    const reordered = await api.reorderProjects(["quux", "worktable", "cafe"]);
 
     expect(reordered.map((project: Project) => project.id)).toEqual([
-      "agencyzero",
+      "quux",
       "worktable",
       "cafe",
     ]);
@@ -73,7 +73,7 @@ describe("projects", () => {
 
     const carried = await api.listMessages(fork.id);
     expect(carried.map((message: Message) => message.body)).toEqual([
-      expect.stringContaining("Review the WorkTable upgrade"),
+      expect.stringContaining("Review the foo.bar upgrade"),
       expect.stringContaining("Phase A"),
     ]);
   });

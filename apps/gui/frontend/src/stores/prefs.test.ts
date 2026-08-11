@@ -41,10 +41,10 @@ describe("workspace layout", () => {
   it("treats reordered backend preference keys as the same JSON value", () => {
     const local = {
       panelSections: { usage: true, settings: false },
-      openTabKeys: ["agencyzero", "worktable"],
+      openTabKeys: ["quux", "worktable"],
     };
     const backend = {
-      openTabKeys: ["agencyzero", "worktable"],
+      openTabKeys: ["quux", "worktable"],
       panelSections: { settings: false, usage: true },
     };
 
