@@ -500,11 +500,18 @@
   }
 
   /*
-   * A static accent on the composer edge. This used to animate forever.
-   * Blitz correctly treated that CSS animation as an active document and kept
-   * submitting full frames while the app was otherwise idle, consuming a full
-   * core for decoration alone. Keep the same accent distribution without an
-   * idle render loop.
+   * The accent on the composer edge, and the drift across it.
+   *
+   * This used to animate unconditionally. Blitz correctly treated that CSS
+   * animation as an active document and kept submitting full frames while the
+   * app was otherwise idle, consuming a full core for decoration alone, so
+   * PR #136 removed the animation and left the accent static.
+   *
+   * The drift is worth having while someone is actually writing, which is the
+   * only time anyone looks at this edge. `az-ring-drift` is applied by the
+   * composer while its field holds focus and dropped the moment it does not,
+   * so the render loop lasts exactly as long as the cursor is in the box and
+   * an idle window animates nothing.
    */
   .az-ring-composer {
     background-image: linear-gradient(
@@ -519,6 +526,19 @@
     );
     background-position: 50% 50%;
     background-size: 240% 100%;
+  }
+
+  .az-ring-drift {
+    animation: az-composer-ring-drift 12s ease-in-out infinite alternate;
+  }
+
+  @keyframes az-composer-ring-drift {
+    from {
+      background-position: 100% 50%;
+    }
+    to {
+      background-position: -100% 50%;
+    }
   }
 
   /* Status dots carry a soft halo when the state is live rather than historic. */
