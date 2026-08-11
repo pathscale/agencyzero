@@ -14,3 +14,8 @@ node_modules
 *.local.md
 /review.md
 __pycache__/
+
+# Working handover for whoever picks this up, including a future me after a
+# compaction. Machine-local paths and in-flight state; it describes the working
+# session, not the repository.
+docs/HANDOVER.md

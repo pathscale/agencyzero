@@ -418,6 +418,66 @@ describe("an unsent draft", () => {
  * survived that swap and appeared under the next tab — typing "test" in one
  * session showed "test" in the next, and the draft it landed on was lost.
  */
+/*
+ * The drift on the composer's edge is a CSS animation, and Blitz treats a
+ * running animation as an active document: it submits full frames for the whole
+ * window until the animation stops. Measured on 0.5.35 against a real project,
+ * with nothing driven and no input at all: composer unfocused, 1.4fps and under
+ * 2% CPU; a cursor placed in the composer, 29.9fps and 46% CPU, holding there
+ * indefinitely. An owner's instance held 74.8% for four hours that way.
+ *
+ * So the class must track writing, not focus. These assert the state machine
+ * that costs a core when it is wrong; the focus-keyed version fails the first
+ * and the third.
+ */
+describe("the drift on the composer edge is a render loop, so it follows typing", () => {
+  const ring = (container: HTMLElement) => container.querySelector(".az-ring-composer")!;
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("does not animate for a cursor parked in an untouched composer", () => {
+    const { container, field } = mount({ autofocus: true });
+    expect(document.activeElement).toBe(field);
+    expect(ring(container).className).not.toContain("az-ring-drift");
+  });
+
+  it("animates while someone is typing", () => {
+    const { container, field } = mount();
+    type(field, "writing something");
+    expect(ring(container).className).toContain("az-ring-drift");
+  });
+
+  it("stops a few seconds after the last keystroke, with the cursor still in the box", () => {
+    const { container, field } = mount();
+    type(field, "writing something");
+    expect(ring(container).className).toContain("az-ring-drift");
+
+    vi.advanceTimersByTime(3_000);
+    expect(ring(container).className).not.toContain("az-ring-drift");
+  });
+
+  it("keeps drifting across a burst rather than flickering per keystroke", () => {
+    const { container, field } = mount();
+    type(field, "a");
+    vi.advanceTimersByTime(2_000);
+    type(field, "ab");
+    vi.advanceTimersByTime(2_000);
+    expect(ring(container).className).toContain("az-ring-drift");
+  });
+
+  it("stops on blur without waiting out the timer", () => {
+    const { container, field } = mount();
+    type(field, "writing something");
+    fireEvent.blur(field);
+    expect(ring(container).className).not.toContain("az-ring-drift");
+  });
+});
+
 describe("a draft belongs to its own tab", () => {
   beforeEach(() => {
     setPrefs("composerDrafts", {});

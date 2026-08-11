@@ -72,7 +72,7 @@ dependencies = [
 
 [[package]]
 name = "agency-tools"
-version = "0.5.32"
+version = "0.5.36"
 dependencies = [
  "derive_more 2.1.1",
  "dirs",
@@ -364,11 +364,11 @@ checksum = "f2032f911046de80f0a198e0901378627c33f59ea0ac00e363d481118bd70a53"
 
 [[package]]
 name = "az-core"
-version = "0.5.32"
+version = "0.5.36"
 
 [[package]]
 name = "az-gui"
-version = "0.5.32"
+version = "0.5.36"
 dependencies = [
  "agency-proxy-client",
  "agency-proxy-protocol",
@@ -407,7 +407,7 @@ dependencies = [
 
 [[package]]
 name = "az-mcp-proxy"
-version = "0.5.32"
+version = "0.5.36"
 dependencies = [
  "az-core",
 ]
@@ -432,6 +432,12 @@ name = "base64"
 version = "0.22.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "72b3254f16251a8381aa12e40e3c4d2f0199f8c6508fbecb9d91f575e0fbb8c6"
+
+[[package]]
+name = "base64"
+version = "0.23.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ac07cdecf99051d9a5238b80f35af32cdeba5b336e55d957b318b50137e18da5"
 
 [[package]]
 name = "bit-set"
@@ -492,7 +498,7 @@ dependencies = [
 
 [[package]]
 name = "blitz-bench"
-version = "0.5.32"
+version = "0.5.36"
 dependencies = [
  "blitz-control-protocol",
  "endpoint-libs",
@@ -505,11 +511,39 @@ dependencies = [
 [[package]]
 name = "blitz-control-protocol"
 version = "0.1.0"
-source = "git+https://github.com/pathscale/tauri-runtime-blitz.git?rev=cf9b75ccab95cb715ab649bab0ca775719c7d780#cf9b75ccab95cb715ab649bab0ca775719c7d780"
 dependencies = [
  "endpoint-libs",
  "serde",
  "serde_json",
+]
+
+[[package]]
+name = "blitz-html"
+version = "0.3.0-beta.3"
+dependencies = [
+ "html5ever 0.39.0",
+ "ps-blitz-dom",
+ "ps-blitz-traits",
+ "xml5ever",
+]
+
+[[package]]
+name = "blitz-paint"
+version = "0.3.0-beta.3"
+dependencies = [
+ "color",
+ "euclid",
+ "kurbo",
+ "parley",
+ "peniko",
+ "ps-anyrender",
+ "ps-anyrender-svg",
+ "ps-blitz-dom",
+ "ps-blitz-traits",
+ "ps-taffy",
+ "smallvec",
+ "stylo",
+ "usvg",
 ]
 
 [[package]]
@@ -1019,7 +1053,7 @@ checksum = "af491d569909a7e4dee0ad7db7f5341fef5c614d5b8ec8cf765732aba3cff681"
 dependencies = [
  "serde",
  "termcolor",
- "unicode-width 0.2.2",
+ "unicode-width 0.1.14",
 ]
 
 [[package]]
@@ -1489,6 +1523,10 @@ dependencies = [
 [[package]]
 name = "debug_timer"
 version = "0.1.3"
+
+[[package]]
+name = "debug_timer"
+version = "0.1.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "da220af51a1a335e9a930beaaef53d261e41ea9eecfb3d973a3ddae1a7284b9c"
 
@@ -1594,7 +1632,7 @@ dependencies = [
  "libc",
  "option-ext",
  "redox_users 0.5.2",
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -1865,7 +1903,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -2033,6 +2071,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "font-types"
+version = "0.12.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0a7299a780854a6d391be2ae1c8521c9368471b559dbfd6a8dbd9f407eaff100"
+dependencies = [
+ "bytemuck",
+]
+
+[[package]]
 name = "fontconfig-parser"
 version = "0.5.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2043,16 +2090,15 @@ dependencies = [
 
 [[package]]
 name = "fontdb"
-version = "0.23.0"
+version = "0.24.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "457e789b3d1202543297a350643cf459f836cade38934e7a4cf6a39e7cde2905"
+checksum = "2660c5e9157bf76d2db1294e4a9feba604ef610819a3b591088d0d8392a3290f"
 dependencies = [
  "fontconfig-parser",
  "log",
  "memmap2",
  "slotmap",
  "tinyvec",
- "ttf-parser",
 ]
 
 [[package]]
@@ -2069,7 +2115,7 @@ dependencies = [
  "objc2-core-text",
  "objc2-foundation",
  "parlance",
- "read-fonts",
+ "read-fonts 0.39.2",
  "roxmltree 0.21.1",
  "smallvec",
  "windows 0.62.2",
@@ -2528,7 +2574,7 @@ dependencies = [
  "hashbrown 0.17.1",
  "log",
  "peniko",
- "skrifa",
+ "skrifa 0.42.1",
  "smallvec",
  "vello_common",
 ]
@@ -2582,7 +2628,7 @@ dependencies = [
  "log",
  "presser",
  "thiserror 2.0.19",
- "windows 0.62.2",
+ "windows 0.61.3",
 ]
 
 [[package]]
@@ -2687,7 +2733,19 @@ checksum = "d12c7c642d4ce8c2e784b4751a6634bd89583912265add4a679a8882d123fbcd"
 dependencies = [
  "bitflags 2.13.1",
  "bytemuck",
- "read-fonts",
+ "read-fonts 0.39.2",
+ "smallvec",
+]
+
+[[package]]
+name = "harfrust"
+version = "0.12.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c03d949a14aa089bbb282f7dd76a498a7f684428e4257202efc119ec010376f9"
+dependencies = [
+ "bitflags 2.13.1",
+ "bytemuck",
+ "read-fonts 0.41.0",
  "smallvec",
 ]
 
@@ -2902,7 +2960,7 @@ dependencies = [
  "js-sys",
  "log",
  "wasm-bindgen",
- "windows-core 0.62.2",
+ "windows-core 0.61.2",
 ]
 
 [[package]]
@@ -3132,9 +3190,9 @@ dependencies = [
 
 [[package]]
 name = "imagesize"
-version = "0.14.0"
+version = "0.15.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "09e54e57b4c48b40f7aec75635392b12b3421fa26fe8b4332e63138ed278459c"
+checksum = "65b27460c2c92b037f3f94c538ed9a3342f3fdf923606781629ccb35f82d042a"
 
 [[package]]
 name = "indenter"
@@ -3207,7 +3265,7 @@ checksum = "3640c1c38b8e4e43584d8df18be5fc6b0aa314ce6ebf51b53313d4306cca8e46"
 dependencies = [
  "hermit-abi",
  "libc",
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -3660,7 +3718,7 @@ dependencies = [
  "png 0.18.1",
  "serde",
  "thiserror 2.0.19",
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -3818,7 +3876,7 @@ version = "0.7.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "680998035259dcfcafe653688bf2aa6d3e2dc05e98be6ab46afb089dc84f1df8"
 dependencies = [
- "proc-macro-crate 3.5.0",
+ "proc-macro-crate 2.0.2",
  "proc-macro2",
  "quote",
  "syn 2.0.119",
@@ -4201,7 +4259,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6b1cfcf399c774719fb1fa51bc6b91e86bdf003b03202a0902f1827ba6750746"
 dependencies = [
  "fontique",
- "harfrust",
+ "harfrust 0.8.4",
  "hashbrown 0.17.1",
  "icu_normalizer",
  "icu_properties",
@@ -4209,7 +4267,7 @@ dependencies = [
  "linebender_resource_handle",
  "parlance",
  "parley_data",
- "skrifa",
+ "skrifa 0.42.1",
 ]
 
 [[package]]
@@ -4499,15 +4557,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "proc-macro-crate"
-version = "3.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e67ba7e9b2b56446f1d419b1d807906278ffa1a658a8a5d8a39dcb1f5a78614f"
-dependencies = [
- "toml_edit 0.25.13+spec-1.1.0",
-]
-
-[[package]]
 name = "proc-macro-error"
 version = "1.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4560,8 +4609,7 @@ dependencies = [
 [[package]]
 name = "ps-anyrender"
 version = "0.12.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4563bed05182e9deb9d24dfbd66d28a2792314c68f8afa857038f3fc47e504ae"
+source = "git+https://github.com/pathscale/ps-anyrender.git?rev=0e4122bff9220b85e4e462d1c3213c24beace3ea#0e4122bff9220b85e4e462d1c3213c24beace3ea"
 dependencies = [
  "kurbo",
  "peniko",
@@ -4571,9 +4619,8 @@ dependencies = [
 
 [[package]]
 name = "ps-anyrender-svg"
-version = "0.13.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "49e97e1d85862e3a0e42ea6156b217da35b99d13bacf407338b1eae87209193a"
+version = "0.14.0"
+source = "git+https://github.com/pathscale/ps-anyrender.git?rev=0e4122bff9220b85e4e462d1c3213c24beace3ea#0e4122bff9220b85e4e462d1c3213c24beace3ea"
 dependencies = [
  "image",
  "kurbo",
@@ -4585,10 +4632,9 @@ dependencies = [
 [[package]]
 name = "ps-anyrender-vello"
 version = "0.13.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "faf64df00ea2ee9ba296f6a102c4603d490803012e01f6abf714ce51a1734e8a"
+source = "git+https://github.com/pathscale/ps-anyrender.git?rev=0e4122bff9220b85e4e462d1c3213c24beace3ea#0e4122bff9220b85e4e462d1c3213c24beace3ea"
 dependencies = [
- "debug_timer",
+ "debug_timer 0.1.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "futures-channel",
  "kurbo",
  "peniko",
@@ -4604,10 +4650,9 @@ dependencies = [
 [[package]]
 name = "ps-anyrender-vello-cpu"
 version = "0.15.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c9ce9c0715870ccbcdfe60eec1063f98e2d6c622774a91d7d0afbed2297a4a43"
+source = "git+https://github.com/pathscale/ps-anyrender.git?rev=0e4122bff9220b85e4e462d1c3213c24beace3ea#0e4122bff9220b85e4e462d1c3213c24beace3ea"
 dependencies = [
- "debug_timer",
+ "debug_timer 0.1.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "glifo",
  "kurbo",
  "peniko",
@@ -4619,10 +4664,9 @@ dependencies = [
 [[package]]
 name = "ps-anyrender-vello-hybrid"
 version = "0.9.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5964b4e2352d788f907608285cc8c17e4ae54f3116474bc99349e7a7a8627fd8"
+source = "git+https://github.com/pathscale/ps-anyrender.git?rev=0e4122bff9220b85e4e462d1c3213c24beace3ea#0e4122bff9220b85e4e462d1c3213c24beace3ea"
 dependencies = [
- "debug_timer",
+ "debug_timer 0.1.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "futures-channel",
  "glifo",
  "kurbo",
@@ -4657,6 +4701,7 @@ dependencies = [
  "color",
  "cssparser 0.37.0",
  "cursor-icon",
+ "debug_timer 0.1.3",
  "euclid",
  "html-escape",
  "image",
@@ -4669,18 +4714,18 @@ dependencies = [
  "percent-encoding",
  "ps-anyrender",
  "ps-blitz-traits",
- "ps-debug-timer",
- "ps-stylo-taffy",
  "ps-taffy",
  "rayon",
  "selectors 0.40.0",
- "skrifa",
- "slab",
+ "skrifa 0.42.1",
+ "slotmap",
  "smallvec",
  "stylo",
  "stylo_dom",
  "stylo_static_prefs",
+ "stylo_taffy",
  "stylo_traits",
+ "thin-vec",
  "thread_local",
  "url",
  "usvg",
@@ -4689,39 +4734,12 @@ dependencies = [
 ]
 
 [[package]]
-name = "ps-blitz-html"
-version = "0.3.0-beta.3"
-dependencies = [
- "html5ever 0.39.0",
- "ps-blitz-dom",
- "ps-blitz-traits",
- "xml5ever",
-]
-
-[[package]]
-name = "ps-blitz-paint"
-version = "0.3.0-beta.3"
-dependencies = [
- "color",
- "euclid",
- "kurbo",
- "parley",
- "peniko",
- "ps-anyrender",
- "ps-anyrender-svg",
- "ps-blitz-dom",
- "ps-blitz-traits",
- "ps-taffy",
- "smallvec",
- "stylo",
- "usvg",
-]
-
-[[package]]
 name = "ps-blitz-script"
 version = "0.3.0-beta.3"
 dependencies = [
  "base64 0.22.1",
+ "blitz-html",
+ "blitz-paint",
  "boa_engine",
  "boa_gc",
  "boa_runtime",
@@ -4734,8 +4752,6 @@ dependencies = [
  "ps-anyrender-vello-cpu",
  "ps-blitz-debug-control",
  "ps-blitz-dom",
- "ps-blitz-html",
- "ps-blitz-paint",
  "ps-blitz-traits",
  "rustc-hash 2.1.3",
  "serde_json",
@@ -4750,11 +4766,11 @@ dependencies = [
  "android-activity",
  "arboard",
  "atomic_refcell",
+ "blitz-paint",
  "futures-util",
  "keyboard-types 0.7.0",
  "ps-anyrender",
  "ps-blitz-dom",
- "ps-blitz-paint",
  "ps-blitz-script",
  "ps-blitz-traits",
  "wasm-bindgen",
@@ -4779,21 +4795,9 @@ dependencies = [
 ]
 
 [[package]]
-name = "ps-debug-timer"
-version = "0.1.3"
-
-[[package]]
-name = "ps-stylo-taffy"
-version = "0.3.0-beta.3"
-dependencies = [
- "ps-taffy",
- "stylo",
- "stylo_atoms",
-]
-
-[[package]]
 name = "ps-taffy"
 version = "0.13.0"
+source = "git+https://github.com/pathscale/ps-taffy.git?rev=4f86730bab59a1b1910fb5adb29a5dec6415d5f7#4f86730bab59a1b1910fb5adb29a5dec6415d5f7"
 dependencies = [
  "arrayvec",
  "serde",
@@ -4804,8 +4808,7 @@ dependencies = [
 [[package]]
 name = "ps-wgpu-context"
 version = "0.8.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2089c166b3c856d7c1d542725a09b392d1ff9609cf1998ee1c07154825cfe79c"
+source = "git+https://github.com/pathscale/ps-anyrender.git?rev=0e4122bff9220b85e4e462d1c3213c24beace3ea#0e4122bff9220b85e4e462d1c3213c24beace3ea"
 dependencies = [
  "futures-intrusive",
  "wgpu",
@@ -5011,7 +5014,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c4ed38b89c2c77ff968c524145ad65fb010f38af5c7a224b53b81d47ac2daa81"
 dependencies = [
  "bytemuck",
- "font-types",
+ "font-types 0.11.3",
+]
+
+[[package]]
+name = "read-fonts"
+version = "0.41.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "046a7d674daf459825b32f5062056d6882db0d2f5a479fbd76ccfc870ac18709"
+dependencies = [
+ "bytemuck",
+ "font-types 0.12.2",
+ "once_cell",
 ]
 
 [[package]]
@@ -5352,7 +5366,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys",
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -5408,7 +5422,7 @@ dependencies = [
  "security-framework",
  "security-framework-sys",
  "webpki-root-certs",
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -5433,24 +5447,6 @@ name = "rustversion"
 version = "1.0.23"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf54715a573b99ac80df0bc206da022bcd442c974952c7b9720069370852e21f"
-
-[[package]]
-name = "rustybuzz"
-version = "0.20.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fd3c7c96f8a08ee34eff8857b11b49b07d71d1c3f4e88f8a88d4c9e9f90b1702"
-dependencies = [
- "bitflags 2.13.1",
- "bytemuck",
- "core_maths",
- "log",
- "smallvec",
- "ttf-parser",
- "unicode-bidi-mirroring",
- "unicode-ccc",
- "unicode-properties",
- "unicode-script",
-]
 
 [[package]]
 name = "ryu"
@@ -5594,7 +5590,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5b55fb86dfd3a2f5f76ea78310a88f96c4ea21a3031f8d212443d56123fd0521"
 dependencies = [
  "libc",
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -5899,7 +5895,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0c34617370ae968efb7161bb2beb517d9084659aae19e24b89e3db25b46e4564"
 dependencies = [
  "bytemuck",
- "read-fonts",
+ "read-fonts 0.39.2",
+]
+
+[[package]]
+name = "skrifa"
+version = "0.44.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "819ab7d62b1d3e72d9d9dea5650bac30424f9111364bb94928dbf5ecad1baa68"
+dependencies = [
+ "bytemuck",
+ "read-fonts 0.41.0",
 ]
 
 [[package]]
@@ -5992,7 +5998,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c3d1e2c7f27f8d4cb10542a02c49005dbd6e93095799d6f3be745fae9f8fedd4"
 dependencies = [
  "libc",
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -6240,6 +6246,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0e017eb7fd506fa0fb0da653a6bc3793d9fc11edf92d4721c16b350432f8116f"
 dependencies = [
  "toml 1.1.3+spec-1.1.0",
+]
+
+[[package]]
+name = "stylo_taffy"
+version = "0.3.0-beta.3"
+dependencies = [
+ "ps-taffy",
+ "stylo",
+ "stylo_atoms",
 ]
 
 [[package]]
@@ -6674,7 +6689,6 @@ dependencies = [
 [[package]]
 name = "tauri-runtime-blitz"
 version = "0.1.0"
-source = "git+https://github.com/pathscale/tauri-runtime-blitz.git?rev=cf9b75ccab95cb715ab649bab0ca775719c7d780#cf9b75ccab95cb715ab649bab0ca775719c7d780"
 dependencies = [
  "blitz-control-protocol",
  "endpoint-libs",
@@ -6754,7 +6768,7 @@ dependencies = [
  "serde_with",
  "swift-rs",
  "thiserror 2.0.19",
- "toml 1.1.3+spec-1.1.0",
+ "toml 0.9.12+spec-1.1.0",
  "url",
  "urlpattern",
  "uuid",
@@ -6782,7 +6796,7 @@ dependencies = [
  "getrandom 0.4.3",
  "once_cell",
  "rustix",
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -6941,18 +6955,7 @@ dependencies = [
  "bytemuck",
  "cfg-if",
  "log",
- "tiny-skia-path 0.12.0",
-]
-
-[[package]]
-name = "tiny-skia-path"
-version = "0.11.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9c9e7fc0c2e86a30b117d0462aa261b72b7a99b7ebd7deb3a14ceda95c5bdc93"
-dependencies = [
- "arrayref",
- "bytemuck",
- "strict-num",
+ "tiny-skia-path",
 ]
 
 [[package]]
@@ -7165,18 +7168,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "toml_edit"
-version = "0.25.13+spec-1.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6975367e4d2ef766d86af01ffad14b622fecc8d4357a998fbc4deb6e9bacaf9b"
-dependencies = [
- "indexmap 2.14.0",
- "toml_datetime 1.1.1+spec-1.1.0",
- "toml_parser",
- "winnow 1.0.4",
-]
-
-[[package]]
 name = "toml_parser"
 version = "1.1.2+spec-1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7287,7 +7278,7 @@ dependencies = [
  "png 0.18.1",
  "serde",
  "thiserror 2.0.19",
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -7301,9 +7292,6 @@ name = "ttf-parser"
 version = "0.25.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d2df906b07856748fa3f6e0ad0cbaa047052d4a7dd609e231c4f72cee8c36f31"
-dependencies = [
- "core_maths",
-]
 
 [[package]]
 name = "typeid"
@@ -7374,18 +7362,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5c1cb5db39152898a79168971543b1cb5020dff7fe43c8dc468b0885f5e29df5"
 
 [[package]]
-name = "unicode-bidi-mirroring"
-version = "0.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5dfa6e8c60bb66d49db113e0125ee8711b7647b5579dc7f5f19c42357ed039fe"
-
-[[package]]
-name = "unicode-ccc"
-version = "0.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ce61d488bcdc9bc8b5d1772c404828b17fc481c0a582b5581e95fb233aef503e"
-
-[[package]]
 name = "unicode-ident"
 version = "1.0.24"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7399,12 +7375,6 @@ checksum = "5fd4f6878c9cb28d874b009da9e8d183b5abc80117c40bbd187a1fde336be6e8"
 dependencies = [
  "tinyvec",
 ]
-
-[[package]]
-name = "unicode-properties"
-version = "0.1.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7df058c713841ad818f1dc5d3fd88063241cc61f49f5fbea4b951e8cf5a8d71d"
 
 [[package]]
 name = "unicode-script"
@@ -7475,25 +7445,25 @@ dependencies = [
 
 [[package]]
 name = "usvg"
-version = "0.46.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e419dff010bb12512b0ae9e3d2f318dfbdf0167fde7eb05465134d4e8756076f"
+version = "0.48.1"
+source = "git+https://github.com/DioxusLabs/resvg?branch=devin%2F1785858271-intrinsic-dimensions#3289a9b0c3d3352692bf5acdf5f6e6949cdb57b5"
 dependencies = [
- "base64 0.22.1",
+ "base64 0.23.1",
  "data-url",
  "flate2",
  "fontdb",
+ "harfrust 0.12.0",
  "imagesize",
  "kurbo",
  "log",
  "pico-args",
  "roxmltree 0.21.1",
- "rustybuzz",
  "simplecss",
  "siphasher",
+ "skrifa 0.44.0",
  "strict-num",
  "svgtypes",
- "tiny-skia-path 0.11.4",
+ "tiny-skia-path",
  "unicode-bidi",
  "unicode-script",
  "unicode-vo",
@@ -7535,7 +7505,7 @@ dependencies = [
  "log",
  "peniko",
  "png 0.18.1",
- "skrifa",
+ "skrifa 0.42.1",
  "static_assertions",
  "thiserror 2.0.19",
  "vello_encoding",
@@ -7581,7 +7551,7 @@ dependencies = [
  "bytemuck",
  "guillotiere",
  "peniko",
- "skrifa",
+ "skrifa 0.42.1",
  "smallvec",
 ]
 
@@ -8212,7 +8182,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -8920,9 +8890,6 @@ name = "winnow"
 version = "1.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "23b97319f7b8343df12cc98938e5c3eb436064524c8d2b4e30a1d3a36eecdf81"
-dependencies = [
- "memchr",
-]
 
 [[package]]
 name = "winreg"
@@ -9088,7 +9055,7 @@ dependencies = [
 
 [[package]]
 name = "wt-migrate"
-version = "0.5.32"
+version = "0.5.36"
 dependencies = [
  "chrono",
  "derive_more 2.1.1",

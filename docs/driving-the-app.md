@@ -1,7 +1,8 @@
 # Driving the app from outside
 
-> Operating context for all of this, including which surface answers which
-> question and what is currently in flight, is in [HANDOVER.md](HANDOVER.md).
+> An untracked `docs/HANDOVER.md` may sit beside this file with the operating
+> context: repository wiring, what is in flight, and which surface answers which
+> question. Not committed, because it is about a session rather than the repo.
 
 How to inspect, operate and measure a running AgencyZero without touching the
 keyboard. Written for an agent: everything here is reproducible from a shell,

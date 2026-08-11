@@ -1,4 +1,13 @@
-import { createEffect, createMemo, createSignal, For, type JSX, onMount, Show } from "solid-js";
+import {
+  createEffect,
+  createMemo,
+  createSignal,
+  For,
+  type JSX,
+  onCleanup,
+  onMount,
+  Show,
+} from "solid-js";
 import { Icon } from "~/components/Icon";
 import { PillMenu } from "~/components/PillMenu";
 import { AGENT_LABELS, PERMISSION_ORDER, permissionLabel } from "~/lib/labels";
@@ -418,11 +427,36 @@ export function Composer(props: ComposerProps): JSX.Element {
   };
   let field!: HTMLTextAreaElement;
   const [promptHeight, setPromptHeight] = createSignal(22);
-  // Drives the drift across the composer's edge. Tracked here rather than with
-  // `:focus-within` so the animation starts and stops on an event this code
-  // owns: it is a render loop for as long as it runs, and it must not outlive
-  // the cursor being in the field.
+  /*
+   * Drives the drift across the composer's edge. Tracked here rather than with
+   * `:focus-within` so the animation starts and stops on an event this code
+   * owns: it is a render loop for as long as it runs.
+   *
+   * Keyed on keystrokes rather than on focus, and this is the whole point.
+   * Blitz treats a running CSS animation as an active document and submits
+   * full frames for as long as one exists, so this class is worth ~30fps of
+   * resolve, scene and paint over the entire window: measured at 1.4fps and
+   * under 2% CPU with the composer unfocused, and 29.9fps and 46% CPU with a
+   * cursor sitting in it and nothing else happening at all. Focus is not
+   * writing. A cursor parked in the box while its owner reads the transcript,
+   * or walks away, held a core for four hours.
+   */
+  const DRIFT_IDLE_MS = 3_000;
   const [writing, setWriting] = createSignal(false);
+  let driftTimer: ReturnType<typeof setTimeout> | undefined;
+  const stopDrift = (): void => {
+    if (driftTimer !== undefined) clearTimeout(driftTimer);
+    driftTimer = undefined;
+    setWriting(false);
+  };
+  // Each keystroke re-arms the timer, so a burst of typing is one continuous
+  // drift rather than a flicker, and it ends a few seconds after the last one.
+  const keepDrifting = (): void => {
+    setWriting(true);
+    if (driftTimer !== undefined) clearTimeout(driftTimer);
+    driftTimer = setTimeout(stopDrift, DRIFT_IDLE_MS);
+  };
+  onCleanup(stopDrift);
 
   // Sending while a run is live is allowed again — the store queues it and
   // sends when the run lands, so Enter never starts a second run and never
@@ -953,11 +987,11 @@ export function Composer(props: ComposerProps): JSX.Element {
               value={draft()}
               placeholder={props.placeholder}
               aria-label={props.placeholder}
-              onFocus={() => setWriting(true)}
-              onBlur={() => setWriting(false)}
+              onBlur={stopDrift}
               onInput={(event) => {
                 remember(event.currentTarget.value);
                 resize();
+                keepDrifting();
               }}
               onKeyDown={(event) => {
                 // Enter sends; Shift+Enter is a newline. Standard for a chat box,
