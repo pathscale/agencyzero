@@ -63,6 +63,32 @@ DOM write stays O(body) per token no matter what the JS side does."* That last
 clause is load-bearing and it applies to step 1 too. Bounding the block is what
 makes any of the rest matter.
 
+### Step 2 is not the fix either, and this is the third correction
+
+Written after implementing it. Splitting prose on blank lines landed
+(`MessageBody.tsx`), and reading the code around it says step 2's own claim was
+also too strong.
+
+- `MessageBody`'s memo calls `splitBlocks(props.body)` on every body change, and
+  that walks the **whole body** to split it into lines no matter how many blocks
+  come out. Still O(body) per token.
+- The `sameBlock` comparisons across N paragraph blocks sum to the body length.
+  Still O(body) per token.
+- The DOM write was **already** bounded before the change. The `<For>` over
+  `block.text.split(/\n{2,}/)` diffs paragraphs by value, so an unchanged
+  paragraph already kept its node and only the growing one was rewritten.
+  Passes 4 to 6 were not costing what the ledger above says they cost.
+
+So the paragraph split is an **enabler, not a fix**: a paragraph closed by a
+blank line can never change again, which makes everything before the last blank
+line provably settled. A parse whose only block is the whole message has no
+prefix that can be cached; now it has one.
+
+**The actual fix is an incremental parse**: keep the blocks already produced for
+the settled prefix, and re-parse only from the last blank line onward. That is
+the step that takes the per-token cost from O(body) to O(tail), and it is not
+any of the five steps listed below.
+
 ### What to do instead
 
 1. **Step 2 first.** Split prose on blank lines, bounding passes 3 to 6 to one
