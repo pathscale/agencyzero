@@ -1,5 +1,7 @@
 # Allocations: what to measure, in what order, and what it said
 
+> Tooling, repository wiring and what is in flight: [HANDOVER.md](HANDOVER.md).
+
 One workstream under
 [Blitz performance architecture](blitz-performance-architecture.md), covering
 allocation churn and resident memory. Sibling plans cover the other lines in

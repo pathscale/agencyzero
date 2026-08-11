@@ -1,5 +1,8 @@
 # Driving the app from outside
 
+> Operating context for all of this, including which surface answers which
+> question and what is currently in flight, is in [HANDOVER.md](HANDOVER.md).
+
 How to inspect, operate and measure a running AgencyZero without touching the
 keyboard. Written for an agent: everything here is reproducible from a shell,
 and none of it needs a human to scroll or click.
