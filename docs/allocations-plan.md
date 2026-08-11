@@ -164,12 +164,32 @@ the document could not change the answer, only charge for it.
 6.2x on the keystroke, 4x on the frame, and the forced resolve is gone rather
 than reduced.
 
-**The composition changed, and it matters for step 6.** `scene` went 0.76 to
-2.19ms and `renderer` 1.72 to 4.39ms. Neither got slower: with resolve no
-longer swamping the frame, more frames actually present, so paint and submit
-carry a larger share of a much smaller total. Paint is now roughly 22% of a
-frame rather than 1.9% — which is the shift the owner argued for when I wanted
-to drop the path caching, arriving within the hour.
+**The composition inverted, and it settles step 6.** A full `frames` reading on
+0.5.26:
+
+| phase | 0.5.25 | 0.5.26 | share now |
+| --- | --- | --- | --- |
+| `resolve` | 37.56ms | **1.76ms** | 13% |
+| `scene` | 0.76ms | **4.36ms** | **32%** |
+| `renderer` | 1.72ms | **7.52ms** | **55%** |
+| total | 40.04ms | **13.64ms** | |
+| active fps | 24.7 | 38.2 | |
+| missed refreshes | 136/239 | 18/256 | |
+
+Resolve fell 21x and stopped being the problem. Paint did not get slower — the
+same work is simply no longer hidden behind a cost three times its size, and
+frames that used to be dropped now present. It is 32% of the frame.
+
+So the deferral was right and the argument for it has been paid off inside the
+hour: judging paint as 1.9% of a frame that was 93.8% resolve measured the
+wrong ratio, exactly as the owner said. **Step 6 is now the second-largest item
+in the frame**, behind the renderer.
+
+Two cautions on this table. The two readings cover different activity, so the
+means are not strictly like-for-like. And `residentBytes` fell 855MB to 671MB
+across it, which is mostly a freshly launched process rather than a saving:
+step 3 has to be re-taken on an instance with comparable history before that
+number means anything.
 
 ---
 
