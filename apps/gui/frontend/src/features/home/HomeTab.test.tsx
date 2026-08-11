@@ -124,17 +124,17 @@ describe("Home item rows", () => {
         (project) => project.dataset.projectId,
       );
 
-    expect(projectOrder()).toEqual(["cafe", "agencyzero", "worktable"]);
+    expect(projectOrder()).toEqual(["cafe", "quux", "worktable"]);
     fireEvent.click(direction);
-    expect(projectOrder()).toEqual(["worktable", "agencyzero", "cafe"]);
+    expect(projectOrder()).toEqual(["worktable", "quux", "cafe"]);
 
     fireEvent.click(by);
     expect(by).toHaveTextContent("Time");
-    expect(projectOrder()).toEqual(["worktable", "cafe", "agencyzero"]);
+    expect(projectOrder()).toEqual(["worktable", "cafe", "quux"]);
 
     fireEvent.click(by);
     expect(by).toHaveTextContent("Turns");
-    expect(projectOrder()).toEqual(["cafe", "worktable", "agencyzero"]);
+    expect(projectOrder()).toEqual(["cafe", "worktable", "quux"]);
   });
 
   it("expands one item description and closes it when another item receives focus", async () => {
@@ -187,7 +187,7 @@ describe("Home item rows", () => {
     const screen = await mountHome();
     const recentCard = screen
       .getAllByRole("button")
-      .find((button) => button.textContent?.includes("~/src/WorkTable"));
+      .find((button) => button.textContent?.includes("~/src/foo.bar"));
 
     expect(recentCard).toBeTruthy();
     expect(recentCard?.querySelector("div")).toHaveClass("flex-1");
@@ -281,7 +281,7 @@ describe("Home item rows", () => {
       true,
     );
 
-    fireEvent.click(screen.getByLabelText("Delete WorkTable"));
+    fireEvent.click(screen.getByLabelText("Delete foo.bar"));
 
     expect(screen.getByText("Delete?")).toBeTruthy();
     expect(screen.workspace.state.projects.some((project) => project.id === "worktable")).toBe(

@@ -61,10 +61,10 @@ const pinned = (
 export const PROJECTS: Project[] = [
   {
     id: "worktable",
-    name: "WorkTable",
+    name: "foo.bar",
     status: "active",
     order: 0,
-    dirs: ["~/src/WorkTable", "~/src/api.support.cafe"],
+    dirs: ["~/src/foo.bar", "~/src/baz.qux"],
     pinned: true,
     moderatorEnabled: true,
     forkedFrom: null,
@@ -74,10 +74,10 @@ export const PROJECTS: Project[] = [
   },
   {
     id: "cafe",
-    name: "api.support.cafe",
+    name: "baz.qux",
     status: "pending",
     order: 1,
-    dirs: ["~/src/api.support.cafe"],
+    dirs: ["~/src/baz.qux"],
     pinned: false,
     moderatorEnabled: true,
     forkedFrom: null,
@@ -86,11 +86,11 @@ export const PROJECTS: Project[] = [
     lastActivityAt: ago(9 * 60_000),
   },
   {
-    id: "agencyzero",
-    name: "agencyzero",
+    id: "quux",
+    name: "quux.dev",
     status: "pending",
     order: 2,
-    dirs: ["~/src/agencyzero"],
+    dirs: ["~/src/quux.dev"],
     pinned: true,
     moderatorEnabled: true,
     forkedFrom: null,
@@ -126,10 +126,10 @@ export const ITEMS: ProjectItem[] = [
   item("cafe", 2, "Deploy 0.9.2 to prod", "finished"),
   item("cafe", 3, "Verify prod health (TCP + HTTP)", "finished"),
 
-  item("agencyzero", 0, "Solid + @pathscale/ui frontend scaffold", "pending"),
-  item("agencyzero", 1, "Replace static dist/index.html", "pending"),
-  item("agencyzero", 2, "Land design/ exports in the repo", "pending"),
-  item("agencyzero", 3, "Tauri GUI harness bring-up", "finished"),
+  item("quux", 0, "Wire the component library", "pending"),
+  item("quux", 1, "Replace the static entry point", "pending"),
+  item("quux", 2, "Land the design exports", "pending"),
+  item("quux", 3, "Desktop harness bring-up", "finished"),
 ];
 
 /** Defaults every fixture message shares, so each one below states only what differs. */
@@ -144,14 +144,14 @@ const base = {
 };
 
 export const MESSAGES: Message[] = [
-  // — WorkTable: a plan, a moderator summary, and a go-ahead ————————————
+  // — foo.bar: a plan, a moderator summary, and a go-ahead ——————————————
   {
     ...base,
     id: "wt-1",
     projectId: "worktable",
     author: "user",
     model: "sonnet",
-    body: "Review the WorkTable upgrade and propose a plan before you touch anything.",
+    body: "Review the foo.bar upgrade and propose a plan before you touch anything.",
     createdAt: ago(22 * 60_000),
   },
   {
@@ -225,7 +225,7 @@ export const MESSAGES: Message[] = [
     createdAt: ago(3 * 60_000),
   },
 
-  // — api.support.cafe: a CRITICAL hold, still waiting on a decision ————
+  // — baz.qux: a CRITICAL hold, still waiting on a decision ——————————————
   {
     ...base,
     id: "cafe-1",
@@ -353,7 +353,7 @@ export const TASK_LOG: TaskLogEntry[] = [
   logEntry("cafe", 1, "Health check: TCP + HTTP 200", "Bash", true, 600, 0),
   logEntry("cafe", 2, "legacy-data scan (first attempt)", "Bash", false, null, 2),
 
-  logEntry("agencyzero", 0, "cargo tauri build", "Bash", true, 134_000, 0),
+  logEntry("quux", 0, "cargo tauri build", "Bash", true, 134_000, 0),
 ];
 
 /**
@@ -363,7 +363,7 @@ export const TASK_LOG: TaskLogEntry[] = [
 export const LOG_TOTALS: Record<string, number> = {
   worktable: 91,
   cafe: 12,
-  agencyzero: 4,
+  quux: 4,
 };
 
 export const AGENT_STATUS: AgentStatus[] = [
@@ -529,9 +529,9 @@ export const MODEL_CATALOGUE: AgentModels[] = [
 export const PULL_REQUESTS: PullRequest[] = [
   {
     id: "pr-1",
-    projectId: "agencyzero",
-    url: "https://github.com/pathscale/agencyzero/pull/16",
-    repo: "pathscale/agencyzero",
+    projectId: "quux",
+    url: "https://example.invalid/quux/pull/16",
+    repo: "quux/quux.dev",
     number: 16,
     branch: "fix/home-list-ergonomics",
     state: "OPEN",
@@ -542,9 +542,9 @@ export const PULL_REQUESTS: PullRequest[] = [
   },
   {
     id: "pr-2",
-    projectId: "agencyzero",
-    url: "https://github.com/pathscale/agencyzero/pull/2",
-    repo: "pathscale/agencyzero",
+    projectId: "quux",
+    url: "https://example.invalid/quux/pull/2",
+    repo: "quux/quux.dev",
     number: 2,
     branch: "feat/workspace-scaffold",
     state: "MERGED",
@@ -638,7 +638,7 @@ export const SETTINGS: GlobalSettings = {
 };
 
 /**
- * The mockup shows api.support.cafe rate-limited, which is what turns its tab
+ * The mockup shows baz.qux rate-limited, which is what turns its tab
  * dot amber and puts the "Rate limited · resets 14:20" pill in its header.
  */
 export const RATE_LIMITS: Record<

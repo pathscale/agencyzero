@@ -56,37 +56,37 @@ beforeEach(() => {
   queueHarness.handlers.clear();
   queueHarness.send.mockReset();
   SETTINGS.workspaceTabs = null;
-  setPrefs("lastTabKey", "agencyzero");
-  setPrefs("openTabKeys", ["agencyzero"]);
+  setPrefs("lastTabKey", "quux");
+  setPrefs("openTabKeys", ["quux"]);
 });
 
 describe("queued live follow-ups", () => {
   it("injects a startup-race message when the provider channel becomes ready", async () => {
     const workspace = await mountWorkspace();
     queueHarness.handlers.get("run:accepted")?.({
-      projectId: "agencyzero",
+      projectId: "quux",
       agent: "codex",
       model: "gpt-5.6-sol",
       permission: "auto",
     });
 
-    await workspace.actions.send("agencyzero", "connect?");
-    expect(workspace.state.queued.agencyzero).toHaveLength(1);
+    await workspace.actions.send("quux", "connect?");
+    expect(workspace.state.queued.quux).toHaveLength(1);
     expect(queueHarness.send).toHaveBeenCalledTimes(1);
 
-    queueHarness.handlers.get("run:ready")?.({ projectId: "agencyzero" });
+    queueHarness.handlers.get("run:ready")?.({ projectId: "quux" });
     await waitFor(() => expect(queueHarness.send).toHaveBeenCalledTimes(2));
-    expect(workspace.state.queued.agencyzero).toHaveLength(0);
+    expect(workspace.state.queued.quux).toHaveLength(0);
   });
 
   it("retries the persisted user row instead of appending the prompt again", async () => {
     const workspace = await mountWorkspace();
 
-    await workspace.actions.retry("agencyzero", "msg-interrupted", "continue the audit");
+    await workspace.actions.retry("quux", "msg-interrupted", "continue the audit");
 
     expect(queueHarness.send).toHaveBeenCalledWith(
       expect.objectContaining({
-        projectId: "agencyzero",
+        projectId: "quux",
         body: "continue the audit",
         retryMessageId: "msg-interrupted",
       }),
@@ -97,11 +97,11 @@ describe("queued live follow-ups", () => {
     const workspace = await mountWorkspace();
 
     queueHarness.handlers.get("run:inject_failed")?.({
-      projectId: "agencyzero",
+      projectId: "quux",
       messageId: "msg-session-rejected",
       body: "continue on the same session",
     });
-    expect(workspace.state.queued.agencyzero).toEqual([
+    expect(workspace.state.queued.quux).toEqual([
       expect.objectContaining({
         messageId: "msg-session-rejected",
         body: "continue on the same session",
@@ -109,7 +109,7 @@ describe("queued live follow-ups", () => {
     ]);
 
     queueHarness.handlers.get("run:stopped")?.({
-      projectId: "agencyzero",
+      projectId: "quux",
       agent: "claude",
       model: "claude-opus-5",
       permission: "auto",
@@ -120,7 +120,7 @@ describe("queued live follow-ups", () => {
     await waitFor(() => expect(queueHarness.send).toHaveBeenCalledTimes(2), { timeout: 2_000 });
     expect(queueHarness.send).toHaveBeenLastCalledWith(
       expect.objectContaining({
-        projectId: "agencyzero",
+        projectId: "quux",
         body: "continue on the same session",
         retryMessageId: "msg-session-rejected",
       }),

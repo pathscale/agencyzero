@@ -63,8 +63,8 @@ describe("Claude usage backoff", () => {
  * Mounts the provider and hands back the live workspace once it has loaded.
  *
  * Outside Tauri `selectApi` picks the mock, so every test here runs against
- * the design fixtures: three projects, two tool calls running on WorkTable,
- * and a CRITICAL hold plus a rate limit on api.support.cafe.
+ * the design fixtures: three projects, two tool calls running on foo.bar,
+ * and a CRITICAL hold plus a rate limit on baz.qux.
  */
 async function mountWorkspace(): Promise<Workspace> {
   let workspace!: Workspace;
@@ -92,7 +92,7 @@ beforeEach(() => {
   SETTINGS.workspaceTabs = null;
   setPrefs("lastTabKey", "home");
   // These scenarios predate tab restore, so they remember everything open.
-  setPrefs("openTabKeys", ["worktable", "cafe", "agencyzero"]);
+  setPrefs("openTabKeys", ["worktable", "cafe", "quux"]);
 });
 
 describe("startup", () => {
@@ -107,7 +107,7 @@ describe("startup", () => {
 
   it("opens Home plus the remembered tabs, in project order", async () => {
     const workspace = await mountWorkspace();
-    expect(keys(workspace)).toEqual(["home", "worktable", "cafe", "agencyzero"]);
+    expect(keys(workspace)).toEqual(["home", "worktable", "cafe", "quux"]);
   });
 
   /*
@@ -122,7 +122,7 @@ describe("startup", () => {
 
   it("prefers the portable backup state and restores its project order and focus", async () => {
     SETTINGS.workspaceTabs = {
-      openProjectKeys: ["agencyzero", "cafe"],
+      openProjectKeys: ["quux", "cafe"],
       activeProjectKey: "cafe",
     };
     setPrefs("openTabKeys", ["worktable"]);
@@ -130,7 +130,7 @@ describe("startup", () => {
 
     const workspace = await mountWorkspace();
 
-    expect(keys(workspace)).toEqual(["home", "agencyzero", "cafe"]);
+    expect(keys(workspace)).toEqual(["home", "quux", "cafe"]);
     expect(workspace.state.activeKey).toBe("cafe");
   });
 
@@ -150,15 +150,15 @@ describe("startup", () => {
 
   it("persists project focus without replacing it when Settings covers the strip", async () => {
     const workspace = await mountWorkspace();
-    workspace.actions.focus("agencyzero");
+    workspace.actions.focus("quux");
 
     await waitFor(() =>
-      expect(workspace.state.settings?.workspaceTabs?.activeProjectKey).toBe("agencyzero"),
+      expect(workspace.state.settings?.workspaceTabs?.activeProjectKey).toBe("quux"),
     );
 
     workspace.actions.openSettings();
     await new Promise((resolve) => setTimeout(resolve, 150));
-    expect(workspace.state.settings?.workspaceTabs?.activeProjectKey).toBe("agencyzero");
+    expect(workspace.state.settings?.workspaceTabs?.activeProjectKey).toBe("quux");
   });
 
   it("falls back to the mock backend when there is no Rust to talk to", async () => {
@@ -211,7 +211,7 @@ describe("item reference routing", () => {
 describe("cycleTab", () => {
   it("steps forward and wraps at the end", async () => {
     const workspace = await mountWorkspace();
-    workspace.actions.focus("agencyzero");
+    workspace.actions.focus("quux");
 
     workspace.actions.cycleTab(1);
     expect(workspace.state.activeKey).toBe("home");
@@ -222,7 +222,7 @@ describe("cycleTab", () => {
     workspace.actions.focus("home");
 
     workspace.actions.cycleTab(-1);
-    expect(workspace.state.activeKey).toBe("agencyzero");
+    expect(workspace.state.activeKey).toBe("quux");
   });
 
   /*
@@ -231,12 +231,12 @@ describe("cycleTab", () => {
    */
   it("follows the strip after a reorder rather than the original order", async () => {
     const workspace = await mountWorkspace();
-    workspace.actions.moveTab("agencyzero", 1);
-    expect(keys(workspace)).toEqual(["home", "agencyzero", "worktable", "cafe"]);
+    workspace.actions.moveTab("quux", 1);
+    expect(keys(workspace)).toEqual(["home", "quux", "worktable", "cafe"]);
 
     workspace.actions.focus("home");
     workspace.actions.cycleTab(1);
-    expect(workspace.state.activeKey).toBe("agencyzero");
+    expect(workspace.state.activeKey).toBe("quux");
   });
 });
 
@@ -244,35 +244,35 @@ describe("moveTab", () => {
   it("moves a tab to the requested index", async () => {
     const workspace = await mountWorkspace();
     workspace.actions.moveTab("cafe", 1);
-    expect(keys(workspace)).toEqual(["home", "cafe", "worktable", "agencyzero"]);
+    expect(keys(workspace)).toEqual(["home", "cafe", "worktable", "quux"]);
   });
 
   it("will not move Home, which anchors the strip", async () => {
     const workspace = await mountWorkspace();
     workspace.actions.moveTab("home", 2);
-    expect(keys(workspace)).toEqual(["home", "worktable", "cafe", "agencyzero"]);
+    expect(keys(workspace)).toEqual(["home", "worktable", "cafe", "quux"]);
   });
 
   it("will not drop another tab in front of Home", async () => {
     const workspace = await mountWorkspace();
-    workspace.actions.moveTab("agencyzero", 0);
-    expect(keys(workspace)).toEqual(["home", "agencyzero", "worktable", "cafe"]);
+    workspace.actions.moveTab("quux", 0);
+    expect(keys(workspace)).toEqual(["home", "quux", "worktable", "cafe"]);
   });
 
   it("clamps past the end instead of dropping the tab", async () => {
     const workspace = await mountWorkspace();
     workspace.actions.moveTab("worktable", 99);
-    expect(keys(workspace)).toEqual(["home", "cafe", "agencyzero", "worktable"]);
+    expect(keys(workspace)).toEqual(["home", "cafe", "quux", "worktable"]);
   });
 
   it("persists the project order, so it survives a restart", async () => {
     const workspace = await mountWorkspace();
-    workspace.actions.moveTab("agencyzero", 1);
+    workspace.actions.moveTab("quux", 1);
     await workspace.actions.commitTabOrder();
 
     await waitFor(() =>
       expect(workspace.state.projects.map((project) => project.id)).toEqual([
-        "agencyzero",
+        "quux",
         "worktable",
         "cafe",
       ]),
@@ -292,15 +292,15 @@ describe("closeTab", () => {
     workspace.actions.focus("cafe");
     workspace.actions.closeTab("cafe");
 
-    expect(keys(workspace)).toEqual(["home", "worktable", "agencyzero"]);
+    expect(keys(workspace)).toEqual(["home", "worktable", "quux"]);
     expect(workspace.state.activeKey).toBe("worktable");
   });
 
   it("leaves the active tab alone when a different one is closed", async () => {
     const workspace = await mountWorkspace();
-    workspace.actions.focus("agencyzero");
+    workspace.actions.focus("quux");
     workspace.actions.closeTab("worktable");
-    expect(workspace.state.activeKey).toBe("agencyzero");
+    expect(workspace.state.activeKey).toBe("quux");
   });
 });
 
@@ -352,8 +352,8 @@ describe("tabStatus", () => {
   it("reports an idle project that has not started as quiet", async () => {
     const workspace = await mountWorkspace();
     // The `agencyzero` fixture is `pending`: not started, so not waiting on you.
-    expect(workspace.state.projects.find((p) => p.id === "agencyzero")?.status).toBe("pending");
-    expect(workspace.tabStatus("agencyzero")).toBe("quiet");
+    expect(workspace.state.projects.find((p) => p.id === "quux")?.status).toBe("pending");
+    expect(workspace.tabStatus("quux")).toBe("quiet");
   });
 
   it("reports an idle active project as ready, not quiet", async () => {

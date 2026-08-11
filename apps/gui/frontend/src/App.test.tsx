@@ -53,13 +53,13 @@ describe("startup", () => {
     await waitFor(() => expect(workspace.state.activeKey).toBe("worktable"));
     workspace.actions.openProject("cafe");
     await waitFor(() => expect(workspace.state.activeKey).toBe("cafe"));
-    workspace.actions.openProject("agencyzero");
-    await waitFor(() => expect(workspace.state.activeKey).toBe("agencyzero"));
+    workspace.actions.openProject("quux");
+    await waitFor(() => expect(workspace.state.activeKey).toBe("quux"));
 
     const retained = Array.from(
       screen.container.querySelectorAll<HTMLElement>("[data-retained-project]"),
     ).map((node) => node.dataset.retainedProject);
-    expect(retained).toEqual(["worktable", "cafe", "agencyzero"]);
+    expect(retained).toEqual(["worktable", "cafe", "quux"]);
     expect(screen.container.querySelector('[data-retained-tab="home"]')).not.toBeNull();
     const settings = screen.container.querySelector<HTMLElement>('[data-retained-tab="settings"]');
     expect(settings).not.toBeNull();

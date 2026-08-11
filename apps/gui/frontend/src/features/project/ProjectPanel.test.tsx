@@ -302,7 +302,7 @@ describe("the project side panel", () => {
     function Gate() {
       workspace = useWorkspace();
       const project = () =>
-        workspace.state.projects.find((candidate) => candidate.id === "agencyzero");
+        workspace.state.projects.find((candidate) => candidate.id === "quux");
       return (
         <Show when={workspace.state.boot.status === "ready" && project()}>
           {(readyProject) => <ProjectPanel project={readyProject()} agent="codex" />}
@@ -315,20 +315,20 @@ describe("the project side panel", () => {
         <Gate />
       </WorkspaceProvider>
     ));
-    await waitFor(() => expect(workspace.state.items.agencyzero?.length).toBeGreaterThan(0), {
+    await waitFor(() => expect(workspace.state.items.quux?.length).toBeGreaterThan(0), {
       timeout: 5_000,
     });
     const send = vi.spyOn(workspace.actions, "send");
-    await workspace.actions.setItemStatus("agencyzero-0", "questions");
+    await workspace.actions.setItemStatus("quux-0", "questions");
 
     const work = await screen.findByRole("button", {
-      name: "Work on Solid + @pathscale/ui frontend scaffold; it has no unanswered question",
+      name: "Work on Wire the component library; it has no unanswered question",
     });
     expect(work.className).toContain("size-[22px]");
     fireEvent.click(work);
 
     await waitFor(() => expect(send).toHaveBeenCalled());
-    expect(send.mock.calls.at(-1)?.[4]).toBe("agencyzero-0");
+    expect(send.mock.calls.at(-1)?.[4]).toBe("quux-0");
   });
 
   it("stacks an item status with its issue or pull-request reference", async () => {

@@ -49,7 +49,7 @@ async function mountWorkspace(): Promise<Workspace> {
 
 function stopRun(): void {
   compactHarness.handlers.get("run:stopped")?.({
-    projectId: "agencyzero",
+    projectId: "quux",
     agent: "claude",
     model: "claude-opus-5",
     permission: "auto",
@@ -62,8 +62,8 @@ beforeEach(() => {
   compactHarness.handlers.clear();
   compactHarness.compact.mockReset();
   SETTINGS.workspaceTabs = null;
-  setPrefs("lastTabKey", "agencyzero");
-  setPrefs("openTabKeys", ["agencyzero"]);
+  setPrefs("lastTabKey", "quux");
+  setPrefs("openTabKeys", ["quux"]);
 });
 
 describe("a compaction asked for while the project is busy", () => {
@@ -74,15 +74,15 @@ describe("a compaction asked for while the project is busy", () => {
     compactHarness.compact.mockResolvedValue(undefined);
     const workspace = await mountWorkspace();
 
-    await expect(workspace.actions.compactProject("agencyzero", "claude")).resolves.toBeUndefined();
-    expect(workspace.state.pendingCompact.agencyzero).toBe("claude");
+    await expect(workspace.actions.compactProject("quux", "claude")).resolves.toBeUndefined();
+    expect(workspace.state.pendingCompact.quux).toBe("claude");
 
     stopRun();
 
     await waitFor(() => expect(compactHarness.compact).toHaveBeenCalledTimes(2), {
       timeout: 2_000,
     });
-    expect(workspace.state.pendingCompact.agencyzero).toBeUndefined();
+    expect(workspace.state.pendingCompact.quux).toBeUndefined();
   });
 
   it("holds one compaction however many times the button is pressed", async () => {
@@ -91,11 +91,11 @@ describe("a compaction asked for while the project is busy", () => {
     );
     const workspace = await mountWorkspace();
 
-    await workspace.actions.compactProject("agencyzero", "claude");
-    await workspace.actions.compactProject("agencyzero", "claude");
-    await workspace.actions.compactProject("agencyzero", "claude");
+    await workspace.actions.compactProject("quux", "claude");
+    await workspace.actions.compactProject("quux", "claude");
+    await workspace.actions.compactProject("quux", "claude");
 
-    expect(workspace.state.pendingCompact.agencyzero).toBe("claude");
+    expect(workspace.state.pendingCompact.quux).toBe("claude");
     expect(compactHarness.compact).toHaveBeenCalledTimes(3);
 
     stopRun();
@@ -113,11 +113,11 @@ describe("a compaction asked for while the project is busy", () => {
     );
     const workspace = await mountWorkspace();
 
-    await workspace.actions.compactProject("agencyzero", "claude");
-    expect(workspace.state.pendingCompact.agencyzero).toBe("claude");
+    await workspace.actions.compactProject("quux", "claude");
+    expect(workspace.state.pendingCompact.quux).toBe("claude");
 
-    workspace.actions.dropPendingCompact("agencyzero");
-    expect(workspace.state.pendingCompact.agencyzero).toBeUndefined();
+    workspace.actions.dropPendingCompact("quux");
+    expect(workspace.state.pendingCompact.quux).toBeUndefined();
 
     stopRun();
 
@@ -129,9 +129,9 @@ describe("a compaction asked for while the project is busy", () => {
     compactHarness.compact.mockRejectedValue(new Error("no agent session to compact"));
     const workspace = await mountWorkspace();
 
-    await expect(workspace.actions.compactProject("agencyzero", "claude")).rejects.toThrow(
+    await expect(workspace.actions.compactProject("quux", "claude")).rejects.toThrow(
       "no agent session to compact",
     );
-    expect(workspace.state.pendingCompact.agencyzero).toBeUndefined();
+    expect(workspace.state.pendingCompact.quux).toBeUndefined();
   });
 });
