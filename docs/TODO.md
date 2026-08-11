@@ -151,6 +151,30 @@ In `ps-blitz-render`, unpushed on `master`.
 - **Scroll offsets never re-clamped** when content shrank, and **`focus_node_id` /
   `mousedown_node_id` surviving node removal**, which explains a crash.
 
+### Known open, with a measurement: the composer's second line is invisible
+
+Stashed at the owner's request, but the mechanism is now measured rather than described,
+via `blitz-bench layout` against a live 0.5.31.
+
+Typing 220 characters into the project composer, reading the boxes after each pass:
+
+| | y | height |
+|---|---|---|
+| textarea, empty | 767 | 24.4 |
+| after ~100 chars | 743 | **24.4** |
+| after ~220 chars | 719 | **24.4** |
+| `Send` / `Attach` / `Expand`, throughout | **829** | 27.8 |
+
+The control row never moves, so the composer shell grew 48px — exactly two lines — while
+the textarea's own box stayed one line tall. The gap between the textarea's bottom and the
+controls went from 37.6px to 85.6px. Something computes the right height and reserves the
+space; the textarea element does not receive it.
+
+That points at the `field.style.height` write in `resize()`
+([Composer.tsx](../apps/gui/frontend/src/features/project/Composer.tsx)) rather than at
+`scrollHeight`, since `setPromptHeight` clearly got a correct number. Next step is to read
+the element's computed height against what `resize()` wrote, not to theorise further.
+
 ### Tooling
 
 - **`scripts/local-delivery.sh quick`**: builds the frontend dist and `az-gui`, swaps the

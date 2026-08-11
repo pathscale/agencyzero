@@ -130,15 +130,26 @@ async fn layout(client: &mut Client, want: &str) -> Result<()> {
         let Some(box_) = bounds.get(&id) else {
             continue;
         };
-        let read = |key: &str| box_.get(key).and_then(|v| v.as_f64()).unwrap_or(f64::NAN);
+        // `bounds` arrives as `[x, y, width, height]`. Reading it as an object
+        // with named keys returned `None` for every one of them, and the
+        // fallback was `f64::NAN`, so this printed four NaNs per row for every
+        // node and never said why: a silently broken instrument, which is the
+        // one thing a measurement tool must not be. Both shapes are accepted
+        // now, so a protocol that grows named fields does not break it again.
+        let read = |key: &str, index: usize| {
+            box_.get(key)
+                .or_else(|| box_.get(index))
+                .and_then(|v| v.as_f64())
+                .unwrap_or(f64::NAN)
+        };
         println!(
             "{:>6}  {:<16} {:>8.1} {:>8.1} {:>8.1} {:>8.1}  {}",
             id,
             role,
-            read("x"),
-            read("y"),
-            read("width"),
-            read("height"),
+            read("x", 0),
+            read("y", 1),
+            read("width", 2),
+            read("height", 3),
             name.chars().take(60).collect::<String>()
         );
         shown += 1;
