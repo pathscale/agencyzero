@@ -1,4 +1,5 @@
 import { fireEvent, render } from "@solidjs/testing-library";
+import { createSignal } from "solid-js";
 import { describe, expect, it } from "vitest";
 import { InlineText, MessageBody, splitBlocks } from "~/features/project/MessageBody";
 import { setItemReferenceHandler } from "~/lib/itemReference";
@@ -8,6 +9,34 @@ describe("MessageBody", () => {
     const { container } = render(() => <MessageBody body={"First para.\n\nSecond para."} />);
     const paragraphs = [...container.querySelectorAll("p")].map((p) => p.textContent);
     expect(paragraphs).toEqual(["First para.", "Second para."]);
+  });
+
+  it("gives each paragraph its own block", () => {
+    // The precondition for bounding the streaming parse. Prose used to flush
+    // only at a table or a list, so a reply with neither was one block holding
+    // the entire message, and a parse whose only block is the whole message has
+    // no prefix that can be cached. A paragraph closed by a blank line can
+    // never change again, which is what makes the settled part identifiable.
+    // This body would previously have been a single block.
+    const blocks = splitBlocks("One.\n\nTwo.\n\nThree.");
+    expect(blocks).toHaveLength(3);
+    expect(blocks.map((block) => ("text" in block ? block.text : block.kind))).toEqual([
+      "One.",
+      "Two.",
+      "Three.",
+    ]);
+  });
+
+  it("holds a finished paragraph still while the next one grows", () => {
+    const [body, setBody] = createSignal("Settled paragraph.\n\nStill wri");
+    const { container } = render(() => <MessageBody body={body()} />);
+    const first = container.querySelectorAll("p")[0];
+
+    setBody("Settled paragraph.\n\nStill writing now.");
+
+    const after = container.querySelectorAll("p");
+    expect(after[0]).toBe(first);
+    expect(after[1]).toHaveTextContent("Still writing now.");
   });
 
   it("keeps a single newline inside one paragraph", () => {

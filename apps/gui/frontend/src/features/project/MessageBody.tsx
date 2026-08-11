@@ -181,6 +181,31 @@ function extractProseStructures(text: string): Block[] {
       }
     }
 
+    // A blank line ends a paragraph, and a paragraph is a block.
+    //
+    // Prose used to flush only at a table or a list, so a reply with neither —
+    // most replies — was a single block holding the whole message.
+    //
+    // Be precise about what this buys, because it is less than it looks. It
+    // does *not* make the per-token cost sublinear on its own: `splitBlocks`
+    // still walks the entire body on every token, and so do the `sameBlock`
+    // comparisons. The DOM write was already bounded, by the `<For>` over
+    // `/\n{2,}/` further down, which diffs paragraphs by value.
+    //
+    // What it buys is the precondition for bounding the parse: a paragraph
+    // closed by a blank line can never change again, so everything before the
+    // last blank line is settled and re-parsing it is provably wasted work.
+    // Nothing can cache a prefix of a parse whose only block is the whole
+    // message.
+    //
+    // The rendered output is unchanged. A prose block is already split into one
+    // `<p>` per paragraph below, and `<For>` adds no wrapper, so those
+    // paragraphs were already direct children of the same flex container.
+    if (line.trim().length === 0) {
+      flush();
+      continue;
+    }
+
     const firstItem = /^\s*(?:(\d+)[.)]|[-*+])\s+(.+)$/.exec(line);
     if (firstItem) {
       flush();
