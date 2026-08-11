@@ -236,11 +236,20 @@ describe("light mode", () => {
     expect(CSS).not.toMatch(/rgb\(255 255 255 \/ 0\.1[25]\)/);
   });
 
-  it("keeps the composer accent static so idle Blitz views stop redrawing", () => {
+  it("drifts the composer accent only under a class the composer can drop", () => {
     const rule = CSS.match(/\.az-ring-composer\s*\{([\s\S]*?)\n {2}\}/)?.[1] ?? "";
 
+    // The accent itself must stay static. An animation here runs for the life
+    // of the document, and Blitz reads that as an active document: it kept
+    // submitting full frames for an idle window, for decoration alone.
     expect(rule).toContain("var(--color-primary)");
     expect(rule).not.toContain("animation:");
-    expect(CSS).not.toContain("@keyframes az-composer-ring-drift");
+
+    // The drift lives on its own class, which the composer adds while its
+    // field holds focus and removes on blur, so the render loop cannot outlive
+    // the cursor being in the box.
+    const drift = CSS.match(/\.az-ring-drift\s*\{([\s\S]*?)\n {2}\}/)?.[1] ?? "";
+    expect(drift).toContain("az-composer-ring-drift");
+    expect(CSS).toContain("@keyframes az-composer-ring-drift");
   });
 });
