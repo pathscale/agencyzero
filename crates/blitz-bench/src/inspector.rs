@@ -89,6 +89,19 @@ pub fn discover(explicit: Option<&str>) -> Result<Descriptor> {
         }
     }
 
+    // The delivery script pins this path into the bundle's `Info.plist`, so a
+    // locally built app announces itself here and nowhere else. Scanning only
+    // $TMPDIR meant the one instance that was definitely running was the one
+    // instance discovery could not see, and it picked a dead descriptor from a
+    // previous run instead — which is how preferring a live pid still failed.
+    let pinned = PathBuf::from("target/blitz-control.json");
+    if pinned.exists()
+        && let Ok(descriptor) = read_descriptor(&pinned)
+        && pid_is_live(descriptor.descriptor.pid)
+    {
+        return Ok(descriptor);
+    }
+
     let root = PathBuf::from(std::env::var("TMPDIR").unwrap_or_else(|_| "/tmp".into()))
         .join("tauri-blitz-agent");
     let mut found: Vec<(std::time::SystemTime, PathBuf)> = std::fs::read_dir(&root)
