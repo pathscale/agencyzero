@@ -386,3 +386,104 @@ script execution had no timing at all.
 - Fields that cannot be measured are `None` with a comment saying why, never
   zero. A zero that looks like a measurement is how the original metrics misled
   for a year.
+
+## Addendum, 2026-08-11: what a source review added
+
+Written the day after the measurements above, from reading this stack against WebRender,
+GPUI, zng, Blink, Gecko, Servo, Slint, Masonry, Yoga, Taffy, Aurora, Boa and Brimstone.
+**Nothing in this addendum was measured.** It explains, corrects and extends what is above;
+where it contradicts an earlier line, the contradiction is called out.
+
+### Two things above were measured with a thumb on the scale
+
+- **The instrumentation ships.** `log-phase-times` is enabled on the base `blitz-dom`
+  dependency line in `apps/gui/Cargo.toml`, and `release.yml` builds with
+  `--features blitz-runtime`, so per-frame phase instrumentation is in the distributed app:
+  a `HashMap` op per `compute_child_layout` (16,842 of them per keystroke, by the number
+  above), a sort per frame, and a `format!` plus locked `stdout` write per frame into a
+  descriptor a bundle discards. **Every number above was taken with this on**, so it sits
+  inside the baseline rather than on top of it. See [allocations.md](allocations.md).
+- **"`hybrid-renderer` is a wash" holds only under full repaint.** Hybrid's 7.29 ms "scene"
+  is CPU strip generation inside the `PaintScene` calls, so it is proportional to emitted
+  content and falls with damage culling; vello's 6.55 ms is GPU rasterization over the whole
+  target and does not. The two backends respond to damage completely differently. See
+  [partial-paint.md](partial-paint.md).
+
+### The taffy cache thrash has a name and a cause
+
+Section 6 above is right that the cache absorbs almost nothing, and section 8 is right that
+no frontend change moves it. The cause is documented upstream. Taffy's own changelog, under
+**0.12.0**, the release line we run:
+
+> **More correct caching logic.** The cache key now includes the axis, parent size, and
+> available space ... This is a performance hit (~10% in common cases, ~60% in
+> pathalogically ones) but is necessary for correctness. (#911)
+
+The mechanism is a 9-slot cache with deterministic slot assignment in which `Definite(_)`
+shares a slot with `MaxContent`, so two different definite widths overwrite each other, and
+a lookup that requires exact key equality. Yoga, Chromium and Gecko each solve this
+differently and better. Taffy 0.13.0 shipped 2026-08-08 and has not been A/B tested here.
+See [layout-caching-prior-art.md](layout-caching-prior-art.md).
+
+### Why the negative result in section 8 was negative
+
+Section 8 records that narrowing the parent `restyle_subtree` in `set_attribute` measured
+18.17 ms against 18.90 ms, noise. That experiment could not have worked in isolation:
+`snapshot_node` sets `class_changed`, `id_changed` and `other_attributes_changed` to `true`
+unconditionally, which is what Stylo reads to decide which invalidation maps to walk, so
+the invalidator still had to union every map regardless of the hint.
+
+Stylo already implements Blink-style invalidation sets and `blitz-dom` already calls them;
+we override the result twice. See
+[style-invalidation-we-already-ship.md](style-invalidation-we-already-ship.md).
+
+### The transcript fix bounded the churn, not the parse
+
+Section 3 above is accurate about what it fixed. The remaining half: the memo's dependency
+is `props.body`, which changes every token, so `splitBlocks` still re-parses the whole body
+per token. Worse, `splitBlocks` flushes prose only on a code fence and
+`extractProseStructures` only on a table, so a fence-free reply is **one prose block that
+grows without bound** and its text node is rewritten in full every token.
+
+Combined with Boa having no rope (`current + delta` memcpys the whole reply per token), the
+accumulated body is walked five to seven times per token. See
+[js-engine-big-problem.md](js-engine-big-problem.md) for the per-pass ledger and the fix.
+
+### Candidates for the unexplained memory
+
+The 819 MB and 3.9 GB under **What is still open** now have a candidate list, none of it
+measured:
+
+- vello's GPU `ResourcePool` is size-classed and **never shrinks**, so the peak frame
+  permanently sets the floor, and on unified memory that is RSS.
+- Every element owns a separate heap `String` per attribute, with no sharing or
+  copy-on-write. Our UI is Tailwind, so class strings are long and duplicated per list row.
+  Blink shares identical attribute sets for exactly this reason.
+- `Node` carries everything inline for every node, including whitespace text nodes, where
+  Blink keeps rare fields in a side table.
+
+Two cheap measurements would size the first two: `vmmap <pid>` separates Metal regions from
+MALLOC zones, and counting distinct versus total attribute values on a live tree tests the
+duplication directly. See [allocations.md](allocations.md).
+
+### A second full-slab walk per frame
+
+`resolve.rs:124` clearing damage over every node is noted elsewhere as a fixed per-frame
+floor. `resolve.rs:56` `clamp_scroll_offsets` is a **second** walk over the same slab each
+frame. Both iterate the DOM slab rather than the layout tree, so whitespace text nodes that
+were correctly excluded from layout are still visited every frame.
+
+### Where the rest of it went
+
+| Document | Covers |
+|---|---|
+| [partial-paint.md](partial-paint.md) | damage regions, the staged plan, prior art |
+| [allocations.md](allocations.md) | per-frame allocation, retention, the shipping instrumentation |
+| [zero-copy-and-hot-paths.md](zero-copy-and-hot-paths.md) | the copy ledger across every boundary |
+| [dom-optimized-updates-for-solidjs.md](dom-optimized-updates-for-solidjs.md) | mutation-path damage faults |
+| [style-invalidation-we-already-ship.md](style-invalidation-we-already-ship.md) | the invalidation override |
+| [layout-caching-prior-art.md](layout-caching-prior-art.md) | Taffy versus five other engines |
+| [js-engine-big-problem.md](js-engine-big-problem.md) | the streaming quadratic |
+| [blink-what-we-can-learn.md](blink-what-we-can-learn.md) | Blink subsystem review |
+| [webrender-good-design-to-review.md](webrender-good-design-to-review.md), [why-not-webrender.md](why-not-webrender.md), [GPUI-and-zng-what-we-should-learn.md](GPUI-and-zng-what-we-should-learn.md) | renderer prior art |
+| [TODO-dom-related-work.md](TODO-dom-related-work.md) | the plan drawn from all of it |

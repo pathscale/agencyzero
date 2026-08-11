@@ -2,3 +2,20 @@
 # `tauri-runtime` exposes WKWebView types even when the selected custom runtime never uses WebKit.
 # Remove those otherwise-unused framework load commands from final binaries.
 rustflags = ["-C", "link-arg=-Wl,-dead_strip_dylibs"]
+
+# LOCAL ONLY — not committed. Builds the renderer from the working checkout
+# instead of the pinned rev.
+#
+# It lives here rather than in `Cargo.toml` because it must never be committed:
+# the paths exist only on this machine, so a build anywhere else would fail. In
+# the manifest it sat one `git add` away from shipping and went in three times
+# in a single session. Here it is a local edit to an already-tracked file, so
+# `git status` still shows it and `git diff` still explains it.
+#
+# Remove once ps-blitz is pushed and the revs in apps/gui/Cargo.toml name
+# commits carrying these fixes.
+[patch."https://github.com/pathscale/ps-blitz.git"]
+ps-blitz-dom = { path = "/Users/revenge/code/ps-blitz-render/packages/blitz-dom" }
+ps-blitz-script = { path = "/Users/revenge/code/ps-blitz-render/packages/blitz-script" }
+ps-blitz-shell = { path = "/Users/revenge/code/ps-blitz-render/packages/blitz-shell" }
+ps-blitz-traits = { path = "/Users/revenge/code/ps-blitz-render/packages/blitz-traits" }
