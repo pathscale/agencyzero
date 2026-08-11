@@ -683,12 +683,16 @@ Both defects named in
 [layout-caching-prior-art.md](layout-caching-prior-art.md) were real, and each
 was worth about the same:
 
-| typing one character | baseline | + validity test | + slot fix |
-| --- | --- | --- | --- |
-| `compute_child_layout` calls | 16,140 | 7,589 | **3,330** |
-| cache lookups | 32,186 | 22,169 | **9,178** |
-| misses | 16,140 | 7,589 | **3,330** |
-| **layout phase** | **8.0ms** | 5.7ms | **2.7ms** |
+| typing one character | baseline | + validity | + slot fix | + size 16 |
+| --- | --- | --- | --- | --- |
+| `compute_child_layout` calls | 16,140 | 7,589 | 3,334 | **176** |
+| cache lookups | 32,186 | 22,169 | 9,182 | **692** |
+| distinct nodes touched | 160 | 134 | 127 | **17** |
+| **layout phase** | **8.0ms** | 5.7ms | 2.6ms | **0.28ms** |
+
+**28x on the layout phase**, and the third change was the largest of the three.
+The 17 distinct nodes is the number to read: around 15 are genuinely dirty per
+keystroke, so the cache now recomputes what changed and nothing else.
 
 **Defect 2, lookup is equality rather than validity.** Yoga asks whether a
 stored result is *still correct* rather than whether the question was
@@ -716,10 +720,23 @@ total 6.87ms at 114fps. **The renderer is now 65% of the frame and layout is no
 longer the largest item in the application.** That changes what is worth doing
 next, and step 9's scrollport clips inherit the position.
 
-Not done: Chromium's N-way LRU proper. Eviction here is insertion-ordered,
-because `get` takes `&self` and cannot record a touch, and interior mutability
-on the hottest path in layout costs more than better eviction is worth across
-nine entries. Worth revisiting only if a measurement asks for it.
+**Defect 3, the cache was smaller than the working set.** Nine slots was one
+per category under the fixed-slot scheme; once slots are plain storage it is a
+working-set size, and nine is below ours. This was not in the prior-art
+document and only showed up because the first two fixes made it visible.
+
+It is a cliff rather than a curve, which is why it went unnoticed: 12 slots is
+no better than 9, because below the working set the eviction thrashes either
+way. 16 is just past the edge, 24 buys nothing further, and the cost is about
+16MB of resident memory on a 6,331 node tree.
+
+Not done: Chromium's true LRU promotion, and Gecko's "does the result depend on
+the varying input at all", which this document's prior-art sibling calls the
+strongest idea in its sweep. Neither is worth building now. Eviction is
+insertion-ordered because `get` takes `&self` and cannot record a touch, and
+with the cache sized to the working set almost nothing is evicted, so a better
+eviction policy has almost nothing left to improve. Revisit if a measurement
+asks.
 
 ---
 
