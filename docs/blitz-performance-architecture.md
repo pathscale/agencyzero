@@ -215,3 +215,28 @@ the commands to run and what each one answered:
   above the paint boundary, the shipping build's phase instrumentation, and
   splitting the memory figure into GPU pool versus CPU heap. Reading it tests:
   [allocations.md](allocations.md), [partial-paint.md](partial-paint.md).
+
+## Addendum, 2026-08-12: one decision here has been built by someone else
+
+Source reading, not measurement. Full review in [genet-review.md](genet-review.md).
+
+"Stage rendering and carry change metadata forward" above adapts Bevy's extract, prepare,
+batch and submit staging to this application, and asks for an explicit frame change set
+extracted into renderer-owned frame data. It has never been built, and until now the
+nearest prior art was a game engine with an ECS this document explicitly declines to adopt.
+
+Genet is a Servo fork on this exact stack (Stylo, Taffy, parley, vello) and implements the
+staging directly: `genet-layout` produces a `GenetPaintList` through `paint_list_api`, and
+`paint_list_render` lowers it to a renderer scene. The IR crates sit in a separate
+repository from the engine so the contract stays engine-neutral, and the contract carries
+no GPU types.
+
+That is worth recording against this decision for two reasons. It shows the staging is
+reachable without an ECS and without a game engine's data model, which was the open
+question the Bevy reference left. And it is the same seam that "Keep runtime data compact
+and renderer backends replaceable" asks for one section earlier, since a paint list is what
+makes a renderer backend genuinely replaceable rather than merely generic.
+
+The dependent workstreams are [partial-paint.md](partial-paint.md), which needs a value to
+diff, and [concurrency-todo.md](concurrency-todo.md) chain D, which needs a value to send
+across a thread. Both were blocked on the same missing IR without naming it.

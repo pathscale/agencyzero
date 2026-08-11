@@ -1,11 +1,22 @@
-import { createMemo, createSignal, For, type JSX, onCleanup, Show } from "solid-js";
+import {
+  createEffect,
+  createMemo,
+  createSignal,
+  For,
+  type JSX,
+  onCleanup,
+  Show,
+} from "solid-js";
 import { EditableTitle } from "~/components/EditableTitle";
 import { Icon } from "~/components/Icon";
 import { Panel } from "~/components/Panel";
 import { Composer } from "~/features/project/Composer";
 import { copyText } from "~/features/project/MessageBody";
 import { ProjectPanel } from "~/features/project/ProjectPanel";
-import { TranscriptPane } from "~/features/project/TranscriptPane";
+import {
+  noteTranscriptChromeChanged,
+  TranscriptPane,
+} from "~/features/project/TranscriptPane";
 import { providerUsageLabel } from "~/features/shell/UsageReadout";
 import { AGENT_LABELS } from "~/lib/labels";
 import { describeError, log } from "~/lib/log";
@@ -36,6 +47,30 @@ function isCount(value: number | null): value is number {
 export function ProjectTab(props: { tab: Tab; project: Project }): JSX.Element {
   const { state, actions, promptModels, effortsFor, permissionsFor, capabilitiesFor, isLive } =
     useWorkspace();
+  /*
+   * The footer's height, as a value rather than as a measurement.
+   *
+   * Each of these decides whether a strip appears below the transcript, and
+   * every one of them shortens the scroller when it does. A pinned transcript
+   * has to follow the tail down or the newest message ends up cut off under the
+   * chrome, which is what "dialogs are not pushing the chat up" looks like.
+   *
+   * A `ResizeObserver` on the scroller is the natural way to notice, and
+   * `TranscriptPane` asks for one, but the engine implements neither
+   * `ResizeObserver` nor `MutationObserver` and both calls sit behind
+   * `typeof … !== "undefined"`, so they have been dead and silent. Reading the
+   * same state the footer renders from is exact, and it cannot go stale the way
+   * a hand-maintained pixel offset would.
+   */
+  createEffect(() => {
+    const id = props.project.id;
+    void (state.pullRequests[id] ?? []).filter((pr) => !pr.dismissed).length;
+    void state.pendingCompact[id];
+    void (state.queued[id] ?? []).length;
+    void state.streaming[id];
+    noteTranscriptChromeChanged();
+  });
+
   const forkInfo = createMemo(() => {
     const link = props.project.forkedFrom;
     if (!link?.itemId) return null;
@@ -346,6 +381,13 @@ export function ProjectTab(props: { tab: Tab; project: Project }): JSX.Element {
             streaming={state.streaming[props.project.id] ?? ""}
           />
 
+          {/*
+            Everything below the transcript that can appear and disappear. Each
+            one shortens the scroller, and a pinned transcript has to follow the
+            tail down or the newest message is left cut off under this chrome.
+            The engine has no `ResizeObserver` to notice for us, so the chrome
+            says so itself.
+          */}
           <div class="flex flex-none flex-col gap-2.5 px-4 pt-2 pb-4">
             {/* PRs this project's runs have cut, tracked like Claude Desktop's
               chips: state, diff stats, CI — with a way to wave each away. */}

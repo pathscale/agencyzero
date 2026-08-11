@@ -274,3 +274,38 @@ deciding whether to carry a patched Taffy while an upstream PR lands.
   with, which currently ship in the release build.
 - [dom-optimized-updates-for-solidjs.md](dom-optimized-updates-for-solidjs.md) for why
   narrowing DOM damage cannot pay off until this is fixed.
+
+# Addendum, 2026-08-12: a second fork of Taffy 0.12, with no overlapping patches
+
+From [genet-review.md](genet-review.md). Source reading, not measurement.
+
+Actionable step 1 above notes that our only local lever is deciding whether to carry a
+patched Taffy. There is now a second party carrying one, on the same version line, and
+their patches and ours do not touch the same code.
+
+Genet vendors Taffy at `=0.12.1` in `support/patches/taffy`, documented in their own
+`GENET_PATCHES.md` and `UPSTREAM_PR.md`, with three changes:
+
+1. a `find_content_slot` width-fit fix, where a full-width float yielded a zero-width slot
+   at its right edge so a fixed-width BFC child was placed beside the float instead of
+   below it, which they note is present on Taffy `main` too;
+2. a float exclusion-band accessor, feeding parley-measured inline float wrap;
+3. flex `order`, which Taffy does not model at all.
+
+`ps-taffy` carries the measure cache, Yoga's validity test, slots as plain storage, and the
+known-dimension relaxation, all of which are `cache.rs` and the `get` path. Theirs are
+float placement and flex ordering. **No file is touched by both.**
+
+Three things follow:
+
+- If `float_layout` ever becomes ours, patch 1 is a bug fix we would otherwise rediscover,
+  and patch 2 is the accessor an inline float wrap needs. Both are worth reading first.
+- Their `UPSTREAM_PR.md` says they intend to upstream at their own pace. If the cache work
+  in step 2 above goes upstream as a PR rather than a fork, as recommended, the two sets
+  can converge in Taffy rather than in either fork.
+- It is mild evidence for step 1's premise. Two independent consumers on the 0.12 line
+  both found it necessary to fork, for unrelated reasons, which says more about Taffy's
+  release cadence than about either fork.
+
+**Not a reason to bump.** Their pin is `=0.12.1`; step 1's A/B against 0.13.0 is unaffected
+by any of this.
