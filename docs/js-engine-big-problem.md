@@ -1,0 +1,287 @@
+# The streaming quadratic: what the JS engine has to do with it, and what it does not
+
+Written 2026-08-11, from reading Boa at the pinned git rev this repository builds
+(`8a1e8fe`), Brimstone at
+[`9357af1`](https://github.com/Hans-Halverson/brimstone/tree/9357af1578873285873605cde15cae094f96cad5),
+and the local frontend and `blitz-*` checkouts. **Nothing here was measured.** The
+arithmetic below is arithmetic, and is labelled as such.
+
+## Correction, first
+
+An earlier summary of mine said that Brimstone "has exactly the thing our documented
+quadratic needs". That is half true, and the false half matters more.
+
+Brimstone does have cons strings, and Boa does not. But on **our** code path the engine's
+rope would remove **one of six** full passes over the accumulated reply per token, because
+we read the whole string back every token and reading forces a flatten. The quadratic is
+architectural, not a property of the engine. Switching engines would not fix it, and fixing
+it does not require switching engines.
+
+## Second correction: step 1 does not remove the quadratic
+
+Added 2026-08-11, after reading Boa rather than reasoning about it. Read this
+before acting on the TODO, because the first item in that list is the one to
+skip.
+
+**`join` costs exactly what `+` costs.** Boa's `Array.prototype.join`
+(`core/engine/src/builtins/array/mod.rs:1005-1026` at the pinned `8a1e8fe`)
+collects a `Vec<JsString>` and makes a single `js_string!(&r[..])` call, which
+lands in the same `concat_array` at `lib.rs:636`: one allocation of
+`full_count`, one `copy_nonoverlapping` per operand. Holding `streaming` as
+`string[]` and joining therefore allocates and copies the whole reply per token,
+exactly as `current + delta` did.
+
+And the join cannot be kept out of the per-token path, which is what step 1
+asks for. `MessageBody` takes `body: string` and `splitBlocks(props.body)`
+re-parses it every token at
+[TranscriptPane.tsx:673](../apps/gui/frontend/src/features/project/TranscriptPane.tsx).
+Something has to hand it a string on every delta.
+
+**It is slightly worse than neutral.** `concat_array` makes two O(N) passes over
+its operand list, the length sum and the copy loop, so joining N chunks adds an
+O(N²) term across a reply that the string version never paid: about 156 million
+pointer operations for the 12,500-token example above, on top of the same 312MB
+of character copying.
+
+Two further defects in step 1 as written:
+
+- `props.streaming.length`
+  ([TranscriptPane.tsx:686](../apps/gui/frontend/src/features/project/TranscriptPane.tsx))
+  does not become "a sum over chunks". `Array.prototype.length` is the element
+  count, so the character counter would read 12,500 instead of 50,000. It needs
+  an explicit sum or a running total.
+- The emptiness checks break silently, and there are more of them than a first
+  pass finds: `ProjectTab.tsx:346`, `ProjectTab.tsx:463`, **`workspace.tsx:2092`**,
+  and `<Show when={props.streaming}>` at `TranscriptPane.tsx:665`. `[]` is truthy
+  and `[] !== ""` is always true, so "a run is streaming" becomes permanently
+  true and the streaming bubble appears before the first token arrives.
+
+### The refutation was already in this document
+
+Step 2 says it outright: *"Without it the last block is the whole reply and the
+DOM write stays O(body) per token no matter what the JS side does."* That last
+clause is load-bearing and it applies to step 1 too. Bounding the block is what
+makes any of the rest matter.
+
+### What to do instead
+
+1. **Step 2 first.** Split prose on blank lines, bounding passes 3 to 6 to one
+   paragraph. Independent of everything else, and the only step that changes the
+   asymptotics on its own.
+2. **Then measure.** Nothing in this document is measured, and it says so twice.
+   Every figure here is arithmetic from source reading, which is how a step that
+   wins nothing came to be ordered first.
+3. **Revisit step 1 only if a real cost survives the bound**, and then do it
+   properly: `MessageBody` consuming chunks rather than a joined string, a
+   running character count, and every emptiness check converted. That is a
+   larger change than "hold it as an array", and it is worth nothing until the
+   tail is bounded.
+
+## The chain, per streaming token
+
+One delta arrives. Every row below walks the **entire accumulated reply**, not the delta.
+
+| # | Pass | Where |
+|---|---|---|
+| 1 | `current + delta` allocates and copies the whole reply | [workspace.tsx:1462](../apps/gui/frontend/src/stores/workspace.tsx), into Boa `core/string/src/lib.rs:636` |
+| 2 | `holdBackPartialDirective(text())` scans it | [TranscriptPane.tsx:673](../apps/gui/frontend/src/features/project/TranscriptPane.tsx) calling `:51` |
+| 3 | `splitBlocks(props.body)` re-parses it | [MessageBody.tsx:303](../apps/gui/frontend/src/features/project/MessageBody.tsx) calling `:228` |
+| 4 | `to_std_string_lossy()` copies and transcodes it | `blitz-script/src/dom/mod.rs:113`, reached from `dom/node.rs:238` and `:280` |
+| 5 | `text.content != value` compares it in full | `blitz-dom/src/mutator.rs:183` |
+| 6 | `clear()` + `push_str()` copies it again | `blitz-dom/src/mutator.rs:185-186` |
+
+Passes 4 to 6 are bounded by the **tail block**, not the whole body, thanks to the memo at
+`MessageBody.tsx:303`. That bound is worth nothing in the common case, and section
+"Why the tail block is not a bound" explains why.
+
+### The arithmetic
+
+Take a 50,000 character reply arriving in 4-character deltas: 12,500 tokens. Each pass over
+the accumulated body costs the prefix length, so one pass across the whole reply costs
+
+```
+sum of prefix lengths  =  L * N / 2  =  50,000 * 12,500 / 2  =  312,500,000 characters
+```
+
+Six passes is roughly **1.9 billion character-touches** for one reply, plus 12,500
+allocations of steadily growing size in pass 1 alone, all of it garbage. This is arithmetic
+from the code, not a measurement.
+
+## Boa: three string representations, all eager
+
+Boa's `JsString` (`core/string/src/lib.rs:138`) can be backed by three things, and none of
+them is lazy:
+
+| Representation | Where | What it is |
+|---|---|---|
+| `SequenceString<Latin1>` / `<Utf16>` | `core/string/src/vtable/sequence.rs`, used at `lib.rs:650`, `:653` | contiguous owned code units |
+| `SliceString` | `core/string/src/vtable/slice.rs`, constructed at `lib.rs:575` | a view into an existing string |
+| `StaticString` | `core/string/src/vtable/static.rs`, `lib.rs:557` | `'static` data |
+
+`SliceString` means **substring is cheap**. There is no equivalent for concatenation.
+`concat_array` (`lib.rs:636`) sums the lengths, allocates `full_count`, and
+`copy_nonoverlapping`s every operand in:
+
+```rust
+let (ptr, data_offset) = if latin1_encoding {
+    SequenceString::<Latin1>::allocate(full_count) ...
+for &string in strings {
+    ptr::copy_nonoverlapping(s.as_ptr(), data.cast::<u8>(), count);
+```
+
+The one mercy is the latin1 path: ASCII stays one byte per character rather than doubling
+to UTF-16.
+
+## Brimstone: cons strings, flattened in place
+
+Brimstone's `StringValue` header carries a `kind`
+([`src/js/runtime/string_value.rs:57`](https://github.com/Hans-Halverson/brimstone/blob/9357af1578873285873605cde15cae094f96cad5/src/js/runtime/string_value.rs#L57)):
+
+```rust
+enum StringKind {
+    /// A string which is the concatenation of a left and right string.
+    Concat,
+    OneByte,
+    TwoByte,
+}
+```
+
+`StringValue::concat`
+([`:66`](https://github.com/Hans-Halverson/brimstone/blob/9357af1578873285873605cde15cae094f96cad5/src/js/runtime/string_value.rs#L66))
+computes the combined length, picks the wider encoding, and returns a `ConcatString` node.
+**No copy.** `is_flat()` is at
+[`:111`](https://github.com/Hans-Halverson/brimstone/blob/9357af1578873285873605cde15cae094f96cad5/src/js/runtime/string_value.rs#L111).
+
+`flatten()`
+([`:314`](https://github.com/Hans-Halverson/brimstone/blob/9357af1578873285873605cde15cae094f96cad5/src/js/runtime/string_value.rs#L314))
+is the other half:
+
+> If this string is a concat string, flatten it into a single buffer. This modifies the
+> string value in-place and switches it from a concat string to a sequential string type.
+
+It is idempotent: an already-flattened concat node forwards to its left child. That makes
+flattening amortized **for a string that is read repeatedly without being appended to**.
+
+## Why the rope does not save us
+
+Every read forces a flatten. In `string_value.rs`, `code_unit_at`
+([`:181`](https://github.com/Hans-Halverson/brimstone/blob/9357af1578873285873605cde15cae094f96cad5/src/js/runtime/string_value.rs#L181)),
+`code_point_at` ([`:191`](https://github.com/Hans-Halverson/brimstone/blob/9357af1578873285873605cde15cae094f96cad5/src/js/runtime/string_value.rs#L191)),
+`substring` ([`:199`](https://github.com/Hans-Halverson/brimstone/blob/9357af1578873285873605cde15cae094f96cad5/src/js/runtime/string_value.rs#L199))
+and `find` ([`:208`](https://github.com/Hans-Halverson/brimstone/blob/9357af1578873285873605cde15cae094f96cad5/src/js/runtime/string_value.rs#L208))
+all begin by flattening.
+
+Trace our loop on a rope engine:
+
+1. Token N appends: `s_N = s_{N-1} + d_N`, O(1), a `ConcatString` over a flat left and a
+   tiny right.
+2. Pass 2 scans it for a partial directive: **flatten**, copying the whole body.
+3. Passes 3 to 6 then read a flat string, as before.
+
+The append became free and the very next line paid for it. A rope wins when you append many
+times and read once. We append once and read four times, every token.
+
+**Score: a rope removes pass 1 of 6.** Worth having, not worth an engine migration.
+
+## Why the tail block is not a bound
+
+`MessageBody`'s memo (`MessageBody.tsx:303`) reuses unchanged blocks, so only the final
+block's text node is rewritten. That would bound passes 4 to 6 to the size of the last
+block, which is the fix `performance.md` records for the transcript rebuild.
+
+Except the last block is usually the whole reply. `splitBlocks` (`MessageBody.tsx:228`)
+accumulates `prose: string[]` and flushes it only when it hits a **code fence**, and
+`extractProseStructures` (`:153`) flushes prose only when it hits a **table** (`:167-178`).
+Blank lines do not split prose.
+
+So a fence-free, table-free reply, which is most replies, is **one prose block that grows
+without bound**, and passes 4 to 6 rewrite all of it on every token.
+
+## TODO: fix the quadratic
+
+Ordered. Steps 1 and 2 are independent and can land in either order; together they make the
+per-token cost proportional to the tail rather than the body.
+
+### 1. Stop accumulating the reply in a JavaScript string
+
+- **Where:** [workspace.tsx:1462](../apps/gui/frontend/src/stores/workspace.tsx),
+  `setState("streaming", projectId, (current = "") => current + delta)`.
+- **What:** hold `streaming` as `string[]` and push the delta. Join only where a string is
+  genuinely required, and only over the tail once step 2 lands.
+- **Why:** removes pass 1 outright and makes passes 2 and 3 addressable.
+- **Depends on:** nothing.
+- **Verify:** `RunStatusLine` reads `props.streaming.length`
+  ([TranscriptPane.tsx:686](../apps/gui/frontend/src/features/project/TranscriptPane.tsx));
+  that becomes a sum, so check the character counter still tracks. Existing tests:
+  `TranscriptWindow.test.tsx`, `workspace.test.tsx`.
+- **Size:** small.
+- **Risk:** low. Frontend only, no engine or protocol change.
+
+### 2. Bound the tail block: split prose on blank lines
+
+- **Where:** `extractProseStructures` in
+  [MessageBody.tsx:153](../apps/gui/frontend/src/features/project/MessageBody.tsx).
+- **What:** flush the prose accumulator on a blank line, not only on a table. Each paragraph
+  becomes its own block.
+- **Why:** this is the step that actually bounds passes 4, 5 and 6. Without it the last
+  block is the whole reply and the DOM write stays O(body) per token no matter what the JS
+  side does.
+- **Depends on:** nothing, but it is worth doing with step 1 so the win is visible in one
+  measurement.
+- **Verify:** `sameBlock` identity reconciliation should keep completed paragraphs stable,
+  which is the observable proof. **This changes DOM structure**, one element per paragraph
+  instead of one for the reply, so paragraph spacing and margins need visual checking per
+  [ui-verification.md](ui-verification.md).
+- **Size:** small.
+- **Risk:** medium, because it is a rendering change. Markdown already treats a blank line
+  as a paragraph break, so the semantics are right; the styling is what needs eyes.
+
+### 3. Scan only the tail for a partial directive
+
+- **Where:** `holdBackPartialDirective`, [TranscriptPane.tsx:51](../apps/gui/frontend/src/features/project/TranscriptPane.tsx),
+  called at `:673`.
+- **What:** it exists to hold back a `<ps @agency:...>` that is still arriving, so it only
+  needs to inspect the end of the buffer. Scan a bounded suffix, long enough for the longest
+  directive, instead of the whole body.
+- **Depends on:** step 1 makes this natural, since the tail is already a separate chunk.
+- **Size:** small.
+
+### 4. Optional: block-delimited deltas from Rust
+
+- **Where:** the `run:text` payload, `{ projectId, delta }`
+  ([client.ts:442](../apps/gui/frontend/src/api/client.ts)), emitted from
+  `apps/gui/src/projects.rs:10853` and `:11240`.
+- **What:** have Rust say which block a delta belongs to, so the frontend appends without
+  re-splitting anything.
+- **Why:** removes pass 3 entirely rather than bounding it.
+- **Depends on:** steps 1 to 3 should be measured first; this is a protocol change and may
+  prove unnecessary.
+- **Size:** medium. Protocol plus both sides.
+
+### 5. Do not switch engines for this
+
+Recorded as a decision, not a task. See below.
+
+## What an engine swap would and would not buy
+
+If Brimstone were adopted today, on this path:
+
+- **Would remove:** pass 1.
+- **Would not remove:** passes 2 to 6.
+- **Would cost:** `blitz-script` is 6,659 lines written against Boa's API (`runtime.rs`
+  1,306, `dom/element.rs` 1,205, `dom/node.rs` 777). Brimstone is unpublished on crates.io,
+  self-described as "Not ready for use in production", and uses a compacting garbage
+  collector, which changes the handle discipline an embedder must follow.
+
+Steps 1 to 3 above remove more of the cost, for a fraction of the work, without changing
+engines. Revisit Brimstone on its own merits when it publishes and drops the
+not-for-production line; its cons-string design is correct and the project is active.
+
+## Related
+
+- [zero-copy-and-hot-paths.md](zero-copy-and-hot-paths.md) for the full copy ledger this
+  expands on, including the IPC boundary and the store read path.
+- [performance.md](performance.md) for the transcript-rebuild fix that bounded the DOM
+  churn but not the parse.
+- [TODO-dom-related-work.md](TODO-dom-related-work.md), item 8, which this document is the
+  detail behind.
