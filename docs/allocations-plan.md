@@ -1,6 +1,7 @@
 # Allocations: what to measure, in what order, and what it said
 
-> Tooling, repository wiring and what is in flight: [HANDOVER.md](HANDOVER.md).
+> Tooling, repository wiring and what is in flight may be in an untracked
+> `docs/HANDOVER.md` beside this file.
 
 One workstream under
 [Blitz performance architecture](blitz-performance-architecture.md), covering

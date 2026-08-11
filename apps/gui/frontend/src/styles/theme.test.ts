@@ -245,9 +245,10 @@ describe("light mode", () => {
     expect(rule).toContain("var(--color-primary)");
     expect(rule).not.toContain("animation:");
 
-    // The drift lives on its own class, which the composer adds while its
-    // field holds focus and removes on blur, so the render loop cannot outlive
-    // the cursor being in the box.
+    // The drift lives on its own class, which the composer adds on a keystroke
+    // and drops a few seconds after the last one, so the render loop lasts as
+    // long as someone is writing rather than as long as the cursor sits in the
+    // box. Keyed on focus it held 46% CPU for as long as nobody typed.
     const drift = CSS.match(/\.az-ring-drift\s*\{([\s\S]*?)\n {2}\}/)?.[1] ?? "";
     expect(drift).toContain("az-composer-ring-drift");
     expect(CSS).toContain("@keyframes az-composer-ring-drift");

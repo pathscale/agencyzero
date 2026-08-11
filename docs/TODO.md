@@ -1,10 +1,10 @@
 # TODO: what to work on, and what is still research
 
-> **New here, or resuming after a compaction? Read
-> [HANDOVER.md](HANDOVER.md) first.** It carries what this file does not: the
-> three-repository wiring, which measuring surface answers which question and
-> which of them lie, the build and shutdown rituals, and what is in flight
-> versus blocked. This file is the item list; that one is the operating manual.
+> **New here, or resuming after a compaction?** There may be an untracked
+> `docs/HANDOVER.md` beside this file, written at the end of a working session
+> and deliberately not committed: it holds machine-local paths and in-flight
+> state. Read it if it is there. This file is the item list; that one is the
+> operating manual.
 
 Written 2026-08-11. A high-level index. Every line points at the document that carries the
 evidence, the line numbers and the caveats. **Read the linked doc before acting on an
