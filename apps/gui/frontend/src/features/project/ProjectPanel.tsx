@@ -1,7 +1,7 @@
 import { Toggle } from "@pathscale/ui";
 import { createEffect, createMemo, createSignal, For, type JSX, Show } from "solid-js";
 import { NOTES_BUDGET } from "~/api/client";
-import { AppModal } from "~/components/AppModal";
+import { AppModal, type ModalAnchor } from "~/components/AppModal";
 import { Icon } from "~/components/Icon";
 import { SectionPanel } from "~/components/Panel";
 import { PillMenu } from "~/components/PillMenu";
@@ -937,6 +937,9 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
   const [adding, setAdding] = createSignal(false);
   const [title, setTitle] = createSignal("");
   const [forkingId, setForkingId] = createSignal<string | null>(null);
+  // Where the control that opened the dialog was, so it lands beside the row
+  // it is about rather than in the middle of the window.
+  const [contextAnchor, setContextAnchor] = createSignal<ModalAnchor | null>(null);
   const [contextDraft, setContextDraft] = createSignal<{
     item: ProjectItem;
     context: string;
@@ -1372,12 +1375,28 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
                 </div>
                 <button
                   type="button"
-                  onClick={() => void toggleDescription(item)}
+                  onClick={(event) => {
+                    const box = event.currentTarget.getBoundingClientRect();
+                    setContextAnchor({
+                      left: box.left,
+                      top: box.top,
+                      right: box.right,
+                      bottom: box.bottom,
+                    });
+                    void toggleDescription(item);
+                  }}
                   title={tx("Description / sub-items")}
                   aria-label={tx("Edit the description for {name}", { name: item.title })}
                   aria-expanded={descriptionDraft()?.item.id === item.id}
                   aria-controls={`item-description-${item.id}`}
-                  class={`relative flex size-[22px] shrink-0 items-center justify-center rounded-md border transition-colors hover:border-primary/70 hover:bg-primary/20 ${
+                  /*
+                    These action buttons are plain siblings in the row, so
+                    without a margin their 1px borders meet and read as one
+                    segmented control rather than three separate targets. The
+                    row cannot carry a `gap` instead: it also holds the title
+                    and the status label, which want the wider spacing.
+                  */
+                  class={`relative ml-0.5 flex size-[22px] shrink-0 items-center justify-center rounded-md border transition-colors hover:border-primary/70 hover:bg-primary/20 ${
                     descriptionDraft()?.item.id === item.id || item.context?.trim()
                       ? "border-primary/45 bg-primary/14 text-primary"
                       : "border-primary/20 bg-primary/5 text-az-muted"
@@ -1387,7 +1406,16 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
                 </button>
                 <button
                   type="button"
-                  onClick={() => openFork(item)}
+                  onClick={(event) => {
+                    const box = event.currentTarget.getBoundingClientRect();
+                    setContextAnchor({
+                      left: box.left,
+                      top: box.top,
+                      right: box.right,
+                      bottom: box.bottom,
+                    });
+                    openFork(item);
+                  }}
                   disabled={forkingId() === item.id}
                   title={
                     forkFor(item.id)
@@ -1399,7 +1427,7 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
                       ? tx("Open the fork for {name}", { name: item.title })
                       : tx("Fork {name} into a fresh chat", { name: item.title })
                   }
-                  class={`relative flex size-[22px] shrink-0 items-center justify-center rounded-md border transition-colors hover:border-primary/70 hover:bg-primary/20 disabled:opacity-30 ${
+                  class={`relative ml-0.5 flex size-[22px] shrink-0 items-center justify-center rounded-md border transition-colors hover:border-primary/70 hover:bg-primary/20 disabled:opacity-30 ${
                     forkFor(item.id)
                       ? "border-primary/55 bg-primary/18 text-primary"
                       : "border-primary/30 bg-primary/8 text-primary/80"
@@ -1423,7 +1451,7 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
                         aria-label={tx("Work on {name}; it has no unanswered question", {
                           name: item.title,
                         })}
-                        class="relative z-10 mr-1 flex size-[22px] shrink-0 items-center justify-center rounded-md border border-primary/55 bg-primary/18 text-primary transition-colors hover:border-primary hover:bg-primary/28 disabled:opacity-30"
+                        class="relative z-10 mr-1 ml-0.5 flex size-[22px] shrink-0 items-center justify-center rounded-md border border-primary/55 bg-primary/18 text-primary transition-colors hover:border-primary hover:bg-primary/28 disabled:opacity-30"
                       >
                         <Icon name="play" class="text-[11px]" />
                       </button>
@@ -1435,7 +1463,7 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
                         onClick={() => replyTo(question())}
                         title={tx("Reply to this item's question")}
                         aria-label={tx("Reply to the question for {name}", { name: item.title })}
-                        class="relative z-10 mr-1 flex size-[22px] shrink-0 items-center justify-center rounded-md border border-warning/65 bg-warning/22 text-warning shadow-[0_0_0_1px_rgb(from_var(--color-warning)_r_g_b/.08)] transition-colors hover:border-warning hover:bg-warning/34 focus-visible:border-warning focus-visible:bg-warning/34"
+                        class="relative z-10 mr-1 ml-0.5 flex size-[22px] shrink-0 items-center justify-center rounded-md border border-warning/65 bg-warning/22 text-warning shadow-[0_0_0_1px_rgb(from_var(--color-warning)_r_g_b/.08)] transition-colors hover:border-warning hover:bg-warning/34 focus-visible:border-warning focus-visible:bg-warning/34"
                       >
                         <Icon name="message-square-dashed" class="text-[12px]" />
                       </button>
@@ -1660,8 +1688,17 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
 
       <Show when={contextDraft()}>
         {(draft) => (
-          <AppModal labelledBy="item-context-title" onDismiss={() => setContextDraft(null)}>
-            <section class="az-ring flex max-h-full w-[620px] max-w-full flex-none flex-col overflow-hidden rounded-[17px] bg-base-200 shadow-[0_24px_80px_rgba(0,0,0,.65)]">
+          <AppModal
+            labelledBy="item-context-title"
+            anchor={contextAnchor()}
+            onDismiss={() => setContextDraft(null)}
+          >
+            {/*
+              A plain hairline, not `az-ring`. That class paints a
+              primary-tinted gradient across the whole panel rather than only
+              its edge, which washed the header in olive.
+            */}
+            <section class="flex max-h-full w-[560px] max-w-full flex-none flex-col overflow-hidden rounded-[14px] border border-az-hairline-strong bg-base-200 shadow-[0_24px_80px_rgba(0,0,0,.65)]">
               <header class="flex items-start gap-3 border-az-hairline-soft border-b px-5 py-4">
                 <div class="flex size-9 shrink-0 items-center justify-center rounded-[11px] border border-primary/28 bg-primary/10 text-primary">
                   <Icon name="git-fork" class="text-[17px]" />
