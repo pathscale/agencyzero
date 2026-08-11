@@ -131,7 +131,22 @@ Prior baseline, for shape only and not for comparison — it was taken with the
 instrument on, before the node leak was fixed: 19.36ms/keystroke, 16.84ms in
 `layout:flush_from_script`.
 
-**Result:**
+**Result, 0.5.25, 2026-08-11.** 40 keystrokes into a live composer:
+
+| | per keystroke |
+| --- | --- |
+| `event:input` | **21.55ms** |
+| of which `layout:flush_from_script` | **19.16ms** |
+| `event:keydown` | 0.07ms |
+| `dom:attr=` | 0.01ms |
+
+**89% of a keystroke is one synchronous layout.** The composer autosizes by
+reading `scrollHeight`, and every geometry read flushes layout so the answer
+describes the mutations script has already made. So each character typed forces
+a full resolve of the document before the keystroke can return.
+
+Frame timings during the same run: `resolve` 32.63ms mean, `scene` 1.05ms,
+`renderer` 2.00ms, 26.9 fps with 139 of 256 frames missing a refresh.
 
 ---
 
@@ -163,13 +178,44 @@ Candidates, in the order they are worth ruling out:
   visited.
 - Boa's JS heap, and the WorkTable store.
 
-**Result:**
+**Result, 0.5.25, 2026-08-11.** 855MB resident. `vmmap -summary`, by region:
+
+| region | resident | dirty |
+| --- | --- | --- |
+| `MALLOC_SMALL` | **552.1M** | 507.6M |
+| `MALLOC_LARGE` | 48.8M | 48.8M |
+| `MALLOC_LARGE (empty)` | 47.8M | 47.8M |
+| `MALLOC_SMALL (empty)` | 30.2M | 30.2M |
+| `IOSurface` | 56.4M | 56.4M |
+| `IOAccelerator (graphics)` | 10.9M | 10.9M |
+| `MALLOC metadata` | 4.0M | 4.0M |
+
+**The CPU heap is the answer, not the GPU pool.** Everything GPU-side —
+`IOSurface` plus `IOAccelerator` — is 67MB of 855MB. The candidate this list
+led with, vello's `ResourcePool` never shrinking and sitting in RSS on unified
+memory, is ruled out as the main cause: it cannot account for more than a
+twelfth of the figure.
+
+`MALLOC_SMALL` at 552M resident and 507M dirty is where the mass is: many small
+live allocations, which is what the remaining candidates predict — retained
+tabs holding styles, taffy caches and parley layout, plus Boa's heap and the
+WorkTable store. Splitting those needs `heap` by class, not `vmmap`.
+
+One number does bear on step 4: **78M of *empty* malloc regions are still
+resident** (`MALLOC_LARGE (empty)` 47.8M plus `MALLOC_SMALL (empty)` 30.2M).
+That is the allocator holding pages it is no longer using, which is the one
+place a different allocator has an obvious claim — on memory, not on speed.
 
 ---
 
 ## 4. mimalloc as the global allocator, as an A/B
 
-`[ ]` There is no `#[global_allocator]` in `agencyzero`, `ps-blitz-render`,
+`[~]` Re-scoped by steps 2, 3 and 5: this is now a **memory** experiment, not a
+speed one. Paint is 1.9% of a frame and typing is 89% synchronous layout, so an
+allocator cannot move the frame numbers much. But 78M of empty-but-resident
+malloc regions is a direct claim on the 855MB.
+
+There is no `#[global_allocator]` in `agencyzero`, `ps-blitz-render`,
 `ps-anyrender` or `tauri-runtime-blitz`, so every allocation goes through macOS
 system malloc — the least favourable allocator for thousands of small,
 short-lived, single-threaded, LIFO-ish allocations per frame, which is exactly
@@ -206,10 +252,24 @@ cargo run -q -p blitz-bench -- frames
 ```
 
 So the thesis in [allocations.md](allocations.md) is testable directly: build
-paths churn inside `paint_scene`, so their cost is in `scene_ms`. Take it during
-a scroll, where the most elements are repainted per frame.
+paths churn inside `paint_scene`, so their cost is in `scene_ms`.
 
-**Result:** pending a live instance, same as step 2.
+**Result, 0.5.25, 2026-08-11.** 239 presented frames, 120Hz display:
+
+| phase | mean | p95 | max | share |
+| --- | --- | --- | --- | --- |
+| `resolve` | 37.56ms | 78.23 | 82.26 | **93.8%** |
+| `scene` (all path churn) | **0.76ms** | 1.32 | 1.64 | **1.9%** |
+| `renderer` | 1.72ms | 2.60 | 5.03 | 4.3% |
+| total | 40.04ms | 80.99 | 85.16 | |
+
+24.7 active fps, 136 of 239 frames missing a refresh.
+
+**This retires the thesis as a performance priority.** Every `BezPath` built and
+dropped by all ~25 sites, for every element, every frame, is inside that
+0.76ms. Caching all of them perfectly wins under 2% of a frame. The reading in
+[allocations.md](allocations.md) is accurate about the code and correct that the
+churn is real; it is simply not where the time is. Resolve is.
 
 **Worth keeping as a lesson:** this step was written as "add a timer", and the
 timer already existed two crates away. Reading before building is cheaper than
@@ -219,7 +279,12 @@ either measuring or guessing.
 
 ## 6. Cache the paths, if and only if step 5 justifies it
 
-`[ ]` Gated on step 5's `scene_ms` reading, not on the source comment.
+`[-]` **Dropped 2026-08-11 on step 5's measurement.** All the churn lives in
+`scene_ms`, which is 0.76ms of a 40.04ms frame. Perfect caching of every site
+wins under 2%. Revisit only if resolve ever drops far enough to make 0.76ms
+matter.
+
+Gated on step 5's `scene_ms` reading, not on the source comment.
 `render.rs:518` already says "we can cache the bezpaths themselves,
 saving us a bunch of work". Each allocation is small — a rounded rect is a
 handful of `PathEl`s — so the cost is the count, not the bytes. Cache only the
