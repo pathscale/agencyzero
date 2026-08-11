@@ -21,7 +21,13 @@ export function DraftTab(props: { tab: Tab }): JSX.Element {
 
   return (
     <Panel class="flex min-w-0 flex-1 items-center justify-center p-7">
-      <div class="w-full max-w-[900px]">
+      {/*
+        Narrower than the panel it floats in. At 900 the composer stretched
+        most of the way across a wide window, which pushed the model and
+        effort controls a long way from the posture controls they sit beside
+        in every other prompt area and left a large empty span between them.
+      */}
+      <div class="w-full max-w-[720px]">
         <Composer
           draftKey={props.tab.key}
           size="lg"
