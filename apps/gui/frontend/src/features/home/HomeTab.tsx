@@ -1,6 +1,6 @@
 import { createMemo, createSignal, For, type JSX, Show } from "solid-js";
 import { NOTES_BUDGET } from "~/api/client";
-import { AppModal } from "~/components/AppModal";
+import { AppModal, type ModalAnchor } from "~/components/AppModal";
 import { EditableTitle } from "~/components/EditableTitle";
 import { Icon } from "~/components/Icon";
 import { Panel, SectionPanel } from "~/components/Panel";
@@ -823,6 +823,9 @@ function GroupItemRow(props: {
     saved: string;
   } | null>(null);
   const [forkDraft, setForkDraft] = createSignal<string | null>(null);
+  // Where the fork button was when it was pressed, so the dialog opens
+  // beside the row it is about rather than in the middle of the window.
+  const [forkAnchor, setForkAnchor] = createSignal<ModalAnchor | null>(null);
   const [busy, setBusy] = createSignal(false);
   const fork = () => state.projects.find((project) => project.forkedFrom?.itemId === props.item.id);
 
@@ -1020,7 +1023,11 @@ function GroupItemRow(props: {
           </button>
           <button
             type="button"
-            onClick={() => void openFork()}
+            onClick={(event) => {
+              const box = event.currentTarget.getBoundingClientRect();
+              setForkAnchor({ left: box.left, top: box.top, right: box.right, bottom: box.bottom });
+              void openFork();
+            }}
             disabled={busy()}
             aria-label={
               fork()
@@ -1108,9 +1115,16 @@ function GroupItemRow(props: {
         <Show when={forkDraft() !== null}>
           <AppModal
             labelledBy={`home-fork-title-${props.item.id}`}
+            anchor={forkAnchor()}
             onDismiss={() => setForkDraft(null)}
           >
-            <section class="az-ring flex max-h-full w-[620px] max-w-full flex-none flex-col overflow-hidden rounded-[17px] bg-base-200 shadow-[0_24px_80px_rgba(0,0,0,.65)]">
+            {/*
+              A plain hairline, not `az-ring`. That class paints a primary-tinted
+              gradient across the whole panel rather than only its edge, which
+              washed the header in olive and made a working dialog read as a
+              rendering fault.
+            */}
+            <section class="flex max-h-full w-[560px] max-w-full flex-none flex-col overflow-hidden rounded-[14px] border border-az-hairline-strong bg-base-200 shadow-[0_24px_80px_rgba(0,0,0,.65)]">
               <header class="flex items-start gap-3 border-az-hairline-soft border-b px-5 py-4">
                 <div class="flex size-9 shrink-0 items-center justify-center rounded-[11px] border border-primary/28 bg-primary/10 text-primary">
                   <Icon name="git-fork" class="text-[17px]" />
