@@ -98,6 +98,17 @@ costs 2x; a 40KB reply spent 2348ms in the parse and now spends 16.4ms. `bun run
 reproduces it. Every prefix of every test body must parse identically to a full reparse,
 across a fence spanning a blank line, a table, a list and an unterminated fence.
 
+The directive scan had the same shape and got the same treatment: only the last line is
+searched, which is exact rather than a heuristic because a directive is a line. 105.9ms to
+17.3ms at 40KB, and since 16.4 of that 17.3 is the parse underneath, the scan itself went
+from about 90ms to about 1ms.
+
+**That closes the streaming quadratic.** What remains is the Boa concatenation, and
+arithmetic puts it at roughly 30ms spread across a 50,000-character reply — about one
+percent of the 2.3 seconds the parse cost. Leave it alone: the change it would need is
+`MessageBody` and the directive scan consuming chunks across four files, and it cannot even
+be measured from the test suite, because Node's V8 has cons strings and Boa does not.
+
 Two corrections came out of building it, both recorded in
 [js-engine-big-problem.md](js-engine-big-problem.md):
 

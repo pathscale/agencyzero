@@ -121,11 +121,55 @@ The equivalence test is the part that matters: every prefix of every body is
 required to parse identically to a full reparse, across a fence spanning a
 blank line, a table, a list, an unterminated fence and stray blank runs.
 
-**Note what this did not touch.** Pass 1, the Boa concatenation, is untouched
-and is still O(body) per token. So is `holdBackPartialDirective`. Those are
-steps 1 and 3, and they are now the whole of the remaining cost on the JS side.
-Step 1 is still not worth doing as written, for the reasons above; step 3 is,
-and it is small.
+### Step 3 too: 6.1x, and the scan is now nearly free
+
+`holdBackPartialDirective` had the same shape as the parse.
+`lastIndexOf("<ps")` has to reach the start of the string before it can report
+a miss, and a miss is the common case because most replies carry no directive.
+
+| chars | whole body | last line only |
+| --- | --- | --- |
+| 10,000 | 9.6 ms | 4.4 ms |
+| 40,000 | 105.9 ms | **17.3 ms** |
+
+Both figures include the incremental parse underneath, which is 16.4ms of the
+17.3, so the scan itself went from ~90ms to about 1ms.
+
+The bound is exact, not a window: `isPromptSyntaxDirectiveLine` takes one line
+and requires the directive to span it exactly, so an unterminated `<ps` can only
+be on the last line. The test keeps the old whole-body scan as an oracle and
+requires them to agree at every prefix.
+
+### Pass 1 is all that is left, and it is small
+
+The Boa concatenation is untouched and still copies the accumulated reply on
+every token. It is now the whole of the remaining JS-side cost, and it is worth
+sizing before anyone spends a day on it.
+
+**Arithmetic, labelled as such**, on the 50,000-character example this document
+opened with: 312,500,000 characters copied in total. ASCII takes Boa's latin1
+path at one byte per character, so that is ~312MB of `copy_nonoverlapping`.
+Memory bandwidth on this class of machine is on the order of 10GB/s, which puts
+the whole of pass 1 at roughly **30 milliseconds spread across the entire
+reply**, plus 12,500 allocations.
+
+Against the 2.3 seconds the parse cost at 40KB, pass 1 is on the order of one
+percent of the problem this document is named after. It is not worth the change
+it would need, which is not the `string[]` of step 1 — that is neutral, shown
+above — but `MessageBody` and the directive scan consuming chunks rather than a
+string, across four files, plus a running character count and four emptiness
+checks.
+
+Two honest caveats. The bandwidth figure is an assumption rather than a
+measurement, and it cannot be measured from the test suite: Node's V8 has cons
+strings, so timing `s = s + delta` there measures a rope and tells you nothing
+about Boa. It would have to be measured in the app. And allocation churn has
+effects that do not show up as elapsed time, which is the same argument that
+kept path caching alive in
+[allocations-plan.md](allocations-plan.md).
+
+**Recommendation: leave pass 1 alone** until something measures it in the app
+and finds it matters.
 
 ### What to do instead
 
