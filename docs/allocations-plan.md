@@ -360,6 +360,42 @@ sites paint shows to be hot.
 
 ---
 
+## 7. Split the renderer figure — done, and it says the cost is work
+
+`[x]` **Measured 2026-08-11.** After steps 1, 2 and 6, `renderer` was the
+largest item in the frame at 5.03ms of 8.45ms under scroll, and it was one
+opaque number: `render()` minus paint.
+
+No new instrumentation was needed. `anyrender_vello`'s `render()` already
+contains a `debug_timer!` splitting the phases, behind a `log_frame_times`
+feature nothing enabled. Enabling it took one non-obvious step: the renderer
+reaches the app through `tauri-runtime-blitz`, not through `ps-blitz-shell`, so
+a feature added anywhere in the ps-blitz workspace is never consulted. Naming
+`ps-anyrender-vello` directly in `apps/gui/Cargo.toml` under `blitz-inspector`
+is what reaches the copy actually built, because cargo unifies features across
+the graph. `cargo tree -e features -i ps-anyrender-vello` shows which.
+
+263 frames under scroll:
+
+| phase | mean | share |
+| --- | --- | --- |
+| `render` — `render_to_texture`, vello encode and GPU submit | **2.84ms** | **62.5%** |
+| `cmd` — scene encode, i.e. `paint_scene` | 1.50ms | 33.1% |
+| `present` — blit and present | 0.20ms | 4.4% |
+| `poll` — non-blocking device poll | 0.00ms | 0.0% |
+
+**The backpressure hypothesis is dead.** A 120Hz display at 52fps with most
+frames missing a refresh looked like waiting on vsync; `present` is 4.4% of the
+renderer figure. This is work.
+
+The target is `render_to_texture`. That is inside vello rather than in this
+codebase, so the lever here is scene complexity, not the submit path: how many
+draw commands and, especially, how many clip layers the scene contains.
+`LayerManager` already counts `layers_wanted` against a `LAYER_LIMIT`, so the
+count is available. That is the next reading to take.
+
+---
+
 ## Explicitly not doing
 
 - **Building a mempool.** Two already exist below the paint boundary: vello's
