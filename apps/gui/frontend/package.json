@@ -14,7 +14,8 @@
     "format": "biome format . --write",
     "test": "vitest",
     "test:run": "vitest run",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage",
+    "bench": "vitest run --config vitest.bench.config.ts --reporter=verbose"
   },
   "license": "MIT",
   "dependencies": {
