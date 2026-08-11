@@ -327,6 +327,33 @@ async fn spill(client: &mut Client, axis: &str, tolerance: f64) -> Result<()> {
         for (over, id, what) in out.iter().take(15) {
             println!("  {over:>8.1}px past  {id:>12}  {what}");
         }
+        // The chain, for the worst few. A box in the wrong place is explained by
+        // whichever ancestor it was placed against, and that ancestor is never
+        // the one in the row above.
+        for (_, id, _) in out.iter().take(3) {
+            println!("  chain for {id}:");
+            let mut current = Some(*id);
+            for _ in 0..16 {
+                let Some(node) = current.and_then(|id| by_id.get(&id)) else {
+                    break;
+                };
+                let b = node.bounds.unwrap_or([f64::NAN; 4]);
+                println!(
+                    "    {:>12} {:<12} [{:>7.1},{:>7.1} {:>7.1}x{:>6.1}]  {}",
+                    node.id,
+                    node.role,
+                    b[0],
+                    b[1],
+                    b[2],
+                    b[3],
+                    node.name.chars().take(40).collect::<String>()
+                );
+                if node.id == pane.id {
+                    break;
+                }
+                current = node.parent;
+            }
+        }
     }
 
     // The per-row list is dominated by whichever container repeats most, so
@@ -552,11 +579,29 @@ async fn click_named(client: &mut Client, want: &str) -> Result<()> {
         report::py_repr(&target.name.chars().take(50).collect::<String>())
     );
 
+    // A click is dispatched at the node's coordinates, so a node scrolled out
+    // of the viewport gets a `pointerdown` at a point nothing is at and no
+    // click at all. "Show 12 earlier messages" sat at y=-2246 and every attempt
+    // to press it read as the button doing nothing.
+    let offscreen = target
+        .bounds
+        .is_some_and(|b| b[1] + b[3] < 0.0 || b[0] + b[2] < 0.0);
+    let target_id = target.id;
+    if offscreen {
+        println!("  offscreen, scrolling it into view first");
+        client
+            .agent(&AgentControlRequest::Act(AgentAction::ScrollIntoView {
+                node_id: target_id,
+            }))
+            .await?;
+        tokio::time::sleep(Duration::from_millis(300)).await;
+    }
+
     let before = metrics(client).await?;
     let started = Instant::now();
     client
         .agent(&AgentControlRequest::Act(AgentAction::Click {
-            node_id: target.id,
+            node_id: target_id,
         }))
         .await?;
     let ack = started.elapsed().as_secs_f64() * 1000.0;

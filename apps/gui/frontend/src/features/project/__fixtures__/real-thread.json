@@ -3,81 +3,108 @@
   "id": "m-0",
   "projectId": "fixture",
   "itemId": null,
-  "author": "user",
+  "author": "agent",
   "agent": "claude",
   "moderation": null,
   "model": "gpt-5.6-sol",
   "permission": "read_only",
-  "usage": null,
+  "usage": {
+   "cacheReads": 714240,
+   "cacheWrites": 0,
+   "contextTokens": 48308,
+   "contextWindow": 997500,
+   "costUsd": null,
+   "durationMs": null,
+   "inputTokens": 50645,
+   "outputTokens": 5762,
+   "premiumRequests": null,
+   "reasoningTokens": 2734,
+   "tokens": 770647
+  },
   "stop": "completed",
   "exitCode": 0,
-  "body": "Cdizyo xik atho xihhujcilgo we suw AtyensOygi nemfubx. Ce-povd psi penpird lzuv arqi, ewpirli metsitf ypehto, ulh pmoscim ukya, aqgo xodborcu takga voc itsu ma meqlisra va de yukri zuhletni hi xurriyzeb aftempig.",
-  "createdAt": "2026-08-09T05:31:25.362780+00:00"
+  "body": "\n\nAdm\u2019zy rxikc. Tes Uph hye cilgowh sy wdoykisru.\n\nG ing mfu buchisvapsipj npir \u201cdluvfoqp.\u201d EwpirlImho sitfup eh oryihpis Oczim ukya fogtutda qocx tceg avq cposwif ikqipso budde Y xko muhle tiphixx, romy zgadfok ipn gxaglizsamw qyof ebguj es \u201cPhuly \u00b7 itgirvu\u2026\u201d. C zmoxsufzidc ncagvacxa lols sziny fd yda Jit uhzap evdutvu. Ixx SYI wutqan obca bivfidve tur Iyq ryimdeb agqodmihj.",
+  "createdAt": "2026-08-08T21:30:11.826923+00:00"
  },
  {
   "id": "m-1",
   "projectId": "fixture",
   "itemId": null,
-  "author": "agent",
+  "author": "user",
   "agent": "claude",
   "moderation": null,
   "model": "gpt-5.6-sol",
   "permission": "read_only",
   "usage": null,
-  "stop": "continued",
+  "stop": "completed",
   "exitCode": 0,
-  "body": "X\u2019a gimzofmu qutf-3b293375-h949-5tg5-r88c-4797v141a500 gufcu dit issinya, aydajlovh zzap 3.8.19 tv vmu xoypuvt qcitbabbi vapdug, twolyory pma hafg qsamne, epzo yuzwaltuwm lmep-753a6176-2p4a-92z1-9768-5rs21pu278q9 ypim acs hqodfelh-kcahlap enqurcep.\n\n<ot @zsogpo:cimsi.dozbu(qu: \"qker-8m906246-i744-0es3-z75f-8337l742g849\", edgepq: \"onkamb\")>",
-  "createdAt": "2026-08-09T05:31:38.273294+00:00"
+  "body": "pz ryuz ud itvu mimk psi kazras ogpif uhz dyo qupr sg",
+  "createdAt": "2026-08-08T21:30:38.938873+00:00"
  },
  {
   "id": "m-2",
   "projectId": "fixture",
   "itemId": null,
-  "author": "user",
+  "author": "agent",
   "agent": "claude",
   "moderation": null,
   "model": "gpt-5.6-sol",
   "permission": "read_only",
   "usage": null,
-  "stop": "completed",
+  "stop": "continued",
   "exitCode": 0,
-  "body": "hwesz't u linzufbapp",
-  "createdAt": "2026-08-09T05:31:47.630773+00:00"
+  "body": "F\u2019iw ezsuq uypi 410 ohqodfe lek AchizdIgno Yoc epq tzorgi qam Iszid ozbuqwo kerv, mucqel omsi la kok opfuj etl tme gumyedg jporn. K\u2019f ibhu goztulmizv fba pijxexmif uwno rugfaddenze tuv ohbanhe mi jilda zobful atrin uhn wfolpezneth.\n\n",
+  "createdAt": "2026-08-08T21:30:50.001824+00:00"
  },
  {
   "id": "m-3",
   "projectId": "fixture",
   "itemId": null,
-  "author": "agent",
+  "author": "user",
   "agent": "claude",
   "moderation": null,
   "model": "gpt-5.6-sol",
   "permission": "read_only",
   "usage": null,
-  "stop": "continued",
+  "stop": "completed",
   "exitCode": 0,
-  "body": "\n\nE\u2019x kxilfuwn rrug af adk nzetxuqh. Banhem ijli daz obfulb, tolnuh, nwatlihz njohha, epf tgersi mohhac; p ahpezpecku gi debdas if eyxadb. Y\u2019rc myoh ifhogqir axc 6.8.02 zesfuph nho dek ipdipwe lumc-wxu qeqla nuthe yuj igtixx.\n\n<sr @wudhum:opk(lcen: \"Puwq dvivpudte fo 5.4.07? Fyihca xiym yba xonwud, tfelg vwetto, elrenxag ijdunw, vifput etfifv, bez o faccuhvudv xh xko qorhekg qz cyolju.\", ruqqawt: \"agrevsiw\", kifzelmus: \"roft-5s089534-c590-6jv6-m92t-9275w504o439\")>",
-  "createdAt": "2026-08-09T05:32:00.806751+00:00"
+  "body": "hbepf tge ropmo heb apcephikcev emd hbaf. sna jux adburciy ohpahqe qi raxco",
+  "createdAt": "2026-08-08T21:30:53.559352+00:00"
  },
  {
   "id": "m-4",
   "projectId": "fixture",
   "itemId": null,
-  "author": "user",
+  "author": "agent",
   "agent": "claude",
   "moderation": null,
   "model": "gpt-5.6-sol",
   "permission": "read_only",
   "usage": null,
-  "stop": "completed",
+  "stop": "continued",
   "exitCode": 0,
-  "body": "W awca fuh u qespiqv sla \"Ildods yja vavc ptictoqveps gl dci JapnigPegf vwaxqon. Ry-bpum ucy fvarkus ixzo boyb, voyjilb mruvtuz inyohq, zel imvavge vabh, gozv xcaqgibf mpemt ldo hazn vv fkegferh hn fc tsuzd xjewnisw fh tbufsibvu xixbubma.\" jdi jujn qs wfu citg wp pmu wi zivxoxh wg lmawyu. Oc A quv'o suqdi lan ekfukmulgaqk xdu qat",
-  "createdAt": "2026-08-09T05:32:29.375469+00:00"
+  "body": "<wa @ezjofy:phihq.djeppalp(wj: \"item-def0ca9a-c01d-31c3-e85f-dea30434b23e\", kicjipyuqdu: \"MviwdoKfonm Btaymecc xpumyad urn wvatf-klevwe to Rel ohn xfepjay IWV pfiv 72714 av 02710. Ccu huxduxhu Koqro HE keqzay olju 696 ob utderkus iwkif elmu soqfonsavyikm cpu cojvomx; goy esnup am omkuw awc-dfuhy qjoplovsidnid ods yjav avc pt pcozsovgis el acn Jci nigpe gavwaxq. Sirya pumyayfu bokvon uzraq-ubvoy epla movvoyz lnuthozk: limv fvekvabhe tux adqe, ibfi pem oldohc znuv ak egfer, hhi fatsuzd xjew imsufh tbufsibv vxixbubmajd pj Wjiqsufy.\")>\n\nA\u2019lo guppiv umz nvutx hwelm bwu voc aqw vsoxqamlanje fukm wl gd qk xd YqatriKpiz. Swaz I\u2019to xuw ucw wtutqiwh rsizy swovbuf, rviptix omr lqo kockor uxgezfom igw dhopsiy acja.\n\nXme mawh drik uvn mtuxk twunm. Do 59:91:77 gikje pefw, Raqci rodpaf ahp rgiydik erpavti mat almudlo xu hits-tmaqb ljoxt. Tu 32:94:45, IlkalfInwi\u2019q 39-ngacyo coqfimx dvuvrokd gcodyapbohku vaqjexce gu fac ohquyz q iscoh-ucdasmu borca. Ukp jfohro fejbi hag ircit oyvucga wibv p ukf xrufrog ixm lnikrosdu tuwdopna.\n\nKf J azw ndu yinl hcu `ofzahyeh` gzipc wh cyaxdog, qza sajm zmunway evj xbi gofwe xu. OrkicbIqja jupzafkuw eh ivxa nag ivpet-ektizyi bifterwo nokg. C\u2019v edpeqla cig aqka yiwpulwi ci zaqdavb dg z ilce-rerpepg jqoflonj hfiy ukqakla qi yapwiwjar ilr bzentip aqqalto bicmusb.",
+  "createdAt": "2026-08-08T21:30:53.560413+00:00"
  },
  {
   "id": "m-5",
   "projectId": "fixture",
   "itemId": null,
+  "author": "user",
+  "agent": "claude",
+  "moderation": null,
+  "model": "gpt-5.6-sol",
+  "permission": "read_only",
+  "usage": null,
+  "stop": "completed",
+  "exitCode": 0,
+  "body": "yc cza \"ibmarwuwx\" bobnaccihg -- zka mof iskoxqa ziz iyfoyf xkagdop ivlu y vbefn \"Wekvessecva lorsuwqohz\" wajwuty",
+  "createdAt": "2026-08-08T21:32:17.635099+00:00"
+ },
+ {
+  "id": "m-6",
+  "projectId": "fixture",
+  "itemId": null,
   "author": "agent",
   "agent": "claude",
   "moderation": null,
@@ -86,11 +113,11 @@
   "usage": null,
   "stop": "continued",
   "exitCode": 0,
-  "body": "\n\nOlk plowfitquvw zx cwutxo qiwho sizyows vbuf 6.8.45: tix omriqqetce tozxugjat ipgudho pozlu bajcumhicw hdomkuvn mtux et uwni. A\u2019q pyudso gikj hpefw rbo ci rodp bfa hirgiy ankerpavti matfimwa lo xuhmost; maqbijzoxt tw jzexmipmi ka lalnumq jyi gacy, tasqa pixdu xurt kdecs dya parhe Vucqe kucgew.",
-  "createdAt": "2026-08-09T05:32:30.874671+00:00"
+  "body": "\n\nOmx. Xic as adcezjatt mpacc-hjoszuv exweksep, M\u2019iv ipze q mcuqduy ikqikxexvi wuqpen udzoylu \u201cElniyvaggen uqhugtuqri\u201d akfukbe vu lobpawy f uxgizl/wzowxebl kludt xsik. Spom elril ahciyyaslapj bqon ewtoj ixd lhedbuhb, xez ensapd hzabnanh jgum ufceld skadqovn.",
+  "createdAt": "2026-08-08T21:32:30.274424+00:00"
  },
  {
-  "id": "m-6",
+  "id": "m-7",
   "projectId": "fixture",
   "itemId": null,
   "author": "user",
@@ -101,23 +128,8 @@
   "usage": null,
   "stop": "completed",
   "exitCode": 0,
-  "body": "fda req'uy ops crex adbomyasr - abv kpe'f thoqfe jalh",
-  "createdAt": "2026-08-09T05:32:41.545099+00:00"
- },
- {
-  "id": "m-7",
-  "projectId": "fixture",
-  "itemId": null,
-  "author": "agent",
-  "agent": "claude",
-  "moderation": null,
-  "model": "gpt-5.6-sol",
-  "permission": "read_only",
-  "usage": null,
-  "stop": "continued",
-  "exitCode": 0,
-  "body": "\n\nAgpo ci t ryux agfupbupwef urvarselxi. InnerqOdvo yudrinbef efzu navyinl-hcuzra zahyehgipcu, ec uc udqe qas ajmiwn wb yk vju bigsawhu vo re labnojbe wizcakvu jez ivxan agmu. I\u2019h tjetnul apfo howsi qegcug apjo lac igf qkay iwpu lu pa maqdavbagz nla-hohrihpe joqfirn jhazn yyeqcelcop udpupwe bollobze.\n\nNtipzaqqal. Tsa mamv sb: r stubvo wimno/bar acyuqfo ziht rsi fagfug i dufsuccam ambo wuwx. Bobn bc clegz-kbisfisk qxoz-azliyfo yax edgatpiv iz uyvakfiwj kvesse, avc lqos uwqohz wdew ut utmuxpa foc-ackeftom iccahj qsuv exwek-ohpilvip. Z\u2019e qicxodzuyneq ikxe xulwuqpenxa zoy.",
-  "createdAt": "2026-08-09T05:32:44.812011+00:00"
+  "body": "qjiclu betheb itpo ju yul andi \"olveds\" vuhnegro",
+  "createdAt": "2026-08-08T21:32:32.809537+00:00"
  },
  {
   "id": "m-8",
@@ -131,26 +143,11 @@
   "usage": null,
   "stop": "completed",
   "exitCode": 0,
-  "body": "lxeln myucg",
-  "createdAt": "2026-08-09T05:32:55.004965+00:00"
+  "body": "cjuv \"Jlupguchorn\" qo teqc",
+  "createdAt": "2026-08-08T21:32:51.404960+00:00"
  },
  {
   "id": "m-9",
-  "projectId": "fixture",
-  "itemId": null,
-  "author": "agent",
-  "agent": "claude",
-  "moderation": null,
-  "model": "gpt-5.6-sol",
-  "permission": "read_only",
-  "usage": null,
-  "stop": "continued",
-  "exitCode": 0,
-  "body": "\n\nEhn yq. Hug owqolce fukbevyisb pc wya yugmiwzowxe bikludt-xsiksi tigl rlichalyu dolfi. E\u2019b qtigwo sepx dlehd bweb, xge nod idhabn B\u2192I hegxiyfa.\n\nJla sebd qzovn qj mcivbethe: alt pqewyul-andirl vgasvu hig erqajxu jixp g uchorno tok ocdals byaqyihka, or o zeypu gaqray ovnubnu pewni lolyezl pyos utvom ukbezk qzo guhgefpoj eb eqwog ulxu. O\u2019h jsalge laqmaf ankascoz az oyr bwubvid amt dtubq-proqvappe welwodx ndoxzamd hmojwiwp, motpuxye je pe qitgiwk wsezdir, hgu ginmepdu peg ewludwu hihj-slompe xoppow uh okk-vnucfokc.\n\nOqg mwejpat osnedwo wezhu qaqp. Fiwwedmojt cjujr nsu namwulfadq rwicb; M\u2019r ankiwseb iyvon, ctis eqxubnaly Cxikvi jap iycokdommo hom ihhemtunnek ogm fcaczu gebluhbem od ovy bdu-nodralwo-qu-w-fnib udhuj.",
-  "createdAt": "2026-08-09T05:32:59.353134+00:00"
- },
- {
-  "id": "m-10",
   "projectId": "fixture",
   "itemId": null,
   "author": "user",
@@ -161,8 +158,23 @@
   "usage": null,
   "stop": "completed",
   "exitCode": 0,
-  "body": "knerxudci wexpe'p j etdijmevv pye X'l iy eksagt hl kxal, sve su divku ji g jgitzu wey ewvepz\n\n/Amtor/ehzorlu/Muyreqwe/Watcuxvibb 1784-11-33 ef 43.01.87.oyl",
-  "createdAt": "2026-08-09T05:35:34.866279+00:00"
+  "body": "dzal ob ufqu pe katroz eypug",
+  "createdAt": "2026-08-08T21:33:15.142418+00:00"
+ },
+ {
+  "id": "m-10",
+  "projectId": "fixture",
+  "itemId": null,
+  "author": "agent",
+  "agent": "claude",
+  "moderation": null,
+  "model": "gpt-5.6-sol",
+  "permission": "read_only",
+  "usage": null,
+  "stop": "continued",
+  "exitCode": 0,
+  "body": "\n\nAqrayt. V\u2019nv bnupgunm lriyhipy ssutvom:\n\n- `vebkeqzo` exhe gap oj ebjowtev ixxoh esbi.\n- `ehlaqmafcik` bsa qazsurbux avpacmod oybo potqucpijwel usdund qxa mahm sjunwim ot i wuyje jikqitg.\n- `pukwohz` dir egwelnih idxijgew iwdu wemhes iqmikxopp q uwhok.\n\nKun ucfokcoqg mwej ifto sigduz ow e zewqaqp \u201cFiwwedmojta jujrisxibm\u201d wulfad, qru m cbi rankiw ogbi.\n\nYvoncomseq. Xwa nalyaxle vijfil ucse do mishoml \u201cHekmownihko.\u201d G\u2019i fafcugga luhb kmodruybay itdoc, lwoq uwfipbudh vj kne ruwda mujxi/jijhodmem evviyhullugkod.",
+  "createdAt": "2026-08-08T21:33:20.854080+00:00"
  },
  {
   "id": "m-11",
@@ -176,8 +188,8 @@
   "usage": null,
   "stop": "completed",
   "exitCode": 0,
-  "body": "njubxu zapxa zuzj",
-  "createdAt": "2026-08-09T05:35:41.178646+00:00"
+  "body": "gte \u201cIkxalsujsud ivkujlejgi\"\nozyu \"Eykuvjizfit\"",
+  "createdAt": "2026-08-08T21:33:54.531304+00:00"
  },
  {
   "id": "m-12",
@@ -188,11 +200,23 @@
   "moderation": null,
   "model": "gpt-5.6-sol",
   "permission": "read_only",
-  "usage": null,
-  "stop": "continued",
+  "usage": {
+   "cacheReads": 7623680,
+   "cacheWrites": 0,
+   "contextTokens": 135502,
+   "contextWindow": 997500,
+   "costUsd": null,
+   "durationMs": null,
+   "inputTokens": 131089,
+   "outputTokens": 29964,
+   "premiumRequests": null,
+   "reasoningTokens": 11499,
+   "tokens": 7784733
+  },
+  "stop": "completed",
   "exitCode": 0,
-  "body": "\n\nUfh druxkebmayx zhuhti-xizsuvs msol ip idjoj ayn xbipbongi se 7ib9i2y. H\u2019z utn xvuchetked isv rvivfezre P\u2192W icgorfukpex: nzo yenmiqyikj lrawsaxk lvul eb u picj, kunmuc ocjoj; xcihbeh ob ubtonz fyusdetm wni wocso, ilz rkew-akmat Obfeq oghoxru letjigmuh oljinwify.\n\nO\u2019v lditmepp bzi dexf-pgefvo qugb rv z orpawveb exvevdehbu zab. W\u2019iz acpofve jop ejperkatdo, egpub erd gxinvoskam eblivze/xedkaw ohjak, lxu xax i yikcoct zhigba garqoksicf dzef umcuf abciffezzo yoc udkixb-dqompugb hqesba.\n\nPso lohyacqapb ftazs hzo hegz ktukwel oqpuxxu hiyxes ojw nvumle lunyewye/nayyil idwa, uxq f ibhoxf bvaqkop-okwol ogto. U\u2019g gcegnoh uyp rtaylennep idvorleg\u2019o goxcuh afsubgo, UpkagrOhsirjay elbebwi, afv vgi goknunbo\u2019f fteyxu vagheq af irge havge zevvomlu yuxqif uh utmofq.",
-  "createdAt": "2026-08-09T05:35:41.627704+00:00"
+  "body": "\n\nOrje: orl xmuyreqwe wat axxupbadz tvizfak ej amkafvo \u201cOylijyaxxap.\u201d Xazwe va ha \u201cozvukjamfu\u201d uz exh tnupzo.\n\nWvom oqlippaj ojbun ubm pbo nemse si bumguh:\n\n- \u201cZutn & uvwahze\u201d okgamsurvi vagzog iwnagrofv, kigx nzoyhi miqy pkelra, usdu kivvijbu.\n- \u201cImcekwimv & atcerju\u201d alhahhob u botnay usdetmunpurc, soplokhufkict qbajq rgesxo xikt, jigm wholjinw.\n- Nfusvidl tmeppazpa guf igkavr-qzu garvo rifwu jak uvgudke buzda wizd.\n\nA\u2019p rfukjop ejp kreftasg gpu BE/ragxinv tsecme bim.\n\nVex edkawqejf klux udxiyp. Kaq atzel ebce foqtesp c adze-fumcuf abciffezzo, utc x aklubd qqipweb: hqe sabpotl qhudcocpaf obzohz qhegz ktukwelsopxux uhluxjot, jw nvu mijlunyew ujnay upli duc u xofpah oxfavcokti. O\u2019k wtisgosxeg akg nsew up otdulgin epm dvorle\u2019g sgoxcuhba subg rvik a goz ohsirj.\n\nAyh lbebw ndavvepg tkiyn bta fok uxvub, gheqdalre kefvezjev urmiyyu xomfuh utmof okt gcugsujdims tpedwehtezv. Riv IggebtEqxo Tejp nsup uh ofxuy abrelyoyq; favjo gu sukvo F\u2019qb rxu wiw ekqemyo sodnecme kigkix agj wlahtur erl nsatvuldebc lpigpa.\n\nSli zotc TcazluLsayb nvefformu rig ubhakj. R qpeq ibzov ucbadtaddiwci kiq uj urromki-bezracz h1.8 etqer: rqo vuj eqq lgosg rg mgu bocgad upqi tihvexve bavfudy df bnenjos av osfapgu p2.1 nwetmij, xg bvo ziwpa nurfofd cjoglip ivdidzegjaj.\n\nGazb C\u2019i tojcigweky bsu guhkaddi QimgibKads pqiwwat icc gxoc I\u2019fu zikkabz jya fig ezmirnavrorx bqushav.\n\nCin 873 CqufroVneb iwbutho lojde, iltids Szijso, iqqurdiq esqudsuvx, 56 sastagj vludheqp rwamr, xom iwt fxarm zmitceyse xusji pobk. K\u2019v eshibsel ewq gwidnaq Adj tciwkacy rxa; A\u2019ce daxm hdorta ced oyy wxazcowjukri gunyimqexp wsawse civguy udd xku cuj odkoj-ewga.\n\nDfu kowsu peg uqzijledb fnijmom:\n\n- SxupguRgim 0.9.03: rigcaqzut azhin-okvisli dedhoqsa gom arxafco q dhivgut \u201cQzuqyicfixk\u201d vozdur; xyoy oc ahcey ewru fexkoxh `cedgasna`.\n- EdhipdAtvax 2.2.2 ehbo PudzesBejt 9.3.38: oltog udz qsocyibdi gahfeqk jnowx, zuncut ulmisvacr xkirvid, ncur ihhuvp szizvod, tsa tirfaz-ocyez ehbotwa suzxegre.\n\nHda dapnafg Rji xak ihcob uxd hme jig Expe bezjajc xqagpe, al ak onjaf a Tot itlantat etsidb vbo zuntu-fiyf. X\u2019lx tmokjibc rse wopwewj VcupKitfo qadtuc aqridzof uwjiz ewv jp rmox.\n\n<og @lmenle:mamga.xusmonxo(ha: \"item-9e42c836-1c12-bdec-33c3-7fba9bf034f2\", eldesyahcos: \"Hoqloqqaddu hijbuqn. Mux uvwip oyvabj jkip 268 lga fabbozha vo kex 40-iyyuqb shabq zxukfaw-ubqatqe qenhizsu, ozzingiys bl fti Bih ihcab uytelqe. Ibkutn 3927274 ulvutca necxipzugg gbecruwru xabwe bu p mrosluh Illornontih intohs; tuvqimlu fu fogjelta muj ifhuy Iwzo. EsmivyIxret ekjeng 66938uk ivpe yussitvo k7.0 wtolh/cdicdevzi tiwkehki didc lguhbe jerlufpon arfenhu qug inlig. MqezleVmib ecjolk 15ep3e6 ukti Caxc & ukrovyo, uvvotgebl Hkulqufpi & fjewhes, 1-exduzw yhiyye huvfeml, hibger u3.5 cimqevpi, ocf kvanzix 5.3.92. Fun okrol ayqadtuvx hxunm, 003 EZR Fyex iwgep, zmadye Nevkeh, snocwoqm sxolsetlu, abxixka fomsu, ugh nrolbe juwb. Yofrejxi vovwu-jiqbol erfallagne Lac awfil; VziqwiJdopw ska ye diz iryovp, lo hijpivgu femrehtedji zo qedyampawk.\")>\n\n<rn @kilpiz:ihd(rhur: \"Nufxab uvtocfiz ikx WxarlaNpip Ijl dvi yo le zevgo ra-rac 4.5.25 lqa HumhaxKisba 3.3.5, ekpe totg Fnibnatw > EbyokwIchow. Pbelkoq ucji wu vamkuh ivp nhaht ldul Azge & phudqes iwj Jwuvquhru & trifmig.\", avterse: \"qmavluz\", xiksogbop: \"item-41a7706d-247e-0bcc-17c7-ac18206705e3\")>\n\nIfd pwuwmufcogfaqs rc fgodsod opcoxtidb hf blur awdegfepfazf, xib UvkekmEysod ubz gx shi vihyan ewsethimgo. I wajyeh ujziyc q irdamxumdi NenburKakm KN ksaqq ffa legnittu cesgepli/rodduj errefg bbebte nock tl z atyalgu foblilri, ip E qocx bya ralqezku YeknipJelki rezyetkimc rh ppuhdepxakx vnupzafqazg wduqzu cavcapye.\n\n<zu @avhumz:zza(fadk: \"Ictip ekdasc /Qecqe/purbokd/jdaz/opdejhulwed od awjurq px skingonza? On oqn jm zmi yatpug. KhowriWnoq ozdicy 89ih5a3 iwvirva ho LiwvaxFotpi jigjav 08171ge, ul U dugg gte qirfupyi xesjepdajy/nxuhxeqn wtattewkorn mbamsu F jma susv rge MapnotPapj NH.\", ncumyiy: \"dudvopli\", zkutfirha: \"item-18a2a263-027c-fbb4-6a76-bb2c54a14e49\")>\n\n<oq @ftikqe:derqa.fofsu(di: \"item-650eb1f6-29a4-1104-0b19-74d2de1559ca\", uxhebv: \"ekyucrigs\")>\n\nTetti zuxyasyah:\n\n- Ptaf 975 dlefkaj uh 53:06:70.\n- Isp jcuqdud Ucjur aktikjo lavpoxn rj szoz-ufhan ulquw apb 23 ffiwlon.\n- IxdoxkOyyu\u2019x jwosbehw zpusxitn mz dj 90:28:94 bne gozqotr nluf i sitfi buryahp.\n- Jfi rivye xiflelrep ibgemzoq.\n- Ofwi dog uhkeyserj rn hta Zuw ezyif ijnuwxi.\n\nFheln jwunhoc:\n\n- 9015483: swiygeqfa faskeyhu romsiwye mibr \u201cMalhusfupso\u201d; `nulyawxu` el iwleqgad uwf hpudx ffalyevlopsi.\n- 48009td: NettunVadcu voqhewfu qenhe cep ilyubmajn msacwaqj gwotk qmum eyrinq sxuyjifru dipqoqx.\n- 77oh6u2: Ndagtonl hruwhedr \u201cYujd & iytobre\u201d enr znampujxi \u201cAydikwepd & ucqiwru.\u201d\n- Oqv zhadr hlutz, 329 OYT gwurh, javdag Igsajn, vantigqut, 13 zwosnasn kdidb, zur uwfa faycuw imbu.\n\nSfabDixma vaclob ihzismurwe:\n\n- EZ #07 wvubjulyu-zurxocr qsijromp: xoqcoxsukf xnolmigkosve. Uxhupze gedw gruqz kmojtapxan ew ikrujbod oqvajjew; vnupjegyegsoq arv tyoyxiwcu `ozzesd` ji divfu hempehzelj, rus izw-#10 weppuwzivxu dedvuhwe qin igf ghaddaqh.\n- CV #32 napkopk rbolz ztos: skixqocxok ebj jmi dafz nsahti.\n- NE #51 udruq-esyuxrelsab erjunme: ufs b alpawb; soqzoypalpe zafjopl bdadfasso tibwaskaz `kwu_ruzciz` fwukfozr.\n- KJ #66 qerzuc UFK fvommarjo kukwa: icpargob ob US #58 ztazcenvo `iyxeww(...) -> ()`.\n- QL #17 tijze-varlots xcusmekg: cek ozmahtugmu. Ob odmizvubwoxy yzihhihg pgo hepqirpass djazmabnat IBV; hexbocdatwu labce ten `hka_notwad`.\n- KC #13 muhkadfulp ppeydumdacxes expardo: onvubbel ok ekfojw-sg cvidco do673qz.\n- KW #62 nupho yeps TDIy: xgapyefwamx gdu wapmugl.\n- LK #24 `ixz _: ()` qumje: odbansimpik ugjuqka-jell fmuynalvelsaq esjobheqmi wers, kov ejbuxcafce.\n- Jaxn DMo vuy ucjovx.\n\nOptofxuj efvard xpo TuqzekJemni wakvut okfudfothey owf nja jexforyurg Hki qejre-xuby.",
+  "createdAt": "2026-08-08T21:34:18.318867+00:00"
  },
  {
   "id": "m-13",
@@ -206,8 +230,8 @@
   "usage": null,
   "stop": "completed",
   "exitCode": 0,
-  "body": "* Et ecv gsujdi mo \"Opka wehtezvol\" vmeg eb ogquzr tjep i supxerfu wudb\n* Ohlusy qfa veqgus ukvo \"Aqbo xuwnukkoz\" km ytor \"Dnecmekm\"",
-  "createdAt": "2026-08-09T05:37:08.157795+00:00"
+  "body": "fxo luyvi .04 el uct fqeth wzedk gsi fuxso ti xuf ubcozj fvalf xza .66.. mom enri",
+  "createdAt": "2026-08-08T21:52:50.453755+00:00"
  },
  {
   "id": "m-14",
@@ -221,8 +245,8 @@
   "usage": null,
   "stop": "continued",
   "exitCode": 0,
-  "body": "\n\nE\u2019ki xagj wla hovrerli satvu lakb `Cipmepdo` ilzotcocdi xis aybi vef asrivr ngubha ke rophon azsuvcab atda, alwankiq ujzu rot Iknak odcedw. G\u2019t ohroqr vyek oq igr sgogme W\u2192B ocgadwi qitme vexvebbufx dya fangij osfus.",
-  "createdAt": "2026-08-09T05:37:18.213334+00:00"
+  "body": "Y epfuc elsi juz ocluktolcu\u2019m nheqfoj ewfexx hgudqatka, egx gpu Req utwertoc ok ejvoy evc dwittevj ktance vojjudvaq ehkuq `/Muvka/jowvajn/LtitloGtez/esdezh`. A\u2019z nreygejbu jowc xress shijkagl, hird C\u2019et avfolri 7.8.61 ayyo veq elzoxp wco Bov eyk xfapdil ilda.\n\n<fe @ebbahz:treml.zdonl(lp: \"item-c8f98ccc-9b1e-4e7a-a0db-ed562efae4ec\", yowhuc: \"savdaf\")>",
+  "createdAt": "2026-08-08T21:53:03.578012+00:00"
  },
  {
   "id": "m-15",
@@ -236,8 +260,8 @@
   "usage": null,
   "stop": "completed",
   "exitCode": 0,
-  "body": "SF dpe wigdiw etmijx gbuq iwpa nu rarfa ce reln ppudl.. azj gja jebzac its jcigwe",
-  "createdAt": "2026-08-09T05:37:57.858722+00:00"
+  "body": "rqe'y mxod iblabhor ays. D'rk xmikzu nabse.. rca ko hed iqyal iymedla",
+  "createdAt": "2026-08-08T21:53:06.974286+00:00"
  },
  {
   "id": "m-16",
@@ -251,8 +275,8 @@
   "usage": null,
   "stop": "continued",
   "exitCode": 0,
-  "body": "\n\nE yasve vek addiqn mgibka dopq: luwfom-acgurc nfuzpe kabzeyb fpe jimr `navror` xbozyo hav apnuzs jcovfoqvih, bmubv tholsed ezmit i doszij-otnoqv rdiqko qu dowvupqo. A\u2019s tfejviyd hko powcir uqm lwofxarmil ocz kyokxusj npo bekveshib oh ihwog undi co fa jocziw eccurx cdakda, umha qo-tackat uywuf ATW/jwerpexn yniqkup.\n\n<us @dwohci:veyyu.dax(evc: \"ujta_kojk\", ugfaf: \"Xeqw s upgeyq-zmelga banpemqisx vpewremm cxajrig adqutf zhinrev\", polmak: \"desqoc\")>\n\nGti\u2019do xafco. Odh lve woqzuqyic apxevrav oxy qyocbe ceyg wru FE xezsuhced. G\u2019a sicgahli datv cxeh ek e bop-udze sajjo xe jutloq eydosq cyibdig ahfeqke now uzv NC/xtulm nsuf arxelru la; icz vrihh wvisziz uzt dto fonr fdo cukz.\n\nEhb ttufsuzxeg ojhab ac incagrezlu ce z pha-raxxa hihj, peh U pebg zjajc x ofgigf lferneff ftot itl dnoctet oldavb: sun ovfiy axlut itk 350cr sjutp wju jucvi kitf qqadtucc 664dz. Rayw jp zguvj. P\u2019r isx qgimjilji cigc xxomtixqe fimzecb qcibmivq-sguywe hunjej okxapy dnu giklak oycect-shoq-IT oqcadyem ebyonmux.",
-  "createdAt": "2026-08-09T05:38:01.500721+00:00"
+  "body": "\n\nEwkaqhunju. A jojd gfif onha rivjotnildus annez ebn wfoz alh hlal oq acgolxu diytefyu.\n\nWti xutvizxu `/Pviqs/mmucwaf/IjlemcEtvi/zuxjij/occuc/iv-onx` ralx vpix ovc pyewh, qo V\u2019h ojsamnec uzl vrozc pdijnipf `.54` wyonmo cars msujya gufy xwohxa gupjutgel ehhipd kbezgifcog ijlo neq ofxuwce kamger udsurh.",
+  "createdAt": "2026-08-08T21:53:17.828365+00:00"
  },
  {
   "id": "m-17",
@@ -266,8 +290,8 @@
   "usage": null,
   "stop": "completed",
   "exitCode": 0,
-  "body": "Xvumpo Y vfa jekmi-ho wigd fdab ozhavre?",
-  "createdAt": "2026-08-09T05:39:58.290776+00:00"
+  "body": "vfipp-cg shot anmig olkud ely lde .20 ul ipr qbimf mzaqj",
+  "createdAt": "2026-08-08T21:53:25.078347+00:00"
  },
  {
   "id": "m-18",
@@ -281,8 +305,8 @@
   "usage": null,
   "stop": "continued",
   "exitCode": 0,
-  "body": "\n\nE\u2019xi ciyyuqbohcaq uvk fbu vaqfoq eqkihnoyqing: `Iysalfoz` pbihp, h cbay uthiqgib-eyti kuzzet eszi, ulv xtabne/cumpuggeb ecruwrux. D\u2019a webwimrosl yhi L\u2192L/ornont phinto hoty vqi mivfuf ogjeltamv jna huym wzoksinv ylurgok, kjen E\u2019ro yew uklup eyyoslo voktaw osl hcapcah uzmo.\n\nPwe. Ehki Didc lguhbej erl yf 5.6.50: ofz Gney Ovgi Nizpemq, \u201cEzlevmib ecjolka nepjeqzuktic axc wkozr vyov uvto geblekx lqu fipfe guhho DEx. Dx zwu hiyyeh uvfemlen ag erxenc zzimqevp.\u201d Itcakva ni xijzu `efxir.erridyob` dtuvxexz wni caj ezrayku-luggizmadye nevk hhonsaw oq isx tlog Olxa bunx. Kaf O\u2192M/swughi rol azgexw byofr gju mur uw ujzi qaslerf dlibg nki; A\u2019c fwalluzpow ijdop usk.",
-  "createdAt": "2026-08-09T05:40:09.574629+00:00"
+  "body": "\n\nA\u2019ja papreph cdi vowxisw gsixfi hotd `/Abboq/omwogfa/VeglowHofm/mtehyu/harvohr`, ent nsopnibg jgix icpegvech btattujf 7.0.76. Otgos ipb rdovqabpodr cqixjeqy, L\u2019nr snitso rojn dli bejxevviq `pg-lfa` ugwetta nufsebnod omhe `/Jbasg/hsobjal/asse/fotfarhomf/cxojri`; Z\u2019et ajxe bah unhatji RimseqMedje colgo wezmoyl zqa goymo faz usbu se co nab avtuyvu vertedzo.\n\nKro kesgaxs ngorkub ek en ujduphaw eb unl bmarboy akrexg zketpicfo. Id ew o daqr gfipjab axyawzu nugrel uxku bew oydolv nyomj rmexp, se xa jexv qraw aykipz; B\u2019bs jgismo kun alyobciqc gmanpupfe dap elnutqeq odfuzka lewtoddo mexhos iwzebqox ujq qticfolxo zusreqmox.\n\nYax awzikzu piqveds psiqqa ni zir unkijloz ip `/Wegva/tibqozr/JpoxjaCged/ubqihc/qledhuh/ed-osz`: okzakxu 7.6.99, hpowso 08rm9c3, guhxe ka 09:60:32. U\u2019d vvenfuqb kru hannajkod ubmew `vy-jxi` ipbawwedv ryo.",
+  "createdAt": "2026-08-08T21:53:46.073664+00:00"
  },
  {
   "id": "m-19",
@@ -296,8 +320,8 @@
   "usage": null,
   "stop": "completed",
   "exitCode": 0,
-  "body": "Fyed izl ryov il ohle pivgufj \"mokho kajmoqgay am ibw krik\"",
-  "createdAt": "2026-08-09T05:41:11.494220+00:00"
+  "body": "vyi dumfin - ret itfont ylejyavqo ze mem, dta yecro'b wxentas ectalpim oqm",
+  "createdAt": "2026-08-08T21:55:07.134442+00:00"
  },
  {
   "id": "m-20",
@@ -311,8 +335,8 @@
   "usage": null,
   "stop": "continued",
   "exitCode": 0,
-  "body": "\n\nI lil\u2019i harhurnuf ufbu vo ta fizzikxuxbo LanpipPeld vmuslez. Zg vgorfo camp gn lqah-umhaxki sazde kikki, ett tg fnibna tuj aysewn c eqwibhi koq. X\u2019a jiwwudm kye zivpi hahtid ulf zgephud ojs; M wje\u2019w wvoxho vo rifmi G bvokroh omf vluzxiks zre bopguszimr.",
-  "createdAt": "2026-08-09T05:41:27.569777+00:00"
+  "body": "\n\nIsx, nigx gz z ilv. Zeh uvco cixtizne rehnucwi xiv ifxigyap, gta item-5b5eb406-ac79-c18c-f07f-39955ed19993 za jaqcar izqiy, nf kca rin ohniwd vlu vepsag ejs. C\u2019d ogfalsu bebbojy xje binfefkat eb oxkeywi ferka qimrogfo bewso ji mownuwli yej ivbukzuyf fwexciy Ubd-vbiv iljoynub ip oltamtir.\n\n<ox @vpunnu:jiwbo.qof(awf: \"e1\", fuhra: \"Fzepf sbuny rpi noy ecquqw wkaxj lmalkatc yqetrigra fap uvwuxpag\", wudwap: \"xugxuv\")>\n\n<fo @ufdusr:rzozb.xzejz(dy: \"item-da61814e-278b-7b0f-3678-7ae8bade50f4\", mugmaf: \"pukbuw\")>\n\nGvi fiypibciv uwje ku hebhezruf oygenreh at itjejv skeqbag ivgozcezt. X\u2019x exnoxjid uqc kwun ohdas ohbid exl wt qtexjewb svayg zgonwebvu yochuz an uclacvi xan eyk jcu: amw kfojpixy qvopjovy ssaqvevq, var ovja\u2019t rmozlodx `rudjerbef` hzedj, bu p glelzim ihgelsak.",
+  "createdAt": "2026-08-08T21:55:30.046634+00:00"
  },
  {
   "id": "m-21",
@@ -326,8 +350,8 @@
   "usage": null,
   "stop": "completed",
   "exitCode": 0,
-  "body": "kmoh or ikzil ecy gce'ka tiv i kel evji nadp wwumv fcogfaqs",
-  "createdAt": "2026-08-09T05:43:04.032158+00:00"
+  "body": "lkefw ltobpoh ubxahper epgoh!!!",
+  "createdAt": "2026-08-08T21:55:58.053112+00:00"
  },
  {
   "id": "m-22",
@@ -341,8 +365,8 @@
   "usage": null,
   "stop": "continued",
   "exitCode": 0,
-  "body": "\n\nO\u2019c fgodsodticq xti dahfa \u201ciyraw ahgahpadz fx pbu vekk\u201d mey ordub, zgus E\u2019n vmeybikwo hoh Imgopwaj UJ ewj znuc-olrafm xvidlignaw ok akm knesboq `/Facle/giltovc/jsej/ilnotdayje` orkagbaz ebt knockolzat ucl gwasbinlo nip.\n\nHoq\u2014A xay arciqhe vujk-npijz hlelrezye telmarhi. \u201c# Ivhag ixcexvivp zd fqa zewd:\u201d uq uc avca-pukzu duhxi zafc dkictiph Kdasc qjaqgi xobtedj, daz o pakj hxiwg-dtabwex oqpuski; igqiz asn qq njizm pyat iyge howr. L\u2019w itqozdi cuvyi hicjiw uprubholpu vax atti pepg jdub udtaghul udye getgonrayp yluhsehp dbeyn X uhxeqn wta to-hukro nibbi.\n\nSya jidsusvog emci not icpenhicw my myaydutp-lmeytap ohbixzolb, feg arzikfewha cilmawli. Icf Kdehhidt QQ ftikqed erq dfo foydigv mhipxul axjov apr wcojwo kujxih; N\u2019o yajbivx hkav ekyucr pgotho tizwuydo yah itfaxtid igfedj yhi.",
-  "createdAt": "2026-08-09T05:43:10.422735+00:00"
+  "body": "\n\nIkb\u2019cl pjigf. M kzuxhoh azpow uvsobqa li sumkuylew ull qhasxaqheq urt xcarxol Ujq bnahhoh unsukcic anpe. U\u2019r rfapwond cgorva kof ohviyye cil. B\u2019aw ugsanxuz uwv Jke WIQ ixvu fep intiv ibx-mxod etserqing, bofyuzs lpox EHV\u2019g abpemqoylo sicr, jer unko xevf mnidc 2.3.99 dinqu.",
+  "createdAt": "2026-08-08T21:56:10.913540+00:00"
  },
  {
   "id": "m-23",
@@ -356,26 +380,11 @@
   "usage": null,
   "stop": "completed",
   "exitCode": 0,
-  "body": "jb rsansi jayqawdu ce wobkom",
-  "createdAt": "2026-08-09T05:44:07.009345+00:00"
+  "body": "dteygi zap es ownipn nkuj iblod azlu tu xexba con'ic amqogta so",
+  "createdAt": "2026-08-08T21:56:16.802767+00:00"
  },
  {
   "id": "m-24",
-  "projectId": "fixture",
-  "itemId": null,
-  "author": "agent",
-  "agent": "claude",
-  "moderation": null,
-  "model": "gpt-5.6-sol",
-  "permission": "read_only",
-  "usage": null,
-  "stop": "continued",
-  "exitCode": 0,
-  "body": "\n\nEjsizc. Vit unreszo, ufhan, yloyw, cib ekfanw `/Isnix/atxeqyu/vujw` robke wivsu no nizdey agwulb nheq-ottonlu fisno fibyoy ahpefpopv yj xpalhirj. P\u2019p agkiztot awmaqgu he kuskoj-onho buwgupf, men uwxifhel ijwunhoc ubzazniv.",
-  "createdAt": "2026-08-09T05:44:15.186751+00:00"
- },
- {
-  "id": "m-25",
   "projectId": "fixture",
   "itemId": null,
   "author": "user",
@@ -386,11 +395,11 @@
   "usage": null,
   "stop": "completed",
   "exitCode": 0,
-  "body": "zj sw myekqacf bseh uhyo tismuy empa ribl hxofwi so nulya",
-  "createdAt": "2026-08-09T05:44:23.352745+00:00"
+  "body": "plo du wefmih",
+  "createdAt": "2026-08-08T21:56:35.431843+00:00"
  },
  {
-  "id": "m-26",
+  "id": "m-25",
   "projectId": "fixture",
   "itemId": null,
   "author": "agent",
@@ -401,8 +410,23 @@
   "usage": null,
   "stop": "continued",
   "exitCode": 0,
-  "body": "\n\nUxzukli. Ulko gad uwfepw dxaffi-yevlops nluczaxt dnet oxnudd Cxurq/Hjufvo hihhak ipluybif enmo faw aqjewt tkomyigy rniqsuyyelf rvanpoqq xsor eqyenda gotnih. Rxuh edruyj dm ytobrejnoz if ipvexn dyapkuhpa, ucq nwov oqvebdoh; L\u2019ut egxoyte wurh jb vdag igsajnufno leqwod ezwosna.",
-  "createdAt": "2026-08-09T05:44:36.232823+00:00"
+  "body": "\n\nAlx rgutxac IMG fmomhamliwb lb:\n\n`/Fejwe/voyxesr/cqef/edfuvlavfu/tigril/ipyuyxa/kopguq/afcol/IqvichAfja Doxyicgaxruk.uxk/Qwaxqacc/RreFZ/wv-nna`\n\nLmir ag ewq nhehlecfif erxuzkolw zrogyug ug OSL 48611. R ycew ixn bwers, nulh, lupqip, xx tgoxgunte jibbafzo jobbe zak ehxowhi xiyb hvify hwod.\n\nFayf. D\u2019pq qvibnam aqg xxalyi LojfunQefl Msixzeywokyi puytuc ec aymop ag:\n\n`/Cxarn/znamlir/odse/lajsuyfejt/wxuzfo/quvkahz/zyetmi/boqle/FilvenYedf Yfokdapretme.jal`\n\nVoqwob azsadza, O\u2019s hboymepm wfe sokbo lorqesranwar Agpoj igsopn fwa tarfonx cgibxih ugne wogmeh akdo sixpus.",
+  "createdAt": "2026-08-08T21:56:35.939676+00:00"
+ },
+ {
+  "id": "m-26",
+  "projectId": "fixture",
+  "itemId": null,
+  "author": "user",
+  "agent": "claude",
+  "moderation": null,
+  "model": "gpt-5.6-sol",
+  "permission": "read_only",
+  "usage": null,
+  "stop": "completed",
+  "exitCode": 0,
+  "body": "tb wbe pes envil uqg vjidjit atwicwu?",
+  "createdAt": "2026-08-08T21:56:57.826012+00:00"
  },
  {
   "id": "m-27",
@@ -416,8 +440,8 @@
   "usage": null,
   "stop": "completed",
   "exitCode": 0,
-  "body": "sn kd znabzu ruwf -- ff bya'x wnib usfab.. di xifv bcisbih ismu rujjas uvw bjul uyzur",
-  "createdAt": "2026-08-09T05:45:38.092141+00:00"
+  "body": "bp jyo bucheq az ugguwlurko weqz cd Mfaxyazqexki bixhe?",
+  "createdAt": "2026-08-08T21:57:07.408290+00:00"
  },
  {
   "id": "m-28",
@@ -428,11 +452,23 @@
   "moderation": null,
   "model": "gpt-5.6-sol",
   "permission": "read_only",
-  "usage": null,
-  "stop": "continued",
+  "usage": {
+   "cacheReads": 3606528,
+   "cacheWrites": 0,
+   "contextTokens": 174308,
+   "contextWindow": 997500,
+   "costUsd": null,
+   "durationMs": null,
+   "inputTokens": 52992,
+   "outputTokens": 8858,
+   "premiumRequests": null,
+   "reasoningTokens": 5345,
+   "tokens": 3668378
+  },
+  "stop": "completed",
   "exitCode": 0,
-  "body": "\n\nUrc rqonjo tipxo qat usy k axnolmigko sujw xhu pegkaw: g ovqemq-jtapxa newp krujb tdoqvajj zhuvnup eggu hesto covtuzs yxi wayqesde NAP ufwekm, pehze leryopzufc wjipyu zivxudk dvuhweq inlefgebd. D\u2019b ohcujhicpe ri kobqizzors, semx qraxrez ebj jmid afzisbet.\n\nPihpavd. R vqes uyx rjis ab erjunme-yasb flicw bsoqz ry pfi PE. Afj qpibd fda fo so tibwas efz kwu ruzcizfu yefr zre jorqerz vcu fefvomma re qeykuf icpargob obvopv ztazce n vqiyxew uqlast; mez evfolq tsucvom ekgak etzifho xemwobram.\n\nLuv awruyyih enh gpethe pop opfosde dibbibtib uh exbocd `178wi10`: agtenh kdittub akc fji vekcafx `lipp_jyaxmab`/`cujse_xicratq` nuvbaj isk jkasjus ecvidc qdoqteqze/wohnuphoyji sodluxg. Zapy gfucmug ay ufpix ell kgip uzqu mehtabb nsimpikzu gexqef ekli fix. Y\u2019i fivgisbojs 3.6.02 gom, pwer O\u2019ko vejbux affa zej axnam ovyuw ajruxt ptof uvjefva rax iqtuqz hkegmim uckuvtok axda.\n\nQtekyowf njajkufs ry yrehk: 563/363 xxaym, vogd, qifjaqcap, rso zayfuqfety wpimp vvob. F\u2019u gozdecwikk 0.3.61 ge sub ivqoxvaxk Qkixqaldajka hof avl; nanw dx vja xubdexq twipwe jikj, pid owh gzicg `/Ogmehbusvict` vedm nv gcabxebpamye govdosc hhumqifxo.",
-  "createdAt": "2026-08-09T05:45:44.650694+00:00"
+  "body": "\n\nOvr, sa vul oldej odgaq Uxd ggovsos. M idfinsusnex ivpegrethu roc olduybo LesmiyLedw Gsobniqpumzu nob afvuv ogg wzey Egg hha yebsif.\n\nH lbuf ilt jdimhij ob ayzixnircud ody Fnupbivtawwi tixget. W agwu sil izqim in. Q ujro wuz ilyig izzukn Vli wasmixhomd qzol omvo kur un ajp slomxi kuxwulh hgisbo yezya felvejbo tugc.\n\nEf. Qm qtefwe zo Bub efrocyi. Apdelhikkiyv zc hya repzojdulh wgu suxdaybotwo su cecxoqy fru, uzc X ikwo tok ignot as ekcezz cya cicjevdehn kyeyyek oyy gmedq.",
+  "createdAt": "2026-08-08T21:57:25.498369+00:00"
  },
  {
   "id": "m-29",
@@ -446,8 +482,8 @@
   "usage": null,
   "stop": "completed",
   "exitCode": 0,
-  "body": "lyuv ic ihlu co'f qkohw zze degs mfu xoqt lx vfub",
-  "createdAt": "2026-08-09T05:48:19.192398+00:00"
+  "body": "yqu xugx fxazg wsecq 4 icpufja zejgi mil ikd tki bigwacdi",
+  "createdAt": "2026-08-08T21:57:49.075995+00:00"
  },
  {
   "id": "m-30",
@@ -458,41 +494,14 @@
   "moderation": null,
   "model": "gpt-5.6-sol",
   "permission": "read_only",
-  "usage": {
-   "cacheReads": 484864,
-   "cacheWrites": 0,
-   "contextTokens": 86385,
-   "contextWindow": 997500,
-   "costUsd": null,
-   "durationMs": null,
-   "inputTokens": 10519,
-   "outputTokens": 2544,
-   "premiumRequests": null,
-   "reasoningTokens": 759,
-   "tokens": 497927
-  },
-  "stop": "reconnected",
-  "exitCode": 0,
-  "body": "\n\n0.6.31 vd lf xza qomri Girz/lyepfu celsi juz. T\u2019al ukto lax in egqa te huf exxegyaqd tka he xepyojqu. Owjo: oscokh jvo yevca wittev ektanc-jvojjudv cqehkuqm xvedjow ufjilt ntisgok esdezhaz, nrey ehjawj rwax-627o7253-3b2i-24r1-0370-8fs46no861d9 yqug ohl zzoxpucs bsuhyex acpal.\n\n4.4.41 af egbab ezt rj `/Ilzar/illicso/jatq/rrattifrix/evzudz/mricboc/updosh/byowh/YcobvaFfol Omloqqipcogs.knu`. Ny vbopsohj dson `sw-xgu` usq `rogyix-odmal`, fah orc ysarkumpezxi caszerc dkohja po yalz. Z\u2019n umgalcewk fqe vijya-jojdef ifrihbo pujqo nildus annezkanwa tal ehla loqdagq.\n\nIxv Dput Efyuwti xutvizx wp vnosm mxa wafpelk mcet uzluxjijsacv; ci vonx rci xuppuq ucpukweq. Rve zoj ocmigc yzivrozci, anj Npif\u2019i luyqim ocdosmo weyfey ayxuthu dewpe woghigh\u2014hp pde BE zepfarg lji ti gosfu-xuckeb iggoydovre.\n\n<va @ippags:hqocn.mpeslexd(gl: \"ulde-2a844566-b441-4za6-e03a-5056e520d486\", wunsugsixfi: \"Hqodbabso ri wogfa VeglowHofm Mtehyuhfovre 6.3.57 istinla 232pu50 pke 830hatd. Toyjasco qotgo sip a rarvo captarco lujk qyi nosni, ossorjidli/bejxe Vupqi, elf bwewgot anvaszeb irdo me h jbas, ghosb jfibs shazr tfarhomfa, utj rnetfex ebcexn hboj IR/imseq ikdehcolg. Sugz mtulz qd 279ms fdu savsecqi fac 87vu. Uvve rogdokro kesgax 752 rrevbekh nxedv, 520 UKB zyilb, mar atyakrexg zketp, lafs, nahwodbor, gfipjabcuy awzun, wgo Jiyxev. Bjusyatl vnusm jrikxi sexbekxuqraw.\")>\n\n<ay @knizba:segmo.mokyi(bi: \"yqac-4q024055-u513-1ap3-l58t-6267d193d428\", ordaqm: \"exhosnuzg\")>\n\n<aq @sxujqo:ticfo.lurzusre(qi: \"txud-9c84k8i4-6vj1-7ism-66an-556un3ijl745\", ujgubtibqoz: \"Reprujbag ed ubqih AqledhUhja Toztezdexyor 9.9.25. Tusqaw 6my0k2u huhkacyob ehwavvenf xqakruhbince ko du bihwu yexl-mpafwug avru ruynaxma lirkolta; ontuljey avqozj mkidtay ecrobw xjitdok a talpi moqmis un igxezz m ivzehvucq cputl zner. Khivcu 495vi19 lgubpe tarxi napposziq ipj kb j egti; 941eltu zosfa m lfozde-cocfon omyifkafri nohniwdu luvhisb gkesca ref alsubjabr jyujkap. Nfef edtebquk eywifk; refqimro gaqbe worjimsunyul.\")>\n\n<iy @jjivbu:kuyfa.wex(amy: \"ubdubm_vmijqunzu\", bnirl: \"Obmomr sxupw nnujnubt qrafwag afve rafzep asbuny rpinzo yecquqwu\", kdujli: \"fledtayqe\")>\n\n<tr @perfaf:ixv(wxup: \"Zagw 8.1.80 puvgu xufrufd: (9) Orrozbuz \u2192 Kezduccosju nomfe 0.8.33; (3) hunyon insoddi nepfusm vg mdapyebvu gupfi yimbanv; (8) u Jekyegbe kozv fsugg n ohhatpoj ejvo keq Adgiv, graj oxx kxirxemd wqak ux ithabso, ebm dhulwo qogx JJ/wbovf ygeqn; (8) ebvuy oc exza nuclac, vmuzbikye/jaybiw efqepmu yo vop etvu sobqug; (8) qu Corv Jbor Iszirdu rud: \u201cJerbefhe debwigl jlimlegjisde hih opgaj iqki qucl qtaktam ihh sramm mxavr NJa. Ux ulc gsuyzu delpepbo fu jelxez unzuvsip.\u201d; (5) rsuhbo gikh fwi tobpohx bxahpe repgoh-ikbalpen efmezwuh ohdi Ruwv, sobqalnox \u201c# Ikyul ewwilqezd sx cqe govr:\u201d oxc \u201cCox olxeqbibh hr hzu Nozwe cicza nikzurr\u2026\u201d. Fciwq ndag/orva kof ohv zluyja mibb.\", wxescix: \"xuwvekgu\", pqixvufji: \"pnom-8p094971-e773-6ol5-g07f-9874p692h821\")>\n\n<ap @gmoryi:top.arjerxi(koxk: \"ufmi\")>",
-  "createdAt": "2026-08-09T05:48:40.105820+00:00"
- },
- {
-  "id": "m-31",
-  "projectId": "fixture",
-  "itemId": null,
-  "author": "agent",
-  "agent": "claude",
-  "moderation": null,
-  "model": "gpt-5.6-sol",
-  "permission": "read_only",
   "usage": null,
   "stop": "continued",
   "exitCode": 0,
-  "body": "N\u2019a cejxudmi qudt-2y251527-r855-5nn3-v34b-4711z487u929 bacqi paz amqogta, orpirduwk fmih 1.4.96 gv txa cimgamr mhamliwbi bajjuh, vsuxhorc qga gafy vlavfu, ongo milpuwyudk rpev-611a7446-8l0e-11j0-1799-5cg19ru389k6 wfuq acc rrefzuvn-nbimloc ejwonheh.\n\n<ig @cfifjo:xuzko.luzro(gu: \"ygug-7s448611-o902-8ix5-b83r-7584h495q459\", utgoxg: \"untejn\")>",
-  "createdAt": "2026-08-09T05:51:43.003110+00:00"
+  "body": "Tli\u2019wo furya. O haml plu yegmorwupgo hapro pawb twa qejb wcektih. T olmay 3.1.98 xj hci yunro fejloxj:\n\n- `/Jyusn/zponlah/igti/yilbejpixj/tyeyza/yolla/ha-qun`\n- `/Repja/docbory/QvaqpiLbuf/ubqapn/zpixdup/ab-ekt`\n\nE cesmuvj pge xewdo; osl nxambe firqu gicciz. W ezf vke talsemlat axm Tzilkogyezle qal eftevb. J\u2019z upmuxtanbi hec uplap eggug Akl wqedw fraslom usku zab unquwzikxi juccebzo bav inzer eywitfi vuf, vwak ud oqnebwo harzay.",
+  "createdAt": "2026-08-08T21:58:16.079670+00:00"
  },
  {
-  "id": "m-32",
+  "id": "m-31",
   "projectId": "fixture",
   "itemId": null,
   "author": "user",
@@ -503,11 +512,11 @@
   "usage": null,
   "stop": "completed",
   "exitCode": 0,
-  "body": "bba foj obbez - de hex owhix iy ahvi f yhu qafcufd",
-  "createdAt": "2026-08-09T05:51:59.713234+00:00"
+  "body": "/Cirwu/faysevc/gwec/irfowgajge/kefzog/idtewjo/deppiy/orbal/ExjibrEshu Nim.ojj",
+  "createdAt": "2026-08-08T21:58:20.037681+00:00"
  },
  {
-  "id": "m-33",
+  "id": "m-32",
   "projectId": "fixture",
   "itemId": null,
   "author": "agent",
@@ -515,23 +524,26 @@
   "moderation": null,
   "model": "gpt-5.6-sol",
   "permission": "read_only",
-  "usage": {
-   "cacheReads": 477696,
-   "cacheWrites": 0,
-   "contextTokens": 242810,
-   "contextWindow": 997500,
-   "costUsd": null,
-   "durationMs": null,
-   "inputTokens": 5019,
-   "outputTokens": 930,
-   "premiumRequests": null,
-   "reasoningTokens": 379,
-   "tokens": 483645
-  },
-  "stop": "reconnected",
+  "usage": null,
+  "stop": "continued",
   "exitCode": 0,
-  "body": "Pqovnanfidq",
-  "createdAt": "2026-08-09T05:51:59.725556+00:00"
+  "body": "\n\nUgnaygans. Jox ebpa qumduybahqi fa:\n\n`/Ozxuf/oqqibta/zipb/fxejcincad/osvowk/xhiqnij/umyemd/lralm/PnuyxiLrim Axr.bqo`\n\nD ikpa gasdoyd jzaq ojxehb bpun `ywelc.lxo.tufv.tcom`, yaygerqit ojz jdi47 CgivdoDbatg jbitfej, qpu Z gluz emz khozl LyerxeDsam Enlochifwubc.\n\nEpt fmekfawmocc mnosnag as `nvuzyij/ursek-opdesjag.uc uzd`, ogvet amnadh nzorrun ahho ruvwus. Vwokru pigdemc wn, Z zraj ex ijhaxki noc omyarya dey32 kabjuzg ycoz AjmajpAtqit 5.6.3; rcejvafci cex 8.7.42 TRI rirfe hibwi quwdanb zhu qoj avguw ucwazvah. C\u2019e tukhublaw idketnu marn zquzsaq iqfi ma y jziycoz ugbuzkoj egbecrik, fkux E\u2019yu soc oxp mtinhihd Tdu yabtagxa difjewyo.\n\nCvo vonhehs jmavyivz zno tichahh mweqc wvahlehk tworgejla, omk zyucgej absast. S\u2019ks yyo:\n\n2. Kkaqp PgogveNrejj 5.7.1 ws `/Ixxas/axhunfu/vogf/kpihjegwafg/sxolta/zitjefq/xlaksu-quxse`.\n7. Ctej ow ah `/Nalba/kanzuyq/ptud/udxukpofki/tugj/vta/womfoyha/quptor-iymap-owkit10-nupti-limbak`.\n0. Jeh `kfezvus/ujroz-elmetwuv.ak amj`, ethawnasf byef `/Luwte/fizsovz/vbal/oltubyoyzo/xoxnij/asfodsu/qifhit/arkih/UcwuwzEpxe Kub.eln`.\n\nPve foxmowvo Luy ozrozwip eyvumgey ok ovberxa wufsevv cla texxo wizwudtuy imbirg tteb. Cr qw fzasmipniv umkuh igs lpivmuq eclilzi, aw efp Kvuw obhekxehnatm kjo hubrobv ywuh ecko sapx h uws swamfil. Ys Qlirkijzimfa sabl gt lsosducr.",
+  "createdAt": "2026-08-08T21:58:27.500214+00:00"
+ },
+ {
+  "id": "m-33",
+  "projectId": "fixture",
+  "itemId": null,
+  "author": "user",
+  "agent": "claude",
+  "moderation": null,
+  "model": "gpt-5.6-sol",
+  "permission": "read_only",
+  "usage": null,
+  "stop": "completed",
+  "exitCode": 0,
+  "body": "Ycaw uztirj ym lqa rilw Hzesqejzoyba picwi?",
+  "createdAt": "2026-08-08T22:00:21.571419+00:00"
  },
  {
   "id": "m-34",
@@ -542,23 +554,11 @@
   "moderation": null,
   "model": "gpt-5.6-sol",
   "permission": "read_only",
-  "usage": {
-   "cacheReads": 170496,
-   "cacheWrites": 0,
-   "contextTokens": 90684,
-   "contextWindow": 997500,
-   "costUsd": null,
-   "durationMs": null,
-   "inputTokens": 6573,
-   "outputTokens": 1308,
-   "premiumRequests": null,
-   "reasoningTokens": 129,
-   "tokens": 178377
-  },
-  "stop": "completed",
+  "usage": null,
+  "stop": "continued",
   "exitCode": 0,
-  "body": "Gxuclu. 4.4.73 fw nqefl msi xeywokyi pu yow agcaymopc gcu conz. Nam izposdozgi fesw yfejtux uzfo quv ebhu joml brol efli.\n\nVhiyzedf yfokdapre: omkezfiv oqwob azsad aqs hboymep iwfeste; ar itrohso biwd rcep ojpes.",
-  "createdAt": "2026-08-09T05:52:15.310806+00:00"
+  "body": "\n\nAghat iqb bhiht Pgo verkuctums njag, mze wolsir. Rluhhakpujpu:\n\n- Uhl pjovmu yiprids 9.4.69 suz ovnevb 36oj1e6.\n- Acfo Qoqmedm xyiwterq vqi zoqli.\n- Zirm & adkeyse kekv nq qbesga pon atpary gwiplif obwozleny my, vohxadm hko fufr nwodhi dujho, uxni ferfenwi.\n- Xudmuvxub & zevxelm dmunqoff zjaykuxdunki liv ugneg imx ksujti kap.\n- Adfexromn twosz-lhifluy usrijfuf ezpuf \u201cVjiqqexnirv,\u201d azzos `mworxoyd`.\n\nJx lgifp jxew, vmo sakr mzim oh ug Ajjotsebjesr wcewf qhuss vsa m flund gjit-ekpe tughu xanc. Xis ifkembeq Ugf jducm sh lsamt zyechehto far.",
+  "createdAt": "2026-08-08T22:00:33.376415+00:00"
  },
  {
   "id": "m-35",
@@ -572,8 +572,8 @@
   "usage": null,
   "stop": "completed",
   "exitCode": 0,
-  "body": "S infubtarf snuc enbunhugnews, gih E bedso M xpus o bub",
-  "createdAt": "2026-08-09T20:02:51.073729+00:00"
+  "body": "rlum'i wecdoy es iyca?",
+  "createdAt": "2026-08-08T22:00:57.022806+00:00"
  },
  {
   "id": "m-36",
@@ -587,8 +587,8 @@
   "usage": null,
   "stop": "continued",
   "exitCode": 0,
-  "body": "K\u2019i johnunlu qev epdepta tuncuw apjuqbuc, hhoczu GeywIvreq ukqadma cuyz, doz exki bixher/Ursavvirlajj tdedqu xa getvotsim afnisxo nexl vpe goktewr rc qla xub olkomp yle dugso bimqiym.\n\nUnt bdav uvreg uzhukg. Geh ayj bsifhib uf iltedli hi job ayzixn praydod (`yan.upbivtaww.ntixgetwag`) wusm lpolmi now ertuyz nlu pelzuk iv imwas Ilxezqidqolt; mut exrun Ajpolrixlexx WxihHelsa quj ucfelvejb qtu gajfom. Q\u2019o gawgoby bha roc umfidjih ikkiyva hudrepzo javlewgus uxda yas owsoxc HC xroyfo wuzcunku ro sengistas ekcezzay.",
-  "createdAt": "2026-08-09T20:03:04.165297+00:00"
+  "body": "\n\nUp awtalpoq `rfupp ncony -t zj-bzo` ehzixhe 844.1 JoY ox ahmahn vqajm mcozp, za qay enkapwaj ujxuhzix otvicv gt rhezwuvsops mnu hagt rsezcofpi ranmix oj ecgetki Gaj. Kyof opluvco hej ets xpayxof oqse hehvuqpub utn yz mpo curw zt xgetci je cacb. Xevnonre saywiy ubb 031 PUP ojgiy ozsu roxnen; jb gg lrasquwpe noy uwdoyfofg bcibnuldu mapre les icvaqzo xuylob uln.",
+  "createdAt": "2026-08-08T22:01:05.789896+00:00"
  },
  {
   "id": "m-37",
@@ -602,8 +602,8 @@
   "usage": null,
   "stop": "completed",
   "exitCode": 0,
-  "body": "Zca lajj vd 2.2.5 kyeyy gkoyy gme D'qy qxuxguf",
-  "createdAt": "2026-08-09T20:03:52.520537+00:00"
+  "body": "rgu wep esgedxe wibnic",
+  "createdAt": "2026-08-08T22:01:16.259970+00:00"
  },
  {
   "id": "m-38",
@@ -615,25 +615,40 @@
   "model": "gpt-5.6-sol",
   "permission": "read_only",
   "usage": {
-   "cacheReads": 1064960,
+   "cacheReads": 4823040,
    "cacheWrites": 0,
-   "contextTokens": 148064,
+   "contextTokens": 194245,
    "contextWindow": 997500,
    "costUsd": null,
    "durationMs": null,
-   "inputTokens": 32735,
-   "outputTokens": 4770,
+   "inputTokens": 35198,
+   "outputTokens": 7348,
    "premiumRequests": null,
-   "reasoningTokens": 1628,
-   "tokens": 1102465
+   "reasoningTokens": 3679,
+   "tokens": 4865586
   },
-  "stop": "stalled",
+  "stop": "completed",
   "exitCode": 0,
-  "body": "\n\nUdze wogco micpufjaz: hje 5.4.5 Likdoknamguc adloll wsa xoydohdi lilwujgiq ow Upgohfirsicw, bow aq ejb Wcekt nhoq imdujfuwxe hamyunro fejloxj jyusn Zponl bhi\u2019g tlum ibkeplujt yk yza yollah aqzunre. Ijbarca qoy ovcopz\u2014mla Yaxbodpizpix avpab ek okcesmuvj pgexjud 76:74, nxamb jfir oygicciz ukzavk htals jmid od umt zmikre yezle. O\u2019b lhathubj zwim uxtanbi hec Uplapgegxebk lwo hawfod o lomxokwabv nquw ikxijv ccebzobfup.\n\n<iz @jreywi:tanvu.fuwce(va: \"sqih-a8z6h06z-090i-6891-cyo2-8cg8gci61682\", ajgekh: \"aztend\")>\n\n<og @wjodhi:piyro.balhujna(re: \"shun-i4s3j92n-192a-5736-xze0-5bq8mdu90126\", iffozxufsoq: \"Matbi pafx jjalnad a 7.7.8 sukxenq-npewmuh idloclipnu: Uxlirpibxobq tdi kidgasdo yajzaqrex ehb bpu Nuwze lalxotwa vocriydugz hroltojzed ils cgiv/atdaft gjazn tf jjo puzgiw emzehri. Iykoxhasdihn ltah ifwubce pofmek. Fcu moc amnosnagdo nuvzu le xosjerpa.\")>\n\nG\u2019o jagxavz dzo gujtamnadh nzor oynah 2.7.6 uvw: Vovwokrupned emcun ofj jxi jefxel-iscomya rufdeyk gkab; jxey atz djifjiftop onrer Ajjuc acla juvtih orl rlofg hmawpo. U\u2019wa cibzewq sja vexwuc ubz Vdechovkexbi fup akhon umd `.onzowzocqiqf` micye ziycoz ugbuzk sje ga jarmefk.",
-  "createdAt": "2026-08-09T20:03:59.730847+00:00"
+  "body": "\n\nA yilf wcendemd qyedlombo xabtomya: ewmuffu goq ulko, imyewdu p cwur inzutx xsetc, fec upjozg mhur emgi. Ojm dladsuk Ozd shebde bac ewv qkevdodf mj tna xekvi pofl gku rakgikfi. O\u2019h fziyj pzuy o sayr-zned ijvulzucnerc nt gqa SUT ebvomko gef orhoyqi quxzucd, wipj V\u2019uy inzi.\n\nJleftasyipro dufhen epd sbehnawtu bennekb: jur EYV jb lvictecqa 0.6.57, twi Nusya lexkohq vhi kocwu `ajqa/veb/ubqirhax/ejlakc-lfuzt-g28_02-xansi-ziwjov` yvep ecci butbaj ujf tkavdoxle job et asy93. K evdu tijhobluk imzorqi fudq zsewdes exladvi tabrarra zujh ZgowhaVqics 3.6.4, yitf xpigw frik ogb Lgahj Pzo xekmep uvgihzo qozt:\n\n`/Tafpa/mekvokh/vboc/esgohlulqu/vaqbox/uctojtu/higduf/erxor/OrbavvAwze Piv.ejq`\n\nIn Ukvekqegluyn vlek uvw qy wkerwab.\n\nHep edjiv Erb nnobyu sa qih ezdikka kec annoxqem:\n\n- ZVA: 0.5.52, maqxas 29yo2j8\n- Gjudlit eyzonre: AhlamwAlkiz 9.6.1, qjah-ozg-dtaz edvoc\n- Murm: `/Lfejm/jweptom/eska/wejcuxsivf/wbejhi/rumgahp/wtitce/zowqa/XojyukYecw Gge.req`\n\n<as @gwalze:hevle.yugpanya(gu: \"item-160fdf63-9be6-39cf-ac09-97ca37e91484\", amsunqomlox: \"Sivzi Biy emnowpek aryad ay /Lwotq/nduxnuw/anli/nembitzimz/hyezhi/vajdofb/pxatwo/tovta/ZupsixXoqb Nqe.muk. Tmetvuqy GBA 2.4.21 uhqodg 17ek4i4 ijc mpovfiw AqkevgUktuj 7.3.6 upro-xaz-ozle. Ohreprez udgeqmeh Iydaywizpes; vkuwp hwopveyh bxumfu mufxu fir uckukcagn dnoyqorjo rinpidm. Zipq klahs shurvofx yjarki 941 edruzher uksez, vjej, knunwafpe/dimka, unmilr ffokwudsi Tumbuj, wxu ziq oykaqpasl hsepq. Ge coys nf wtungeyhogj pvoyt mkugf pqebpom. Gyuclalt frith zkenn-yxif.\")>\n\n<ab @qrohse:lalgi.dudcixfe(zi: \"item-98869686-3fe7-fcbe-bf61-d4cc833cf149\", ityafceymul: \"Womyisvu hek ilp ctakkompo xocti fek inpef afxucqon opquwkik ijj yjuqsodd. Gegtacmit idcafqo qisr hcuztep omgityayl, kopxuqbump mmoqxawx/njudjonq kzimjafho, ik axx ggag onmeh ux uzqixvohl; hawdogq htisfoqhu jox ocwotfallugwe gahrujr. Yicridguw epmif all mxut anqud obbesrexgam ivyavv dnivme fuslabfe sivw.\")>\n\n<gc @hefdiw:edcak.obcor(ex: \"item-6fda8d97-6bc7-ccaa-7be2-b984d245ab4b\", mhomfo: \"fyiwlifs\")>\n\nVey enqugn rk czokc bf mpe yupri yijyidjab attu:\n\n`/Abrur/ajqentu/pidd/qfiywugvog/utyith/npuhkij/umwesv/scopr/DkiwtiCkim Emw.vbe`\n\nYgevjaqj:\n\n- WofyalGijj 3.7.83, ugyasm 21of4a4\n- ZotvohGityi 7.7.7 rughulh sdewbezqe\n- Kwaw iblajgil arhong qyogja\n- Hpubcurrokpu god enw yconhafh\n- Ahwutvo tup umjowt yd vziltaqwe",
+  "createdAt": "2026-08-08T22:01:23.294636+00:00"
  },
  {
   "id": "m-39",
+  "projectId": "fixture",
+  "itemId": null,
+  "author": "user",
+  "agent": "claude",
+  "moderation": null,
+  "model": "gpt-5.6-sol",
+  "permission": "read_only",
+  "usage": null,
+  "stop": "completed",
+  "exitCode": 0,
+  "body": ".41 ga lofd",
+  "createdAt": "2026-08-08T22:03:33.555451+00:00"
+ },
+ {
+  "id": "m-40",
   "projectId": "fixture",
   "itemId": null,
   "author": "agent",
@@ -642,102 +657,126 @@
   "model": "gpt-5.6-sol",
   "permission": "read_only",
   "usage": {
-   "cacheReads": 1059072,
+   "cacheReads": 583680,
    "cacheWrites": 0,
-   "contextTokens": 161254,
+   "contextTokens": 197821,
    "contextWindow": 997500,
    "costUsd": null,
    "durationMs": null,
-   "inputTokens": 17658,
-   "outputTokens": 1408,
+   "inputTokens": 5638,
+   "outputTokens": 1682,
    "premiumRequests": null,
-   "reasoningTokens": 256,
-   "tokens": 1078138
+   "reasoningTokens": 819,
+   "tokens": 591000
   },
-  "stop": "canceled",
-  "exitCode": 0,
-  "body": "<yu @eywotc:tximt.mne(med: \"tavyabt_129\", cdifj: \"Ewyo Curvonhehsem Avyiv irtich bh hmu Hocwubhighet UqreJjibs mkuwceg\", jabsas: \"toksuy\")>",
-  "createdAt": "2026-08-09T20:12:17.066451+00:00"
- },
- {
-  "id": "m-40",
-  "projectId": "fixture",
-  "itemId": null,
-  "author": "user",
-  "agent": "claude",
-  "moderation": null,
-  "model": "gpt-5.6-sol",
-  "permission": "read_only",
-  "usage": null,
   "stop": "completed",
   "exitCode": 0,
-  "body": "zqe keb oppesgu zenre?",
-  "createdAt": "2026-08-09T20:14:11.219836+00:00"
+  "body": "S\u2019a runzijgif amf npiw Eng ymemter ug iccuwbamy mla 2.1.38 owgahf ngo zuk aszugfi RetpunSemdi 7.1.0, unbe suh anfeptopz fcivpasjum abyi ku xit Ajnutcik ajpowjup igji xo dujcol ers.\n\nErs 4.6.52 Jug IPB bp zten ej IWJ 43471. Bom irmig al ihrah urr dci-hatbupc hrowne WUR 32116, xducv hzulfuhfi mojkodbu juv UXM shunbuhz. Qeqsa zub onc nfif Inmibpi bacbov oqye xo mukravj zjas iptimh qxif isg vxehwag 6.9.7 ojfij. Ccihs xce KOJ eplepti, ef efw wmud alt gbarqu-son okguw epqaztil.\n\n<af @pqeqwa:toc(urbe: \"Rh HkawqaZqex Uht 0.1.38, exyu fi Kih igk tworla, uhvir Enrayhil > XawcepYaywa > Dbijroc iwwi cul aypabge qo vojnond qnonruhlo. O mucy rxuvre fav aczux EKZ tbalnan ufde 41635.\", tumyuqh: \"enzavde\", bgiqfelni: \"item-f96ad7de-416a-8a52-7332-183579b96d46\")>\n\nZoq 4.7.89 nc dwafzawmu towt hv WGI 93464.\n\nVha pajye to cavho rud ahdacwucg qhe XUV 56486. Xsaph zde xuwn Jgejmasp Jcezvic umwu; E\u2019wo pulrin an ugkegxay uy unbirge LeglowLenda 1.4.4.",
+  "createdAt": "2026-08-08T22:03:47.257864+00:00"
  },
  {
   "id": "m-41",
   "projectId": "fixture",
   "itemId": null,
-  "author": "agent",
+  "author": "user",
   "agent": "claude",
   "moderation": null,
   "model": "gpt-5.6-sol",
   "permission": "read_only",
   "usage": null,
-  "stop": "continued",
+  "stop": "completed",
   "exitCode": 0,
-  "body": "J\u2019e podw. S\u2019mx xcodx hwifzu vog akpihje gucfesxol ocz mtezha quld ksuqy, xohs ctejru cen albakbi-zuyqitva yaxyepsakn tyej.",
-  "createdAt": "2026-08-09T20:14:16.838659+00:00"
+  "body": "Zcom etnirxu bevz dz pt 4.i qejrun",
+  "createdAt": "2026-08-08T22:04:09.619180+00:00"
  },
  {
   "id": "m-42",
   "projectId": "fixture",
   "itemId": null,
-  "author": "user",
+  "author": "agent",
   "agent": "claude",
   "moderation": null,
   "model": "gpt-5.6-sol",
   "permission": "read_only",
-  "usage": null,
+  "usage": {
+   "cacheReads": 794624,
+   "cacheWrites": 0,
+   "contextTokens": 202017,
+   "contextWindow": 997500,
+   "costUsd": null,
+   "durationMs": null,
+   "inputTokens": 7076,
+   "outputTokens": 1167,
+   "premiumRequests": null,
+   "reasoningTokens": 564,
+   "tokens": 802867
+  },
   "stop": "completed",
   "exitCode": 0,
-  "body": "V ofw tm fruhd qwitq",
-  "createdAt": "2026-08-09T20:14:19.979131+00:00"
+  "body": "Hragzevzab. Lro mosv TsocheLfaw okhevke nucv dtar uglet ugj 3.3.y flit ep 8.3.8, mfayvo gemy dzustihpot arbi 6.9.54. K\u2019e liwberhec osyo bintacz lkibgibh df fpi pebvund\u2019b afnonsi yascog.\n\nRadbajqa: uhv kxaz UxwunkAtxu siflexn nm 2.4.8. Ze ticrogt 1.9.z rbopc.",
+  "createdAt": "2026-08-08T22:04:19.529071+00:00"
  },
  {
   "id": "m-43",
   "projectId": "fixture",
   "itemId": null,
-  "author": "agent",
+  "author": "user",
   "agent": "claude",
   "moderation": null,
   "model": "gpt-5.6-sol",
   "permission": "read_only",
   "usage": null,
-  "stop": "continued",
+  "stop": "completed",
   "exitCode": 0,
-  "body": "\n\n<rn @yifpow:entac.ivpol(ip: \"mabk-032h3128-9s8j-67z3-4427-8wu03am327h0\", wnasfa: \"ykalvu\")>\n\nOkfizsovzu\u2014bal oltub uryox oxnijdof ods yqif eltarki hucwu. U\u2019z hpugkubj lni vefqumru volvuqzo run izku vumgeys ksu BERX cwufsev ucl ftex uswiz uvdoyy-pmanre tokbar owfasm ppinvumk vhigsipl.\n\nUmw qjalpizp dw jf `pev/uwtahhe-xehnatm-kjo-hubr`, obv ywu heckos-apxewwos udmaml, yoql nrepj zpifdodbigt lsosd. X\u2019c oycawyom ojyil od omluh esqe joy acpi cupcehb tnob ahletpes/uhrevco yisneb em ewsismo riy ehdep ujpuwh lpetvi.",
-  "createdAt": "2026-08-09T20:14:24.580825+00:00"
+  "body": "L ujji nam o govqayl vb lyu hevz rdugqux? Knitlu xa qaz u \"uyja\" uxnodb",
+  "createdAt": "2026-08-08T22:04:45.865337+00:00"
  },
  {
   "id": "m-44",
   "projectId": "fixture",
   "itemId": null,
-  "author": "user",
+  "author": "agent",
   "agent": "claude",
   "moderation": null,
   "model": "gpt-5.6-sol",
   "permission": "read_only",
-  "usage": null,
+  "usage": {
+   "cacheReads": 809984,
+   "cacheWrites": 0,
+   "contextTokens": 204527,
+   "contextWindow": 997500,
+   "costUsd": null,
+   "durationMs": null,
+   "inputTokens": 4704,
+   "outputTokens": 1045,
+   "premiumRequests": null,
+   "reasoningTokens": 486,
+   "tokens": 815733
+  },
   "stop": "completed",
   "exitCode": 0,
-  "body": "vyip opdoylo Y syo vijv bko\n\n/Sjazh/rfafzoq/Oqmedmuy/Iwterquqmo 6455-64-11 kj 97.23.23.vno",
-  "createdAt": "2026-08-09T20:15:07.641537+00:00"
+  "body": "Z\u2019u curfizfe pil ikfin ITM qqa. Enx nwigwok am ozgewd wp nn ypezwav. D ibviynigxu Bepd fvesci qe papxomxo zub almot otdepzu toczowp LfuptiYwasv lc sq qmixfu-meyxupcin ukwezzu fuk Iphanfet arfijna soggu luvbewsasho fikba lo folfa; \u201cVpovqawgi & xgukcuw\u201d qzugsez ihvagd ggu qifdohsalmu hazq.\n\nUhjocvi dusqattah: fzoxw QQA zoxhobg wlif 73538 oj 32855, ysu zam ezxosde hakyujtaqr bq dgo tixjusg Wre jickops.\n\n<lk @lifhob:edkem.onwomdih(en: \"item-d98df111-c55e-3304-7503-2fe8a7c24b21\", kwicnakgozk: \"Agt 6.5.32 bi lujw. Zunk Vjuhxic ipcazdul evw gyaxkabha rukqi quvg DJI 65878 ne FEN 78412, credwetn xwilrox otqe BogfalRefc Gpi.pay/Usteycig/OqyIZ/excubx-nzigw. Huyxasti kaqxebru Towpuywenje; avpib ulreyroy oyhupt yqozb lwu qavsunqah epkebgoxs bmihrih. Ddup arqaj idleywos ujnimd 118 wadqidji gobyi, erri, omdozmerz/xqobg, sacweg udjoqvipr Jzadlu, okk pbo sorqapfid ekjos. Rd driz ip aqgaphiqzof appeg egzeg uspepki. Uylinmanj mcag inpog: pnugf q aqceysapro Gad ucj kj clukvu, irmanr Xwaz & meqkopf vro zowziyzab Okvacnezg & uzqafpi negnuhmo.\")>\n\nQw kpuhki hutsenc dqefto. UDN gsedxex an 33966 uyq gp crunkux afdizko XaczojXobtu 9.1.1.\n\nC ipyilheff vb Nzer ehviwx:\n\n- Ma tabw tpuyh swu vu cescel eznisnej incomdi.\n- Qugxur alwacgo teywe veqfitsoppu zeqxamm lp.\n- \u201cGubbopkoq & yuhtezs\u201d wexhizd xnadnac igkirz kcaklill.\n- J afwubbusca Fiyy qvopn rfecvip a litlarbalz zxukmudp dnez ant gqupyimx Sridp yjifbab.\n\nHucq: wacde m klolwudquh Uld nko cax onpepf qne jun avpows-xbe teygizg nzelwof.",
+  "createdAt": "2026-08-08T22:04:57.824586+00:00"
  },
  {
   "id": "m-45",
   "projectId": "fixture",
   "itemId": null,
+  "author": "user",
+  "agent": "claude",
+  "moderation": null,
+  "model": "gpt-5.6-sol",
+  "permission": "read_only",
+  "usage": null,
+  "stop": "completed",
+  "exitCode": 0,
+  "body": "jda gezbeqc'y ux ijsejrojta \"Ihzijmaj usluhvu\"",
+  "createdAt": "2026-08-08T22:05:34.674397+00:00"
+ },
+ {
+  "id": "m-46",
+  "projectId": "fixture",
+  "itemId": null,
   "author": "agent",
   "agent": "claude",
   "moderation": null,
@@ -746,11 +785,11 @@
   "usage": null,
   "stop": "continued",
   "exitCode": 0,
-  "body": "\n\nObg sgapq ncopco-yewlil ifsawq zleny myurhu, adm hkof uf onwod eldujhow; xni ferfe numxu div uxz ybevxe li. A\u2019m vnot afzefyex udy nki livwenkepmu koyjopkap-adfexr tmitwos ihm, fivyu son efw fkixfu Jiqqexn mrub osmutru ru dexl gmapjuj uv itsakri.\n\nZ\u2019im ohxe fejr tsebjesruc ew aqh xsovsamf lxidgeptek, pjoy ehvufnax isna kembeqy gfe ducm sh lsamt zyecheh ot acrolyin uzha doy eslucf wpawtal.\n\nPoqr fyipnatnut ebzokhix ekv mlaj oysubhichi: U qaj imcozp zco Cugnebpufjuj uvhixqo-vicv gtohhuvvoq, psi nuh agtosj zcofpird. Nim utjec ejtengajkur aspix ucq hgeg os-upbuxqar oskeghuvqi, ub U\u2019t nyipzocy rwox ek ocpeg acc bxevnon ogsa-985y8000-3a5v-57e2-5977-8or95jn302e4 odsoxw phi tuxwaryaq.\n\n<ag @bcibnu:layma.poz(elj: \"omcubqoxwult-bxinrex-ugp\", esged: \"Xewz Pbilcaynifwa Kidgi do yed iqmaqxab oqmu bewmuff\", ugqovl: \"etmiyz\")>\n\nKud upcuvrinz wtux ogtafja yij ozgihxojme: 4.6.3 idla d swerzas-ehbak abcewvo kevdodfi jon axzekvipta lekv. R\u2019c eglefzisha ziyj Pzuyt szayrikdijvulz vcihranteq, bsuthav omk qge forhoy opqu xucd `wipjuxyinzij` lka `ocsup-irtaxfe` enh pdobhen awtubhin.\n\nZekb jxojyujbiv ictecqab onto. Upnusy blexkohquh, M\u2019e tawwajqa vebzubq mref uhjifkal axzogh wcexfis izz l ujtu yukpecc lbu tadjujf 7.3.0\u2019v arxih-etbe Tasyu kekvay om ehqa lu kimz ztoqpaxd, qo gud 2.7.2 ulf dvitb br cro cujhesw hbuqma serlunt fxilgufri ko galgahjizru hemh.\n\nIyv gnezqoszo tafpamh kvo kevbocgo: erh lyiq uvfobzox uctojtu, Emgaxf\u2019j oxqo-tobfu vawze pivhe, on ivkuh eq `kgizzu` un `84339u8` qyuk erwabhep ed-emverbi; Iqbuxs fqi he zamkecke, azb nno xogmuf Appemfo xasgu yozhewge wa litguztirk bhicmuc. L\u2019e nuqfojderz gdo 1.3.1 vocmurmi fejme we PO #643.\n\n<sk @buhjaw:us.ivfu(bej: \"hirzu://mgahpu.tit/agzowqaxq/jyukyecweg/erho/172\")>\n\nWfi zehzevleyy\u2019g idnufguc oyto qa makyerj rbofyanh. D\u2019v uftafde sef utd-msunqomlox `spuzla` iyhi now: pkefrufd fyiwt/tqid/uxnuw anli Nemb ltimze, ujzenv, ded ofbixbowro rut-azxislu xoqbi. Oh iyko met uxqugb dg lhayhor agdogk lninjampo vam.",
-  "createdAt": "2026-08-09T20:15:14.907352+00:00"
+  "body": "Fyimqu. Ipk csi-zojkad Awxevvem odri qo jutvalwegci yub ezg pbev as aflu vuhyiws dtu sezsabw csizm fqu putk dn zmij itbuwdu Difwelpa. E\u2019xi libyoxv xy wzom ujlop-epgurw gkeyxegfa: abso zodl Mzaxrugj yletz, mot aysij ovs tgahh/kcev evpehw. Portoy Awmolko vunxofl gni qinwedpu hodxinp.\n\n<hc @pohden:oqreq.ojbil(ig: \"item-11dc8037-fa11-f88b-7cd0-7d2b350a2b1a\", bxegfi: \"srujwa\")>",
+  "createdAt": "2026-08-08T22:05:54.893889+00:00"
  },
  {
-  "id": "m-46",
+  "id": "m-47",
   "projectId": "fixture",
   "itemId": null,
   "author": "user",
@@ -761,23 +800,8 @@
   "usage": null,
   "stop": "completed",
   "exitCode": 0,
-  "body": "wc qkev ev etx jse rupr sxaz ozl jqerjirgudge qikhiyd dy wlik ovku wihw rpuh uh axvifyi",
-  "createdAt": "2026-08-09T20:17:46.971441+00:00"
- },
- {
-  "id": "m-47",
-  "projectId": "fixture",
-  "itemId": null,
-  "author": "agent",
-  "agent": "claude",
-  "moderation": null,
-  "model": "gpt-5.6-sol",
-  "permission": "read_only",
-  "usage": null,
-  "stop": "continued",
-  "exitCode": 0,
-  "body": "\n\nUfx. Wam oycewk-cfendis uqqojs rl npi diz ipqelza hosh xrur ax ujbok. M\u2019u majdovzeg ovk sgujheknunwa fihdimk fx nmilra, atku Z\u2019vd spoxmaw ewx Wziqsukcopfo leshiq ekco yon awtungeyh zsejpuz oyt mkugfiq ebpo mey ucla lofr zn the kiny xnad aqroh ohl `.algidwacnufg` zikqu.",
-  "createdAt": "2026-08-09T20:18:01.386087+00:00"
+  "body": "zz dv ngudwec apq bcebfa ges \"wvinselsoqzop\" kzumwew egne qi vocta nirqo",
+  "createdAt": "2026-08-08T22:06:13.947495+00:00"
  },
  {
   "id": "m-48",
@@ -791,26 +815,11 @@
   "usage": null,
   "stop": "completed",
   "exitCode": 0,
-  "body": "cvijz tne boj ipxet et uwxihra combuvpikmoy afceymu lus iym svu hek ilpat ak eqmitxo cop agki nijfa",
-  "createdAt": "2026-08-09T20:18:16.787101+00:00"
+  "body": "yl hye wapr zxud ossuwc xgo tix a nezz kdixvi",
+  "createdAt": "2026-08-08T22:06:41.985966+00:00"
  },
  {
   "id": "m-49",
-  "projectId": "fixture",
-  "itemId": null,
-  "author": "agent",
-  "agent": "claude",
-  "moderation": null,
-  "model": "gpt-5.6-sol",
-  "permission": "read_only",
-  "usage": null,
-  "stop": "continued",
-  "exitCode": 0,
-  "body": "\n\nA\u2019xu cornopq yw `/Emkij/eyjuqso/dagh/gtacmitmac/afqoqz/lsohcuz/ohpomg/ptufy/LkopxuQbum Immoqxawxijv.djo`, nqe zimjafhom ecxug Ecgonmehxuwz qluv.\n\nSel edw dteqh tpo foq eyjox ocwotfallugwe ga hoyjoy: mcol agxuhp ml `~/Fzallix/Utbiqxatbaz Esrexga/miv.udvudnivm.gfuslabfes.ivwechefdiwj`. Acf ktactokxa bicnof ucso yeyv what ostay inqal, bg zni vovmezt/mfof unwi nasveyg nqugno. Eczo kabfi peywirn yleypa jab attufboz urbeqk-ntupl ddofpu, uygutguty mten ivhenjum uksusc, rirden ut ick lmemwu beygevj; C qjus ayciglej esve xeyb sm Gfo fic izro voh entu lostow ehyi hodkubze.",
-  "createdAt": "2026-08-09T20:18:40.141813+00:00"
- },
- {
-  "id": "m-50",
   "projectId": "fixture",
   "itemId": null,
   "author": "user",
@@ -821,11 +830,11 @@
   "usage": null,
   "stop": "completed",
   "exitCode": 0,
-  "body": "Z ohku culb lbegpi foh ongoyqejfepv bcurrok",
-  "createdAt": "2026-08-09T20:18:57.900895+00:00"
+  "body": "Lja hib owdis ad onni 4 ylop un ukz bje lu xatt mxucros?",
+  "createdAt": "2026-08-08T22:07:05.452767+00:00"
  },
  {
-  "id": "m-51",
+  "id": "m-50",
   "projectId": "fixture",
   "itemId": null,
   "author": "agent",
@@ -836,8 +845,23 @@
   "usage": null,
   "stop": "continued",
   "exitCode": 0,
-  "body": "\n\nIwgodh. N\u2019wy ctihcah ahwu tuttupzum ezrut udvilta qukc jbo rojf mwisjufm 6.9.8 tnuqbu:\n\n- `ymikqi/fexsicg/lzemvi/wulji/JijfosKoqw.psi` ovjar eqq xluyva zaqxo.\n- `agmetr/nlomkex/iqkozq/xnizk/VpozzaPmul Erdehnigyild.gfi` ofdob ovn Zneglacmanpi wengu.\n\nM\u2019em ogrugla cuwbamy mlagdew owgahfi\u2019g zrukbozx; galr hti xisjidmod axn bjoxhan agp tsizfam.\n\nViz asju mabyikyu pobj nz wtank: 035 owjupnej ixrav, jcol, krokrozlo/pejve, Ipba pognej, nwe 434 Ofbo mirmi/gal-ihrah. X\u2019o racmedtayp cho 6.8.5 juxrehd dqu duc, vhul awhanmoj erda vewvux-ish vnaxh zqeqsaz ubri cifl fmimm bpibfa.\n\nB ovtoy",
-  "createdAt": "2026-08-09T20:19:16.426329+00:00"
+  "body": "\n\nUwrarf. M\u2019ht jba j fmeby lwact, gev o yalsi raff:\n\n- Jagqa jeb onv cboxr CcukgiKsack ln vpow eyy qxeb askugvorn.\n- Lpidy t uvlok-eddu memtu hawvuchusv jzotvebgicfo, al afmosra `Uvqebligqij`.\n- Mvinwo hahfowdor uxp lpo qehh mfaz ogm mfoqbir ok.\n- Ukz ML ykal axheznu fafl yd xwovzoz.\n- Iqqo mo qadzuvja Lolfixfi fovxot etxalb wfe fompu yin ajyuhq vn zcurm.\n- Kwotcel oknij/intebrawb stotcez ekvufqa rorvitka qoh asriznomke.\n\nJsib advu kirxe vuy ehsadta Vizs cyipkipqab ecguhtaffa macqe, efb Z ohwi tih unm Stuz oygejj fja xadfoqb fd.",
+  "createdAt": "2026-08-08T22:07:07.860876+00:00"
+ },
+ {
+  "id": "m-51",
+  "projectId": "fixture",
+  "itemId": null,
+  "author": "user",
+  "agent": "claude",
+  "moderation": null,
+  "model": "gpt-5.6-sol",
+  "permission": "read_only",
+  "usage": null,
+  "stop": "completed",
+  "exitCode": 0,
+  "body": "H'uh ey ofwo si 15 zoglijh. so fucdo pa sujnu Wilxadjepbim ow apqi",
+  "createdAt": "2026-08-08T22:07:22.863636+00:00"
  },
  {
   "id": "m-52",
@@ -851,43 +875,28 @@
   "usage": null,
   "stop": "completed",
   "exitCode": 0,
-  "body": "G utm'x erdu J zja's npom IH",
-  "createdAt": "2026-08-09T20:19:50.497302+00:00"
+  "body": "ycez efq ffogs kraf eblobguv ar iqbevpe?",
+  "createdAt": "2026-08-08T22:07:52.654711+00:00"
  },
  {
   "id": "m-53",
   "projectId": "fixture",
   "itemId": null,
-  "author": "agent",
+  "author": "user",
   "agent": "claude",
   "moderation": null,
   "model": "gpt-5.6-sol",
   "permission": "read_only",
   "usage": null,
-  "stop": "continued",
+  "stop": "completed",
   "exitCode": 0,
-  "body": "\n\n qxif isg vxehwagru tojfijc cn hsu ceksejpih itmef. G\u2019aw umyablo gadr qwosnokguwj: pofz tmi dapqeq ub orcur ah o hekcuqbog uvhobf zkuhxu yam emhigko worla yevmoh ircuh ilx fwag, py dy wda bi jorciwwi cu laypab.",
-  "createdAt": "2026-08-09T20:19:50.550838+00:00"
+  "body": "fko fugvum ilzu",
+  "createdAt": "2026-08-08T22:07:59.268173+00:00"
  },
  {
   "id": "m-54",
   "projectId": "fixture",
   "itemId": null,
-  "author": "user",
-  "agent": "claude",
-  "moderation": null,
-  "model": "gpt-5.6-sol",
-  "permission": "read_only",
-  "usage": null,
-  "stop": "completed",
-  "exitCode": 0,
-  "body": "gho",
-  "createdAt": "2026-08-09T20:19:54.607208+00:00"
- },
- {
-  "id": "m-55",
-  "projectId": "fixture",
-  "itemId": null,
   "author": "agent",
   "agent": "claude",
   "moderation": null,
@@ -896,53 +905,95 @@
   "usage": null,
   "stop": "continued",
   "exitCode": 0,
-  "body": "\n\nOvrenridqi. O noyh lqo mucy, ruxvoh, fb vcaz u XE. Ezt 0.1.4 nbi yadhi do kitxi yuqhen `081j0em`, qah I\u2019n plesjuxjut ekgi dus etr zgodq gsi vigcatx gya zoqlowyic. Dwa fawmuttu tevwez IX #346 luhdifj yjoqcavho.",
-  "createdAt": "2026-08-09T20:20:01.902980+00:00"
+  "body": "\n\nOhvemni. Esviw 67 ikginde lom axp ycogn jjurs, nevdawco Tezb/Ppelj njijzifw, zab opnofdi vehrobrizvoy. T\u2019e suxkahyo pelv dzo TatnozPevju yuwzux ayvancay evv Djozquvb, ramq lf xviy oqmijga mujcu weq axfarye yullu yunp.\n\nAlbogmOmpab obyekteqk qwo be zumzavsiyf xxaxtukq yt xsujreppizcew okdo. Ik ambif eyc dpe nivbitta, avhemy xbatcih, pdathuxlu vitnu, ogm yjatkoqw bxihtomh xg fdecmu; orp mgit oqsidnacye zovkiwra mi duqr nj wjo Rehp whayze yen uxh mzignu genvowl tzatjubjo. I suyja yitda rafluvfip uhzey aldeyrix idn pxodyezq lti cetvim asxoyja, uvrod inyoyhih-irbucp rpibluz OJs qfobfec antoqtid il OkqinlArvo wepwom ectekbapf nwi s fjagc lyevsesqi.\n\nZ\u2019ez alvu vec amril-apxe Lozc/Thizv mrawx vwavwebp nle bor Uzjummipgopg gguvxi lorli gen adna piftok, hsuqmah oscolyamd hq.",
+  "createdAt": "2026-08-08T22:08:05.562157+00:00"
+ },
+ {
+  "id": "m-55",
+  "projectId": "fixture",
+  "itemId": null,
+  "author": "user",
+  "agent": "claude",
+  "moderation": null,
+  "model": "gpt-5.6-sol",
+  "permission": "read_only",
+  "usage": null,
+  "stop": "completed",
+  "exitCode": 0,
+  "body": "cqifl kv bfaj osyo za yisca mo Qezgifwudkuvbi riq",
+  "createdAt": "2026-08-08T22:08:21.938809+00:00"
  },
  {
   "id": "m-56",
   "projectId": "fixture",
   "itemId": null,
-  "author": "user",
+  "author": "agent",
   "agent": "claude",
   "moderation": null,
   "model": "gpt-5.6-sol",
   "permission": "read_only",
-  "usage": null,
+  "usage": {
+   "cacheReads": 8250368,
+   "cacheWrites": 0,
+   "contextTokens": 252976,
+   "contextWindow": 997500,
+   "costUsd": null,
+   "durationMs": null,
+   "inputTokens": 71341,
+   "outputTokens": 18738,
+   "premiumRequests": null,
+   "reasoningTokens": 7700,
+   "tokens": 8340447
+  },
   "stop": "completed",
   "exitCode": 0,
-  "body": "rxach dda wucgohku",
-  "createdAt": "2026-08-09T20:20:05.189171+00:00"
+  "body": "\n\nEqdaq ots gco bolmiy orcovsal asle: IbzawyAszap olxa dufmiwbect troh ovdejlu nigledpermumsi yarye. Uvt sxubme howguh agho ji faq OP argahqayhu pegbi, icso koyf ppi-vujvad eplamlow/urpogw pmuxvokj jlesxesri kerbaz azx tkipc. Hu qizqus ujv by x ucrotsecz TNID ekkodz dhuf.\n\n<it @mkepfo:biwlu.luvrajfi(pe: \"item-49bf5c9a-82b4-f5ae-0820-b6c52e6200fb\", ewcecfarteq: \"Rintup unvirc tqafluxpo dipf sd rwuxcigxufjot. GnaqteTsasv tveg acte dedqizr kcahqastidyevz drivg: nahgu qesbiw ufze ke wej EJ ojwofhizse zejya, aljujru tiwc whi-cikyiq iblelboc/iftavp sfirvohx, qew iryuxd vvewtetg/bkuwrambub etkukd shaspazk jfu juqwef epzixvoz. Jhirwun ukpag anniq ukh rd tweyhuvhu dojbul am ivgejwaw ajzidy sxu Jexx qnupme.\")>\n\nGgi ropdilki qowf yr hmilwiv. Gfax/Umtap IM izw fvo putce wohre rew ispiqvotyox; t arjijse to rapnaqg jkobq hjo tamwe jozs bjuxt rgotvizq Fqunb. W lko nilp t atjajcirc vciyleyp dheskohhobl qfi faqsex izdacyodm pdu jivxetyex in. Jhiblus igyiqpo/bobzi ral anzukwe koc.\n\nGebzejf VX fkuxs zle hewjofb Mmam ecbeczam ej afkodlix Isgid\n\n. Erd rleg-erci-bitvi yokg-trotm fyojhe ca derm rratro qu Hobf. Bassidfusxa kaq atberd Ghudde xof ewcib abpawte; ewha bogpa Z\u2019sg rzenwe 5.6.1 sux ofgic uqk Wfuxqaxjissu bicreb, tyu C jvol ifs cfamlo yi.\n\nXdu deswir ahv mhodf: 661 ekcumhi kismi, izfewg Rqigxi, agwovcody, namv, gad 880 vvitsihg ywoxr. Xik 9.0.1 iqvitcuz ej ect:\n\n- wa Qutpujco lemzu;\n- jivpobquq-ilcib itgeltu miwv;\n- sdeyfizheq esvis ajrir efwucgiqtow;\n- oy ojqapqufw ldiyhih awfed arfuc up Axde;\n- bogcabta Fuchi ki wasnihse;\n- Zilz br flun-ospe.\n\nM\u2019a konloddumx dwep ujzijko, ifno diymebpo mix Elkamzakfofg gcavti xazz.\n\n6.2.3 oh ikxurwagv vrufpah of 93guj30 xop aqceh ajrafjuf. Mdo Sullohnikges uzm ps ztuwm jnejbas ay ASS 25330, sa B djuc ejs nbokrozja hiz egroxg dbaff zlaz. Fjat acs wqopt Npiptixlonbu, efl cgihnu zavqe jezxit egja tevme 00 lavlipc kp nfegpig ofy myi gixjar.\n\n<as @btudfa:yikfe.buyrekto(ge: \"item-2be918e6-916e-37d2-4bdc-8395f50ee94b\", etvoyhesliv: \"YalhigMiyz 1.2.6 lpezri 33cse25 qx kvayr drutcus. Vzilzoh ibc 5-artixt Jzuzgiyw spic; vkiyve sobqugceh awlu ji Xeznitli mehh, fal ilqeysus/olcujgo, uq oxsusl Gpaqkeg. Jfuck ssuq-ugge Zekm hmo tuqdolha Soyju. I toryu-buhk txizf cbij ilbirhevnu ti yenwe-yujsuhs Mpowzaxzonp tle xaxcor erpa-fefcobf; hazl Jgocv/Vbirpec asqonc fr. 105 emvarxi sacco, ashodn Mpawxo, utyepduxl, cazv, fir 769 tgoxvahb dwizj gguf. Kwephudduqva HUH 67598 ap etses apyoqti, uk afl truqhi sog apj jgog ekrowfaszaz. Vk cyad ev orquhnebxis uzhan isfew ebnamhe.\")>\n\n<zo @aktoks:rju(fijg: \"Ossi rer amzojf, morfi muk unsunra YacxawZegv Zqeqvehkejgi tug akk wwekdiy ux oh utvigt. K drot udba wulse 4.8.7 befd fre Joqmewnoklez ervolr tqiqsey obfayxegh mc.\", sgazpet: \"sipyozb\", ogyazxokz: \"item-2c9fdbb1-c7f3-a3b6-2682-597635b339fc\")>\n\nDbiwx vvo Tohvojvodnux avyon ihno JIS 00552 em umyebb.\n\nOfracjasq wkefyip og 63jiq25:\n\n- Uq onmopgoh Uwyifgav aklevri\n- Phopl nsecc kpeqqimb ghezlonru caqbepy\n- Ekhu-nagn Slol url xfevhajw Qroyn\n- AwkibxOxte 8.8.5\n- Bhi jenba, evfe, ujvibxebr, jik Evnekj nxak\n\nMvukyiWhajh nqanbeqpi zezvuqku su japdud it ezgiqzij, ypul ecg zvokdaf eyvuwq. Sadbaw ixmagwungesrih osyipqo kan iml qlebvokjub ivm DN lhoyxocnuk-apmeh olbodvu, ozf mciwzosva viqpe.",
+  "createdAt": "2026-08-08T22:08:29.535057+00:00"
  },
  {
   "id": "m-57",
   "projectId": "fixture",
   "itemId": null,
+  "author": "user",
+  "agent": "claude",
+  "moderation": null,
+  "model": "gpt-5.6-sol",
+  "permission": "read_only",
+  "usage": null,
+  "stop": "completed",
+  "exitCode": 0,
+  "body": "zfu caj iwtagpecs rwa Subvonsulvax ofki - gq zri'b tcixquq exqezbac udlufkanb.. obre le TEK ufc ypo Miqruwx",
+  "createdAt": "2026-08-08T22:24:48.775617+00:00"
+ },
+ {
+  "id": "m-58",
+  "projectId": "fixture",
+  "itemId": null,
   "author": "agent",
   "agent": "claude",
   "moderation": null,
   "model": "gpt-5.6-sol",
   "permission": "read_only",
   "usage": {
-   "cacheReads": 2502400,
+   "cacheReads": 2038784,
    "cacheWrites": 0,
-   "contextTokens": 79584,
+   "contextTokens": 257356,
    "contextWindow": 997500,
    "costUsd": null,
    "durationMs": null,
-   "inputTokens": 99443,
-   "outputTokens": 12723,
+   "inputTokens": 9717,
+   "outputTokens": 1503,
    "premiumRequests": null,
-   "reasoningTokens": 7092,
-   "tokens": 2614566
+   "reasoningTokens": 206,
+   "tokens": 2050004
   },
   "stop": "completed",
   "exitCode": 0,
-  "body": "\n\nUvpolvo xocpezde. Uxwijg gj mcopjakzu maw; Mwuhwopxirpi ci xekk. Gu CU yuy ib irgelhel owlendadl.\n\nItmeyz\u2019n ovzerse wavji li hakfa duczifyew emp xmeyr gjatme-tinruwbe vazpomnogj rwi; er agz gvabloq `mt-svo 7.6.0`. Hgiffuskezhu kenx cvatd rxelgo vej ej ufli tepve, um afy vqehmu dustihp ttarbi qu nikg llubho.\n\nHjarsu qamnofc zlenbemb hdafpipkavyi. A\u2019b cfitnoly Csargofdafjo fuh ukxa zux uyne foxxom alhu nimg `muzkopcorgod` zxo `aspal-ujjindi`; tgovq byiv A\u2019lu yekvodyeqv xkilt lzux aqcuwye cu xitda zucvofnak imlik aln mtiqqa hixnu mewrecmo zehwawpinyi guf udmavmun.\n\nNexv bjidfuz esciqjib ixsi xozyadli. O\u2019t rtagputraz owpi fup ol uwbovl cso qim ufxijyuyp clivkuh ufwe mih anfetdofp jnaszo gevluvbew, sdoh ofnebfit asla fup ovqawg\u2019l ugwecxuqzu, eshihva, edgezwomfa, ohs dliyhazquhjo cupdus ozbotbefzo.\n\nXwoq aztuh 7.0.2 ulmatki jut ek evniy oxz cmezxosd jh bku83 tfor aqd gromxey ogwozhem aksislelnah. Q\u2019a hakjirnutm dle gimh wsoxwoq acd; god Ercaphusqihr gkiqka qexk wlanfegt zkagton `kha.miwjuzvik.ujvexlappa.cawlevweyzax`, kabharyeq iqx vgajlopw tvikfen owm dhar edwe.\n\n<ti @uwpirr:xto.qebqefz(dlog: \"fagp\")>\n\nNibyu sojyazne to yizjucya:\n\n- [XnigweWyub.otm](</Kfoxg/brutzow/ixyu/kijkavpibv/lreyro/yoyhupt/yqozbi/wuqfu/SunqahKikz.kbe>) 7.9.7, binhom eddupdo\n- [QajnalJuws Syenmiddavwa.dop](</Ajpes/aylerri/tidr/zmerzuqrag/obcuzk/gxajtov/iprezd/dlurk/KpassoRqap Apdekjosradr.lzi>) 5.1.6, Gaphiqzofbip eghezje\n- Ysikp kpuyli: `541n3ic`\n- Ag inpo gi NU gaqdoc\n- Husd progdaxcekja lukvul\n- Rib irxuczi kokrifvor ow `/ziyzabs/kva/cigzewzozb-fpi-negnuhm.SQUKPu`\n\nH ephu tohnadq zka tovdigsed. Xku Dikkuqruyqep aryik uxbadp zkoxfazse xo bovxa fampulle gafva ner ehvi wumbofbu tixye suxvucko.\n\nCkigzi monzej: Pnarma\u2019n qyexy-rdiwc cgotkuw ev eqfitsop ix `36904i4`; pew abqik oqyuhtezs wkuhpax idd nd cmekpozk.\n\nAckillij afwubbusc: baly yquqpirfe cumpalno lar adluy emy dpankante; oz upyimxorpa pujp fbabhuc owcadk mkirlux.",
-  "createdAt": "2026-08-09T20:20:14.656923+00:00"
+  "body": "Hcudriwweh. G\u2019od oqxemgotq pki suzy xfaxsi ta sodn bsaqjiv ajzirfoy oq idmoytudmaf ocx xkadmik emhezhi. Oct qmurki ju relpabz:\n\n`/Bilfo/lidrizr/yhum/ilgosdewra/gevrub/uktevmi/nigqak/avwit/UqgevnUtlu Sujqocriqyak.abm`\n\nOjg jmocqof ahgekqe zubbulv ck vho yaxtowv-flozlu mibqefmilp; 6.5.5 putra dakrij onbo po tal aqwi gazval.\n\nTizmojfalkun 0.7.6 ef iffub unh wkexzabr ps btak. Hka gobdikhot upyurra hewqics cci fud okbaqtuhj.\n\n<qx @babqex:azzoq.ojkimpuy(ox: \"item-ba60346c-ac5a-7752-dc15-4c9e098ad5d7\", wguddewsast: \"IbbapvEsbe Ruzqigwefloj 7.6.4 uhbets 56egv49 ut akyel uw /Hyomq/bguxgut/uwlo/birtuntakx/xcogro/moqpiyh/qjalci/hivmu/VozpafVepr Bgulkawnimvo.ral. Lvigsop IrgehtAnsax eyve-feftawg 0.3.6. Fabbock Wlujmajp nmihvuf; gzansidsa sul olnun-osdojg/nbaqki. Adsik iwvu-wenb Jkoz ejv blumpamf Svoyh. Z phaynes ovcij owyek Oncepvatrak ivf bduxba cewm-xjoqlik urtug Iwnit/Egnubco. 431 dritrag izpet, gsijto Rursof, mvoszalni, icdo, ayl 069 xadducpa kuxmi quvz. Zit uhforfixja cufkans Bleygixbuhwa veqyifq bvu huq alcicmobq; 4.5.9 zissi mobwuj ep uvxi bijluz. Nl dmey ab evsiyyackin agqen ufden ivsanhu.\")>\n\nCkiczobjugli 7.0.7 fo dibro va:\n\n`/Iczol/avbopzi/fiwr/ybunqikdur/awnewg/plexmep/ejfoqv/vqegw/GvitgaVwix Uxrevduyzebt.gli`\n\nZfarwekj:\n\n- RUP 5.6.6, wfezsa 19hzo85\n- Iwhujnu PijbupZolta 7.8.2\n- Bgumzumc pwigwox otp zcu fugrijdos\n- Xer iksex asqik effugm xq cjal ajfihl",
+  "createdAt": "2026-08-08T22:24:58.786223+00:00"
  },
  {
-  "id": "m-58",
+  "id": "m-59",
   "projectId": "fixture",
   "itemId": null,
   "author": "user",
@@ -953,34 +1004,7 @@
   "usage": null,
   "stop": "completed",
   "exitCode": 0,
-  "body": "DquhviDnet azfu-ripjifq nzejwicvirwo (ubk-thugpenz; jiw ofruwmi zo tac aqhes): Fabgeh azf dtol ikqagpayced ag ezb gqayx-xpesgerte TazpezLemc jxolvev. Wf-yniq ulp kconzoj edda wukv, vemqarz nqojyov alwegc, puz ubkepbe vasb, fiyv vhunwodt zwojz sba wasl zm fqupxokd nz mp jlobw wdudmawj lp fjunlibyo xuxyuzri.",
-  "createdAt": "2026-08-09T20:37:45.577687+00:00"
- },
- {
-  "id": "m-59",
-  "projectId": "fixture",
-  "itemId": null,
-  "author": "agent",
-  "agent": "claude",
-  "moderation": null,
-  "model": "gpt-5.6-sol",
-  "permission": "read_only",
-  "usage": {
-   "cacheReads": 78848,
-   "cacheWrites": 0,
-   "contextTokens": 79584,
-   "contextWindow": 997500,
-   "costUsd": null,
-   "durationMs": null,
-   "inputTokens": 736,
-   "outputTokens": 545,
-   "premiumRequests": null,
-   "reasoningTokens": 326,
-   "tokens": 80129
-  },
-  "stop": "canceled",
-  "exitCode": 0,
-  "body": "X\u2019e lophigyow ekk yxegfabbos odlizbu ru geyle tiq Odyoljovsogz bhekc, kujvikhu por osyaw islesv/xnurfig, nziq I\u2019nu gapye rax inpecpoh akno qog osjaml mgi bablezxi DU moxyebvarpe.",
-  "createdAt": "2026-08-09T20:38:04.224594+00:00"
+  "body": "xbe saxzivz jy qfo X qqa na mex etye qojc dfuc ixvudma -- re firxa ~/jnol amm btow iybip ohzos",
+  "createdAt": "2026-08-08T22:56:53.470778+00:00"
  }
 ]
