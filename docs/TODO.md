@@ -96,6 +96,73 @@ Items 1 to 6 are independent of each other and of the layout cache.
 The full DOM-side breakdown, with per-item verification steps and sizes, is
 [TODO-dom-related-work.md](TODO-dom-related-work.md).
 
+## For the next micro release
+
+- **The app burns ~76% CPU while completely idle.** Measured on 0.5.35, PID 6443,
+  four minutes after launch with nobody typing and the pointer still: `fps=30.7`,
+  `frames=488`, and in that window `poll_hook` 1,305 calls / 1,441ms, `timers`
+  279 calls, and **`dom:attr=` 3,698 writes**, roughly 230 attribute writes a
+  second with no input. An earlier instance held 74.8% for four hours, so it
+  reproduces immediately and is not a startup effect.
+
+  **It is not the engine.** `resolve` is 2.81ms mean and `layout:flush_from_script`
+  fired 3 times. The taffy cache is working. Something in the frontend writes
+  attributes continuously, each write dirties layout and asks for a frame, and
+  30fps is exactly `ANIMATION_TARGET_FPS` — the app is pinned to its animation
+  ceiling by a loop with no animation in it.
+
+  Unverified candidates, in order of suspicion: `followTail` in
+  `TranscriptPane.tsx:363`, which writes `scroller.scrollTop` and could be
+  re-triggered by the scroll event that write emits; and whatever drives
+  `poll_hook`. `useNow` (`workspace.tsx:2676`) ticks once a second and cannot
+  account for 230 writes a second on its own. **Get a trace before choosing.**
+
+- **Text spills past its container in the transcript.** Seen in a screenshot on a
+  real session. **Not reproducible synthetically**, and two mechanisms were
+  tested and refuted: the engine wraps `overflow-wrap: anywhere` prose correctly
+  inside a fixed-width box, and a flex *column* child is not forced wider by
+  unbroken text, because `min-width: auto` binds the main axis, which for a
+  column is height. Both measured, neither is the cause.
+
+  A three-element fixture cannot express a bug about position relative to other
+  elements. Reproduce against the real document instead.
+
+## Two benchmarks to build, from real shape
+
+The owner's design: one for the project chat, one for settings, with the text
+anonymized to gibberish preserving **length and shape**. Captured from the live
+0.5.35 instance so the fixtures have a target to hit:
+
+| surface | nodes | role histogram |
+| --- | --- | --- |
+| project chat | 4,350 | generic 3,119, button 528, presentation 385, option 158 |
+| settings | 4,506 | generic 3,256, button 534, presentation 389, option 158 |
+
+`agency-tools` (formerly and still referred to as `wt-tools`) reads the store
+read-only and is safe while the GUI is open: `list-messages --bodies` gives the
+length distribution the gibberish should match.
+
+**Do not capture a baseline until the idle CPU loop above is fixed**, or the
+benchmark bakes a 30fps idle spin into its own numbers.
+
+## Recorded bugs, not yet investigated
+
+- **Transcript text runs under the turn header.** Seen on 0.5.34, 2026-08-11: the first
+  lines of a message render beneath the sticky `Turn N · tokens · cost` pill instead of
+  clearing it, so they are unreadable. The transcript carries `pt-14`
+  ([TranscriptPane.tsx:565](../apps/gui/frontend/src/features/project/TranscriptPane.tsx)),
+  which is presumably meant to reserve that space, so the question is whether the header
+  is taller than the reserve or is positioned outside the flow.
+
+  A second artefact in the same screenshot: a lighter vertical band down the right of the
+  message bubble, roughly the width of a scrollbar gutter. Whether the two share a cause
+  is unknown.
+
+  **Observed in a screenshot only.** Nothing here has been measured against the live box
+  tree, and a screenshot cannot tell a layout fault from a paint fault. Read the geometry
+  with `blitz-bench layout` before designing anything, or this becomes another session
+  spent on a plausible mechanism the tests then refute.
+
 ## Open research
 
 Questions that are not yet decisions. Each has a document arguing a position; none has a
@@ -253,6 +320,66 @@ the element's computed height against what `resize()` wrote, not to theorise fur
 | [TODO-dom-related-work.md](TODO-dom-related-work.md) | the DOM plan in full |
 | [allocations-plan.md](allocations-plan.md) | the pre-existing allocation workstream plan |
 | [blitz-performance-architecture.md](blitz-performance-architecture.md) | the design thesis all of this is tested against |
+| [concurrency-todo.md](concurrency-todo.md) | what runs on the window thread, ours against Chromium, Gecko, Stylo and fastrender |
 
 Chuzz has a parallel set at `chuzz/docs/`, including its own `TODO.md`. Items marked ENGINE
 in either repository need landing in both trees, or the trees need converging first.
+
+## Concurrency, added 2026-08-12
+
+Source review, not measurement. Full reasoning, the ours-against-theirs comparison with
+line numbers, and the per-item verification steps are in
+[concurrency-todo.md](concurrency-todo.md). Read it before acting on any line below: three
+of these are one-line changes whose *measurement* has an ordering constraint, and one is a
+research item that must start with a count rather than a fix.
+
+The finding behind all of it: with Blitz in process the window thread owns OS events, Boa,
+style, layout, paint, `present` **and** every non-async Tauri command. Under WebKit those
+lived in another process, so habits carried over from that build are mispriced.
+
+| # | Item | Gated on | Detail |
+|---|---|---|---|
+| 13 | **Count how often `resolve.rs:663` clears the whole document's taffy cache.** It fires when any inline layout is reconstructed, which reading the mutation paths suggests is every streaming token and every tab switch. If so it outranks everything else here, and the measured "0.27ms per keystroke" describes only resolves that do not reconstruct. | none | [concurrency-todo.md](concurrency-todo.md) B1 |
+| 14 | **Set `BLITZ_PRESENT_MODE=mailbox`.** `AutoVsync` is FIFO and its `present` parks the window thread until vblank, so a 3ms frame still costs a refresh interval and input slips two frames. The renderer's own source says so; nothing sets it. **This blocks the measurement of 15, 16 and 17**, because under FIFO a main-thread saving does not show up in frame time. | none | [concurrency-todo.md](concurrency-todo.md) A1 |
+| 15 | **Pass Stylo a thread pool** (`main.rs:95`, `StyleThreading::Parallel`). We link Firefox's parallel style traversal and run it sequentially, because `DocumentConfig` defaults to `Sequential` and its own doc comment says the opposite. The multi-document hazard the comment warns about does not apply: one document, no iframes, one resolving thread. | 14 | [concurrency-todo.md](concurrency-todo.md) A2 |
+| 16 | **Enable `blitz-dom/parallel-construct`.** The rayon fan-out over deferred inline construction, which is the parley shaping a tab switch is mostly made of, is written and switched off here while upstream's own `apps/browser` and `apps/readme` enable it. Measure RSS in the same run: it clones a `FontContext` per worker, and item 3 is open. | 14 | [concurrency-todo.md](concurrency-todo.md) A3 |
+| 17 | **Move the heavy read-only Tauri commands off the window thread** with `#[tauri::command(async)]`. 34 of 97 commands are non-async and therefore execute between two frames of the UI they serve, including `list_messages`, `list_task_log` and a filesystem walk in `list_table_sizes`. Audit call-order dependence first; leave the cheap ones and the writers sync. | none, but audit before edit | [concurrency-todo.md](concurrency-todo.md) C1, C2 |
+| 18 | **Decide whether the renderer moves to its own thread**, fastrender's model: UI thread does OS events and message passing, renderer worker does the pipeline. Needs a `Send` audit and interacts with the main-thread id checks in `tauri-runtime-blitz`. Compositor-style scroll is the item after it and composes with item 12. | 14, 17 measured | [concurrency-todo.md](concurrency-todo.md) D1, D2 |
+
+**Not on the list, with the reason:** parallel layout (no engine worth copying does it, and
+our cost is cache behaviour, which is item 7); moving DOM teardown to a worker (Boa and
+`blitz-dom` are deliberately single-threaded, so there is nothing separable to hand over);
+anything from fastrender's multiprocess design (unimplemented there).
+
+## From the Genet review, added 2026-08-12
+
+Source reading, not measurement. [genet-review.md](genet-review.md) carries the evidence,
+the dependency audit and the line numbers; each doc named below has a dated addendum at its
+bottom with the detail. Genet is a Servo fork on our exact stack (Stylo, Taffy, parley,
+vello), so where it disagrees with us that is evidence rather than opinion.
+
+**Two items above are amended rather than added to.** Item 16 is no longer a one-line
+feature flip, and item 12 gains a prerequisite.
+
+| # | Item | Gated on | Detail |
+|---|---|---|---|
+| 19 | **Amends item 16.** Port the four parts of Genet's shaping pre-pass, not just the rayon call: split width-independent shaping from line breaking; add a threshold (theirs is 24 leaves, and our whole document is the chrome UI their comment says to keep serial); **skip `display: none` leaves**, which is most of what a tab switch reconstructs given nine retained tabs and may be worth more than the parallelism; add a `GENET_SHAPE_SERIAL`-style A/B switch. Their `map_init` also softens item 16's memory caveat: the font-context clone is per worker, not per item, and parley's `Collection` is shared. | 14 | [concurrency-todo.md](concurrency-todo.md) addendum, [genet-review.md](genet-review.md) §1 |
+| 20 | **A paint-list IR between layout and the renderer.** Genet emits a `GenetPaintList` and lowers it to a scene in a separate crate, GPU-free. We paint straight from the DOM into a vello `Scene` inside `View::redraw`, so there is no value to diff, send or test. **This is the missing prerequisite under three separate workstreams**: item 12's stages 1 and 2, concurrency item 18's renderer thread, and the "Stage rendering and carry change metadata forward" decision that has sat unbuilt in the architecture doc. Sequence it before item 12 rather than beside it. | 13, and a decision on IR shape | [partial-paint.md](partial-paint.md) addendum, [blitz-performance-architecture.md](blitz-performance-architecture.md) addendum |
+| 21 | **Research: a script-engine seam, keeping Boa behind it.** Genet runs Boa, Nova and Piccolo through one `ScriptEngine` trait, with `Budget`/`PumpOutcome`/`eval_bounded`/`pump` making script cooperatively interruptible. That is also the yield point concurrency section 2.8 says we lack. **Not free**: they carry forks of both Boa and Nova to get weak reflector references, because engines disagree about GC handles. Build it only if a second engine is actually wanted. | none | [js-engine-big-problem.md](js-engine-big-problem.md) addendum |
+| 22 | **Build-graph witnesses in CI.** The one finding with no home in this doc set. We have hit "the build graph is not what we believed" four times and recorded each separately: `blitz-dom/incremental` missing and costing a measured 13x, `log-phase-times` shipping in release while being used to measure it, `ps-anyrender-vello` reaching the app through `tauri-runtime-blitz` rather than where it was looked for, and Genet's own fontconfig failure from the outside. Genet asserts its architecture mechanically instead: a dependency-cone check that fails CI if a crate gains a forbidden dep, plus `cargo check -p <crate> --target wasm32-unknown-unknown` as a standing no-native-deps proof. **Needs a home before it needs an implementation**: either a short `docs/build-graph-witnesses.md` or a rule in `AGENTS.md` under Verification, which is the owner's call. | none | [genet-review.md](genet-review.md) §4 and "Where this leaves a gap" |
+
+**Recorded, not actioned:** Genet vendors Taffy `=0.12.1` with three patches (float slot
+width-fit, a float exclusion-band accessor, flex `order`) that touch no file `ps-taffy`
+touches. Worth reading before either fork drifts, and before `float_layout` ever becomes
+ours. Not a reason to bump; their pin is 0.12.1 and item 7's A/B against 0.13.0 is
+unaffected. See the [layout-caching-prior-art.md](layout-caching-prior-art.md) addendum.
+
+**Negative result, recorded so it is not rediscovered:** Genet has not enabled Stylo's
+parallel traversal either (`cascade.rs:374`, "Sequential (no rayon pool)"). Item 15 is
+unexploited in both trees on the same stack. That is a reason to try it and a reason to
+stop calling it a known win.
+
+**Do not depend on Genet.** One author, 0 stars, 21,000-line layout engine against a moving
+WPT target, and `cargo check --workspace` has failed on every run since 2026-08-09 because
+the inherited Servo islands still pull HarfBuzz, FreeType, fontconfig and GStreamer. Pelt's
+own closure is clean apart from `ring`. Read it for designs.

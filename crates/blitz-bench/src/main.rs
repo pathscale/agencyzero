@@ -41,6 +41,7 @@ usage: blitz-bench <mode> [args]
   spill [h|v] [tolerance]     boxes that stick out of their container, worst first
   watch [seconds]             stream metrics/console/runtimeErrors (default 20)
   scroll [ticks] [delta] [over]  wheel events over a named node (default 120 -80 Conversation)
+  drag [name-substr] [dy] [n]    scroll a named node's container directly, n times
   type [count] [name-substr]  drive real keystrokes into a text field (default 20)
   key <name> [count] [over]   pageup/pagedown/home/end/up/down into a named scroller
   reveal <name-substr>        scroll a named node into view, reporting its y before/after
@@ -319,6 +320,37 @@ async fn spill(client: &mut Client, axis: &str, tolerance: f64) -> Result<()> {
             })
             .collect();
         out.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
+
+        // Is the transcript actually sitting on its tail? The complaint
+        // "dialogs do not push the chat up" is this number: the gap between the
+        // bottom of the last thing in the pane and the bottom of the pane. A
+        // pinned transcript ends flush; anything else means the newest message
+        // is cut off under the chrome below.
+        let pane_bottom = pane_box[1] + pane_box[3];
+        let deepest = snapshot
+            .nodes
+            .iter()
+            .filter_map(|node| node.bounds.map(|b| (node, b)))
+            .filter(|(node, b)| node.id != pane.id && b[2] > 0.0 && b[3] > 0.0)
+            .filter(|(node, _)| {
+                let mut id = node.parent;
+                for _ in 0..64 {
+                    match id {
+                        Some(current) if current == pane.id => return true,
+                        Some(current) => id = by_id.get(&current).and_then(|n| n.parent),
+                        None => return false,
+                    }
+                }
+                false
+            })
+            .map(|(_, b)| b[1] + b[3])
+            .fold(f64::NEG_INFINITY, f64::max);
+        if deepest.is_finite() {
+            println!(
+                "tail: last content ends at {deepest:.1}, pane ends at {pane_bottom:.1}, gap {:.1}",
+                pane_bottom - deepest
+            );
+        }
         println!(
             "\ntranscript pane [{:.0},{:.0} {:.0}x{:.0}], right edge {right:.0}",
             pane_box[0], pane_box[1], pane_box[2], pane_box[3]
@@ -405,6 +437,27 @@ async fn nodes(client: &mut Client) -> Result<usize> {
 /// at all and read as "the bug does not reproduce", when the transcript had
 /// never been scrolled.
 async fn hover_over(client: &mut Client, want: &str) -> Result<bool> {
+    // "x,y" targets a point directly. A scroll container often has no
+    // accessible name, so naming is not always enough to put the pointer inside
+    // the thing you mean to scroll: aiming at "Settings" found a button in the
+    // sidebar and every wheel event went there.
+    if let Some((x, y)) = want.split_once(',') {
+        if let (Ok(x), Ok(y)) = (x.trim().parse::<f64>(), y.trim().parse::<f64>()) {
+            client
+                .agent(&AgentControlRequest::Act(AgentAction::Input(
+                    InputCommand::Pointer {
+                        phase: PointerPhase::Move,
+                        x,
+                        y,
+                        button: 0,
+                        modifiers: Modifiers::default(),
+                    },
+                )))
+                .await?;
+            println!("pointer at {x:.0},{y:.0}");
+            return Ok(true);
+        }
+    }
     let (snapshot, _) = inspect(client).await?;
     let Some(node) = snapshot
         .nodes
@@ -836,6 +889,42 @@ async fn main() -> Result<()> {
             let want = args.get(2).map(String::as_str).unwrap_or("");
             nodes(&mut client).await?;
             type_keys(&mut client, count, want).await?;
+        }
+        // Wheel events go to whatever the document last saw hovered, which an
+        // injected pointer move does not reliably set, so they scroll nothing.
+        // This asks the node's own scroll container to move, which is what
+        // `scroll` should have been able to do all along.
+        "drag" => {
+            let want = args.get(1).map(String::as_str).unwrap_or("Conversation");
+            let dy: f64 = args.get(2).and_then(|v| v.parse().ok()).unwrap_or(-400.0);
+            let times: usize = args.get(3).and_then(|v| v.parse().ok()).unwrap_or(1);
+            let (snapshot, _) = inspect(&mut client).await?;
+            let Some(target) = snapshot
+                .nodes
+                .iter()
+                .filter(|node| node.visible && node.name.contains(want))
+                .filter_map(|node| node.bounds.map(|b| (node, b)))
+                .max_by(|a, b| {
+                    (a.1[2] * a.1[3])
+                        .partial_cmp(&(b.1[2] * b.1[3]))
+                        .unwrap_or(std::cmp::Ordering::Equal)
+                })
+                .map(|(node, _)| node.id)
+            else {
+                bail!("no visible node named {want:?}");
+            };
+            println!("scrolling node {target} by {dy} x{times}");
+            for _ in 0..times {
+                client
+                    .agent(&AgentControlRequest::Act(AgentAction::ScrollBy {
+                        node_id: target,
+                        delta_x: 0.0,
+                        delta_y: dy,
+                    }))
+                    .await?;
+                sleep_pace().await;
+            }
+            tokio::time::sleep(Duration::from_millis(300)).await;
         }
         "scroll" => {
             let ticks: usize = args.get(1).and_then(|v| v.parse().ok()).unwrap_or(120);

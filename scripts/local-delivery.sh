@@ -154,6 +154,20 @@ case "$mode" in
       cargo build --release --features blitz-inspector -p az-gui
     )
     cp "$repo_root/target/release/az-gui" "$bundle/Contents/MacOS/az-gui"
+    # Carry the version across too.
+    #
+    # `Info.plist` is written by the bundler, which `quick` does not run, so the
+    # plist keeps whatever version the last *full* build had. The Settings pane
+    # reads `az_core::VERSION` and shows the truth, while Finder, `mdls` and
+    # anything else reading the bundle show a version one or more bumps behind.
+    # Two answers to "which build is this", disagreeing, is worse than one slow
+    # build: same failure as the mtime below.
+    version=$(awk -F'"' '/^version = "/ {print $2; exit}' "$repo_root/Cargo.toml")
+    if [ -n "$version" ]; then
+      plutil -replace CFBundleShortVersionString -string "$version" "$bundle/Contents/Info.plist" || true
+      plutil -replace CFBundleVersion -string "$version" "$bundle/Contents/Info.plist" || true
+      echo "==> version $version"
+    fi
     # Replacing a binary invalidates the bundle signature, and macOS then
     # refuses to launch it at all. Ad-hoc again, as the bundle already was.
     codesign --force --sign - --options runtime "$bundle" >/dev/null 2>&1

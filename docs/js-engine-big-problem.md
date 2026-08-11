@@ -404,3 +404,39 @@ not-for-production line; its cons-string design is correct and the project is ac
   churn but not the parse.
 - [TODO-dom-related-work.md](TODO-dom-related-work.md), item 8, which this document is the
   detail behind.
+
+## Addendum, 2026-08-12: a third option this document did not consider
+
+From the Genet review ([genet-review.md](genet-review.md)), a Servo fork on our stack that
+removed SpiderMonkey. Source reading, not measurement.
+
+The decision above stands: **do not switch engines for the quadratic.** Steps 1 to 3
+remove more cost for a fraction of the work, and that arithmetic is unchanged.
+
+What Genet adds is an option framed neither as "keep Boa" nor "switch to Brimstone":
+**put a seam in and keep Boa behind it.** `components/script-engine-api/lib.rs` is one
+trait (`ScriptEngine`) with three backends in tree, `script-engine-boa`,
+`script-engine-nova` and `script-engine-piccolo`. The engine choice stops being a rewrite
+and becomes a type parameter.
+
+That changes the shape of the cost this document prices. The 6,659 lines of `blitz-script`
+written against Boa's API is the number that makes an engine swap unaffordable. A seam
+does not make that number smaller, but it converts it from a cost paid on the day you
+switch into one paid once, in advance, whether or not you ever switch.
+
+**The seam is not free, and their manifest shows the price.** They carry a fork of Boa
+(`mark-ik/boa`, `genet` branch, adding `JsObject::downgrade()` and `WeakJsObject`) and a
+fork of Nova (`merely-made/vano`, `genet-embedder` branch), both to get weak reflector
+references. Engines do not agree about GC handle discipline, which is exactly the concern
+this document raises about Brimstone's compacting collector, so a seam over two engines is
+a seam plus two forks. That is the honest price, and it argues for building the seam only
+if a second engine is actually wanted.
+
+Two smaller things from the same file are useful regardless of the seam:
+
+- `Budget` (`:51`), `PumpOutcome` (`:61`), `eval_bounded` (`:136`) and `pump(budget)`
+  (`:188`) make script execution cooperatively interruptible.
+  [concurrency-todo.md](concurrency-todo.md) section 2.8 records that we have no yield
+  point anywhere in the pipeline, and this is what one looks like as an API.
+- `drain_dead_reflectors` and `force_gc` on the same trait are the hooks that would let an
+  embedder observe what Boa's collector is doing, which today we cannot see at all.

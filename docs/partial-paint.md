@@ -293,3 +293,39 @@ not add a retaining cache on top of an unattributed number: attribute it first, 
   one-line changes that belong before stage 0, and the memory constraint on stage 4.
 - [driving-the-app.md](driving-the-app.md) for how to run the diagnostics build that
   stage 0 needs.
+
+## Addendum, 2026-08-12: Genet has the IR this document assumes
+
+From [genet-review.md](genet-review.md). Source reading, not measurement.
+
+Every stage above needs something to attach damage to, and this document has been quiet
+about what that is because today there is nothing: `View::redraw` calls
+`blitz-paint::paint_scene`, which walks the DOM and writes into a vello `Scene` in one
+pass. There is no intermediate value, so "cull the emit to damage" (stage 2) means
+threading damage through a tree walk rather than filtering a list.
+
+Genet, on the same renderer family, has the intermediate value. `genet-layout` emits a
+`GenetPaintList` through `paint_list_api`, and `paint_list_render` lowers `PaintCmd` into
+a netrender scene. Both of those crates live in a **separate repository** from the engine,
+deliberately, so the contract stays engine-neutral, and the contract is GPU-free.
+
+Why that belongs in this document rather than only in the concurrency one:
+
+- **Stage 1 becomes a diff instead of a bookkeeping exercise.** Damage accumulated as
+  flags on nodes has to be kept correct against every mutation path, which is the trap
+  named at the top of "Traps, named in advance". A paint list can be compared against last
+  frame's, which is WebRender's bet, recorded above as the design worth reading.
+- **Stage 2 becomes a filter over a `Vec`**, which is testable without a window.
+- **Stage 0 gets cheaper to measure**, because a paint list can be counted, sized and
+  diffed off-GPU, where today the only instrument is `layers_by_site` on the frame line.
+
+It is also not a new decision.
+[blitz-performance-architecture.md](blitz-performance-architecture.md), "Stage rendering
+and carry change metadata forward", already says to "extract only visible, paint-dirty
+nodes into renderer-owned frame data". Genet is that decision implemented by someone else
+on our stack. The novelty is only the evidence that it is buildable here.
+
+**What this does not settle:** whether the IR should be a flat command list, WebRender's
+tiled picture cache, or GPUI's quads. That question is still open above, and a paint list
+is compatible with all three. It should be sequenced before stage 1 rather than treated as
+an alternative to it.

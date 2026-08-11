@@ -99,6 +99,27 @@ const TRANSCRIPT_PAGE_SIZE = 12;
  * pages is roughly four screenfuls, which is as far as anyone reads in one
  * movement before they start scrolling again.
  */
+/*
+ * Anything below the transcript that changes height, announced.
+ *
+ * The transcript is a flex child above a footer that grows and shrinks: PR
+ * chips, a queued compaction, held prompts, the cost warning. When the footer
+ * grows the scroller gets shorter, and a pinned transcript has to be put back
+ * on the tail or the newest message is left half-cut under the chrome, which is
+ * exactly what the owner sees as "dialogs are not pushing the chat up".
+ *
+ * A `ResizeObserver` would be the natural way to notice, and this file already
+ * asks for one. **Blitz implements neither `ResizeObserver` nor
+ * `MutationObserver`**, and both are behind `typeof … !== "undefined"` guards,
+ * so both paths have been dead the whole time and failed silently. Until the
+ * engine grows them, the chrome says so explicitly.
+ */
+const [chromeRevision, bumpChromeRevision] = createSignal(0);
+
+export function noteTranscriptChromeChanged(): void {
+  bumpChromeRevision((value) => value + 1);
+}
+
 export const TRANSCRIPT_MAX_ENTRIES = TRANSCRIPT_PAGE_SIZE * 4;
 
 /** One row of the transcript: a message, or an answered question above it. */
@@ -415,6 +436,13 @@ export function TranscriptPane(props: {
         subtree: true,
       });
     }
+    followTail();
+  });
+  // The footer changed height, so the tail moved. `untrack` inside `followTail`
+  // keeps this from subscribing to `pinned`: a reader who scrolled up must not
+  // be yanked back by a PR chip arriving.
+  createEffect(() => {
+    chromeRevision();
     followTail();
   });
   onCleanup(() => {
