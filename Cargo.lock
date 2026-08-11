@@ -72,7 +72,7 @@ dependencies = [
 
 [[package]]
 name = "agency-tools"
-version = "0.5.29"
+version = "0.5.31"
 dependencies = [
  "derive_more 2.1.1",
  "dirs",
@@ -364,11 +364,11 @@ checksum = "f2032f911046de80f0a198e0901378627c33f59ea0ac00e363d481118bd70a53"
 
 [[package]]
 name = "az-core"
-version = "0.5.29"
+version = "0.5.31"
 
 [[package]]
 name = "az-gui"
-version = "0.5.29"
+version = "0.5.31"
 dependencies = [
  "agency-proxy-client",
  "agency-proxy-protocol",
@@ -407,7 +407,7 @@ dependencies = [
 
 [[package]]
 name = "az-mcp-proxy"
-version = "0.5.29"
+version = "0.5.31"
 dependencies = [
  "az-core",
 ]
@@ -492,7 +492,7 @@ dependencies = [
 
 [[package]]
 name = "blitz-bench"
-version = "0.5.29"
+version = "0.5.31"
 dependencies = [
  "blitz-control-protocol",
  "endpoint-libs",
@@ -2604,12 +2604,6 @@ checksum = "fdf242682df893b86f33a73828fb09ca4b2d3bb6cc95249707fc684d27484b91"
 dependencies = [
  "bitflags 2.13.1",
 ]
-
-[[package]]
-name = "grid"
-version = "1.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b40ca9252762c466af32d0b1002e91e4e1bc5398f77455e55474deb466355ff5"
 
 [[package]]
 name = "gtk"
@@ -6361,14 +6355,14 @@ dependencies = [
 
 [[package]]
 name = "taffy"
-version = "0.12.2"
+version = "0.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "340a09581f29809fc0df82a3955501dc7f2a21f887e5d1c13dbe288fe1c0bef4"
+checksum = "c034e05f6ee85a12daa63863c2245797715075c70649947aa0da54f3f2ab1d0f"
 dependencies = [
  "arrayvec",
- "grid",
  "serde",
  "slotmap",
+ "smallvec",
 ]
 
 [[package]]
@@ -9096,7 +9090,7 @@ dependencies = [
 
 [[package]]
 name = "wt-migrate"
-version = "0.5.29"
+version = "0.5.31"
 dependencies = [
  "chrono",
  "derive_more 2.1.1",
