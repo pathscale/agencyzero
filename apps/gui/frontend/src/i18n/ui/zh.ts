@@ -512,6 +512,7 @@ const zh = {
     "在一次大量使用缓存的轮次之后，最近的可比轮次报告缓存读取为零。这可能增加用量，但提供方未公开原因。",
   "cache miss?": "缓存未命中？",
   "Drop this queued message": "移除此排队消息",
+  "Drop this queued compaction": "移除此排队压缩",
   "Ask, or type / for commands…": "提问，或输入 / 查看命令…",
   copied: "已复制",
   "GitHub ›": "GitHub ›",

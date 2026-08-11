@@ -201,6 +201,19 @@ type WorkspaceState = {
    */
   compacting: Record<string, boolean>;
   /**
+   * A compaction asked for while the slot was taken, waiting for it to free.
+   *
+   * A compaction is not a prompt, so it cannot ride in `queued` — there is no
+   * body to hold and nothing to re-send. It is a single pending intent per
+   * project, which is why this is one agent rather than a list: asking twice
+   * while a run is live means one compaction when the run ends, not two.
+   *
+   * Held instead of refused because "let it finish first" put the work back on
+   * the user to watch the run and click again at the right moment, for a wait
+   * the window can sit through itself.
+   */
+  pendingCompact: Record<string, Agent>;
+  /**
    * What each project's agent reported it can do, from its own catalogue.
    *
    * Per project because the agent, its plugins and its skills can differ per
@@ -412,6 +425,7 @@ function createWorkspace() {
     streaming: {},
     runStatus: {},
     compacting: {},
+    pendingCompact: {},
     queued: {},
     commands: {},
     tabs: [HOME_TAB],
@@ -1562,7 +1576,15 @@ function createWorkspace() {
        * backend actually releases the one-run-per-project slot, so an
        * immediate send can still be refused. `flushQueue` retries on that.
        */
-      if ((state.queued[projectId] ?? []).length > 0) {
+      /*
+       * A held compaction goes first and takes the beat to itself. The prompts
+       * behind it are not flushed here: the compaction sets `compacting`, and
+       * its own end already flushes the queue, so sending them now would only
+       * bounce them off the compaction and queue them a second time.
+       */
+      if (state.pendingCompact[projectId] !== undefined) {
+        window.setTimeout(() => flushPendingCompact(projectId), 250);
+      } else if ((state.queued[projectId] ?? []).length > 0) {
         window.setTimeout(() => void flushQueue(projectId, 0), 250);
       }
       refreshProxyAfterLifecycleEvent();
@@ -1811,6 +1833,7 @@ function createWorkspace() {
           delete draft.runStatus[projectId];
           delete draft.queued[projectId];
           delete draft.compacting[projectId];
+          delete draft.pendingCompact[projectId];
           delete draft.commands[projectId];
         }),
       );
@@ -2212,6 +2235,29 @@ function createWorkspace() {
    * actually opening; after the attempts run out the prompt goes back to the
    * front of the queue, still visible above the composer rather than lost.
    */
+  /**
+   * Run a compaction that was asked for while the project was busy.
+   *
+   * Ahead of the prompt queue on purpose, and it clears the intent before
+   * dispatching: the compaction was asked for first, and the prompts waiting
+   * behind it are better sent into the rewritten session than into the one it
+   * is about to replace. A compaction that still cannot start is dropped
+   * rather than retried in a loop — `compacting` will queue the prompts under
+   * their own label, and a silent retry that never lands is worse than a
+   * button the user can press again.
+   */
+  function flushPendingCompact(projectId: string): void {
+    const agent = state.pendingCompact[projectId];
+    if (agent === undefined) return;
+    setState(
+      "pendingCompact",
+      produce((waiting) => delete waiting[projectId]),
+    );
+    void client()
+      .compactProject(projectId, agent)
+      .catch(() => {});
+  }
+
   async function flushQueue(
     projectId: string,
     attempt: number,
@@ -2383,7 +2429,29 @@ function createWorkspace() {
      * already holding the slot. Swallowing them here would leave the user
      * looking at an unchanged transcript with no explanation.
      */
-    compactProject: (projectId: string, agent: Agent) => client().compactProject(projectId, agent),
+    /**
+     * Compact now, or hold the intent until the slot frees.
+     *
+     * The backend refuses a compaction while a run owns the project, and that
+     * refusal used to reach the composer as a red line telling the user to
+     * come back later. The window can do that waiting: the same `queueReason`
+     * that decides whether a prompt is worth holding decides this, so a
+     * refusal it cannot name is still raised rather than silently swallowed.
+     */
+    compactProject: async (projectId: string, agent: Agent): Promise<void> => {
+      try {
+        await client().compactProject(projectId, agent);
+      } catch (cause) {
+        if (queueReason(cause) === null) throw cause;
+        setState("pendingCompact", projectId, agent);
+      }
+    },
+    /** Wave away a compaction that is still waiting for the run to end. */
+    dropPendingCompact: (projectId: string): void =>
+      setState(
+        "pendingCompact",
+        produce((waiting) => delete waiting[projectId]),
+      ),
     /*
      * Read on demand rather than held in the store: the notes change once per
      * compaction, and the only screen that shows them is the panel section that

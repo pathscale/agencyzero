@@ -3,8 +3,10 @@ import { EditableTitle } from "~/components/EditableTitle";
 import { Icon } from "~/components/Icon";
 import { Panel } from "~/components/Panel";
 import { Composer } from "~/features/project/Composer";
+import { copyText } from "~/features/project/MessageBody";
 import { ProjectPanel } from "~/features/project/ProjectPanel";
 import { TranscriptPane } from "~/features/project/TranscriptPane";
+import { providerUsageLabel } from "~/features/shell/UsageReadout";
 import { AGENT_LABELS } from "~/lib/labels";
 import { describeError, log } from "~/lib/log";
 import { turnCostTotals } from "~/lib/pricing";
@@ -104,6 +106,66 @@ export function ProjectTab(props: { tab: Tab; project: Project }): JSX.Element {
   const costs = createMemo(() => turnCostTotals(state.pricing, tabMessages()));
   const conversationTotals = createMemo(() => usageTotals(messages()));
   const likelyCacheBreak = createMemo(() => cacheBreak(tabMessages()));
+
+  /*
+   * The provider usage chip, restored and now behind the experimental profile.
+   *
+   * It was dropped by a commit meant to remove a *duplicate* usage warning
+   * chip, which took the real readout with it, so the countdown quietly stopped
+   * existing after 0.5.2. Gated on `claudeUsage` because that capability is
+   * only advertised by the experimental build, which makes it the same switch
+   * the Settings readout already uses rather than a second notion of what
+   * "experimental" means.
+   */
+  const [usageNow, setUsageNow] = createSignal(Date.now());
+  // A minute is finer than the readout, which is stated in hours and days.
+  const usageTicker = setInterval(() => setUsageNow(Date.now()), 60_000);
+  onCleanup(() => clearInterval(usageTicker));
+
+  /** Warm the readout as it fills: above 90% is error, above 70% warning. */
+  const severityFor = (percent: number | null): "low" | "mid" | "high" => {
+    if (percent === null) return "low";
+    if (percent >= 90) return "high";
+    if (percent >= 70) return "mid";
+    return "low";
+  };
+
+  /** The active tab's provider only, beside the turn count it constrains. */
+  const providerUsage = createMemo<{
+    label: string;
+    title: string;
+    severity: "low" | "mid" | "high";
+  } | null>(() => {
+    if (!isLive("claudeUsage")) return null;
+
+    if (props.tab.agent === "claude") {
+      const window = state.claudeUsage?.sevenDay;
+      if (!window) return null;
+      const percent = Math.min(100, Math.max(0, window.utilization));
+      return {
+        label: providerUsageLabel("Claude", percent, window.resetsAt, usageNow()),
+        title: window.resetsAt ?? "",
+        severity: severityFor(percent),
+      };
+    }
+
+    const windows = state.quota?.agents.find((entry) => entry.agent === "codex")?.windows ?? [];
+    const window = windows.reduce<(typeof windows)[number] | null>(
+      (longest, candidate) =>
+        (candidate.windowMinutes ?? 0) > (longest?.windowMinutes ?? 0) ? candidate : longest,
+      null,
+    );
+    if (!window) return null;
+    const reported =
+      window.usedFraction !== null && Number.isFinite(window.usedFraction)
+        ? Math.round(Math.min(1, Math.max(0, window.usedFraction)) * 100)
+        : null;
+    return {
+      label: providerUsageLabel("Codex", reported, window.resetsAt, usageNow()),
+      title: window.resetsAt ?? "",
+      severity: severityFor(reported),
+    };
+  });
   // Boot provides a cheap project turn count before the full transcript is
   // hydrated. Use it to reserve the totals chip immediately; otherwise every
   // tab switch briefly removes the chip and adds it back after listMessages.
@@ -241,6 +303,23 @@ export function ProjectTab(props: { tab: Tab; project: Project }): JSX.Element {
               </span>
             </span>
 
+            <Show when={providerUsage()}>
+              {(usage) => (
+                <span
+                  class={`min-w-0 max-w-[300px] shrink truncate rounded-md border px-2.5 py-1 font-mono font-semibold text-[10.5px] ${
+                    usage().severity === "high"
+                      ? "border-error/32 bg-error/10 text-error"
+                      : usage().severity === "mid"
+                        ? "border-warning/32 bg-warning/10 text-warning"
+                        : "border-primary/20 bg-az-inset text-az-body"
+                  }`}
+                  title={usage().title}
+                >
+                  {usage().label}
+                </span>
+              )}
+            </Show>
+
             <Show when={likelyCacheBreak()}>
               <span
                 title={tx(
@@ -277,6 +356,24 @@ export function ProjectTab(props: { tab: Tab; project: Project }): JSX.Element {
                 >
                   {(pr) => <PrChip pr={pr} />}
                 </For>
+              </div>
+            </Show>
+            {/* A compaction held until the run ends. Same strip and same way
+              out as a queued prompt, because it is the same promise: the click
+              was taken and is waiting, not refused. */}
+            <Show when={state.pendingCompact[props.project.id] !== undefined}>
+              <div class="flex items-center gap-2 rounded-[11px] border border-primary/14 border-dashed bg-az-inset px-3 py-1.5 text-[12px]">
+                <Icon name="history" class="shrink-0 text-[12px] text-az-faint" />
+                <span class="min-w-0 flex-1 truncate text-az-body">{tx("Compact")}</span>
+                <span class="shrink-0 text-[10.5px] text-az-faint">{QUEUE_REASONS.busy}</span>
+                <button
+                  type="button"
+                  onClick={() => actions.dropPendingCompact(props.project.id)}
+                  aria-label={tx("Drop this queued compaction")}
+                  class="shrink-0 text-az-faint transition-colors hover:text-error"
+                >
+                  <Icon name="x" class="text-[12px]" />
+                </button>
               </div>
             </Show>
             {/* Prompts waiting their turn, each with its way out. Above the
@@ -463,13 +560,15 @@ function PrChip(props: { pr: PullRequest }): JSX.Element {
   const closed = () => props.pr.state === "CLOSED";
 
   const copy = async (): Promise<void> => {
-    try {
-      await navigator.clipboard.writeText(props.pr.url);
+    // Through `copyText`, not `navigator.clipboard` directly: the API is
+    // refused here and rejects rather than degrading, so this button wrote a
+    // log line and nothing else. See `copyText` for the fallback it adds.
+    if (await copyText(props.pr.url)) {
       setCopied(true);
       setTimeout(() => setCopied(false), 1_400);
-    } catch (cause) {
-      log.warn(`could not copy the PR URL: ${describeError(cause)}`);
+      return;
     }
+    log.warn("could not copy the PR URL");
   };
 
   const CI_TONE: Record<string, string> = {
@@ -568,7 +667,10 @@ function PrChip(props: { pr: PullRequest }): JSX.Element {
         type="button"
         onClick={() => void actions.dismissPullRequest(props.pr.id)}
         aria-label={tx("Dismiss PR {number}", { number: props.pr.number })}
-        class="shrink-0 text-az-faint transition-colors hover:text-base-content"
+        /* `hover:text-base-content` was a stray DaisyUI token in a file that
+         * themes off `az-*`, so this control hovered to a colour the theme does
+         * not set. Every other dismiss here warms to `error`. */
+        class="shrink-0 text-az-faint transition-colors hover:text-error"
       >
         <Icon name="x" class="text-[13px]" />
       </button>
@@ -652,15 +754,15 @@ function SessionChip(props: { sessionId: string | null }): JSX.Element {
   onCleanup(() => clearTimeout(revert));
 
   const copy = async (id: string): Promise<void> => {
-    try {
-      await navigator.clipboard.writeText(id);
+    // Through `copyText`, which falls back when the clipboard API is refused.
+    // Calling `navigator.clipboard` directly is why this button did nothing.
+    if (await copyText(id)) {
       setCopied(true);
       clearTimeout(revert);
       revert = setTimeout(() => setCopied(false), 1_400);
-    } catch (cause) {
-      // Clipboard access can be refused. Saying nothing would leave the button
-      // looking like it worked.
-      log.warn(`could not copy the session id: ${describeError(cause)}`);
+    } else {
+      // Saying nothing would leave the button looking like it worked.
+      log.warn("could not copy the session id");
     }
   };
 
