@@ -140,6 +140,14 @@ case "$mode" in
       echo "no bundle at $bundle; run 'stable' once first" >&2
       exit 1
     fi
+    # The frontend dist is embedded into the binary at compile time, so a
+    # Rust-only rebuild silently ships whatever `dist` happens to hold. Build
+    # it, but without the test and lint gate: this is the inner loop.
+    echo "==> frontend dist"
+    (
+      cd "$repo_root/apps/gui/frontend"
+      bun run build
+    )
     echo "==> az-gui (Blitz inspector)"
     (
       cd "$repo_root"
