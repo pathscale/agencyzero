@@ -418,6 +418,11 @@ export function Composer(props: ComposerProps): JSX.Element {
   };
   let field!: HTMLTextAreaElement;
   const [promptHeight, setPromptHeight] = createSignal(22);
+  // Drives the drift across the composer's edge. Tracked here rather than with
+  // `:focus-within` so the animation starts and stops on an event this code
+  // owns: it is a render loop for as long as it runs, and it must not outlive
+  // the cursor being in the field.
+  const [writing, setWriting] = createSignal(false);
 
   // Sending while a run is live is allowed again — the store queues it and
   // sends when the run lands, so Enter never starts a second run and never
@@ -597,9 +602,17 @@ export function Composer(props: ComposerProps): JSX.Element {
     resize();
   });
 
+  /* What the last resize actually wrote, so a keystroke that changes no
+   * geometry writes nothing. Every style write marks layout stale, and the
+   * `scrollHeight` read below then has to resolve the whole document before it
+   * can answer: measured at 12.77ms per keystroke on a 3599-node tree, which
+   * was 82% of the cost of typing a character. */
+  let lastLength = -1;
+  let lastHeight = -1;
+  let lastCeiling = -1;
+
   /** Grow with the content up to a ceiling, then scroll — no jumping layout. */
   function resize(): void {
-    field.style.height = "auto";
     // Expanded is a deliberate fixed workspace. Letting its measured content
     // drive height made it jump while the owner was typing.
     const modeCeiling = expanded() ? 240 : 168;
@@ -612,9 +625,31 @@ export function Composer(props: ComposerProps): JSX.Element {
     // editor may use more room, but must never consume the whole viewport.
     const viewportCeiling = Math.max(floor, Math.floor(window.innerHeight * 0.45));
     const ceiling = Math.min(modeCeiling, viewportCeiling);
-    field.style.maxHeight = `${ceiling}px`;
+    if (ceiling !== lastCeiling) {
+      field.style.maxHeight = `${ceiling}px`;
+      lastCeiling = ceiling;
+      // A new ceiling invalidates the shrink bookkeeping below.
+      lastLength = -1;
+    }
+    // Resetting to `auto` is what lets the field shrink: with a fixed height
+    // larger than its content, `scrollHeight` reports the box rather than the
+    // text. That reset is also a style write, so it stales layout and makes the
+    // measurement below resolve the entire document.
+    //
+    // It is only needed when the content may have got shorter. While text is
+    // being added the box is never taller than the text, so `scrollHeight`
+    // already answers with the true content height and the reset buys nothing.
+    // Typing forward is the overwhelmingly common case and now skips it.
+    const length = field.value.length;
+    const mayHaveShrunk = length < lastLength || lastLength < 0;
+    if (mayHaveShrunk) field.style.height = "auto";
+    lastLength = length;
     const height = Math.max(floor, Math.min(field.scrollHeight || floor, ceiling));
-    field.style.height = `${height}px`;
+    // Most keystrokes land inside the current line and change no height at all.
+    if (height !== lastHeight) {
+      field.style.height = `${height}px`;
+      lastHeight = height;
+    }
     setPromptHeight(height);
   }
 
@@ -880,10 +915,19 @@ export function Composer(props: ComposerProps): JSX.Element {
         </div>
       </Show>
       <div
-        class={`az-ring az-ring-composer rounded-[17px] ${props.size === "lg" ? "az-ring-strong rounded-[19px]" : ""}`}
+        class={`az-ring az-ring-composer rounded-[17px] ${writing() ? "az-ring-drift" : ""} ${
+          props.size === "lg" ? "az-ring-strong rounded-[19px]" : ""
+        }`}
       >
         <div
-          class={`flex flex-col gap-3 bg-az-inset ${props.size === "lg" ? "rounded-[18px] p-[18px] pb-3.5" : "rounded-2xl p-[15px] pb-3"}`}
+          /*
+            Less room under the controls than over the prompt: the text needs
+            air above it, the controls only need to clear the edge. Even spacing
+            made the row look adrift in the box rather than seated at its foot.
+          */
+          class={`flex flex-col gap-2.5 bg-az-inset ${
+            props.size === "lg" ? "rounded-[18px] p-[18px] pb-2.5" : "rounded-2xl p-[15px] pb-2"
+          }`}
         >
           <AttachmentPills
             paths={attachments()}
@@ -909,6 +953,8 @@ export function Composer(props: ComposerProps): JSX.Element {
               value={draft()}
               placeholder={props.placeholder}
               aria-label={props.placeholder}
+              onFocus={() => setWriting(true)}
+              onBlur={() => setWriting(false)}
               onInput={(event) => {
                 remember(event.currentTarget.value);
                 resize();
@@ -972,7 +1018,19 @@ export function Composer(props: ComposerProps): JSX.Element {
           reference. This departs from design/workspace.html, which puts the
           model pill on the left after Attach; recorded in the frontend README.
         */}
-          <div data-composer-controls class="flex flex-wrap items-center gap-2.5">
+          <div
+            data-composer-controls
+            /*
+              The row may wrap: on a narrow window the model and effort controls
+              drop below the posture controls, which is better than clipping
+              them. Its height is pinned to one control so that when it does not
+              wrap it cannot be taller than the buttons in it either — an
+              over-tall row centres its groups and opens a band of dead space
+              above and below them that reads as the composer having lost its
+              alignment.
+            */
+            class="flex min-h-[24px] flex-wrap items-center gap-2.5"
+          >
             <div data-composer-primary-controls class="flex shrink-0 items-center gap-2.5">
               <button
                 type="button"
@@ -1031,7 +1089,25 @@ export function Composer(props: ComposerProps): JSX.Element {
 
             <div
               data-composer-secondary-controls
-              class="ml-auto flex min-w-0 max-w-full flex-wrap items-center justify-end gap-2.5"
+              /*
+                One line, always, and no `min-w-0`.
+                
+                These controls still need to drop below the posture controls on
+                a narrow window at the largest interface size, but that break
+                belongs to the parent row, which moves this group down whole.
+                Breaking *inside* the group is what went wrong: it left the
+                model and effort pills on one line and the send button on the
+                next, so the group stood two rows tall, the posture controls
+                beside it centred against that height and sat visibly lower,
+                and a band of dead space opened underneath. Reproduced at the
+                XL interface size at every width the composer actually gets.
+
+                `min-w-0` is what let it happen. With it the group may shrink
+                below its contents, so the parent keeps it on the first line
+                and it wraps within itself; without it the parent sees its true
+                width and breaks the line instead.
+              */
+              class="ml-auto flex max-w-full shrink-0 flex-nowrap items-center justify-end gap-2.5"
             >
               {/*
             Extra Thinking, next to the model it qualifies. Only Claude has a
@@ -1093,53 +1169,65 @@ export function Composer(props: ComposerProps): JSX.Element {
                 />
               </Show>
 
-              {/* While a run is live, the provider capability decides whether this
-              interrupts the open turn or queues for the next one. */}
-              <button
-                type="button"
-                onClick={() => void submit()}
-                disabled={!canSend()}
-                aria-label={
-                  props.isRunning
-                    ? props.canFollowUp
-                      ? tx("Send into the running turn")
-                      : tx("Queue after the running turn")
-                    : tx("Send")
-                }
-                title={
-                  !agentReady()
-                    ? agentBlockedReason()
-                    : props.isRunning
-                      ? props.canFollowUp
-                        ? tx("Delivered into the running turn; the agent takes it at its next step")
-                        : tx("Queued until the running turn finishes")
-                      : undefined
-                }
-                class="flex size-[24px] items-center justify-center rounded-full bg-primary text-primary-content transition-colors hover:bg-az-primary-hover disabled:cursor-not-allowed disabled:opacity-40"
-              >
-                <Icon name="arrow-up" class="text-[17px]" />
-              </button>
               {/*
+                Send and its reserved Stop slot are one flex item, not two.
+                Stop is `invisible` while idle but still occupies space, so as
+                a separate item it could be the only thing on a wrapped line —
+                a line with nothing visible on it, which is what made the two
+                halves of this row fall out of alignment with an empty band
+                between them. Together they always carry the send button.
+              */}
+              <div class="flex shrink-0 items-center gap-2.5">
+                {/* While a run is live, the provider capability decides whether
+                this interrupts the open turn or queues for the next one. */}
+                <button
+                  type="button"
+                  onClick={() => void submit()}
+                  disabled={!canSend()}
+                  aria-label={
+                    props.isRunning
+                      ? props.canFollowUp
+                        ? tx("Send into the running turn")
+                        : tx("Queue after the running turn")
+                      : tx("Send")
+                  }
+                  title={
+                    !agentReady()
+                      ? agentBlockedReason()
+                      : props.isRunning
+                        ? props.canFollowUp
+                          ? tx(
+                              "Delivered into the running turn; the agent takes it at its next step",
+                            )
+                          : tx("Queued until the running turn finishes")
+                        : undefined
+                  }
+                  class="flex size-[24px] items-center justify-center rounded-full bg-primary text-primary-content transition-colors hover:bg-az-primary-hover disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  <Icon name="arrow-up" class="text-[17px]" />
+                </button>
+                {/*
                 Always rendered, only hidden when idle: mounting the Stop button
                 on run-start (and unmounting on stop) reflowed this wrap row and
                 slid the send button left-right every turn. Reserving its slot
                 keeps the send button fixed; `invisible` also drops it from the
                 tab order so an idle composer has no dead control.
               */}
-              <button
-                type="button"
-                onClick={() => props.onStop?.()}
-                // No handler means the backend cannot stop this run; a Stop
-                // that only pretended would be worse than a disabled one.
-                disabled={!props.onStop}
-                aria-label={tx("Stop the run")}
-                tabindex={props.isRunning ? undefined : -1}
-                class={`flex size-[24px] items-center justify-center rounded-full border border-primary/40 bg-base-300 transition-colors hover:border-primary disabled:cursor-not-allowed disabled:opacity-40 ${
-                  props.isRunning ? "" : "invisible"
-                }`}
-              >
-                <span class="size-[11px] rounded-[3px] bg-primary" />
-              </button>
+                <button
+                  type="button"
+                  onClick={() => props.onStop?.()}
+                  // No handler means the backend cannot stop this run; a Stop
+                  // that only pretended would be worse than a disabled one.
+                  disabled={!props.onStop}
+                  aria-label={tx("Stop the run")}
+                  tabindex={props.isRunning ? undefined : -1}
+                  class={`flex size-[24px] items-center justify-center rounded-full border border-primary/40 bg-base-300 transition-colors hover:border-primary disabled:cursor-not-allowed disabled:opacity-40 ${
+                    props.isRunning ? "" : "invisible"
+                  }`}
+                >
+                  <span class="size-[11px] rounded-[3px] bg-primary" />
+                </button>
+              </div>
             </div>
           </div>
         </div>
