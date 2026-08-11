@@ -29,6 +29,7 @@ blitz-runtime = [
 # phase that dominates every reading taken so far.
 blitz-inspector = [
     "blitz-runtime",
+    "dep:anyrender_vello",
     "blitz-dom/log-phase-times",
     "tauri-runtime-blitz/diagnostics",
 ]
@@ -67,6 +68,13 @@ tauri = { version = "2", features = [] }
 tauri-runtime-blitz = { git = "https://github.com/pathscale/tauri-runtime-blitz.git", rev = "cf9b75ccab95cb715ab649bab0ca775719c7d780", optional = true }
 blitz-dom = { package = "ps-blitz-dom", git = "https://github.com/pathscale/ps-blitz.git", rev = "40d0153770a17c5456ac222b89bbb318601bb99d", features = ["system-fonts", "incremental"], optional = true }
 blitz-script = { package = "ps-blitz-script", git = "https://github.com/pathscale/ps-blitz.git", rev = "40d0153770a17c5456ac222b89bbb318601bb99d", features = ["system-fonts"], optional = true }
+# Named only to turn on its per-frame phase timer, which splits the one opaque
+# "renderer" figure into scene encode, GPU submit and present. The renderer
+# arrives through tauri-runtime-blitz, so a feature added anywhere in the
+# ps-blitz workspace is never consulted on this path; cargo unifies features
+# across the graph, so asking for it here is what reaches the copy actually
+# built. Inspector-only: it prints a line per frame.
+anyrender_vello = { package = "ps-anyrender-vello", version = "0.13.0", features = ["log_frame_times"], optional = true }
 brotli = { version = "8.0.4", default-features = false, features = ["std"], optional = true }
 url = { version = "2.5.8", optional = true }
 tauri-plugin-updater = "2"
