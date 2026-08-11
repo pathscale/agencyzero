@@ -279,12 +279,35 @@ either measuring or guessing.
 
 ## 6. Cache the paths, if and only if step 5 justifies it
 
-`[-]` **Dropped 2026-08-11 on step 5's measurement.** All the churn lives in
-`scene_ms`, which is 0.76ms of a 40.04ms frame. Perfect caching of every site
-wins under 2%. Revisit only if resolve ever drops far enough to make 0.76ms
-matter.
+`[~]` **Deferred, not dropped. Revisit 2026-08-11.** I marked this dropped on
+step 5's measurement and the owner disagreed; the disagreement is recorded here
+because it has a real case behind it.
 
-Gated on step 5's `scene_ms` reading, not on the source comment.
+The measurement: all the churn lives in `scene_ms`, 0.76ms of a 40.04ms frame,
+so perfect caching of every site wins under 2% **of a frame shaped like this
+one**. That last clause is the whole argument.
+
+Why it may still matter:
+
+- **The denominator is about to move.** 93.8% of that frame is resolve, and
+  resolve is the thing being worked on. If resolve came down to single-digit
+  milliseconds, 0.76ms stops being 1.9% and starts being a quarter of the
+  frame. Judging paint against a frame dominated by a cost we intend to remove
+  measures the wrong ratio.
+- **0.76ms is a mean over one sample of activity.** Scene cost scales with the
+  count of painted elements, so a dense scroll or a full Settings page is not
+  the same measurement. `scene` p95 was 1.32 and max 1.64 in that window; a
+  worse window has not been taken.
+- **Allocation churn has effects that do not show up as frame time.** 78M of
+  empty-but-resident malloc regions in step 3 is the allocator holding pages
+  it was handed back, and thousands of small short-lived allocations a frame is
+  exactly the pattern that produces that.
+
+What would settle it, in order: finish the resolve work, re-take `frames`
+during a heavy scroll rather than at rest, and only then judge 0.76ms against
+whatever the frame has become.
+
+Gated on that re-measurement, not on the source comment at `render.rs:518`.
 `render.rs:518` already says "we can cache the bezpaths themselves,
 saving us a bunch of work". Each allocation is small — a rounded rect is a
 handful of `PathEl`s — so the cost is the count, not the bytes. Cache only the
