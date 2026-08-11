@@ -19,10 +19,15 @@ and reaching for it out of habit has cost real time.
   which is the entire subject of
   [js-engine-big-problem.md](js-engine-big-problem.md); a string benchmark in a
   browser measures a rope that does not exist in the shipping engine.
-- **The mock does not stream.** `src/api/mock.ts` emits no `run:text` at all —
-  `grep -c "run:text" src/api/mock.ts` returns 0. Nothing in the streaming path
-  can be exercised there. Two attempts to drive a streaming reply through it
-  failed for that reason and looked like a driving problem.
+- **The mock does not stream, by design.** `src/api/mock.ts` emits no `run:text`
+  and no `run:accepted`; [client.ts:419](../apps/gui/frontend/src/api/client.ts)
+  says so and says why — "which is correct — it fakes no run." So nothing in the
+  streaming path can be exercised there, and two attempts to drive a streaming
+  reply through it failed for that reason while looking like a driving problem.
+- **Its projects are fixtures, not your data.** `api.support.cafe`, `WorkTable`
+  and the rest in `src/api/fixtures.ts` exist to exercise UI shapes. Carrying one
+  of those names into a statement about the running app is how a mock fixture
+  gets reported as a real project.
 - **jsdom is the same trap one level down.** A vitest benchmark measures the
   function, which is worth having, but it is not the application.
 
