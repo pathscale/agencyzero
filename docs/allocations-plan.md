@@ -184,24 +184,43 @@ through a distorting lens.
 
 ---
 
-## 5. Measure paint. It has never been measured
+## 5. Read the paint number that already exists
 
-`[ ]` The seven phases in the resolve timer are all pre-paint: `style`,
-`construct`, `pconstruct`, `flush`, `layout`, `transform`, `subdocs`. So the
-central claim in [allocations.md](allocations.md) — that ~25 path-producing
-sites build and drop `BezPath`s for every element every frame — has **no number
-attached to it at all**.
+`[x]` **Checked 2026-08-11, and the premise was wrong.** Paint is measured
+already, unconditionally, and has been all along.
 
-Add a timer around the paint pass and get one before touching any of those
-sites. Skipping this is how the last round went wrong.
+The seven phases in the resolve timer are indeed all pre-paint, which is what
+made it look unmeasured. But `blitz-shell/src/frame_stats.rs` records every
+presented frame's `resolve`, `paint_scene` and renderer cost, publishes them
+process-globally, and says in its own header why recording is unconditional:
+gating the shared data would leave a normally launched app reporting nothing,
+"which is what pushed the previous consumer into inventing numbers".
 
-**Result:**
+It reaches the bench without any new code. `scene_ms` — "the `paint_scene` call
+that turns the resolved document into renderer commands" — travels in
+`RendererMetrics`, and `blitz-bench frames` prints mean, p95 and max for it
+beside resolve and renderer:
+
+```bash
+cargo run -q -p blitz-bench -- frames
+```
+
+So the thesis in [allocations.md](allocations.md) is testable directly: build
+paths churn inside `paint_scene`, so their cost is in `scene_ms`. Take it during
+a scroll, where the most elements are repainted per frame.
+
+**Result:** pending a live instance, same as step 2.
+
+**Worth keeping as a lesson:** this step was written as "add a timer", and the
+timer already existed two crates away. Reading before building is cheaper than
+either measuring or guessing.
 
 ---
 
 ## 6. Cache the paths, if and only if step 5 justifies it
 
-`[ ]` `render.rs:518` already says "we can cache the bezpaths themselves,
+`[ ]` Gated on step 5's `scene_ms` reading, not on the source comment.
+`render.rs:518` already says "we can cache the bezpaths themselves,
 saving us a bunch of work". Each allocation is small — a rounded rect is a
 handful of `PathEl`s — so the cost is the count, not the bytes. Cache only the
 sites paint shows to be hot.
