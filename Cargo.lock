@@ -72,7 +72,7 @@ dependencies = [
 
 [[package]]
 name = "agency-tools"
-version = "0.5.13"
+version = "0.5.24"
 dependencies = [
  "derive_more 2.1.1",
  "dirs",
@@ -103,8 +103,8 @@ dependencies = [
 
 [[package]]
 name = "agent-experimental"
-version = "0.1.2"
-source = "git+https://gitlab.com/anonymous-28282828282/agent-experimental.git?rev=f04ee035d9f243eb0c2dadb03829f827bb87d918#f04ee035d9f243eb0c2dadb03829f827bb87d918"
+version = "0.1.3"
+source = "git+https://gitlab.com/anonymous-28282828282/agent-experimental.git?rev=afe3a70e02ef844a092385859ab8f5f3ab8a039e#afe3a70e02ef844a092385859ab8f5f3ab8a039e"
 dependencies = [
  "anyhow",
  "reqwest",
@@ -364,11 +364,11 @@ checksum = "f2032f911046de80f0a198e0901378627c33f59ea0ac00e363d481118bd70a53"
 
 [[package]]
 name = "az-core"
-version = "0.5.13"
+version = "0.5.24"
 
 [[package]]
 name = "az-gui"
-version = "0.5.13"
+version = "0.5.24"
 dependencies = [
  "agency-proxy-client",
  "agency-proxy-protocol",
@@ -406,7 +406,7 @@ dependencies = [
 
 [[package]]
 name = "az-mcp-proxy"
-version = "0.5.13"
+version = "0.5.24"
 dependencies = [
  "az-core",
 ]
@@ -491,7 +491,7 @@ dependencies = [
 
 [[package]]
 name = "blitz-bench"
-version = "0.5.13"
+version = "0.5.24"
 dependencies = [
  "blitz-control-protocol",
  "endpoint-libs",
@@ -4645,7 +4645,6 @@ dependencies = [
 [[package]]
 name = "ps-blitz-debug-control"
 version = "0.3.0-beta.3"
-source = "git+https://github.com/pathscale/ps-blitz.git?rev=40d0153770a17c5456ac222b89bbb318601bb99d#40d0153770a17c5456ac222b89bbb318601bb99d"
 dependencies = [
  "getrandom 0.4.3",
  "serde",
@@ -4655,7 +4654,6 @@ dependencies = [
 [[package]]
 name = "ps-blitz-dom"
 version = "0.3.0-beta.3"
-source = "git+https://github.com/pathscale/ps-blitz.git?rev=40d0153770a17c5456ac222b89bbb318601bb99d#40d0153770a17c5456ac222b89bbb318601bb99d"
 dependencies = [
  "accesskit",
  "app_units",
@@ -4698,7 +4696,6 @@ dependencies = [
 [[package]]
 name = "ps-blitz-html"
 version = "0.3.0-beta.3"
-source = "git+https://github.com/pathscale/ps-blitz.git?rev=40d0153770a17c5456ac222b89bbb318601bb99d#40d0153770a17c5456ac222b89bbb318601bb99d"
 dependencies = [
  "html5ever 0.39.0",
  "ps-blitz-dom",
@@ -4709,7 +4706,6 @@ dependencies = [
 [[package]]
 name = "ps-blitz-paint"
 version = "0.3.0-beta.3"
-source = "git+https://github.com/pathscale/ps-blitz.git?rev=40d0153770a17c5456ac222b89bbb318601bb99d#40d0153770a17c5456ac222b89bbb318601bb99d"
 dependencies = [
  "color",
  "euclid",
@@ -4729,7 +4725,6 @@ dependencies = [
 [[package]]
 name = "ps-blitz-script"
 version = "0.3.0-beta.3"
-source = "git+https://github.com/pathscale/ps-blitz.git?rev=40d0153770a17c5456ac222b89bbb318601bb99d#40d0153770a17c5456ac222b89bbb318601bb99d"
 dependencies = [
  "base64 0.22.1",
  "boa_engine",
@@ -4756,7 +4751,6 @@ dependencies = [
 [[package]]
 name = "ps-blitz-shell"
 version = "0.3.0-beta.3"
-source = "git+https://github.com/pathscale/ps-blitz.git?rev=40d0153770a17c5456ac222b89bbb318601bb99d#40d0153770a17c5456ac222b89bbb318601bb99d"
 dependencies = [
  "android-activity",
  "arboard",
@@ -4777,7 +4771,6 @@ dependencies = [
 [[package]]
 name = "ps-blitz-traits"
 version = "0.3.0-beta.3"
-source = "git+https://github.com/pathscale/ps-blitz.git?rev=40d0153770a17c5456ac222b89bbb318601bb99d#40d0153770a17c5456ac222b89bbb318601bb99d"
 dependencies = [
  "atomic_refcell",
  "bitflags 2.13.1",
@@ -4793,12 +4786,10 @@ dependencies = [
 [[package]]
 name = "ps-debug-timer"
 version = "0.1.3"
-source = "git+https://github.com/pathscale/ps-blitz.git?rev=40d0153770a17c5456ac222b89bbb318601bb99d#40d0153770a17c5456ac222b89bbb318601bb99d"
 
 [[package]]
 name = "ps-stylo-taffy"
 version = "0.3.0-beta.3"
-source = "git+https://github.com/pathscale/ps-blitz.git?rev=40d0153770a17c5456ac222b89bbb318601bb99d#40d0153770a17c5456ac222b89bbb318601bb99d"
 dependencies = [
  "stylo",
  "stylo_atoms",
@@ -9104,7 +9095,7 @@ dependencies = [
 
 [[package]]
 name = "wt-migrate"
-version = "0.5.13"
+version = "0.5.24"
 dependencies = [
  "chrono",
  "derive_more 2.1.1",
