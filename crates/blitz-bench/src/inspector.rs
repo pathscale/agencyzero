@@ -100,8 +100,35 @@ pub fn discover(explicit: Option<&str>) -> Result<Descriptor> {
         .filter_map(|path| Some((path.metadata().ok()?.modified().ok()?, path)))
         .collect();
     found.sort();
-    match found.pop() {
-        Some((_, path)) => read_descriptor(&path),
+
+    // Newest *live* instance, not simply newest.
+    //
+    // Descriptors outlive the process that wrote them, and a machine that has
+    // run the app more than once has a directory full of them. Taking the most
+    // recent file connected to whichever instance happened to exit last: at
+    // best a refused connection, at worst a successful attach to a stale socket
+    // and a set of numbers describing a process nobody is looking at. The
+    // warning for that case already existed and was printed immediately before
+    // connecting anyway.
+    let mut newest: Option<Descriptor> = None;
+    for (_, path) in found.iter().rev() {
+        let Ok(descriptor) = read_descriptor(path) else {
+            continue;
+        };
+        if pid_is_live(descriptor.descriptor.pid) {
+            return Ok(descriptor);
+        }
+        if newest.is_none() {
+            newest = Some(descriptor);
+        }
+    }
+
+    match newest {
+        // Nothing live. Return the most recent anyway rather than refusing:
+        // `warn_if_stale` says so plainly at the call site, and a dump of a
+        // dead instance's descriptor is still the fastest way to see that no
+        // diagnostics build is running.
+        Some(descriptor) => Ok(descriptor),
         None => bail!(
             "no inspector descriptor found; is a diagnostics build running?\n\
              looked at $TAURI_BLITZ_CONTROL_DESCRIPTOR and {}",

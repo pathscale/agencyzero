@@ -207,3 +207,11 @@ The local AgencyZero item tracker contains separate workstreams for:
 - benchmark-driven evaluation of WorkTable for complex tabular application state
 
 The active Blitz compatibility item owns the immediate redraw, hover, scrolling, and shadow-artifact fixes.
+
+Each workstream that has reached the measuring stage keeps its own plan, with
+the commands to run and what each one answered:
+
+- [Allocations and resident memory](allocations-plan.md) — allocation churn
+  above the paint boundary, the shipping build's phase instrumentation, and
+  splitting the memory figure into GPU pool versus CPU heap. Reading it tests:
+  [allocations.md](allocations.md), [partial-paint.md](partial-paint.md).
