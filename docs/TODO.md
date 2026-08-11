@@ -68,7 +68,7 @@ the app. Leave it until something measures it there.
 | # | Item | Detail |
 |---|---|---|
 | 1 | Move `log-phase-times` off the base `blitz-dom` dependency onto `blitz-inspector`. One line, removes per-frame work from the shipping app, cleans the baseline. | [allocations.md](allocations.md) |
-| 2 | Bound the streaming tail block: split prose on blank lines in `extractProseStructures`. The only step that changes the asymptotics on its own. | [js-engine-big-problem.md](js-engine-big-problem.md) |
+| 2 | ~~Bound the streaming tail block: split prose on blank lines in `extractProseStructures`.~~ **Done** 2026-08-11, along with the incremental parse that followed it. See "Done" below before re-issuing this. | [js-engine-big-problem.md](js-engine-big-problem.md) |
 | 3 | Two cheap memory measurements: `vmmap`/`heap` on a live instance, and distinct versus total attribute values on a tree. | [allocations.md](allocations.md), [blink-what-we-can-learn.md](blink-what-we-can-learn.md) section 7 |
 | 4 | Make Stylo snapshots updatable (`document.rs:1258`). A correctness fix, and it unblocks the invalidation work. | [style-invalidation-we-already-ship.md](style-invalidation-we-already-ship.md) |
 | 5 | Clamp animation-driven redraw to a lower cadence (`blitz-shell/src/window.rs:614`). Best value per line available. | [animation-gap.md](animation-gap.md) |
@@ -158,8 +158,11 @@ Two corrections came out of building it, both recorded in
   uses, so holding the reply as `string[]` and joining costs exactly what concatenating
   cost. It is slightly worse than neutral, and it breaks the character counter and four
   emptiness checks.
-- **Passes 4 to 6 in that document's ledger were already bounded**, by the `<For>` over
-  `/\n{2,}/` which diffs paragraphs by value. Item 2 above is an enabler, not a fix.
+- ~~Passes 4 to 6 were already bounded by the `<For>` over `/\n{2,}/`.~~ **That was wrong,
+  and testing it is what showed it.** Remove the blank-line flush and the paragraph-identity
+  test fails: with the whole reply as one block, `sameBlock` fails on it, the memo hands the
+  outer `<For>` a new object, and the row is torn down along with the inner `<For>` and every
+  `<p>` in it — so the inner value-diff never runs. Item 2 does bound the DOM write.
 
 ### Renderer, and a correction that invalidates earlier numbers
 
