@@ -56,7 +56,7 @@ connection while a live instance was open the whole time.
 
 ## 1. Take the phase instrumentation out of the shipping build
 
-`[ ]` **One line.** `apps/gui/Cargo.toml:52` enables `log-phase-times` on the
+`[x]` **Done 2026-08-11.** `apps/gui/Cargo.toml:52` enabled `log-phase-times` on the
 base `blitz-dom` dependency, and `.github/workflows/release.yml:150` builds
 `--features blitz-runtime`, so it is compiled into the distributed app. Move it
 onto `blitz-inspector`, where `blitz-hybrid` and the bench already live.
@@ -87,7 +87,28 @@ strings -a "target/release/bundle/macos/AgencyZero.app/Contents/MacOS/az-gui" | 
 
 Zero for a plain `blitz-runtime` build; non-zero for the inspector build.
 
-**Result:**
+**Result:** moved onto `blitz-inspector` as `blitz-dom/log-phase-times`, so the
+bench and the hybrid pipeline still get it and a release build does not.
+
+The `strings` check above turned out to be the weaker half of the evidence, and
+worth recording as a caution: a bare `Resolve(` fragment survives in *both*
+builds, so counting it alone would have read as a failed removal. The payload
+is what moved.
+
+| string | `blitz-runtime` (ships) | `blitz-inspector` |
+| --- | --- | --- |
+| `Resolve(` | 1 | 1 |
+| ` distinct of ` | 0 | 1 |
+| `layout hotspots` | 0 | 1 |
+
+The proof is upstream of the binary anyway: the counter's call site is
+`#[cfg(feature = "log-phase-times")]` at `blitz-dom/src/layout/mod.rs:142`, so
+without the feature the call is not compiled, rather than compiled and cheap.
+
+**Consequence for every number recorded before this date:** they were taken
+with the counter charging to the layout phase. The 2026-08-11 trace read layout
+at 71.6% of a 39ms median resolve. That split cannot be compared against
+anything measured after this change; step 2 starts the baseline over.
 
 ---
 
