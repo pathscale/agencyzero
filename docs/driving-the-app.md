@@ -103,6 +103,22 @@ A measure-fix-measure cycle is: `quick`, quit the app, `open` it, take the
 reading. Rebuilding both bundles for each turn of that loop is the slow way to
 answer a question that a binary swap answers identically.
 
+**Launch it by path. Nothing here ever installs to `/Applications`.**
+
+```bash
+open /Users/revenge/code/agencyzero/target/release/bundle/macos/AgencyZero.app
+```
+
+There are separate copies in `/Applications` that this script never writes to
+and must not. Opening "AgencyZero" from Spotlight, the Dock or Finder starts
+one of those instead, and no build made here will ever reach it — which reads
+as a build that silently did nothing.
+
+Settings shows the version, the commit and the build time, and that is how to
+tell which one is running. Quit with `kill -TERM`, never a forced kill and not
+the AppleScript quit: `apps/gui/src/main.rs:2307` routes SIGTERM, SIGINT and
+SIGHUP to a graceful shutdown, and the WorkTable store is single-writer.
+
 ## Launching
 
 ```sh

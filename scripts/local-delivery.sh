@@ -161,7 +161,20 @@ case "$mode" in
       echo "bundle signature is invalid after swapping the binary" >&2
       exit 1
     }
+    # Date the bundle to match the binary inside it.
+    #
+    # Swapping `Contents/MacOS/az-gui` leaves the enclosing directory's mtime
+    # untouched, so Finder, `ls` and every other date the eye lands on keep
+    # showing the last *full* bundle build. A fresh binary then reads as a
+    # build that silently did nothing, which is worse than a slow build.
+    # Touching a directory changes no content, so the signature survives.
+    touch "$bundle" "$bundle/Contents/Info.plist"
+    codesign --verify --strict "$bundle" || {
+      echo "bundle signature is invalid after restamping the date" >&2
+      exit 1
+    }
     echo "$bundle"
+    ls -ld "$bundle" "$bundle/Contents/MacOS/az-gui"
     ;;
   stable)
     echo "==> AgencyZero.app (Blitz inspector)"
