@@ -513,6 +513,71 @@ answer is a small number of repeated structures.
 
 ---
 
+## 9. Where the layers come from, and the correction it forced
+
+`[x]` **Measured 2026-08-11.** Five sites go through `LayerManager`. Three more
+push straight onto the scene and were invisible to step 8 entirely: inset
+shadows, CSS masks and border clips are not subject to `LAYER_LIMIT` and appear
+in neither `wanted` nor `used`. They are counted by hand now, so the per-site
+sum is deliberately larger than `used` rather than a split of it.
+
+At rest:
+
+| site | count |
+| --- | --- |
+| `bg-image` | **314** |
+| `overflow` | 36 |
+| `inset-shadow` | 10 |
+| `border` | 4 |
+| `effect` | 1 |
+| `clip-path`, `outset-shadow`, `mask` | 0 |
+
+**314 of them draw nothing.** `background-image: none` is still one layer in
+CSS, and every element has at least one, so `draw_background` looped over the
+whole document pushing a clip layer and building a `BezPath` for a layer whose
+draw call is an empty match arm. Skipping those takes the count 351 to 39.
+
+Masks genuinely do have to push unconditionally, and say so at their call site:
+compositing an empty layer with `intersect` clears the mask built so far.
+Backgrounds composite source-over and have no such requirement.
+
+### The correction: count was never the cost
+
+Three points on the same bench, same scroll:
+
+| layers | frame total |
+| --- | --- |
+| 351 | 8.08ms |
+| 39 — the 312 empty background clips gone | **7.82ms** |
+| 9 — about 30 more gone, via `LAYER_LIMIT` | 4.52ms |
+
+Removing 312 layers bought 0.26ms. Removing the next 30 bought 3.30ms. That is
+roughly **0.8us for a background clip and 110us for an overflow clip**, and it
+says the lever is clipped area, not layer count.
+
+Step 8 measured that clip layers are 44% of the frame, and that stands. What
+does not stand is the reading anyone would naturally take from 351: that the
+bulk of the count is the bulk of the cost. It is not. **The 36 overflow clips,
+each covering a whole scrollport, are where the 3.3ms is.**
+
+The background fix is kept regardless: 314 path allocations and 314 push/pop
+pairs per frame for no visual effect, and it makes the remaining count mean
+something, since what is left is layers that actually clip something.
+
+**Next, and it is a different question than step 8 posed:** why a scrollport
+clip costs ~110us, and whether 36 of them are all needed. Candidates worth
+separating before any fix: whether vello is allocating an intermediate target
+per clip rather than using a scissor rect for axis-aligned rectangles, and
+whether nested scrollports are re-clipping regions their ancestors already
+clipped. The first is a vello question, the second is ours.
+
+One caveat on the arithmetic above: the 9-layer number was taken on the build
+before the background fix, so the middle row and the last row come from
+different binaries. Re-running `LAYER_LIMIT=8` on the current build would turn
+that inference into a measurement, and has not been done.
+
+---
+
 ## Explicitly not doing
 
 - **Building a mempool.** Two already exist below the paint boundary: vello's
