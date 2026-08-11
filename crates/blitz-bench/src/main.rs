@@ -42,6 +42,8 @@ usage: blitz-bench <mode> [args]
   watch [seconds]             stream metrics/console/runtimeErrors (default 20)
   scroll [ticks] [delta] [over]  wheel events over a named node (default 120 -80 Conversation)
   type [count] [name-substr]  drive real keystrokes into a text field (default 20)
+  key <name> [count] [over]   pageup/pagedown/home/end/up/down into a named scroller
+  reveal <name-substr>        scroll a named node into view, reporting its y before/after
   click <name-substring>      click the first matching visible, enabled node
 
 env:
@@ -507,6 +509,73 @@ fn find_text_field<'a>(nodes: &'a [SemanticNode], want: &str) -> Option<&'a Sema
 /// `style.height`, reads `scrollHeight`, and writes it again, so every
 /// keystroke forces a synchronous layout resolve. Scrolling never exercises
 /// that path, which is why a scroll benchmark cannot stand in for this one.
+/// Send a named key, optionally repeated, after focusing something inside a
+/// named container.
+///
+/// Wheel events could not scroll the transcript: they carry no coordinates, and
+/// pointing them at the pane still moved nothing. Page Up does, because it goes
+/// to the focused scroller, and without it every attempt to reach the rows the
+/// owner was looking at meant asking the owner to scroll. A bug that only
+/// reproduces by hand is a bug that gets one measurement per message.
+async fn press_key(client: &mut Client, name: &str, count: usize, over: &str) -> Result<()> {
+    // A key goes to the focused node, so click the container first. Clicking a
+    // scroll container's own body focuses it without activating anything: the
+    // transcript section carries `tabindex="0"` for exactly this.
+    let (snapshot, _) = inspect(client).await?;
+    if let Some(target) = snapshot
+        .nodes
+        .iter()
+        .filter(|node| node.visible && node.name.contains(over))
+        .filter_map(|node| node.bounds.map(|b| (node, b)))
+        .max_by(|a, b| {
+            (a.1[2] * a.1[3])
+                .partial_cmp(&(b.1[2] * b.1[3]))
+                .unwrap_or(std::cmp::Ordering::Equal)
+        })
+        .map(|(node, _)| node.id)
+    {
+        client
+            .agent(&AgentControlRequest::Act(AgentAction::Click {
+                node_id: target,
+            }))
+            .await?;
+        tokio::time::sleep(Duration::from_millis(150)).await;
+        println!("focused node {target} for {name} x{count}");
+    } else {
+        println!("no visible node named {over:?}; sending {name} to whatever has focus");
+    }
+
+    // `key` and `code` are both what the DOM calls them. They are not
+    // interchangeable and sending the wrong one is a silent no-op.
+    let (key, code) = match name.to_ascii_lowercase().as_str() {
+        "pageup" | "pgup" => ("PageUp", "PageUp"),
+        "pagedown" | "pgdn" => ("PageDown", "PageDown"),
+        "home" => ("Home", "Home"),
+        "end" => ("End", "End"),
+        "up" | "arrowup" => ("ArrowUp", "ArrowUp"),
+        "down" | "arrowdown" => ("ArrowDown", "ArrowDown"),
+        other => bail!("unknown key {other:?}: pageup, pagedown, home, end, up, down"),
+    };
+
+    for _ in 0..count {
+        for phase in [KeyPhase::Down, KeyPhase::Up] {
+            client
+                .agent(&AgentControlRequest::Act(AgentAction::Input(
+                    InputCommand::Key {
+                        phase,
+                        key: key.to_string(),
+                        code: code.to_string(),
+                        modifiers: Modifiers::default(),
+                    },
+                )))
+                .await?;
+        }
+        sleep_pace().await;
+    }
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    Ok(())
+}
+
 async fn type_keys(client: &mut Client, count: usize, want: &str) -> Result<()> {
     let (snapshot, _) = inspect(client).await?;
     let Some(field) = find_text_field(&snapshot.nodes, want) else {
@@ -725,6 +794,42 @@ async fn main() -> Result<()> {
             let want = args.get(1).map(String::as_str).unwrap_or("Settings");
             nodes(&mut client).await?;
             click_named(&mut client, want).await?;
+        }
+        "reveal" => {
+            let want = args.get(1).map(String::as_str).unwrap_or("");
+            let (snapshot, _) = inspect(&mut client).await?;
+            let Some(target) = snapshot
+                .nodes
+                .iter()
+                .find(|node| node.name.contains(want) && node.bounds.is_some())
+            else {
+                bail!("no node named {want:?}");
+            };
+            let before = target.bounds.unwrap();
+            let id = target.id;
+            println!("{id} {:?} y={:.1}", target.role, before[1]);
+            client
+                .agent(&AgentControlRequest::Act(AgentAction::ScrollIntoView {
+                    node_id: id,
+                }))
+                .await?;
+            tokio::time::sleep(Duration::from_millis(400)).await;
+            let (after_snapshot, _) = inspect(&mut client).await?;
+            let after = after_snapshot
+                .nodes
+                .iter()
+                .find(|node| node.id == id)
+                .and_then(|node| node.bounds);
+            match after {
+                Some(b) => println!("after: y={:.1} (moved {:.1})", b[1], b[1] - before[1]),
+                None => println!("after: the node is gone from the tree"),
+            }
+        }
+        "key" => {
+            let name = args.get(1).map(String::as_str).unwrap_or("pageup");
+            let count: usize = args.get(2).and_then(|v| v.parse().ok()).unwrap_or(1);
+            let over = args.get(3).map(String::as_str).unwrap_or("Conversation");
+            press_key(&mut client, name, count, over).await?;
         }
         "type" => {
             let count: usize = args.get(1).and_then(|v| v.parse().ok()).unwrap_or(20);
