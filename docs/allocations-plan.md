@@ -392,7 +392,60 @@ The target is `render_to_texture`. That is inside vello rather than in this
 codebase, so the lever here is scene complexity, not the submit path: how many
 draw commands and, especially, how many clip layers the scene contains.
 `LayerManager` already counts `layers_wanted` against a `LAYER_LIMIT`, so the
-count is available. That is the next reading to take.
+count is available. That is the next reading to take, and step 8 takes it.
+
+---
+
+## 8. Count the layers a scene pushes
+
+`[~]` The one lever on `render_to_texture` that lives in this codebase. Each
+clip or opacity layer is a push, a pop and a region the rasteriser composites
+separately, so the count is the part of scene complexity most likely to explain
+2.84ms of GPU-side work per frame.
+
+The counter was half there and half broken. `LayerManager` incremented
+`layers_wanted` and nothing ever read it, and the high-water depth was recorded
+with `layer_depth.update(|x| x.max(layer_depth.get()))` — a value maxed against
+itself — so the deepest nesting a scene reached was never stored at all.
+`layer_depth_used` carried an `#[allow(unused)]` saying "only used for
+debugging", which is how a line that could never work went unnoticed.
+
+It now publishes per painted scene and rides the once-per-second
+`[blitz-frame]` line as the worst scene of each sample window:
+
+```
+layers_wanted_max=… layers_used_max=… layer_depth_max=…
+```
+
+Not on the MCP surface, so `blitz-bench` cannot read it. That surface carries
+timings only, and adding a field there means changing the protocol crate, the
+runtime and the bench across two more repositories for one reading. The log
+line already existed and already knew how to write to a file.
+
+Reading it needs the file, because a Finder-launched bundle discards stderr.
+`scripts/local-delivery.sh` pins `BLITZ_FRAME_STATS` and
+`BLITZ_FRAME_STATS_FILE` into `LSEnvironment` beside the control descriptor, so
+a `stable` build writes to `target/blitz-frame.log`. It appends, so delete it
+before a run worth reading:
+
+```bash
+rm -f target/blitz-frame.log
+```
+
+Two things to read out of it, one of which is not about performance:
+
+- **`wanted` above `used`** means the scene hit `LAYER_LIMIT` (1024) and layers
+  were silently skipped. A skipped layer is a skipped clip, so content that
+  should have been cut off at a scrollport edge was drawn whole. That would be
+  a correctness bug hiding inside a performance counter.
+- **`used` against `layer_depth_max`** separates two different costs: many
+  shallow clips, versus deep nesting the rasteriser has to keep live at once.
+
+What it cannot answer: draw commands. Layers are the countable part of scene
+complexity today; fill and stroke counts are not tallied anywhere, and adding
+that tally is only worth it if the layer count comes back small.
+
+**Result:**
 
 ---
 
