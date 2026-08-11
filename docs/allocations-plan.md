@@ -730,6 +730,44 @@ no better than 9, because below the working set the eviction thrashes either
 way. 16 is just past the edge, 24 buys nothing further, and the cost is about
 16MB of resident memory on a 6,331 node tree.
 
+### Attempted and backed out: ignoring the parent size
+
+Instrumented the rejection reasons, because the next fix should target whatever
+actually dominates rather than whatever reads best. Cumulative over a session:
+
+| rejection reason | count | share |
+| --- | --- | --- |
+| **parent size differs** | **269,464** | **70%** |
+| known dimension differs | 76,520 | 20% |
+| available space differs | 33,294 | 9% |
+| no entry at all | 1,328 | <1% |
+
+So the parent-size equality check discards 70% of otherwise usable entries, and
+Gecko's idea says most of those nodes cannot care: a node's geometry only
+follows the parent's size if some length in it is a percentage.
+
+Built it — a `depends_on_parent_size` predicate on the length type and on
+`Style`, supplied by the embedder at lookup — and **it broke four grid baseline
+tests**, `grid_align_items_baseline_child_multiline` in all four box/direction
+combinations.
+
+Two theories, both refuted by those same four tests. First that the final-layout
+entry was the problem, since a box can follow its parent through stretch
+alignment without any percentage: restricting the relaxation to the measure path
+alone changed nothing. Second that the measure cache discards baselines, since
+it stores `Size<f32>` and rebuilds with `from_outer_size`: storing the whole
+`LayoutOutput` changed nothing either.
+
+Backed out rather than left half-understood. The 70% figure is real and the idea
+is still the highest-ceiling item on
+[layout-caching-prior-art.md](layout-caching-prior-art.md)'s list, but something
+about grid baseline alignment depends on the parent size through a path neither
+theory covers, and shipping a cache that is wrong for grid is worse than a cache
+that misses.
+
+**What would settle it:** read one of those four tests and find what actually
+differs, rather than proposing a third mechanism. That is where to pick this up.
+
 Not done: Chromium's true LRU promotion, and Gecko's "does the result depend on
 the varying input at all", which this document's prior-art sibling calls the
 strongest idea in its sweep. Neither is worth building now. Eviction is
