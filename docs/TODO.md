@@ -22,6 +22,47 @@ numbers.
    Chuzz path-depends on `~/code/blitz-rust`; this repository builds ps-blitz from a pinned
    git rev. A fix in one does not reach the other.
 
+## Resume here
+
+Paused 2026-08-11 for one short unrelated project. This is where the performance
+workstream picks up, in this order, and each line already has its measurement — see
+"Done, 2026-08-11" below for what produced them.
+
+**A. Why a scrollport clip costs ~110us.** The largest measured item left. Clip and
+opacity layers are 44% of the frame, and within that the count is not the cost: a
+background clip is about 0.8us, a scrollport clip about 110us, and the ~30 remaining ones
+are worth **2.5ms of a 7.4ms frame**. Two candidates, and they need separating before
+anything is designed:
+
+  1. Whether vello allocates an intermediate render target per clip rather than using a
+     scissor rect for an axis-aligned rectangle. A vello question.
+  2. Whether nested scrollports re-clip regions an ancestor already clipped. Ours, and
+     cheap to answer now that `layers_by_site` is on the `[blitz-frame]` line.
+
+**B. Re-baseline everything unpaced.** Every frame-rate figure recorded before step 10 of
+[allocations-plan.md](allocations-plan.md) came through a harness pacing itself at 60Hz.
+The millisecond phase timings survive; the frame rates and `missedRefreshes` counts do
+not. Until this is redone the workstream's own baseline is wrong. `BENCH_PACE=0`, three
+runs, discard the first.
+
+**C. The two deferred items, both re-scoped by measurement.** Path caching (item 11) is
+now judged against an 8.33ms frame rather than a 40ms one, which is the whole reason it
+was deferred rather than dropped. mimalloc (item 6) is a **memory** experiment aimed at
+the 78MB of empty-but-resident malloc regions, not a speed one.
+
+**Explicitly not next:** the Boa concatenation. Arithmetic puts it at ~30ms across a
+50,000-character reply against the 2.3s the parse cost, and it cannot be measured outside
+the app. Leave it until something measures it there.
+
+**Two loose ends from that session**, neither performance work but both mine:
+
+- Roughly 220 characters of `abcdefg…` typed into one of the five open project drafts in
+  the real store, while testing the composer through `blitz-bench type`.
+- Five UI-reachable commands with no Rust implementation — `resolveModeration` (5
+  callsites), `cancelTask`, `setProjectModerator`, `setProjectStatus`, `reorderProjects` —
+  which `selectApi()` routes to the mock. Inferred from the routing table, never confirmed
+  live. `forkProject` is a sixth with no callsites and is simply dead.
+
 ## Do next
 
 | # | Item | Detail |
