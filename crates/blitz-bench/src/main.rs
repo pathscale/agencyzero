@@ -13,12 +13,13 @@
 //! own definition of the wire. The previous client hand-wrote this JSON and got
 //! the adjacent tagging of `AgentAction` wrong, which presented as a hung app.
 
+use std::collections::HashMap;
 use std::time::{Duration, Instant};
 
 use blitz_control_protocol::{
     AgentAction, AgentControlRequest, AgentSnapshot, DebugResponse, DebugStream,
     DiagnosticsRequest, InputCommand, KeyPhase, Modifiers, RendererMetrics, SemanticNode,
-    WheelPhase,
+    SnapshotRequest, WheelPhase,
 };
 use eyre::{Result, bail};
 
@@ -35,6 +36,7 @@ usage: blitz-bench <mode> [args]
   frames                      one metrics read, laid out for reading
   metrics                     the raw metrics response
   tree                        the semantic tree
+  layout [name-substr]        live boxes: x, y, w, h per named node
   watch [seconds]             stream metrics/console/runtimeErrors (default 20)
   scroll [ticks] [delta]      paced wheel events, then metrics (default 120 -80)
   type [count] [name-substr]  drive real keystrokes into a text field (default 20)
@@ -77,6 +79,79 @@ async fn metrics(client: &mut Client) -> Result<RendererMetrics> {
 
 /// The whole tree. `max_depth` is snake_case inside the variant even though the
 /// frame wrapper is camelCase, which is the trap the shared types remove.
+/// Print the live box of every named node, optionally filtered by name.
+///
+/// The reason this exists: a layout complaint that cannot be reproduced from
+/// the markup is answered by the boxes the running app actually computed, not
+/// by another screenshot. `include_layout` has been in the diagnostics snapshot
+/// all along; nothing exposed it.
+async fn layout(client: &mut Client, want: &str) -> Result<()> {
+    let answer = client
+        .diagnostics(&DiagnosticsRequest::Snapshot(SnapshotRequest {
+            include_dom: true,
+            include_layout: true,
+            include_computed_style: false,
+        }))
+        .await?;
+    let DebugResponse::Snapshot(snapshot) = answer.response else {
+        bail!("asked for a layout snapshot, got {:?}", answer.response);
+    };
+    let bounds: HashMap<u64, serde_json::Value> = snapshot
+        .layout
+        .as_ref()
+        .and_then(|value| value.as_array())
+        .map(|rows| {
+            rows.iter()
+                .filter_map(|row| {
+                    let id = row.get("nodeId")?.as_u64()?;
+                    Some((id, row.get("bounds")?.clone()))
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+
+    let nodes = snapshot
+        .dom
+        .as_ref()
+        .and_then(|value| value.as_array())
+        .cloned()
+        .unwrap_or_default();
+
+    let mut shown = 0usize;
+    for node in &nodes {
+        let name = node.get("name").and_then(|v| v.as_str()).unwrap_or("");
+        let role = node.get("role").and_then(|v| v.as_str()).unwrap_or("");
+        if !want.is_empty() && !name.contains(want) && !role.contains(want) {
+            continue;
+        }
+        let Some(id) = node.get("id").and_then(|v| v.as_u64()) else {
+            continue;
+        };
+        let Some(box_) = bounds.get(&id) else {
+            continue;
+        };
+        let read = |key: &str| box_.get(key).and_then(|v| v.as_f64()).unwrap_or(f64::NAN);
+        println!(
+            "{:>6}  {:<16} {:>8.1} {:>8.1} {:>8.1} {:>8.1}  {}",
+            id,
+            role,
+            read("x"),
+            read("y"),
+            read("width"),
+            read("height"),
+            name.chars().take(60).collect::<String>()
+        );
+        shown += 1;
+    }
+    if shown == 0 {
+        println!(
+            "no named node matched {want:?} ({} in the tree)",
+            nodes.len()
+        );
+    }
+    Ok(())
+}
+
 async fn inspect(client: &mut Client) -> Result<(AgentSnapshot, f64)> {
     let started = Instant::now();
     let answer = client
@@ -308,6 +383,10 @@ async fn main() -> Result<()> {
                 })
                 .await?;
             println!("{}", report::dump(&answer.envelope, 3000));
+        }
+        "layout" => {
+            let want = args.get(1).map(String::as_str).unwrap_or("");
+            layout(&mut client, want).await?;
         }
         "nodes" => {
             nodes(&mut client).await?;
