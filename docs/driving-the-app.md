@@ -22,10 +22,38 @@ Known broken: the debug driver's `screenshot` route returns an identical image
 regardless of build. Three different builds produced the same SHA256. Do not use
 it to judge visual correctness.
 
+## Local development mode
+
+**Default to this while iterating. Build a bundle only when asked for one.**
+
+```sh
+scripts/local-delivery.sh quick
+```
+
+54 seconds against several minutes, and the difference is entirely work that
+cannot matter to a Rust-only change: it skips the frontend build, the test
+gate, and bundling. It builds `az-gui` alone, drops it into the bundle already
+at `target/release/bundle/macos/AgencyZero.app`, and re-signs.
+
+Everything else in that bundle is invariant. The frontend dist is already
+embedded, the `agency-proxy` sidecar is untouched, and `Info.plist` keeps the
+`LSEnvironment` block that `stable` pinned, so the control descriptor and the
+frame log keep working across a swap.
+
+Two conditions on it. It needs a bundle to exist, so run `stable` once after a
+clean checkout, and it runs no tests, so `verify` or `stable` before anything
+leaves the machine. Replacing a binary invalidates the bundle signature and
+macOS then refuses to launch it at all, which is why the re-sign is part of the
+mode rather than something to remember.
+
+A measure-fix-measure cycle is: `quick`, quit the app, `open` it, take the
+reading. Rebuilding both bundles for each turn of that loop is the slow way to
+answer a question that a binary swap answers identically.
+
 ## Launching
 
 ```sh
-scripts/local-delivery.sh stable        # builds with blitz-inspector
+scripts/local-delivery.sh stable        # full gate, builds with blitz-inspector
 ```
 
 ```sh
