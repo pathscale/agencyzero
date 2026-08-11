@@ -175,6 +175,28 @@ async fn nodes(client: &mut Client) -> Result<usize> {
 
 /// A fixed scroll burst, paced like a trackpad rather than a firehose.
 async fn scroll(client: &mut Client, ticks: usize, delta: f64) -> Result<()> {
+    // Say what the pace is, every time, before any number is printed.
+    //
+    // The default sends a wheel event every 1/60s, so the app is asked for
+    // roughly 60 frames a second and answers about 53 once the sleep overhead
+    // is counted. Read without this line, that 53 looks like the application
+    // failing to keep up on a 120Hz display, and the `missed_refreshes` figure
+    // beside it appears to confirm it. Both are describing this loop.
+    //
+    // `BENCH_PACE=0` sends as fast as the app accepts, which is what measures
+    // the application: it reaches 120fps with no missed refreshes.
+    let pace = pace();
+    if pace.is_zero() {
+        println!("pace: unpaced (BENCH_PACE=0) - measures app throughput");
+    } else {
+        println!(
+            "pace: {:.2}ms between events ({:.0} Hz requested); fps and missed_refreshes \
+             below describe this pace, not the app's limit. BENCH_PACE=0 to remove it",
+            pace.as_secs_f64() * 1000.0,
+            1.0 / pace.as_secs_f64(),
+        );
+    }
+
     let mut latencies = Vec::with_capacity(ticks);
     for _ in 0..ticks {
         let started = Instant::now();
