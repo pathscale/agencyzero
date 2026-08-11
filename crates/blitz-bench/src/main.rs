@@ -18,8 +18,8 @@ use std::time::{Duration, Instant};
 
 use blitz_control_protocol::{
     AgentAction, AgentControlRequest, AgentSnapshot, DebugResponse, DebugStream,
-    DiagnosticsRequest, InputCommand, KeyPhase, Modifiers, RendererMetrics, SemanticNode,
-    SnapshotRequest, WheelPhase,
+    DiagnosticsRequest, InputCommand, KeyPhase, Modifiers, PointerPhase, RendererMetrics,
+    SemanticNode, SnapshotRequest, WheelPhase,
 };
 use eyre::{Result, bail};
 
@@ -40,7 +40,7 @@ usage: blitz-bench <mode> [args]
   layout [name-substr]        live boxes: x, y, w, h per named node
   spill [h|v] [tolerance]     boxes that stick out of their container, worst first
   watch [seconds]             stream metrics/console/runtimeErrors (default 20)
-  scroll [ticks] [delta]      paced wheel events, then metrics (default 120 -80)
+  scroll [ticks] [delta] [over]  wheel events over a named node (default 120 -80 Conversation)
   type [count] [name-substr]  drive real keystrokes into a text field (default 20)
   click <name-substring>      click the first matching visible, enabled node
 
@@ -271,6 +271,64 @@ async fn spill(client: &mut Client, axis: &str, tolerance: f64) -> Result<()> {
     if rows.len() > 40 {
         println!("... and {} more", rows.len() - 40);
     }
+    // Parent-relative overflow is blind to the case where a box and every
+    // ancestor up to the pane are all too wide together: each one fits inside
+    // the next and nothing reports. So also measure everything against the
+    // transcript itself, which is the edge the owner can see.
+    if let Some((pane, pane_box)) = snapshot
+        .nodes
+        .iter()
+        .filter(|node| node.name.contains("Conversation"))
+        .filter_map(|node| node.bounds.map(|bounds| (node, bounds)))
+        .max_by(|a, b| {
+            (a.1[2] * a.1[3])
+                .partial_cmp(&(b.1[2] * b.1[3]))
+                .unwrap_or(std::cmp::Ordering::Equal)
+        })
+    {
+        let right = pane_box[0] + pane_box[2];
+        let mut out: Vec<(f64, u64, String)> = snapshot
+            .nodes
+            .iter()
+            .filter_map(|node| node.bounds.map(|b| (node, b)))
+            // Descendants of the pane only. The project panel sits to the
+            // right of the transcript and every row in it is "past" the
+            // transcript's edge without overflowing anything.
+            .filter(|(node, _)| {
+                let mut id = node.parent;
+                for _ in 0..64 {
+                    match id {
+                        Some(current) if current == pane.id => return true,
+                        Some(current) => id = by_id.get(&current).and_then(|n| n.parent),
+                        None => return false,
+                    }
+                }
+                false
+            })
+            .filter_map(|(node, b)| {
+                let over = (b[0] + b[2]) - right;
+                (over > 0.5 && b[2] > 0.0 && b[3] > 0.0).then(|| {
+                    (
+                        over,
+                        node.id,
+                        format!("{} {}", node.role, describe(node.id)),
+                    )
+                })
+            })
+            .collect();
+        out.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
+        println!(
+            "\ntranscript pane [{:.0},{:.0} {:.0}x{:.0}], right edge {right:.0}",
+            pane_box[0], pane_box[1], pane_box[2], pane_box[3]
+        );
+        if out.is_empty() {
+            println!("  nothing reaches past it");
+        }
+        for (over, id, what) in out.iter().take(15) {
+            println!("  {over:>8.1}px past  {id:>12}  {what}");
+        }
+    }
+
     // The per-row list is dominated by whichever container repeats most, so
     // the grouping is what says where to look. A `truncate` row overflows by
     // design and clips in paint; a container that appears here once, deep in
@@ -308,6 +366,49 @@ async fn nodes(client: &mut Client) -> Result<usize> {
 }
 
 /// A fixed scroll burst, paced like a trackpad rather than a firehose.
+/// Put the pointer over a named node, so the next wheel event goes to the
+/// scroller under it.
+///
+/// A wheel event carries no coordinates. It lands on whatever the document
+/// last saw the pointer over, which after a fresh launch is nothing, and the
+/// scroll then goes to the root or to whichever container happened to be
+/// hovered. Three scroll sweeps over a transcript changed the mounted rows not
+/// at all and read as "the bug does not reproduce", when the transcript had
+/// never been scrolled.
+async fn hover_over(client: &mut Client, want: &str) -> Result<bool> {
+    let (snapshot, _) = inspect(client).await?;
+    let Some(node) = snapshot
+        .nodes
+        .iter()
+        .filter(|node| node.visible && node.name.contains(want))
+        .filter_map(|node| node.bounds.map(|bounds| (node, bounds)))
+        .max_by(|a, b| {
+            (a.1[2] * a.1[3])
+                .partial_cmp(&(b.1[2] * b.1[3]))
+                .unwrap_or(std::cmp::Ordering::Equal)
+        })
+        .map(|(node, bounds)| (node.name.clone(), bounds))
+    else {
+        println!("no visible node named {want:?} to hover; wheel goes wherever it goes");
+        return Ok(false);
+    };
+    let (name, bounds) = node;
+    let (x, y) = (bounds[0] + bounds[2] / 2.0, bounds[1] + bounds[3] / 2.0);
+    client
+        .agent(&AgentControlRequest::Act(AgentAction::Input(
+            InputCommand::Pointer {
+                phase: PointerPhase::Move,
+                x,
+                y,
+                button: 0,
+                modifiers: Modifiers::default(),
+            },
+        )))
+        .await?;
+    println!("pointer over {name:?} at {x:.0},{y:.0}");
+    Ok(true)
+}
+
 async fn scroll(client: &mut Client, ticks: usize, delta: f64) -> Result<()> {
     // Say what the pace is, every time, before any number is printed.
     //
@@ -589,7 +690,9 @@ async fn main() -> Result<()> {
         "scroll" => {
             let ticks: usize = args.get(1).and_then(|v| v.parse().ok()).unwrap_or(120);
             let delta: f64 = args.get(2).and_then(|v| v.parse().ok()).unwrap_or(-80.0);
+            let over = args.get(3).map(String::as_str).unwrap_or("Conversation");
             let count = nodes(&mut client).await?;
+            hover_over(&mut client, over).await?;
             report::show("before", &metrics(&mut client).await?);
             scroll(&mut client, ticks, delta).await?;
             report::show("after", &metrics(&mut client).await?);
