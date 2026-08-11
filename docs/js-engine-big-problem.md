@@ -74,15 +74,26 @@ also too strong.
   come out. Still O(body) per token.
 - The `sameBlock` comparisons across N paragraph blocks sum to the body length.
   Still O(body) per token.
-- The DOM write was **already** bounded before the change. The `<For>` over
-  `block.text.split(/\n{2,}/)` diffs paragraphs by value, so an unchanged
-  paragraph already kept its node and only the growing one was rewritten.
-  Passes 4 to 6 were not costing what the ledger above says they cost.
 
-So the paragraph split is an **enabler, not a fix**: a paragraph closed by a
-blank line can never change again, which makes everything before the last blank
-line provably settled. A parse whose only block is the whole message has no
-prefix that can be cached; now it has one.
+**Correction, 2026-08-11, after testing it.** This section previously claimed the
+DOM write was already bounded before the change, on the reasoning that the
+`<For>` over `block.text.split(/\n{2,}/)` diffs paragraphs by value. That was
+wrong, and the test says so: remove the blank-line flush and
+`holds a finished paragraph still while the next one grows` fails.
+
+The inner `<For>` never gets the chance to diff. With the whole reply as one
+block, `sameBlock` fails on it, the memo hands the outer `<For>` a new block
+object, and `<For>` tears the whole row down — inner `<For>` and every `<p>`
+inside it. So passes 4 to 6 *were* costing what the ledger above says, and
+splitting on blank lines is what bounds them.
+
+So the paragraph split does two things: it bounds the DOM write, and it makes a
+prefix cacheable. A paragraph closed by a blank line can never change again,
+which makes everything before the last blank line provably settled, and a parse
+whose only block is the whole message has no prefix to cache.
+
+What it does *not* do on its own is make the parse sublinear, which is what the
+incremental splitter below is for.
 
 **The actual fix is an incremental parse**: keep the blocks already produced for
 the settled prefix, and re-parse only from the last blank line onward. That is
