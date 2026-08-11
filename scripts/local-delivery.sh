@@ -54,6 +54,12 @@ pin_inspector_env() {
   # LSEnvironment is read by launchd from the bundle itself, so it holds for
   # every way the app can start. Applied here rather than in tauri.conf.json
   # because this belongs to a local diagnostics build and must never ship.
+  #
+  # BLITZ_FRAME_STATS turns on the once-per-second `[blitz-frame]` line, which
+  # carries the per-scene layer counts. Those are the one renderer figure the
+  # MCP surface does not expose, so the file is the only way to read them, and
+  # a Finder-launched bundle has nowhere to send stderr. It appends, so delete
+  # target/blitz-frame.log before a run you intend to read.
   bundle=$1
   plist="$bundle/Contents/Info.plist"
   plutil -remove LSEnvironment "$plist" >/dev/null 2>&1 || true
@@ -61,6 +67,8 @@ pin_inspector_env() {
     "<dict>
        <key>BLITZ_INCREMENTAL</key><string>1</string>
        <key>TAURI_BLITZ_CONTROL_DESCRIPTOR</key><string>$repo_root/target/blitz-control.json</string>
+       <key>BLITZ_FRAME_STATS</key><string>1</string>
+       <key>BLITZ_FRAME_STATS_FILE</key><string>$repo_root/target/blitz-frame.log</string>
      </dict>" "$plist"
   # Editing Info.plist after bundling invalidates the signature, and macOS then
   # refuses to launch the app at all: `open` fails with -54 and nothing starts.
