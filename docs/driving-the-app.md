@@ -7,6 +7,50 @@ and none of it needs a human to scroll or click.
 The point is that a measurement nobody can reproduce is an anecdote. Drive a
 fixed interaction, read the numbers, change one thing, drive it again.
 
+## Verify here, not in a browser. Read this before reaching for :3010
+
+The frontend also runs standalone against a mock on port 3010
+([ui-verification.md](ui-verification.md)), and that surface answers exactly one
+question: **does the markup come out right.** It cannot answer anything else,
+and reaching for it out of habit has cost real time.
+
+- **It proves nothing about performance, ever.** The browser runs V8 and a real
+  DOM. The app runs Boa and `blitz-dom`. V8 has cons strings and Boa does not,
+  which is the entire subject of
+  [js-engine-big-problem.md](js-engine-big-problem.md); a string benchmark in a
+  browser measures a rope that does not exist in the shipping engine.
+- **The mock does not stream.** `src/api/mock.ts` emits no `run:text` at all —
+  `grep -c "run:text" src/api/mock.ts` returns 0. Nothing in the streaming path
+  can be exercised there. Two attempts to drive a streaming reply through it
+  failed for that reason and looked like a driving problem.
+- **jsdom is the same trap one level down.** A vitest benchmark measures the
+  function, which is worth having, but it is not the application.
+
+So: correctness of rendered markup, the mock or jsdom. **Anything with a number
+attached, the real app through `blitz-bench`.** Launch it, attach, drive a fixed
+interaction, read the metrics:
+
+```bash
+scripts/local-delivery.sh quick
+open target/release/bundle/macos/AgencyZero.app
+cargo run -q -p blitz-bench -- frames
+```
+
+Four rules that each cost a session to learn:
+
+1. **`BENCH_PACE=0` or the number is about the harness.** `scroll` and `type`
+   sleep 1/60s between events by default, so the reported fps and
+   `missedRefreshes` describe the bench. Unpaced this app does 120fps with zero
+   missed refreshes; paced it reads 53 and looks broken.
+2. **Take three runs and discard the first.** The first interaction after a
+   launch is cold and reads several milliseconds high.
+3. **Check the instrument exists before building one.** Twice the timer being
+   written already existed two crates away. `cargo tree -e features -i <crate>`
+   when a feature looks like it is not compiled in, because `ps-anyrender-vello`
+   reaches the app through `tauri-runtime-blitz` rather than `ps-blitz-shell`.
+4. **Layer counts ride the frame log, not the MCP surface.** `target/blitz-frame.log`,
+   `layers_by_site=...`. Delete it before a run worth reading.
+
 ## Two surfaces, and which one you want
 
 | | Agent level | Debug level |
