@@ -663,6 +663,66 @@ workstream.
 
 ---
 
+## 11. The Taffy measure cache, in ps-taffy
+
+`[x]` **Measured 2026-08-11.** The one item on the list whose premise survived
+every other fix today. `performance.md` measured 16,842 `compute_child_layout`
+calls at a 52% hit rate on 2026-08-10, and the assumption was that it was
+tangled up with the 18ms keystroke the `scrollHeight` fix removed. It was not:
+the keystroke is now 3.3ms and the cache was still missing half its lookups on
+the same order of calls.
+
+**The instrument already existed and nobody had seen it.** `layout_counters`
+prints `cache N/M hits P%` on every resolve, from
+`blitz-dom/src/resolve.rs:196`. It goes to **stdout**, which a Finder-launched
+bundle discards, and the frame log only captures the `[blitz-frame]` line.
+Running the binary directly is what surfaces it. Third time today that the
+timer being reached for already existed.
+
+Both defects named in
+[layout-caching-prior-art.md](layout-caching-prior-art.md) were real, and each
+was worth about the same:
+
+| typing one character | baseline | + validity test | + slot fix |
+| --- | --- | --- | --- |
+| `compute_child_layout` calls | 16,140 | 7,589 | **3,330** |
+| cache lookups | 32,186 | 22,169 | **9,178** |
+| misses | 16,140 | 7,589 | **3,330** |
+| **layout phase** | **8.0ms** | 5.7ms | **2.7ms** |
+
+**Defect 2, lookup is equality rather than validity.** Yoga asks whether a
+stored result is *still correct* rather than whether the question was
+identical. `newSizeIsStricterAndStillValid` was named in that document as "our
+miss pattern exactly", and it was: intrinsic sizing re-descends offering a
+sequence of definite widths, and an answer measured under a wider offer still
+holds when the content fit inside the narrower one.
+
+**Defect 1, definite sizes collide in one slot.** `compute_cache_slot` mapped
+each question to a fixed slot and documented the assumption that made it safe —
+a node is generally sized under definite *or* max-content but not both.
+Intrinsic sizing breaks exactly that, so with neither dimension known every
+definite width landed in slot 5 and each measurement destroyed the one before
+it. The cache was evicting the entries it was about to be asked for.
+
+Correctness is carried by taffy's own suite: **5,541 generated layout tests
+pass unchanged** across both changes. The only tests that moved are the two
+hand-written ones asserting how often a leaf is measured, 7 to 6, which is the
+quantity being optimised. They were updated to the new exact count rather than
+loosened to an upper bound, because `<= 7` would stay green if the cache
+silently got worse again.
+
+Frame after both, under typing: resolve 1.61ms, scene 0.80ms, renderer 4.47ms,
+total 6.87ms at 114fps. **The renderer is now 65% of the frame and layout is no
+longer the largest item in the application.** That changes what is worth doing
+next, and step 9's scrollport clips inherit the position.
+
+Not done: Chromium's N-way LRU proper. Eviction here is insertion-ordered,
+because `get` takes `&self` and cannot record a touch, and interior mutability
+on the hottest path in layout costs more than better eviction is worth across
+nine entries. Worth revisiting only if a measurement asks for it.
+
+---
+
 ## Explicitly not doing
 
 - **Building a mempool.** Two already exist below the paint boundary: vello's
