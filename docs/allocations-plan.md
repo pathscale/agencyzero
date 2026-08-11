@@ -148,6 +148,29 @@ a full resolve of the document before the keystroke can return.
 Frame timings during the same run: `resolve` 32.63ms mean, `scene` 1.05ms,
 `renderer` 2.00ms, 26.9 fps with 139 of 256 frames missing a refresh.
 
+### Fixed, and re-measured on 0.5.26
+
+A text input now answers `scrollHeight` from its own parley editor instead of
+flushing. `TextInputData::set_text` re-applies the wrap width and refreshes that
+layout as the text changes, so the editor's height is already current: resolving
+the document could not change the answer, only charge for it.
+
+| | 0.5.25 | 0.5.26 |
+| --- | --- | --- |
+| `event:input` | 21.55ms | **3.50ms** |
+| of which `layout:flush_from_script` | 19.16ms | **absent from the profile** |
+| frame `total` | 40.04ms | **10.05ms** |
+
+6.2x on the keystroke, 4x on the frame, and the forced resolve is gone rather
+than reduced.
+
+**The composition changed, and it matters for step 6.** `scene` went 0.76 to
+2.19ms and `renderer` 1.72 to 4.39ms. Neither got slower: with resolve no
+longer swamping the frame, more frames actually present, so paint and submit
+carry a larger share of a much smaller total. Paint is now roughly 22% of a
+frame rather than 1.9% — which is the shift the owner argued for when I wanted
+to drop the path caching, arriving within the hour.
+
 ---
 
 ## 3. Split the memory question before theorising about it
