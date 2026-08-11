@@ -30,15 +30,19 @@ it to judge visual correctness.
 scripts/local-delivery.sh quick
 ```
 
-54 seconds against several minutes, and the difference is entirely work that
-cannot matter to a Rust-only change: it skips the frontend build, the test
-gate, and bundling. It builds `az-gui` alone, drops it into the bundle already
-at `target/release/bundle/macos/AgencyZero.app`, and re-signs.
+Under a minute against several, and the difference is the test gate and
+bundling, neither of which can change what the binary does. It builds the
+frontend dist and `az-gui`, drops the binary into the bundle already at
+`target/release/bundle/macos/AgencyZero.app`, and re-signs.
 
-Everything else in that bundle is invariant. The frontend dist is already
-embedded, the `agency-proxy` sidecar is untouched, and `Info.plist` keeps the
-`LSEnvironment` block that `stable` pinned, so the control descriptor and the
-frame log keep working across a swap.
+The dist is built rather than assumed, and that is not optional: Tauri embeds
+it into the binary at compile time, so a Rust-only rebuild would silently ship
+whatever `dist` last happened to hold, and a frontend change would appear to
+have no effect.
+
+Everything else in the bundle is invariant. The `agency-proxy` sidecar is
+untouched and `Info.plist` keeps the `LSEnvironment` block that `stable`
+pinned, so the control descriptor and the frame log survive a swap.
 
 Two conditions on it. It needs a bundle to exist, so run `stable` once after a
 clean checkout, and it runs no tests, so `verify` or `stable` before anything
