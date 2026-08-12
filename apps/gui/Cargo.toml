@@ -65,9 +65,9 @@ uuid = "1"
 chrono = { version = "0.4", default-features = false, features = ["clock", "serde", "std"] }
 tokio = { version = "1", features = ["process", "rt-multi-thread", "time"] }
 tauri = { version = "2", features = [] }
-tauri-runtime-blitz = { git = "https://github.com/pathscale/tauri-runtime-blitz.git", rev = "cf9b75ccab95cb715ab649bab0ca775719c7d780", optional = true }
-blitz-dom = { package = "ps-blitz-dom", git = "https://github.com/pathscale/ps-blitz.git", rev = "40d0153770a17c5456ac222b89bbb318601bb99d", features = ["system-fonts"], optional = true }
-blitz-script = { package = "ps-blitz-script", git = "https://github.com/pathscale/ps-blitz.git", rev = "40d0153770a17c5456ac222b89bbb318601bb99d", features = ["system-fonts"], optional = true }
+tauri-runtime-blitz = { git = "https://github.com/pathscale/tauri-runtime-blitz.git", rev = "6173d8394dc8038f8a1717f220dd01a0a12830df", optional = true }
+blitz-dom = { package = "ps-blitz-dom", git = "https://github.com/pathscale/ps-blitz.git", rev = "464444a2a2708afea65f89c38d2f4908cda89af9", features = ["system-fonts"], optional = true }
+blitz-script = { package = "ps-blitz-script", git = "https://github.com/pathscale/ps-blitz.git", rev = "464444a2a2708afea65f89c38d2f4908cda89af9", features = ["system-fonts"], optional = true }
 # Named only to turn on its per-frame phase timer, which splits the one opaque
 # "renderer" figure into scene encode, GPU submit and present. The renderer
 # arrives through tauri-runtime-blitz, so a feature added anywhere in the
