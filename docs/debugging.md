@@ -17,6 +17,29 @@ Never run two processes against the same profile. The normal profile is a safe
 Blitz debugging target only while the owner is using Experimental; reverse the
 choice when the owner is using normal AgencyZero.
 
+Check profile ownership directly on the advisory locks. An empty result means
+that profile is available:
+
+```sh
+lsof "$HOME/Library/Application Support/com.pathscale.agencyzero/db.lock"
+lsof "$HOME/Library/Application Support/com.pathscale.agencyzero.experimental/db.lock"
+```
+
+Current builds also write the owning PID and executable name into the lock
+file. The kernel lock remains authoritative: the text is diagnostic and may be
+stale after a crash. If a second process targets an owned profile, it logs the
+owner record and exits successfully before opening WorkTable or showing a
+window.
+
+Stop a process started for debugging only with explicit SIGTERM:
+
+```sh
+kill -TERM <pid>
+```
+
+Never hard-kill AgencyZero. Its SIGTERM handler drains every WorkTable before
+exiting; SIGKILL bypasses that protection.
+
 ## Shared first checks
 
 Frontend-only work is fastest in fixture mode:

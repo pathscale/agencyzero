@@ -61,13 +61,14 @@ derive_more = { version = "2.0.1", features = ["from", "error", "display", "debu
 futures = "0.3"
 backon = { version = "1.6.0", default-features = false }
 libc = "0.2"
+dirs = "6"
 uuid = "1"
 chrono = { version = "0.4", default-features = false, features = ["clock", "serde", "std"] }
 tokio = { version = "1", features = ["process", "rt-multi-thread", "time"] }
 tauri = { version = "2", features = [] }
-tauri-runtime-blitz = { git = "https://github.com/pathscale/tauri-runtime-blitz.git", rev = "c908c37fd72d58939607def6a32015a301b8e8ad", optional = true }
-blitz-dom = { package = "ps-blitz-dom", git = "https://github.com/pathscale/ps-blitz.git", rev = "4a825e548a387a3cb424b61c8db91f27d489b394", features = ["system-fonts"], optional = true }
-blitz-script = { package = "ps-blitz-script", git = "https://github.com/pathscale/ps-blitz.git", rev = "4a825e548a387a3cb424b61c8db91f27d489b394", features = ["system-fonts"], optional = true }
+tauri-runtime-blitz = { git = "https://github.com/pathscale/tauri-runtime-blitz.git", rev = "1279f3f9baa539f9c4a9063641756140da30a15f", optional = true }
+blitz-dom = { package = "ps-blitz-dom", git = "https://github.com/pathscale/ps-blitz.git", rev = "064ba1e0d809ac09405739c2bd68563b942c3725", features = ["system-fonts", "parallel-construct"], optional = true }
+blitz-script = { package = "ps-blitz-script", git = "https://github.com/pathscale/ps-blitz.git", rev = "064ba1e0d809ac09405739c2bd68563b942c3725", features = ["system-fonts"], optional = true }
 # Named only to turn on its per-frame phase timer, which splits the one opaque
 # "renderer" figure into scene encode, GPU submit and present. The renderer
 # arrives through tauri-runtime-blitz, so a feature added anywhere in the

@@ -38,6 +38,7 @@ usage: blitz-bench <mode> [args]
   metrics                     the raw metrics response
   tree                        the semantic tree
   layout [name-substr]        live boxes: x, y, w, h per named node
+  transcript                  transcript scroll state and lowest DOM descendants
   spill [h|v] [tolerance]     boxes that stick out of their container, worst first
   watch [seconds]             stream metrics/console/runtimeErrors (default 20)
   scroll [ticks] [delta] [over]  wheel events over a named node (default 120 -80 Conversation)
@@ -147,14 +148,36 @@ async fn layout(client: &mut Client, want: &str) -> Result<()> {
                 .and_then(|v| v.as_f64())
                 .unwrap_or(f64::NAN)
         };
+        let row = snapshot
+            .layout
+            .as_ref()
+            .and_then(|value| value.as_array())
+            .and_then(|rows| {
+                rows.iter()
+                    .find(|row| row.get("nodeId").and_then(|value| value.as_u64()) == Some(id))
+            });
+        let pair = |field: &str, index: usize| {
+            row.and_then(|row| row.get(field))
+                .and_then(|value| value.get(index))
+                .and_then(|value| value.as_f64())
+                .unwrap_or(f64::NAN)
+        };
         println!(
-            "{:>6}  {:<16} {:>8.1} {:>8.1} {:>8.1} {:>8.1}  {}",
+            "{:>6}  {:<16} {:>8.1} {:>8.1} {:>8.1} {:>8.1}  scroll={:.1},{:.1} range={:.1},{:.1} client={:.1},{:.1} content={:.1},{:.1}  {}",
             id,
             role,
             read("x", 0),
             read("y", 1),
             read("width", 2),
             read("height", 3),
+            pair("scrollOffset", 0),
+            pair("scrollOffset", 1),
+            pair("scrollRange", 0),
+            pair("scrollRange", 1),
+            pair("clientSize", 0),
+            pair("clientSize", 1),
+            pair("scrollSize", 0),
+            pair("scrollSize", 1),
             name.chars().take(60).collect::<String>()
         );
         shown += 1;
@@ -163,6 +186,125 @@ async fn layout(client: &mut Client, want: &str) -> Result<()> {
         println!(
             "no named node matched {want:?} ({} in the tree)",
             nodes.len()
+        );
+    }
+    Ok(())
+}
+
+/// The scroll state and bottom-most descendants of the visible transcript.
+///
+/// A screenshot can show that a reply is clipped, but cannot distinguish the
+/// scroller being short of max from a child being laid out below the clip. This
+/// walks the actual DOM parent chain and reports both in one read-only sample.
+async fn transcript(client: &mut Client) -> Result<()> {
+    let answer = client
+        .diagnostics(&DiagnosticsRequest::Snapshot(SnapshotRequest {
+            include_dom: true,
+            include_layout: true,
+            include_computed_style: false,
+        }))
+        .await?;
+    let DebugResponse::Snapshot(snapshot) = answer.response else {
+        bail!("asked for a transcript snapshot, got {:?}", answer.response);
+    };
+    let nodes = snapshot
+        .dom
+        .as_ref()
+        .and_then(|value| value.as_array())
+        .ok_or_else(|| eyre::eyre!("snapshot omitted DOM rows"))?;
+    let rows = snapshot
+        .layout
+        .as_ref()
+        .and_then(|value| value.as_array())
+        .ok_or_else(|| eyre::eyre!("snapshot omitted layout rows"))?;
+    let conversation = nodes
+        .iter()
+        .find(|node| node.get("name").and_then(|value| value.as_str()) == Some("Conversation"))
+        .and_then(|node| node.get("id").and_then(|value| value.as_u64()))
+        .ok_or_else(|| eyre::eyre!("no Conversation node"))?;
+    let parent: HashMap<u64, Option<u64>> = nodes
+        .iter()
+        .filter_map(|node| {
+            Some((
+                node.get("id")?.as_u64()?,
+                node.get("parent").and_then(|value| value.as_u64()),
+            ))
+        })
+        .collect();
+    let named: HashMap<u64, (&str, &str)> = nodes
+        .iter()
+        .filter_map(|node| {
+            Some((
+                node.get("id")?.as_u64()?,
+                (
+                    node.get("role")
+                        .and_then(|value| value.as_str())
+                        .unwrap_or(""),
+                    node.get("name")
+                        .and_then(|value| value.as_str())
+                        .unwrap_or(""),
+                ),
+            ))
+        })
+        .collect();
+    let layout: HashMap<u64, &serde_json::Value> = rows
+        .iter()
+        .filter_map(|row| Some((row.get("nodeId")?.as_u64()?, row)))
+        .collect();
+    let conversation_row = layout
+        .get(&conversation)
+        .ok_or_else(|| eyre::eyre!("Conversation has no layout row"))?;
+    let pair = |row: &serde_json::Value, field: &str, index: usize| {
+        row.get(field)
+            .and_then(|value| value.get(index))
+            .and_then(|value| value.as_f64())
+            .unwrap_or(f64::NAN)
+    };
+    let bounds = conversation_row
+        .get("bounds")
+        .ok_or_else(|| eyre::eyre!("Conversation has no bounds"))?;
+    let viewport_bottom = bounds.get(1).and_then(|v| v.as_f64()).unwrap_or(f64::NAN)
+        + bounds.get(3).and_then(|v| v.as_f64()).unwrap_or(f64::NAN);
+    println!(
+        "Conversation id={conversation} top={:.1} bottom={viewport_bottom:.1} scrollTop={:.1} max={:.1} clientHeight={:.1} scrollHeight={:.1} gapToMax={:.1}",
+        bounds.get(1).and_then(|v| v.as_f64()).unwrap_or(f64::NAN),
+        pair(conversation_row, "scrollOffset", 1),
+        pair(conversation_row, "scrollRange", 1),
+        pair(conversation_row, "clientSize", 1),
+        pair(conversation_row, "scrollSize", 1),
+        pair(conversation_row, "scrollRange", 1) - pair(conversation_row, "scrollOffset", 1),
+    );
+    let is_descendant = |mut id: u64| {
+        for _ in 0..512 {
+            let Some(Some(next)) = parent.get(&id) else {
+                return false;
+            };
+            if *next == conversation {
+                return true;
+            }
+            id = *next;
+        }
+        false
+    };
+    let mut descendants: Vec<(f64, u64, f64)> = layout
+        .iter()
+        .filter_map(|(id, row)| {
+            if *id == conversation || !is_descendant(*id) {
+                return None;
+            }
+            let box_ = row.get("bounds")?;
+            let top = box_.get(1)?.as_f64()?;
+            let height = box_.get(3)?.as_f64()?;
+            Some((top + height, *id, top))
+        })
+        .collect();
+    descendants.sort_by(|left, right| right.0.total_cmp(&left.0));
+    for (bottom, id, top) in descendants.into_iter().take(12) {
+        let (role, name) = named.get(&id).copied().unwrap_or(("", ""));
+        println!(
+            "  id={id} top={top:.1} bottom={bottom:.1} fromViewportBottom={:.1} role={role} name={}",
+            bottom - viewport_bottom,
+            name.chars().take(100).collect::<String>()
         );
     }
     Ok(())
@@ -818,6 +960,7 @@ async fn main() -> Result<()> {
             let want = args.get(1).map(String::as_str).unwrap_or("");
             layout(&mut client, want).await?;
         }
+        "transcript" => transcript(&mut client).await?,
         "nodes" => {
             nodes(&mut client).await?;
         }

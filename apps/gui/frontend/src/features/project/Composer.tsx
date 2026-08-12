@@ -126,6 +126,8 @@ export type ComposerProps = {
   /** Whether a send during that run enters it instead of waiting for the slot. */
   canFollowUp?: boolean;
   onStop?: () => void;
+  /** Footer chrome entered or left and may have changed transcript height. */
+  onChromeChange?: () => void;
   /** Larger prompt text, centred layout — the new-project variant. */
   size?: "md" | "lg";
   /** Put the cursor here on mount, so an opened tab is ready to type into. */
@@ -351,6 +353,13 @@ export function Composer(props: ComposerProps): JSX.Element {
     if (!est?.priced || (est.severity === "low" && !isContextSwitch())) return false;
     return true;
   };
+  createEffect(() => {
+    // Both values change the warning's height. The callback is optional because
+    // draft and test composers have no transcript above them to realign.
+    void showCostAlert();
+    void confirmDisableCostWarning();
+    props.onChromeChange?.();
+  });
   const compactPressure = () => {
     const tokens = props.contextTokens ?? 0;
     const window = props.contextWindow ?? 0;

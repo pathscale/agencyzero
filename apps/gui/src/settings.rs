@@ -142,6 +142,9 @@ pub struct Review {
 pub struct WorkspaceTabs {
     pub open_project_keys: Vec<String>,
     pub active_project_key: String,
+    /// Encoded transcript viewport per open project. Zero follows the true
+    /// tail; a positive integer is the top-relative scroll offset plus one.
+    pub scroll_positions: BTreeMap<String, u32>,
 }
 
 /// The built-in review instruction, used when the setting is blank.
@@ -845,6 +848,28 @@ mod tests {
             loaded.moderator.model, "claude:haiku",
             "absent blocks use defaults"
         );
+    }
+
+    #[test]
+    fn workspace_tabs_add_scroll_positions_without_changing_a_worktable_row() {
+        let old = r#"{
+            "workspaceTabs": {
+                "openProjectKeys": ["cafe"],
+                "activeProjectKey": "cafe"
+            }
+        }"#;
+        let loaded: GlobalSettings = serde_json::from_str(old).expect("old tab state still loads");
+        let tabs = loaded.workspace_tabs.expect("the old tab strip survives");
+        assert_eq!(tabs.open_project_keys, ["cafe"]);
+        assert!(tabs.scroll_positions.is_empty());
+
+        let current = WorkspaceTabs {
+            open_project_keys: vec!["cafe".into()],
+            active_project_key: "cafe".into(),
+            scroll_positions: BTreeMap::from([("cafe".into(), 201)]),
+        };
+        let json = serde_json::to_value(&current).expect("tab state serializes");
+        assert_eq!(json["scrollPositions"]["cafe"], 201);
     }
 
     #[test]
