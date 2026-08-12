@@ -16,47 +16,63 @@ says so at the top. `performance.md` remains the only measured document, and its
 2026-08-11 addendum records what a source review added and where it qualified the earlier
 numbers.
 
-## First: the inspector costs 80% of a core, and stable ships it
+## First: the inspector's 80% of a core does not reproduce
 
-**Measured 2026-08-12, as CPU time consumed rather than as a percentage**, same
-build, same idle app, same store:
+This section used to say the inspector cost 80% of a core, on the strength of
+one pair of readings: 0.00s of CPU over 10s wall without `blitz-inspector`,
+8.04s with it. **Re-measured on 2026-08-12 after 0.6.0, it does not reproduce,
+and the build is not the variable.**
 
-| build | CPU time over 10s wall |
+| what was run | idle CPU over 10s wall |
 | --- | --- |
-| `cargo build --release -p az-gui` | **0.00s** |
-| the same, `--features blitz-inspector` | **8.04s**, 80% of a core |
+| 0.6.0, `--features blitz-runtime` | 0.13s, 1.3% of a core |
+| 0.6.0, `--features blitz-inspector` | 0.09s, 0.9% |
+| the same, under the bundle's pinned `LSEnvironment` | 0.03s, 0.3% |
+| **the 0.5.51 binary the 8.04s came from** | **0.14s, 1.4%** |
 
-`local-delivery.sh stable` builds with `blitz-inspector`, so this is what the
-owner runs. It is the high CPU reported over and over, and it is not the
-renderer: the app draws 1.4fps with no script work while it happens, every
-thread samples as blocked, and the time splits evenly between user and system,
-which is the signature of a very high rate of wakeups doing almost nothing each
-rather than of rendering.
+Same machine, same store, same project open, both binaries executed directly
+rather than through Finder. The 0.5.51 build in
+`target/release/bundle/macos/AgencyZero.app` is the one the figure was taken
+from, and today it reads 1.4%.
 
-One source is fixed. The control server's per-connection loop treated a
-transport error as a bad request, answered it, and read again; a hung-up peer
-returns the same error immediately, so every client that ever disconnected left
-a task spinning for the life of the process
-([tauri-runtime-blitz 989e076](https://github.com/pathscale/tauri-runtime-blitz)).
-That was not the whole of it: with the fix in, the 8.04s stands.
+Nothing walks it back up. After six control clients attach and hang up, 1.0%.
+After six page downs, after scrolling the transcript, after paging through
+Settings: 0.9% to 1.4%. Over ten minutes of uptime with the app driven between
+every reading, it stays between 0.7% and 1.6% while RSS drifts 665MB to 679MB.
+The harness is [`scripts/perf/idle-cpu.sh`](../scripts/perf/idle-cpu.sh), in the
+four modes above:
 
-Where to look next, in order:
+```sh
+scripts/perf/idle-cpu.sh once      target/release/az-gui
+scripts/perf/idle-cpu.sh clients   target/release/az-gui 6
+scripts/perf/idle-cpu.sh after-use target/release/az-gui
+scripts/perf/idle-cpu.sh soak      target/release/az-gui 10
+```
 
-1. **What wakes the event loop.** `mk_timer_arm` and `semaphore_timedwait_trap`
-   dominate a `sample`, and no thread is spinning in user code. Something arms a
-   timer, wakes, finds nothing, and re-arms. `blitz-shell`'s `about_to_wait`
-   picks the deadline; a deadline already in the past would produce exactly
-   this, at full rate, with no frames drawn.
-2. **The bridge to the UI thread.** `RuntimeMessage::Control` is drained with
-   `try_recv` from `about_to_wait`, and every `send` calls `proxy.wake_up()`.
-   Worth checking whether anything sends when there is nothing to say.
-3. **Whether the diagnostics collection itself is running when nobody asked.**
-   `collect_diagnostics` polls the script loop up to 100 times and forces a
-   resolve; that is fine as an observer cost, and not fine on a schedule.
+It takes two `ps -o time=` reads a known interval apart, runs the binary under
+the same environment the bundle pins, refuses to start when the store is
+already locked, and refuses to report a number for a process that failed to
+take the store. Two readings were once taken from an app that had never
+started.
 
-Do not fix this by turning the feature off. It is how the app is measured and
-driven at all, and everything in this file that carries a number was obtained
-through it.
+So one of these is true, and which one decides whether there is any work here:
+
+1. The control-server fix
+   ([tauri-runtime-blitz 6173d83](https://github.com/pathscale/tauri-runtime-blitz))
+   closed it after all. A hung-up peer returned the same transport error
+   forever and every client that ever disconnected left a task spinning. The
+   note that "with the fix in, the 8.04s stands" was written from a binary
+   built off a warm target dir whose dependency graph resolved ps-blitz at
+   **two revisions** — the graph CI could not compile at all (see agencyzero
+   PR 141). What that binary contained is not knowable now.
+2. The cost belongs to a state the app only reaches with a human at it, which
+   nothing above walks into.
+
+**Do not turn the feature off**, and do not spend a session on item 1's three
+old leads until the number is seen again. The next move is the owner's: when
+`az-gui` is next above a few percent, leave it running and say so, and take the
+reading with `idle-cpu.sh`'s method rather than `ps %cpu`, which is a lifetime
+average and was the source of the original alarm.
 
 ## Three constraints that govern the order
 
