@@ -436,6 +436,7 @@ export function ProjectTab(props: { tab: Tab; project: Project }): JSX.Element {
             </Show>
             <Composer
               draftKey={props.tab.key}
+              onChromeChange={noteTranscriptChromeChanged}
               onCompact={
                 props.tab.agent === "codex" || capabilitiesFor(props.tab.agent)?.commands
                   ? () => actions.compactProject(props.project.id, props.tab.agent)

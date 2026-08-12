@@ -664,17 +664,22 @@ describe("cost guidance controls", () => {
   });
 
   it("snoozes a dismissed warning and offers permanent disable on its next appearance", async () => {
+    const onChromeChange = vi.fn();
     const screen = mount({
       contextTokens: 900_000,
       contextWindow: 1_000_000,
       contextAgent: "claude",
       contextModel: "sonnet",
+      onChromeChange,
     });
     await screen.booted();
     await waitFor(() => expect(screen.getByText(/This turn is projected/)).toBeTruthy());
+    const entered = onChromeChange.mock.calls.length;
+    expect(entered).toBeGreaterThan(0);
 
     fireEvent.click(screen.getByLabelText("Dismiss"));
     expect(screen.queryByText(/This turn is projected/)).toBeNull();
+    await waitFor(() => expect(onChromeChange.mock.calls.length).toBeGreaterThan(entered));
     expect(prefs.costWarningSnoozedUntil).toBeGreaterThan(Date.now());
 
     // Stand in for the ten-minute clock elapsing without making the provider's

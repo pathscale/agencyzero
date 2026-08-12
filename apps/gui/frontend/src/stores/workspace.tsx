@@ -222,6 +222,11 @@ type WorkspaceState = {
    * as "nothing exists".
    */
   commands: Record<string, Partial<Record<Agent, { all: string[]; skills: string[] }>>>;
+  /**
+   * Encoded transcript viewport per open project. Zero is the true-bottom
+   * sentinel; positive values are top-relative scrollTop plus one.
+   */
+  transcriptPositions: Record<string, number>;
   tabs: Tab[];
   activeKey: string;
   backend: "tauri" | "mock" | "hybrid" | "loading";
@@ -428,6 +433,7 @@ function createWorkspace() {
     pendingCompact: {},
     queued: {},
     commands: {},
+    transcriptPositions: {},
     tabs: [HOME_TAB],
     activeKey: "home",
     backend: "loading",
@@ -535,7 +541,10 @@ function createWorkspace() {
     if (lastPortableActiveKey !== "home" && !openProjectKeys.includes(lastPortableActiveKey)) {
       lastPortableActiveKey = "home";
     }
-    return { openProjectKeys, activeProjectKey: lastPortableActiveKey };
+    const scrollPositions = Object.fromEntries(
+      openProjectKeys.map((key) => [key, state.transcriptPositions[key] ?? 0]),
+    );
+    return { openProjectKeys, activeProjectKey: lastPortableActiveKey, scrollPositions };
   }
 
   function sameWorkspaceTabs(
@@ -543,10 +552,16 @@ function createWorkspace() {
     right: NonNullable<GlobalSettings["workspaceTabs"]>,
   ): boolean {
     if (!left) return false;
+    const leftPositions = left.scrollPositions ?? {};
+    const rightPositions = right.scrollPositions;
     return (
       left.activeProjectKey === right.activeProjectKey &&
       left.openProjectKeys.length === right.openProjectKeys.length &&
-      left.openProjectKeys.every((key, index) => key === right.openProjectKeys[index])
+      left.openProjectKeys.every(
+        (key, index) =>
+          key === right.openProjectKeys[index] &&
+          (leftPositions[key] ?? 0) === (rightPositions[key] ?? 0),
+      )
     );
   }
 
@@ -565,14 +580,22 @@ function createWorkspace() {
    * for settings rows written before portable tabs existed. Guarded on boot
    * being ready, because before hydration the strip is only Home.
    */
+  let workspaceTabsWriteTimer: ReturnType<typeof setTimeout> | undefined;
   createEffect(() => {
     if (state.boot.status !== "ready") return;
     const workspaceTabs = portableWorkspaceTabs();
     setPrefs("openTabKeys", workspaceTabs.openProjectKeys);
     setPrefs("lastTabKey", workspaceTabs.activeProjectKey);
-    void persistWorkspaceTabs().catch((cause) =>
-      log.warn(`could not persist open project tabs: ${describeError(cause)}`),
-    );
+    if (workspaceTabsWriteTimer) clearTimeout(workspaceTabsWriteTimer);
+    workspaceTabsWriteTimer = setTimeout(() => {
+      workspaceTabsWriteTimer = undefined;
+      void persistWorkspaceTabs().catch((cause) =>
+        log.warn(`could not persist open project tabs: ${describeError(cause)}`),
+      );
+    }, 120);
+  });
+  onCleanup(() => {
+    if (workspaceTabsWriteTimer) clearTimeout(workspaceTabsWriteTimer);
   });
 
   let prefsWriteTimer: ReturnType<typeof setTimeout> | undefined;
@@ -928,6 +951,16 @@ function createWorkspace() {
         const portableTabs = settings.workspaceTabs;
         const rememberedKeys = portableTabs?.openProjectKeys ?? prefs.openTabKeys;
         const projectsById = new Map(projects.map((project) => [project.id, project]));
+        const rememberedPositions = portableTabs?.scrollPositions ?? {};
+        setState(
+          "transcriptPositions",
+          Object.fromEntries(
+            rememberedKeys.map((key) => {
+              const position = rememberedPositions[key];
+              return [key, Number.isSafeInteger(position) && position >= 0 ? position : 0];
+            }),
+          ),
+        );
         setState("tabs", [
           HOME_TAB,
           ...Array.from(new Set(rememberedKeys))
@@ -1793,6 +1826,11 @@ function createWorkspace() {
     if (index < 0) return;
     batch(() => {
       setState("tabs", (tabs) => tabs.filter((tab) => tab.key !== key));
+      setState(
+        produce((draft) => {
+          delete draft.transcriptPositions[key];
+        }),
+      );
       if (state.activeKey === key) {
         // Fall back to the tab on the left, which is where the eye already is.
         focus(state.tabs[Math.max(0, index - 1)]?.key ?? "home");
@@ -1835,6 +1873,7 @@ function createWorkspace() {
           delete draft.compacting[projectId];
           delete draft.pendingCompact[projectId];
           delete draft.commands[projectId];
+          delete draft.transcriptPositions[projectId];
         }),
       );
       closeTab(projectId);
@@ -2320,6 +2359,12 @@ function createWorkspace() {
     });
   };
 
+  function setProjectTranscriptPosition(id: string, position: number): void {
+    const encoded = Number.isSafeInteger(position) && position > 0 ? position : 0;
+    if ((state.transcriptPositions[id] ?? 0) === encoded) return;
+    setState("transcriptPositions", id, encoded);
+  }
+
   const actions = {
     retryInit,
     focus,
@@ -2356,6 +2401,7 @@ function createWorkspace() {
     purgeProject,
     setProjectStatus: (id: string, status: ProjectStatus) => client().setProjectStatus(id, status),
     setProjectPinned: (id: string, pinned: boolean) => client().setProjectPinned(id, pinned),
+    setProjectTranscriptPosition,
     setProjectModerator: (id: string, enabled: boolean) =>
       client().setProjectModerator(id, enabled),
     addDir: (projectId: string, path: string) => client().addDir(projectId, path),
