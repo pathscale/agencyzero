@@ -74,6 +74,55 @@ old leads until the number is seen again. The next move is the owner's: when
 reading with `idle-cpu.sh`'s method rather than `ps %cpu`, which is a lifetime
 average and was the source of the original alarm.
 
+## Every item, by number
+
+One table so a number can be looked up without knowing which section owns it.
+The detail stays in the sections below; this is an index, not a second copy.
+
+| # | Item | State |
+|---|---|---|
+| 1 | `log-phase-times` off the base dependency | done 2026-08-11 |
+| 2 | Bound the streaming tail block | done 2026-08-11 |
+| 3 | `vmmap`/`heap` on a live instance | half done |
+| 4 | Make Stylo snapshots updatable | open |
+| 5 | Clamp animation-driven redraw to a lower cadence | open |
+| 6 | mimalloc as the global allocator | open, re-scoped to memory |
+| 7 | Fix the Taffy cache: A/B 0.12.2 against 0.13.0 | half done |
+| 8 | Honest snapshot flags, then narrow the restyle hints | gated on 4, 7 |
+| 9 | Narrow `ALL_DAMAGE` on the mutation paths | gated on 7 |
+| 10 | Batch pending invalidations | open |
+| 11 | Cache the bezier paths | partly, re-scoped |
+| 12 | Damage regions, stages 0 to 3 | gated on 1, 20 |
+| 13 | Count the whole-document taffy cache clears | open, decides 7 to 12 |
+| 14 | `BLITZ_PRESENT_MODE=mailbox` | **closed 2026-08-12, measured worse** |
+| 15 | Pass Stylo a thread pool | open |
+| 16 | Enable `blitz-dom/parallel-construct` | open, amended by 19 |
+| 17 | Heavy read-only Tauri commands off the window thread | open |
+| 18 | Renderer on its own thread | gated on 17 |
+| 19 | Genet's shaping pre-pass, all four parts | amends 16 |
+| 20 | A paint-list IR between layout and the renderer | prerequisite of 12, 18 |
+| 21 | Research: a script-engine seam | open |
+| 22 | W1: assert the engine's resolved features | open, highest of 22 to 26 |
+| 23 | W2: assert instrumentation is absent from release | **now false by choice, see below** |
+| 24 | W3: assert one copy of each pivotal crate | open |
+| 25 | W4: assert no local `[patch]` reaches a shipped build | open, near-missed 2026-08-12 |
+| 26 | W5: assert a target-aware native-dependency inventory | open |
+
+Item 14 was measured on 2026-08-12 and **closed without shipping**: three
+unpaced runs each, first discarded, `mailbox` against `fifo` gave 107.3 and
+117.5 fps against 116.7 and 120.1, with 5 and 4 missed refreshes against 2 and
+1. FIFO is equal or better on every column, and the predicted drop in
+`missed_refreshes` went the other way. Items 15, 16 and 17 were said to be
+gated on it; they are not gated on anything now, but their measurements are
+still taken under FIFO, which is what ships.
+
+Item 23 is deliberately violated as of 2026-08-12: release bundles now build
+`--features blitz-inspector`, unstripped, because two defects this week were
+invisible until a crash report and a `sample` could name a function of ours.
+The cost is real and accepted: `log-phase-times` rides that feature, so a
+timing taken from a release build now contains its own instrument. Constraint 2
+below therefore stands rather than being retired.
+
 ## Three constraints that govern the order
 
 1. **The Taffy layout cache gates almost every speed number.** Style is 167 microseconds
@@ -156,34 +205,50 @@ The full DOM-side breakdown, with per-item verification steps and sizes, is
 
 ## For the next micro release
 
-- **The app burns ~76% CPU while completely idle.** Measured on 0.5.35, PID 6443,
-  four minutes after launch with nobody typing and the pointer still: `fps=30.7`,
-  `frames=488`, and in that window `poll_hook` 1,305 calls / 1,441ms, `timers`
-  279 calls, and **`dom:attr=` 3,698 writes**, roughly 230 attribute writes a
-  second with no input. An earlier instance held 74.8% for four hours, so it
-  reproduces immediately and is not a startup effect.
+- ~~**The app burns ~76% CPU while completely idle.**~~ **Fixed 2026-08-12**, and
+  the diagnosis above was wrong in an instructive way. It is not the frontend,
+  and no attribute write is involved: `blitz-shell`'s `about_to_wait` set
+  `ControlFlow::WaitUntil` for each animation frame and, when there was no next
+  frame, left the control flow alone because `Wait` is the default. It is the
+  default and it is not what the loop is still set to: the last animation
+  frame's `WaitUntil` stays in force with a deadline already past, so the loop
+  wakes immediately and keeps waking with nothing to do.
 
-  **It is not the engine.** `resolve` is 2.81ms mean and `layout:flush_from_script`
-  fired 3 times. The taffy cache is working. Something in the frontend writes
-  attributes continuously, each write dirties layout and asks for a frame, and
-  30fps is exactly `ANIMATION_TARGET_FPS` — the app is pinned to its animation
-  ceiling by a loop with no animation in it.
+  Two `ps -o time=` reads 15s apart, twice on two separately built binaries:
+  **11.45s of CPU over 15s wall before, 1.17s after — 76.3% against 7.8%.**
 
-  Unverified candidates, in order of suspicion: `followTail` in
-  `TranscriptPane.tsx:363`, which writes `scroller.scrollTop` and could be
-  re-triggered by the scroll event that write emits; and whatever drives
-  `poll_hook`. `useNow` (`workspace.tsx:2676`) ticks once a second and cannot
-  account for 230 writes a second on its own. **Get a trace before choosing.**
+  Why it survived so long: there is nothing to see. `sample` on the busy process
+  puts the entire main thread inside the run loop, 1327 of 5071 samples in
+  `__CFRunLoopDoTimers` and ~800 in `mk_timer_arm`, with **no frame of layout,
+  style, paint or script anywhere on the stack**. Every profile of the *app*
+  came back empty, which read as "it must be the frontend". A stripped release
+  binary made it worse, since even the engine frames were `???`.
 
-- **Text spills past its container in the transcript.** Seen in a screenshot on a
-  real session. **Not reproducible synthetically**, and two mechanisms were
-  tested and refuted: the engine wraps `overflow-wrap: anywhere` prose correctly
-  inside a fixed-width box, and a flex *column* child is not forced wider by
-  unbroken text, because `min-width: auto` binds the main axis, which for a
-  column is height. Both measured, neither is the cause.
+- **Text spills past its container.** **Now reproducible, with a numeric
+  fingerprint**, against the real document via the debug driver. It is one bug,
+  not the several it looks like: overflowing inline content is **centred on its
+  container instead of start-aligned**, so it hangs off *both* sides of every
+  clipped box — tab labels, message bodies, code spans.
 
-  A three-element fixture cannot express a bug about position relative to other
-  elements. Reproduce against the real document instead.
+  Measured 2026-08-12, 40 offending elements in one session, the clearest:
+
+  ```
+  SPAN   (no class)                                w=873  x=702
+  BUTTON min-w-0 flex-1 ... text-left truncate     w=230  x=1023
+  ```
+
+  Span centre 1138.5, button centre 1138. The span should start at the parent's
+  left edge and be clipped by `truncate`; instead it starts 321px to its left.
+  The button explicitly carries `text-left`, and the alignment call in
+  `blitz-dom/src/layout/inline.rs:637` already passes
+  `align_when_overflowing: false`, so the centring is coming from somewhere
+  other than the `text-align` this code reads. **That is the next thing to
+  find**, and the reproduction is: attach the driver, walk `div,p,span`, and
+  report any element whose rect is wider than its parent's.
+
+  Supersedes the previous entry here, which said this was not reproducible
+  synthetically and recorded two refuted mechanisms. Both refutations stand;
+  neither was the cause.
 
 ## Two benchmarks to build, from real shape
 
@@ -246,6 +311,32 @@ measurement behind it.
   streaming quadratic. Brimstone has cons strings, is unpublished and self-describes as not
   production ready. Revisit when that changes; do not act now.
   [js-engine-big-problem.md](js-engine-big-problem.md)
+
+## Done, 2026-08-12
+
+Two engine defects, both found the same way and neither by reading source: get
+the process to say what it is doing, then read it.
+
+- **The experimental boot crash.** `--features experimental` died about two
+  seconds after `boot: ready` on 7 launches in 10, with `SIGSEGV`, `SIGBUS`, an
+  out-of-bounds index inside stylo's calc resolver and once a stack overflow.
+  One cause: a `calc()` reaches taffy as a raw pointer into the node's
+  `ComputedValues`, and the renderer cached the taffy style across restyles that
+  carry no relayout damage. Recolouring an element recomputes every descendant
+  that inherits from it, the old arc drops, and layout resolves freed memory.
+  Fixed in ps-blitz `87abcc1c` with a test that fails without it. Shipped 0.6.2.
+
+  **macOS had been writing the answer to `~/Library/Logs/DiagnosticReports/` the
+  whole time.** One report is a write into az-gui's own read-only mapping, which
+  ends the "bad CSS value" reading immediately. Read those first, next time.
+
+- **The 76% idle spin.** See "For the next micro release" above. One line in
+  `blitz-shell`'s `about_to_wait`.
+
+**Every performance number recorded before today was taken on a machine where
+this app was burning 76% of a core in the background, on the same window
+thread.** The phase timings, the 8.33ms frame, the keystroke figures: all of
+them. Item B's re-baseline is no longer bookkeeping.
 
 ## Done, 2026-08-11
 
