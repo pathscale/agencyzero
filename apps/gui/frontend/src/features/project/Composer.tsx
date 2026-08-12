@@ -10,7 +10,7 @@ import {
 } from "solid-js";
 import { Icon } from "~/components/Icon";
 import { PillMenu } from "~/components/PillMenu";
-import { noteTranscriptChromeChanged } from "~/features/project/TranscriptPane";
+import { noteTranscriptChromeChanged } from "~/features/project/transcriptChrome";
 import { AGENT_LABELS, PERMISSION_ORDER, permissionLabel } from "~/lib/labels";
 import { describeError, log } from "~/lib/log";
 import {

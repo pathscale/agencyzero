@@ -15,6 +15,7 @@ import {
 import { Icon } from "~/components/Icon";
 import { ApprovalCard } from "~/features/project/ApprovalCard";
 import { CopyMessageButton, InlineText, MessageBody } from "~/features/project/MessageBody";
+import { chromeRevision } from "~/features/project/transcriptChrome";
 import {
   isCybersecurityRefusal,
   isRetryableStop,
@@ -134,12 +135,6 @@ const TAIL_SLACK = 24;
  * next thing happens.
  */
 const TAIL_GLIDE_MS = 160;
-
-const [chromeRevision, bumpChromeRevision] = createSignal(0);
-
-export function noteTranscriptChromeChanged(): void {
-  bumpChromeRevision((value) => value + 1);
-}
 
 export const TRANSCRIPT_MAX_ENTRIES = TRANSCRIPT_PAGE_SIZE * 4;
 
