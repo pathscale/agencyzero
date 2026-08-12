@@ -218,7 +218,9 @@ the commands to run and what each one answered:
 
 ## Addendum, 2026-08-12: one decision here has been built by someone else
 
-Source reading, not measurement. Full review in [genet-review.md](genet-review.md).
+Source reading, not measurement. Genet is a Servo fork on this stack, read at `main` on
+2026-08-12; the adoption verdict and the items it produced are in [TODO.md](TODO.md) under
+"From the Genet review".
 
 "Stage rendering and carry change metadata forward" above adapts Bevy's extract, prepare,
 batch and submit staging to this application, and asks for an explicit frame change set
