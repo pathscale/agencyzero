@@ -14,9 +14,10 @@
  * It is a generator, not an assertion. It fails only if the markup cannot be
  * produced at all.
  */
-import { render } from "@solidjs/testing-library";
+
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
+import { render } from "@solidjs/testing-library";
 import { describe, expect, it } from "vitest";
 import { TranscriptPane } from "~/features/project/TranscriptPane";
 import { WorkspaceProvider } from "~/stores/workspace";

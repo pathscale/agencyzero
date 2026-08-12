@@ -396,7 +396,11 @@ async fn spill(client: &mut Client, axis: &str, tolerance: f64) -> Result<()> {
     // the transcript, does not.
     if !by_owner.is_empty() {
         let mut owners: Vec<(String, (usize, f64))> = by_owner.into_iter().collect();
-        owners.sort_by(|a, b| b.1.1.partial_cmp(&a.1.1).unwrap_or(std::cmp::Ordering::Equal));
+        owners.sort_by(|a, b| {
+            b.1.1
+                .partial_cmp(&a.1.1)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
         println!("\nby container, worst first:");
         for (owner, (count, worst)) in owners {
             println!("  {count:>4} nodes  worst {worst:>7.1}px  {owner}");
@@ -833,9 +837,8 @@ async fn main() -> Result<()> {
             println!("== holding still for {seconds}s, nothing driven ==");
             tokio::time::sleep(Duration::from_secs_f64(seconds)).await;
             let after = metrics(&mut client).await?;
-            let frames_of = |m: &RendererMetrics| {
-                m.frame_window.as_ref().map(|w| w.frames_total).unwrap_or(0)
-            };
+            let frames_of =
+                |m: &RendererMetrics| m.frame_window.as_ref().map(|w| w.frames_total).unwrap_or(0);
             let frames = frames_of(&after).saturating_sub(frames_of(&before));
             println!(
                 "frames={frames} over {seconds}s = {:.1}fps with no input",

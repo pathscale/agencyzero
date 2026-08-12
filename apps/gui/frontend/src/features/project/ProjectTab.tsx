@@ -1,22 +1,11 @@
-import {
-  createEffect,
-  createMemo,
-  createSignal,
-  For,
-  type JSX,
-  onCleanup,
-  Show,
-} from "solid-js";
+import { createEffect, createMemo, createSignal, For, type JSX, onCleanup, Show } from "solid-js";
 import { EditableTitle } from "~/components/EditableTitle";
 import { Icon } from "~/components/Icon";
 import { Panel } from "~/components/Panel";
 import { Composer } from "~/features/project/Composer";
 import { copyText } from "~/features/project/MessageBody";
 import { ProjectPanel } from "~/features/project/ProjectPanel";
-import {
-  noteTranscriptChromeChanged,
-  TranscriptPane,
-} from "~/features/project/TranscriptPane";
+import { noteTranscriptChromeChanged, TranscriptPane } from "~/features/project/TranscriptPane";
 import { providerUsageLabel } from "~/features/shell/UsageReadout";
 import { AGENT_LABELS } from "~/lib/labels";
 import { describeError, log } from "~/lib/log";

@@ -12,11 +12,7 @@ beforeEach(() => {
 describe("projects", () => {
   it("serves the design fixtures in manual order", async () => {
     const projects = await api.listProjects();
-    expect(projects.map((project) => project.name)).toEqual([
-      "foo.bar",
-      "baz.qux",
-      "quux.dev",
-    ]);
+    expect(projects.map((project) => project.name)).toEqual(["foo.bar", "baz.qux", "quux.dev"]);
   });
 
   it("hands back an independent copy, so a caller cannot mutate the backend", async () => {
@@ -47,11 +43,7 @@ describe("projects", () => {
 
     const reordered = await api.reorderProjects(["quux", "worktable", "cafe"]);
 
-    expect(reordered.map((project: Project) => project.id)).toEqual([
-      "quux",
-      "worktable",
-      "cafe",
-    ]);
+    expect(reordered.map((project: Project) => project.id)).toEqual(["quux", "worktable", "cafe"]);
     expect(updated).toHaveBeenCalledTimes(3);
   });
 
