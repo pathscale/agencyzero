@@ -126,6 +126,15 @@ const TRANSCRIPT_PAGE_SIZE = 12;
  */
 const TAIL_SLACK = 24;
 
+/**
+ * How long the transcript takes to slide back onto the tail after something
+ * below it changed height, in milliseconds.
+ *
+ * Long enough to be followed by eye, short enough that it is over before the
+ * next thing happens.
+ */
+const TAIL_GLIDE_MS = 160;
+
 const [chromeRevision, bumpChromeRevision] = createSignal(0);
 
 export function noteTranscriptChromeChanged(): void {
@@ -409,8 +418,60 @@ export function TranscriptPane(props: {
   };
 
   let followFrame: number | undefined;
-  const followTail = (): void => {
+  let glideFrame: number | undefined;
+  /*
+   * Slide to the tail instead of jumping to it, when the tail moved because
+   * something else did.
+   *
+   * A panel opening or closing under the transcript shortens the scroller, and
+   * snapping the text up by that much reads as the conversation flinching: the
+   * eye has nothing to follow between the two positions and has to re-find the
+   * line it was on. Moving it over a few frames makes the cause legible — the
+   * panel pushed, so the text moved.
+   *
+   * Only for chrome. Streamed text must not be animated: a token arrives every
+   * few frames, each one would start a new glide, and the tail would trail the
+   * text it is supposed to be pinned to.
+   *
+   * Cancelled by anything that supersedes it, including the next glide. There
+   * is no easing library here and none is wanted: this is `1 - (1 - t)^3` over
+   * a fixed duration, which decelerates into the target.
+   */
+  const glideTo = (target: number): void => {
+    if (typeof requestAnimationFrame === "undefined") {
+      scroller.scrollTop = target;
+      lastScrollTop = target;
+      return;
+    }
+    if (glideFrame !== undefined) cancelAnimationFrame(glideFrame);
+    const from = scroller.scrollTop;
+    const distance = target - from;
+    // Not worth a frame, and short hops read better instantly.
+    if (Math.abs(distance) < 2) {
+      scroller.scrollTop = target;
+      lastScrollTop = target;
+      return;
+    }
+    const started = performance.now();
+    const step = (now: number): void => {
+      // A reader who scrolled away mid-glide has taken over: stop where they
+      // put it rather than finishing a move they no longer want.
+      if (!pinned()) {
+        glideFrame = undefined;
+        return;
+      }
+      const t = Math.min(1, (now - started) / TAIL_GLIDE_MS);
+      const eased = 1 - (1 - t) ** 3;
+      scroller.scrollTop = from + distance * eased;
+      lastScrollTop = scroller.scrollTop;
+      glideFrame = t < 1 ? requestAnimationFrame(step) : undefined;
+    };
+    glideFrame = requestAnimationFrame(step);
+  };
+
+  const followTail = (options?: { animate?: boolean }): void => {
     if (!pinned()) return;
+    const animate = options?.animate ?? false;
     const moveToTail = (): void => {
       if (!pinned()) return;
       // Clamped, not `scrollHeight`. Assigning the full height relies on the
@@ -421,7 +482,16 @@ export function TranscriptPane(props: {
       // Nothing to scroll means nothing to do: adding slack to a scroller that
       // is already showing all of its content moves it off zero for no reason.
       const bottom = scroller.scrollHeight - scroller.clientHeight;
-      scroller.scrollTop = bottom > 0 ? bottom + TAIL_SLACK : 0;
+      const target = bottom > 0 ? bottom + TAIL_SLACK : 0;
+      if (animate) {
+        glideTo(target);
+        return;
+      }
+      if (glideFrame !== undefined) {
+        cancelAnimationFrame(glideFrame);
+        glideFrame = undefined;
+      }
+      scroller.scrollTop = target;
       lastScrollTop = scroller.scrollTop;
     };
     queueMicrotask(moveToTail);
@@ -464,7 +534,7 @@ export function TranscriptPane(props: {
       resizeObserver.observe(scroller);
     }
     if (typeof MutationObserver !== "undefined") {
-      mutationObserver = new MutationObserver(followTail);
+      mutationObserver = new MutationObserver(() => followTail());
       mutationObserver.observe(scroller, {
         childList: true,
         characterData: true,
@@ -478,9 +548,10 @@ export function TranscriptPane(props: {
   // be yanked back by a PR chip arriving.
   createEffect(() => {
     chromeRevision();
-    followTail();
+    followTail({ animate: true });
   });
   onCleanup(() => {
+    if (glideFrame !== undefined) cancelAnimationFrame(glideFrame);
     resizeObserver?.disconnect();
     mutationObserver?.disconnect();
     if (followFrame !== undefined && typeof cancelAnimationFrame !== "undefined") {
