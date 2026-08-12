@@ -445,8 +445,10 @@ async fn hover_over(client: &mut Client, want: &str) -> Result<bool> {
     // accessible name, so naming is not always enough to put the pointer inside
     // the thing you mean to scroll: aiming at "Settings" found a button in the
     // sidebar and every wheel event went there.
-    if let Some((x, y)) = want.split_once(',') {
-        if let (Ok(x), Ok(y)) = (x.trim().parse::<f64>(), y.trim().parse::<f64>()) {
+    if let Some((x, y)) = want.split_once(',')
+        && let (Ok(x), Ok(y)) = (x.trim().parse::<f64>(), y.trim().parse::<f64>())
+    {
+        {
             client
                 .agent(&AgentControlRequest::Act(AgentAction::Input(
                     InputCommand::Pointer {
