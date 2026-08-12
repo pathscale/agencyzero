@@ -4,7 +4,7 @@ Written 2026-08-11. A plan, not a design doc: each item says what to change, whe
 what it depends on, and how to tell it worked. The reasoning behind each lives in the
 linked document.
 
-**Engine paths here are `ps-blitz-render/packages/blitz-dom/src/...`**, the checkout this
+**Engine paths here are `ps-blitz/packages/blitz-dom/src/...`**, the checkout this
 repository patches in. Chuzz builds against a *different* checkout (`blitz-rust`) whose
 line numbers differ, and has its own list at `chuzz/docs/TODO-dom-related-work.md`. **A fix
 in one tree does not reach the other.** Items marked ENGINE need landing in both, or the

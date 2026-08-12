@@ -68,7 +68,7 @@ the same string for the same reason.
 
 ### Step 7: the one place that avoids an allocation
 
-`set_node_text` (`ps-blitz-render/packages/blitz-dom/src/mutator.rs:183`) compares
+`set_node_text` (`ps-blitz/packages/blitz-dom/src/mutator.rs:183`) compares
 `text.content != value` in full, then does `clear()` + `push_str()`, reusing the existing
 capacity. Two full passes, no allocation. That is the best-behaved stage on the path, and
 it is still O(tail block) per token.

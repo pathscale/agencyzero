@@ -27,7 +27,7 @@ two already exist.
   before creating one; buffers return to the pool after each recording. No per-frame
   `create_buffer`.
 - **The DOM is a slab arena.** `nodes: Box<Slab<Node>>`
-  (`ps-blitz-render/packages/blitz-dom/src/document.rs:213`). Node ids are indices, not
+  (`ps-blitz/packages/blitz-dom/src/document.rs:213`). Node ids are indices, not
   boxes.
 - **Glyphs stream.** `draw_glyphs` takes `impl Iterator<Item = Glyph>` and the vello
   painter consumes it in place. No `Vec` per glyph run on the hot path. The recording
@@ -60,7 +60,7 @@ short-lived, single-threaded, LIFO-ish allocations per frame.
 
 ### There is no custom global allocator
 
-Grepped across `agencyzero`, `ps-blitz-render`, `ps-anyrender` and `tauri-runtime-blitz`:
+Grepped across `agencyzero`, `ps-blitz`, `ps-anyrender` and `tauri-runtime-blitz`:
 no `#[global_allocator]`, no mimalloc, no jemalloc. All of the churn above goes through
 macOS system malloc, which is the least favourable allocator for that exact pattern.
 
@@ -79,7 +79,7 @@ the base dependency line, and
 per-frame phase instrumentation is in the distributed app.
 
 That feature gates `layout_counters`
-(`ps-blitz-render/packages/blitz-dom/src/layout/mod.rs:29`), whose doc comment says
+(`ps-blitz/packages/blitz-dom/src/layout/mod.rs:29`), whose doc comment says
 "Thread-local and read once per resolve, so the counting itself is free". It is not free:
 
 - `note_computed` does a `HashMap` entry lookup and increment **per `compute_child_layout`

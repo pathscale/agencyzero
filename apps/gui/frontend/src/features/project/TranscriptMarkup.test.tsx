@@ -41,7 +41,7 @@ const PROJECT: Project = {
 // the renderer checkout that consumes it.
 const OUT = resolve(
   process.cwd(),
-  "../../../../ps-blitz-render/tests/blitz-tests/fixtures/transcript.html",
+  "../../../../ps-blitz/tests/blitz-tests/fixtures/transcript.html",
 );
 
 describe("the transcript's markup, as the engine receives it", () => {

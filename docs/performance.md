@@ -68,7 +68,7 @@ Each of these produced a confident, wrong conclusion before it was caught.
    Three different builds produced byte-identical PNGs with the same SHA256. Do
    not use it to judge visual correctness.
 5. **`cargo fmt --check` gates the bundle build.** Unformatted code in any local
-   path checkout (`ps-blitz-render`, `tauri-runtime-blitz`, `ps-anyrender`)
+   path checkout (`ps-blitz`, `tauri-runtime-blitz`, `ps-anyrender`)
    fails the app build with a diff that looks unrelated to what you changed.
 6. **Piping the build through `tail` discards its exit status.** The honest
    check is the binary's mtime, not the exit code you think you saw.

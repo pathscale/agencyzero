@@ -268,7 +268,7 @@ speed one. Paint is 1.9% of a frame and typing is 89% synchronous layout, so an
 allocator cannot move the frame numbers much. But 78M of empty-but-resident
 malloc regions is a direct claim on the 855MB.
 
-There is no `#[global_allocator]` in `agencyzero`, `ps-blitz-render`,
+There is no `#[global_allocator]` in `agencyzero`, `ps-blitz`,
 `ps-anyrender` or `tauri-runtime-blitz`, so every allocation goes through macOS
 system malloc — the least favourable allocator for thousands of small,
 short-lived, single-threaded, LIFO-ish allocations per frame, which is exactly

@@ -102,10 +102,10 @@ Assert a single version and a single source for `stylo`, `ps-taffy`, `ps-anyrend
 Assert that a release build resolves no `[patch]` entry to a local path.
 
 - `.cargo/config.toml` is tracked, carries a local `[patch]` block pointing at
-  `~/code/ps-blitz-render`, and therefore shows as modified forever by design. That is a
+  `~/code/ps-blitz`, and therefore shows as modified forever by design. That is a
   working arrangement, not a mistake, and it is exactly the arrangement that makes a
   machine-local build silently different from a release one.
-- [HANDOVER.md](HANDOVER.md) names the sharper edge: `ps-blitz-render/Cargo.toml` points
+- [HANDOVER.md](HANDOVER.md) names the sharper edge: `ps-blitz/Cargo.toml` points
   `taffy` at `../ps-taffy` by path **and is committed that way**, which breaks any other
   machine. A witness would have caught that on the commit rather than on the next clone.
 
@@ -166,4 +166,4 @@ any of this to be a separate workflow rather than steps in the existing one.
 - [allocations.md](allocations.md) for instance 2, and what the shipped instrumentation
   cost per frame.
 - [HANDOVER.md](HANDOVER.md) for instance 3's rule, the committed local path in
-  `ps-blitz-render/Cargo.toml`, and "One instrument that lies".
+  `ps-blitz/Cargo.toml`, and "One instrument that lies".

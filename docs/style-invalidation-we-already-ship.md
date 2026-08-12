@@ -2,7 +2,7 @@
 
 Written 2026-08-11, from reading Blink at
 [`7e6a84f`](https://github.com/chromium/chromium/tree/7e6a84f5165fd617dbf3d032f755e11804bf8ff6),
-Stylo 0.20.0 in the local cargo registry, and the `ps-blitz-render` checkout. **Nothing
+Stylo 0.20.0 in the local cargo registry, and the `ps-blitz` checkout. **Nothing
 here was measured or built.** Numbers quoted come from [performance.md](performance.md),
 taken 2026-08-10.
 
@@ -55,7 +55,7 @@ like before the mutation, so the invalidator can diff selector matches then agai
 `resolve_stylist` calls the invalidator with the snapshots, every frame:
 
 ```rust
-// ps-blitz-render/packages/blitz-dom/src/stylo.rs:77
+// ps-blitz/packages/blitz-dom/src/stylo.rs:77
 self.stylist.flush(&guards).process_style(root, Some(&self.snapshots));
 ```
 
