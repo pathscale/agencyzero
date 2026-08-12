@@ -299,7 +299,7 @@ Two corrections came out of building it, both recorded in
 
 ### Engine correctness fixes, each with a failing-first test
 
-In `ps-blitz-render`, unpushed on `master`.
+In `ps-blitz`, unpushed on `master`.
 
 - **Node leak**: box construction orphaned its anonymous blocks on every rebuild, +11 nodes
   per resolve, 14 nodes to 22,353 in one session.

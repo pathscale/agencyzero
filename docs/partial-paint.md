@@ -74,17 +74,17 @@ renderer is Linebender's Vello on wgpu, chosen deliberately in
   into any other sink with a transform applied. Fragment caching has a data structure and
   a replay path already built.
 - **It is already used for exactly this.** `CustomWidgetSceneMap = HashMap<(usize, usize), Scene>`
-  in `ps-blitz-render/packages/blitz-paint/src/lib.rs:31`: custom widgets paint once into a
+  in `ps-blitz/packages/blitz-paint/src/lib.rs:31`: custom widgets paint once into a
   recorded Scene and get replayed. The precedent for cached fragments is in the file.
 - **Culling is per-element and already hierarchical.**
-  `ps-blitz-render/packages/blitz-paint/src/render.rs:311` computes `screen_bbox` from
+  `ps-blitz/packages/blitz-paint/src/render.rs:311` computes `screen_bbox` from
   `overflow.union(border_box)` and returns early if it misses `clip_rect`, and `clip_rect`
   is narrowed by every ancestor scrollport. Adding a second rect to that test is a handful
   of lines.
 
 So blitz-paint is not missing the machinery. It is missing an *input*: nobody tells it
 what changed. `blitz-dom` computes damage every frame and then throws it away at
-`ps-blitz-render/packages/blitz-dom/src/resolve.rs:124`, in a loop that already visits
+`ps-blitz/packages/blitz-dom/src/resolve.rs:124`, in a loop that already visits
 every node.
 
 Two gaps below it are real:
@@ -147,7 +147,7 @@ vello is renderer 6.55 / scene 1.67, hybrid is renderer 2.41 / scene 7.29, so fr
 is roughly the same and neither wins.
 
 That is true **under full repaint only**, and it stops being true the moment damage
-exists. In `ps-blitz-render/packages/blitz-shell/src/window.rs:565`, `paint_time` is
+exists. In `ps-blitz/packages/blitz-shell/src/window.rs:565`, `paint_time` is
 measured around the `paint_scene` closure and `renderer_time` is everything else, so
 hybrid's 7.29 ms "scene" is CPU strip generation happening inside the `PaintScene` calls.
 **That cost is proportional to the content emitted.** Culling the emit to a damage rect

@@ -93,7 +93,7 @@ from CSS here**, which inverts the usual web intuition.
 
 ### 1. Clamp animation-driven redraw to a lower cadence ENGINE
 
-- **Where:** `ps-blitz-render/packages/blitz-shell/src/window.rs:614`, the unconditional
+- **Where:** `ps-blitz/packages/blitz-shell/src/window.rs:614`, the unconditional
   `self.request_redraw()` while `is_animating`.
 - **What:** gate it on elapsed time since the last animation-only frame, so a decorative
   animation runs at 20 to 30fps instead of the display rate.

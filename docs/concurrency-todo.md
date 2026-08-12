@@ -1,7 +1,7 @@
 # Concurrency: what runs on the window thread, and what does not have to
 
 Written 2026-08-12. **Nothing here was measured.** It is a source review of this
-application against the engine checkouts it actually builds (`ps-blitz-render`,
+application against the engine checkouts it actually builds (`ps-blitz`,
 `ps-taffy`, `ps-anyrender`, and the local `tauri-runtime-blitz`), read alongside Chromium,
 Gecko/WebRender, Stylo and fastrender. Where a number appears it is quoted from
 [performance.md](performance.md) or [HANDOVER.md](HANDOVER.md), which are the measured
@@ -11,7 +11,7 @@ The question that started it: closing Settings pauses, and the pause looks like 
 thread freeing something. It is not a free. It is a rebuild, and it is on the one thread
 that also answers the operating system.
 
-**Engine paths below are the checkouts, not the pinned revs.** `ps-blitz-render/…` is what
+**Engine paths below are the checkouts, not the pinned revs.** `ps-blitz/…` is what
 `.cargo/config.toml` patches in, so it is what runs. Line numbers were read from those
 trees on 2026-08-12 and will drift.
 
@@ -22,7 +22,7 @@ trees on 2026-08-12 and will drift.
    (`ps-anyrender/crates/anyrender_vello/src/window_renderer.rs:491`). Free 5ms of main
    thread underneath that and the frame time will not move, because the thread was going
    to sit there anyway. **Item A1 comes before any other measurement in this document.**
-2. **The taffy cache clear at `ps-blitz-render/packages/blitz-dom/src/resolve.rs:663`
+2. **The taffy cache clear at `ps-blitz/packages/blitz-dom/src/resolve.rs:663`
    outranks everything else here**, and it is not a concurrency bug. If it fires as often
    as the source suggests, parallelising the work around it is optimising the wrong thing.
    Chain B is first in value and last in confidence, which is why it starts with a
@@ -153,7 +153,7 @@ Which is exactly why the next item is the important one in this document.
 
 ### 2.4 The whole-document cache clear (not concurrency, ranks above it)
 
-`ps-blitz-render/packages/blitz-dom/src/resolve.rs:663`:
+`ps-blitz/packages/blitz-dom/src/resolve.rs:663`:
 
 ```rust
 if !self.deferred_construction_nodes.is_empty() {
@@ -383,7 +383,7 @@ guesses. Measure with three unpaced runs and discard the first, per
   the case that restyles every retained tab. Note performance.md measured style at 167
   microseconds on a *keystroke*, so a keystroke is the wrong workload to judge this on:
   use the switch. Also fix the wrong doc comment at
-  `ps-blitz-render/packages/blitz-dom/src/config.rs:54` in the same change.
+  `ps-blitz/packages/blitz-dom/src/config.rs:54` in the same change.
 - **Size:** one line, plus a comment recording why the multi-document hazard does not
   apply here.
 
@@ -514,7 +514,7 @@ The adoption verdict (do not depend on it, and why) is recorded in
 Genet does the same work and does it better, at
 `components/genet-layout/box_tree.rs:2183-2256`:
 
-| | Ours (`ps-blitz-render`) | Theirs |
+| | Ours (`ps-blitz`) | Theirs |
 |---|---|---|
 | Where | `blitz-dom/src/resolve.rs:553` `resolve_deferred_tasks`, after box construction | a shaping pre-pass ahead of Taffy's measure walk |
 | What is parallel | whole inline-layout construction, width-dependent work included | shaping only, which is width-independent; line breaking stays in the serial measure |

@@ -40,7 +40,7 @@ encoding, no allocation.
 | Piece | Location |
 |---|---|
 | `PaintScene`: fill, stroke, glyphs, layers. Geometry is always `&impl Shape` | `ps-anyrender/crates/anyrender/src/lib.rs:185` (fill at `:221`, stroke at `:211`) |
-| Border box path, rebuilt per element per frame | `ps-blitz-render/packages/blitz-paint/src/kurbo_css/css_box.rs:213` |
+| Border box path, rebuilt per element per frame | `ps-blitz/packages/blitz-paint/src/kurbo_css/css_box.rs:213` |
 | Padding and content box paths | `css_box.rs:220`, `:227` |
 | Per-edge border geometry, built as separate `BezPath`s | `css_box.rs:98`, called seven times in `render/border.rs:269-312` |
 | Outline, shadow clip | `css_box.rs:199`, `:290` |
@@ -122,7 +122,7 @@ cheap instead of making redraw partial.
 ### Ours
 
 `is_animating` drives an unconditional next-frame request
-(`ps-blitz-render/packages/blitz-shell/src/window.rs:614`), the damage clear walks every
+(`ps-blitz/packages/blitz-shell/src/window.rs:614`), the damage clear walks every
 node each frame (`blitz-dom/src/resolve.rs:124`), and
 [partial-paint.md](partial-paint.md) proposes building damage regions.
 

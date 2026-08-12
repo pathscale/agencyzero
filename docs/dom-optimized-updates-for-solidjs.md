@@ -40,13 +40,13 @@ What a binding call *triggers* is.
 Yes, in both senses of the question, and one of them is already the innerHTML path.
 
 - **Fragment parsing.** `blitz-html` exposes `parse_inner_html_into_mutator`
-  (`ps-blitz-render/packages/blitz-html/src/html_sink.rs:120`), which calls html5ever's
+  (`ps-blitz/packages/blitz-html/src/html_sink.rs:120`), which calls html5ever's
   `parse_fragment_for_element`: it parses into an existing element without touching the
   rest of the tree. This is what Solid's `template.innerHTML = ...` goes through.
   html5ever is also a streaming tokenizer, so incremental feeding is available if
   something ever needs it.
 - **Partial reads.** Nodes live in `Box<Slab<Node>>`
-  (`ps-blitz-render/packages/blitz-dom/src/document.rs:213`), so access by id is O(1)
+  (`ps-blitz/packages/blitz-dom/src/document.rs:213`), so access by id is O(1)
   indexing. Nothing in the API forces a whole-tree read.
 
 The whole-tree behaviour in this stack is not in the DOM API. It is in what a mutation

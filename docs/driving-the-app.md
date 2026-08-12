@@ -316,7 +316,7 @@ If a profile stops naming functions, it was built without that override.
 ## Building without breaking the build
 
 The engine is consumed through local path checkouts patched in the root
-`Cargo.toml`: `ps-blitz-render`, `tauri-runtime-blitz`, `ps-anyrender`.
+`Cargo.toml`: `ps-blitz`, `tauri-runtime-blitz`, `ps-anyrender`.
 
 - `cargo fmt --check` gates the bundle build. Unformatted code in **any** of
   those checkouts fails the app build with a diff that looks unrelated to what
