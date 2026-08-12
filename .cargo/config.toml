@@ -40,3 +40,15 @@ ps-anyrender = { git = "https://github.com/pathscale/ps-anyrender.git", rev = "0
 ps-anyrender-vello = { git = "https://github.com/pathscale/ps-anyrender.git", rev = "0e4122bff9220b85e4e462d1c3213c24beace3ea" }
 ps-anyrender-vello-cpu = { git = "https://github.com/pathscale/ps-anyrender.git", rev = "0e4122bff9220b85e4e462d1c3213c24beace3ea" }
 ps-anyrender-vello-hybrid = { git = "https://github.com/pathscale/ps-anyrender.git", rev = "0e4122bff9220b85e4e462d1c3213c24beace3ea" }
+
+# LOCAL ONLY, never commit: builds the renderer from the working checkout so a
+# local az-gui carries today's engine work before it is pinned.
+[patch."https://github.com/pathscale/ps-blitz.git"]
+ps-blitz-dom = { path = "../ps-blitz/packages/blitz-dom" }
+ps-blitz-script = { path = "../ps-blitz/packages/blitz-script" }
+ps-blitz-shell = { path = "../ps-blitz/packages/blitz-shell" }
+ps-blitz-traits = { path = "../ps-blitz/packages/blitz-traits" }
+blitz-html = { path = "../ps-blitz/packages/blitz-html" }
+blitz-paint = { path = "../ps-blitz/packages/blitz-paint" }
+stylo_taffy = { path = "../ps-blitz/packages/stylo_taffy" }
+debug_timer = { path = "../ps-blitz/packages/debug_timer" }

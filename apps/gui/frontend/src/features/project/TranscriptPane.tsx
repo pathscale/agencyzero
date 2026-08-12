@@ -27,6 +27,7 @@ import { costLabel, estimateTurnCost } from "~/lib/pricing";
 import { compactCount } from "~/lib/stats";
 import { agentTurnLabels } from "~/lib/turns";
 import { tx } from "~/stores/i18n";
+import { prefs, setPrefs } from "~/stores/prefs";
 import { type RunStatus, useNow, useWorkspace } from "~/stores/workspace";
 import type { Message, MessageReceipt as MessageReceiptState, Project, Question } from "~/types";
 
@@ -114,6 +115,17 @@ const TRANSCRIPT_PAGE_SIZE = 12;
  * so both paths have been dead the whole time and failed silently. Until the
  * engine grows them, the chrome says so explicitly.
  */
+/**
+ * How near the bottom still counts as the bottom, in CSS pixels.
+ *
+ * Doubles as the overshoot when moving to the tail. Fractional layout means
+ * `scrollHeight - clientHeight` and the position actually reached disagree by
+ * up to a pixel, and a transcript that stops a pixel short stops following.
+ * One line of body text is the smallest slack that survives that without
+ * swallowing a deliberate scroll away from the bottom.
+ */
+const TAIL_SLACK = 24;
+
 const [chromeRevision, bumpChromeRevision] = createSignal(0);
 
 export function noteTranscriptChromeChanged(): void {
@@ -278,7 +290,22 @@ export function TranscriptPane(props: {
    * moving what you are reading. Coming back within a bubble's height of the
    * bottom re-engages the follow.
    */
-  const [pinned, setPinned] = createSignal(true);
+  /*
+   * Following the tail is a property of the conversation, not of this
+   * component, so it lives in prefs keyed by project.
+   *
+   * It used to be a local signal, and switching tabs unmounts the project
+   * screen: coming back re-armed the follow for a reader who had deliberately
+   * scrolled up, and dropped it for one who had not.
+   *
+   * Set whenever the view is at or near the bottom, and cleared only by the
+   * owner scrolling away. Nothing else may clear it.
+   */
+  const pinned = (): boolean => prefs.transcriptAtBottom[props.project.id] ?? true;
+  const setPinned = (value: boolean): void => {
+    if (pinned() === value) return;
+    setPrefs("transcriptAtBottom", props.project.id, value);
+  };
   const [visibleEntries, setVisibleEntries] = createSignal(TRANSCRIPT_PAGE_SIZE);
   /*
    * The newest row the window is allowed to mount, by key, once the window has
@@ -366,7 +393,7 @@ export function TranscriptPane(props: {
     // Reaching the bottom of a slid window is not reaching the conversation:
     // pinning there would follow a tail that is not mounted, leaving the
     // transcript apparently frozen on old messages while it claims to be live.
-    if (toTail < 48 && view.trailing === 0) {
+    if (toTail <= TAIL_SLACK && view.trailing === 0) {
       setPinned(true);
     } else if (top < lastScrollTop - 1 && ownerIntent) {
       // Only owner input disengages tail following. Window resizing and text
@@ -383,10 +410,18 @@ export function TranscriptPane(props: {
 
   let followFrame: number | undefined;
   const followTail = (): void => {
-    if (!untrack(pinned)) return;
+    if (!pinned()) return;
     const moveToTail = (): void => {
-      if (!untrack(pinned)) return;
-      scroller.scrollTop = scroller.scrollHeight;
+      if (!pinned()) return;
+      // Clamped, not `scrollHeight`. Assigning the full height relies on the
+      // engine clamping it, and half a pixel of rounding either way leaves the
+      // last line under the fold. TAIL_SLACK overshoots deliberately: the
+      // clamp takes the excess, and it costs nothing when the numbers are
+      // exact.
+      // Nothing to scroll means nothing to do: adding slack to a scroller that
+      // is already showing all of its content moves it off zero for no reason.
+      const bottom = scroller.scrollHeight - scroller.clientHeight;
+      scroller.scrollTop = bottom > 0 ? bottom + TAIL_SLACK : 0;
       lastScrollTop = scroller.scrollTop;
     };
     queueMicrotask(moveToTail);
@@ -400,7 +435,7 @@ export function TranscriptPane(props: {
           // layout in the next. A single callback then reads the old height and
           // leaves a newly opened transcript at the top. Retry once after that
           // layout without turning this into an open-ended animation loop.
-          if (remaining > 1 && untrack(pinned)) afterLayout(remaining - 1);
+          if (remaining > 1 && pinned()) afterLayout(remaining - 1);
         });
       };
       afterLayout(2);
