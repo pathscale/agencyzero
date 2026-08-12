@@ -152,7 +152,12 @@ jobs:
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
-        run: bunx --yes @tauri-apps/cli@^2.11 build --features blitz-runtime
+          # See the same block in release-experimental.yml. A crash report or a
+          # `sample` from a stripped binary names no function of ours, and both
+          # of this week's defects were found only once one did.
+          CARGO_PROFILE_RELEASE_STRIP: "false"
+          CARGO_PROFILE_RELEASE_DEBUG: line-tables-only
+        run: bunx --yes @tauri-apps/cli@^2.11 build --features blitz-inspector
         working-directory: apps/gui
 
       # Two failures worth catching here. The signature one was live in this

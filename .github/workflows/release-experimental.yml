@@ -85,7 +85,21 @@ jobs:
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
-        run: bunx --yes @tauri-apps/cli@^2.11 build --features experimental,blitz-runtime --config tauri.experimental.conf.json
+          # Diagnosable in the field, which is the point of this channel.
+          #
+          # A stripped binary profiles and crashes as `???`: the 2026-08-12 boot
+          # crash cost two sessions to a backtrace naming a registry crate and
+          # not one frame of ours, and the 76% idle spin was invisible until a
+          # `sample` could name `mk_timer_arm` under our own event loop. Cargo
+          # reads these from the environment and they reach the tauri wrapper,
+          # so no manifest carries a debugging setting.
+          #
+          # `line-tables-only` rather than full debug info: it is what gives a
+          # backtrace its file and line, without the DWARF that took a local
+          # build from 61MB to 92MB, and this artifact ships through the updater.
+          CARGO_PROFILE_RELEASE_STRIP: "false"
+          CARGO_PROFILE_RELEASE_DEBUG: line-tables-only
+        run: bunx --yes @tauri-apps/cli@^2.11 build --features experimental,blitz-inspector --config tauri.experimental.conf.json
         working-directory: apps/gui
 
       - name: Normalize updater artifact name
