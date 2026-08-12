@@ -307,8 +307,23 @@ export function SettingsTab(): JSX.Element {
       })),
     );
 
+  /*
+   * Opening Settings puts focus on the page itself, so Page Up and Page Down
+   * work immediately.
+   *
+   * Keyboard scrolling targets the focused node's scroll container, and nothing
+   * here was focusable: the page could only be moved by pointing at it first,
+   * which is not a keyboard path at all. `tabindex="-1"` makes it focusable
+   * programmatically without adding a stop to the tab order.
+   */
+  let page!: HTMLDivElement;
+  onMount(() => page.focus({ preventScroll: true }));
+
   return (
-    <div class="az-scroll flex min-w-0 flex-1 justify-center rounded-panel border border-az-hairline bg-az-sunken">
+    <div
+      ref={page}
+      tabindex="-1"
+      class="az-scroll flex min-w-0 flex-1 justify-center rounded-panel border border-az-hairline bg-az-sunken focus:outline-none">
       <div class="flex w-full max-w-[720px] flex-col gap-3 px-6 pt-5.5 pb-7">
         <div class="flex items-baseline gap-2.5 pb-0.5">
           <h1 class="font-semibold text-[18px] text-az-title tracking-[-.01em]">
