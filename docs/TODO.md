@@ -93,7 +93,7 @@ The detail stays in the sections below; this is an index, not a second copy.
 | 10 | Batch pending invalidations | open |
 | 11 | Cache the bezier paths | partly, re-scoped |
 | 12 | Damage regions, stages 0 to 3 | gated on 1, 20 |
-| 13 | Count the whole-document taffy cache clears | open, decides 7 to 12 |
+| 13 | Count the whole-document taffy cache clears | **closed 2026-08-12, premise false** |
 | 14 | `BLITZ_PRESENT_MODE=mailbox` | **closed 2026-08-12, measured worse** |
 | 15 | Pass Stylo a thread pool | open |
 | 16 | Enable `blitz-dom/parallel-construct` | open, amended by 19 |
@@ -107,6 +107,17 @@ The detail stays in the sections below; this is an index, not a second copy.
 | 24 | W3: assert one copy of each pivotal crate | open |
 | 25 | W4: assert no local `[patch]` reaches a shipped build | open, near-missed 2026-08-12 |
 | 26 | W5: assert a target-aware native-dependency inventory | open |
+
+Item 13 was measured on 2026-08-12 and **closed**: there is no whole-document
+clear left to count. `resolve.rs` clears one node, not the tree. On a 186-node
+transcript, an idle resolve computes nothing and a resolve carrying one
+streamed token computes 3 nodes, clears 3 caches and hits cache 61 times in 64,
+at 720us against 315us idle. Items 7 to 12 are therefore not gated behind a
+catastrophic invalidation, and the worry that "0.27ms per keystroke describes
+only resolves that do not reconstruct" does not hold. Reproduce with
+`cargo test -p blitz-tests --test streaming_token_cost --features counters --
+--nocapture`; the magnitude still wants re-measuring against the real document,
+which is 4,000 nodes rather than 186.
 
 Item 14 was measured on 2026-08-12 and **closed without shipping**: three
 unpaced runs each, first discarded, `mailbox` against `fifo` gave 107.3 and
