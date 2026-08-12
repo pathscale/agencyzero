@@ -63,6 +63,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: One rev per git source
+        # Cheaper to fail on this runner than twenty minutes into a macOS
+        # bundle, which is the only build that resolves the renderer at all.
+        run: scripts/check-one-rev-per-git-source.sh
+
       - name: Compare the committed version against the published one
         id: decide
         run: |
