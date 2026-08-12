@@ -15,6 +15,7 @@ import {
 import { Icon } from "~/components/Icon";
 import { ApprovalCard } from "~/features/project/ApprovalCard";
 import { CopyMessageButton, InlineText, MessageBody } from "~/features/project/MessageBody";
+import { chromeRevision } from "~/features/project/transcriptChrome";
 import {
   isCybersecurityRefusal,
   isRetryableStop,
@@ -27,6 +28,7 @@ import { costLabel, estimateTurnCost } from "~/lib/pricing";
 import { compactCount } from "~/lib/stats";
 import { agentTurnLabels } from "~/lib/turns";
 import { tx } from "~/stores/i18n";
+import { prefs, setPrefs } from "~/stores/prefs";
 import { type RunStatus, useNow, useWorkspace } from "~/stores/workspace";
 import type { Message, MessageReceipt as MessageReceiptState, Project, Question } from "~/types";
 
@@ -99,26 +101,22 @@ const TRANSCRIPT_PAGE_SIZE = 12;
  * pages is roughly four screenfuls, which is as far as anyone reads in one
  * movement before they start scrolling again.
  */
-/*
- * Anything below the transcript that changes height, announced.
- *
- * The transcript is a flex child above a footer that grows and shrinks: PR
- * chips, a queued compaction, held prompts, the cost warning. When the footer
- * grows the scroller gets shorter, and a pinned transcript has to be put back
- * on the tail or the newest message is left half-cut under the chrome, which is
- * exactly what the owner sees as "dialogs are not pushing the chat up".
- *
- * A `ResizeObserver` would be the natural way to notice, and this file already
- * asks for one. **Blitz implements neither `ResizeObserver` nor
- * `MutationObserver`**, and both are behind `typeof … !== "undefined"` guards,
- * so both paths have been dead the whole time and failed silently. Until the
- * engine grows them, the chrome says so explicitly.
- */
-const [chromeRevision, bumpChromeRevision] = createSignal(0);
 
-export function noteTranscriptChromeChanged(): void {
-  bumpChromeRevision((value) => value + 1);
-}
+/**
+ * How near the bottom still counts as the bottom, in CSS pixels.
+ *
+ * Fractional layout means `scrollHeight - clientHeight` and the position
+ * actually reached can disagree by up to a pixel, and a transcript that stops a
+ * pixel short stops following. One line of body text is the smallest slack that
+ * survives that without swallowing a deliberate scroll away from the bottom.
+ */
+const TAIL_SLACK = 24;
+
+/**
+ * How long the transcript takes to slide back onto the tail after something
+ * below it changed height, in milliseconds.
+ */
+const TAIL_GLIDE_MS = 160;
 
 export const TRANSCRIPT_MAX_ENTRIES = TRANSCRIPT_PAGE_SIZE * 4;
 
@@ -278,7 +276,19 @@ export function TranscriptPane(props: {
    * moving what you are reading. Coming back within a bubble's height of the
    * bottom re-engages the follow.
    */
-  const [pinned, setPinned] = createSignal(true);
+  /*
+   * Following the tail is a property of the conversation, not of this
+   * component, so it lives in prefs keyed by project.
+   *
+   * It used to be a local signal, and switching tabs unmounts the project
+   * screen: coming back re-armed the follow for a reader who had deliberately
+   * scrolled up, and dropped it for one who had not.
+   */
+  const pinned = (): boolean => prefs.transcriptAtBottom[props.project.id] ?? true;
+  const setPinned = (value: boolean): void => {
+    if (pinned() === value) return;
+    setPrefs("transcriptAtBottom", props.project.id, value);
+  };
   const [visibleEntries, setVisibleEntries] = createSignal(TRANSCRIPT_PAGE_SIZE);
   /*
    * The newest row the window is allowed to mount, by key, once the window has
@@ -366,7 +376,7 @@ export function TranscriptPane(props: {
     // Reaching the bottom of a slid window is not reaching the conversation:
     // pinning there would follow a tail that is not mounted, leaving the
     // transcript apparently frozen on old messages while it claims to be live.
-    if (toTail < 48 && view.trailing === 0) {
+    if (toTail <= TAIL_SLACK && view.trailing === 0) {
       setPinned(true);
     } else if (top < lastScrollTop - 1 && ownerIntent) {
       // Only owner input disengages tail following. Window resizing and text
@@ -382,11 +392,74 @@ export function TranscriptPane(props: {
   };
 
   let followFrame: number | undefined;
-  const followTail = (): void => {
-    if (!untrack(pinned)) return;
+  let glideFrame: number | undefined;
+  const cancelGlide = (): void => {
+    if (glideFrame === undefined) return;
+    cancelAnimationFrame(glideFrame);
+    glideFrame = undefined;
+  };
+  /*
+   * Slide to the tail instead of jumping, when the tail moved because something
+   * else did.
+   *
+   * A panel opening below shortens the scroller, and snapping the text up by
+   * that much reads as the conversation flinching: the eye has nothing to
+   * follow between the two positions. Over a few frames the cause is legible.
+   *
+   * Chrome only. Streamed text stays instant: a token lands every few frames,
+   * each would start a new glide, and the tail would trail the text it is
+   * pinned to.
+   */
+  const glideTo = (target: number): void => {
+    if (
+      typeof requestAnimationFrame === "undefined" ||
+      typeof cancelAnimationFrame === "undefined"
+    ) {
+      scroller.scrollTop = target;
+      lastScrollTop = scroller.scrollTop;
+      return;
+    }
+    cancelGlide();
+    const from = scroller.scrollTop;
+    const distance = target - from;
+    if (Math.abs(distance) < 2) {
+      scroller.scrollTop = target;
+      lastScrollTop = scroller.scrollTop;
+      return;
+    }
+    const started = Date.now();
+    const step = (): void => {
+      // A reader who scrolled away mid-glide has taken over: stop where they
+      // put it rather than finishing a move they no longer want.
+      if (!pinned()) {
+        glideFrame = undefined;
+        return;
+      }
+      const t = Math.min(1, (Date.now() - started) / TAIL_GLIDE_MS);
+      scroller.scrollTop = from + distance * (1 - (1 - t) ** 3);
+      lastScrollTop = scroller.scrollTop;
+      glideFrame = t < 1 ? requestAnimationFrame(step) : undefined;
+    };
+    glideFrame = requestAnimationFrame(step);
+  };
+
+  const followTail = (options?: { animate?: boolean }): void => {
+    if (!pinned()) return;
+    const animate = options?.animate ?? false;
     const moveToTail = (): void => {
-      if (!untrack(pinned)) return;
-      scroller.scrollTop = scroller.scrollHeight;
+      if (!pinned()) return;
+      // The bottom, not the height. Assigning the full height overshoots by a
+      // viewport and leans on the engine clamping it back; the slack on top is
+      // the deliberate part, absorbing fractional layout so the last line
+      // cannot end up under the fold. Nothing to scroll means nothing to do.
+      const bottom = scroller.scrollHeight - scroller.clientHeight;
+      const target = bottom > 0 ? bottom + TAIL_SLACK : 0;
+      if (animate) {
+        glideTo(target);
+        return;
+      }
+      cancelGlide();
+      scroller.scrollTop = target;
       lastScrollTop = scroller.scrollTop;
     };
     queueMicrotask(moveToTail);
@@ -400,7 +473,7 @@ export function TranscriptPane(props: {
           // layout in the next. A single callback then reads the old height and
           // leaves a newly opened transcript at the top. Retry once after that
           // layout without turning this into an open-ended animation loop.
-          if (remaining > 1 && untrack(pinned)) afterLayout(remaining - 1);
+          if (remaining > 1 && pinned()) afterLayout(remaining - 1);
         });
       };
       afterLayout(2);
@@ -429,7 +502,7 @@ export function TranscriptPane(props: {
       resizeObserver.observe(scroller);
     }
     if (typeof MutationObserver !== "undefined") {
-      mutationObserver = new MutationObserver(followTail);
+      mutationObserver = new MutationObserver(() => followTail());
       mutationObserver.observe(scroller, {
         childList: true,
         characterData: true,
@@ -443,9 +516,10 @@ export function TranscriptPane(props: {
   // be yanked back by a PR chip arriving.
   createEffect(() => {
     chromeRevision();
-    followTail();
+    followTail({ animate: true });
   });
   onCleanup(() => {
+    cancelGlide();
     resizeObserver?.disconnect();
     mutationObserver?.disconnect();
     if (followFrame !== undefined && typeof cancelAnimationFrame !== "undefined") {

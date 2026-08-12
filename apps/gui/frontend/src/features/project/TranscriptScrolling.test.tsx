@@ -1,7 +1,9 @@
 import { fireEvent, render } from "@solidjs/testing-library";
 import { createSignal } from "solid-js";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { reconcile } from "solid-js/store";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { TranscriptPane } from "~/features/project/TranscriptPane";
+import { setPrefs } from "~/stores/prefs";
 import { WorkspaceProvider } from "~/stores/workspace";
 import type { Message, Project } from "~/types";
 
@@ -107,6 +109,11 @@ function mount(messages: Message[]) {
 }
 
 describe("scrolling the transcript by hand", () => {
+  // Following the tail outlives the component now, which is the point of it,
+  // so each test has to start as a reader who has not scrolled anywhere yet.
+  // `reconcile`, because assigning `{}` to a store path merges into what is
+  // already there and would leave the previous test's project behind.
+  beforeEach(() => setPrefs("transcriptAtBottom", reconcile({})));
   afterEach(() => vi.unstubAllGlobals());
 
   it("stays where Page Up put it when new content arrives", async () => {

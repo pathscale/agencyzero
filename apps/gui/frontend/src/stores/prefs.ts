@@ -47,6 +47,7 @@ const DEFAULTS: UiPrefs = {
   seenSections: [],
   composerDrafts: {},
   replyQuestionIds: {},
+  transcriptAtBottom: {},
   costWarningsDisabled: false,
   costWarningSnoozedUntil: 0,
   costWarningDismissals: 0,
@@ -141,7 +142,12 @@ export { prefs, setPrefs };
 /** Snapshot only durable choices; drafts and staged replies are live owner content. */
 export function portablePrefsSnapshot(): PortableUiPrefs {
   const snapshot = JSON.parse(JSON.stringify(prefs)) as UiPrefs;
-  const { composerDrafts: _drafts, replyQuestionIds: _replies, ...portable } = snapshot;
+  const {
+    composerDrafts: _drafts,
+    replyQuestionIds: _replies,
+    transcriptAtBottom: _atBottom,
+    ...portable
+  } = snapshot;
   return portable;
 }
 

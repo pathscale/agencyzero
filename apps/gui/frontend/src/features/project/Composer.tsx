@@ -10,6 +10,7 @@ import {
 } from "solid-js";
 import { Icon } from "~/components/Icon";
 import { PillMenu } from "~/components/PillMenu";
+import { noteTranscriptChromeChanged } from "~/features/project/transcriptChrome";
 import { AGENT_LABELS, PERMISSION_ORDER, permissionLabel } from "~/lib/labels";
 import { describeError, log } from "~/lib/log";
 import {
@@ -351,6 +352,22 @@ export function Composer(props: ComposerProps): JSX.Element {
     if (!est?.priced || (est.severity === "low" && !isContextSwitch())) return false;
     return true;
   };
+  /*
+   * The composer sits below the transcript, so everything here that appears,
+   * disappears or grows moves where "the bottom" is. The scroller cannot see
+   * it — the engine implements neither `ResizeObserver` nor `MutationObserver` —
+   * so a following transcript stayed where it was and the newest message ended
+   * up under the chrome. The component that changes height is the one that can
+   * say so exactly.
+   */
+  createEffect(() => {
+    void showCostAlert();
+    void confirmDisableCostWarning();
+    void advanced();
+    void expanded();
+    noteTranscriptChromeChanged();
+  });
+
   const compactPressure = () => {
     const tokens = props.contextTokens ?? 0;
     const window = props.contextWindow ?? 0;
