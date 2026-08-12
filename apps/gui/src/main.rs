@@ -1878,9 +1878,20 @@ fn main() {
      * saying only "abort()", the message and location of the panic itself
      * were discarded with the stream.
      */
+    /*
+     * With the stack, and `force_capture` rather than `capture`: this hook
+     * replaces the default one instead of chaining it, so `RUST_BACKTRACE` is
+     * read by nobody and setting it does nothing. 0.6.1 aborted two seconds
+     * after `boot: ready` inside stylo's `CalcLengthPercentage::resolve`, and
+     * the log named the line in a registry crate and not one frame of ours, so
+     * there was no way to tell which declaration on which element reached it.
+     *
+     * Cost is paid once, on the way out of a process that is already dying.
+     */
     std::panic::set_hook(Box::new(|info| {
-        crate::log!(log::Level::Error, "panic", "{info}");
-        eprintln!("{info}");
+        let backtrace = std::backtrace::Backtrace::force_capture();
+        crate::log!(log::Level::Error, "panic", "{info}\n{backtrace}");
+        eprintln!("{info}\n{backtrace}");
     }));
 
     #[cfg(feature = "blitz-runtime")]
