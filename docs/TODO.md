@@ -96,7 +96,7 @@ The detail stays in the sections below; this is an index, not a second copy.
 | 13 | Count the whole-document taffy cache clears | **closed 2026-08-12, premise false** |
 | 14 | `BLITZ_PRESENT_MODE=mailbox` | **closed 2026-08-12, measured worse** |
 | 15 | Pass Stylo a thread pool | open |
-| 16 | Enable `blitz-dom/parallel-construct` | open, amended by 19 |
+| 16 | Enable `blitz-dom/parallel-construct` | **done 2026-08-12, 7x on shaping** |
 | 17 | Heavy read-only Tauri commands off the window thread | open |
 | 18 | Renderer on its own thread | gated on 17 |
 | 19 | Genet's shaping pre-pass, all four parts | amends 16 |
@@ -107,6 +107,29 @@ The detail stays in the sections below; this is an index, not a second copy.
 | 24 | W3: assert one copy of each pivotal crate | open |
 | 25 | W4: assert no local `[patch]` reaches a shipped build | open, near-missed 2026-08-12 |
 | 26 | W5: assert a target-aware native-dependency inventory | open |
+| 27 | **Scheduling: tokio instead of rayon, and interruptible construction** | open, review written |
+
+Item 16 shipped on 2026-08-12 and it was the largest single win of the day: a
+tab switch re-shapes every text node in the pane it reveals, because a
+`display: none` subtree keeps no inline layout. On six retained panes,
+`pconstruct` went 35ms to 5.0ms and the whole switch 53ms to 22ms. It was one
+line, written and switched off.
+
+Item 27 is the question that came out of it, and it is a scheduling question
+rather than a pool one. Rayon work-steals but its scope blocks the window
+thread until the join finishes, its tail is the largest indivisible item, and it
+cannot yield to an arriving keystroke; meanwhile a dozen `tokio-rt-worker`
+threads sit idle beside it. **Two hard constraints**: Stylo's parallel traversal
+takes a `rayon::ThreadPool` by signature (`stylo.rs:150`), and `stylo` declares
+`links = "servo_style_crate"`, so moving style off rayon means a renamed fork.
+And the construction fan-out relies on thread-locals for its `LayoutContext` and
+its per-worker `FontContext` clone, which assume worker affinity that a
+migrating scheduler does not give.
+
+The full review, with what each step costs and what it does not fix, is
+[tokio-instead-of-rayon.md](tokio-instead-of-rayon.md). Its conclusion in one
+line: making construction *interruptible* is worth more than changing runtime,
+and is a prerequisite for the runtime change paying off.
 
 Item 13 was measured on 2026-08-12 and **closed**: there is no whole-document
 clear left to count. `resolve.rs` clears one node, not the tree. On a 186-node

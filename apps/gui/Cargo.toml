@@ -66,7 +66,7 @@ chrono = { version = "0.4", default-features = false, features = ["clock", "serd
 tokio = { version = "1", features = ["process", "rt-multi-thread", "time"] }
 tauri = { version = "2", features = [] }
 tauri-runtime-blitz = { git = "https://github.com/pathscale/tauri-runtime-blitz.git", rev = "c908c37fd72d58939607def6a32015a301b8e8ad", optional = true }
-blitz-dom = { package = "ps-blitz-dom", git = "https://github.com/pathscale/ps-blitz.git", rev = "4a825e548a387a3cb424b61c8db91f27d489b394", features = ["system-fonts"], optional = true }
+blitz-dom = { package = "ps-blitz-dom", git = "https://github.com/pathscale/ps-blitz.git", rev = "4a825e548a387a3cb424b61c8db91f27d489b394", features = ["system-fonts", "parallel-construct"], optional = true }
 blitz-script = { package = "ps-blitz-script", git = "https://github.com/pathscale/ps-blitz.git", rev = "4a825e548a387a3cb424b61c8db91f27d489b394", features = ["system-fonts"], optional = true }
 # Named only to turn on its per-frame phase timer, which splits the one opaque
 # "renderer" figure into scene encode, GPU submit and present. The renderer
