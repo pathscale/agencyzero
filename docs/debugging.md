@@ -73,11 +73,16 @@ until the bug requires release-mode behavior.
 
 ## New Tauri: Blitz
 
-Blitz does not have WebKit, Chromium, CDP, or Web Inspector. Its local control
-plane is MCP over a mode-`0600` Unix socket using endpoint-libs framing. It has
-no HTTP server, WebDriver session, bearer token, or authentication handshake.
+Blitz does not have WebKit, Chromium, CDP, or Web Inspector. Its **agent**
+control plane is MCP over a mode-`0600` Unix socket using endpoint-libs framing.
 
-There are two layers:
+There is also a **debug driver**, which this file used to deny the existence of:
+it is an HTTP server, it is WebDriver-shaped, and it does have a token. It is
+off unless `TAURI_BLITZ_DRIVER` is set, which is why it was easy to forget. See
+"The debug driver" below, because it is the only surface that answers questions
+about the real DOM.
+
+There are three layers:
 
 - **Agent control** is compiled into normal Blitz builds but starts disabled.
   Settings → Local Blitz control is the owner authority. Off means no socket
@@ -153,6 +158,94 @@ Correlate metrics with IPC durations in `az-gui.log`. Use Instruments for
 native stack and CPU attribution when needed; macOS may reject `sample <pid>`
 for a signed GUI process without additional debugging privileges. Do not
 escalate with `sudo` silently.
+
+## The debug driver: real DOM, real geometry
+
+Enabled by environment, never by default:
+
+```sh
+TAURI_BLITZ_DRIVER=127.0.0.1:0 \
+TAURI_BLITZ_DRIVER_DESCRIPTOR=$PWD/target/blitz-driver.json \
+  ./target/release/az-gui >/tmp/az.log 2>&1
+```
+
+The handshake is the part nobody remembers. **The token goes in a capability,
+not a header**, and only one session may exist at a time: a session left open
+by an earlier probe makes every later attempt answer `only one session is
+supported`, which reads like a broken driver rather than a stale session.
+
+```sh
+A=$(sed -n 's/.*"address": "\([^"]*\)".*/\1/p' target/blitz-driver.json)
+T=$(sed -n 's/.*"token": "\([^"]*\)".*/\1/p' target/blitz-driver.json)
+S=$(curl -s -X POST -H 'content-type: application/json' \
+     -d "{\"capabilities\":{\"alwaysMatch\":{\"blitz:token\":\"$T\"}}}" \
+     http://$A/session | sed -n 's/.*"sessionId":"\([^"]*\)".*/\1/p')
+curl -s -X POST -H 'content-type: application/json' \
+  --data-binary @script.json http://$A/session/$S/execute/sync
+```
+
+Three properties that have each cost time:
+
+- `getBoundingClientRect` works. `getComputedStyle` does not.
+- **Rects are physical pixels.** They are the CSS value times the window scale,
+  so a `width: 270px` element measures 313.2 at 1.16x. Reading that as a layout
+  bug cost a detour; check the scale before believing a discrepancy.
+- Layout resolves on the frame loop, not synchronously. Set a style in one call
+  and measure in a *later* one, or the rect is the previous frame's.
+
+This is how the transcript spill was finally pinned: walking every element and
+reporting any whose rect is wider than its parent's found 40 offenders and named
+the element, after two hand-written fixtures had failed to reproduce it.
+
+## When the app crashes or burns CPU
+
+macOS has already written the answer down.
+
+- **Crashes**: `~/Library/Logs/DiagnosticReports/az-gui-*.ips`, for every
+  `SIGSEGV`, `SIGBUS` and abort. Match the report to the binary with
+  `dwarfdump --uuid`; a mismatch means you are reading a different build.
+- **A spin**: `sample <pid> 10 -file out.txt`. **An empty-looking profile is
+  itself a finding**: a main thread in `__CFRunLoopDoTimers` and `mk_timer_arm`
+  with no frame of ours means the event loop is failing to sleep rather than the
+  app being busy. That was 76% of a core, misfiled for weeks as a frontend bug.
+- **True CPU**: two `ps -o time= -p <pid>` reads a known interval apart.
+  `ps %cpu` is a lifetime average and has raised a false alarm here before.
+
+All three need symbols, so build unstripped. `CARGO_NET_GIT_FETCH_WITH_CLI` is
+not optional on this machine: cargo's own git transport fails the TLS handshake
+with `unexpected return value from ssl handshake -9847`.
+
+```sh
+CARGO_NET_GIT_FETCH_WITH_CLI=true \
+CARGO_PROFILE_RELEASE_STRIP=false CARGO_PROFILE_RELEASE_DEBUG=1 \
+  cargo build --release -p az-gui --features experimental,blitz-runtime,blitz-inspector
+```
+
+Release bundles ship unstripped with the inspector as of 0.6.3, so a report from
+a user's machine names our functions too.
+
+## Measuring the engine without the app
+
+Prefer this to driving the app: it runs in about three seconds and needs no
+window. The fixtures are the application's own transcript markup and its shipped
+stylesheet, so the flex chains and percentage caps are the real ones.
+
+```sh
+cd ~/code/ps-blitz
+cargo test -p blitz-tests --test transcript_frame_cost     --features counters -- --nocapture
+cargo test -p blitz-tests --test transcript_scroll_cost    --features counters -- --nocapture
+cargo test -p blitz-tests --test transcript_streaming_cost --features counters -- --nocapture
+cargo test -p blitz-tests --test tab_switch_cost           --features counters -- --nocapture
+```
+
+`blitz-dom` exposes `layout_counters::last()` behind `log-phase-times`, which
+`blitz-tests` surfaces as the `counters` feature. Use `last()` and not `take()`:
+the per-frame printer takes the counters at the end of every resolve, so
+anything else calling `take()` reads zero and looks broken.
+
+**Do not measure with invented markup.** The fixture these replaced had no
+`z-index` and no `position: fixed` anywhere, so it could not have caught a paint
+regression in the very change it was being used to justify.
 
 ## Build and signing traps
 
