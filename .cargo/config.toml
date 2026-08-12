@@ -40,15 +40,3 @@ ps-anyrender = { git = "https://github.com/pathscale/ps-anyrender.git", rev = "0
 ps-anyrender-vello = { git = "https://github.com/pathscale/ps-anyrender.git", rev = "0e4122bff9220b85e4e462d1c3213c24beace3ea" }
 ps-anyrender-vello-cpu = { git = "https://github.com/pathscale/ps-anyrender.git", rev = "0e4122bff9220b85e4e462d1c3213c24beace3ea" }
 ps-anyrender-vello-hybrid = { git = "https://github.com/pathscale/ps-anyrender.git", rev = "0e4122bff9220b85e4e462d1c3213c24beace3ea" }
-
-[patch."https://github.com/pathscale/ps-blitz.git"]
-ps-blitz-dom = { path = "/Users/revenge/code/ps-blitz-render/packages/blitz-dom" }
-ps-blitz-script = { path = "/Users/revenge/code/ps-blitz-render/packages/blitz-script" }
-ps-blitz-shell = { path = "/Users/revenge/code/ps-blitz-render/packages/blitz-shell" }
-ps-blitz-traits = { path = "/Users/revenge/code/ps-blitz-render/packages/blitz-traits" }
-
-# Same local-only rule as the ps-blitz block: the working checkout, so the
-# NodeId port can be built before it is pushed.
-[patch."https://github.com/pathscale/tauri-runtime-blitz.git"]
-tauri-runtime-blitz = { path = "/Users/revenge/code/tauri-runtime-blitz/crates/tauri-runtime-blitz" }
-blitz-control-protocol = { path = "/Users/revenge/code/tauri-runtime-blitz/crates/blitz-control-protocol" }

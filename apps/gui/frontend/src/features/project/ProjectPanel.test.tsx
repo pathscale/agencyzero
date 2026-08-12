@@ -301,8 +301,7 @@ describe("the project side panel", () => {
 
     function Gate() {
       workspace = useWorkspace();
-      const project = () =>
-        workspace.state.projects.find((candidate) => candidate.id === "quux");
+      const project = () => workspace.state.projects.find((candidate) => candidate.id === "quux");
       return (
         <Show when={workspace.state.boot.status === "ready" && project()}>
           {(readyProject) => <ProjectPanel project={readyProject()} agent="codex" />}

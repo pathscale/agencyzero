@@ -323,7 +323,8 @@ export function SettingsTab(): JSX.Element {
     <div
       ref={page}
       tabindex="-1"
-      class="az-scroll flex min-w-0 flex-1 justify-center rounded-panel border border-az-hairline bg-az-sunken focus:outline-none">
+      class="az-scroll flex min-w-0 flex-1 justify-center rounded-panel border border-az-hairline bg-az-sunken focus:outline-none"
+    >
       <div class="flex w-full max-w-[720px] flex-col gap-3 px-6 pt-5.5 pb-7">
         <div class="flex items-baseline gap-2.5 pb-0.5">
           <h1 class="font-semibold text-[18px] text-az-title tracking-[-.01em]">
