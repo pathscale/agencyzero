@@ -4,16 +4,6 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { TranscriptPane } from "~/features/project/TranscriptPane";
 import { useWorkspace, WorkspaceProvider } from "~/stores/workspace";
 
-/**
- * The tail, as the pane now targets it: the furthest the scroller can show,
- * plus the slack that absorbs fractional layout. jsdom does not clamp
- * `scrollTop`, so the overshoot is visible here where a real engine would take
- * it back. Asserting the exact number keeps the slack honest — a change to it
- * has to be deliberate.
- */
-const tailFor = (scrollHeight: number, clientHeight = 400): number =>
-  Math.max(0, scrollHeight - clientHeight) + 24;
-
 function Harness() {
   const workspace = useWorkspace();
   const project = () => workspace.state.projects.find((candidate) => candidate.id === "cafe");
@@ -68,7 +58,7 @@ describe("transcript resize anchoring", () => {
       callback(16);
     });
 
-    expect(scroller.scrollTop).toBe(tailFor(1_000));
+    expect(scroller.scrollTop).toBe(1_000);
   });
 
   it("keeps a pinned transcript at the tail when its width changes", async () => {
@@ -105,7 +95,7 @@ describe("transcript resize anchoring", () => {
     notifyResize?.([], {} as ResizeObserver);
     await Promise.resolve();
 
-    expect(scroller.scrollTop).toBe(tailFor(1_240));
+    expect(scroller.scrollTop).toBe(1_240);
     expect(scroller.scrollLeft).toBe(0);
   });
 
@@ -187,7 +177,7 @@ describe("transcript resize anchoring", () => {
     notifyResize?.([], {} as ResizeObserver);
     await Promise.resolve();
 
-    expect(scroller.scrollTop).toBe(tailFor(1_240));
+    expect(scroller.scrollTop).toBe(1_240);
   });
 
   it("re-anchors after streamed DOM content changes while still pinned", async () => {
@@ -223,6 +213,6 @@ describe("transcript resize anchoring", () => {
     notifyMutation?.([], {} as MutationObserver);
     await Promise.resolve();
 
-    expect(scroller.scrollTop).toBe(tailFor(1_180));
+    expect(scroller.scrollTop).toBe(1_180);
   });
 });

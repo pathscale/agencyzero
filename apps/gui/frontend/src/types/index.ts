@@ -1002,20 +1002,6 @@ export interface UiPrefs {
   composerDrafts: Record<string, string>;
   /** Question staged as the target of each project's next owner message. */
   replyQuestionIds: Record<string, string>;
-  /**
-   * Whether each project's transcript is following its tail.
-   *
-   * Per project and persisted, because it is a property of the conversation
-   * rather than of a mounted component: switching tabs unmounts the project
-   * screen, and a flag that lived there came back `true` for a reader who had
-   * deliberately scrolled up, or `false` for one who had not.
-   *
-   * Set whenever the view is at or near the bottom, and cleared only by the
-   * owner scrolling away from it. Nothing else may clear it: growing content,
-   * a footer changing height and a reflow all move the tail without anyone
-   * asking to leave it.
-   */
-  transcriptAtBottom: Record<string, boolean>;
   /** Never show the projected-turn warning card. Cost chips/actions remain. */
   costWarningsDisabled: boolean;
   /** Epoch milliseconds until which dismissing the warning has snoozed it. */
@@ -1025,10 +1011,7 @@ export interface UiPrefs {
 }
 
 /** Preferences that travel with a backup; unfinished owner text stays local. */
-export type PortableUiPrefs = Omit<
-  UiPrefs,
-  "composerDrafts" | "replyQuestionIds" | "transcriptAtBottom"
->;
+export type PortableUiPrefs = Omit<UiPrefs, "composerDrafts" | "replyQuestionIds">;
 
 /**
  * One quota window, in the provider's own terms.
