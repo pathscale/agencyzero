@@ -1,11 +1,13 @@
 import { fireEvent, render, waitFor } from "@solidjs/testing-library";
 import { Show } from "solid-js";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { TranscriptPane } from "~/features/project/TranscriptPane";
-import { useWorkspace, WorkspaceProvider } from "~/stores/workspace";
+import { noteTranscriptChromeChanged, TranscriptPane } from "~/features/project/TranscriptPane";
+import { useWorkspace, type Workspace, WorkspaceProvider } from "~/stores/workspace";
+
+let workspace!: Workspace;
 
 function Harness() {
-  const workspace = useWorkspace();
+  workspace = useWorkspace();
   const project = () => workspace.state.projects.find((candidate) => candidate.id === "cafe");
 
   return (
@@ -58,7 +60,7 @@ describe("transcript resize anchoring", () => {
       callback(16);
     });
 
-    expect(scroller.scrollTop).toBe(1_000);
+    expect(scroller.scrollTop).toBe(600);
   });
 
   it("keeps a pinned transcript at the tail when its width changes", async () => {
@@ -95,7 +97,7 @@ describe("transcript resize anchoring", () => {
     notifyResize?.([], {} as ResizeObserver);
     await Promise.resolve();
 
-    expect(scroller.scrollTop).toBe(1_240);
+    expect(scroller.scrollTop).toBe(840);
     expect(scroller.scrollLeft).toBe(0);
   });
 
@@ -177,7 +179,7 @@ describe("transcript resize anchoring", () => {
     notifyResize?.([], {} as ResizeObserver);
     await Promise.resolve();
 
-    expect(scroller.scrollTop).toBe(1_240);
+    expect(scroller.scrollTop).toBe(840);
   });
 
   it("re-anchors after streamed DOM content changes while still pinned", async () => {
@@ -213,6 +215,193 @@ describe("transcript resize anchoring", () => {
     notifyMutation?.([], {} as MutationObserver);
     await Promise.resolve();
 
-    expect(scroller.scrollTop).toBe(1_180);
+    expect(scroller.scrollTop).toBe(780);
+  });
+
+  it("uses Page Up and Page Down to leave and rejoin tail following", async () => {
+    const screen = render(() => (
+      <WorkspaceProvider>
+        <Harness />
+      </WorkspaceProvider>
+    ));
+    await waitFor(() => expect(screen.container.querySelector("[data-selectable]")).not.toBeNull());
+
+    const scroller = screen.container.querySelector("[data-selectable]") as HTMLDivElement;
+    workspace.actions.openProject("cafe");
+    Object.defineProperties(scroller, {
+      clientHeight: { configurable: true, get: () => 400 },
+      scrollHeight: { configurable: true, get: () => 1_000 },
+    });
+    scroller.scrollTop = 600;
+
+    fireEvent.keyDown(scroller, { key: "PageUp" });
+    expect(scroller.scrollTop).toBe(200);
+    expect(workspace.state.transcriptPositions.cafe).toBe(201);
+
+    fireEvent.keyDown(scroller, { key: "PageDown" });
+    expect(scroller.scrollTop).toBe(600);
+    expect(workspace.state.transcriptPositions.cafe).toBe(0);
+  });
+
+  it("keeps appended content out of view after the owner pages up", async () => {
+    let notifyResize: ResizeObserverCallback | undefined;
+    vi.stubGlobal(
+      "ResizeObserver",
+      class {
+        constructor(callback: ResizeObserverCallback) {
+          notifyResize = callback;
+        }
+        observe() {}
+        disconnect() {}
+      },
+    );
+
+    const screen = render(() => (
+      <WorkspaceProvider>
+        <Harness />
+      </WorkspaceProvider>
+    ));
+    await waitFor(() => expect(screen.container.querySelector("[data-selectable]")).not.toBeNull());
+
+    const scroller = screen.container.querySelector("[data-selectable]") as HTMLDivElement;
+    let scrollHeight = 1_000;
+    Object.defineProperties(scroller, {
+      clientHeight: { configurable: true, get: () => 400 },
+      scrollHeight: { configurable: true, get: () => scrollHeight },
+    });
+    scroller.scrollTop = 600;
+    fireEvent.keyDown(scroller, { key: "PageUp" });
+    expect(scroller.scrollTop).toBe(200);
+
+    scrollHeight = 1_400;
+    notifyResize?.([], {} as ResizeObserver);
+    await Promise.resolve();
+
+    expect(scroller.scrollTop).toBe(200);
+  });
+
+  it("realigns bottom chrome only for the true-bottom sentinel", async () => {
+    const frames: FrameRequestCallback[] = [];
+    vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => {
+      frames.push(callback);
+      return frames.length;
+    });
+    vi.stubGlobal("cancelAnimationFrame", () => {});
+
+    const screen = render(() => (
+      <WorkspaceProvider>
+        <Harness />
+      </WorkspaceProvider>
+    ));
+    await waitFor(() => expect(screen.container.querySelector("[data-selectable]")).not.toBeNull());
+
+    const scroller = screen.container.querySelector("[data-selectable]") as HTMLDivElement;
+    workspace.actions.openProject("cafe");
+    let clientHeight = 400;
+    Object.defineProperties(scroller, {
+      clientHeight: { configurable: true, get: () => clientHeight },
+      scrollHeight: { configurable: true, get: () => 1_000 },
+    });
+    for (const callback of frames.splice(0)) callback(0);
+    await Promise.resolve();
+
+    scroller.scrollTop = 600;
+    fireEvent.keyDown(scroller, { key: "PageUp" });
+    expect(workspace.state.transcriptPositions.cafe).toBe(201);
+    clientHeight = 300;
+    noteTranscriptChromeChanged();
+    await Promise.resolve();
+    for (const callback of frames.splice(0)) callback(16);
+    expect(scroller.scrollTop).toBe(200);
+
+    fireEvent.keyDown(scroller, { key: "End" });
+    expect(workspace.state.transcriptPositions.cafe).toBe(0);
+    clientHeight = 250;
+    noteTranscriptChromeChanged();
+    await Promise.resolve();
+    for (const callback of frames.splice(0)) callback(32);
+    expect(scroller.scrollTop).toBe(750);
+  });
+
+  it("realigns a bottom-following project when its retained tab becomes visible again", async () => {
+    const frames: FrameRequestCallback[] = [];
+    vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => {
+      frames.push(callback);
+      return frames.length;
+    });
+    vi.stubGlobal("cancelAnimationFrame", () => {});
+
+    const screen = render(() => (
+      <WorkspaceProvider>
+        <Harness />
+      </WorkspaceProvider>
+    ));
+    await waitFor(() => expect(screen.container.querySelector("[data-selectable]")).not.toBeNull());
+
+    const scroller = screen.container.querySelector("[data-selectable]") as HTMLDivElement;
+    Object.defineProperties(scroller, {
+      clientHeight: { configurable: true, get: () => 400 },
+      scrollHeight: { configurable: true, get: () => 1_000 },
+    });
+    workspace.actions.openProject("cafe");
+    for (const callback of frames.splice(0)) callback(0);
+    await Promise.resolve();
+    expect(scroller.scrollTop).toBe(600);
+
+    workspace.actions.openProject("worktable");
+    // Reproduce the renderer presentation shift that occurs while a retained
+    // pane is hidden. It is not owner intent and must not become the new anchor.
+    scroller.scrollTop = 180;
+    fireEvent.scroll(scroller);
+    workspace.actions.openProject("cafe");
+    await Promise.resolve();
+    for (const callback of frames.splice(0)) callback(16);
+    await Promise.resolve();
+
+    expect(scroller.scrollTop).toBe(600);
+  });
+
+  it("does not reposition a retained tab after its reader pages up", async () => {
+    const frames: FrameRequestCallback[] = [];
+    vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => {
+      frames.push(callback);
+      return frames.length;
+    });
+    vi.stubGlobal("cancelAnimationFrame", () => {});
+
+    const screen = render(() => (
+      <WorkspaceProvider>
+        <Harness />
+      </WorkspaceProvider>
+    ));
+    await waitFor(() => expect(screen.container.querySelector("[data-selectable]")).not.toBeNull());
+
+    const scroller = screen.container.querySelector("[data-selectable]") as HTMLDivElement;
+    workspace.actions.openProject("cafe");
+    Object.defineProperties(scroller, {
+      clientHeight: { configurable: true, get: () => 400 },
+      scrollHeight: { configurable: true, get: () => 1_000 },
+    });
+    scroller.scrollTop = 600;
+    fireEvent.keyDown(scroller, { key: "PageUp" });
+    expect(scroller.scrollTop).toBe(200);
+    expect(workspace.state.transcriptPositions.cafe).toBe(201);
+
+    workspace.actions.openProject("worktable");
+    await waitFor(() =>
+      expect(workspace.state.settings?.workspaceTabs?.scrollPositions.cafe).toBe(201),
+    );
+    // Blitz may clamp or re-present a retained `display:none` scroller while
+    // another tab is visible. This is renderer layout, not owner navigation,
+    // and must not replace the reader's last deliberate position.
+    scroller.scrollTop = 0;
+    fireEvent.scroll(scroller);
+    expect(workspace.state.transcriptPositions.cafe).toBe(201);
+    workspace.actions.openProject("cafe");
+    await Promise.resolve();
+    for (const callback of frames.splice(0)) callback(16);
+    await Promise.resolve();
+
+    expect(scroller.scrollTop).toBe(200);
   });
 });

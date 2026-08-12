@@ -325,6 +325,63 @@ migration_engine!(
 /// guessed at, and [`Report::reset`] says so out loud.
 const MIGRATABLE: [&str; 1] = ["project_item"];
 
+/// Why the store lock could not be taken.
+#[derive(Debug)]
+pub enum StoreLockError {
+    /// Another live process owns the advisory lock. The optional owner text is
+    /// diagnostic metadata written by recent AgencyZero and `wt-migrate`
+    /// builds; the kernel lock, never this text, is the source of truth.
+    Busy {
+        store: std::path::PathBuf,
+        lock: std::path::PathBuf,
+        owner: Option<String>,
+    },
+    /// The lock could not be created, opened, or operated for another reason.
+    Unavailable(String),
+}
+
+impl StoreLockError {
+    /// True only for a normal single-writer collision. GUI startup treats this
+    /// as an already-open profile and exits cleanly; filesystem failures remain
+    /// real startup errors.
+    #[must_use]
+    pub const fn is_busy(&self) -> bool {
+        matches!(self, Self::Busy { .. })
+    }
+}
+
+impl std::fmt::Display for StoreLockError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Busy { store, lock, owner } => {
+                write!(
+                    formatter,
+                    "another process holds the store at {store:?} (lock {lock:?}). The store is \
+                     single-writer: close the other AgencyZero instance or migration tool first"
+                )?;
+                if let Some(owner) = owner {
+                    write!(formatter, "; lock owner reports {owner}")?;
+                }
+                Ok(())
+            }
+            Self::Unavailable(message) => formatter.write_str(message),
+        }
+    }
+}
+
+impl std::error::Error for StoreLockError {}
+
+fn lock_owner() -> String {
+    let executable = std::env::current_exe()
+        .ok()
+        .and_then(|path| {
+            path.file_name()
+                .map(|name| name.to_string_lossy().into_owned())
+        })
+        .unwrap_or_else(|| "unknown".into());
+    format!("pid={} executable={executable}", std::process::id())
+}
+
 /// Take the store's exclusive advisory lock, or say who cannot.
 ///
 /// The single-writer rule used to live in prose; on 2026-08-01 a second
@@ -335,9 +392,10 @@ const MIGRATABLE: [&str; 1] = ["project_item"];
 /// Every tool that opens the store for writing takes it; wt-migrate does.
 ///
 /// # Errors
-/// A message naming the lock when another process holds it, or when the lock
-/// file cannot be created at all.
-pub fn lock_store(store: &std::path::Path) -> Result<std::fs::File, String> {
+/// A typed busy result when another process holds it, or an unavailable result
+/// when the lock file cannot be created or operated at all.
+pub fn lock_store(store: &std::path::Path) -> Result<std::fs::File, StoreLockError> {
+    use std::io::{Seek, Write};
     use std::os::fd::AsRawFd;
 
     /*
@@ -357,26 +415,68 @@ pub fn lock_store(store: &std::path::Path) -> Result<std::fs::File, String> {
     lock_name.push(".lock");
     let lock_path = std::path::PathBuf::from(lock_name);
     if let Some(parent) = lock_path.parent() {
-        std::fs::create_dir_all(parent)
-            .map_err(|error| format!("could not create {parent:?} for the store lock: {error}"))?;
+        std::fs::create_dir_all(parent).map_err(|error| {
+            StoreLockError::Unavailable(format!(
+                "could not create {parent:?} for the store lock: {error}"
+            ))
+        })?;
     }
-    let file = std::fs::OpenOptions::new()
+    let mut file = std::fs::OpenOptions::new()
         .create(true)
         .truncate(false)
+        .read(true)
         .write(true)
         .open(&lock_path)
-        .map_err(|error| format!("could not open the store lock {lock_path:?}: {error}"))?;
+        .map_err(|error| {
+            StoreLockError::Unavailable(format!(
+                "could not open the store lock {lock_path:?}: {error}"
+            ))
+        })?;
 
     // Safety: a valid fd from the file just opened; flock takes no pointers.
-    let taken = unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) } == 0;
-    if taken {
-        Ok(file)
-    } else {
-        Err(format!(
-            "another process holds the store at {store:?} (lock {lock_path:?}). The store is \
-             single-writer: close the other AgencyZero instance or migration tool first."
-        ))
+    if unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) } != 0 {
+        let error = std::io::Error::last_os_error();
+        if error.raw_os_error() == Some(libc::EWOULDBLOCK) {
+            let owner = std::fs::read_to_string(&lock_path)
+                .ok()
+                .map(|text| text.trim().to_string())
+                .filter(|text| !text.is_empty());
+            return Err(StoreLockError::Busy {
+                store: store.to_path_buf(),
+                lock: lock_path,
+                owner,
+            });
+        }
+        return Err(StoreLockError::Unavailable(format!(
+            "could not lock the store at {store:?} with {lock_path:?}: {error}"
+        )));
     }
+
+    // The advisory lock is the authority. This short record only makes a
+    // collision actionable in logs and shell probes, instead of leaving an
+    // empty lock file that cannot say which live process owns it.
+    file.set_len(0).map_err(|error| {
+        StoreLockError::Unavailable(format!(
+            "could not clear store lock metadata at {lock_path:?}: {error}"
+        ))
+    })?;
+    file.rewind().map_err(|error| {
+        StoreLockError::Unavailable(format!(
+            "could not seek store lock metadata at {lock_path:?}: {error}"
+        ))
+    })?;
+    file.write_all(lock_owner().as_bytes()).map_err(|error| {
+        StoreLockError::Unavailable(format!(
+            "could not write store lock metadata at {lock_path:?}: {error}"
+        ))
+    })?;
+    file.flush().map_err(|error| {
+        StoreLockError::Unavailable(format!(
+            "could not flush store lock metadata at {lock_path:?}: {error}"
+        ))
+    })?;
+
+    Ok(file)
 }
 
 /// Split a fingerprint into table name and column list.
@@ -2120,6 +2220,29 @@ mod scrub_tests {
             .expect("a store with the same stem must lock separately");
 
         drop((live, kept));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_second_writer_gets_a_typed_busy_probe_with_owner_metadata() {
+        let dir = std::env::temp_dir().join(format!(
+            "wt-migrate-busy-lock-{}-{}",
+            std::process::id(),
+            uuid::Uuid::now_v7()
+        ));
+        let store = dir.join("db");
+
+        let first = super::lock_store(&store).expect("the first writer owns the profile");
+        let second = super::lock_store(&store).expect_err("a second writer must be refused");
+
+        assert!(second.is_busy());
+        let message = second.to_string();
+        assert!(message.contains(&format!("pid={}", std::process::id())));
+        assert!(message.contains("executable="));
+        assert!(message.contains("another process holds the store"));
+
+        drop(first);
+        super::lock_store(&store).expect("the OS releases the lock with its owner");
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

@@ -379,6 +379,7 @@ dependencies = [
  "brotli",
  "chrono",
  "derive_more 2.1.1",
+ "dirs",
  "eyre",
  "futures",
  "libc",
@@ -500,12 +501,22 @@ dependencies = [
 name = "blitz-bench"
 version = "0.6.3"
 dependencies = [
- "blitz-control-protocol",
+ "blitz-control-protocol 0.1.0 (git+https://github.com/pathscale/tauri-runtime-blitz.git?rev=c908c37fd72d58939607def6a32015a301b8e8ad)",
  "endpoint-libs",
  "eyre",
  "serde",
  "serde_json",
  "tokio",
+]
+
+[[package]]
+name = "blitz-control-protocol"
+version = "0.1.0"
+source = "git+https://github.com/pathscale/tauri-runtime-blitz.git?rev=1279f3f9baa539f9c4a9063641756140da30a15f#1279f3f9baa539f9c4a9063641756140da30a15f"
+dependencies = [
+ "endpoint-libs",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
@@ -521,7 +532,7 @@ dependencies = [
 [[package]]
 name = "blitz-html"
 version = "0.3.0-beta.3"
-source = "git+https://github.com/pathscale/ps-blitz.git?rev=4a825e548a387a3cb424b61c8db91f27d489b394#4a825e548a387a3cb424b61c8db91f27d489b394"
+source = "git+https://github.com/pathscale/ps-blitz.git?rev=064ba1e0d809ac09405739c2bd68563b942c3725#064ba1e0d809ac09405739c2bd68563b942c3725"
 dependencies = [
  "html5ever 0.39.0",
  "ps-blitz-dom",
@@ -532,7 +543,7 @@ dependencies = [
 [[package]]
 name = "blitz-paint"
 version = "0.3.0-beta.3"
-source = "git+https://github.com/pathscale/ps-blitz.git?rev=4a825e548a387a3cb424b61c8db91f27d489b394#4a825e548a387a3cb424b61c8db91f27d489b394"
+source = "git+https://github.com/pathscale/ps-blitz.git?rev=064ba1e0d809ac09405739c2bd68563b942c3725#064ba1e0d809ac09405739c2bd68563b942c3725"
 dependencies = [
  "color",
  "euclid",
@@ -1532,7 +1543,7 @@ checksum = "da220af51a1a335e9a930beaaef53d261e41ea9eecfb3d973a3ddae1a7284b9c"
 [[package]]
 name = "debug_timer"
 version = "0.1.3"
-source = "git+https://github.com/pathscale/ps-blitz.git?rev=4a825e548a387a3cb424b61c8db91f27d489b394#4a825e548a387a3cb424b61c8db91f27d489b394"
+source = "git+https://github.com/pathscale/ps-blitz.git?rev=064ba1e0d809ac09405739c2bd68563b942c3725#064ba1e0d809ac09405739c2bd68563b942c3725"
 
 [[package]]
 name = "deranged"
@@ -4688,7 +4699,7 @@ dependencies = [
 [[package]]
 name = "ps-blitz-debug-control"
 version = "0.3.0-beta.3"
-source = "git+https://github.com/pathscale/ps-blitz.git?rev=4a825e548a387a3cb424b61c8db91f27d489b394#4a825e548a387a3cb424b61c8db91f27d489b394"
+source = "git+https://github.com/pathscale/ps-blitz.git?rev=064ba1e0d809ac09405739c2bd68563b942c3725#064ba1e0d809ac09405739c2bd68563b942c3725"
 dependencies = [
  "getrandom 0.4.3",
  "serde",
@@ -4698,7 +4709,7 @@ dependencies = [
 [[package]]
 name = "ps-blitz-dom"
 version = "0.3.0-beta.3"
-source = "git+https://github.com/pathscale/ps-blitz.git?rev=4a825e548a387a3cb424b61c8db91f27d489b394#4a825e548a387a3cb424b61c8db91f27d489b394"
+source = "git+https://github.com/pathscale/ps-blitz.git?rev=064ba1e0d809ac09405739c2bd68563b942c3725#064ba1e0d809ac09405739c2bd68563b942c3725"
 dependencies = [
  "accesskit",
  "app_units",
@@ -4707,7 +4718,7 @@ dependencies = [
  "color",
  "cssparser 0.37.0",
  "cursor-icon",
- "debug_timer 0.1.3 (git+https://github.com/pathscale/ps-blitz.git?rev=4a825e548a387a3cb424b61c8db91f27d489b394)",
+ "debug_timer 0.1.3 (git+https://github.com/pathscale/ps-blitz.git?rev=064ba1e0d809ac09405739c2bd68563b942c3725)",
  "euclid",
  "html-escape",
  "image",
@@ -4742,7 +4753,7 @@ dependencies = [
 [[package]]
 name = "ps-blitz-script"
 version = "0.3.0-beta.3"
-source = "git+https://github.com/pathscale/ps-blitz.git?rev=4a825e548a387a3cb424b61c8db91f27d489b394#4a825e548a387a3cb424b61c8db91f27d489b394"
+source = "git+https://github.com/pathscale/ps-blitz.git?rev=064ba1e0d809ac09405739c2bd68563b942c3725#064ba1e0d809ac09405739c2bd68563b942c3725"
 dependencies = [
  "base64 0.22.1",
  "blitz-html",
@@ -4769,7 +4780,7 @@ dependencies = [
 [[package]]
 name = "ps-blitz-shell"
 version = "0.3.0-beta.3"
-source = "git+https://github.com/pathscale/ps-blitz.git?rev=4a825e548a387a3cb424b61c8db91f27d489b394#4a825e548a387a3cb424b61c8db91f27d489b394"
+source = "git+https://github.com/pathscale/ps-blitz.git?rev=064ba1e0d809ac09405739c2bd68563b942c3725#064ba1e0d809ac09405739c2bd68563b942c3725"
 dependencies = [
  "android-activity",
  "arboard",
@@ -4790,7 +4801,7 @@ dependencies = [
 [[package]]
 name = "ps-blitz-traits"
 version = "0.3.0-beta.3"
-source = "git+https://github.com/pathscale/ps-blitz.git?rev=4a825e548a387a3cb424b61c8db91f27d489b394#4a825e548a387a3cb424b61c8db91f27d489b394"
+source = "git+https://github.com/pathscale/ps-blitz.git?rev=064ba1e0d809ac09405739c2bd68563b942c3725#064ba1e0d809ac09405739c2bd68563b942c3725"
 dependencies = [
  "atomic_refcell",
  "bitflags 2.13.1",
@@ -6260,7 +6271,7 @@ dependencies = [
 [[package]]
 name = "stylo_taffy"
 version = "0.3.0-beta.3"
-source = "git+https://github.com/pathscale/ps-blitz.git?rev=4a825e548a387a3cb424b61c8db91f27d489b394#4a825e548a387a3cb424b61c8db91f27d489b394"
+source = "git+https://github.com/pathscale/ps-blitz.git?rev=064ba1e0d809ac09405739c2bd68563b942c3725#064ba1e0d809ac09405739c2bd68563b942c3725"
 dependencies = [
  "ps-taffy",
  "stylo",
@@ -6699,9 +6710,9 @@ dependencies = [
 [[package]]
 name = "tauri-runtime-blitz"
 version = "0.1.0"
-source = "git+https://github.com/pathscale/tauri-runtime-blitz.git?rev=c908c37fd72d58939607def6a32015a301b8e8ad#c908c37fd72d58939607def6a32015a301b8e8ad"
+source = "git+https://github.com/pathscale/tauri-runtime-blitz.git?rev=1279f3f9baa539f9c4a9063641756140da30a15f#1279f3f9baa539f9c4a9063641756140da30a15f"
 dependencies = [
- "blitz-control-protocol",
+ "blitz-control-protocol 0.1.0 (git+https://github.com/pathscale/tauri-runtime-blitz.git?rev=1279f3f9baa539f9c4a9063641756140da30a15f)",
  "endpoint-libs",
  "http",
  "keyboard-types 0.7.0",

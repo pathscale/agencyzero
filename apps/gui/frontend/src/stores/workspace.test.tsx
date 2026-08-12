@@ -124,6 +124,7 @@ describe("startup", () => {
     SETTINGS.workspaceTabs = {
       openProjectKeys: ["quux", "cafe"],
       activeProjectKey: "cafe",
+      scrollPositions: { quux: 321, cafe: 0 },
     };
     setPrefs("openTabKeys", ["worktable"]);
     setPrefs("lastTabKey", "worktable");
@@ -132,6 +133,7 @@ describe("startup", () => {
 
     expect(keys(workspace)).toEqual(["home", "quux", "cafe"]);
     expect(workspace.state.activeKey).toBe("cafe");
+    expect(workspace.state.transcriptPositions).toEqual({ quux: 321, cafe: 0 });
   });
 
   it("migrates the old webview preference into backup-backed settings", async () => {
@@ -144,6 +146,7 @@ describe("startup", () => {
       expect(workspace.state.settings?.workspaceTabs).toEqual({
         openProjectKeys: ["cafe"],
         activeProjectKey: "cafe",
+        scrollPositions: { cafe: 0 },
       }),
     );
   });

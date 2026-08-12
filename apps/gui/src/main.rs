@@ -52,6 +52,77 @@ fn blitz_profile_dir(bundle_dir: PathBuf) -> PathBuf {
     }
 }
 
+enum StoreProbe {
+    Acquired(std::fs::File),
+    Busy(wt_migrate::StoreLockError),
+}
+
+/// Probe the profile before WorkTable opens a single table.
+///
+/// A live writer is an ordinary duplicate-profile launch, not a damaged app or
+/// database. Keep that collision as data so setup can log it and request a
+/// clean zero-status exit. Permission and filesystem failures remain errors.
+fn probe_store(store: &std::path::Path) -> Result<StoreProbe, wt_migrate::StoreLockError> {
+    match wt_migrate::lock_store(store) {
+        Ok(lock) => Ok(StoreProbe::Acquired(lock)),
+        Err(error) if error.is_busy() => Ok(StoreProbe::Busy(error)),
+        Err(error) => Err(error),
+    }
+}
+
+fn no_persist_requested() -> bool {
+    std::env::var_os("AZ_NO_PERSIST").is_some()
+        || std::env::args().any(|arg| arg == "--debug-no-persist")
+}
+
+/// Resolve and claim the Blitz profile before AppKit, a window, or frontend
+/// JavaScript exists. This is the soft duplicate-instance probe: a busy return
+/// ends `main` normally, while an acquired lock is handed into setup and held
+/// by `AppState` for the process lifetime.
+#[cfg(feature = "blitz-runtime")]
+enum BlitzPreflight {
+    Skip,
+    Busy,
+    Acquired(PathBuf, std::fs::File),
+}
+
+#[cfg(feature = "blitz-runtime")]
+fn preflight_blitz_profile() -> Result<BlitzPreflight, String> {
+    if no_persist_requested() {
+        return Ok(BlitzPreflight::Skip);
+    }
+
+    let identifier = if cfg!(feature = "experimental") {
+        "com.pathscale.agencyzero.experimental"
+    } else {
+        "com.pathscale.agencyzero"
+    };
+    let config_dir = dirs::config_dir()
+        .ok_or_else(|| "no config directory for the Blitz profile probe".to_string())?
+        .join(identifier);
+    let data_dir = dirs::data_dir()
+        .ok_or_else(|| "no data directory for the Blitz profile probe".to_string())?
+        .join(identifier);
+    let location = location::resolve(&config_dir, &data_dir);
+
+    match probe_store(&location.path).map_err(|error| error.to_string())? {
+        StoreProbe::Acquired(lock) => Ok(BlitzPreflight::Acquired(location.path, lock)),
+        StoreProbe::Busy(busy) => {
+            log::init(&data_dir.join("logs"));
+            crate::log!(
+                log::Level::Warn,
+                "boot",
+                "profile already open; exiting before Tauri or WorkTable starts: {busy}"
+            );
+            eprintln!(
+                "AgencyZero profile is already open; this launch exited without starting Tauri \
+                 or touching WorkTable: {busy}"
+            );
+            Ok(BlitzPreflight::Busy)
+        }
+    }
+}
+
 use crate::db::location::{self, DataLocation};
 use crate::db::tables::Tables;
 use crate::settings::GlobalSettings;
@@ -664,6 +735,25 @@ mod restart_resume_tests {
                 )
             );
         }
+    }
+
+    #[test]
+    fn a_live_profile_is_a_soft_probe_result_not_a_startup_error() {
+        let dir = std::env::temp_dir().join(format!(
+            "az-soft-store-probe-{}-{}",
+            std::process::id(),
+            uuid::Uuid::now_v7()
+        ));
+        let store = dir.join("db");
+        let first = wt_migrate::lock_store(&store).expect("the first process owns the profile");
+
+        let probe = probe_store(&store).expect("a live profile is not a fatal startup error");
+        assert!(matches!(probe, StoreProbe::Busy(_)));
+
+        drop(first);
+        let probe = probe_store(&store).expect("the released profile can be opened");
+        assert!(matches!(probe, StoreProbe::Acquired(_)));
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }
 
@@ -1872,6 +1962,19 @@ fn main() {
 
     adopt_login_shell_path();
 
+    #[cfg(feature = "blitz-runtime")]
+    let startup_store_lock = match preflight_blitz_profile() {
+        Ok(BlitzPreflight::Busy) => return,
+        Ok(BlitzPreflight::Skip) => None,
+        Ok(BlitzPreflight::Acquired(path, lock)) => Some((path, lock)),
+        Err(error) => {
+            eprintln!("AgencyZero could not probe its data profile: {error}");
+            std::process::exit(1);
+        }
+    };
+    #[cfg(not(feature = "blitz-runtime"))]
+    let startup_store_lock: Option<(PathBuf, std::fs::File)> = None;
+
     /*
      * Panics must reach the log file. A Finder-launched app's stderr goes
      * nowhere, so before this hook a crash left a DiagnosticReports entry
@@ -2006,7 +2109,7 @@ fn main() {
             list_table_sizes,
             open_external
         ])
-        .setup(|app| {
+        .setup(move |app| {
             app.set_menu(build_menu(app.handle())?)?;
 
             // The store is opened before the window is usable, and a failure is
@@ -2070,8 +2173,7 @@ fn main() {
              *   byte as the old build wrote it, so downgrading to that build
              *   is always a way back; this session runs on scratch.
              */
-            let no_persist = std::env::var_os("AZ_NO_PERSIST").is_some()
-                || std::env::args().any(|arg| arg == "--debug-no-persist");
+            let no_persist = no_persist_requested();
             let no_migration = std::env::var_os("AZ_NO_DB_MIGRATION").is_some()
                 || std::env::args().any(|arg| arg == "--no-db-migration");
 
@@ -2105,10 +2207,41 @@ fn main() {
              * file makes that a refusal instead. Held for the whole session by
              * living in AppState. wt-migrate takes the same lock.
              */
-            let store_lock = wt_migrate::lock_store(&location.path).map_err(|message| {
-                crate::log!(log::Level::Error, "boot", "{message}");
-                message
-            })?;
+            let store_probe = match startup_store_lock {
+                Some((preflight_path, lock)) if preflight_path == location.path => {
+                    StoreProbe::Acquired(lock)
+                }
+                Some((_preflight_path, lock)) => {
+                    // A custom Tauri config can route differently from the
+                    // compiled Blitz identity. Release the speculative claim
+                    // and probe the exact setup path before opening it.
+                    drop(lock);
+                    probe_store(&location.path).map_err(|error| error.to_string())?
+                }
+                None => probe_store(&location.path).map_err(|error| error.to_string())?,
+            };
+            let store_lock = match store_probe {
+                StoreProbe::Acquired(lock) => lock,
+                StoreProbe::Busy(busy) => {
+                    // A second launch of one profile is harmless when it stops
+                    // here: no WorkTable page has opened, the hidden window has
+                    // never appeared, and the existing owner keeps running.
+                    // Returning an error from setup used to turn this expected
+                    // collision into a Tauri panic. This fallback is reached
+                    // only when an externally supplied config routed somewhere
+                    // the early Blitz probe could not know about.
+                    crate::log!(
+                        log::Level::Warn,
+                        "boot",
+                        "profile already open; exiting without touching WorkTable: {busy}"
+                    );
+                    eprintln!(
+                        "AgencyZero profile is already open; this launch will exit without \
+                         touching WorkTable: {busy}"
+                    );
+                    std::process::exit(0);
+                }
+            };
 
             /*
              * The rolling snapshot, taken the moment the lock is held and

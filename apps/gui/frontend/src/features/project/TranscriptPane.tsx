@@ -6,6 +6,7 @@ import {
   For,
   type JSX,
   Match,
+  on,
   onCleanup,
   onMount,
   Show,
@@ -83,6 +84,12 @@ export function holdBackPartialDirective(text: string): string {
 }
 
 const TRANSCRIPT_PAGE_SIZE = 12;
+
+/** Fractional layout may leave the reachable tail within a pixel of max. */
+const TAIL_SLACK = 24;
+
+/** Arrow-key movement in CSS pixels. Page keys use the viewport height. */
+const KEYBOARD_LINE_STEP = 48;
 
 /**
  * The ceiling on mounted rows, in pages.
@@ -250,6 +257,17 @@ export function viewportAnchor(scroller: HTMLElement): { row: Element; gap: numb
   return undefined;
 }
 
+/** Zero is reserved for following the true tail; every reader offset is +1. */
+export function encodeTranscriptPosition(scrollTop: number): number {
+  if (!Number.isFinite(scrollTop)) return 1;
+  return Math.min(Number.MAX_SAFE_INTEGER, Math.max(0, Math.round(scrollTop)) + 1);
+}
+
+/** Return the top-relative viewport offset represented by a non-tail position. */
+export function decodeTranscriptPosition(position: number): number | undefined {
+  return Number.isSafeInteger(position) && position > 0 ? position - 1 : undefined;
+}
+
 /**
  * The conversation. Three voices, three shapes:
  * you (a right-aligned bubble), the agent (plain prose), and the moderator
@@ -278,7 +296,18 @@ export function TranscriptPane(props: {
    * moving what you are reading. Coming back within a bubble's height of the
    * bottom re-engages the follow.
    */
-  const [pinned, setPinned] = createSignal(true);
+  const transcriptPosition = (): number => state.transcriptPositions[props.project.id] ?? 0;
+  const pinned = (): boolean => transcriptPosition() === 0;
+  const rememberReaderPosition = (top = scroller.scrollTop): void => {
+    actions.setProjectTranscriptPosition(props.project.id, encodeTranscriptPosition(top));
+  };
+  const setPinned = (value: boolean): void => {
+    if (pinned() === value) return;
+    actions.setProjectTranscriptPosition(
+      props.project.id,
+      value ? 0 : encodeTranscriptPosition(scroller.scrollTop),
+    );
+  };
   const [visibleEntries, setVisibleEntries] = createSignal(TRANSCRIPT_PAGE_SIZE);
   /*
    * The newest row the window is allowed to mount, by key, once the window has
@@ -323,6 +352,7 @@ export function TranscriptPane(props: {
         ? anchoredToRow(scroller.scrollTop, anchor.gap, rowGap(scroller, anchor.row))
         : anchoredScrollTop(previousTop, previousHeight, scroller.scrollHeight);
       lastScrollTop = scroller.scrollTop;
+      if (!untrack(pinned)) rememberReaderPosition();
       slidingWindow = false;
     };
     if (typeof requestAnimationFrame === "undefined") queueMicrotask(restoreAnchor);
@@ -366,7 +396,7 @@ export function TranscriptPane(props: {
     // Reaching the bottom of a slid window is not reaching the conversation:
     // pinning there would follow a tail that is not mounted, leaving the
     // transcript apparently frozen on old messages while it claims to be live.
-    if (toTail < 48 && view.trailing === 0) {
+    if (toTail <= TAIL_SLACK && view.trailing === 0) {
       setPinned(true);
     } else if (top < lastScrollTop - 1 && ownerIntent) {
       // Only owner input disengages tail following. Window resizing and text
@@ -377,16 +407,62 @@ export function TranscriptPane(props: {
     }
     userScrollIntent = false;
     lastScrollTop = top;
+    if (ownerIntent && toTail > TAIL_SLACK) rememberReaderPosition(top);
     if (shouldRevealEarlier(top, view.hidden, ownerIntent)) revealEarlier();
     else if (shouldRevealLater(toTail, view.trailing, ownerIntent)) revealLater();
   };
 
+  /**
+   * Blitz has no browser default to rely on for a focusable overflow region.
+   * Drive the same scroll offset a native chat would, then feed the resulting
+   * position through the ordinary intent tracker so Page Up disengages follow
+   * and Page Down or End re-engages it only at the true tail.
+   */
+  const navigateByKeyboard = (event: KeyboardEvent): void => {
+    if (event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey) return;
+    const max = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
+    let target: number | undefined;
+    switch (event.key) {
+      case "ArrowUp":
+        target = scroller.scrollTop - KEYBOARD_LINE_STEP;
+        break;
+      case "ArrowDown":
+        target = scroller.scrollTop + KEYBOARD_LINE_STEP;
+        break;
+      case "PageUp":
+        target = scroller.scrollTop - scroller.clientHeight;
+        break;
+      case "PageDown":
+        target = scroller.scrollTop + scroller.clientHeight;
+        break;
+      case "Home":
+        target = 0;
+        break;
+      case "End":
+        target = max;
+        break;
+      default:
+        return;
+    }
+    event.preventDefault();
+    const previous = scroller.scrollTop;
+    userScrollIntent = true;
+    scroller.scrollTop = Math.max(0, Math.min(max, target));
+    // A keyboard navigation command is owner intent by definition. Do not make
+    // it depend on a later scroll event or on `lastScrollTop` having observed
+    // the renderer's most recent presentation adjustment first.
+    if (scroller.scrollTop < previous) setPinned(false);
+    trackScroll();
+  };
+
   let followFrame: number | undefined;
+  let restoreReaderFrame: number | undefined;
   const followTail = (): void => {
     if (!untrack(pinned)) return;
     const moveToTail = (): void => {
       if (!untrack(pinned)) return;
-      scroller.scrollTop = scroller.scrollHeight;
+      const bottom = scroller.scrollHeight - scroller.clientHeight;
+      scroller.scrollTop = bottom > 0 ? bottom + TAIL_SLACK : 0;
       lastScrollTop = scroller.scrollTop;
     };
     queueMicrotask(moveToTail);
@@ -404,6 +480,24 @@ export function TranscriptPane(props: {
         });
       };
       afterLayout(2);
+    }
+  };
+
+  const restoreReaderPosition = (): void => {
+    const remembered = decodeTranscriptPosition(untrack(transcriptPosition));
+    if (remembered === undefined || untrack(pinned)) return;
+    const restore = (): void => {
+      if (state.activeKey !== props.project.id || untrack(pinned)) return;
+      scroller.scrollTop = remembered;
+      lastScrollTop = scroller.scrollTop;
+    };
+    queueMicrotask(restore);
+    if (typeof requestAnimationFrame !== "undefined") {
+      if (restoreReaderFrame !== undefined) cancelAnimationFrame(restoreReaderFrame);
+      restoreReaderFrame = requestAnimationFrame(() => {
+        restoreReaderFrame = undefined;
+        restore();
+      });
     }
   };
 
@@ -450,6 +544,9 @@ export function TranscriptPane(props: {
     mutationObserver?.disconnect();
     if (followFrame !== undefined && typeof cancelAnimationFrame !== "undefined") {
       cancelAnimationFrame(followFrame);
+    }
+    if (restoreReaderFrame !== undefined && typeof cancelAnimationFrame !== "undefined") {
+      cancelAnimationFrame(restoreReaderFrame);
     }
     if (revealFrame !== undefined && typeof cancelAnimationFrame !== "undefined") {
       cancelAnimationFrame(revealFrame);
@@ -569,6 +666,22 @@ export function TranscriptPane(props: {
     followTail();
   });
 
+  // Retained project panes are `display:none` while another tab is active.
+  // Layout work performed while hidden cannot provide a useful tail position,
+  // and no message signal necessarily changes when the pane becomes visible
+  // again. Visibility is therefore an explicit reason to realign, but only for
+  // a project whose durable owner choice still says it follows the tail.
+  createEffect(
+    on(
+      () => state.activeKey,
+      (activeKey) => {
+        if (activeKey !== props.project.id) return;
+        if (untrack(pinned)) followTail();
+        else restoreReaderPosition();
+      },
+    ),
+  );
+
   return (
     /*
      * The whole scroller is selectable, not each bubble.
@@ -581,14 +694,16 @@ export function TranscriptPane(props: {
       ref={scroller}
       aria-label={tx("Conversation")}
       tabindex="0"
+      aria-keyshortcuts="PageUp PageDown Home End ArrowUp ArrowDown"
       onScroll={trackScroll}
       onWheel={markScrollIntent}
-      onPointerDown={markScrollIntent}
+      onPointerDown={(event) => {
+        markScrollIntent();
+        if (event.target === scroller) scroller.focus();
+      }}
       onPointerMove={(event) => event.buttons !== 0 && markScrollIntent()}
       onTouchMove={markScrollIntent}
-      onKeyDown={(event) => {
-        if (["ArrowUp", "PageUp", "Home"].includes(event.key)) markScrollIntent();
-      }}
+      onKeyDown={navigateByKeyboard}
       data-selectable
       class="az-scroll flex min-h-0 flex-1 flex-col gap-4 overflow-x-hidden px-6 pt-14 pb-2 leading-relaxed"
     >

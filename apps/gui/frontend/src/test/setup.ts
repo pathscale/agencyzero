@@ -19,3 +19,21 @@ Object.defineProperty(window, "matchMedia", {
     dispatchEvent: () => false,
   }),
 });
+
+/**
+ * jsdom stores `scrollTop` but does not clamp it. Real scroll containers clamp
+ * every assignment to their reachable range, and the transcript's bottom
+ * contract depends on that behavior. Installing the platform rule here keeps
+ * scroll tests from passing with a viewport parked beyond all visible content.
+ */
+const scrollTops = new WeakMap<Element, number>();
+Object.defineProperty(Element.prototype, "scrollTop", {
+  configurable: true,
+  get(this: Element) {
+    return scrollTops.get(this) ?? 0;
+  },
+  set(this: Element, value: number) {
+    const limit = Math.max(0, this.scrollHeight - this.clientHeight);
+    scrollTops.set(this, Math.max(0, Math.min(limit, Number(value) || 0)));
+  },
+});

@@ -651,6 +651,12 @@ export interface WorkspaceTabs {
   openProjectKeys: string[];
   /** An open project key, or `home` when no project was active. */
   activeProjectKey: string;
+  /**
+   * Encoded transcript viewport per open project. Zero follows the true tail;
+   * a positive integer is the top-relative scroll offset plus one, leaving
+   * zero available for the bottom sentinel.
+   */
+  scrollPositions: Record<string, number>;
 }
 
 /** The PR-review side-channel's configuration. */
