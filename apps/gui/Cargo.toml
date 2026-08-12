@@ -65,7 +65,7 @@ uuid = "1"
 chrono = { version = "0.4", default-features = false, features = ["clock", "serde", "std"] }
 tokio = { version = "1", features = ["process", "rt-multi-thread", "time"] }
 tauri = { version = "2", features = [] }
-tauri-runtime-blitz = { git = "https://github.com/pathscale/tauri-runtime-blitz.git", rev = "6173d8394dc8038f8a1717f220dd01a0a12830df", optional = true }
+tauri-runtime-blitz = { git = "https://github.com/pathscale/tauri-runtime-blitz.git", rev = "e9be45a49c460886863a1bbbafa5f025a25580de", optional = true }
 blitz-dom = { package = "ps-blitz-dom", git = "https://github.com/pathscale/ps-blitz.git", rev = "464444a2a2708afea65f89c38d2f4908cda89af9", features = ["system-fonts"], optional = true }
 blitz-script = { package = "ps-blitz-script", git = "https://github.com/pathscale/ps-blitz.git", rev = "464444a2a2708afea65f89c38d2f4908cda89af9", features = ["system-fonts"], optional = true }
 # Named only to turn on its per-frame phase timer, which splits the one opaque
