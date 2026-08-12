@@ -114,12 +114,42 @@ The detail stays in the sections below; this is an index, not a second copy.
 | 25 | W4: assert no local `[patch]` reaches a shipped build | open, near-missed 2026-08-12 |
 | 26 | W5: assert a target-aware native-dependency inventory | open |
 | 27 | **Scheduling: tokio instead of rayon, and interruptible construction** | open, review written |
+| 28 | **A hidden pane keeps what it built** | **done 2026-08-12, 11x on a re-reveal** |
 
-Item 16 shipped on 2026-08-12 and it was the largest single win of the day: a
-tab switch re-shapes every text node in the pane it reveals, because a
-`display: none` subtree keeps no inline layout. On six retained panes,
-`pconstruct` went 35ms to 5.0ms and the whole switch 53ms to 22ms. It was one
-line, written and switched off.
+**Item 28 supersedes item 16's numbers, and the correction is worth reading
+before trusting any figure in this file.** Item 16's tab-switch measurement was
+taken in a debug build, against a fixture whose "tabs" were 238 nodes where a
+real project tab is around 4,260, and which toggled a `style` attribute where
+the application toggles a class. Rebuilt at real scale in release, a tab switch
+was **54ms**, not 22ms: layout 31ms, inline shaping 18ms, style 3ms.
+
+The benchmark then asked a question it had never asked — reveal a pane, hide
+it, reveal it again — and the second reveal cost exactly what the first did:
+46,526 layout computations either way. Nothing about a retained tab was
+retained.
+
+Stylo was why. `clear_descendant_data` throws away the computed styles of any
+subtree restyled to `display: none`, which is right for Gecko, where that
+subtree has no frames, and wrong for an application that retains nine tabs and
+toggles them by class: the revealed pane has no old style to diff against, so
+every node comes back fully damaged and the pane is rebuilt from nothing.
+`blitz-dom` now overrides `clear_data` to keep the styles, and box construction
+and the flush skip ask whether a node has boxes rather than whether it has
+damage, both of which had been leaning on stylo doing the clearing.
+
+Re-revealing a retained tab: **54ms and 46,526 computations to 5.0ms and 7**. A
+first reveal is unchanged, being the real cost of building a pane that has never
+been built.
+
+Two things this settles for the items above. The taffy cache is **not**
+thrashing even here: 720 evictions against 40,310 stores, so its 61% hit rate
+during a switch is genuinely distinct questions and a bigger cache buys nothing
+(item 7). And `parallel-construct` is still worth what item 16 claimed in
+proportion, just against a smaller remainder.
+
+Item 16 shipped on 2026-08-12: a tab switch re-shapes every text node in the
+pane it reveals, because a `display: none` subtree keeps no inline layout. It
+was one line, written and switched off.
 
 Item 27 is the question that came out of it, and it is a scheduling question
 rather than a pool one. Rayon work-steals but its scope blocks the window
