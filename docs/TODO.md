@@ -74,6 +74,12 @@ old leads until the number is seen again. The next move is the owner's: when
 reading with `idle-cpu.sh`'s method rather than `ps %cpu`, which is a lifetime
 average and was the source of the original alarm.
 
+**How to measure any of this**: [debugging.md](debugging.md). The headless
+benchmarks against the real transcript fixture take three seconds and need no
+window; the debug driver answers questions about the real DOM. Numbers in this
+file that predate 2026-08-12 were taken while the app burned 76% of a core in
+the background, so re-measure before trusting one.
+
 ## Every item, by number
 
 One table so a number can be looked up without knowing which section owns it.

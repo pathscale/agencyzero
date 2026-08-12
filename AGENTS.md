@@ -41,6 +41,13 @@ hardens into procedure moves here; the reasoning stays in memory.
 
 Run what you build before calling it done. **If you can't run it, say so.**
 
+**How to run it is [docs/debugging.md](docs/debugging.md).** The debug driver and
+its handshake, crash reports and sampling, the unstripped build line, and the
+headless engine benchmarks that answer most questions in three seconds without
+opening a window. Read it before driving the app: the app is the slowest and
+least reliable surface, and the measurement it gives is usually available
+without it.
+
 - Compare against the base branch: a pre-existing failure is not yours, and saying so
   requires checking.
 - A suspiciously fast build was cached. Force a rebuild when the rebuild is the point.
