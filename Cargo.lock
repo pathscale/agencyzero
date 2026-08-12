@@ -500,7 +500,7 @@ dependencies = [
 name = "blitz-bench"
 version = "0.6.0"
 dependencies = [
- "blitz-control-protocol 0.1.0 (git+https://github.com/pathscale/tauri-runtime-blitz.git?rev=cf9b75ccab95cb715ab649bab0ca775719c7d780)",
+ "blitz-control-protocol",
  "endpoint-libs",
  "eyre",
  "serde",
@@ -512,16 +512,6 @@ dependencies = [
 name = "blitz-control-protocol"
 version = "0.1.0"
 source = "git+https://github.com/pathscale/tauri-runtime-blitz.git?rev=6173d8394dc8038f8a1717f220dd01a0a12830df#6173d8394dc8038f8a1717f220dd01a0a12830df"
-dependencies = [
- "endpoint-libs",
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "blitz-control-protocol"
-version = "0.1.0"
-source = "git+https://github.com/pathscale/tauri-runtime-blitz.git?rev=cf9b75ccab95cb715ab649bab0ca775719c7d780#cf9b75ccab95cb715ab649bab0ca775719c7d780"
 dependencies = [
  "endpoint-libs",
  "serde",
@@ -6829,7 +6819,7 @@ name = "tauri-runtime-blitz"
 version = "0.1.0"
 source = "git+https://github.com/pathscale/tauri-runtime-blitz.git?rev=6173d8394dc8038f8a1717f220dd01a0a12830df#6173d8394dc8038f8a1717f220dd01a0a12830df"
 dependencies = [
- "blitz-control-protocol 0.1.0 (git+https://github.com/pathscale/tauri-runtime-blitz.git?rev=6173d8394dc8038f8a1717f220dd01a0a12830df)",
+ "blitz-control-protocol",
  "endpoint-libs",
  "http",
  "keyboard-types 0.7.0",
