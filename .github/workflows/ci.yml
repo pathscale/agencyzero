@@ -50,6 +50,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # First, because it needs nothing installed and it guards a failure this
+      # job cannot otherwise see: `blitz-runtime` is off here, so a renderer
+      # pinned at two revs compiles green through every PR gate and only breaks
+      # the macOS bundle after the merge.
+      - run: scripts/check-one-rev-per-git-source.sh
+
       # The Tauri stack needs a webview toolchain to compile at all.
       - name: Install Tauri system dependencies
         run: |
