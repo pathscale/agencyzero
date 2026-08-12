@@ -277,7 +277,8 @@ deciding whether to carry a patched Taffy while an upstream PR lands.
 
 # Addendum, 2026-08-12: a second fork of Taffy 0.12, with no overlapping patches
 
-From [genet-review.md](genet-review.md). Source reading, not measurement.
+Source reading, not measurement, from Genet read at `main` on 2026-08-12. See
+[TODO.md](TODO.md), "From the Genet review", for the adoption verdict.
 
 Actionable step 1 above notes that our only local lever is deciding whether to carry a
 patched Taffy. There is now a second party carrying one, on the same version line, and

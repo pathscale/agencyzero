@@ -407,8 +407,9 @@ not-for-production line; its cons-string design is correct and the project is ac
 
 ## Addendum, 2026-08-12: a third option this document did not consider
 
-From the Genet review ([genet-review.md](genet-review.md)), a Servo fork on our stack that
-removed SpiderMonkey. Source reading, not measurement.
+From Genet, a Servo fork on our stack that removed SpiderMonkey, read at `main` on
+2026-08-12. Source reading, not measurement. See [TODO.md](TODO.md), "From the Genet
+review", for the adoption verdict and item 21.
 
 The decision above stands: **do not switch engines for the quadratic.** Steps 1 to 3
 remove more cost for a fraction of the work, and that arithmetic is unchanged.

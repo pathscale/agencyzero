@@ -296,7 +296,9 @@ not add a retaining cache on top of an unattributed number: attribute it first, 
 
 ## Addendum, 2026-08-12: Genet has the IR this document assumes
 
-From [genet-review.md](genet-review.md). Source reading, not measurement.
+Source reading, not measurement. Genet is a Servo fork on our renderer stack, read at
+`main` on 2026-08-12; see [TODO.md](TODO.md), "From the Genet review", for the adoption
+verdict and item 20, which this is the detail behind.
 
 Every stage above needs something to attach damage to, and this document has been quiet
 about what that is because today there is nothing: `View::redraw` calls

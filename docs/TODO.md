@@ -321,6 +321,8 @@ the element's computed height against what `resize()` wrote, not to theorise fur
 | [allocations-plan.md](allocations-plan.md) | the pre-existing allocation workstream plan |
 | [blitz-performance-architecture.md](blitz-performance-architecture.md) | the design thesis all of this is tested against |
 | [concurrency-todo.md](concurrency-todo.md) | what runs on the window thread, ours against Chromium, Gecko, Stylo and fastrender |
+| [build-graph-witnesses.md](build-graph-witnesses.md) | asserting in CI that we build what we think we build |
+| [concurrency-todo.md](concurrency-todo.md) | what runs on the window thread, ours against Chromium, Gecko, Stylo and fastrender |
 
 Chuzz has a parallel set at `chuzz/docs/`, including its own `TODO.md`. Items marked ENGINE
 in either repository need landing in both trees, or the trees need converging first.
@@ -353,9 +355,9 @@ anything from fastrender's multiprocess design (unimplemented there).
 
 ## From the Genet review, added 2026-08-12
 
-Source reading, not measurement. [genet-review.md](genet-review.md) carries the evidence,
-the dependency audit and the line numbers; each doc named below has a dated addendum at its
-bottom with the detail. Genet is a Servo fork on our exact stack (Stylo, Taffy, parley,
+Source reading, not measurement, from Genet read at `main` on 2026-08-12. Each doc named
+below carries a dated addendum at its bottom with the line numbers and the detail; the
+dependency audit that decided the adoption question is at the end of this section. Genet is a Servo fork on our exact stack (Stylo, Taffy, parley,
 vello), so where it disagrees with us that is evidence rather than opinion.
 
 **Two items above are amended rather than added to.** Item 16 is no longer a one-line
@@ -363,10 +365,23 @@ feature flip, and item 12 gains a prerequisite.
 
 | # | Item | Gated on | Detail |
 |---|---|---|---|
-| 19 | **Amends item 16.** Port the four parts of Genet's shaping pre-pass, not just the rayon call: split width-independent shaping from line breaking; add a threshold (theirs is 24 leaves, and our whole document is the chrome UI their comment says to keep serial); **skip `display: none` leaves**, which is most of what a tab switch reconstructs given nine retained tabs and may be worth more than the parallelism; add a `GENET_SHAPE_SERIAL`-style A/B switch. Their `map_init` also softens item 16's memory caveat: the font-context clone is per worker, not per item, and parley's `Collection` is shared. | 14 | [concurrency-todo.md](concurrency-todo.md) addendum, [genet-review.md](genet-review.md) §1 |
+| 19 | **Amends item 16.** Port the four parts of Genet's shaping pre-pass, not just the rayon call: split width-independent shaping from line breaking; add a threshold (theirs is 24 leaves, and our whole document is the chrome UI their comment says to keep serial); **skip `display: none` leaves**, which is most of what a tab switch reconstructs given nine retained tabs and may be worth more than the parallelism; add a `GENET_SHAPE_SERIAL`-style A/B switch. Their `map_init` also softens item 16's memory caveat: the font-context clone is per worker, not per item, and parley's `Collection` is shared. | 14 | [concurrency-todo.md](concurrency-todo.md) addendum |
 | 20 | **A paint-list IR between layout and the renderer.** Genet emits a `GenetPaintList` and lowers it to a scene in a separate crate, GPU-free. We paint straight from the DOM into a vello `Scene` inside `View::redraw`, so there is no value to diff, send or test. **This is the missing prerequisite under three separate workstreams**: item 12's stages 1 and 2, concurrency item 18's renderer thread, and the "Stage rendering and carry change metadata forward" decision that has sat unbuilt in the architecture doc. Sequence it before item 12 rather than beside it. | 13, and a decision on IR shape | [partial-paint.md](partial-paint.md) addendum, [blitz-performance-architecture.md](blitz-performance-architecture.md) addendum |
 | 21 | **Research: a script-engine seam, keeping Boa behind it.** Genet runs Boa, Nova and Piccolo through one `ScriptEngine` trait, with `Budget`/`PumpOutcome`/`eval_bounded`/`pump` making script cooperatively interruptible. That is also the yield point concurrency section 2.8 says we lack. **Not free**: they carry forks of both Boa and Nova to get weak reflector references, because engines disagree about GC handles. Build it only if a second engine is actually wanted. | none | [js-engine-big-problem.md](js-engine-big-problem.md) addendum |
-| 22 | **Build-graph witnesses in CI.** The one finding with no home in this doc set. We have hit "the build graph is not what we believed" four times and recorded each separately: `blitz-dom/incremental` missing and costing a measured 13x, `log-phase-times` shipping in release while being used to measure it, `ps-anyrender-vello` reaching the app through `tauri-runtime-blitz` rather than where it was looked for, and Genet's own fontconfig failure from the outside. Genet asserts its architecture mechanically instead: a dependency-cone check that fails CI if a crate gains a forbidden dep, plus `cargo check -p <crate> --target wasm32-unknown-unknown` as a standing no-native-deps proof. **Needs a home before it needs an implementation**: either a short `docs/build-graph-witnesses.md` or a rule in `AGENTS.md` under Verification, which is the owner's call. | none | [genet-review.md](genet-review.md) §4 and "Where this leaves a gap" |
+| 22 | **W1: assert the engine's resolved features.** Compare `cargo tree -e features -i` output for `ps-blitz-dom`, `ps-blitz-script` and `ps-anyrender-vello` against a checked-in expectation, and fail the build on a diff. Highest value of the five: this is the check that would have caught `incremental` being absent, which cost a measured 13x, and it catches item 16 in reverse once `parallel-construct` is on. | none | [build-graph-witnesses.md](build-graph-witnesses.md) W1 |
+| 23 | **W2: assert instrumentation is absent from release** and present in the inspector build (`log-phase-times`, `dom-stats`). Item 1 fixed the instance by moving the feature onto `blitz-inspector`; nothing stops it moving back. **Retires constraint 2 at the top of this file.** | none | [build-graph-witnesses.md](build-graph-witnesses.md) W2 |
+| 24 | **W3: assert exactly one copy of each pivotal crate** (`stylo`, `ps-taffy`, `ps-anyrender`, `ps-anyrender-vello`, `wgpu`, `parley`, `boa_engine`). All seven are single copies as of 2026-08-12, so this is cheap while it is true and expensive after it breaks. `stylo` is the one that fails as a link error rather than a type error, because it declares `links = "servo_style_crate"`. | none | [build-graph-witnesses.md](build-graph-witnesses.md) W3 |
+| 25 | **W4: assert no local `[patch]` path reaches a shipped build.** Aimed at the committed `taffy = "../ps-taffy"` path that HANDOVER calls the sharpest edge in the tree, and at the tracked `.cargo/config.toml` patch block that makes a local build silently different from a release one. | none | [build-graph-witnesses.md](build-graph-witnesses.md) W4 |
+| 26 | **W5: assert a target-aware native-dependency inventory** for the macOS release target. Note the trap before writing it: `Cargo.lock` names 34 `-sys` crates including the whole GTK and WebKit stack, none of which macOS builds, so the naive lock grep returns 34 false positives and gets switched off within a week. It has to be `cargo tree --target`. | none | [build-graph-witnesses.md](build-graph-witnesses.md) W5 |
+
+**Items 22 to 26 are one class, not five unrelated checks.** We have hit "the build graph is
+not what we believed" four times and recorded each separately: `blitz-dom/incremental` absent
+and costing a measured 13x, `log-phase-times` shipping in release while being used to measure
+it, `ps-anyrender-vello` reaching the app through `tauri-runtime-blitz` rather than where it
+was looked for, and Genet's own fontconfig failure seen from outside. Genet asserts its
+architecture mechanically instead, and its wasm target check would have replaced the entire
+audit above with one command. The class, the prior art and the five traps are in
+[build-graph-witnesses.md](build-graph-witnesses.md). None of the five is implemented.
 
 **Recorded, not actioned:** Genet vendors Taffy `=0.12.1` with three patches (float slot
 width-fit, a float exclusion-band accessor, flex `order`) that touch no file `ps-taffy`
@@ -379,7 +394,67 @@ parallel traversal either (`cascade.rs:374`, "Sequential (no rayon pool)"). Item
 unexploited in both trees on the same stack. That is a reason to try it and a reason to
 stop calling it a known win.
 
-**Do not depend on Genet.** One author, 0 stars, 21,000-line layout engine against a moving
-WPT target, and `cargo check --workspace` has failed on every run since 2026-08-09 because
-the inherited Servo islands still pull HarfBuzz, FreeType, fontconfig and GStreamer. Pelt's
-own closure is clean apart from `ring`. Read it for designs.
+### The dependency audit, and the adoption verdict
+
+The question that produced this section was whether Genet carries system or hidden C++
+dependencies. The answer is not one answer, which is why it is recorded rather than
+summarised.
+
+**Method, and its limit.** Treeless shallow clone (`--depth 1 --filter=blob:none
+--no-checkout`), 7.1 MB for 187,905 files, then per-file reads. **No `Cargo.lock` is
+committed**, so the closure below is a manifest walk resolving `[workspace.dependencies]`
+aliases to local paths, not a resolved graph. Feature unification can pull in what a
+manifest walk misses, so treat it as a floor. A real `cargo tree` cannot be run today
+because their build does not pass.
+
+**In-tree: clean.** Zero `.c/.cc/.cpp/.h/.m/.mm` files outside `tests/`, which is WPT and
+is 186,173 of the 187,905 files. Three `build.rs` in the repository, none containing
+`cc::`, `cmake`, `bindgen` or `Command::new`.
+
+**Pelt's closure: one C dependency.** `default-members = ["ports/pelt"]`, and that closure
+is 60 local crates and 148 external. The only non-Rust build input is **`ring 0.17`**, via
+`components/netfetcher` (`rustls` with `features = ["ring"]`, `ring` directly, plus `quinn`
+and `h3`), which compiles C and per-architecture assembly. It is deliberate: their
+`Cargo.toml:127` records removing `aws-lc-rs` to avoid "NASM-required C+asm crypto" and
+names ring or `rustls-rustcrypto` as the replacements. Everything else that touches the
+platform binds rather than builds (`windows`, `ash` which dlopens libvulkan, `libc`,
+`mach2`, `dwrote` on Windows only, the AccessKit adapters, `arboard`). No HarfBuzz,
+FreeType, fontconfig, SpiderMonkey, GStreamer or jemalloc.
+
+**The workspace: all of it comes back**, through two vestigial Servo islands.
+`components/fonts` declares `harfbuzz-sys` with `features = ["bundled"]`, which compiles
+vendored HarfBuzz C++, plus `freetype-sys`, `yeslogic-fontconfig-sys` and `dwrote`; it is
+reached only by `components/shared/layout`, which `genet-layout` explicitly does not use
+(its manifest carries the commented-out line `# layout_api = ...  # EXPERIMENT: genet-layout
+uses parley, not servo-fonts/layout-api`). Separately, `components/media/examples` is a
+workspace member and depends on `servo-media-auto`, which selects `servo-media-gstreamer`
+on x86_64 and aarch64, pulling `gstreamer-sys`, `glib-sys` and eleven more pkg-config
+crates.
+
+**Their CI proves it rather than the audit asserting it.** `cargo check --workspace
+--all-targets` on `ubuntu-latest` with no apt step has failed on every run since at least
+2026-08-09, on `yeslogic-fontconfig-sys`'s build script panicking with "pkg-config exited
+with status code 1", and the same log shows the GStreamer `-sys` family being downloaded on
+the way there. Their `cargo check -p genet-layout --target wasm32-unknown-unknown` witness
+is **skipped** because the workspace check fails first, so their no-native-deps proof is
+currently unproven rather than passing.
+
+**Verdict.** The README's "entirely Rust" is true of the thing you would embed, apart from
+ring, and false of the repository. **Do not depend on Genet**: one author, 0 stars, a
+21,000-line layout engine against a moving WPT target, and a build that does not pass. Read
+it for designs.
+
+**One hazard to record in case it ever matters.** Only one Stylo is allowed in a dependency
+graph, because `stylo` declares `links = "servo_style_crate"` and `[patch]` cannot rename
+its target. Genet solved it by renaming and publishing their fork as `genet-stylo`. We
+reach stylo 0.20 through ps-blitz, so two Stylos in one binary is a link error at best.
+
+### What item 22 would be asserting
+
+Genet's `support/ci/check_dependency_cones.py` fails CI unless: `genet-extract`'s dependency
+set is **exactly** `{layout_dom_api}`; its build-dependencies are empty and its
+dev-dependencies are fixtures only; it never reaches `genet-layout`, `genet-render`,
+`paint`, `paint_list_render`, `netrender` or `wgpu`; and no crate under `components/`
+path-depends on anything under `ports/`. The wasm target check is the second witness. Note
+that the cone check passes on every one of their red runs, which is the point: it catches
+the class of error it is aimed at, and says nothing about the one they actually have.

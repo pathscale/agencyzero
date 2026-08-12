@@ -501,14 +501,31 @@ guesses. Measure with three unpaced runs and discard the first, per
 ## Addendum, 2026-08-12: what the Genet review amended
 
 Source review of [Genet](https://github.com/merely-made/genet), a Servo fork on the same
-Stylo + Taffy + parley + vello stack, written up in [genet-review.md](genet-review.md).
-Three items above change. **Still not measured.**
+Stylo + Taffy + parley + vello stack, read at `main` on 2026-08-12. It arrived at this
+stack by subtracting from Servo where we arrived by adding to Blitz, so where the two
+disagree that is evidence rather than opinion. Three items above change. **Still not
+measured.**
+
+The adoption verdict (do not depend on it, and why) is recorded in
+[TODO.md](TODO.md) under "From the Genet review".
 
 ### A3 is no longer "flip a feature flag"
 
 Genet does the same work and does it better, at
-`components/genet-layout/box_tree.rs:2183-2256`. The difference is not the rayon call, it
-is what surrounds it, and each of the four is a separate small change here:
+`components/genet-layout/box_tree.rs:2183-2256`:
+
+| | Ours (`ps-blitz-render`) | Theirs |
+|---|---|---|
+| Where | `blitz-dom/src/resolve.rs:553` `resolve_deferred_tasks`, after box construction | a shaping pre-pass ahead of Taffy's measure walk |
+| What is parallel | whole inline-layout construction, width-dependent work included | shaping only, which is width-independent; line breaking stays in the serial measure |
+| Parallelism | `resolve.rs:561` `into_par_iter()`, behind `parallel-construct`, **off in this app** | `par_iter()` above a threshold, on by default |
+| Threshold | none: compiled in, it always fans out | `PARALLEL_SHAPE_THRESHOLD = 24` |
+| Per-worker context | `document.rs:253` `thread_font_contexts`, one `FontContext` clone per rayon thread | `map_init`, one clone per worker rather than per item |
+| Hidden subtrees | reconstructed like any other | **skipped entirely** |
+| Serial A/B | `BLITZ_INCREMENTAL` covers incremental layout; nothing covers shaping | `GENET_SHAPE_SERIAL` |
+
+The difference is not the rayon call, it is what surrounds it, and each of the four is a
+separate small change here:
 
 1. **Split shaping from line breaking.** They shape each visible inline leaf into an
    *unbroken* `parley::Layout` in a pre-pass, because shaping is width-independent and only
