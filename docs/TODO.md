@@ -16,6 +16,48 @@ says so at the top. `performance.md` remains the only measured document, and its
 2026-08-11 addendum records what a source review added and where it qualified the earlier
 numbers.
 
+## First: the inspector costs 80% of a core, and stable ships it
+
+**Measured 2026-08-12, as CPU time consumed rather than as a percentage**, same
+build, same idle app, same store:
+
+| build | CPU time over 10s wall |
+| --- | --- |
+| `cargo build --release -p az-gui` | **0.00s** |
+| the same, `--features blitz-inspector` | **8.04s**, 80% of a core |
+
+`local-delivery.sh stable` builds with `blitz-inspector`, so this is what the
+owner runs. It is the high CPU reported over and over, and it is not the
+renderer: the app draws 1.4fps with no script work while it happens, every
+thread samples as blocked, and the time splits evenly between user and system,
+which is the signature of a very high rate of wakeups doing almost nothing each
+rather than of rendering.
+
+One source is fixed. The control server's per-connection loop treated a
+transport error as a bad request, answered it, and read again; a hung-up peer
+returns the same error immediately, so every client that ever disconnected left
+a task spinning for the life of the process
+([tauri-runtime-blitz 989e076](https://github.com/pathscale/tauri-runtime-blitz)).
+That was not the whole of it: with the fix in, the 8.04s stands.
+
+Where to look next, in order:
+
+1. **What wakes the event loop.** `mk_timer_arm` and `semaphore_timedwait_trap`
+   dominate a `sample`, and no thread is spinning in user code. Something arms a
+   timer, wakes, finds nothing, and re-arms. `blitz-shell`'s `about_to_wait`
+   picks the deadline; a deadline already in the past would produce exactly
+   this, at full rate, with no frames drawn.
+2. **The bridge to the UI thread.** `RuntimeMessage::Control` is drained with
+   `try_recv` from `about_to_wait`, and every `send` calls `proxy.wake_up()`.
+   Worth checking whether anything sends when there is nothing to say.
+3. **Whether the diagnostics collection itself is running when nobody asked.**
+   `collect_diagnostics` polls the script loop up to 100 times and forces a
+   resolve; that is fine as an observer cost, and not fine on a schedule.
+
+Do not fix this by turning the feature off. It is how the app is measured and
+driven at all, and everything in this file that carries a number was obtained
+through it.
+
 ## Three constraints that govern the order
 
 1. **The Taffy layout cache gates almost every speed number.** Style is 167 microseconds

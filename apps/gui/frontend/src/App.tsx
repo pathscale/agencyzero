@@ -10,6 +10,7 @@ import {
   Show,
   Switch,
 } from "solid-js";
+import { log } from "~/lib/log";
 import { Icon } from "~/components/Icon";
 import { IconSprite } from "~/components/IconSprite";
 import { AnalyticsTab } from "~/features/analytics/AnalyticsTab";
@@ -92,21 +93,33 @@ export function Workspace(): JSX.Element {
       </Show>
 
       <main class="flex min-h-0 flex-1 gap-3 px-3 pt-1.5 pb-3">
-        <Show
-          when={
-            state.boot.status === "ready" ||
-            (activeTab().kind === "settings" && state.settings !== null)
-          }
+        {/*
+          `Switch`, not a `Show` with a `Show` in its fallback.
+          The nested form kept the splash mounted for the whole session: it was
+          laid out at the full size of the window from the first frame, over the
+          real content, and painted its own background into whichever panel it
+          landed in. That is the blank page, and its `animate-pulse` also kept
+          the document animating, which is a render loop for as long as the app
+          is open. `Switch` renders exactly one branch and unmounts the others.
+        */}
+        <Switch
           fallback={
-            <Show when={state.boot.status === "error"} fallback={<Booting />}>
-              <BootFailed
-                message={state.boot.status === "error" ? state.boot.message : ""}
-                onRetry={() => void actions.retryInit()}
-                onOpenSettings={actions.openSettings}
-              />
-            </Show>
+            <BootFailed
+              message={state.boot.status === "error" ? state.boot.message : ""}
+              onRetry={() => void actions.retryInit()}
+              onOpenSettings={actions.openSettings}
+            />
           }
         >
+          <Match when={state.boot.status === "loading"}>
+            <Booting />
+          </Match>
+          <Match
+            when={
+              state.boot.status === "ready" ||
+              (activeTab().kind === "settings" && state.settings !== null)
+            }
+          >
           <div
             data-retained-tab="home"
             aria-hidden={activeTab().kind !== "home"}
@@ -183,7 +196,8 @@ export function Workspace(): JSX.Element {
               </p>
             </div>
           </Show>
-        </Show>
+          </Match>
+        </Switch>
       </main>
 
       <Show when={state.backend === "mock"}>
@@ -204,6 +218,15 @@ export function Workspace(): JSX.Element {
 }
 
 export function Booting(): JSX.Element {
+  /*
+   * The splash is the whole window when it renders, so if it comes back after
+   * boot the app looks blank. That has been reported and never reproduced by
+   * driving, so it says when it arrives and when it leaves, with the reason it
+   * was allowed to.
+   */
+  onMount(() => log.warn("boot: splash mounted"));
+  onCleanup(() => log.info("boot: splash unmounted"));
+
   return (
     <div
       role="status"
