@@ -4,6 +4,17 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { TranscriptPane } from "~/features/project/TranscriptPane";
 import { useWorkspace, WorkspaceProvider } from "~/stores/workspace";
 
+/**
+ * The bottom of a scroller, which is where "go to the tail" actually lands.
+ *
+ * These once asserted `scrollHeight`, the value the pane assigns, and jsdom
+ * kept it because it clamped nothing — so they asserted a position a viewport
+ * past anything the scroller could show. The environment clamps now
+ * (`src/test/setup.ts`), so the number here is the one a reader would see.
+ */
+const tailFor = (scrollHeight: number, clientHeight = 400): number =>
+  Math.max(0, scrollHeight - clientHeight);
+
 function Harness() {
   const workspace = useWorkspace();
   const project = () => workspace.state.projects.find((candidate) => candidate.id === "cafe");
@@ -58,7 +69,7 @@ describe("transcript resize anchoring", () => {
       callback(16);
     });
 
-    expect(scroller.scrollTop).toBe(1_000);
+    expect(scroller.scrollTop).toBe(tailFor(1_000));
   });
 
   it("keeps a pinned transcript at the tail when its width changes", async () => {
@@ -95,7 +106,7 @@ describe("transcript resize anchoring", () => {
     notifyResize?.([], {} as ResizeObserver);
     await Promise.resolve();
 
-    expect(scroller.scrollTop).toBe(1_240);
+    expect(scroller.scrollTop).toBe(tailFor(1_240));
     expect(scroller.scrollLeft).toBe(0);
   });
 
@@ -177,7 +188,7 @@ describe("transcript resize anchoring", () => {
     notifyResize?.([], {} as ResizeObserver);
     await Promise.resolve();
 
-    expect(scroller.scrollTop).toBe(1_240);
+    expect(scroller.scrollTop).toBe(tailFor(1_240));
   });
 
   it("re-anchors after streamed DOM content changes while still pinned", async () => {
@@ -213,6 +224,6 @@ describe("transcript resize anchoring", () => {
     notifyMutation?.([], {} as MutationObserver);
     await Promise.resolve();
 
-    expect(scroller.scrollTop).toBe(1_180);
+    expect(scroller.scrollTop).toBe(tailFor(1_180));
   });
 });

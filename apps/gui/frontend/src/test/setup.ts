@@ -19,3 +19,30 @@ Object.defineProperty(window, "matchMedia", {
     dispatchEvent: () => false,
   }),
 });
+
+/**
+ * jsdom stores `scrollTop` and clamps nothing.
+ *
+ * A real engine clamps every assignment to `[0, scrollHeight - clientHeight]`,
+ * and code that scrolls relies on it: `element.scrollTop = element.scrollHeight`
+ * is the ordinary way to say "go to the bottom" precisely because the platform
+ * takes back the overshoot. Under jsdom that assignment sticks, so the offset
+ * sits a full viewport past anything the scroller could show and every position
+ * measured afterwards is wrong by that much.
+ *
+ * It made a broken transcript scroll read as fine in tests. Clamping here means
+ * a test that stubs `scrollHeight` and `clientHeight` gets browser behaviour for
+ * free; one that stubs neither keeps jsdom's zeros, where the clamp is the
+ * identity and nothing changes.
+ */
+const scrollTops = new WeakMap<Element, number>();
+Object.defineProperty(Element.prototype, "scrollTop", {
+  configurable: true,
+  get(this: Element) {
+    return scrollTops.get(this) ?? 0;
+  },
+  set(this: Element, value: number) {
+    const limit = Math.max(0, this.scrollHeight - this.clientHeight);
+    scrollTops.set(this, Math.max(0, Math.min(limit, Number(value) || 0)));
+  },
+});

@@ -76,28 +76,18 @@ function mount(messages: Message[]) {
   ));
   const scroller = screen.container.querySelector("[data-selectable]") as HTMLDivElement;
   let scrollHeight = CONTENT;
-  let scrollTop = 0;
-  // Clamped on assignment, because every real engine clamps and jsdom does
-  // not. Without this the pane's own `scrollTop = scrollHeight` sticks at a
-  // value the scroller could never reach, and every position measured after it
-  // is off by one viewport — which is how a broken scroll read as fine here.
+  // `scrollTop` clamps against these on its own: the environment does it for
+  // every element (`src/test/setup.ts`), the way a real engine would.
   Object.defineProperties(scroller, {
     clientHeight: { configurable: true, get: () => VIEW },
     scrollHeight: { configurable: true, get: () => scrollHeight },
-    scrollTop: {
-      configurable: true,
-      get: () => scrollTop,
-      set: (value: number) => {
-        scrollTop = Math.max(0, Math.min(scrollHeight - VIEW, value));
-      },
-    },
   });
 
   const settle = (): void => {
     for (const callback of frames.splice(0)) callback(0);
   };
   const to = (top: number): void => {
-    scroller.scrollTop = Math.max(0, Math.min(BOTTOM, top));
+    scroller.scrollTop = top;
     fireEvent.scroll(scroller);
   };
   /** A key the browser would act on, then the scroll it would produce. */
