@@ -130,7 +130,21 @@ export function ProjectTab(props: { tab: Tab; project: Project }): JSX.Element {
    */
   const [panelReady, setPanelReady] = createSignal(false);
   onMount(() => {
-    requestAnimationFrame(() => setPanelReady(true));
+    requestAnimationFrame(() => {
+      setPanelReady(true);
+      /*
+       * The pane is a different width the moment the panel arrives, and the
+       * transcript had already measured itself against the layout without it.
+       * Without this the bottom pin is computed against a layout that no longer
+       * exists, and the last rows sit under the composer's chrome.
+       *
+       * Same signal the composer raises when its own chrome grows, which is
+       * exactly the case this regressed: the projected-cost notice appearing
+       * has to push the transcript up, and it could not while the alignment was
+       * stale.
+       */
+      noteTranscriptChromeChanged();
+    });
   });
 
   const built = performance.now();

@@ -62,8 +62,27 @@ function mount(messages: Message[]) {
 describe("transcript window bounds", () => {
   afterEach(() => vi.unstubAllGlobals());
 
+  /*
+   * The window opens at `INITIAL_VISIBLE_ENTRIES` and fills to a full page over
+   * the frames after the first, so a row's 8 to 14ms build cost is not paid
+   * twelve times before anything is on screen. The frames have to be driven
+   * here for the same reason the test below drives them.
+   */
   it("mounts one page of a long thread", () => {
+    const frames: FrameRequestCallback[] = [];
+    vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => {
+      frames.push(callback);
+      return frames.length;
+    });
+    vi.stubGlobal("cancelAnimationFrame", () => {});
     const { screen, rows } = mount(thread(200));
+
+    // The first frame carries only the visible tail.
+    expect(rows()).toBe(4);
+    // Then the page fills, a step per frame.
+    for (let step = 0; step < 6 && rows() < 12; step += 1) {
+      for (const callback of frames.splice(0)) callback(0);
+    }
 
     expect(rows()).toBe(12);
     expect(screen.getByText("row 199")).toBeInTheDocument();
@@ -79,6 +98,11 @@ describe("transcript window bounds", () => {
     });
     vi.stubGlobal("cancelAnimationFrame", () => {});
     const { screen } = mount(thread(200));
+    // Let the window reach a full page before exercising Page Up, which is the
+    // state this test is about.
+    for (let step = 0; step < 6; step += 1) {
+      for (const callback of frames.splice(0)) callback(0);
+    }
     const scroller = screen.container.querySelector("[data-selectable]") as HTMLDivElement;
     Object.defineProperties(scroller, {
       clientHeight: { configurable: true, get: () => 400 },
