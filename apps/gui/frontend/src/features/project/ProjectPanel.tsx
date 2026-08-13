@@ -223,7 +223,7 @@ function IoPersistToggle(props: { projectId: string }): JSX.Element {
       title={tx(
         "Keep this project's raw exchange in the database, so it survives a restart. Off by default: a long run writes thousands of rows.",
       )}
-      class="px-3.5 pb-2 text-[11px] text-az-muted"
+      class="px-3.5 py-2 text-[11px] text-az-muted [&_[data-slot=checkbox-control]]:size-4"
     >
       {tx("Keep across restarts")}
     </Checkbox>
