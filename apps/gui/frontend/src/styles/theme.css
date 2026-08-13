@@ -607,15 +607,30 @@
   .az-cost-warning-slider [data-slot="slider-thumb"] {
     top: var(--slider-pad);
     left: var(--az-slider-percent) !important;
-    transform: translateX(-50%);
+    /*
+     * A margin, not `translateX(-50%)`.
+     *
+     * Transforms are paint-only in this renderer, so a translated thumb paints
+     * half a thumb to the left of the box that actually receives the pointer.
+     * Measured on the live window at value 30: the thumb painted across
+     * x 868..888 while its hit box sat at 878..897. Pressing the left half of
+     * the thumb you can see therefore missed it and landed on the track, and
+     * the value jumped away from the pointer instead of dragging: 30 became 28.
+     *
+     * A negative margin moves the box itself, so paint and hit test agree.
+     */
+    margin-left: calc(var(--slider-thumb-w) / -2);
+    transform: none;
   }
 
   .az-cost-warning-slider [data-slot="slider-fill"] {
     width: var(--az-slider-percent) !important;
   }
 
+  /* Scale alone now. The offset is a margin, and paint-only is fine for a
+     symmetric shrink: it does not move the box the pointer is testing. */
   .az-cost-warning-slider [data-slot="slider-thumb"][data-dragging="true"] {
-    transform: translateX(-50%) scale(0.9);
+    transform: scale(0.9);
   }
 }
 

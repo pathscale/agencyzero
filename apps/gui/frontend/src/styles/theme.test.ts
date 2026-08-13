@@ -19,12 +19,22 @@ describe("PathScale UI theme contract", () => {
     expect(CSS).toContain("--color-accent-foreground: var(--color-accent-content)");
   });
 
-  it("anchors the cost slider thumb without a vertical percentage", () => {
+  /*
+   * The thumb is placed entirely by layout, with no transform in either axis.
+   *
+   * Transforms are paint-only in this renderer, so a translated thumb paints
+   * somewhere its hit box is not. Measured on the live window at value 30: the
+   * thumb painted across x 868..888 while the box receiving the pointer sat at
+   * 878..897, so pressing the left half of the visible thumb missed it, landed
+   * on the track, and jumped the value away from the pointer.
+   */
+  it("anchors the cost slider thumb by layout, never by transform", () => {
     expect(CSS).toContain('.az-cost-warning-slider [data-slot="slider-thumb"]');
     expect(CSS).toContain("top: var(--slider-pad)");
     expect(CSS).toContain("left: var(--az-slider-percent) !important");
     expect(CSS).not.toContain("var(--az-slider-thumb-offset)");
-    expect(CSS).toContain("transform: translateX(-50%)");
+    expect(CSS).toContain("margin-left: calc(var(--slider-thumb-w) / -2)");
+    expect(CSS).not.toContain("transform: translateX(-50%)");
   });
 });
 
