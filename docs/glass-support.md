@@ -87,17 +87,47 @@ This is the whole remaining gap, and it is worth stating precisely because
 | `anyrender_vello` (GPU, vello 0.9) | **yes**, the default | **none.** `push_layer` takes `_filter` and `_backdrop_filter` and drops both ([`scene.rs:75`](../../ps-anyrender/crates/anyrender_vello/src/scene.rs)) |
 | `anyrender_vello_cpu` | no, tests only | `filter` and `backdrop-filter`, both working |
 | `anyrender_vello_hybrid` | behind `--features blitz-hybrid` | `filter` only, over the layer's **own** content |
+| `anyrender_skia` (Metal on macOS) | not wired up | `filter` **and** `backdrop-filter`, both working. See below |
 
-So the blur landed in the one renderer the window does not use. Getting it on
-screen means one of:
+### The fourth renderer, which changes the answer
 
-1. **Implement backdrop capture in `vello_hybrid`.** `FilterSource::BackgroundImage`
+`ps-anyrender` also ships **`anyrender_skia`**, and it is not a stub: 3000 lines,
+a `WindowRenderer` and an `ImageRenderer`, and on macOS it builds against
+`skia-safe` with the **`metal`** feature over a `CAMetalLayer`. Skia's
+`SkCanvas::saveLayer` takes a backdrop image filter, applied to the destination
+pixels the layer covers, which is precisely what CSS `backdrop-filter` means.
+The backend already forwards it
+([`scene.rs:453`](../../ps-anyrender/crates/anyrender_skia/src/scene.rs)).
+
+Measured 2026-08-14, not read:
+`crates/anyrender_skia/tests/backdrop_filter.rs` draws a hard black and white
+seam, covers it with an empty layer carrying `blur(12)`, and samples a ramp
+across the seam. It passes. Skia blurs backdrops here today.
+
+Two costs to weigh before adopting it. `skia-safe` is a heavy dependency,
+though it was already vendored and cached on this machine and the crate built
+in 22 seconds. And the published `anyrender_skia 0.10.0` depends on upstream
+`anyrender 0.12.0`, while this graph runs the `ps-anyrender` fork under the same
+name, so it has to come from the local checkout by patch or the traits will not
+match. That is the same two-copies trap the `.cargo/config.toml` comments
+describe.
+
+### Getting the blur on screen
+
+Options, cheapest first:
+
+1. **Add a `skia-renderer` feature to `tauri-runtime-blitz`**, beside the
+   existing `hybrid-renderer`, selecting `SkiaWindowRenderer`. The seam is one
+   `use` and one options type: `runtime.rs` already picks its renderer by
+   feature. This is the only option where the blur is written already.
+2. **Implement backdrop capture in `vello_hybrid`.** `FilterSource::BackgroundImage`
    is declared in `vello_common 0.0.9`
    (`filter_effects.rs:684`) and in `anyrender`
    ([`filters.rs:267`](../../ps-anyrender/crates/anyrender/src/filters.rs)), and is
-   implemented nowhere. This is the honest route and it is upstream work.
-2. Wait for vello proper to grow a layer filter. It has none in 0.9.
-3. Ship the CPU renderer for the window, which trades the blur for the frame
+   implemented nowhere. Upstream work in a foreign codebase, and hybrid also
+   rasterises visibly softer than vello proper.
+3. Wait for vello proper to grow a layer filter. It has none in 0.9.
+4. Ship the CPU renderer for the window, which trades the blur for the frame
    budget of every other pixel. Not seriously on the table.
 
 Note also that the hybrid renderer rasterises visibly softer than vello proper.
@@ -113,9 +143,13 @@ That was measured and is **not** a scale-factor bug: scene and surface were both
 - Dark glass over a dark desktop only darkens. The owner's rule: **there is no
   frosted black**, so on a dark theme glass has to tint, never add white alpha.
   A glass mode that only lowers opacity will look broken and be correct.
-- `outline-offset` is ignored by the renderer: a probe at `-2px` painted
-  identically to no offset at all, so `.rounded-panel`'s inset hairline actually
-  sits a pixel outside its border box. Engine bug, unrelated to the axes.
+- ~~`outline-offset` is ignored by the renderer.~~ **Fixed 2026-08-14.** A probe
+  at `-2px` had painted identically to no offset at all, so `.rounded-panel`'s
+  inset hairline sat a pixel *outside* its border box, which is what "the window
+  border is not pulling in the extra styling" looked like. The ring now has its
+  own inner edge, and the outline paints over the element rather than under it,
+  because a negative offset puts it where the background was erasing it. See
+  `tests/blitz-tests/tests/outline_offset.rs`.
 
 ## What already exists
 
