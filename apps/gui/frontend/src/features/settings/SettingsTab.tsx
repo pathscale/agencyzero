@@ -126,6 +126,9 @@ export function SettingsTab(): JSX.Element {
   const [terminateArmed, setTerminateArmed] = createSignal(false);
   const [blitzControlPending, setBlitzControlPending] = createSignal(false);
   const [blitzControlError, setBlitzControlError] = createSignal("");
+  const [pendingBlitzControl, setPendingBlitzControl] = createSignal<boolean | null>(null);
+  const displayedBlitzControl = () =>
+    pendingBlitzControl() ?? settings()?.blitzControlEnabled ?? false;
 
   const refreshProxy = (): void => {
     setProxyAction("refresh");
@@ -182,6 +185,10 @@ export function SettingsTab(): JSX.Element {
   };
 
   const setBlitzControl = (enabled: boolean): void => {
+    // Reflect the category boundary before the async persistence round trip.
+    // In particular, deep profiling must never remain visibly active under an
+    // inspection toggle that the owner has already turned off.
+    setPendingBlitzControl(enabled);
     setBlitzControlPending(true);
     setBlitzControlError("");
     void actions
@@ -193,7 +200,10 @@ export function SettingsTab(): JSX.Element {
         ...(!enabled ? { blitzDeepProfilingEnabled: false } : {}),
       })
       .catch((cause) => setBlitzControlError(describeError(cause)))
-      .finally(() => setBlitzControlPending(false));
+      .finally(() => {
+        setPendingBlitzControl(null);
+        setBlitzControlPending(false);
+      });
   };
 
   const setBlitzDeepProfiling = (enabled: boolean): void => {
@@ -403,7 +413,7 @@ export function SettingsTab(): JSX.Element {
                   <div class="flex flex-col items-end gap-1">
                     <SettingToggle
                       label={tx("Enable inspection and agent control")}
-                      checked={current().blitzControlEnabled}
+                      checked={displayedBlitzControl()}
                       disabled={blitzControlPending()}
                       onChange={setBlitzControl}
                     />
@@ -412,7 +422,7 @@ export function SettingsTab(): JSX.Element {
                       class={`max-w-[260px] text-right text-[10.5px] ${
                         blitzControlError()
                           ? "text-error"
-                          : current().blitzControlEnabled
+                          : displayedBlitzControl()
                             ? "text-success"
                             : "text-az-muted"
                       }`}
@@ -436,12 +446,12 @@ export function SettingsTab(): JSX.Element {
                   <div class="flex flex-col items-end gap-1">
                     <SettingToggle
                       label={tx("Enable deep intrusive profiling")}
-                      checked={current().blitzDeepProfilingEnabled}
-                      disabled={blitzControlPending() || !current().blitzControlEnabled}
+                      checked={displayedBlitzControl() && current().blitzDeepProfilingEnabled}
+                      disabled={blitzControlPending() || !displayedBlitzControl()}
                       onChange={setBlitzDeepProfiling}
                     />
                     <span class="max-w-[260px] text-right text-[10.5px] text-az-muted">
-                      {!current().blitzControlEnabled
+                      {!displayedBlitzControl()
                         ? tx("Enable inspection first")
                         : current().blitzDeepProfilingEnabled
                           ? tx("Intrusive profiling active")

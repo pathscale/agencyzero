@@ -162,6 +162,9 @@ describe("local debug control", () => {
     expect(screen.getByText("Intrusive profiling active")).toBeTruthy();
 
     fireEvent.click(await screen.findByLabelText("Enable inspection and agent control"));
+    expect(profiling.checked).toBe(false);
+    expect(profiling.disabled).toBe(true);
+    expect(screen.getByText("Enable inspection first")).toBeTruthy();
     await waitFor(() => expect(screen.workspace.state.settings?.blitzControlEnabled).toBe(false));
     expect(screen.workspace.state.settings?.blitzDeepProfilingEnabled).toBe(false);
     expect(profiling.disabled).toBe(true);

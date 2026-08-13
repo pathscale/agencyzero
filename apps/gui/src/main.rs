@@ -2349,9 +2349,29 @@ fn main() {
                 );
             }
 
-            let persisted_settings = tables
+            let mut persisted_settings = tables
                 .kv_get(settings::KEY)
                 .and_then(|raw| serde_json::from_str::<GlobalSettings>(&raw).ok());
+            if let Some(settings) = persisted_settings.as_mut()
+                && !settings.blitz_control_enabled
+                && settings.blitz_deep_profiling_enabled
+            {
+                // Repair rows written before deep profiling became a strict
+                // child of inspection. Keeping the stale true on disk would
+                // make a later inspection enable silently restart a trace.
+                settings.blitz_deep_profiling_enabled = false;
+                if let Ok(serialized) = serde_json::to_string(settings)
+                    && let Err(error) = tauri::async_runtime::block_on(
+                        tables.kv_put(settings::KEY, serialized),
+                    )
+                {
+                    crate::log!(
+                        log::Level::Warn,
+                        "settings",
+                        "could not persist the disabled deep-profiling repair: {error}"
+                    );
+                }
+            }
             let configured_proxy = persisted_settings
                 .as_ref()
                 .map(|settings| settings.agent_proxy_binary.clone())
