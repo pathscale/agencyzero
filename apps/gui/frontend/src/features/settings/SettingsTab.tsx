@@ -21,7 +21,13 @@ import { AgentStateDot } from "~/components/StatusDot";
 import { countdown, formatBytes, relativeTime } from "~/lib/format";
 import { AGENT_LABELS, agentStateLabel, envPolicyLabel, permissionLabel } from "~/lib/labels";
 import { describeError, log } from "~/lib/log";
-import { DEFAULT_GLASS, DEFAULT_WASH, normalizeWash } from "~/lib/theme";
+import {
+  DEFAULT_GLASS,
+  DEFAULT_WASH,
+  type GlassAxisName,
+  normalizeWash,
+  writeGlassAxis,
+} from "~/lib/theme";
 import { t, tx, type UiMessage } from "~/stores/i18n";
 import { prefs, setPrefs } from "~/stores/prefs";
 import { useNow, useWorkspace } from "~/stores/workspace";
@@ -1024,6 +1030,7 @@ export function SettingsTab(): JSX.Element {
                     max={60}
                     step={2}
                     value={current().theme.glassLift ?? 0}
+                    axis="lift"
                     format={(value) => `${value}%`}
                     onChange={(glassLift) => void actions.saveSettings({ theme: { glassLift } })}
                   />
@@ -1035,6 +1042,7 @@ export function SettingsTab(): JSX.Element {
                     max={60}
                     step={2}
                     value={current().theme.glassBorder ?? 16}
+                    axis="border"
                     format={(value) => `${value}%`}
                     onChange={(glassBorder) => void actions.saveSettings({ theme: { glassBorder } })}
                   />
@@ -1046,6 +1054,9 @@ export function SettingsTab(): JSX.Element {
                     max={60}
                     step={2}
                     value={Math.round((current().theme.glassShadow ?? 0) * 100)}
+                    axis="shadow"
+                    // The slider counts percent; the token is a 0..1 alpha.
+                    toAxis={(percent) => percent / 100}
                     format={(value) => `${value}%`}
                     onChange={(percent) =>
                       void actions.saveSettings({ theme: { glassShadow: percent / 100 } })
@@ -2581,16 +2592,58 @@ function Row(props: {
  * the point of these is to drag them and watch the window, and a value that
  * only lands on release cannot be judged.
  */
+/** How long after the last tick a drag counts as finished. */
+const GLASS_COMMIT_DELAY_MS = 180;
+
+/**
+ * One appearance axis.
+ *
+ * Dragging paints immediately and persists only once the knob settles. It used
+ * to call `saveSettings` on every tick, and each of those awaited a serialized
+ * store write before it even applied the CSS, then made a native window call:
+ * one session's log held 75 `set_settings` and 76 `set_window_chrome` round
+ * trips at 7 and 6ms, all on the window thread. That is why the knob led and
+ * the panel lagged, and why dragging depth could starve paint until the window
+ * went blank and only recovered once the drag stopped.
+ *
+ * The live value is local while dragging so the knob tracks the pointer without
+ * waiting for anything, and it defers back to the record between drags, which
+ * keeps the store the one source of truth.
+ */
 function GlassAxis(props: {
   label: string;
   min: number;
   max: number;
   step: number;
   value: number;
+  /** Which custom property this axis paints, for the drag preview. */
+  axis: GlassAxisName;
+  /** Slider units to the value the axis takes, where they differ. */
+  toAxis?: (value: number) => number;
   format: (value: number) => string;
   onChange: (value: number) => void;
 }): JSX.Element {
-  const percent = () => ((props.value - props.min) / (props.max - props.min)) * 100;
+  const [dragging, setDragging] = createSignal<number | undefined>();
+  const shown = () => dragging() ?? props.value;
+  const percent = () => ((shown() - props.min) / (props.max - props.min)) * 100;
+
+  let commitTimer: ReturnType<typeof setTimeout> | undefined;
+  onCleanup(() => clearTimeout(commitTimer));
+
+  const change = (value: number): void => {
+    setDragging(value);
+    // Paint now. No store, no AppKit, no await.
+    writeGlassAxis(props.axis, props.toAxis ? props.toAxis(value) : value);
+
+    clearTimeout(commitTimer);
+    commitTimer = setTimeout(() => {
+      // Hand the value back to the record and stop overriding it, so a later
+      // change from anywhere else still wins here.
+      setDragging(undefined);
+      props.onChange(value);
+    }, GLASS_COMMIT_DELAY_MS);
+  };
+
   return (
     <div class="min-w-[260px]">
       <Slider
@@ -2598,10 +2651,10 @@ function GlassAxis(props: {
         min={props.min}
         max={props.max}
         step={props.step}
-        value={props.value}
+        value={shown()}
         style={{ "--az-slider-percent": `${percent()}%` }}
         formatValue={props.format}
-        onChange={props.onChange}
+        onChange={change}
         size="sm"
         class="az-cost-warning-slider w-full min-w-0 [&_[data-slot=label]]:sr-only [&_[data-slot=slider-output]]:w-14 [&_[data-slot=slider-output]]:text-right [&_[data-slot=slider-output]]:font-mono [&_[data-slot=slider-output]]:text-[12.5px] [&_[data-slot=slider-output]]:text-az-strong"
       />
