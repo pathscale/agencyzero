@@ -2829,8 +2829,32 @@ pub async fn reorder_items(
     Ok(items)
 }
 
+/// A window onto a project's transcript, newest-last, plus how many rows exist.
+///
+/// The total is what lets the pane say how much history is above the window
+/// without holding it: the badge counts every message, the store holds a page.
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct MessagePage {
+    pub messages: Vec<MessageDto>,
+    pub total: usize,
+}
+
+/// The transcript, or the newest `limit` of it.
+///
+/// `limit` is not decoration. The pane never displays more than
+/// `TRANSCRIPT_MAX_ENTRIES` rows at once, and this returned every row a project
+/// had ever accumulated: 2,422 of them on the owner's largest project, each
+/// costing a `message_chunk` index lookup in `full_body` whether or not it had
+/// chunks, then a DTO, then a reconcile of the whole array into the store.
+///
+/// Passing `None` still returns everything, for callers that genuinely want it.
 #[tauri::command]
-pub fn list_messages(project_id: String, state: State<'_, AppState>) -> Vec<MessageDto> {
+pub fn list_messages(
+    project_id: String,
+    limit: Option<usize>,
+    state: State<'_, AppState>,
+) -> MessagePage {
     let reply_targets: std::collections::HashMap<String, String> = state
         .tables
         .question_reply
@@ -2840,12 +2864,28 @@ pub fn list_messages(project_id: String, state: State<'_, AppState>) -> Vec<Mess
         .into_iter()
         .map(|reply| (reply.message_id, reply.question_id))
         .collect();
-    let mut rows: Vec<MessageDto> = state
+    /*
+     * Rows first, then the window, then the expensive per-row work.
+     *
+     * The raw select is what the total is counted from, so it stays whole. What
+     * used to run over every row and now runs only over the window is
+     * `full_body`, which does a `message_chunk` index lookup per message, and
+     * the DTO construction after it.
+     */
+    let mut raw = state
         .tables
         .message
         .select_by_project_id(project_id)
         .execute()
-        .unwrap_or_default()
+        .unwrap_or_default();
+    let total = raw.len();
+    raw.sort_by(|left, right| left.created_at.cmp(&right.created_at));
+    if let Some(limit) = limit {
+        if total > limit {
+            raw.drain(..total - limit);
+        }
+    }
+    let mut rows: Vec<MessageDto> = raw
         .into_iter()
         .map(|row| {
             // Stitch any overflow chunks back onto the inline head, so a body
@@ -2857,8 +2897,13 @@ pub fn list_messages(project_id: String, state: State<'_, AppState>) -> Vec<Mess
             dto
         })
         .collect();
+    // Already ordered by the sort above; kept so the contract does not depend on
+    // the window having been applied.
     rows.sort_by(|a, b| a.created_at.cmp(&b.created_at));
-    rows
+    MessagePage {
+        messages: rows,
+        total,
+    }
 }
 
 /// A tool call in flight.

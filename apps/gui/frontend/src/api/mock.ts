@@ -523,8 +523,12 @@ export function createMockApi(): AgencyZeroApi {
       return settle(ordered);
     },
 
-    listMessages: (projectId) =>
-      settle(messages.filter((message) => message.projectId === projectId)),
+    listMessages: (projectId, limit) => {
+      const all = messages.filter((message) => message.projectId === projectId);
+      // Newest-last window, matching Rust: the tail is what the pane renders.
+      const page = limit === undefined ? all : all.slice(Math.max(0, all.length - limit));
+      return settle({ messages: page, total: all.length });
+    },
     syncProject: () =>
       fixtures.SYNC_PROJECT_ERROR
         ? Promise.reject(new Error(fixtures.SYNC_PROJECT_ERROR))

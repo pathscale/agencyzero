@@ -1168,3 +1168,14 @@ export interface Question {
   answered: boolean;
   createdAt: string;
 }
+
+/**
+ * A window onto a transcript: the newest rows, and how many exist.
+ *
+ * The total is separate because the pane holds a page and still has to say how
+ * much history is above it.
+ */
+export type MessagePage = {
+  messages: Message[];
+  total: number;
+};
