@@ -38,13 +38,17 @@ usage: blitz-bench <mode> [args]
   metrics                     the raw metrics response
   tree                        the semantic tree
   layout [name-substr]        live boxes: x, y, w, h per named node
+  dom <substr> [depth]        matching nodes with their attributes, plus the
+                              ancestor chain, so a spill can be read against the
+                              container that was meant to clip it (default 6)
   transcript                  transcript scroll state and lowest DOM descendants
   spill [h|v] [tolerance]     boxes that stick out of their container, worst first
   watch [seconds]             stream metrics/console/runtimeErrors (default 20)
   scroll [ticks] [delta] [over]  wheel events over a named node (default 120 -80 Conversation)
   drag [name-substr] [dy] [n]    scroll a named node's container directly, n times
   type [count] [name-substr]  drive real keystrokes into a text field (default 20)
-  key <name> [count] [over]   pageup/pagedown/home/end/up/down into a named scroller
+  key <name> [count] [over]   pageup/pagedown/home/end/up/down/left/right/tab into a
+                              named scroller, or into a bare node id
   reveal <name-substr>        scroll a named node into view, reporting its y before/after
   click <name-substring>      click the first matching visible, enabled node
 
@@ -566,6 +570,67 @@ async fn inspect(client: &mut Client) -> Result<(AgentSnapshot, f64)> {
     }
 }
 
+/// Nodes matching `want`, each with its attributes and its ancestor chain.
+///
+/// `spill` says a box sticks out; it cannot say whether that is a scroller
+/// doing its job or a control escaping a clip. The difference is in the
+/// attributes of the ancestors — which one carries the overflow and the
+/// isolation — and the semantic snapshot already reports every attribute of a
+/// generic node in `value`. So this needs no new server surface: the state was
+/// already on the wire and nothing printed it.
+async fn dom(client: &mut Client, want: &str, depth: usize) -> Result<()> {
+    if want.is_empty() {
+        bail!("dom needs a substring to match");
+    }
+    let (snapshot, elapsed) = inspect(client).await?;
+    let by_id: HashMap<u64, &SemanticNode> =
+        snapshot.nodes.iter().map(|node| (node.id, node)).collect();
+
+    let describe = |node: &SemanticNode| -> String {
+        let bounds = node
+            .bounds
+            .map(|b| format!("[{:.0},{:.0} {:.0}x{:.0}]", b[0], b[1], b[2], b[3]))
+            .unwrap_or_else(|| "[no box]".into());
+        format!(
+            "{} {:<10} {:<28} {bounds}{}\n      attrs: {}",
+            node.id,
+            node.role,
+            format!("{:?}", node.name),
+            if node.visible { "" } else { "  HIDDEN" },
+            node.value.as_deref().unwrap_or("(none)")
+        )
+    };
+
+    let matched: Vec<&SemanticNode> = snapshot
+        .nodes
+        .iter()
+        .filter(|node| {
+            node.name.contains(want)
+                || node.role.contains(want)
+                || node.value.as_deref().is_some_and(|v| v.contains(want))
+        })
+        .collect();
+
+    println!(
+        "{} of {} nodes match {want:?} (inspect {elapsed:.1}ms)\n",
+        matched.len(),
+        snapshot.nodes.len()
+    );
+    for node in &matched {
+        println!("{}", describe(node));
+        let mut parent = node.parent;
+        for level in 0..depth {
+            let Some(current) = parent.and_then(|id| by_id.get(&id)) else {
+                break;
+            };
+            println!("  {}^{} {}", "  ".repeat(level), level + 1, describe(current));
+            parent = current.parent;
+        }
+        println!();
+    }
+    Ok(())
+}
+
 async fn nodes(client: &mut Client) -> Result<usize> {
     let (snapshot, elapsed) = inspect(client).await?;
     report::show_nodes(&snapshot.nodes, elapsed);
@@ -723,18 +788,28 @@ async fn press_key(client: &mut Client, name: &str, count: usize, over: &str) ->
     // scroll container's own body focuses it without activating anything: the
     // transcript section carries `tabindex="0"` for exactly this.
     let (snapshot, _) = inspect(client).await?;
-    if let Some(target) = snapshot
-        .nodes
-        .iter()
-        .filter(|node| node.visible && node.name.contains(over))
-        .filter_map(|node| node.bounds.map(|b| (node, b)))
-        .max_by(|a, b| {
-            (a.1[2] * a.1[3])
-                .partial_cmp(&(b.1[2] * b.1[3]))
-                .unwrap_or(std::cmp::Ordering::Equal)
-        })
-        .map(|(node, _)| node.id)
-    {
+    // A control whose only label is `sr-only` reaches the semantic tree with an
+    // empty name, so no substring can address it. The slider is one, which is
+    // why targeting by node id has to be possible at all.
+    let by_id = over.parse::<u64>().ok().filter(|id| {
+        snapshot
+            .nodes
+            .iter()
+            .any(|node| node.id == *id && node.visible)
+    });
+    if let Some(target) = by_id.or_else(|| {
+        snapshot
+            .nodes
+            .iter()
+            .filter(|node| node.visible && !over.is_empty() && node.name.contains(over))
+            .filter_map(|node| node.bounds.map(|b| (node, b)))
+            .max_by(|a, b| {
+                (a.1[2] * a.1[3])
+                    .partial_cmp(&(b.1[2] * b.1[3]))
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            })
+            .map(|(node, _)| node.id)
+    }) {
         client
             .agent(&AgentControlRequest::Act(AgentAction::Click {
                 node_id: target,
@@ -755,7 +830,12 @@ async fn press_key(client: &mut Client, name: &str, count: usize, over: &str) ->
         "end" => ("End", "End"),
         "up" | "arrowup" => ("ArrowUp", "ArrowUp"),
         "down" | "arrowdown" => ("ArrowDown", "ArrowDown"),
-        other => bail!("unknown key {other:?}: pageup, pagedown, home, end, up, down"),
+        "left" | "arrowleft" => ("ArrowLeft", "ArrowLeft"),
+        "right" | "arrowright" => ("ArrowRight", "ArrowRight"),
+        "tab" => ("Tab", "Tab"),
+        other => {
+            bail!("unknown key {other:?}: pageup, pagedown, home, end, up, down, left, right, tab")
+        }
     };
 
     for _ in 0..count {
@@ -963,6 +1043,11 @@ async fn main() -> Result<()> {
         "transcript" => transcript(&mut client).await?,
         "nodes" => {
             nodes(&mut client).await?;
+        }
+        "dom" => {
+            let want = args.get(1).map(String::as_str).unwrap_or("");
+            let depth: usize = args.get(2).and_then(|v| v.parse().ok()).unwrap_or(6);
+            dom(&mut client, want, depth).await?;
         }
         "spill" => {
             let axis = args.get(1).map(String::as_str).unwrap_or("h");
