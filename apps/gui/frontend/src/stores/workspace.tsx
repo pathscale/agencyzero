@@ -1740,9 +1740,32 @@ function createWorkspace() {
 
   function focus(key: string): void {
     if (!state.tabs.some((tab) => tab.key === key)) return;
+    /*
+     * A tab switch is one signal write, so everything it costs happens after
+     * this returns: the outgoing tab hides, the incoming one reveals, and this
+     * renderer repaints the whole window either way. Timing the write alone
+     * would report a number near zero and say nothing.
+     *
+     * `commit` is the synchronous part, Solid's reaction to the write. `frame`
+     * is the first frame after it, which is when the switch is actually on
+     * screen. The gap between them is layout and paint, and the engine's own
+     * phase lines in the log break that down further.
+     */
+    const from = state.activeKey;
+    const started = performance.now();
     batch(() => {
       setState("activeKey", key);
       setPrefs("lastTabKey", key);
+    });
+    const committed = performance.now();
+    requestAnimationFrame(() => {
+      const painted = performance.now();
+      const rows = state.messages[key]?.length ?? 0;
+      log.info(
+        `tab switch ${from} -> ${key}: commit ${(committed - started).toFixed(0)}ms, ` +
+          `frame ${(painted - committed).toFixed(0)}ms, ` +
+          `total ${(painted - started).toFixed(0)}ms (${rows} messages on the incoming tab)`,
+      );
     });
   }
 
