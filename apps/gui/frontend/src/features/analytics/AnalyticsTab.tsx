@@ -1,4 +1,5 @@
 import { createMemo, createSignal, For, type JSX, onMount, Show } from "solid-js";
+import { Button } from "~/components/Button";
 import { Icon } from "~/components/Icon";
 import { duration } from "~/lib/format";
 import { tx } from "~/stores/i18n";
@@ -81,7 +82,6 @@ export function AnalyticsTab(): JSX.Element {
               ? last
               : null;
     if (next === null) return;
-
     event.preventDefault();
     setActiveTab(ANALYTICS_TABS[next].key);
     event.currentTarget.parentElement
@@ -128,7 +128,7 @@ export function AnalyticsTab(): JSX.Element {
                   {(tab, index) => {
                     const selected = () => activeTab() === tab.key;
                     return (
-                      <button
+                      <Button
                         id={`analytics-tab-${tab.key}`}
                         type="button"
                         role="tab"
@@ -144,7 +144,7 @@ export function AnalyticsTab(): JSX.Element {
                         }`}
                       >
                         {tx(tab.label)}
-                      </button>
+                      </Button>
                     );
                   }}
                 </For>
@@ -495,7 +495,7 @@ function HeadlineRow(props: {
             </Show>
           </div>
         </div>
-        <button
+        <Button
           type="button"
           aria-label={tx("Refresh")}
           title={tx("Refresh")}
@@ -504,7 +504,7 @@ function HeadlineRow(props: {
           class="flex size-8 shrink-0 items-center justify-center rounded-lg text-primary transition-colors hover:bg-primary/8 disabled:cursor-wait disabled:opacity-55"
         >
           <Icon name="refresh-cw" class={`text-[13px] ${props.refreshing ? "animate-spin" : ""}`} />
-        </button>
+        </Button>
       </div>
       <div class="grid grid-cols-2 gap-1.5 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
         <For each={tiles()}>

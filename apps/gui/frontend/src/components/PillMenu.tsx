@@ -30,7 +30,7 @@ export type PillMenuProps<T extends string> = {
  * The rounded selector the design uses everywhere a value is swapped — model,
  * permission, environment policy.
  *
- * Built on `Dropdown` rather than a native `<select>`: the trigger has to show
+ * Built on `Dropdown` rather than a native select element: the trigger has to show
  * an icon plus a two-tone label, and the menu carries a hint line per option.
  * Dropdown supplies the overlay positioning, outside-click and keyboard
  * handling that would otherwise be hand-rolled here.

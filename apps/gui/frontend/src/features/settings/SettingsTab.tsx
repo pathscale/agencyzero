@@ -1,4 +1,4 @@
-import { Toggle } from "@pathscale/ui";
+import { Checkbox, Input, Select, Slider, TextArea, Toggle } from "@pathscale/ui";
 import {
   createContext,
   createEffect,
@@ -12,6 +12,7 @@ import {
   Show,
   useContext,
 } from "solid-js";
+import { Button } from "~/components/Button";
 import { Icon, type IconProps } from "~/components/Icon";
 import { LanguageSwitcher } from "~/components/LanguageSwitcher";
 import { Panel } from "~/components/Panel";
@@ -356,7 +357,7 @@ export function SettingsTab(): JSX.Element {
         */}
         <div class="flex items-center gap-2.5 rounded-[11px] border border-primary/11 bg-az-inset px-3 py-2.5 focus-within:border-primary/40">
           <Icon name="search" class="shrink-0 text-[14px] text-primary/70" />
-          <input
+          <Input.Field
             type="search"
             value={settingsQuery()}
             onInput={(event) => setSettingsQuery(event.currentTarget.value)}
@@ -373,14 +374,14 @@ export function SettingsTab(): JSX.Element {
           </div>
           <div class="flex shrink-0 items-center gap-2">
             <LanguageSwitcher align="end" />
-            <button
+            <Button
               type="button"
               data-guide-target="help-setup"
               onClick={() => actions.openOnboarding()}
               class="rounded-lg border border-az-hairline-strong px-2.5 py-1.5 text-[11.5px] text-az-muted transition-colors hover:border-primary hover:text-primary"
             >
               {tx("Welcome Tutorial")}
-            </button>
+            </Button>
           </div>
         </div>
 
@@ -489,29 +490,29 @@ export function SettingsTab(): JSX.Element {
                     <span class="min-w-0 flex-1 truncate font-mono text-[11.5px] text-az-muted">
                       {current().agentProxyBinary || tx("Bundled AgencyProxy")}
                     </span>
-                    <button
+                    <Button
                       type="button"
                       disabled={!isLive("chooseAgentProxyBinary")}
                       onClick={() => void actions.chooseAgentProxyBinary()}
                       class="rounded-lg border border-az-hairline-strong px-3 py-[5px] text-[12px] text-az-body transition-colors hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-40"
                     >
                       {tx("Choose…")}
-                    </button>
-                    <button
+                    </Button>
+                    <Button
                       type="button"
                       disabled={!current().agentProxyBinary}
                       onClick={() => void actions.saveSettings({ agentProxyBinary: "" })}
                       class="rounded-lg border border-az-hairline-strong px-3 py-[5px] text-[12px] text-az-muted transition-colors hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-40"
                     >
                       {tx("Use bundled")}
-                    </button>
+                    </Button>
                   </div>
                 </Row>
                 <div class="flex flex-wrap items-center justify-end gap-2 px-3.5 py-2.5">
                   <Show when={proxyNote()}>
                     <span class="mr-auto text-[11px] text-az-muted">{proxyNote()}</span>
                   </Show>
-                  <button
+                  <Button
                     type="button"
                     title={tx("Refresh")}
                     aria-label={tx("Refresh")}
@@ -523,8 +524,8 @@ export function SettingsTab(): JSX.Element {
                       name="refresh-cw"
                       class={`text-[13px] ${proxyAction() === "refresh" ? "animate-spin" : ""}`}
                     />
-                  </button>
-                  <button
+                  </Button>
+                  <Button
                     type="button"
                     disabled={proxyAction() !== null || !isLive("restartAgentProxy")}
                     onClick={() => restartProxy("drain")}
@@ -537,9 +538,9 @@ export function SettingsTab(): JSX.Element {
                         : (state.agencyProxy?.activeRuns ?? 0) > 0
                           ? tx("Wait & restart")
                           : tx("Restart")}
-                  </button>
+                  </Button>
                   <Show when={state.agencyProxy?.connected && isLive("stopAgentProxy")}>
-                    <button
+                    <Button
                       type="button"
                       disabled={proxyAction() !== null}
                       onClick={stopProxy}
@@ -550,10 +551,10 @@ export function SettingsTab(): JSX.Element {
                         : proxyAction() === "stop"
                           ? tx("Stopping…")
                           : tx("Stop")}
-                    </button>
+                    </Button>
                   </Show>
                   <Show when={(state.agencyProxy?.activeRuns ?? 0) > 0}>
-                    <button
+                    <Button
                       type="button"
                       disabled={proxyAction() !== null || !isLive("restartAgentProxy")}
                       onClick={() =>
@@ -566,7 +567,7 @@ export function SettingsTab(): JSX.Element {
                         : terminateArmed()
                           ? tx("Confirm terminate & restart")
                           : tx("Terminate & restart")}
-                    </button>
+                    </Button>
                   </Show>
                 </div>
               </Section>
@@ -578,13 +579,13 @@ export function SettingsTab(): JSX.Element {
               >
                 <For each={state.agents}>{(agent) => <AgentRow status={agent} />}</For>
                 <div class="flex items-center gap-2.5 px-3.5 pt-0 pb-3">
-                  <button
+                  <Button
                     type="button"
                     onClick={() => void actions.recheckAgents()}
                     class="rounded-lg border border-az-hairline-strong px-3 py-[5px] text-[12px] text-az-body transition-colors hover:border-primary hover:text-primary"
                   >
                     {tx("Re-check")}
-                  </button>
+                  </Button>
                   <Show when={state.agents[0]}>
                     {(first) => (
                       <span class="text-[11.5px] text-az-muted">
@@ -682,7 +683,7 @@ export function SettingsTab(): JSX.Element {
                   hint={tx("what a PR review asks; empty uses the built-in prompt")}
                   stack
                 >
-                  <textarea
+                  <TextArea
                     rows={3}
                     value={current().review?.prompt ?? ""}
                     placeholder={tx(
@@ -728,13 +729,13 @@ export function SettingsTab(): JSX.Element {
                   )}
                 </For>
                 <div class="flex flex-wrap items-center gap-2.5 px-3.5 pt-0 pb-3">
-                  <button
+                  <Button
                     type="button"
                     onClick={() => void actions.refreshModels()}
                     class="rounded-lg border border-az-hairline-strong px-3 py-[5px] text-[12px] text-az-body transition-colors hover:border-primary hover:text-primary"
                   >
                     {tx("Re-read from the CLIs")}
-                  </button>
+                  </Button>
                   <span class="text-[11.5px] text-az-muted">
                     {tx("only Codex can enumerate; the other two stay on the compiled list")}
                   </span>
@@ -897,7 +898,7 @@ export function SettingsTab(): JSX.Element {
                       ]}
                     >
                       {(option) => (
-                        <button
+                        <Button
                           type="button"
                           aria-pressed={prefs.colorMode === option.value}
                           onClick={() => setPrefs("colorMode", option.value)}
@@ -908,7 +909,7 @@ export function SettingsTab(): JSX.Element {
                           }`}
                         >
                           {option.label}
-                        </button>
+                        </Button>
                       )}
                     </For>
                   </div>
@@ -927,7 +928,7 @@ export function SettingsTab(): JSX.Element {
                       ]}
                     >
                       {(option) => (
-                        <button
+                        <Button
                           type="button"
                           aria-label={`${option.name} ${t("appearance.size")}`}
                           aria-pressed={prefs.uiSize === option.value}
@@ -939,7 +940,7 @@ export function SettingsTab(): JSX.Element {
                           }`}
                         >
                           {option.label}
-                        </button>
+                        </Button>
                       )}
                     </For>
                   </div>
@@ -1001,13 +1002,13 @@ export function SettingsTab(): JSX.Element {
                           {root().path}
                         </span>
                         <Show when={!root().exists}>
-                          <button
+                          <Button
                             type="button"
                             onClick={() => void actions.createWorkspaceRoot()}
                             class="shrink-0 rounded-lg border border-primary/50 px-2.5 py-[4px] text-[11.5px] text-primary transition-colors hover:border-primary"
                           >
                             {tx("Create it")}
-                          </button>
+                          </Button>
                         </Show>
                       </div>
                     </Row>
@@ -1052,15 +1053,15 @@ export function SettingsTab(): JSX.Element {
                       </Row>
                       <Row label={tx("Change it")}>
                         <div class="flex items-center gap-2">
-                          <button
+                          <Button
                             type="button"
                             disabled={!location().isEditable || !isLive("chooseDataDirectory")}
                             onClick={() => void actions.chooseDataLocation()}
                             class="rounded-lg border border-az-hairline-strong px-3 py-[5px] text-[12px] text-az-body transition-colors hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-40"
                           >
                             {tx("Choose…")}
-                          </button>
-                          <button
+                          </Button>
+                          <Button
                             type="button"
                             disabled={
                               !location().isEditable ||
@@ -1074,7 +1075,7 @@ export function SettingsTab(): JSX.Element {
                             class="rounded-lg border border-az-hairline-strong px-3 py-[5px] text-[12px] text-az-muted transition-colors hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-40"
                           >
                             {tx("Use the default")}
-                          </button>
+                          </Button>
                         </div>
                       </Row>
                       <Row
@@ -1381,27 +1382,40 @@ function ChatImportSettings(): JSX.Element {
                   }
                 >
                   <div class="flex w-full items-center gap-2">
-                    <select
+                    <Select
                       value={choice(source)}
-                      aria-label={tx("Choose a session from {source}", { source: source.label })}
-                      onChange={(event) =>
-                        setSelected((current) => ({
-                          ...current,
-                          [source.source]: event.currentTarget.value,
-                        }))
+                      onChange={(value) =>
+                        typeof value === "string" &&
+                        setSelected((current) => ({ ...current, [source.source]: value }))
                       }
-                      class="h-9 min-w-0 flex-1 rounded-lg border border-az-hairline bg-az-inset px-2 text-[12px] text-az-body outline-none"
+                      fullWidth
+                      class="min-w-0 flex-1"
                     >
-                      <For each={importableSessions(source)}>
-                        {(session) => (
-                          <option value={session.id}>
-                            {session.title}
-                            {session.messages > 0 ? ` · ${session.messages}` : ""}
-                          </option>
-                        )}
-                      </For>
-                    </select>
-                    <button
+                      <Select.Trigger
+                        aria-label={tx("Choose a session from {source}", { source: source.label })}
+                        class="h-9 w-full min-w-0 rounded-lg border border-az-hairline bg-az-inset px-2 text-[12px] text-az-body outline-none"
+                      >
+                        <Select.Value />
+                        <Select.Indicator endIcon={<Icon name="chevron-down" />} />
+                      </Select.Trigger>
+                      <Select.Popover>
+                        <Select.Listbox>
+                          <For each={importableSessions(source)}>
+                            {(session) => {
+                              const label = `${session.title}${
+                                session.messages > 0 ? ` · ${session.messages}` : ""
+                              }`;
+                              return (
+                                <Select.Option value={session.id} textValue={label}>
+                                  {label}
+                                </Select.Option>
+                              );
+                            }}
+                          </For>
+                        </Select.Listbox>
+                      </Select.Popover>
+                    </Select>
+                    <Button
                       type="button"
                       disabled={!choice(source) || busy() !== null}
                       onClick={() => void importOne(source.source, choice(source))}
@@ -1410,15 +1424,15 @@ function ChatImportSettings(): JSX.Element {
                       {busy() === `${source.source}:${choice(source)}`
                         ? tx("Importing…")
                         : tx("Import")}
-                    </button>
-                    <button
+                    </Button>
+                    <Button
                       type="button"
                       disabled={busy() !== null}
                       onClick={() => void importAll(source)}
                       class="h-9 shrink-0 rounded-lg border border-primary/45 px-2.5 font-medium text-[11px] text-primary transition-colors hover:border-primary hover:bg-primary/10 disabled:opacity-40"
                     >
                       {busy() === `${source.source}:*` ? tx("Importing all…") : tx("Import all")}
-                    </button>
+                    </Button>
                   </div>
                 </Show>
               </div>
@@ -1556,15 +1570,15 @@ function StudySettings(): JSX.Element {
         isLast
       >
         <div class="flex items-center gap-2">
-          <button
+          <Button
             type="button"
             disabled={busy()}
             onClick={() => void exportEvents()}
             class="rounded-lg border border-az-hairline-strong px-3 py-[5px] text-[12px] text-az-body transition-colors hover:border-primary hover:text-primary disabled:opacity-40"
           >
             {tx("Export JSONL")}
-          </button>
-          <button
+          </Button>
+          <Button
             type="button"
             disabled={busy() || enabled() || (summary()?.eventCount ?? 0) === 0}
             onClick={() => void clearEvents()}
@@ -1576,7 +1590,7 @@ function StudySettings(): JSX.Element {
             }`}
           >
             {confirmingDelete() ? tx("Confirm delete") : tx("Delete data")}
-          </button>
+          </Button>
         </div>
       </Row>
     </Section>
@@ -1697,14 +1711,14 @@ function ExperimentalSettings(): JSX.Element {
           <Show when={note()}>
             {(message) => <span class="max-w-[230px] text-[11px] text-error">{message()}</span>}
           </Show>
-          <button
+          <Button
             type="button"
             disabled={busy()}
             onClick={() => void refresh()}
             class="rounded-lg border border-az-hairline-strong px-3 py-[5px] text-[12px] text-az-body transition-colors hover:border-primary hover:text-primary disabled:opacity-40"
           >
             {busy() ? tx("Refreshing…") : tx("Refresh")}
-          </button>
+          </Button>
         </div>
       </Row>
     </Section>
@@ -1847,44 +1861,44 @@ function StoreBackupControls(): JSX.Element {
         </span>
       </Show>
       <div class="flex items-center gap-2">
-        <button
+        <Button
           type="button"
           disabled={!isLive("createStoreBackup")}
           onClick={backup}
           class="rounded-lg border border-primary/50 px-3 py-[5px] text-[12px] text-primary transition-colors hover:border-primary disabled:cursor-not-allowed disabled:opacity-40"
         >
           {tx("Back up & close")}
-        </button>
+        </Button>
         <Show
           when={selection()}
           fallback={
-            <button
+            <Button
               type="button"
               disabled={!isLive("selectStoreBackup")}
               onClick={selectBackup}
               class="rounded-lg border border-az-hairline-strong px-3 py-[5px] text-[12px] text-az-muted transition-colors hover:border-warning hover:text-warning disabled:cursor-not-allowed disabled:opacity-40"
             >
               {tx("Select backup file…")}
-            </button>
+            </Button>
           }
         >
           <code class="max-w-[160px] truncate font-mono text-[10.5px] text-az-body">
             {selection()?.fileName}
           </code>
-          <button
+          <Button
             type="button"
             onClick={restore}
             class="rounded-lg border border-warning/50 px-2.5 py-[4px] font-semibold text-[11.5px] text-warning hover:border-warning"
           >
             {tx("Restore")}
-          </button>
-          <button
+          </Button>
+          <Button
             type="button"
             onClick={() => setSelection(null)}
             class="rounded-lg px-2 py-[4px] text-[11.5px] text-az-muted hover:text-base-content"
           >
             {tx("Cancel")}
-          </button>
+          </Button>
         </Show>
       </div>
     </div>
@@ -1912,18 +1926,18 @@ function TaskManagerDirs(props: { taskManager: TaskManagerSettings }): JSX.Eleme
         {(dir) => (
           <span class="flex max-w-full items-center gap-1.5 rounded-md border border-az-hairline bg-base-300 px-2 py-0.5">
             <span class="truncate font-mono text-[11px] text-az-body">{dir}</span>
-            <button
+            <Button
               type="button"
               onClick={() => save(props.taskManager.dirs.filter((kept) => kept !== dir))}
               aria-label={`Remove ${dir}`}
               class="shrink-0 text-az-faint transition-colors hover:text-error"
             >
               <Icon name="x" class="text-[11px]" />
-            </button>
+            </Button>
           </span>
         )}
       </For>
-      <input
+      <Input.Field
         value={path()}
         placeholder={tx("~/code/…")}
         aria-label={tx("Add a task manager directory")}
@@ -1971,14 +1985,14 @@ function ResetTaskManagerButton(): JSX.Element {
           </span>
         )}
       </Show>
-      <button
+      <Button
         type="button"
         onClick={() => void reset()}
         disabled={busy() || !state.taskManagerSession || !isLive("resetTaskManager")}
         class="shrink-0 rounded-lg border border-az-hairline-strong px-3 py-[5px] text-[12px] text-az-body transition-colors hover:border-warning hover:text-warning disabled:opacity-40"
       >
         {busy() ? tx("Resetting…") : tx("Reset")}
-      </button>
+      </Button>
     </div>
   );
 }
@@ -2027,20 +2041,20 @@ function SourceActions(): JSX.Element {
   const openRepository = () => void actions.openExternal(AGENCYZERO_REPOSITORY);
   return (
     <div class="flex items-center gap-2">
-      <button
+      <Button
         type="button"
         onClick={openRepository}
         class="rounded-lg border border-az-hairline-strong px-2.5 py-1 text-[11.5px] text-az-muted transition-colors hover:border-primary hover:text-primary"
       >
         {tx("View source")}
-      </button>
-      <button
+      </Button>
+      <Button
         type="button"
         onClick={openRepository}
         class="rounded-lg bg-primary px-2.5 py-1 text-[11.5px] text-primary-content transition-opacity hover:opacity-90"
       >
         {tx("Star on GitHub")}
-      </button>
+      </Button>
     </div>
   );
 }
@@ -2087,14 +2101,14 @@ function UpdateControl(): JSX.Element {
       <Show
         when={state.availableUpdate}
         fallback={
-          <button
+          <Button
             type="button"
             onClick={check}
             disabled={busy() || !isLive("checkForUpdate")}
             class="shrink-0 rounded-lg border border-az-hairline-strong px-3 py-[5px] text-[12px] text-az-body transition-colors hover:border-primary hover:text-primary disabled:opacity-40"
           >
             {busy() ? tx("Checking…") : tx("Check for update")}
-          </button>
+          </Button>
         }
       >
         {(update) => (
@@ -2102,14 +2116,14 @@ function UpdateControl(): JSX.Element {
             <span class="shrink-0 font-mono text-[11.5px] text-primary">
               {update().version} {tx("available")}
             </span>
-            <button
+            <Button
               type="button"
               onClick={install}
               disabled={busy() || !isLive("installUpdate")}
               class="shrink-0 rounded-lg border border-primary/50 px-3 py-[5px] font-semibold text-[12px] text-primary transition-colors hover:border-primary hover:bg-primary/10 disabled:opacity-40"
             >
               {busy() ? tx("Installing…") : tx("Install & Restart")}
-            </button>
+            </Button>
           </>
         )}
       </Show>
@@ -2122,7 +2136,7 @@ function RelaunchButton(): JSX.Element {
   const [busy, setBusy] = createSignal(false);
 
   return (
-    <button
+    <Button
       type="button"
       disabled={busy() || !isLive("relaunchApp")}
       onClick={() => {
@@ -2132,7 +2146,7 @@ function RelaunchButton(): JSX.Element {
       class="shrink-0 rounded-lg border border-az-hairline-strong px-3 py-[5px] text-[12px] text-az-body transition-colors hover:border-warning hover:text-warning disabled:opacity-40"
     >
       {busy() ? tx("Restarting…") : tx("Restart")}
-    </button>
+    </Button>
   );
 }
 
@@ -2242,24 +2256,21 @@ function CostSection(): JSX.Element {
         label={tx("Turn warning threshold")}
         hint={tx("warn when the projected cost of one turn reaches this amount")}
       >
-        <div class="flex min-w-[260px] items-center gap-3">
-          <input
-            type="range"
-            min="0.25"
-            max="20"
-            step="0.25"
+        <div class="min-w-[260px]">
+          <Slider
+            label={tx("Projected turn warning threshold")}
+            min={0.25}
+            max={20}
+            step={0.25}
             value={warningUsd()}
-            aria-label={tx("Projected turn warning threshold")}
-            onInput={(event) => setWarningPreview(Number(event.currentTarget.value))}
-            onChange={(event) => {
-              const costWarningUsd = Number(event.currentTarget.value);
+            formatValue={(value) => `$${value.toFixed(2)}`}
+            onChange={(costWarningUsd) => {
+              setWarningPreview(costWarningUsd);
               void actions.saveSettings({ costWarningUsd }).finally(() => setWarningPreview(null));
             }}
-            class="h-1.5 min-w-0 flex-1 cursor-pointer accent-primary"
+            size="sm"
+            class="[&_[data-slot=label]]:sr-only [&_[data-slot=slider-output]]:w-14 [&_[data-slot=slider-output]]:text-right [&_[data-slot=slider-output]]:font-mono [&_[data-slot=slider-output]]:text-[12.5px] [&_[data-slot=slider-output]]:text-az-strong"
           />
-          <output class="w-14 shrink-0 text-right font-mono text-[12.5px] text-az-strong">
-            ${warningUsd().toFixed(2)}
-          </output>
         </div>
       </Row>
       <Row
@@ -2622,33 +2633,16 @@ function ModelRow(props: {
         and screen readers should hear it as one. The input carries the state and
         the keyboard behaviour; the span beside it is the visible box.
       */}
-      <label
-        class="shrink-0 cursor-pointer"
+      <Checkbox
+        class="shrink-0"
         title={props.isLastEnabled ? tx("The last enabled model cannot be removed") : undefined}
-      >
-        <input
-          type="checkbox"
-          class="peer sr-only"
-          checked={props.isEnabled}
-          disabled={props.isLastEnabled}
-          aria-label={tx("Offer {name}", { name: props.model.name })}
-          onChange={(event) =>
-            void actions.toggleModel(props.agent, props.model.id, event.currentTarget.checked)
-          }
-        />
-        <span
-          aria-hidden="true"
-          class="flex size-[15px] items-center justify-center rounded border transition-colors peer-focus-visible:ring-1 peer-focus-visible:ring-primary peer-disabled:opacity-40"
-          classList={{
-            "border-primary bg-primary text-az-sunken": props.isEnabled,
-            "border-az-hairline-strong": !props.isEnabled,
-          }}
-        >
-          <Show when={props.isEnabled}>
-            <Icon name="check" class="size-2.5" />
-          </Show>
-        </span>
-      </label>
+        checked={props.isEnabled}
+        isDisabled={props.isLastEnabled}
+        aria-label={tx("Offer {name}", { name: props.model.name })}
+        onChange={(event) =>
+          void actions.toggleModel(props.agent, props.model.id, event.currentTarget.checked)
+        }
+      />
 
       <div class="flex min-w-0 flex-1 flex-col leading-tight">
         <span class="flex items-baseline gap-1.5">
@@ -2673,14 +2667,14 @@ function ModelRow(props: {
           </span>
         }
       >
-        <button
+        <Button
           type="button"
           onClick={() => void actions.setDefaultModel(props.agent, props.model.id)}
           aria-label={tx("Make {name} the default", { name: props.model.name })}
           class="shrink-0 rounded border border-az-hairline-strong px-1.5 py-px text-[10px] text-az-muted opacity-0 transition-opacity hover:text-primary focus-visible:opacity-100 group-hover:opacity-100"
         >
           {tx("make default")}
-        </button>
+        </Button>
       </Show>
     </div>
   );

@@ -1,4 +1,6 @@
+import { Radio } from "@pathscale/ui";
 import { createEffect, For, type JSX, Show } from "solid-js";
+import { Button } from "~/components/Button";
 import {
   accentOptions,
   BRIGHTNESS_STOPS,
@@ -72,7 +74,7 @@ export function ThemePicker(props: {
           }
           format={(stop) => `${stop}%`}
           action={
-            <button
+            <Button
               type="button"
               aria-label={t("appearance.resetButton")}
               disabled={props.isDefault}
@@ -80,7 +82,7 @@ export function ThemePicker(props: {
               class="ml-auto rounded-lg border border-az-hairline-strong px-2.5 py-1 text-[11px] text-az-muted transition-colors hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-40"
             >
               {t("appearance.resetButton")}
-            </button>
+            </Button>
           }
         />
 
@@ -167,30 +169,27 @@ function SurfaceColorWheel(props: { value: string; onPick: (value: string) => vo
           const y = Math.sin(angle) * point.radius;
           const selected = () => props.value.trim().toLowerCase() === color.toLowerCase();
           return (
-            <label
+            <Radio
               title={color}
-              class="absolute size-7 cursor-pointer rounded-full"
+              name="surface-colour"
+              value={color}
+              aria-label={`${t("appearance.surfaceColour")} ${color}`}
+              checked={selected()}
+              onChange={() => props.onPick(color)}
+              indicator={
+                <span
+                  aria-hidden="true"
+                  class="block size-full rounded-full"
+                  style={{ "background-color": color }}
+                />
+              }
+              class="absolute size-7 cursor-pointer rounded-full [&_[data-slot=radio-control]]:m-0 [&_[data-slot=radio-control]]:size-7 [&_[data-slot=radio-control]]:border-2 [&_[data-slot=radio-control]]:border-az-hairline-strong [&_[data-slot=radio-indicator]]:overflow-hidden [&_[data-slot=radio-indicator]]:rounded-full"
               style={{
                 left: `calc(50% + ${x.toFixed(2)}px)`,
                 top: `calc(50% + ${y.toFixed(2)}px)`,
                 transform: "translate(-50%, -50%)",
               }}
-            >
-              <input
-                type="radio"
-                name="surface-colour"
-                value={color}
-                aria-label={`${t("appearance.surfaceColour")} ${color}`}
-                checked={selected()}
-                onChange={() => props.onPick(color)}
-                class="peer sr-only"
-              />
-              <span
-                aria-hidden="true"
-                class="block size-full rounded-full border-2 border-az-hairline-strong transition-[border-color,box-shadow] hover:border-base-content/45 peer-checked:border-base-content/70 peer-checked:ring-2 peer-checked:ring-primary peer-checked:ring-offset-2 peer-checked:ring-offset-base-200 peer-focus-visible:ring-2 peer-focus-visible:ring-primary"
-                style={{ "background-color": color }}
-              />
-            </label>
+            />
           );
         }}
       </For>
@@ -244,7 +243,7 @@ function AccentSelector(props: {
                 ? t("appearance.designedYellow")
                 : `${t("appearance.accentColour")} ${index() + 1}`;
             return (
-              <button
+              <Button
                 type="button"
                 aria-label={label()}
                 title={label()}
@@ -297,7 +296,7 @@ function Axis(props: {
       <div class="flex items-center gap-2">
         <For each={props.stops}>
           {(stop, index) => (
-            <button
+            <Button
               type="button"
               aria-label={`${props.label} ${props.format(stop, index())}`}
               aria-pressed={selected(stop)}
@@ -319,7 +318,7 @@ function Axis(props: {
                   </span>
                 )}
               </Show>
-            </button>
+            </Button>
           )}
         </For>
       </div>

@@ -1,6 +1,8 @@
+import { Checkbox, Input, TextArea } from "@pathscale/ui";
 import { createMemo, createSignal, For, type JSX, Show } from "solid-js";
 import { NOTES_BUDGET } from "~/api/client";
 import { AppModal, type ModalAnchor } from "~/components/AppModal";
+import { Button } from "~/components/Button";
 import { EditableTitle } from "~/components/EditableTitle";
 import { Icon } from "~/components/Icon";
 import { Panel, SectionPanel } from "~/components/Panel";
@@ -121,7 +123,7 @@ export function HomeTab(): JSX.Element {
 
             <div class="flex min-w-0 flex-1 items-center gap-2.5 rounded-[11px] border border-primary/11 bg-az-inset px-3 py-2.5 focus-within:border-primary/40">
               <Icon name="search" class="shrink-0 text-[14px] text-primary/70" />
-              <input
+              <Input.Field
                 type="search"
                 value={query()}
                 onInput={(event) => {
@@ -157,7 +159,7 @@ export function HomeTab(): JSX.Element {
             </p>
           </Show>
           <Show when={matches().length > visibleMatches().length}>
-            <button
+            <Button
               type="button"
               onClick={() => setProjectLimit((limit) => limit + HOME_PROJECT_PAGE_SIZE)}
               class="flex-none rounded-xl border border-primary/24 bg-primary/8 px-3.5 py-2.5 font-semibold text-[12px] text-primary transition-colors hover:bg-primary/14"
@@ -165,20 +167,20 @@ export function HomeTab(): JSX.Element {
               {tx("Show {count} more projects", {
                 count: Math.min(HOME_PROJECT_PAGE_SIZE, matches().length - visibleMatches().length),
               })}
-            </button>
+            </Button>
           </Show>
         </div>
       </Panel>
 
       <div class="flex w-[310px] flex-none flex-col gap-3">
-        <button
+        <Button
           type="button"
           onClick={() => actions.openDraft()}
           class="flex items-center justify-center gap-2.5 rounded-panel bg-primary py-3.5 font-semibold text-[13.5px] text-primary-content shadow-[0_6px_20px_rgb(from_var(--color-primary)_r_g_b/.12)] transition-colors hover:bg-az-primary-hover"
         >
           <Icon name="plus" class="text-[17px]" />
           {tx("New Project")}
-        </button>
+        </Button>
 
         <Show when={pinned().length > 0}>
           <SectionPanel
@@ -192,7 +194,7 @@ export function HomeTab(): JSX.Element {
             <div class="flex flex-col gap-2 px-3 pt-3 pb-3">
               <For each={pinned()}>
                 {(project) => (
-                  <button
+                  <Button
                     type="button"
                     onClick={() => actions.openProject(project.id)}
                     class="flex items-center gap-2.5 rounded-[11px] border border-primary/22 bg-base-300 px-3 py-2.5 text-left transition-colors hover:border-primary/50"
@@ -209,7 +211,7 @@ export function HomeTab(): JSX.Element {
                       }{" "}
                       {tx("open")}
                     </span>
-                  </button>
+                  </Button>
                 )}
               </For>
             </div>
@@ -227,7 +229,7 @@ export function HomeTab(): JSX.Element {
           <div class="az-scroll flex min-h-0 flex-1 flex-col gap-2 px-3 pt-3 pb-3">
             <For each={visibleRecent()}>
               {(project) => (
-                <button
+                <Button
                   type="button"
                   onClick={() => actions.openProject(project.id)}
                   class="flex items-center gap-3 rounded-[11px] border border-az-hairline bg-base-300 px-3 py-2.5 text-left transition-colors hover:border-primary/40"
@@ -246,11 +248,11 @@ export function HomeTab(): JSX.Element {
                       ? tx("running now")
                       : relativeTime(project.lastActivityAt)}
                   </span>
-                </button>
+                </Button>
               )}
             </For>
             <Show when={recent().length > visibleRecent().length}>
-              <button
+              <Button
                 type="button"
                 onClick={() => setRecentLimit((limit) => limit + HOME_RECENT_PAGE_SIZE)}
                 class="rounded-[11px] border border-primary/24 bg-primary/8 px-3 py-2 font-semibold text-[11.5px] text-primary transition-colors hover:bg-primary/14"
@@ -258,7 +260,7 @@ export function HomeTab(): JSX.Element {
                 {tx("Show {count} more projects", {
                   count: Math.min(HOME_RECENT_PAGE_SIZE, recent().length - visibleRecent().length),
                 })}
-              </button>
+              </Button>
             </Show>
           </div>
         </SectionPanel>
@@ -307,31 +309,29 @@ export function CleanupRowActions(props: {
 
   return (
     <div class="flex shrink-0 items-center gap-1 rounded-md border border-warning/35 bg-warning/8 px-1.5 py-0.5">
-      <label class="flex cursor-pointer items-center gap-1 font-semibold text-[10.5px] text-warning">
-        <input
-          type="checkbox"
-          checked
-          disabled={busy() !== null}
-          aria-label={tx("Delete {name}", { name: props.item.title })}
-          class="checkbox checkbox-xs checkbox-error"
-          onChange={(event) => {
-            if (event.currentTarget.checked) return;
-            const checkbox = event.currentTarget;
-            void run("keep", props.onKeep).catch(() => {
-              checkbox.checked = true;
-            });
-          }}
-        />
+      <Checkbox
+        checked
+        isDisabled={busy() !== null}
+        aria-label={tx("Delete {name}", { name: props.item.title })}
+        onChange={(event) => {
+          if (event.currentTarget.checked) return;
+          const checkbox = event.currentTarget;
+          void run("keep", props.onKeep).catch(() => {
+            checkbox.checked = true;
+          });
+        }}
+        class="font-semibold text-[10.5px] text-warning"
+      >
         {tx("Delete")}
-      </label>
-      <button
+      </Checkbox>
+      <Button
         type="button"
         disabled={busy() !== null}
         onClick={() => void run("delete", props.onConfirm)}
         class="rounded border border-error/35 px-1.5 py-px font-semibold text-[10px] text-error hover:bg-error/12 disabled:opacity-50"
       >
         {busy() === "delete" ? tx("Deleting…") : tx("Confirm")}
-      </button>
+      </Button>
     </div>
   );
 }
@@ -349,7 +349,7 @@ function HomeItemSortControls(): JSX.Element {
       class="ml-auto flex shrink-0 items-center gap-1 border-0 p-0"
       aria-label={tx("Sort projects and items")}
     >
-      <button
+      <Button
         type="button"
         onClick={nextSort}
         class="rounded-md border border-az-hairline bg-az-inset px-1.5 py-0.5 font-medium text-[10.5px] text-az-muted transition-colors hover:text-az-strong"
@@ -358,8 +358,8 @@ function HomeItemSortControls(): JSX.Element {
         {tx(
           prefs.homeSortBy === "status" ? "Status" : prefs.homeSortBy === "time" ? "Time" : "Turns",
         )}
-      </button>
-      <button
+      </Button>
+      <Button
         type="button"
         onClick={() =>
           setPrefs("homeSortDirection", prefs.homeSortDirection === "asc" ? "desc" : "asc")
@@ -372,7 +372,7 @@ function HomeItemSortControls(): JSX.Element {
           name="arrow-up"
           class={`text-[11px] transition-transform ${prefs.homeSortDirection === "desc" ? "rotate-180" : ""}`}
         />
-      </button>
+      </Button>
     </fieldset>
   );
 }
@@ -401,7 +401,7 @@ function HomeCleanupButton(): JSX.Element {
   };
 
   return (
-    <button
+    <Button
       type="button"
       onClick={() => void start()}
       disabled={isStarting() || isRunning()}
@@ -419,7 +419,7 @@ function HomeCleanupButton(): JSX.Element {
     >
       <Icon name="sparkles" class="text-[11px]" />
       {isStarting() ? tx("Starting…") : tx("Clean-up")}
-    </button>
+    </Button>
   );
 }
 
@@ -546,13 +546,13 @@ function TaskManagerComposer(): JSX.Element {
               "The task manager cannot send prompts until its selected agent is installed, compatible, and signed in.",
             )}
           </p>
-          <button
+          <Button
             type="button"
             onClick={() => actions.openSettings()}
             class="shrink-0 rounded-lg border border-error/30 px-2.5 py-1 text-[10.5px] text-az-body hover:border-error hover:text-error"
           >
             {tx("Open Settings")}
-          </button>
+          </Button>
         </div>
       </Show>
       <div
@@ -569,7 +569,7 @@ function TaskManagerComposer(): JSX.Element {
         <Show
           when={tall()}
           fallback={
-            <input
+            <Input.Field
               value={draft()}
               onInput={(event) => setDraft(event.currentTarget.value)}
               onKeyDown={(event) => {
@@ -586,7 +586,7 @@ function TaskManagerComposer(): JSX.Element {
             />
           }
         >
-          <textarea
+          <TextArea
             autofocus
             rows={6}
             value={draft()}
@@ -604,7 +604,7 @@ function TaskManagerComposer(): JSX.Element {
             class="az-scroll min-w-0 flex-1 resize-none bg-transparent text-[12.5px] text-base-content leading-[1.5] placeholder:text-az-muted focus:outline-none disabled:opacity-60"
           />
         </Show>
-        <button
+        <Button
           type="button"
           onClick={() => void attach()}
           disabled={!isLive("chooseAttachments")}
@@ -613,8 +613,8 @@ function TaskManagerComposer(): JSX.Element {
           class="shrink-0 text-az-faint transition-colors hover:text-az-body disabled:cursor-not-allowed disabled:opacity-40"
         >
           <Icon name="plus" class="text-[14px]" />
-        </button>
-        <button
+        </Button>
+        <Button
           type="button"
           onClick={() => setTall((open) => !open)}
           aria-pressed={tall()}
@@ -623,7 +623,7 @@ function TaskManagerComposer(): JSX.Element {
           class="shrink-0 text-az-faint transition-colors hover:text-az-body"
         >
           <Icon name={tall() ? "chevron-up" : "chevron-down"} class="text-[14px]" />
-        </button>
+        </Button>
         <Show
           when={isRunning()}
           fallback={
@@ -632,7 +632,7 @@ function TaskManagerComposer(): JSX.Element {
             </kbd>
           }
         >
-          <button
+          <Button
             type="button"
             onClick={() => void cancel()}
             disabled={isCanceling()}
@@ -641,14 +641,14 @@ function TaskManagerComposer(): JSX.Element {
             class="flex size-5 shrink-0 items-center justify-center rounded-full border border-error/35 text-error transition-colors hover:bg-error/12 disabled:opacity-45"
           >
             <Icon name="x" class="text-[11px]" />
-          </button>
+          </Button>
         </Show>
         {/*
           The debug reveal. The reply and collected list answer "what did the
           harvest actually do", which only matters when it did the wrong
           thing — so they hide behind this rather than costing space daily.
         */}
-        <button
+        <Button
           type="button"
           onClick={() => togglePanelSection("tmDebug")}
           aria-pressed={prefs.panelSections.tmDebug}
@@ -658,7 +658,7 @@ function TaskManagerComposer(): JSX.Element {
           }`}
         >
           <Icon name="terminal" class="text-[13px]" />
-        </button>
+        </Button>
       </div>
       <Show when={attachments().length > 0}>
         <div class="px-1 pt-1.5">
@@ -767,7 +767,7 @@ function TaskManagerStatus(): JSX.Element {
             <span class="text-[10.5px] text-az-faint">
               {tx("collected ·")} {tasks().length}
             </span>
-            <button
+            <Button
               type="button"
               onClick={() => {
                 for (const task of tasks()) void actions.deleteItem(task.id);
@@ -775,7 +775,7 @@ function TaskManagerStatus(): JSX.Element {
               class="ml-auto rounded-md border border-az-hairline px-2 py-0.5 text-[10.5px] text-az-muted transition-colors hover:border-error hover:text-error"
             >
               {tx("Clear")}
-            </button>
+            </Button>
           </div>
           <div class="az-scroll flex max-h-[150px] flex-col gap-0.5 overflow-y-auto">
             <For each={tasks()}>
@@ -905,7 +905,7 @@ function GroupItemRow(props: {
     <Show
       when={!editing()}
       fallback={
-        <input
+        <Input.Field
           autofocus
           value={title()}
           aria-label={tx("Edit {name}", { name: props.item.title })}
@@ -942,7 +942,7 @@ function GroupItemRow(props: {
            * panel: a status change is deliberate, so it gets its own small
            * target rather than riding on a click meant to read the row.
            */}
-          <button
+          <Button
             type="button"
             onClick={(event) => {
               event.stopPropagation();
@@ -953,8 +953,8 @@ function GroupItemRow(props: {
             class="flex size-7 shrink-0 items-center justify-center rounded-full transition-colors hover:bg-primary/12 focus-visible:bg-primary/12"
           >
             <ItemMarker status={props.item.status} />
-          </button>
-          <button
+          </Button>
+          <Button
             type="button"
             onClick={props.onFold}
             onDblClick={props.onOpen}
@@ -971,7 +971,7 @@ function GroupItemRow(props: {
             >
               {props.item.title}
             </span>
-          </button>
+          </Button>
           <Show when={props.item.deleteProposed}>
             <CleanupRowActions
               item={props.item}
@@ -979,7 +979,7 @@ function GroupItemRow(props: {
               onConfirm={() => actions.deleteItem(props.item.id)}
             />
           </Show>
-          <button
+          <Button
             type="button"
             onClick={() => {
               setTitle(props.item.title);
@@ -990,9 +990,9 @@ function GroupItemRow(props: {
             class="shrink-0 rounded-md p-0.5 text-az-faint opacity-0 transition-[color,opacity] hover:text-az-body group-hover:opacity-100"
           >
             <Icon name="pencil" class="text-[11px]" />
-          </button>
+          </Button>
           <Show when={!props.item.deleteProposed}>
-            <button
+            <Button
               type="button"
               onClick={() =>
                 void actions
@@ -1004,9 +1004,9 @@ function GroupItemRow(props: {
               class="shrink-0 rounded-md p-0.5 text-az-faint opacity-0 transition-[color,opacity] hover:text-error group-hover:opacity-100"
             >
               <Icon name="x" class="text-[12px]" />
-            </button>
+            </Button>
           </Show>
-          <button
+          <Button
             type="button"
             onClick={() => void toggleDescription()}
             aria-label={tx("Edit the description for {name}", { name: props.item.title })}
@@ -1020,8 +1020,8 @@ function GroupItemRow(props: {
             }`}
           >
             <Icon name="list-checks" class="text-[12px]" />
-          </button>
-          <button
+          </Button>
+          <Button
             type="button"
             onClick={(event) => {
               const box = event.currentTarget.getBoundingClientRect();
@@ -1047,7 +1047,7 @@ function GroupItemRow(props: {
           >
             <Icon name="git-fork" class="text-[12px]" />
             <Show when={fork()}>{tx("Forked")}</Show>
-          </button>
+          </Button>
           {/*
             Keep the status edge where it was while reserving one consistent
             column for every label. Without the fixed width, shorter labels
@@ -1074,7 +1074,7 @@ function GroupItemRow(props: {
                   {draft().context.length} / {NOTES_BUDGET}
                 </span>
               </div>
-              <textarea
+              <TextArea
                 autofocus
                 value={draft().context}
                 maxLength={NOTES_BUDGET}
@@ -1092,21 +1092,21 @@ function GroupItemRow(props: {
                   {tx("Use one Markdown bullet or checklist line per sub-item.")}
                 </span>
                 <div class="flex shrink-0 items-center gap-1.5">
-                  <button
+                  <Button
                     type="button"
                     onClick={() => setDescriptionDraft(null)}
                     class="rounded-md px-2.5 py-1 text-[11px] text-az-muted hover:bg-white/6 hover:text-az-body"
                   >
                     {tx("Close")}
-                  </button>
-                  <button
+                  </Button>
+                  <Button
                     type="button"
                     disabled={busy() || draft().context === draft().saved}
                     onClick={() => void saveDescription()}
                     class="rounded-md border border-primary/40 bg-primary/15 px-2.5 py-1 font-semibold text-[11px] text-primary hover:bg-primary/24 disabled:opacity-35"
                   >
                     {tx("Save description")}
-                  </button>
+                  </Button>
                 </div>
               </div>
             </section>
@@ -1138,14 +1138,14 @@ function GroupItemRow(props: {
                   </h2>
                   <p class="mt-0.5 truncate text-[12px] text-az-muted">{props.item.title}</p>
                 </div>
-                <button
+                <Button
                   type="button"
                   onClick={() => setForkDraft(null)}
                   aria-label={tx("Cancel")}
                   class="rounded-lg p-1.5 text-az-muted hover:bg-white/6 hover:text-base-content"
                 >
                   <Icon name="x" class="text-[15px]" />
-                </button>
+                </Button>
               </header>
               <div class="flex min-h-0 flex-col gap-2 px-5 py-4">
                 <div class="flex items-center justify-between gap-3">
@@ -1159,7 +1159,7 @@ function GroupItemRow(props: {
                     {forkDraft()?.length ?? 0} / {NOTES_BUDGET}
                   </span>
                 </div>
-                <textarea
+                <TextArea
                   id={`home-fork-description-${props.item.id}`}
                   autofocus
                   value={forkDraft() ?? ""}
@@ -1178,21 +1178,21 @@ function GroupItemRow(props: {
                 </p>
               </div>
               <footer class="flex items-center justify-end gap-2 border-az-hairline-soft border-t px-5 py-3.5">
-                <button
+                <Button
                   type="button"
                   onClick={() => setForkDraft(null)}
                   class="rounded-lg border border-az-hairline px-3 py-1.5 text-[12px] text-az-body hover:border-primary/35"
                 >
                   {tx("Cancel")}
-                </button>
-                <button
+                </Button>
+                <Button
                   type="button"
                   disabled={busy()}
                   onClick={() => void startFork()}
                   class="rounded-lg border border-primary/45 bg-primary/18 px-3 py-1.5 font-semibold text-[12px] text-primary hover:bg-primary/25 disabled:opacity-40"
                 >
                   {tx("Start fork")}
-                </button>
+                </Button>
               </footer>
             </section>
           </AppModal>
@@ -1336,7 +1336,7 @@ function ProjectGroup(props: {
           <span class="ml-auto shrink-0 text-[11.5px] text-az-muted">{summary()}</span>
         </span>
 
-        <button
+        <Button
           type="button"
           onClick={(event) => {
             event.stopPropagation();
@@ -1347,7 +1347,7 @@ function ProjectGroup(props: {
           class={`shrink-0 transition-colors ${props.project.pinned ? "text-primary" : "text-az-ghost hover:text-az-strong"}`}
         >
           <Icon name="pin" class="text-[14px]" />
-        </button>
+        </Button>
 
         {/*
           Two steps, in place, rather than a modal. Deleting a project takes its
@@ -1359,7 +1359,7 @@ function ProjectGroup(props: {
         <Show
           when={confirming()}
           fallback={
-            <button
+            <Button
               type="button"
               onClick={(event) => {
                 event.stopPropagation();
@@ -1369,12 +1369,12 @@ function ProjectGroup(props: {
               class="shrink-0 text-az-ghost transition-colors hover:text-error"
             >
               <Icon name="x" class="text-[14px]" />
-            </button>
+            </Button>
           }
         >
           <div class="flex shrink-0 items-center gap-1.5">
             <span class="text-[11px] text-az-muted">{tx("Delete?")}</span>
-            <button
+            <Button
               type="button"
               onClick={() => void remove()}
               disabled={isDeleting()}
@@ -1388,14 +1388,14 @@ function ProjectGroup(props: {
               class="rounded-md border border-error/40 bg-error/15 px-2 py-0.5 font-semibold text-[11px] text-error transition-colors hover:bg-error/25 disabled:opacity-50"
             >
               {isDeleting() ? tx("Deleting…") : tx("Delete")}
-            </button>
-            <button
+            </Button>
+            <Button
               type="button"
               onClick={() => setConfirming(false)}
               class="rounded-md px-2 py-0.5 text-[11px] text-az-muted transition-colors hover:text-base-content"
             >
               {tx("Cancel")}
-            </button>
+            </Button>
           </div>
         </Show>
 

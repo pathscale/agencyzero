@@ -10,6 +10,7 @@ import {
   Show,
   Switch,
 } from "solid-js";
+import { Button } from "~/components/Button";
 import { Icon } from "~/components/Icon";
 import { IconSprite } from "~/components/IconSprite";
 import { AnalyticsTab } from "~/features/analytics/AnalyticsTab";
@@ -278,20 +279,20 @@ export function BootFailed(props: {
         </p>
       </div>
       <div class="flex items-center gap-2">
-        <button
+        <Button
           type="button"
           onClick={props.onRetry}
           class="rounded-lg bg-primary px-3.5 py-1.5 font-semibold text-[12.5px] text-primary-content transition-colors hover:bg-az-primary-hover"
         >
           {tx("Try again")}
-        </button>
-        <button
+        </Button>
+        <Button
           type="button"
           onClick={props.onOpenSettings}
           class="rounded-lg border border-az-hairline px-3.5 py-1.5 font-semibold text-[12.5px] text-az-body transition-colors hover:bg-white/6 hover:text-base-content"
         >
           {tx("Open Settings")}
-        </button>
+        </Button>
       </div>
     </div>
   );

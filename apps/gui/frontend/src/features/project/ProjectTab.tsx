@@ -1,4 +1,5 @@
 import { createEffect, createMemo, createSignal, For, type JSX, onCleanup, Show } from "solid-js";
+import { Button } from "~/components/Button";
 import { EditableTitle } from "~/components/EditableTitle";
 import { Icon } from "~/components/Icon";
 import { Panel } from "~/components/Panel";
@@ -264,7 +265,7 @@ export function ProjectTab(props: { tab: Tab; project: Project }): JSX.Element {
                   <span class="shrink-0 rounded-full border border-primary/30 bg-primary/10 px-2 py-0.5 font-semibold text-[10.5px] text-primary uppercase tracking-wide">
                     {tx("Fork")}
                   </span>
-                  <button
+                  <Button
                     type="button"
                     onClick={() => {
                       if (!actions.revealItem(fork().itemId)) actions.openProject(fork().parentId);
@@ -277,7 +278,7 @@ export function ProjectTab(props: { tab: Tab; project: Project }): JSX.Element {
                       {fork().item?.title ?? props.project.name}
                     </span>
                     <Icon name="arrow-up" class="shrink-0 -rotate-90 text-[12px]" />
-                  </button>
+                  </Button>
                 </div>
               )}
             </Show>
@@ -397,14 +398,14 @@ export function ProjectTab(props: { tab: Tab; project: Project }): JSX.Element {
                 <Icon name="history" class="shrink-0 text-[12px] text-az-faint" />
                 <span class="min-w-0 flex-1 truncate text-az-body">{tx("Compact")}</span>
                 <span class="shrink-0 text-[10.5px] text-az-faint">{QUEUE_REASONS.busy}</span>
-                <button
+                <Button
                   type="button"
                   onClick={() => actions.dropPendingCompact(props.project.id)}
                   aria-label={tx("Drop this queued compaction")}
                   class="shrink-0 text-az-faint transition-colors hover:text-error"
                 >
                   <Icon name="x" class="text-[12px]" />
-                </button>
+                </Button>
               </div>
             </Show>
             {/* Prompts waiting their turn, each with its way out. Above the
@@ -421,14 +422,14 @@ export function ProjectTab(props: { tab: Tab; project: Project }): JSX.Element {
                       <span class="shrink-0 text-[10.5px] text-az-faint">
                         {QUEUE_REASONS[prompt.reason]}
                       </span>
-                      <button
+                      <Button
                         type="button"
                         onClick={() => actions.removeQueued(props.project.id, index())}
                         aria-label={tx("Drop this queued message")}
                         class="shrink-0 text-az-faint transition-colors hover:text-error"
                       >
                         <Icon name="x" class="text-[12px]" />
-                      </button>
+                      </Button>
                     </div>
                   )}
                 </For>
@@ -558,7 +559,7 @@ export function ProjectTab(props: { tab: Tab; project: Project }): JSX.Element {
 export function ProjectPanelToggle(props: { visible: boolean; onToggle: () => void }): JSX.Element {
   const label = () => tx(props.visible ? "Hide the project sidebar" : "Show the project sidebar");
   return (
-    <button
+    <Button
       type="button"
       onClick={props.onToggle}
       aria-pressed={props.visible}
@@ -573,7 +574,7 @@ export function ProjectPanelToggle(props: { visible: boolean; onToggle: () => vo
           props.visible ? "rotate-0" : "rotate-180"
         }`}
       />
-    </button>
+    </Button>
   );
 }
 
@@ -643,7 +644,7 @@ function PrChip(props: { pr: PullRequest }): JSX.Element {
         </Show>
       </div>
       {/* Coloured and underlined, because it leaves the app. */}
-      <button
+      <Button
         type="button"
         onClick={() =>
           void actions
@@ -654,7 +655,7 @@ function PrChip(props: { pr: PullRequest }): JSX.Element {
         class="shrink-0 cursor-pointer text-primary underline decoration-dotted underline-offset-2 transition-opacity hover:opacity-75"
       >
         {tx("GitHub ›")}
-      </button>
+      </Button>
       <Show
         when={merged()}
         fallback={
@@ -666,7 +667,7 @@ function PrChip(props: { pr: PullRequest }): JSX.Element {
               </span>
             </Show>
             <Show when={props.pr.ci !== "unknown" && props.pr.ci !== "none"}>
-              <button
+              <Button
                 type="button"
                 onClick={() =>
                   isLive("refreshPullRequest") && actions.refreshPullRequest(props.pr.id)
@@ -675,7 +676,7 @@ function PrChip(props: { pr: PullRequest }): JSX.Element {
                 class={`shrink-0 rounded-md px-[7px] py-px font-semibold text-[10.5px] ${CI_TONE[props.pr.ci] ?? "bg-base-300 text-az-muted"}`}
               >
                 {tx("CI")} {props.pr.ci}
-              </button>
+              </Button>
             </Show>
             <Show when={closed()}>
               <span class="shrink-0 font-semibold text-[11px] text-az-muted">{tx("Closed")}</span>
@@ -685,7 +686,7 @@ function PrChip(props: { pr: PullRequest }): JSX.Element {
       >
         <span class="shrink-0 font-semibold text-[11.5px] text-az-pr-strong">{tx("Merged")}</span>
       </Show>
-      <button
+      <Button
         type="button"
         onClick={() => void copy()}
         aria-label={tx("Copy the link to PR {number}", { number: props.pr.number })}
@@ -693,9 +694,9 @@ function PrChip(props: { pr: PullRequest }): JSX.Element {
         class="shrink-0 rounded-md p-1 text-az-faint transition-colors hover:text-az-body"
       >
         <Icon name={copied() ? "check" : "copy"} class="text-[12px]" />
-      </button>
+      </Button>
       <ReviewButtons pr={props.pr} />
-      <button
+      <Button
         type="button"
         onClick={() => void actions.dismissPullRequest(props.pr.id)}
         aria-label={tx("Dismiss PR {number}", { number: props.pr.number })}
@@ -705,7 +706,7 @@ function PrChip(props: { pr: PullRequest }): JSX.Element {
         class="shrink-0 text-az-faint transition-colors hover:text-error"
       >
         <Icon name="x" class="text-[13px]" />
-      </button>
+      </Button>
     </div>
   );
 }
@@ -743,7 +744,7 @@ export function ReviewButtons(props: { pr: PullRequest }): JSX.Element {
         <span class="text-[10.5px] text-az-faint">{tx("Review")}</span>
         <For each={REVIEWERS}>
           {(reviewer) => (
-            <button
+            <Button
               type="button"
               disabled={isPending(reviewer.agent)}
               onClick={() => review(reviewer.agent)}
@@ -761,7 +762,7 @@ export function ReviewButtons(props: { pr: PullRequest }): JSX.Element {
                 name={isPending(reviewer.agent) ? "history" : reviewer.icon}
                 class={`text-[12px] ${isPending(reviewer.agent) ? "animate-spin" : ""}`}
               />
-            </button>
+            </Button>
           )}
         </For>
       </span>
@@ -820,14 +821,14 @@ function SessionChip(props: { sessionId: string | null }): JSX.Element {
         >
           <span class="text-az-faint">{tx("session ·")}</span>
           {id().slice(0, 8)}
-          <button
+          <Button
             type="button"
             onClick={() => void copy(id())}
             aria-label={tx("Copy session id")}
             class="flex size-[18px] items-center justify-center rounded transition-colors hover:bg-white/8 hover:text-az-body"
           >
             <Icon name={copied() ? "check" : "copy"} class="text-[10px]" />
-          </button>
+          </Button>
         </span>
       )}
     </Show>

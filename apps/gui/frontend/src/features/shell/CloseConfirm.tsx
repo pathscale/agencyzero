@@ -1,4 +1,6 @@
+import { Modal } from "@pathscale/ui";
 import { createMemo, type JSX, Show } from "solid-js";
+import { Button } from "~/components/Button";
 import { Icon } from "~/components/Icon";
 import { tx } from "~/stores/i18n";
 import { useWorkspace } from "~/stores/workspace";
@@ -37,19 +39,24 @@ export function CloseConfirm(props: CloseConfirmProps): JSX.Element {
 
   return (
     <Show when={props.isOpen}>
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="close-confirm-title"
-        class="absolute inset-0 z-50 flex items-center justify-center bg-black/55 p-8"
-        onClick={(event) => event.currentTarget === event.target && props.onCancel()}
-        onKeyDown={(event) => event.key === "Escape" && props.onCancel()}
+      <Modal
+        isOpen
+        onOpenChange={(isOpen) => !isOpen && props.onCancel()}
+        placement="center"
+        size="md"
+        backdrop="opaque"
       >
-        <div class="az-ring w-full max-w-[420px] rounded-[17px]">
+        <Modal.Content
+          aria-labelledby="close-confirm-title"
+          class="az-ring w-full max-w-[420px] rounded-[17px] bg-transparent p-0 shadow-none"
+        >
           <div class="flex flex-col gap-3.5 rounded-2xl bg-az-inset p-5">
-            <div class="flex items-baseline gap-2.5">
+            <Modal.Header class="flex-row items-baseline gap-2.5">
               <Icon name="info" class="relative top-0.5 text-[15px] text-primary" />
-              <h2 id="close-confirm-title" class="font-semibold text-[14.5px] text-az-title">
+              <Modal.Heading
+                id="close-confirm-title"
+                class="font-semibold text-[14.5px] text-az-title"
+              >
                 {tx(
                   props.error
                     ? "Could not safely quit"
@@ -57,78 +64,80 @@ export function CloseConfirm(props: CloseConfirmProps): JSX.Element {
                       ? "Quit AgencyZero and AgencyProxy?"
                       : "Work is still in progress",
                 )}
-              </h2>
-            </div>
+              </Modal.Heading>
+            </Modal.Header>
 
-            <Show
-              when={!props.error}
-              fallback={
-                <p
-                  data-selectable
-                  class="rounded-lg border border-error/25 bg-error/8 p-3 font-mono text-[11.5px] text-error leading-[1.55]"
-                >
-                  {props.error}
+            <Modal.Body class="overflow-visible text-[12.5px] text-az-body leading-[1.55]">
+              <Show
+                when={!props.error}
+                fallback={
+                  <p
+                    data-selectable
+                    class="rounded-lg border border-error/25 bg-error/8 p-3 font-mono text-[11.5px] text-error leading-[1.55]"
+                  >
+                    {props.error}
+                  </p>
+                }
+              >
+                <p>
+                  <Show
+                    when={runningCount() > 0 || heldCount() > 0}
+                    fallback={tx("Nothing is running. Your projects and their items are saved.")}
+                  >
+                    <Show when={runningCount() > 0}>
+                      <span class="text-primary">
+                        {tx(
+                          runningCount() === 1
+                            ? "{count} task is still running"
+                            : "{count} tasks are still running",
+                          { count: runningCount() },
+                        )}
+                      </span>
+                      {heldCount() > 0 ? ", and " : ". "}
+                    </Show>
+                    <Show when={heldCount() > 0}>
+                      <span class="text-warning">
+                        {tx(
+                          heldCount() === 1
+                            ? "{count} project is holding on your approval"
+                            : "{count} projects are holding on your approval",
+                          { count: heldCount() },
+                        )}
+                      </span>
+                      {". "}
+                    </Show>
+                    {tx(
+                      props.quitsProxy
+                        ? "Quitting both cancels every run and stops AgencyProxy."
+                        : "AgencyProxy remains running so active work can continue.",
+                    )}
+                  </Show>
                 </p>
-              }
-            >
-              <p class="text-[12.5px] text-az-body leading-[1.55]">
-                <Show
-                  when={runningCount() > 0 || heldCount() > 0}
-                  fallback={tx("Nothing is running. Your projects and their items are saved.")}
-                >
-                  <Show when={runningCount() > 0}>
-                    <span class="text-primary">
-                      {tx(
-                        runningCount() === 1
-                          ? "{count} task is still running"
-                          : "{count} tasks are still running",
-                        { count: runningCount() },
-                      )}
-                    </span>
-                    {heldCount() > 0 ? ", and " : ". "}
-                  </Show>
-                  <Show when={heldCount() > 0}>
-                    <span class="text-warning">
-                      {tx(
-                        heldCount() === 1
-                          ? "{count} project is holding on your approval"
-                          : "{count} projects are holding on your approval",
-                        { count: heldCount() },
-                      )}
-                    </span>
-                    {". "}
-                  </Show>
-                  {tx(
-                    props.quitsProxy
-                      ? "Quitting both cancels every run and stops AgencyProxy."
-                      : "AgencyProxy remains running so active work can continue.",
-                  )}
-                </Show>
-              </p>
-            </Show>
+              </Show>
+            </Modal.Body>
 
-            <div class="flex items-center justify-end gap-2 pt-0.5">
-              <button
+            <Modal.Footer class="pt-0.5">
+              <Button
                 type="button"
                 onClick={props.onCancel}
                 class="rounded-lg border border-az-hairline-strong px-3.5 py-1.5 text-[12.5px] text-az-body transition-colors hover:border-primary/30 hover:text-az-title"
               >
                 {tx(props.error ? "Keep AgencyZero open" : "Wait for completion")}
-              </button>
+              </Button>
               <Show when={!props.error}>
-                <button
+                <Button
                   type="button"
                   autofocus
                   onClick={props.onConfirm}
                   class="rounded-lg bg-primary px-3.5 py-1.5 font-semibold text-[12.5px] text-primary-content transition-colors hover:bg-az-primary-hover"
                 >
                   {tx(props.quitsProxy ? "Quit both" : "Exit now")}
-                </button>
+                </Button>
               </Show>
-            </div>
+            </Modal.Footer>
           </div>
-        </div>
-      </div>
+        </Modal.Content>
+      </Modal>
     </Show>
   );
 }

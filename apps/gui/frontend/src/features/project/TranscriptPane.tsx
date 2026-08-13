@@ -13,6 +13,7 @@ import {
   Switch,
   untrack,
 } from "solid-js";
+import { Button } from "~/components/Button";
 import { Icon } from "~/components/Icon";
 import { ApprovalCard } from "~/features/project/ApprovalCard";
 import { CopyMessageButton, InlineText, MessageBody } from "~/features/project/MessageBody";
@@ -720,7 +721,7 @@ export function TranscriptPane(props: {
             answered question sits where it was asked rather than in a pile at
             the bottom. */}
         <Show when={visibleTimeline().hidden > 0}>
-          <button
+          <Button
             type="button"
             onClick={revealEarlier}
             data-transcript-edge
@@ -729,7 +730,7 @@ export function TranscriptPane(props: {
             {tx("Show {count} earlier messages", {
               count: Math.min(TRANSCRIPT_PAGE_SIZE, visibleTimeline().hidden),
             })}
-          </button>
+          </Button>
         </Show>
         <For each={visibleTimeline().visible}>
           {(entry) => (
@@ -810,7 +811,7 @@ export function TranscriptPane(props: {
             is live, so the seam has to be named rather than left as a silent
             discontinuity. Scrolling into it reveals the next page anyway. */}
         <Show when={visibleTimeline().trailing > 0}>
-          <button
+          <Button
             type="button"
             onClick={revealLater}
             data-transcript-edge
@@ -819,7 +820,7 @@ export function TranscriptPane(props: {
             {tx("Show {count} newer messages", {
               count: Math.min(TRANSCRIPT_PAGE_SIZE, visibleTimeline().trailing),
             })}
-          </button>
+          </Button>
         </Show>
         {/* The run is blocked on this question; it renders where you read. */}
         <Show when={state.pendingApprovals[props.project.id]}>
@@ -948,15 +949,15 @@ function QuestionCard(props: { question: Question; number: number }): JSX.Elemen
       </div>
       <Show when={!answered()}>
         <div class="flex shrink-0 items-center gap-1">
-          <button
+          <Button
             type="button"
             onClick={() => actions.selectQuestionReply(props.question.projectId, props.question.id)}
             aria-label={tx("Reply to this question")}
             class="rounded-full border border-primary/30 bg-primary/10 px-2 py-0.5 font-semibold text-[10.5px] text-primary transition-colors hover:bg-primary/18"
           >
             {tx("Reply")}
-          </button>
-          <button
+          </Button>
+          <Button
             type="button"
             onClick={() => void actions.answerQuestion(props.question.id, true)}
             aria-label={tx("Dismiss this question")}
@@ -964,7 +965,7 @@ function QuestionCard(props: { question: Question; number: number }): JSX.Elemen
             class="rounded p-0.5 text-az-faint transition-colors hover:bg-white/5 hover:text-az-body"
           >
             <Icon name="x" class="text-[13px]" />
-          </button>
+          </Button>
         </div>
       </Show>
     </div>
@@ -1041,13 +1042,13 @@ export function RunStatusLine(props: {
         indicators for one fact is one too many.
       */}
       <Show when={isLive("cancelRun")}>
-        <button
+        <Button
           type="button"
           onClick={() => void actions.cancelRun(props.projectId)}
           class="shrink-0 rounded-md border border-primary/16 px-2 py-px text-[11.5px] text-az-body transition-colors hover:border-error hover:text-error"
         >
           {tx("Cancel")}
-        </button>
+        </Button>
       </Show>
       {/* Saved-to-store dot: green means killing the app now loses nothing
           that has streamed; amber means the newest instant exists only
@@ -1227,13 +1228,13 @@ function AgentBubble(props: {
       <Show when={retryable() && props.onRetry}>
         {(retry) => (
           <div class="flex items-center gap-2 pt-0.5">
-            <button
+            <Button
               type="button"
               onClick={() => retry()()}
               class="rounded-lg border border-primary/18 px-3 py-[5px] text-[12px] text-az-body transition-colors hover:border-primary hover:text-primary"
             >
               {tx("Retry")}
-            </button>
+            </Button>
             <Show when={transient()}>
               <span class="text-[11.5px] text-az-muted">
                 {tx("the server was overloaded — your prompt is safe to resend")}
@@ -1608,20 +1609,20 @@ function ModeratorNote(props: { message: Message }): JSX.Element {
 
         <Show when={moderation()?.needsApproval}>
           <div class="flex items-center gap-2 pt-0.5">
-            <button
+            <Button
               type="button"
               onClick={() => void actions.resolveModeration(props.message.id, true)}
               class="rounded-lg bg-primary px-[13px] py-[5px] font-semibold text-[12px] text-primary-content transition-colors hover:bg-az-primary-hover"
             >
               {tx("Approve once")}
-            </button>
-            <button
+            </Button>
+            <Button
               type="button"
               onClick={() => void actions.resolveModeration(props.message.id, false)}
               class="rounded-lg border border-primary/18 px-3 py-[5px] text-[12px] text-az-body transition-colors hover:border-error hover:text-error"
             >
               {tx("Deny")}
-            </button>
+            </Button>
             <span class="text-[11.5px] text-az-muted">{tx("· agent is paused")}</span>
           </div>
         </Show>
@@ -1657,13 +1658,13 @@ function EmptyTranscript(props: {
         <EmptyState.Actions class="flex max-w-[430px] flex-wrap justify-center gap-2">
           <For each={STARTERS()}>
             {(starter) => (
-              <button
+              <Button
                 type="button"
                 onClick={() => props.onStart(starter)}
                 class="rounded-full border border-az-hairline-strong px-3.5 py-1.5 text-[12px] text-az-body transition-colors hover:border-primary hover:text-primary"
               >
                 {starter}
-              </button>
+              </Button>
             )}
           </For>
         </EmptyState.Actions>
