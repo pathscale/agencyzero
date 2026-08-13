@@ -340,7 +340,7 @@ export function TranscriptPane(props: {
    * of prose and says nothing about the displacement the reader would feel.
    * The height fallback covers the case where no row is laid out to measure.
    */
-  const slideWindow = (move: () => void): void => {
+  const slideWindow = (move: () => void, afterRestore?: () => void): void => {
     if (slidingWindow) return;
     slidingWindow = true;
     const previousHeight = scroller.scrollHeight;
@@ -355,11 +355,12 @@ export function TranscriptPane(props: {
       lastScrollTop = scroller.scrollTop;
       if (!untrack(pinned)) rememberReaderPosition();
       slidingWindow = false;
+      afterRestore?.();
     };
     if (typeof requestAnimationFrame === "undefined") queueMicrotask(restoreAnchor);
     else revealFrame = requestAnimationFrame(restoreAnchor);
   };
-  const revealEarlier = (): void => {
+  const revealEarlier = (afterRestore?: () => void): void => {
     const view = visibleTimeline();
     if (slidingWindow || view.hidden === 0) return;
     setPinned(false);
@@ -375,7 +376,7 @@ export function TranscriptPane(props: {
       const entries = untrack(timeline);
       const edge = entries.length - view.trailing - 1 - TRANSCRIPT_PAGE_SIZE;
       setWindowEdge(entryKey(entries[Math.max(0, edge)]));
-    });
+    }, afterRestore);
   };
   const revealLater = (): void => {
     const view = visibleTimeline();
@@ -431,6 +432,26 @@ export function TranscriptPane(props: {
         target = scroller.scrollTop + KEYBOARD_LINE_STEP;
         break;
       case "PageUp":
+        if (visibleTimeline().hidden > 0 && scroller.scrollTop <= scroller.clientHeight + 48) {
+          event.preventDefault();
+          setPinned(false);
+          const page = scroller.clientHeight;
+          const previousTop = scroller.scrollTop;
+          const previousHeight = scroller.scrollHeight;
+          revealEarlier(() => {
+            // Use the height delta rather than the transient anchor position.
+            // Blitz may expose the newly mounted edge control before its rows
+            // finish their final line layout; subtracting from that provisional
+            // scrollTop leaves "Show earlier messages" as the whole viewport.
+            scroller.scrollTop = Math.max(
+              0,
+              anchoredScrollTop(previousTop, previousHeight, scroller.scrollHeight) - page,
+            );
+            lastScrollTop = scroller.scrollTop;
+            rememberReaderPosition();
+          });
+          return;
+        }
         target = scroller.scrollTop - scroller.clientHeight;
         break;
       case "PageDown":
@@ -723,7 +744,7 @@ export function TranscriptPane(props: {
         <Show when={visibleTimeline().hidden > 0}>
           <Button
             type="button"
-            onClick={revealEarlier}
+            onClick={() => revealEarlier()}
             data-transcript-edge
             class="mx-auto rounded-full border border-az-hairline-strong px-3 py-1 text-[11px] text-az-muted transition-colors hover:border-primary/50 hover:text-az-body"
           >
