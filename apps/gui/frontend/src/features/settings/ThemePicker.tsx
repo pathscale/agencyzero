@@ -169,27 +169,32 @@ function SurfaceColorWheel(props: { value: string; onPick: (value: string) => vo
           const y = Math.sin(angle) * point.radius;
           const selected = () => props.value.trim().toLowerCase() === color.toLowerCase();
           return (
-            <Radio
-              title={color}
-              name="surface-colour"
-              value={color}
-              aria-label={`${t("appearance.surfaceColour")} ${color}`}
-              checked={selected()}
-              onChange={() => props.onPick(color)}
-              indicator={
-                <span
-                  aria-hidden="true"
-                  class="block size-full rounded-full"
-                  style={{ "background-color": color }}
-                />
-              }
-              class="absolute size-7 cursor-pointer rounded-full [&_[data-slot=radio-control]]:m-0 [&_[data-slot=radio-control]]:size-7 [&_[data-slot=radio-control]]:border-2 [&_[data-slot=radio-control]]:border-az-hairline-strong [&_[data-slot=radio-indicator]]:overflow-hidden [&_[data-slot=radio-indicator]]:rounded-full"
+            <span
+              data-surface-petal={index()}
+              class="absolute size-7"
               style={{
                 left: `calc(50% + ${x.toFixed(2)}px)`,
                 top: `calc(50% + ${y.toFixed(2)}px)`,
                 transform: "translate(-50%, -50%)",
               }}
-            />
+            >
+              <Radio
+                title={color}
+                name="surface-colour"
+                value={color}
+                aria-label={`${t("appearance.surfaceColour")} ${color}`}
+                checked={selected()}
+                onChange={() => props.onPick(color)}
+                indicator={
+                  <span
+                    aria-hidden="true"
+                    class="block size-full rounded-full"
+                    style={{ "background-color": color }}
+                  />
+                }
+                class="size-7 cursor-pointer rounded-full [&_[data-slot=radio-control]]:m-0 [&_[data-slot=radio-control]]:size-7 [&_[data-slot=radio-control]]:border-2 [&_[data-slot=radio-control]]:border-az-hairline-strong [&_[data-slot=radio-indicator]]:overflow-hidden [&_[data-slot=radio-indicator]]:rounded-full"
+              />
+            </span>
           );
         }}
       </For>
@@ -249,7 +254,7 @@ function AccentSelector(props: {
                 title={label()}
                 aria-pressed={selected()}
                 onClick={() => props.onPick(option.value)}
-                class="size-7 rounded-full border-2 transition-colors"
+                class="size-7 rounded-full border-2 transition-[border-color,transform] hover:scale-110"
                 classList={{
                   "border-primary": selected(),
                   "border-az-hairline-strong hover:border-primary": !selected(),
@@ -301,7 +306,7 @@ function Axis(props: {
               aria-label={`${props.label} ${props.format(stop, index())}`}
               aria-pressed={selected(stop)}
               onClick={() => props.onPick(stop)}
-              class="size-7 rounded-full border-2 transition-colors"
+              class="size-7 rounded-full border-2 transition-[border-color,transform] hover:scale-110"
               classList={{
                 "border-primary": selected(stop),
                 "border-az-hairline-strong hover:border-az-hairline-strong/60": !selected(stop),

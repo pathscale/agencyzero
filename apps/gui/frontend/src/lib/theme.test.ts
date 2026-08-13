@@ -234,3 +234,65 @@ describe("toColorValue", () => {
     expect(toColorValue("#fff").rgb).toEqual({ r: 255, g: 255, b: 255, a: 1 });
   });
 });
+
+describe("glass axes", () => {
+  const base = { surface: "", accent: "", softness: 0, wash: 30, textBrightness: 0 };
+
+  /*
+   * Every default must write nothing at all. A record from before these axes
+   * existed, and one sitting at their defaults, both have to render exactly
+   * what the stylesheet already says — otherwise every install changes
+   * appearance on upgrade.
+   */
+  it("writes nothing when the axes are absent or at their defaults", () => {
+    applyTheme({ ...base });
+    const root = document.documentElement.style;
+    expect(root.getPropertyValue("--az-glass-lift")).toBe("");
+    expect(root.getPropertyValue("--az-glass-border")).toBe("");
+    expect(root.getPropertyValue("--az-glass-shadow")).toBe("");
+
+    applyTheme({ ...base, glassLift: 0, glassBorder: 16, glassShadow: 0 });
+    expect(root.getPropertyValue("--az-glass-lift")).toBe("");
+    expect(root.getPropertyValue("--az-glass-border")).toBe("");
+    expect(root.getPropertyValue("--az-glass-shadow")).toBe("");
+  });
+
+  it("writes each axis when it is moved off its default", () => {
+    applyTheme({ ...base, glassLift: 24, glassBorder: 40, glassShadow: 0.3 });
+    const root = document.documentElement.style;
+    expect(root.getPropertyValue("--az-glass-lift")).toBe("24%");
+    expect(root.getPropertyValue("--az-glass-border")).toBe("40%");
+    expect(root.getPropertyValue("--az-glass-shadow")).toBe("0.3");
+  });
+
+  /* The axes are independent: moving one must not disturb the others. */
+  it("moves one axis without touching the rest", () => {
+    applyTheme({ ...base, glassLift: 24, glassBorder: 40, glassShadow: 0.3 });
+    applyTheme({ ...base, glassLift: 24 });
+    const root = document.documentElement.style;
+    expect(root.getPropertyValue("--az-glass-lift")).toBe("24%");
+    expect(root.getPropertyValue("--az-glass-border")).toBe("");
+    expect(root.getPropertyValue("--az-glass-shadow")).toBe("");
+  });
+});
+
+describe("window chrome bridge", () => {
+  const base = { surface: "", accent: "", softness: 0, wash: 30, textBrightness: 0 };
+
+  /*
+   * Off while the window is opaque, which it is.
+   *
+   * Attaching a tinted glass view to an opaque window put a colour over the
+   * whole app and flattened every surface under it. The frame may only be
+   * glass once the window itself is transparent.
+   */
+  it("does not attach native glass to an opaque window", () => {
+    expect(applyTheme({ ...base, accent: "#3366cc" }).enabled).toBe(false);
+    expect(applyTheme({ ...base, accent: "#3366cc", glassBorder: 100 }).enabled).toBe(false);
+  });
+
+  /* And never sends a tint it is not entitled to apply. */
+  it("sends no tint while it is disabled", () => {
+    expect(applyTheme({ ...base, accent: "#3366cc" }).tint).toBeUndefined();
+  });
+});

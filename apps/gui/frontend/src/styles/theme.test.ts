@@ -12,6 +12,22 @@ import { describe, expect, it } from "vitest";
  */
 const CSS = readFileSync(join(process.cwd(), "src/styles/theme.css"), "utf8");
 
+describe("PathScale UI theme contract", () => {
+  it("defines the visible default and accent tokens used by sliders and toggles", () => {
+    expect(CSS).toContain("--color-default: var(--color-base-300)");
+    expect(CSS).toContain("--color-default-foreground: var(--color-base-content)");
+    expect(CSS).toContain("--color-accent-foreground: var(--color-accent-content)");
+  });
+
+  it("anchors the cost slider thumb without a vertical percentage", () => {
+    expect(CSS).toContain('.az-cost-warning-slider [data-slot="slider-thumb"]');
+    expect(CSS).toContain("top: var(--slider-pad)");
+    expect(CSS).toContain("left: var(--az-slider-percent) !important");
+    expect(CSS).not.toContain("var(--az-slider-thumb-offset)");
+    expect(CSS).toContain("transform: translateX(-50%)");
+  });
+});
+
 /*
  * Every colour in the app is now an expression over three axes rather than a
  * literal, so "the palette did not move" stopped being something you can see by
@@ -252,5 +268,32 @@ describe("light mode", () => {
     const drift = CSS.match(/\.az-ring-drift\s*\{([\s\S]*?)\n {2}\}/)?.[1] ?? "";
     expect(drift).toContain("az-composer-ring-drift");
     expect(CSS).toContain("@keyframes az-composer-ring-drift");
+  });
+});
+
+describe("the PathScale/UI button compatibility reset", () => {
+  /*
+   * `:where()` zeroes a rule's specificity. PathScale/UI's own `.button`
+   * (0,1,0) lives in this same `components` layer and later in source, so a
+   * `:where()`-wrapped reset loses every declaration it makes: the 40px pill,
+   * its hover fill and `isolation: isolate` all come back. Measured in the
+   * running app, that put a 46px "GitHub ›" control inside a 36px row with its
+   * hover background painted across the branch name beside it, and turned a
+   * 15px chevron into a blob.
+   *
+   * Caller utilities still win without it, because Tailwind's `utilities`
+   * layer comes after `components` and a later layer beats any specificity.
+   * That is what the `:where()` was reaching for, and it was never needed.
+   */
+  it("keeps enough specificity to beat the library's own .button", () => {
+    expect(CSS).toContain(".button.az-ui-button-neutral {");
+    expect(CSS).not.toContain(":where(.button.az-ui-button-neutral");
+  });
+
+  it("stays inside the components layer, so caller utilities still override it", () => {
+    const reset = CSS.indexOf(".button.az-ui-button-neutral {");
+    const components = CSS.lastIndexOf("@layer components", reset);
+    expect(components).toBeGreaterThanOrEqual(0);
+    expect(reset).toBeGreaterThan(components);
   });
 });

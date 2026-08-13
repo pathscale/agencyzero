@@ -107,6 +107,14 @@ export const WASH_STOPS = [10, 20, 30, 40, 50] as const;
 /** What a freshly picked colour washes at, before anyone touches the strength. */
 export const DEFAULT_WASH = 30;
 
+/**
+ * Where the glass slider starts when it is switched on.
+ *
+ * A visible amount rather than a token one: turning glass on and seeing almost
+ * nothing reads as a broken switch. Tunable straight afterwards.
+ */
+export const DEFAULT_GLASS = 45;
+
 /** Map records from earlier stop layouts onto the nearest current choice. */
 export function normalizeWash(value: number): number {
   const safe = Number.isFinite(value) ? value : DEFAULT_WASH;
@@ -164,7 +172,7 @@ export function closestColorIndex(value: string, colors: string[]): number {
 export function applyTheme(
   theme: ThemeSettings,
   root: HTMLElement = document.documentElement,
-): void {
+): { tint?: [number, number, number, number]; radius?: number; enabled: boolean } {
   const surfaceChosen = isAccent(theme.surface);
   const surface = surfaceChosen ? theme.surface.trim() : DEFAULT_ACCENT;
   const softness = Math.min(Math.max(theme.softness || 0, 0), MAX_SOFTNESS);
@@ -206,7 +214,101 @@ export function applyTheme(
    * before any softness was applied at all.
    */
   root.style.setProperty("--az-damp", `${(softness * DAMP_RATIO - brightness).toFixed(2)}%`);
+
+  /*
+   * The three glass axes, written straight onto the root.
+   *
+   * Applied here rather than from a module of their own so they travel with
+   * every other theme value — one call site, so there is no second place a
+   * stale value could come from.
+   *
+   * Each default is the untouched look: no lift, the 16% hairline, no shadow.
+   * A property is removed rather than written at its default, so the
+   * stylesheet's own value applies and nothing inline needs explaining later.
+   *
+   * There is no blur axis. Blur belongs to the compositor's glass view, and CSS
+   * `backdrop-filter` cannot drive it on either shipping renderer, so a blur
+   * slider would move nothing.
+   */
+  const axis = (name: string, value: number | undefined, fallback: number, unit: string) => {
+    const resolved = Number.isFinite(value) ? Number(value) : fallback;
+    if (resolved === fallback) {
+      root.style.removeProperty(name);
+      return;
+    }
+    root.style.setProperty(name, `${resolved}${unit}`);
+  };
+  axis("--az-glass-lift", theme.glassLift, 0, "%");
+  axis("--az-glass-border", theme.glassBorder, 16, "%");
+  axis("--az-glass-shadow", theme.glassShadow, 0, "");
+
+  return windowChrome(accent, theme);
 }
+
+/**
+ * Whether the native glass view should be attached at all.
+ *
+ * False while the window is opaque. Turning this on requires `transparent: true`
+ * back in the window config *and* the transparent-composite path proven, or the
+ * glass simply covers the app.
+ */
+const WINDOW_GLASS_ENABLED = false;
+
+/**
+ * The window chrome the native frame should wear, derived from the same values
+ * the page just took.
+ *
+ * Returned rather than sent from here so this stays a pure function of the
+ * theme: the caller owns the round trip to Rust. The accent is already resolved
+ * above, so the frame and the page cannot disagree about what the accent is.
+ *
+ * The edge axis becomes the tint's alpha, so one slider moves the panel
+ * hairline and the window's own border together.
+ */
+export function windowChrome(
+  accent: string,
+  theme: ThemeSettings,
+): { tint?: [number, number, number, number]; radius?: number; enabled: boolean } {
+  const border = Number.isFinite(theme.glassBorder) ? Number(theme.glassBorder) : 16;
+  const rgb = hexToRgb(accent);
+  /*
+   * Off unless the window is actually glass, and it is not: the transparent
+   * flag was removed from the window config, so there is nothing behind the
+   * page to show through.
+   *
+   * Enabling it anyway put a tinted `NSGlassEffectView` over an opaque window
+   * and washed the entire app out — every surface flattened under one colour.
+   * The tint is still computed, so the frame is ready the moment glass is real;
+   * it just is not attached to an opaque window.
+   */
+  if (!rgb || !WINDOW_GLASS_ENABLED) return { enabled: false };
+  return {
+    tint: [rgb[0], rgb[1], rgb[2], Math.round((border / 100) * 255)],
+    // macOS 26's own window radius. Stated rather than left to the effect view,
+    // which otherwise squares off against a rounded frame.
+    radius: 12,
+    enabled: true,
+  };
+}
+
+/** `#rgb` / `#rrggbb` to bytes. Anything else is not a colour we can send. */
+function hexToRgb(value: string): [number, number, number] | null {
+  const hex = value.trim().replace(/^#/, "");
+  const full =
+    hex.length === 3
+      ? hex
+          .split("")
+          .map((c) => c + c)
+          .join("")
+      : hex;
+  if (!/^[0-9a-fA-F]{6}$/.test(full)) return null;
+  return [
+    Number.parseInt(full.slice(0, 2), 16),
+    Number.parseInt(full.slice(2, 4), 16),
+    Number.parseInt(full.slice(4, 6), 16),
+  ];
+}
+
 
 /**
  * The wheel's `ColorValue` for a hex string.
