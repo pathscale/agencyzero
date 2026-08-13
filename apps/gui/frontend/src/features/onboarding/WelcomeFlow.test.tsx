@@ -70,6 +70,25 @@ describe("WelcomeFlow", () => {
     expect(modalButton(dialog, "Select backup file…")).toBeVisible();
   });
 
+  it("remains open until an explicit tutorial action closes it", async () => {
+    SETTINGS.onboardingCompleted = true;
+    const { screen } = await mountWelcome();
+
+    screen.getByRole("button", { name: "Welcome Tutorial" }).click();
+    await waitFor(() => expect(welcomeDialog()).not.toBeNull());
+    const backdrop = document.body.querySelector<HTMLElement>('[data-slot="modal-backdrop"]');
+    expect(backdrop).not.toBeNull();
+    if (!backdrop) throw new Error("Welcome backdrop was not rendered");
+
+    fireEvent.keyDown(document, { key: "Escape" });
+    fireEvent.click(backdrop);
+    await new Promise((resolve) => setTimeout(resolve, 250));
+
+    expect(welcomeDialog()).not.toBeNull();
+    fireEvent.click(modalButton(welcomeDialog()!, "Close setup"));
+    await waitFor(() => expect(welcomeDialog()).toBeNull());
+  });
+
   it("shows on a new store and defers without marking setup complete", async () => {
     SETTINGS.onboardingCompleted = false;
     const { workspace } = await mountWelcome();

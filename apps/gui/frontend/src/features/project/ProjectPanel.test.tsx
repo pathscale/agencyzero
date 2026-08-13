@@ -97,6 +97,36 @@ describe("the project side panel", () => {
     expect(items?.className).toContain("min-h-[52px]");
   });
 
+  it("keeps the Agent I/O checkbox fully inside the expanded panel body", async () => {
+    let workspace!: Workspace;
+
+    function Gate() {
+      workspace = useWorkspace();
+      return (
+        <Show when={workspace.state.boot.status === "ready"}>
+          <ProjectPanel project={{ ...PROJECT, id: "worktable" }} agent="codex" />
+        </Show>
+      );
+    }
+
+    const screen = render(() => (
+      <WorkspaceProvider>
+        <Gate />
+      </WorkspaceProvider>
+    ));
+    await waitFor(() => expect(workspace.state.boot.status).toBe("ready"), { timeout: 5_000 });
+    const expand = screen.queryByRole("button", { name: "Expand Agent I/O" });
+    if (expand) fireEvent.click(expand);
+
+    const input = screen.getByRole("checkbox", { name: "Keep across restarts" });
+    const label = input.closest<HTMLElement>('[data-slot="checkbox"]');
+    const control = label?.querySelector<HTMLElement>('[data-slot="checkbox-control"]');
+    if (!label || !control) throw new Error("Agent I/O checkbox control was not rendered");
+    expect(label).toHaveClass("py-2");
+    expect(label.className).toContain("[&_[data-slot=checkbox-control]]:size-4");
+    expect(input.nextElementSibling).toBe(control);
+  });
+
   it("adopts a recovered session into the active Claude provider", async () => {
     let workspace!: Workspace;
     const recovered = "f462e5c2-d5dd-42bd-a462-63256e2adf99";

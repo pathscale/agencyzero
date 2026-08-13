@@ -186,7 +186,7 @@ export function WelcomeFlow(): JSX.Element {
     <Show when={visible()}>
       <Modal
         isOpen
-        onOpenChange={(isOpen) => !isOpen && !busy() && actions.deferOnboarding()}
+        isDismissable={false}
         placement="center"
         size="lg"
         backdrop="opaque"
@@ -210,15 +210,16 @@ export function WelcomeFlow(): JSX.Element {
                 </p>
               </div>
             </div>
-            <Modal.CloseTrigger
+            <Button
               type="button"
               disabled={busy()}
+              onClick={() => actions.deferOnboarding()}
               title={isReplay() ? tx("Close setup") : tx("Finish setup later")}
               aria-label={isReplay() ? tx("Close setup") : tx("Finish setup later")}
               class="static size-auto rounded-lg p-1.5 text-az-muted hover:bg-white/6 hover:text-base-content disabled:opacity-40"
             >
               <Icon name="x" class="text-[16px]" />
-            </Modal.CloseTrigger>
+            </Button>
           </Modal.Header>
 
           <div
