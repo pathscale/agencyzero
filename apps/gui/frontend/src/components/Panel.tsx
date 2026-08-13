@@ -18,7 +18,7 @@ export function Panel(props: PanelProps): JSX.Element {
   const [own, rest] = splitProps(props, ["children", "class"]);
   return (
     <div
-      class={`overflow-hidden rounded-panel border border-az-hairline bg-base-100 ${own.class ?? ""}`}
+      class={`isolate overflow-hidden rounded-panel border border-az-hairline az-panel ${own.class ?? ""}`}
       {...rest}
     >
       {own.children}
@@ -61,7 +61,19 @@ export function SectionPanel(props: SectionPanelProps): JSX.Element {
         (the log's "Clear"), and nesting that inside a button would be invalid
         HTML. The toggle is the button that fills the rest of the row.
       */}
-      <div class="flex items-center justify-start gap-2.5 px-3.5 py-3 transition-colors hover:bg-white/4">
+      {/*
+        Two hue-tinted levels on hover, the row then the title, rather than one
+        flat white wash. Every surface here is tinted by `--az-hue`, so
+        `bg-white/4` read as grey laid over blue instead of the surface
+        lifting; `az-sunken` and `az-hover` are the same ladder, two steps
+        apart, which is what keeps the title legible against its own row.
+
+        The pill on the title is deliberate now. It used to come from
+        PathScale/UI's `.button` fill defeating the compatibility reset, which
+        also sized it to a 40px control and turned the chevron beside it into a
+        blob around a 15px icon.
+      */}
+      <div class="group/header flex items-center justify-start gap-2.5 px-3.5 py-3 transition-colors hover:bg-az-sunken">
         <Button
           type="button"
           onClick={props.onToggle}
@@ -70,7 +82,7 @@ export function SectionPanel(props: SectionPanelProps): JSX.Element {
           // default. Every section header rendered centred, which is what a
           // missing or differently defaulted `justify-content` looks like, and
           // stating it costs nothing where it was already correct.
-          class="flex min-w-0 flex-1 items-center justify-start gap-2.5 text-left"
+          class="-mx-2 flex min-w-0 flex-1 items-center justify-start gap-2.5 rounded-full px-2 py-1 text-left transition-colors group-hover/header:bg-az-hover"
         >
           <Show when={props.trailing}>{props.trailing}</Show>
           <Show when={props.icon}>
@@ -100,7 +112,11 @@ export function SectionPanel(props: SectionPanelProps): JSX.Element {
           aria-label={tx(props.isOpen ? "Collapse {name}" : "Expand {name}", {
             name: props.title,
           })}
-          class="shrink-0 text-az-muted"
+          // Sized here, because the reset now leaves this button at its
+          // content size: a bare 15px icon with no box to hover. A round
+          // target of its own is what the leaked 40px pill was accidentally
+          // providing, minus the overlap.
+          class="flex size-7 shrink-0 items-center justify-center rounded-full text-az-muted transition-colors hover:bg-az-hover"
         >
           <Icon
             name={props.isOpen ? "chevron-up" : "chevron-down"}
@@ -109,11 +125,24 @@ export function SectionPanel(props: SectionPanelProps): JSX.Element {
         </Button>
       </div>
 
-      <Show when={props.isOpen}>
-        <div class={`border-az-hairline-soft border-t ${props.contentClass ?? ""}`}>
-          {props.children}
-        </div>
-      </Show>
+      {/*
+       * Retained, not mounted by the disclosure click.
+       *
+       * PathScale/UI controls contain positioned paint children, such as a
+       * Toggle thumb. Under Blitz, mounting one while this panel simultaneously
+       * grows can expose one provisional frame at the panel origin before the
+       * child's final offset is resolved. That was the detached white pill at
+       * the top-left of Settings. Keeping the subtree alive gives every child
+       * stable layout; `hidden` removes it from layout, paint and accessibility
+       * while collapsed without reconstructing it on expansion.
+       */}
+      <div
+        aria-hidden={!props.isOpen ? "true" : undefined}
+        class={`overflow-hidden border-az-hairline-soft border-t ${props.contentClass ?? ""}`}
+        classList={{ hidden: !props.isOpen }}
+      >
+        {props.children}
+      </div>
     </Panel>
   );
 }
