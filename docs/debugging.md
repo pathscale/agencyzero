@@ -179,6 +179,52 @@ escalate with `sudo` silently.
 
 ## Build and signing traps
 
+### The profile comes from the Tauri config, not the cargo feature
+
+This is the expensive one, because it fails silently and the binary still runs.
+
+`--features experimental` selects the experimental *agent*. It does **not**
+select the experimental *store*: the data directory is keyed off the bundle
+identifier, which lives in the Tauri config. So a bare
+
+```sh
+cargo build --release -p az-gui --features experimental,blitz-inspector
+```
+
+produces a binary that opens the **Stable** store while looking, by its feature
+list, like an Experimental build. An afternoon was spent testing an Experimental
+fix against a Stable profile before this was noticed. Pass the config:
+
+```sh
+cd apps/gui && TAURI_CONFIG="$(cat tauri.experimental.conf.json)" \
+  cargo build --release -p az-gui --features experimental,blitz-inspector
+```
+
+### Four bundles, or the owner launches a stale binary
+
+A rebuilt `target/release/az-gui` is not something anyone can double-click.
+There are four places the binary has to reach, and missing any one of them looks
+exactly like "your fix did nothing":
+
+```
+target/release/bundle/macos/AgencyZero.app
+target/release/bundle/macos/AgencyZero Experimental.app
+/Applications/AgencyZero.app
+/Applications/AgencyZero Experimental.app
+```
+
+Copy into `Contents/MacOS/az-gui` in each, then re-sign each one:
+
+```sh
+codesign --force --sign - --options runtime "<bundle>"
+```
+
+**Verify by the build stamp inside the binary, never by file mtime.** The stamp
+is printed on the first log line and shown in Settings, and it is the only thing
+that survives a copy.
+
+### The rest
+
 The target-triple bundle is an intermediate Tauri output. The local delivery
 script moves it to the canonical `target/release/bundle/macos` path only after a
 successful build.
