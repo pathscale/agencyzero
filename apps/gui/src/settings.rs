@@ -87,6 +87,11 @@ pub struct GlobalSettings {
     /// Off means there is no socket or discovery descriptor.
     #[serde(default)]
     pub blitz_control_enabled: bool,
+    /// Intrusive frame, script/DOM, layout/cache, and paint profiling.
+    /// Effective only while local Blitz control is enabled, so samples cannot
+    /// accumulate invisibly with no retrieval interface.
+    #[serde(default)]
+    pub blitz_deep_profiling_enabled: bool,
     /// The project-tab arrangement that travels with a store backup.
     ///
     /// `None` identifies a settings row written before this field existed, so
@@ -428,6 +433,7 @@ impl Default for GlobalSettings {
             agent_settings_updates: false,
             agent_restart_policy: "disabled".into(),
             blitz_control_enabled: false,
+            blitz_deep_profiling_enabled: false,
             workspace_tabs: None,
             onboarding_completed: Some(false),
             ui_preferences: empty_object(),

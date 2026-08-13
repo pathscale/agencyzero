@@ -1478,17 +1478,28 @@ pub(crate) async fn apply_settings_patch(
         .transpose()?;
 
     #[cfg(feature = "blitz-runtime")]
-    let control_changed = previous.blitz_control_enabled != parsed.blitz_control_enabled;
+    let runtime_debug_changed = previous.blitz_control_enabled != parsed.blitz_control_enabled
+        || previous.blitz_deep_profiling_enabled != parsed.blitz_deep_profiling_enabled;
     #[cfg(feature = "blitz-runtime")]
-    if control_changed {
-        tauri_runtime_blitz::set_agent_control_enabled(parsed.blitz_control_enabled)
-            .map_err(|error| format!("could not update local Blitz control: {error}"))?;
+    if runtime_debug_changed {
+        tauri_runtime_blitz::apply_runtime_debug_options(
+            tauri_runtime_blitz::RuntimeDebugOptions {
+                inspection_and_agent_control: parsed.blitz_control_enabled,
+                deep_intrusive_profiling: parsed.blitz_deep_profiling_enabled,
+            },
+        )
+        .map_err(|error| format!("could not update local Blitz debugging: {error}"))?;
     }
 
     if let Err(error) = state.tables.kv_put(settings::KEY, merged.to_string()).await {
         #[cfg(feature = "blitz-runtime")]
-        if control_changed {
-            let _ = tauri_runtime_blitz::set_agent_control_enabled(previous.blitz_control_enabled);
+        if runtime_debug_changed {
+            let _ = tauri_runtime_blitz::apply_runtime_debug_options(
+                tauri_runtime_blitz::RuntimeDebugOptions {
+                    inspection_and_agent_control: previous.blitz_control_enabled,
+                    deep_intrusive_profiling: previous.blitz_deep_profiling_enabled,
+                },
+            );
         }
         if let Some(id) = boundary_id
             && let Err(cleanup) = state.tables.study_event.delete(id).await
@@ -2354,6 +2365,12 @@ fn main() {
                 || persisted_settings
                     .as_ref()
                     .is_some_and(|settings| settings.blitz_control_enabled);
+            #[cfg(feature = "blitz-runtime")]
+            let blitz_deep_profiling_enabled = std::env::args()
+                .any(|arg| arg == "--blitz-deep-profiling")
+                || persisted_settings
+                    .as_ref()
+                    .is_some_and(|settings| settings.blitz_deep_profiling_enabled);
             let proxy = Arc::new(agent_proxy::AgencyProxy::new(&config_dir, configured_proxy));
             // A checkpoint backed by a still-live proxy run remains a live
             // draft. Only orphaned checkpoints become `interrupted` rows.
@@ -2393,8 +2410,13 @@ fn main() {
 
             #[cfg(feature = "blitz-runtime")]
             {
-                tauri_runtime_blitz::set_agent_control_enabled(blitz_control_enabled)
-                    .map_err(|error| format!("could not apply local Blitz control setting: {error}"))?;
+                tauri_runtime_blitz::apply_runtime_debug_options(
+                    tauri_runtime_blitz::RuntimeDebugOptions {
+                        inspection_and_agent_control: blitz_control_enabled,
+                        deep_intrusive_profiling: blitz_deep_profiling_enabled,
+                    },
+                )
+                .map_err(|error| format!("could not apply local Blitz debugging: {error}"))?;
                 let relaunch_handle = app.handle().clone();
                 tauri_runtime_blitz::set_agent_control_handler(move |request| match request {
                     tauri_runtime_blitz::control_protocol::AgentControlRequest::Relaunch => {

@@ -909,13 +909,22 @@ const zh = {
   "Quit both": "同时退出",
   "Attached: {session}": "已连接：{session}",
   Change: "更改",
-  "Local Blitz control": "本地 Blitz 控制",
+  Diagnostics: "诊断",
+  "local inspection and bounded performance traces": "本地检查与有限性能跟踪",
+  "Inspection and agent control": "检查与智能体控制",
   "off by default; off removes the MCP socket and discovery descriptor":
     "默认关闭；关闭时会移除 MCP 套接字和发现描述文件",
-  "Enable local Blitz control": "启用本地 Blitz 控制",
+  "Enable inspection and agent control": "启用检查与智能体控制",
   "Applying local control…": "正在应用本地控制…",
   "Listening on local MCP socket": "正在监听本地 MCP 套接字",
-  "Local control disabled": "本地控制已停用",
+  "Inspection and control disabled": "检查与控制已停用",
+  "Deep intrusive profiling": "深度侵入式性能分析",
+  "performance-affecting engine timings and counters; enable only while capturing a trace":
+    "会影响性能的引擎计时与计数器；仅在捕获跟踪时启用",
+  "Enable deep intrusive profiling": "启用深度侵入式性能分析",
+  "Enable inspection first": "请先启用检查",
+  "Intrusive profiling active": "侵入式性能分析已启用",
+  "No deep samples collected": "未收集深度样本",
 } satisfies Record<keyof typeof en, string>;
 
 export default zh;

@@ -206,18 +206,22 @@ case "$mode" in
     echo "$repo_root/target/release/bundle/macos/AgencyZero.app"
     ;;
   experimental)
-    echo "==> AgencyZero Experimental.app"
+    # Experimental is the field-debug channel. Keep its ordinary local build
+    # identical to the release workflow: diagnostics must not depend on callers
+    # remembering a second, similarly named mode.
+    echo "==> AgencyZero Experimental.app (Blitz inspector)"
     (
       cd "$repo_root/apps/gui"
       run_tauri build \
         --target "$rust_target" \
-        --features experimental,blitz-runtime \
+        --features experimental,blitz-inspector \
         --config tauri.experimental.conf.json \
         --config '{"bundle":{"createUpdaterArtifacts":false}}'
     )
     publish_bundle \
       "$repo_root/target/$rust_target/release/bundle/macos/AgencyZero Experimental.app" \
       "$repo_root/target/release/bundle/macos/AgencyZero Experimental.app"
+    pin_inspector_env "$repo_root/target/release/bundle/macos/AgencyZero Experimental.app"
     echo "$repo_root/target/release/bundle/macos/AgencyZero Experimental.app"
     ;;
   experimental-inspector)

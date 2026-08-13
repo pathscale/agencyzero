@@ -184,7 +184,22 @@ export function SettingsTab(): JSX.Element {
     setBlitzControlPending(true);
     setBlitzControlError("");
     void actions
-      .saveSettings({ blitzControlEnabled: enabled })
+      .saveSettings({
+        blitzControlEnabled: enabled,
+        // Do not silently restart an intrusive trace if inspection is later
+        // re-enabled. The shared runtime enforces this too; persisting the
+        // coherent pair keeps the application setting honest.
+        ...(!enabled ? { blitzDeepProfilingEnabled: false } : {}),
+      })
+      .catch((cause) => setBlitzControlError(describeError(cause)))
+      .finally(() => setBlitzControlPending(false));
+  };
+
+  const setBlitzDeepProfiling = (enabled: boolean): void => {
+    setBlitzControlPending(true);
+    setBlitzControlError("");
+    void actions
+      .saveSettings({ blitzDeepProfilingEnabled: enabled })
       .catch((cause) => setBlitzControlError(describeError(cause)))
       .finally(() => setBlitzControlPending(false));
   };
@@ -372,6 +387,69 @@ export function SettingsTab(): JSX.Element {
         <Show when={settings()}>
           {(current) => (
             <>
+              <div class="overflow-hidden rounded-panel border border-az-hairline bg-base-100">
+                <div class="flex flex-wrap items-baseline gap-x-2.5 gap-y-1 px-3.5 pt-3 pb-2.5">
+                  <Icon name="gauge" class="relative top-0.5 text-[14px] text-primary" />
+                  <h2 class="font-semibold text-[13px] text-az-title">{tx("Diagnostics")}</h2>
+                  <span class="text-[11.5px] text-az-muted">
+                    {tx("local inspection and bounded performance traces")}
+                  </span>
+                </div>
+                <Row
+                  label={tx("Inspection and agent control")}
+                  hint={tx("off by default; off removes the MCP socket and discovery descriptor")}
+                >
+                  <div class="flex flex-col items-end gap-1">
+                    <SettingToggle
+                      label={tx("Enable inspection and agent control")}
+                      checked={current().blitzControlEnabled}
+                      disabled={blitzControlPending()}
+                      onChange={setBlitzControl}
+                    />
+                    <span
+                      role={blitzControlError() ? "alert" : "status"}
+                      class={`max-w-[260px] text-right text-[10.5px] ${
+                        blitzControlError()
+                          ? "text-error"
+                          : current().blitzControlEnabled
+                            ? "text-success"
+                            : "text-az-muted"
+                      }`}
+                    >
+                      {blitzControlError() ||
+                        (blitzControlPending()
+                          ? tx("Applying local control…")
+                          : current().blitzControlEnabled
+                            ? tx("Listening on local MCP socket")
+                            : tx("Inspection and control disabled"))}
+                    </span>
+                  </div>
+                </Row>
+                <Row
+                  label={tx("Deep intrusive profiling")}
+                  hint={tx(
+                    "performance-affecting engine timings and counters; enable only while capturing a trace",
+                  )}
+                  isLast
+                >
+                  <div class="flex flex-col items-end gap-1">
+                    <SettingToggle
+                      label={tx("Enable deep intrusive profiling")}
+                      checked={current().blitzDeepProfilingEnabled}
+                      disabled={blitzControlPending() || !current().blitzControlEnabled}
+                      onChange={setBlitzDeepProfiling}
+                    />
+                    <span class="max-w-[260px] text-right text-[10.5px] text-az-muted">
+                      {!current().blitzControlEnabled
+                        ? tx("Enable inspection first")
+                        : current().blitzDeepProfilingEnabled
+                          ? tx("Intrusive profiling active")
+                          : tx("No deep samples collected")}
+                    </span>
+                  </div>
+                </Row>
+              </div>
+
               <Section
                 icon="gauge"
                 title={tx("AgencyProxy")}
@@ -791,36 +869,6 @@ export function SettingsTab(): JSX.Element {
                       void actions.saveSettings({ agentRestartPolicy })
                     }
                   />
-                </Row>
-                <Row
-                  label={tx("Local Blitz control")}
-                  hint={tx("off by default; off removes the MCP socket and discovery descriptor")}
-                >
-                  <div class="flex flex-col items-end gap-1">
-                    <SettingToggle
-                      label={tx("Enable local Blitz control")}
-                      checked={current().blitzControlEnabled}
-                      disabled={blitzControlPending()}
-                      onChange={setBlitzControl}
-                    />
-                    <span
-                      role={blitzControlError() ? "alert" : "status"}
-                      class={`max-w-[260px] text-right text-[10.5px] ${
-                        blitzControlError()
-                          ? "text-error"
-                          : current().blitzControlEnabled
-                            ? "text-success"
-                            : "text-az-muted"
-                      }`}
-                    >
-                      {blitzControlError() ||
-                        (blitzControlPending()
-                          ? tx("Applying local control…")
-                          : current().blitzControlEnabled
-                            ? tx("Listening on local MCP socket")
-                            : tx("Local control disabled"))}
-                    </span>
-                  </div>
                 </Row>
                 <Row
                   label={tx("Open source")}

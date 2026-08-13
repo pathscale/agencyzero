@@ -939,13 +939,23 @@ const en = {
   "Quit both": "Quit both",
   "Attached: {session}": "Attached: {session}",
   Change: "Change",
-  "Local Blitz control": "Local Blitz control",
+  Diagnostics: "Diagnostics",
+  "local inspection and bounded performance traces":
+    "local inspection and bounded performance traces",
+  "Inspection and agent control": "Inspection and agent control",
   "off by default; off removes the MCP socket and discovery descriptor":
     "off by default; off removes the MCP socket and discovery descriptor",
-  "Enable local Blitz control": "Enable local Blitz control",
+  "Enable inspection and agent control": "Enable inspection and agent control",
   "Applying local control…": "Applying local control…",
   "Listening on local MCP socket": "Listening on local MCP socket",
-  "Local control disabled": "Local control disabled",
+  "Inspection and control disabled": "Inspection and control disabled",
+  "Deep intrusive profiling": "Deep intrusive profiling",
+  "performance-affecting engine timings and counters; enable only while capturing a trace":
+    "performance-affecting engine timings and counters; enable only while capturing a trace",
+  "Enable deep intrusive profiling": "Enable deep intrusive profiling",
+  "Enable inspection first": "Enable inspection first",
+  "Intrusive profiling active": "Intrusive profiling active",
+  "No deep samples collected": "No deep samples collected",
 } as const;
 
 export default en;
