@@ -11,6 +11,7 @@ import {
   surfaceColors,
   toColorValue,
   WASH_STOPS,
+  writeGlassAxis,
 } from "~/lib/theme";
 
 let root: HTMLElement;
@@ -232,6 +233,50 @@ describe("toColorValue", () => {
     expect(toColorValue("#0000ff").hsl.h).toBe(240);
     expect(toColorValue("#808080").hsl.s).toBe(0);
     expect(toColorValue("#fff").rgb).toEqual({ r: 255, g: 255, b: 255, a: 1 });
+  });
+});
+
+describe("writeGlassAxis", () => {
+  /*
+   * The drag preview. It exists because a slider that persists on every tick
+   * awaits a store write before the CSS moves, and one session's log carried 75
+   * of those plus 76 native window calls at 7 and 6ms each, on the window
+   * thread. This path has to reach the document with no round trip at all, and
+   * has to agree with `applyTheme` about every default.
+   */
+  it("writes an axis directly, with the same defaults applyTheme uses", () => {
+    const root = document.documentElement.style;
+
+    writeGlassAxis("shadow", 0.4);
+    expect(root.getPropertyValue("--az-glass-shadow")).toBe("0.4");
+
+    writeGlassAxis("border", 40);
+    expect(root.getPropertyValue("--az-glass-border")).toBe("40%");
+
+    // At the default the property is removed, not written, exactly as
+    // applyTheme does it: the stylesheet's own value has to apply.
+    writeGlassAxis("border", 16);
+    expect(root.getPropertyValue("--az-glass-border")).toBe("");
+    writeGlassAxis("shadow", 0);
+    expect(root.getPropertyValue("--az-glass-shadow")).toBe("");
+  });
+
+  it("agrees with applyTheme for the same values", () => {
+    const root = document.documentElement.style;
+    applyTheme({
+      surface: "",
+      accent: "",
+      softness: 0,
+      wash: 30,
+      textBrightness: 0,
+      glassLift: 24,
+    });
+    const viaTheme = root.getPropertyValue("--az-glass-lift");
+
+    root.removeProperty("--az-glass-lift");
+    writeGlassAxis("lift", 24);
+
+    expect(root.getPropertyValue("--az-glass-lift")).toBe(viaTheme);
   });
 });
 

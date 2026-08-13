@@ -230,19 +230,54 @@ export function applyTheme(
    * `backdrop-filter` cannot drive it on either shipping renderer, so a blur
    * slider would move nothing.
    */
-  const axis = (name: string, value: number | undefined, fallback: number, unit: string) => {
-    const resolved = Number.isFinite(value) ? Number(value) : fallback;
-    if (resolved === fallback) {
-      root.style.removeProperty(name);
-      return;
-    }
-    root.style.setProperty(name, `${resolved}${unit}`);
-  };
-  axis("--az-glass-lift", theme.glassLift, 0, "%");
-  axis("--az-glass-border", theme.glassBorder, 16, "%");
-  axis("--az-glass-shadow", theme.glassShadow, 0, "");
+  writeGlassAxis("lift", theme.glassLift);
+  writeGlassAxis("border", theme.glassBorder);
+  writeGlassAxis("shadow", theme.glassShadow);
 
   return windowChrome(accent, theme);
+}
+
+/**
+ * The three glass axes, and their defaults.
+ *
+ * The default is the untouched look: no lift, the 16% hairline, no shadow.
+ * A property is *removed* rather than written at its default, so the
+ * stylesheet's own value applies and nothing inline needs explaining later.
+ *
+ * There is no blur axis. Blur belongs to the compositor's glass view, and CSS
+ * `backdrop-filter` cannot drive it on either shipping renderer, so a blur
+ * slider would move nothing.
+ */
+const GLASS_AXES = {
+  lift: { property: "--az-glass-lift", fallback: 0, unit: "%" },
+  border: { property: "--az-glass-border", fallback: 16, unit: "%" },
+  shadow: { property: "--az-glass-shadow", fallback: 0, unit: "" },
+} as const;
+
+export type GlassAxisName = keyof typeof GLASS_AXES;
+
+/**
+ * Write one axis straight onto the root.
+ *
+ * Exported so a slider can paint while it is being dragged. `applyTheme` is
+ * reached only after a settings round trip has returned, which for a drag meant
+ * every tick queued behind a store write and a native call: the log for one
+ * session held 75 `set_settings` and 76 `set_window_chrome` calls, at 7 and 6ms
+ * each, all on the window thread. The knob moved and the panel followed a beat
+ * later, and dragging depth starved paint badly enough to blank the window.
+ *
+ * A custom property costs one style invalidation, so a preview is free by
+ * comparison and the persist can wait until the drag settles.
+ */
+export function writeGlassAxis(axis: GlassAxisName, value: number | undefined): void {
+  const root = document.documentElement;
+  const { property, fallback, unit } = GLASS_AXES[axis];
+  const resolved = Number.isFinite(value) ? Number(value) : fallback;
+  if (resolved === fallback) {
+    root.style.removeProperty(property);
+    return;
+  }
+  root.style.setProperty(property, `${resolved}${unit}`);
 }
 
 /**

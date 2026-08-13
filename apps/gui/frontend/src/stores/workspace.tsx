@@ -446,6 +446,8 @@ function createWorkspace() {
 
   /** Settings writes are serialized so each full response can safely win. */
   let settingsWriteTail: Promise<void> = Promise.resolve();
+  /** The last chrome sent to the native frame, so an identical one is not resent. */
+  let lastWindowChrome: string | undefined;
   let taskManagerWrite = 0;
   let itemRevealRevision = 0;
   /** Last project (or Home) focused before a utility tab covered it. */
@@ -527,7 +529,20 @@ function createWorkspace() {
     }
     // The record is the only source for the palette, so the document follows
     // whatever came back rather than what was optimistically sent.
-    void client().setWindowChrome(applyTheme(next.theme)).catch(() => undefined);
+    const chrome = applyTheme(next.theme);
+    /*
+     * Only cross to AppKit when the frame would actually change. Every settings
+     * write used to make this call whatever it contained: one session's log
+     * held 76 of them, at 6ms each on the window thread, against 76 settings
+     * writes that were mostly a slider being dragged. It logged "window glass
+     * cleared" 76 times, because the window is opaque and every one of them was
+     * asking for the same nothing.
+     */
+    const encoded = JSON.stringify(chrome);
+    if (encoded !== lastWindowChrome) {
+      lastWindowChrome = encoded;
+      void client().setWindowChrome(chrome).catch(() => undefined);
+    }
   }
 
   function portableWorkspaceTabs() {
