@@ -1,4 +1,4 @@
-import { render, waitFor, within } from "@solidjs/testing-library";
+import { fireEvent, render, waitFor } from "@solidjs/testing-library";
 import { afterEach, describe, expect, it } from "vitest";
 import { AGENT_STATUS, SETTINGS } from "~/api/fixtures";
 import { WelcomeFlow } from "~/features/onboarding/WelcomeFlow";
@@ -30,6 +30,21 @@ async function mountWelcome(): Promise<{
   return { screen, workspace };
 }
 
+function welcomeDialog(): HTMLElement | null {
+  return document.body.querySelector<HTMLElement>(
+    '[data-slot="modal-content"][aria-labelledby="welcome-title"]',
+  );
+}
+
+function modalButton(dialog: HTMLElement, name: string): HTMLButtonElement {
+  const button = Array.from(dialog.querySelectorAll<HTMLButtonElement>("button")).find(
+    (candidate) =>
+      candidate.textContent?.trim() === name || candidate.getAttribute("aria-label") === name,
+  );
+  if (!button) throw new Error(`Could not find modal button: ${name}`);
+  return button;
+}
+
 afterEach(() => {
   SETTINGS.onboardingCompleted = true;
   AGENT_STATUS.find((status) => status.agent === "claude")!.state = "connected";
@@ -42,26 +57,29 @@ describe("WelcomeFlow", () => {
     SETTINGS.onboardingCompleted = true;
     const { screen } = await mountWelcome();
 
-    expect(screen.queryByRole("dialog", { name: "Welcome to AgencyZero" })).toBeNull();
+    expect(welcomeDialog()).toBeNull();
     expect(screen.queryByRole("button", { name: "Help and setup" })).toBeNull();
     screen.getByRole("button", { name: "Welcome Tutorial" }).click();
 
-    const dialog = await screen.findByRole("dialog", { name: "Welcome to AgencyZero" });
-    expect(dialog).toBeVisible();
-    expect(within(dialog).getByText("Restoring from backup?")).toBeVisible();
-    expect(within(dialog).getByRole("button", { name: "Select backup file…" })).toBeVisible();
+    await waitFor(() => expect(welcomeDialog()).not.toBeNull());
+    const dialog = welcomeDialog()!;
+    expect(dialog).toHaveAttribute("role", "dialog");
+    expect(dialog).toHaveAttribute("aria-modal", "true");
+    expect(dialog.querySelector("#welcome-title")).toHaveTextContent("Welcome to AgencyZero");
+    expect(dialog).toHaveTextContent("Restoring from backup?");
+    expect(modalButton(dialog, "Select backup file…")).toBeVisible();
   });
 
   it("shows on a new store and defers without marking setup complete", async () => {
     SETTINGS.onboardingCompleted = false;
-    const { screen, workspace } = await mountWelcome();
+    const { workspace } = await mountWelcome();
 
-    expect(await screen.findByRole("dialog", { name: "Welcome to AgencyZero" })).toBeVisible();
-    screen.getByRole("button", { name: "Finish later" }).click();
+    await waitFor(() => expect(welcomeDialog()).not.toBeNull());
+    fireEvent.click(modalButton(welcomeDialog()!, "Finish later"));
 
     await waitFor(() => expect(workspace.state.onboardingDeferred).toBe(true));
     expect(workspace.state.settings?.onboardingCompleted).toBe(false);
-    expect(screen.queryByRole("dialog", { name: "Welcome to AgencyZero" })).toBeNull();
+    expect(welcomeDialog()).toBeNull();
   });
 
   it("allows an explicit skip without pretending prompts will work", async () => {
@@ -70,14 +88,17 @@ describe("WelcomeFlow", () => {
     const { screen } = await mountWelcome();
 
     screen.getByRole("button", { name: "Welcome Tutorial" }).click();
-    const firstContinue = screen.getByRole("button", { name: "Continue" });
+    await waitFor(() => expect(welcomeDialog()).not.toBeNull());
+    const firstContinue = modalButton(welcomeDialog()!, "Continue");
     await waitFor(() => expect(firstContinue).toBeEnabled());
-    firstContinue.click();
+    fireEvent.click(firstContinue);
 
-    expect(await screen.findByText("No compatible project agent is ready")).toBeVisible();
-    screen.getByRole("button", { name: "Skip - I promise to install them later" }).click();
+    await waitFor(() =>
+      expect(welcomeDialog()).toHaveTextContent("No compatible project agent is ready"),
+    );
+    fireEvent.click(modalButton(welcomeDialog()!, "Skip - I promise to install them later"));
 
-    expect(await screen.findByText("Agent setup deferred")).toBeVisible();
-    expect(screen.getByText("Prompt controls will remain disabled")).toBeVisible();
+    await waitFor(() => expect(welcomeDialog()).toHaveTextContent("Agent setup deferred"));
+    expect(welcomeDialog()).toHaveTextContent("Prompt controls will remain disabled");
   });
 });

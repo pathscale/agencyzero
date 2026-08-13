@@ -1,4 +1,5 @@
 import { createEffect, createSignal, For, type JSX, onCleanup, onMount, Show } from "solid-js";
+import { Button } from "~/components/Button";
 import { Icon, type IconProps } from "~/components/Icon";
 import { StatusDot } from "~/components/StatusDot";
 import { createTabReorder } from "~/features/tabs/reorder";
@@ -158,7 +159,7 @@ export function TabStrip(): JSX.Element {
           {(tab) => <TabPill tab={tab} reorder={reorder} strip={() => strip} />}
         </For>
 
-        <button
+        <Button
           type="button"
           onClick={() => actions.openDraft()}
           title={tx("New project")}
@@ -166,7 +167,7 @@ export function TabStrip(): JSX.Element {
           class="flex h-8 shrink-0 items-center justify-center rounded-full border border-primary/22 border-dashed px-3 text-az-muted transition-colors hover:border-primary hover:bg-primary/8 hover:text-primary"
         >
           <Icon name="plus" class="text-[15px]" />
-        </button>
+        </Button>
       </div>
 
       <Show when={overflow().left || overflow().right}>
@@ -174,7 +175,7 @@ export function TabStrip(): JSX.Element {
       </Show>
 
       <div class="flex flex-none items-center gap-1.5">
-        <button
+        <Button
           type="button"
           onClick={() => actions.openAnalytics()}
           title={tx("Analytics")}
@@ -186,8 +187,8 @@ export function TabStrip(): JSX.Element {
           }`}
         >
           <Icon name="gauge" class="text-[15px]" />
-        </button>
-        <button
+        </Button>
+        <Button
           type="button"
           onClick={() => actions.openSettings()}
           title={
@@ -210,7 +211,7 @@ export function TabStrip(): JSX.Element {
           <Show when={state.availableUpdate}>
             <span class="az-halo-primary absolute top-[3px] right-[3px] size-[7px] rounded-full bg-primary" />
           </Show>
-        </button>
+        </Button>
         <div class="ml-1 flex size-[26px] items-center justify-center rounded-full bg-az-badge font-semibold text-[11px] text-base-content">
           N
         </div>
@@ -233,7 +234,7 @@ function ScrollArrow(props: {
   onScroll: () => void;
 }): JSX.Element {
   return (
-    <button
+    <Button
       type="button"
       onClick={props.onScroll}
       disabled={props.isDisabled}
@@ -244,7 +245,7 @@ function ScrollArrow(props: {
         name="chevron-right"
         class={`text-[15px] ${props.direction === -1 ? "rotate-180" : ""}`}
       />
-    </button>
+    </Button>
   );
 }
 
@@ -322,7 +323,7 @@ function TabPill(props: {
       onPointerUp={props.reorder.onPointerUp}
       onPointerCancel={props.reorder.onPointerUp}
     >
-      <button
+      <Button
         type="button"
         onClick={() => actions.focus(props.tab.key)}
         aria-current={isActive() ? "page" : undefined}
@@ -347,7 +348,7 @@ function TabPill(props: {
           <StatusDot status={tabStatus(props.tab.projectId ?? "")} live={isActive()} />
         </Show>
         <TabLabel label={props.tab.label} />
-      </button>
+      </Button>
 
       {/*
         Always rendered for a closable tab, only *shown* when the tab is active,
@@ -355,7 +356,7 @@ function TabPill(props: {
         and shove the rest of the strip sideways every time you cycle.
       */}
       <Show when={isClosable()}>
-        <button
+        <Button
           type="button"
           data-no-drag
           onClick={() => actions.closeTab(props.tab.key)}
@@ -365,7 +366,7 @@ function TabPill(props: {
           }`}
         >
           <Icon name="x" class="text-[13px]" />
-        </button>
+        </Button>
       </Show>
     </div>
   );

@@ -64,6 +64,11 @@ describe("analytics refresh", () => {
     expect(screen.getByRole("tab", { name: "Models" })).toHaveAttribute("aria-selected", "true");
     expect(screen.getByRole("tabpanel")).toHaveAccessibleName("Models");
     expect(screen.getByText("Per model")).toBeInTheDocument();
+
+    fireEvent.keyDown(screen.getByRole("tab", { name: "Models" }), { key: "ArrowRight" });
+    expect(screen.getByRole("tab", { name: "Value" })).toHaveAttribute("aria-selected", "true");
+    fireEvent.keyDown(screen.getByRole("tab", { name: "Value" }), { key: "End" });
+    expect(screen.getByRole("tab", { name: "Models" })).toHaveAttribute("aria-selected", "true");
   });
 
   it("shows measured agent time and distinct turns per item", async () => {

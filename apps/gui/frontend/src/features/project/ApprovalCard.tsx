@@ -1,4 +1,5 @@
 import { type JSX, Show } from "solid-js";
+import { Button } from "~/components/Button";
 import { Icon } from "~/components/Icon";
 import { describeError, log } from "~/lib/log";
 import { tx } from "~/stores/i18n";
@@ -85,14 +86,14 @@ export function ApprovalCard(props: { projectId: string; approval: PendingApprov
         </pre>
 
         <div class="flex items-center gap-2 pt-0.5">
-          <button
+          <Button
             type="button"
             onClick={() => answer(true)}
             class="rounded-lg bg-primary px-[13px] py-[5px] font-semibold text-[12px] text-primary-content transition-colors hover:bg-az-primary-hover"
           >
             {isPermissionGrant() ? tx("Allow for session") : tx("Allow once")}
-          </button>
-          <button
+          </Button>
+          <Button
             type="button"
             onClick={() => answer(true, true)}
             /*
@@ -113,14 +114,14 @@ export function ApprovalCard(props: { projectId: string; approval: PendingApprov
             class="rounded-lg border border-primary/50 px-3 py-[5px] font-semibold text-[12px] text-primary transition-colors hover:border-primary hover:bg-primary/10"
           >
             {isPermissionGrant() ? tx("Always allow these paths") : tx("Always allow similar")}
-          </button>
-          <button
+          </Button>
+          <Button
             type="button"
             onClick={() => answer(false)}
             class="rounded-lg border border-primary/18 px-3 py-[5px] text-[12px] text-az-body transition-colors hover:border-error hover:text-error"
           >
             {tx("Deny")}
-          </button>
+          </Button>
           <span class="text-[11.5px] text-az-muted">
             {tx("· the run is paused until you decide")}
           </span>

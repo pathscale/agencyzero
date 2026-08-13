@@ -1,7 +1,8 @@
-import { Toggle } from "@pathscale/ui";
+import { Checkbox, Input, Slider, TextArea, Toggle } from "@pathscale/ui";
 import { createEffect, createMemo, createSignal, For, type JSX, Show } from "solid-js";
 import { NOTES_BUDGET } from "~/api/client";
 import { AppModal, type ModalAnchor } from "~/components/AppModal";
+import { Button } from "~/components/Button";
 import { Icon } from "~/components/Icon";
 import { SectionPanel } from "~/components/Panel";
 import { PillMenu } from "~/components/PillMenu";
@@ -144,15 +145,15 @@ function ItemSortControls(): JSX.Element {
       class="m-0 flex min-w-0 shrink-0 items-center gap-1 border-0 p-0"
       aria-label={tx("Sort items")}
     >
-      <button
+      <Button
         type="button"
         onClick={() => setPrefs("itemSortBy", prefs.itemSortBy === "status" ? "time" : "status")}
         class="rounded-md border border-az-hairline bg-az-inset px-1.5 py-0.5 font-medium text-[10.5px] text-az-muted transition-colors hover:text-az-strong"
         title={tx("Toggle item sort between status and time")}
       >
         {tx(prefs.itemSortBy === "status" ? "Status" : "Time")}
-      </button>
-      <button
+      </Button>
+      <Button
         type="button"
         onClick={() =>
           setPrefs("itemSortDirection", prefs.itemSortDirection === "asc" ? "desc" : "asc")
@@ -165,7 +166,7 @@ function ItemSortControls(): JSX.Element {
           name="arrow-up"
           class={`text-[11px] transition-transform ${prefs.itemSortDirection === "desc" ? "rotate-180" : ""}`}
         />
-      </button>
+      </Button>
     </fieldset>
   );
 }
@@ -215,21 +216,17 @@ function IoPersistToggle(props: { projectId: string }): JSX.Element {
   };
 
   return (
-    <label
-      class="flex cursor-pointer items-center gap-2 px-3.5 pb-2 text-[11px] text-az-muted"
+    <Checkbox
+      checked={enabled()}
+      isDisabled={!isLive("setIoPersist")}
+      onChange={(event) => void toggle(event.currentTarget.checked)}
       title={tx(
         "Keep this project's raw exchange in the database, so it survives a restart. Off by default: a long run writes thousands of rows.",
       )}
+      class="px-3.5 pb-2 text-[11px] text-az-muted"
     >
-      <input
-        type="checkbox"
-        checked={enabled()}
-        disabled={!isLive("setIoPersist")}
-        onChange={(event) => void toggle(event.currentTarget.checked)}
-        class="size-3 accent-primary"
-      />
       {tx("Keep across restarts")}
-    </label>
+    </Checkbox>
   );
 }
 
@@ -285,20 +282,20 @@ export function AgentIoList(props: { projectId: string }): JSX.Element {
         }
       >
         <div class="flex flex-none items-center gap-1.5 px-2.5 pb-1.5">
-          <button
+          <Button
             type="button"
             onClick={() => setTall((open) => !open)}
             class="rounded-md border border-az-hairline px-2 py-0.5 text-[10.5px] text-az-muted transition-colors hover:border-az-hairline-strong hover:text-base-content"
           >
             {tall() ? tx("Shrink") : tx("Expand")}
-          </button>
-          <button
+          </Button>
+          <Button
             type="button"
             onClick={() => void copyAll()}
             class="rounded-md border border-az-hairline px-2 py-0.5 text-[10.5px] text-az-muted transition-colors hover:border-az-hairline-strong hover:text-base-content"
           >
             {tx("Copy all")}
-          </button>
+          </Button>
           <span class="ml-auto text-[10.5px] text-az-faint">
             {lines().length} {tx("entries")}
           </span>
@@ -419,14 +416,14 @@ function SettingsSection(props: { project: Project; agent: Agent }): JSX.Element
               <span class="min-w-0 flex-1 truncate font-mono text-[11.5px] text-az-body">
                 {dir}
               </span>
-              <button
+              <Button
                 type="button"
                 onClick={() => void actions.removeDir(props.project.id, dir)}
                 aria-label={tx("Remove {name}", { name: dir })}
                 class="shrink-0 text-az-faint transition-colors hover:text-error"
               >
                 <Icon name="x" class="text-[13px]" />
-              </button>
+              </Button>
             </div>
           )}
         </For>
@@ -434,14 +431,14 @@ function SettingsSection(props: { project: Project; agent: Agent }): JSX.Element
         <Show
           when={adding()}
           fallback={
-            <button
+            <Button
               type="button"
               onClick={() => setAdding(true)}
               class="flex items-center gap-[7px] rounded-[9px] border border-primary/16 border-dashed px-2.5 py-[7px] text-[11.5px] text-az-muted transition-colors hover:border-primary hover:text-primary"
             >
               <Icon name="folder-plus" class="text-[13px]" />
               {tx("Add dir")}
-            </button>
+            </Button>
           }
         >
           {/*
@@ -451,7 +448,7 @@ function SettingsSection(props: { project: Project; agent: Agent }): JSX.Element
             requests discovered for it, silently.
           */}
           <div class="flex items-center gap-1.5">
-            <button
+            <Button
               type="button"
               onClick={() => void pick()}
               disabled={!isLive("chooseProjectDirectory")}
@@ -460,8 +457,8 @@ function SettingsSection(props: { project: Project; agent: Agent }): JSX.Element
               class="shrink-0 cursor-pointer rounded-[9px] border border-primary/40 px-2 py-[7px] text-az-body transition-colors hover:border-primary hover:text-primary disabled:opacity-40"
             >
               <Icon name="folder-plus" class="text-[13px]" />
-            </button>
-            <input
+            </Button>
+            <Input.Field
               autofocus
               value={path()}
               placeholder={tx("~/src/…")}
@@ -586,16 +583,17 @@ function ConciseResponseToggle(props: { projectId: string }): JSX.Element {
           <span>{tx("Verbosity")}</span>
           <span class="font-medium text-primary">{labels()[index()]}</span>
         </div>
-        <input
-          type="range"
-          min="0"
-          max="3"
-          step="1"
+        <Slider
+          label={tx("Response verbosity for this project")}
+          min={0}
+          max={3}
+          step={1}
           value={index()}
-          aria-label={tx("Response verbosity for this project")}
           disabled={!isLive("setProjectConcise")}
-          onInput={(event) => void choose(Number(event.currentTarget.value))}
-          class="mt-1 h-1.5 w-full cursor-pointer accent-primary disabled:cursor-not-allowed disabled:opacity-50"
+          onChange={(value) => void choose(value)}
+          formatValue={(value) => labels()[value] ?? labels()[0]}
+          size="sm"
+          class="mt-1 [&_[data-slot=label]]:sr-only [&_[data-slot=slider-output]]:sr-only"
         />
         <span class="mt-1 block text-[10.5px] text-az-muted">{hints()[index()]}</span>
       </div>
@@ -755,32 +753,32 @@ function ResetSession(props: { project: Project; running: boolean }): JSX.Elemen
           <Show
             when={confirming()}
             fallback={
-              <button
+              <Button
                 type="button"
                 class={`btn btn-xs text-[11px] ${props.running ? "btn-error" : "border-az-hairline bg-base-100"}`}
                 onClick={() => setConfirming(true)}
               >
                 {props.running ? tx("Force reset") : tx("Reset")}
-              </button>
+              </Button>
             }
           >
             <div class="flex items-center gap-1.5">
-              <button
+              <Button
                 type="button"
                 class="btn btn-xs btn-error text-[11px]"
                 disabled={busy()}
                 onClick={() => void reset()}
               >
                 {props.running ? tx("Confirm force reset") : tx("Confirm reset")}
-              </button>
-              <button
+              </Button>
+              <Button
                 type="button"
                 class="btn btn-xs btn-ghost text-[11px]"
                 disabled={busy()}
                 onClick={() => setConfirming(false)}
               >
                 {tx("Cancel")}
-              </button>
+              </Button>
             </div>
           </Show>
         </div>
@@ -841,7 +839,7 @@ function ResumeSession(props: {
               : tx("Attach a session recovered by its id so the next message continues it")}
           </span>
         </span>
-        <button
+        <Button
           type="button"
           class="btn btn-xs border-az-hairline bg-base-100 text-[11px]"
           disabled={props.running}
@@ -849,11 +847,11 @@ function ResumeSession(props: {
           onClick={() => setOpen((value) => !value)}
         >
           {tx(props.currentSession ? "Change" : "Resume")}
-        </button>
+        </Button>
       </div>
       <Show when={open()}>
         <div class="flex items-center gap-1.5 pl-[26px]">
-          <input
+          <Input.Field
             value={id()}
             placeholder={tx("session id, e.g. 019fc95e-…")}
             onInput={(event) => setId(event.currentTarget.value)}
@@ -863,14 +861,14 @@ function ResumeSession(props: {
             }}
             class="min-w-0 flex-1 rounded-md border border-az-hairline bg-base-300 px-2 py-1 font-mono text-[11px] text-az-body focus:outline-none"
           />
-          <button
+          <Button
             type="button"
             class="btn btn-xs btn-primary text-[11px]"
             disabled={busy() || props.running || !id().trim()}
             onClick={() => void adopt()}
           >
             {tx("Attach")}
-          </button>
+          </Button>
         </div>
       </Show>
     </div>
@@ -913,13 +911,13 @@ function ApprovalRules(props: { projectId: string }): JSX.Element {
         <span class="min-w-0 flex-1 text-[11.5px] text-az-muted">
           {tx("Remembered approvals · auto-allowed")}
         </span>
-        <button
+        <Button
           type="button"
           onClick={forget}
           class="shrink-0 rounded-md border border-primary/16 px-2 py-0.5 text-[11px] text-az-body transition-colors hover:border-error hover:text-error"
         >
           {tx("Forget all")}
-        </button>
+        </Button>
       </div>
       <For each={rules()}>
         {(rule) => (
@@ -1175,7 +1173,7 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
       <Show when={props.items.length > 3}>
         <div class="mb-1 flex items-center gap-2 border-az-hairline-soft border-b bg-az-inset px-2.5 py-1.5">
           <Icon name="search" class="shrink-0 text-[12px] text-primary/70" />
-          <input
+          <Input.Field
             type="text"
             value={query()}
             onInput={(event) => {
@@ -1187,7 +1185,7 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
             class="min-w-0 flex-1 bg-transparent text-[12px] text-az-body outline-none placeholder:text-az-faint"
           />
           <Show when={filtering()}>
-            <button
+            <Button
               type="button"
               onClick={() => {
                 setQuery("");
@@ -1197,7 +1195,7 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
               class="shrink-0 rounded-md p-0.5 text-az-faint transition-colors hover:text-az-body"
             >
               <Icon name="x" class="text-[11px]" />
-            </button>
+            </Button>
           </Show>
         </div>
       </Show>
@@ -1211,7 +1209,7 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
           <Show
             when={editingId() !== item.id}
             fallback={
-              <input
+              <Input.Field
                 autofocus
                 value={editTitle()}
                 aria-label={tx("Edit {name}", { name: item.title })}
@@ -1278,7 +1276,7 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
                    * deliberate act: it gets the smallest target that can carry it,
                    * and the title beside it goes back to being text.
                    */}
-                  <button
+                  <Button
                     type="button"
                     onClick={() => advance(item)}
                     aria-label={tx("Change the status of {name}", { name: item.title })}
@@ -1286,7 +1284,7 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
                     class="ml-1.5 flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-full transition-colors hover:bg-primary/12 focus-visible:bg-primary/12"
                   >
                     <ItemMarker status={item.status} />
-                  </button>
+                  </Button>
                   <div class="flex min-w-0 flex-1 items-center gap-1.5 px-1.5 py-1 text-left">
                     <span
                       data-selectable
@@ -1343,7 +1341,7 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
                                 }
                               >
                                 {(url) => (
-                                  <button
+                                  <Button
                                     type="button"
                                     onClick={() => void actions.openExternal(url())}
                                     title={tx("Open {url}", { url: url() })}
@@ -1351,13 +1349,13 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
                                   >
                                     {tx("(PR #")}
                                     {reference()})
-                                  </button>
+                                  </Button>
                                 )}
                               </Show>
                             }
                           >
                             {(url) => (
-                              <button
+                              <Button
                                 type="button"
                                 onClick={() => void actions.openExternal(url())}
                                 title={tx("Open {url}", { url: url() })}
@@ -1365,7 +1363,7 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
                               >
                                 {tx("(issue #")}
                                 {issueNumber(url())})
-                              </button>
+                              </Button>
                             )}
                           </Show>
                         )}
@@ -1373,7 +1371,7 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
                     </span>
                   </div>
                 </div>
-                <button
+                <Button
                   type="button"
                   onClick={(event) => {
                     const box = event.currentTarget.getBoundingClientRect();
@@ -1403,8 +1401,8 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
                   }`}
                 >
                   <Icon name="list-checks" class="text-[13px]" />
-                </button>
-                <button
+                </Button>
+                <Button
                   type="button"
                   onClick={(event) => {
                     const box = event.currentTarget.getBoundingClientRect();
@@ -1434,12 +1432,12 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
                   } ${item.status === "questions" ? "" : "mr-1"}`}
                 >
                   <Icon name="git-fork" class="text-[13px]" />
-                </button>
+                </Button>
                 <Show when={item.status === "questions"}>
                   <Show
                     when={questionFor(item)}
                     fallback={
-                      <button
+                      <Button
                         type="button"
                         onClick={() => run(item)}
                         disabled={isRunning()}
@@ -1454,11 +1452,11 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
                         class="relative z-10 mr-1 ml-0.5 flex size-[22px] shrink-0 items-center justify-center rounded-md border border-primary/55 bg-primary/18 text-primary transition-colors hover:border-primary hover:bg-primary/28 disabled:opacity-30"
                       >
                         <Icon name="play" class="text-[11px]" />
-                      </button>
+                      </Button>
                     }
                   >
                     {(question) => (
-                      <button
+                      <Button
                         type="button"
                         onClick={() => replyTo(question())}
                         title={tx("Reply to this item's question")}
@@ -1466,7 +1464,7 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
                         class="relative z-10 mr-1 ml-0.5 flex size-[22px] shrink-0 items-center justify-center rounded-md border border-warning/65 bg-warning/22 text-warning shadow-[0_0_0_1px_rgb(from_var(--color-warning)_r_g_b/.08)] transition-colors hover:border-warning hover:bg-warning/34 focus-visible:border-warning focus-visible:bg-warning/34"
                       >
                         <Icon name="message-square-dashed" class="text-[12px]" />
-                      </button>
+                      </Button>
                     )}
                   </Show>
                 </Show>
@@ -1484,7 +1482,7 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
                     }`}
                   >
                     <Show when={item.status !== "finished"}>
-                      <button
+                      <Button
                         type="button"
                         onClick={() => {
                           const question = questionFor(item);
@@ -1516,11 +1514,11 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
                           name={questionFor(item) ? "message-square-dashed" : "play"}
                           class="text-[12px]"
                         />
-                      </button>
+                      </Button>
                     </Show>
                     {/* Revealed on hover: the controls all the time would be louder
                 than the titles they act on. */}
-                    <button
+                    <Button
                       type="button"
                       onClick={() => {
                         const current = issueUrl(item.reference ?? "") ?? "";
@@ -1537,8 +1535,8 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
                       class="shrink-0 rounded-md p-1 text-az-faint transition-colors hover:text-primary"
                     >
                       <Icon name="git-pull-request" class="text-[11px]" />
-                    </button>
-                    <button
+                    </Button>
+                    <Button
                       type="button"
                       onClick={() => {
                         setEditTitle(item.title);
@@ -1549,8 +1547,8 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
                       class="shrink-0 rounded-md p-1 text-az-faint transition-colors hover:text-az-body"
                     >
                       <Icon name="pencil" class="text-[11px]" />
-                    </button>
-                    <button
+                    </Button>
+                    <Button
                       type="button"
                       onClick={() =>
                         void actions
@@ -1564,9 +1562,9 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
                       class="shrink-0 rounded-md p-1 text-az-faint transition-colors hover:text-error"
                     >
                       <Icon name="x" class="text-[12px]" />
-                    </button>
+                    </Button>
                     <div class="flex shrink-0 flex-col">
-                      <button
+                      <Button
                         type="button"
                         onClick={() => move(index(), -1)}
                         disabled={filtering() || index() === 0}
@@ -1574,8 +1572,8 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
                         class="rounded-sm px-0.5 text-az-faint transition-colors hover:text-az-body disabled:opacity-25"
                       >
                         <Icon name="chevron-up" class="text-[10px]" />
-                      </button>
-                      <button
+                      </Button>
+                      <Button
                         type="button"
                         onClick={() => move(index(), 1)}
                         disabled={filtering() || index() === props.items.length - 1}
@@ -1583,7 +1581,7 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
                         class="rounded-sm px-0.5 text-az-faint transition-colors hover:text-az-body disabled:opacity-25"
                       >
                         <Icon name="chevron-down" class="text-[10px]" />
-                      </button>
+                      </Button>
                     </div>
                   </div>
                 </Show>
@@ -1602,7 +1600,7 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
                         {draft().context.length} / {NOTES_BUDGET}
                       </span>
                     </div>
-                    <textarea
+                    <TextArea
                       autofocus
                       value={draft().context}
                       maxLength={NOTES_BUDGET}
@@ -1620,14 +1618,14 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
                         {tx("Use one Markdown bullet or checklist line per sub-item.")}
                       </span>
                       <div class="flex shrink-0 items-center gap-1.5">
-                        <button
+                        <Button
                           type="button"
                           onClick={() => setDescriptionDraft(null)}
                           class="rounded-md px-2.5 py-1 text-[11px] text-az-muted hover:bg-white/6 hover:text-az-body"
                         >
                           {tx("Close")}
-                        </button>
-                        <button
+                        </Button>
+                        <Button
                           type="button"
                           disabled={
                             savingDescriptionId() === item.id || draft().context === draft().saved
@@ -1636,7 +1634,7 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
                           class="rounded-md border border-primary/40 bg-primary/15 px-2.5 py-1 font-semibold text-[11px] text-primary hover:bg-primary/24 disabled:opacity-35"
                         >
                           {tx("Save description")}
-                        </button>
+                        </Button>
                       </div>
                     </div>
                   </section>
@@ -1647,7 +1645,7 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
         )}
       </For>
       <Show when={shown().length > visibleShown().length}>
-        <button
+        <Button
           type="button"
           onClick={() => setItemLimit((limit) => limit + PROJECT_ITEM_PAGE_SIZE)}
           class="mt-1 flex-none rounded-[9px] border border-primary/24 bg-primary/8 px-2.5 py-2 font-semibold text-[11.5px] text-primary transition-colors hover:bg-primary/14"
@@ -1655,23 +1653,23 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
           {tx("Show {count} more items", {
             count: Math.min(PROJECT_ITEM_PAGE_SIZE, shown().length - visibleShown().length),
           })}
-        </button>
+        </Button>
       </Show>
 
       <Show
         when={adding()}
         fallback={
-          <button
+          <Button
             type="button"
             onClick={() => setAdding(true)}
             class="mt-1 flex items-center gap-2 rounded-[9px] border border-primary/16 border-dashed px-2.5 py-2 text-[12px] text-az-muted transition-colors hover:border-primary hover:text-primary"
           >
             <Icon name="plus" class="text-[13px]" />
             {tx("New item")}
-          </button>
+          </Button>
         }
       >
-        <input
+        <Input.Field
           autofocus
           value={title()}
           placeholder={tx("What needs doing?")}
@@ -1709,14 +1707,14 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
                   </h2>
                   <p class="mt-0.5 truncate text-[12px] text-az-muted">{draft().item.title}</p>
                 </div>
-                <button
+                <Button
                   type="button"
                   onClick={() => setContextDraft(null)}
                   aria-label={tx("Cancel")}
                   class="rounded-lg p-1.5 text-az-muted hover:bg-white/6 hover:text-base-content"
                 >
                   <Icon name="x" class="text-[15px]" />
-                </button>
+                </Button>
               </header>
               <div class="flex min-h-0 flex-col gap-2 px-5 py-4">
                 <div class="flex items-center justify-between gap-3">
@@ -1727,7 +1725,7 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
                     {draft().context.length} / {NOTES_BUDGET}
                   </span>
                 </div>
-                <textarea
+                <TextArea
                   id="item-description"
                   autofocus
                   value={draft().context}
@@ -1752,21 +1750,21 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
                 </p>
               </div>
               <footer class="flex items-center justify-end gap-2 border-az-hairline-soft border-t px-5 py-3.5">
-                <button
+                <Button
                   type="button"
                   onClick={() => setContextDraft(null)}
                   class="rounded-lg border border-az-hairline px-3 py-1.5 text-[12px] text-az-body hover:border-primary/35"
                 >
                   {tx("Cancel")}
-                </button>
-                <button
+                </Button>
+                <Button
                   type="button"
                   disabled={forkingId() === draft().item.id}
                   onClick={() => void saveContext()}
                   class="rounded-lg border border-primary/45 bg-primary/18 px-3 py-1.5 font-semibold text-[12px] text-primary hover:bg-primary/25 disabled:opacity-40"
                 >
                   {draft().startFork ? tx("Start fork") : tx("Save description")}
-                </button>
+                </Button>
               </footer>
             </section>
           </AppModal>
@@ -1808,14 +1806,14 @@ export function RunningTaskCard(props: { task: RunningTask; now: number }): JSX.
         <span class="font-mono text-az-muted">{props.task.name}</span>
         <span class="text-primary">{elapsed(props.task.startedAt, props.now)}</span>
         <div class="flex-1" />
-        <button
+        <Button
           type="button"
           disabled={!props.task.isCancelable || !isLive("cancelRun")}
           onClick={() => void actions.cancelRun(props.task.projectId)}
           class="rounded-md border border-primary/16 px-2 py-0.5 text-az-body transition-colors hover:border-error hover:text-error disabled:opacity-40"
         >
           {tx("Stop")}
-        </button>
+        </Button>
       </div>
     </div>
   );
@@ -1888,7 +1886,7 @@ function TaskLogList(props: { projectId: string }): JSX.Element {
                * over every row on the way past, which reads as the panel
                * flinching. The pointer already says the row is a control.
                */}
-              <button
+              <Button
                 type="button"
                 onClick={() => setExpanded(expanded() === entry.id ? null : entry.id)}
                 aria-label={expanded() === entry.id ? tx("Collapse") : tx("Show the whole command")}
@@ -1897,11 +1895,11 @@ function TaskLogList(props: { projectId: string }): JSX.Element {
                 }`}
               >
                 <span data-selectable>{entry.label}</span>
-              </button>
+              </Button>
               <span class={`shrink-0 ${entry.ok === false ? "text-error" : "text-az-muted"}`}>
                 {taskMeta(entry)}
               </span>
-              <button
+              <Button
                 type="button"
                 onClick={() =>
                   void copyEntry(
@@ -1914,7 +1912,7 @@ function TaskLogList(props: { projectId: string }): JSX.Element {
                 class="shrink-0 rounded p-0.5 text-az-faint transition-colors hover:text-az-body"
               >
                 <Icon name={copied() === entry.id ? "check" : "copy"} class="text-[11px]" />
-              </button>
+              </Button>
             </div>
             <Show when={expanded() === entry.id && entry.output}>
               <pre class="az-scroll max-h-64 whitespace-pre-wrap break-words rounded-md border border-az-hairline bg-az-inset px-2 py-1.5 font-mono text-[10.5px] text-az-body">
@@ -1949,13 +1947,13 @@ function CopyLogButton(props: { projectId: string }): JSX.Element {
     }
   };
   return (
-    <button
+    <Button
       type="button"
       onClick={() => void copy()}
       class="shrink-0 text-[11px] text-az-faint transition-colors hover:text-base-content"
     >
       {tx("Copy")}
-    </button>
+    </Button>
   );
 }
 
@@ -2095,7 +2093,7 @@ function NotesEditor(props: { projectId: string }): JSX.Element {
         compaction is worth having on its own. Waiting for a compaction to earn
         the right to state a house rule would be an odd thing to enforce.
       */}
-      <textarea
+      <TextArea
         value={draft()}
         onInput={(event) => setDraft(event.currentTarget.value)}
         rows={8}
@@ -2120,33 +2118,33 @@ function NotesEditor(props: { projectId: string }): JSX.Element {
         </span>
         <div class="flex-1" />
         <Show when={dirty()}>
-          <button
+          <Button
             type="button"
             onClick={() => setDraft(saved())}
             class="shrink-0 text-[11px] text-az-faint transition-colors hover:text-base-content"
           >
             {tx("Revert")}
-          </button>
+          </Button>
         </Show>
-        <button
+        <Button
           type="button"
           onClick={() => void save(draft())}
           disabled={!dirty() || status() === "saving" || !isLive("setProjectNotes")}
           class="shrink-0 rounded-lg border border-primary/18 px-2.5 py-[3px] text-[11.5px] text-az-body transition-colors hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-40"
         >
           {status() === "saving" ? tx("Saving…") : tx("Save")}
-        </button>
+        </Button>
         {/* Forgetting on purpose is a real thing to want: a project that
               changed direction is better off with nothing than with rules
               written for the work it used to be doing. */}
-        <button
+        <Button
           type="button"
           onClick={() => void save("")}
           disabled={!saved().trim() || !isLive("setProjectNotes")}
           class="shrink-0 text-[11px] text-az-faint transition-colors hover:text-error disabled:cursor-not-allowed disabled:opacity-40"
         >
           {tx("Forget")}
-        </button>
+        </Button>
       </div>
 
       <Show when={status() === "error"}>
@@ -2161,12 +2159,12 @@ function NotesEditor(props: { projectId: string }): JSX.Element {
 function ClearLogButton(props: { projectId: string }): JSX.Element {
   const { actions } = useWorkspace();
   return (
-    <button
+    <Button
       type="button"
       onClick={() => void actions.clearTaskLog(props.projectId)}
       class="shrink-0 text-[11px] text-az-faint transition-colors hover:text-base-content"
     >
       {tx("Clear")}
-    </button>
+    </Button>
   );
 }

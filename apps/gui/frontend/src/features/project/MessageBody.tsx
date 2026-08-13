@@ -1,5 +1,6 @@
 import { PromptSyntaxParser } from "promptsyntax";
 import { createMemo, createSignal, For, type JSX, Show } from "solid-js";
+import { Button } from "~/components/Button";
 import { Icon } from "~/components/Icon";
 import { isItemId, itemReferenceLabel, revealItemReference } from "~/lib/itemReference";
 import { describeError, log } from "~/lib/log";
@@ -521,7 +522,7 @@ function CodeBlock(props: { text: string; lang: string }): JSX.Element {
       >
         <code>{props.text}</code>
       </pre>
-      <button
+      <Button
         type="button"
         onClick={() => void copy()}
         aria-label={tx("Copy this {language} block", { language: props.lang || tx("code") })}
@@ -530,7 +531,7 @@ function CodeBlock(props: { text: string; lang: string }): JSX.Element {
       >
         <Icon name={copied() ? "check" : "copy"} class="text-[11px]" />
         {copied() ? tx("Copied") : tx("Copy")}
-      </button>
+      </Button>
     </div>
   );
 }
@@ -592,7 +593,7 @@ export function CopyMessageButton(props: { body: string }): JSX.Element {
   const [copied, setCopied] = createSignal(false);
 
   return (
-    <button
+    <Button
       type="button"
       onClick={() => {
         void copyText(props.body).then((ok) => {
@@ -608,7 +609,7 @@ export function CopyMessageButton(props: { body: string }): JSX.Element {
       <Show when={copied()} fallback={<Icon name="copy" class="text-[12px]" />}>
         <Icon name="check" class="text-[12px]" />
       </Show>
-    </button>
+    </Button>
   );
 }
 
@@ -633,7 +634,7 @@ function renderItemReferences(text: string): JSX.Element {
     .filter(Boolean)
     .map((part) =>
       isItemId(part) ? (
-        <button
+        <Button
           type="button"
           class="inline cursor-pointer font-medium text-az-link underline decoration-az-link/45 decoration-dotted underline-offset-2 hover:text-primary"
           title={part}
@@ -641,7 +642,7 @@ function renderItemReferences(text: string): JSX.Element {
           onClick={() => revealItemReference(part)}
         >
           {itemReferenceLabel(part)}
-        </button>
+        </Button>
       ) : (
         part
       ),

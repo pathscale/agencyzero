@@ -1,4 +1,6 @@
+import { Input } from "@pathscale/ui";
 import { createSignal, type JSX, Show } from "solid-js";
+import { Button } from "~/components/Button";
 import { Icon } from "~/components/Icon";
 import { describeError, log } from "~/lib/log";
 import { tx } from "~/stores/i18n";
@@ -67,12 +69,12 @@ export function EditableTitle(props: {
             fallback={<span class="min-w-0 truncate">{props.value}</span>}
           >
             {(activate) => (
-              <button type="button" onClick={() => activate()()} class="min-w-0 truncate text-left">
+              <Button type="button" onClick={() => activate()()} class="min-w-0 truncate text-left">
                 {props.value}
-              </button>
+              </Button>
             )}
           </Show>
-          <button
+          <Button
             type="button"
             // Stopped so a rename click cannot double as the header's own
             // click (on Home, that click folds the group).
@@ -87,11 +89,11 @@ export function EditableTitle(props: {
             class="flex size-[18px] shrink-0 items-center justify-center rounded text-az-faint transition-colors hover:bg-white/8 hover:text-az-body"
           >
             <Icon name="pencil" class="text-[11px]" />
-          </button>
+          </Button>
         </span>
       }
     >
-      <input
+      <Input.Field
         // The field only exists once you have asked to edit, so focusing it is
         // completing the action rather than stealing focus on load.
         autofocus

@@ -220,12 +220,14 @@ describe("project response verbosity", () => {
     const { ready, screen } = mount();
     await ready();
 
-    const slider = screen.getByLabelText("Response verbosity for this project") as HTMLInputElement;
-    await waitFor(() => expect(slider.value).toBe("0"));
+    const slider = screen.getByLabelText("Response verbosity for this project");
+    await waitFor(() => expect(slider).toHaveAttribute("aria-valuenow", "0"));
 
-    fireEvent.input(slider, { target: { value: "2" } });
-    await waitFor(() => expect(slider.value).toBe("2"));
-    expect(screen.getByText("Medium")).toBeTruthy();
+    fireEvent.keyDown(slider, { key: "ArrowRight" });
+    fireEvent.keyDown(slider, { key: "ArrowRight" });
+    await waitFor(() => expect(slider).toHaveAttribute("aria-valuenow", "2"));
+    expect(slider).toHaveAttribute("aria-valuetext", "Medium");
+    expect(screen.getAllByText("Medium")).toHaveLength(2);
   });
 });
 

@@ -74,12 +74,15 @@ describe("PS deployment study settings", () => {
 describe("chat imports", () => {
   it("offers a taller session picker and imports every session from one source", async () => {
     const screen = await mountSettings();
-    const picker = (await screen.findByLabelText(
-      "Choose a session from Claude Code",
-    )) as HTMLSelectElement;
+    const picker = await screen.findByLabelText("Choose a session from Claude Code");
 
     expect(picker.classList).toContain("h-9");
-    expect(Array.from(picker.options).map((option) => option.value)).not.toContain("cloud-only");
+    fireEvent.click(picker);
+    await waitFor(() => expect(document.body.querySelector('[role="listbox"]')).not.toBeNull());
+    const offered = Array.from(document.body.querySelectorAll<HTMLElement>('[role="option"]')).map(
+      (option) => option.getAttribute("data-key"),
+    );
+    expect(offered).not.toContain("cloud-only");
     fireEvent.click(screen.getByRole("button", { name: "Import all" }));
 
     await waitFor(() => expect(screen.getByText("Imported 2 chats from Claude Code")).toBeTruthy());
@@ -166,18 +169,70 @@ describe("local debug control", () => {
 });
 
 describe("cost warning settings", () => {
-  it("persists a per-turn warning threshold across the full slider range", async () => {
+  it("renders the PathScale slider track and thumb instead of a disappearing native range", async () => {
     const screen = await mountSettings();
-    const slider = screen.getByLabelText("Projected turn warning threshold") as HTMLInputElement;
+    const slider = screen.container.querySelector<HTMLElement>('[role="slider"]');
+    expect(slider).not.toBeNull();
+    if (!slider) throw new Error("PathScale slider thumb was not rendered");
+    const root = slider.closest('[data-slot="slider"]');
+    const labelId = slider.getAttribute("aria-labelledby");
 
-    expect(slider.min).toBe("0.25");
-    expect(slider.max).toBe("20");
-    expect(slider.value).toBe("0.75");
+    expect(screen.container.querySelector('input[type="range"]')).toBeNull();
+    expect(root?.querySelector('[data-slot="slider-track"]')).toBeTruthy();
+    expect(root?.querySelector('[data-slot="slider-fill"]')).toBeTruthy();
+    expect(root?.querySelector('[data-slot="slider-thumb"]')).toBe(slider);
+    expect(labelId).toBeTruthy();
+    expect(screen.container.querySelector(`#${labelId}`)?.textContent).toBe(
+      "Projected turn warning threshold",
+    );
+    expect(slider).toHaveAttribute("tabindex", "0");
+    expect(slider).toHaveAttribute("aria-valuemin", "0.25");
+    expect(slider).toHaveAttribute("aria-valuemax", "20");
+    expect(slider).toHaveAttribute("aria-valuenow", "0.75");
+    expect(slider).toHaveAttribute("aria-valuetext", "$0.75");
+  });
 
-    fireEvent.input(slider, { target: { value: "1.25" } });
-    expect(screen.getByText("$1.25")).toBeTruthy();
-    fireEvent.change(slider, { target: { value: "1.25" } });
-    await waitFor(() => expect(screen.workspace.state.settings?.costWarningUsd).toBe(1.25));
+  it("is keyboard-operable and persists the selected threshold", async () => {
+    const screen = await mountSettings();
+    const slider = screen.container.querySelector<HTMLElement>('[role="slider"]');
+    expect(slider).not.toBeNull();
+    if (!slider) throw new Error("PathScale slider thumb was not rendered");
+
+    fireEvent.keyDown(slider, { key: "ArrowRight" });
+
+    expect(slider).toHaveAttribute("aria-valuenow", "1");
+    expect(slider).toHaveAttribute("aria-valuetext", "$1.00");
+    await waitFor(() => expect(screen.workspace.state.settings?.costWarningUsd).toBe(1));
+  });
+
+  it("is draggable and persists the pointer-selected threshold", async () => {
+    const screen = await mountSettings();
+    const track = screen.container.querySelector<HTMLElement>('[data-slot="slider-track"]');
+    const slider = screen.container.querySelector<HTMLElement>('[role="slider"]');
+    expect(track).not.toBeNull();
+    expect(slider).not.toBeNull();
+    if (!track || !slider) throw new Error("PathScale slider geometry was not rendered");
+
+    Object.defineProperty(track, "getBoundingClientRect", {
+      value: () => ({
+        bottom: 20,
+        height: 20,
+        left: 0,
+        right: 200,
+        top: 0,
+        width: 200,
+        x: 0,
+        y: 0,
+        toJSON: () => ({}),
+      }),
+    });
+    Object.defineProperty(track, "setPointerCapture", { value: () => {} });
+
+    fireEvent.pointerDown(track, { clientX: 100, pointerId: 1 });
+
+    expect(slider).toHaveAttribute("aria-valuenow", "10.25");
+    expect(slider).toHaveAttribute("aria-valuetext", "$10.25");
+    await waitFor(() => expect(screen.workspace.state.settings?.costWarningUsd).toBe(10.25));
   });
 });
 

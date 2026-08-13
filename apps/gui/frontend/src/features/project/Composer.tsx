@@ -1,3 +1,4 @@
+import { TextArea } from "@pathscale/ui";
 import {
   createEffect,
   createMemo,
@@ -8,6 +9,7 @@ import {
   onMount,
   Show,
 } from "solid-js";
+import { Button } from "~/components/Button";
 import { Icon } from "~/components/Icon";
 import { PillMenu } from "~/components/PillMenu";
 import { AGENT_LABELS, PERMISSION_ORDER, permissionLabel } from "~/lib/labels";
@@ -157,14 +159,14 @@ export function AttachmentPills(props: {
             >
               <Icon name="paperclip" class="shrink-0 text-[11px] text-az-muted" />
               <span class="min-w-0 truncate text-az-body">{path.split("/").pop() || path}</span>
-              <button
+              <Button
                 type="button"
                 onClick={() => props.onRemove(path)}
                 aria-label={tx("Remove {name}", { name: path.split("/").pop() || path })}
                 class="flex size-[16px] shrink-0 items-center justify-center rounded-full text-az-faint transition-colors hover:bg-white/10 hover:text-base-content"
               >
                 <Icon name="x" class="text-[11px]" />
-              </button>
+              </Button>
             </span>
           )}
         </For>
@@ -191,14 +193,14 @@ export function QuestionReplyPill(props: {
             {tx("Reply to #{number}", { number: props.number ?? "?" })}
           </span>
           <Show when={props.onRemove}>
-            <button
+            <Button
               type="button"
               onClick={() => props.onRemove?.()}
               aria-label={tx("Remove question reply")}
               class="flex size-[16px] shrink-0 items-center justify-center rounded-full text-az-faint transition-colors hover:bg-white/10 hover:text-base-content"
             >
               <Icon name="x" class="text-[11px]" />
-            </button>
+            </Button>
           </Show>
         </span>
       )}
@@ -729,13 +731,13 @@ export function Composer(props: ComposerProps): JSX.Element {
             <p class="font-semibold text-[11.5px] text-error">{tx("Agent setup required")}</p>
             <p class="mt-0.5 text-[11px] text-az-body leading-[1.45]">{agentBlockedReason()}</p>
           </div>
-          <button
+          <Button
             type="button"
             onClick={() => actions.openSettings()}
             class="shrink-0 rounded-lg border border-error/30 px-2.5 py-1 text-[10.5px] text-az-body hover:border-error hover:text-error"
           >
             {tx("Open Settings")}
-          </button>
+          </Button>
         </div>
       </Show>
       {/* Cost guidance comes first so the action is read before the two figures
@@ -841,32 +843,32 @@ export function Composer(props: ComposerProps): JSX.Element {
                     </ul>
                   </div>
                 </Show>
-                <button
+                <Button
                   type="button"
                   onClick={dismissCostAlert}
                   aria-label={tx("Dismiss")}
                   class="shrink-0 rounded p-0.5 text-az-faint transition-colors hover:text-az-body"
                 >
                   <Icon name="x" class="text-[12px]" />
-                </button>
+                </Button>
               </div>
               <Show when={prefs.costWarningDismissals > 0}>
                 <div class="flex justify-end">
                   <Show
                     when={confirmDisableCostWarning()}
                     fallback={
-                      <button
+                      <Button
                         type="button"
                         onClick={() => setConfirmDisableCostWarning(true)}
                         class="text-[10.5px] text-az-muted underline decoration-current/40 underline-offset-2 hover:text-az-body"
                       >
                         {tx("Permanently disable this warning")}
-                      </button>
+                      </Button>
                     }
                   >
                     <div class="flex items-center gap-2 text-[10.5px] text-az-muted">
                       <span>{tx("Disable cost warnings permanently?")}</span>
-                      <button
+                      <Button
                         type="button"
                         onClick={() => {
                           setPrefs("costWarningsDisabled", true);
@@ -875,14 +877,14 @@ export function Composer(props: ComposerProps): JSX.Element {
                         class="rounded border border-error/40 px-2 py-0.5 font-medium text-error hover:bg-error/10"
                       >
                         {tx("Confirm")}
-                      </button>
-                      <button
+                      </Button>
+                      <Button
                         type="button"
                         onClick={() => setConfirmDisableCostWarning(false)}
                         class="text-az-muted hover:text-az-body"
                       >
                         {tx("Cancel")}
-                      </button>
+                      </Button>
                     </div>
                   </Show>
                 </div>
@@ -894,7 +896,7 @@ export function Composer(props: ComposerProps): JSX.Element {
       <Show when={props.usage || costEstimate()?.priced}>
         <div class="flex min-h-[24px] items-center justify-end gap-2 px-1">
           <Show when={props.onCompact && compactPressure() && state.pricing}>
-            <button
+            <Button
               type="button"
               onClick={runCompact}
               aria-label={props.agent === "codex" ? tx("Freshen context") : tx("Compact context")}
@@ -914,7 +916,7 @@ export function Composer(props: ComposerProps): JSX.Element {
               {props.agent === "codex" ? tx("Freshen") : tx("Compact")}{" "}
               {costLabel(compactionCost(state.pricing!, estimateModel(), props.contextTokens ?? 0))}{" "}
               ›
-            </button>
+            </Button>
           </Show>
           {/* Accent, not grey: the context fill is a number worth reading, and
               the owner asked for it coloured like the controls rather than dim
@@ -988,7 +990,7 @@ export function Composer(props: ComposerProps): JSX.Element {
             class="min-w-0 overflow-hidden"
             style={{ height: `${promptHeight()}px` }}
           >
-            <textarea
+            <TextArea
               ref={field}
               autofocus={props.autofocus}
               rows={visibleRows()}
@@ -1075,7 +1077,7 @@ export function Composer(props: ComposerProps): JSX.Element {
             class="flex min-h-[24px] flex-wrap items-center gap-2.5"
           >
             <div data-composer-primary-controls class="flex shrink-0 items-center gap-2.5">
-              <button
+              <Button
                 type="button"
                 onClick={toggleAdvanced}
                 aria-pressed={advanced()}
@@ -1087,7 +1089,7 @@ export function Composer(props: ComposerProps): JSX.Element {
                 }`}
               >
                 {tx("Advanced")}
-              </button>
+              </Button>
 
               <PillMenu
                 label={tx("Permission")}
@@ -1100,7 +1102,7 @@ export function Composer(props: ComposerProps): JSX.Element {
                 onChange={props.onPermissionChange}
               />
 
-              <button
+              <Button
                 type="button"
                 onClick={() => void attach()}
                 // Greyed on a build whose backend lacks the picker, per the house
@@ -1112,9 +1114,9 @@ export function Composer(props: ComposerProps): JSX.Element {
                 class="flex size-[24px] items-center justify-center rounded-full border border-az-hairline-strong text-az-body transition-colors hover:border-primary/30 hover:text-az-title disabled:cursor-not-allowed disabled:opacity-40"
               >
                 <Icon name="plus" class="text-[16px]" />
-              </button>
+              </Button>
 
-              <button
+              <Button
                 type="button"
                 onClick={toggleExpanded}
                 aria-pressed={expanded()}
@@ -1127,7 +1129,7 @@ export function Composer(props: ComposerProps): JSX.Element {
                 }`}
               >
                 <Icon name={expanded() ? "chevron-down" : "chevron-up"} class="text-[15px]" />
-              </button>
+              </Button>
             </div>
 
             <div
@@ -1159,7 +1161,7 @@ export function Composer(props: ComposerProps): JSX.Element {
             leave no hint the option exists. Off sends `thinking(false)`, which
             the backend maps to Claude's disable switch.
           */}
-              <button
+              <Button
                 type="button"
                 onClick={() => props.onExtraThinkingChange?.(!props.extraThinking)}
                 disabled={props.agent !== "claude"}
@@ -1179,7 +1181,7 @@ export function Composer(props: ComposerProps): JSX.Element {
               >
                 <Icon name="sparkles" class="text-[11px]" />
                 {tx("Extra Thinking")}
-              </button>
+              </Button>
 
               <PillMenu
                 label={tx("Model")}
@@ -1223,7 +1225,7 @@ export function Composer(props: ComposerProps): JSX.Element {
               <div class="flex shrink-0 items-center gap-2.5">
                 {/* While a run is live, the provider capability decides whether
                 this interrupts the open turn or queues for the next one. */}
-                <button
+                <Button
                   type="button"
                   onClick={() => void submit()}
                   disabled={!canSend()}
@@ -1248,7 +1250,7 @@ export function Composer(props: ComposerProps): JSX.Element {
                   class="flex size-[24px] items-center justify-center rounded-full bg-primary text-primary-content transition-colors hover:bg-az-primary-hover disabled:cursor-not-allowed disabled:opacity-40"
                 >
                   <Icon name="arrow-up" class="text-[17px]" />
-                </button>
+                </Button>
                 {/*
                 Always rendered, only hidden when idle: mounting the Stop button
                 on run-start (and unmounting on stop) reflowed this wrap row and
@@ -1256,7 +1258,7 @@ export function Composer(props: ComposerProps): JSX.Element {
                 keeps the send button fixed; `invisible` also drops it from the
                 tab order so an idle composer has no dead control.
               */}
-                <button
+                <Button
                   type="button"
                   onClick={() => props.onStop?.()}
                   // No handler means the backend cannot stop this run; a Stop
@@ -1269,7 +1271,7 @@ export function Composer(props: ComposerProps): JSX.Element {
                   }`}
                 >
                   <span class="size-[11px] rounded-[3px] bg-primary" />
-                </button>
+                </Button>
               </div>
             </div>
           </div>

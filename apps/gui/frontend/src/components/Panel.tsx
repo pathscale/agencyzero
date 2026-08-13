@@ -1,4 +1,5 @@
 import { type JSX, Show, splitProps } from "solid-js";
+import { Button } from "~/components/Button";
 import { Icon, type IconProps } from "~/components/Icon";
 import { tx } from "~/stores/i18n";
 
@@ -61,7 +62,7 @@ export function SectionPanel(props: SectionPanelProps): JSX.Element {
         HTML. The toggle is the button that fills the rest of the row.
       */}
       <div class="flex items-center justify-start gap-2.5 px-3.5 py-3 transition-colors hover:bg-white/4">
-        <button
+        <Button
           type="button"
           onClick={props.onToggle}
           aria-expanded={props.isOpen}
@@ -90,10 +91,10 @@ export function SectionPanel(props: SectionPanelProps): JSX.Element {
           <Show when={props.note}>
             <span class="text-[11.5px] text-az-muted">{props.note}</span>
           </Show>
-        </button>
+        </Button>
 
         <Show when={props.lead}>{props.lead}</Show>
-        <button
+        <Button
           type="button"
           onClick={props.onToggle}
           aria-label={tx(props.isOpen ? "Collapse {name}" : "Expand {name}", {
@@ -105,7 +106,7 @@ export function SectionPanel(props: SectionPanelProps): JSX.Element {
             name={props.isOpen ? "chevron-up" : "chevron-down"}
             class="text-[15px] text-primary/70"
           />
-        </button>
+        </Button>
       </div>
 
       <Show when={props.isOpen}>

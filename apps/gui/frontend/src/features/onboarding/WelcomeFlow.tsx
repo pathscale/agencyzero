@@ -1,13 +1,6 @@
-import {
-  createEffect,
-  createMemo,
-  createSignal,
-  For,
-  type JSX,
-  onCleanup,
-  onMount,
-  Show,
-} from "solid-js";
+import { Modal, Select } from "@pathscale/ui";
+import { createEffect, createMemo, createSignal, For, type JSX, Show } from "solid-js";
+import { Button } from "~/components/Button";
 import { Icon, type IconProps } from "~/components/Icon";
 import { LanguageSwitcher } from "~/components/LanguageSwitcher";
 import { AGENT_LABELS, agentStateLabel, permissionLabel } from "~/lib/labels";
@@ -89,14 +82,6 @@ export function WelcomeFlow(): JSX.Element {
       .discoverChatImports()
       .then(setSources)
       .catch((cause) => setNote(describeError(cause)));
-  });
-
-  onMount(() => {
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape" && visible() && !busy()) actions.deferOnboarding();
-    };
-    window.addEventListener("keydown", closeOnEscape);
-    onCleanup(() => window.removeEventListener("keydown", closeOnEscape));
   });
 
   const chooseAgent = async (agent: Agent): Promise<void> => {
@@ -199,38 +184,42 @@ export function WelcomeFlow(): JSX.Element {
 
   return (
     <Show when={visible()}>
-      <div class="absolute inset-0 z-50 flex items-center justify-center bg-black/72 px-6 py-8">
-        <section
-          role="dialog"
-          aria-modal="true"
+      <Modal
+        isOpen
+        onOpenChange={(isOpen) => !isOpen && !busy() && actions.deferOnboarding()}
+        placement="center"
+        size="lg"
+        backdrop="opaque"
+        shouldCloseOnBackdropClick={false}
+      >
+        <Modal.Content
           aria-labelledby="welcome-title"
-          class="flex max-h-full w-full max-w-[760px] flex-col overflow-hidden rounded-[20px] border border-primary/24 bg-base-200 shadow-[0_28px_90px_rgba(0,0,0,.7)]"
+          class="max-h-[calc(100dvh-4rem)] w-full max-w-[760px] overflow-hidden rounded-[20px] border border-primary/24 bg-base-200 p-0 shadow-[0_28px_90px_rgba(0,0,0,.7)]"
         >
-          <header class="flex items-start justify-between gap-5 border-az-hairline-soft border-b px-6 py-5">
+          <Modal.Header class="flex-row items-start justify-between gap-5 border-az-hairline-soft border-b px-6 py-5">
             <div class="flex min-w-0 items-center gap-3.5">
               <div class="az-halo-primary flex size-11 shrink-0 items-center justify-center rounded-[14px] border border-primary/30 bg-primary/12 text-primary">
                 <Icon name="sparkles" class="text-[21px]" />
               </div>
               <div>
-                <h1 id="welcome-title" class="font-semibold text-[18px] text-az-title">
+                <Modal.Heading id="welcome-title" class="font-semibold text-[18px] text-az-title">
                   {tx("Welcome to AgencyZero")}
-                </h1>
+                </Modal.Heading>
                 <p class="mt-0.5 text-[11.5px] text-az-muted">
                   {tx("Set up the workspace once, then start with a real task.")}
                 </p>
               </div>
             </div>
-            <button
+            <Modal.CloseTrigger
               type="button"
-              onClick={() => actions.deferOnboarding()}
               disabled={busy()}
               title={isReplay() ? tx("Close setup") : tx("Finish setup later")}
               aria-label={isReplay() ? tx("Close setup") : tx("Finish setup later")}
-              class="rounded-lg p-1.5 text-az-muted hover:bg-white/6 hover:text-base-content disabled:opacity-40"
+              class="static size-auto rounded-lg p-1.5 text-az-muted hover:bg-white/6 hover:text-base-content disabled:opacity-40"
             >
               <Icon name="x" class="text-[16px]" />
-            </button>
-          </header>
+            </Modal.CloseTrigger>
+          </Modal.Header>
 
           <div
             role="progressbar"
@@ -249,7 +238,7 @@ export function WelcomeFlow(): JSX.Element {
             </For>
           </div>
 
-          <div class="az-scroll min-h-0 flex-1 px-6 py-5">
+          <Modal.Body class="az-scroll min-h-0 flex-1 px-6 py-5">
             <Show when={step() === 0}>
               <SetupHeading
                 icon="folder"
@@ -275,23 +264,23 @@ export function WelcomeFlow(): JSX.Element {
                     {state.workspaceRoot?.path ?? tx("Not available")}
                   </code>
                   <div class="flex items-center gap-2">
-                    <button
+                    <Button
                       type="button"
                       disabled={busy()}
                       onClick={() => void actions.chooseWorkspaceRoot()}
                       class="rounded-lg border border-az-hairline-strong px-3 py-1.5 text-[11.5px] text-az-body hover:border-primary hover:text-primary disabled:opacity-40"
                     >
                       {tx("Choose folder…")}
-                    </button>
+                    </Button>
                     <Show when={!state.workspaceRoot?.exists}>
-                      <button
+                      <Button
                         type="button"
                         disabled={busy()}
                         onClick={() => void actions.createWorkspaceRoot()}
                         class="rounded-lg border border-primary/50 px-3 py-1.5 text-[11.5px] text-primary hover:bg-primary/10 disabled:opacity-40"
                       >
                         {tx("Create recommended folder")}
-                      </button>
+                      </Button>
                     </Show>
                   </div>
                 </div>
@@ -313,23 +302,23 @@ export function WelcomeFlow(): JSX.Element {
                       </code>
                     )}
                   </Show>
-                  <button
+                  <Button
                     type="button"
                     disabled={busy() || !isLive("selectStoreBackup")}
                     onClick={() => void selectBackup()}
                     class="rounded-lg border border-az-hairline-strong px-3 py-1.5 text-[11.5px] text-az-body hover:border-primary hover:text-primary disabled:opacity-40"
                   >
                     {tx("Select backup file…")}
-                  </button>
+                  </Button>
                   <Show when={restoreSelection()}>
-                    <button
+                    <Button
                       type="button"
                       disabled={busy()}
                       onClick={() => void restoreBackup()}
                       class="rounded-lg border border-warning/50 px-3 py-1.5 font-semibold text-[11.5px] text-warning hover:border-warning disabled:opacity-40"
                     >
                       {tx("Restore")}
-                    </button>
+                    </Button>
                   </Show>
                 </div>
               </div>
@@ -386,7 +375,7 @@ export function WelcomeFlow(): JSX.Element {
                     ? tx("At least one project agent is ready.")
                     : tx("Install and sign in to Claude or Codex before continuing.")}
                 </p>
-                <button
+                <Button
                   type="button"
                   disabled={busy()}
                   onClick={() => void actions.recheckAgents()}
@@ -394,7 +383,7 @@ export function WelcomeFlow(): JSX.Element {
                 >
                   <Icon name="refresh-cw" class="text-[12px]" />
                   {tx("Run checks again")}
-                </button>
+                </Button>
               </div>
               <Show when={connectedProjectAgents().length === 0}>
                 <div
@@ -409,14 +398,14 @@ export function WelcomeFlow(): JSX.Element {
                       "AgencyZero cannot send prompts until Claude or Codex is installed, compatible, and signed in.",
                     )}
                   </p>
-                  <button
+                  <Button
                     type="button"
                     disabled={busy()}
                     onClick={skipAgents}
                     class="mt-3 rounded-lg border border-error/35 px-3 py-1.5 text-[11.5px] text-az-body hover:border-error hover:text-error disabled:opacity-40"
                   >
                     {tx("Skip - I promise to install them later")}
-                  </button>
+                  </Button>
                 </div>
               </Show>
             </Show>
@@ -455,7 +444,7 @@ export function WelcomeFlow(): JSX.Element {
                     <div class="mt-4 grid grid-cols-2 gap-3">
                       <For each={connectedProjectAgents()}>
                         {(status) => (
-                          <button
+                          <Button
                             type="button"
                             disabled={busy()}
                             onClick={() => void chooseAgent(status.agent)}
@@ -471,7 +460,7 @@ export function WelcomeFlow(): JSX.Element {
                             <span class="mt-1 block text-[10.5px] text-az-muted">
                               {tx("Default project agent")}
                             </span>
-                          </button>
+                          </Button>
                         )}
                       </For>
                     </div>
@@ -479,22 +468,34 @@ export function WelcomeFlow(): JSX.Element {
                       title={tx("Default model")}
                       hint={tx("Choose from the enabled models for this agent.")}
                     >
-                      <select
-                        aria-label={tx("Default model")}
+                      <Select
                         value={settings().models[settings().defaultAgent].default}
                         disabled={busy() || !defaultAgentReady()}
-                        onChange={(event) =>
-                          void actions.setDefaultModel(
-                            settings().defaultAgent,
-                            event.currentTarget.value,
-                          )
+                        onChange={(value) =>
+                          typeof value === "string" &&
+                          void actions.setDefaultModel(settings().defaultAgent, value)
                         }
-                        class="h-9 min-w-[250px] rounded-lg border border-az-hairline bg-az-inset px-2.5 text-[12px] text-az-body outline-none disabled:opacity-40"
+                        class="min-w-[250px]"
                       >
-                        <For each={enabledModels()}>
-                          {(model) => <option value={model.id}>{model.name}</option>}
-                        </For>
-                      </select>
+                        <Select.Trigger
+                          aria-label={tx("Default model")}
+                          class="h-9 min-w-[250px] rounded-lg border border-az-hairline bg-az-inset px-2.5 text-[12px] text-az-body outline-none disabled:opacity-40"
+                        >
+                          <Select.Value />
+                          <Select.Indicator endIcon={<Icon name="chevron-down" />} />
+                        </Select.Trigger>
+                        <Select.Popover>
+                          <Select.Listbox>
+                            <For each={enabledModels()}>
+                              {(model) => (
+                                <Select.Option value={model.id} textValue={model.name}>
+                                  {model.name}
+                                </Select.Option>
+                              )}
+                            </For>
+                          </Select.Listbox>
+                        </Select.Popover>
+                      </Select>
                     </SetupRow>
                     <div class="mt-4">
                       <p class="font-medium text-[12.5px] text-az-strong">
@@ -510,7 +511,7 @@ export function WelcomeFlow(): JSX.Element {
                           )}
                         >
                           {(permission) => (
-                            <button
+                            <Button
                               type="button"
                               disabled={busy()}
                               onClick={() => void chooseSecurity(permission)}
@@ -526,7 +527,7 @@ export function WelcomeFlow(): JSX.Element {
                               <span class="mt-1.5 block text-[10.5px] text-az-muted leading-[1.45]">
                                 {SECURITY_HINT[permission]}
                               </span>
-                            </button>
+                            </Button>
                           )}
                         </For>
                       </div>
@@ -565,14 +566,14 @@ export function WelcomeFlow(): JSX.Element {
                               {tx("{count} chats available", { count: importable().length })}
                             </p>
                           </div>
-                          <button
+                          <Button
                             type="button"
                             disabled={busy() || importable().length === 0}
                             onClick={() => void importAll(source)}
                             class="rounded-lg border border-primary/45 px-3 py-1.5 font-medium text-[11.5px] text-primary hover:bg-primary/10 disabled:opacity-40"
                           >
                             {tx("Import all")}
-                          </button>
+                          </Button>
                         </div>
                       );
                     }}
@@ -601,7 +602,7 @@ export function WelcomeFlow(): JSX.Element {
                     <div class="flex rounded-lg border border-az-hairline bg-az-inset p-1">
                       <For each={[true, false]}>
                         {(enabled) => (
-                          <button
+                          <Button
                             type="button"
                             disabled={busy()}
                             onClick={() =>
@@ -614,7 +615,7 @@ export function WelcomeFlow(): JSX.Element {
                             }`}
                           >
                             {enabled ? tx("On") : tx("Off")}
-                          </button>
+                          </Button>
                         )}
                       </For>
                     </div>
@@ -644,28 +645,28 @@ export function WelcomeFlow(): JSX.Element {
                 </p>
               )}
             </Show>
-          </div>
+          </Modal.Body>
 
-          <footer class="flex items-center justify-between gap-4 border-az-hairline-soft border-t px-6 py-4">
+          <Modal.Footer class="justify-between gap-4 border-az-hairline-soft border-t px-6 py-4">
             <div class="flex items-center gap-2">
-              <button
+              <Button
                 type="button"
                 disabled={busy() || step() === 0}
                 onClick={() => setStep((current) => Math.max(0, current - 1))}
                 class="rounded-lg px-3 py-1.5 text-[11.5px] text-az-muted hover:bg-white/5 hover:text-base-content disabled:opacity-30"
               >
                 {tx("Back")}
-              </button>
-              <button
+              </Button>
+              <Button
                 type="button"
                 disabled={busy()}
                 onClick={() => actions.deferOnboarding()}
                 class="rounded-lg px-3 py-1.5 text-[11.5px] text-az-muted hover:bg-white/5 hover:text-base-content disabled:opacity-30"
               >
                 {isReplay() ? tx("Close") : tx("Finish later")}
-              </button>
+              </Button>
             </div>
-            <button
+            <Button
               type="button"
               disabled={busy() || !canContinue()}
               onClick={() =>
@@ -681,10 +682,10 @@ export function WelcomeFlow(): JSX.Element {
               <Show when={step() !== LAST_STEP}>
                 <Icon name="chevron-right" class="text-[13px]" />
               </Show>
-            </button>
-          </footer>
-        </section>
-      </div>
+            </Button>
+          </Modal.Footer>
+        </Modal.Content>
+      </Modal>
     </Show>
   );
 }
