@@ -1,4 +1,4 @@
-import { Checkbox, Input, Select, Slider, TextArea, Toggle } from "@pathscale/ui";
+import { Checkbox, Input, Select, TextArea, Toggle } from "@pathscale/ui";
 import {
   createContext,
   createEffect,
@@ -16,6 +16,7 @@ import { Button } from "~/components/Button";
 import { Icon, type IconProps } from "~/components/Icon";
 import { LanguageSwitcher } from "~/components/LanguageSwitcher";
 import { Panel } from "~/components/Panel";
+import { Slider } from "~/components/Slider";
 import { PillMenu } from "~/components/PillMenu";
 import { AgentStateDot } from "~/components/StatusDot";
 import { countdown, formatBytes, relativeTime } from "~/lib/format";
@@ -2261,7 +2262,20 @@ function CostSection(): JSX.Element {
   const warningUsd = () => warningPreview() ?? state.settings?.costWarningUsd ?? 0.75;
   let warningSaveRevision = 0;
 
+  /*
+   * Split, because the slider now says when a value is live and when it has
+   * settled. Dragging used to persist on every tick: each of those awaited a
+   * serialized store write, so the knob raced its own saves.
+   *
+   * The preview holds the shown value until the save it belongs to lands, and
+   * the revision guard means an older save finishing late cannot pull the
+   * display back to a value the user has already moved past.
+   */
   const previewWarning = (costWarningUsd: number): void => {
+    setWarningPreview(costWarningUsd);
+  };
+
+  const commitWarning = (costWarningUsd: number): void => {
     setWarningPreview(costWarningUsd);
     const revision = ++warningSaveRevision;
     void actions.saveSettings({ costWarningUsd }).finally(() => {
@@ -2368,13 +2382,10 @@ function CostSection(): JSX.Element {
             max={20}
             step={0.25}
             value={warningUsd()}
-            style={{
-              "--az-slider-percent": `${((warningUsd() - 0.25) / 19.75) * 100}%`,
-            }}
             formatValue={(value) => `$${value.toFixed(2)}`}
-            onChange={previewWarning}
-            size="sm"
-            class="az-cost-warning-slider w-full min-w-0 [&_[data-slot=label]]:sr-only [&_[data-slot=slider-output]]:w-14 [&_[data-slot=slider-output]]:text-right [&_[data-slot=slider-output]]:font-mono [&_[data-slot=slider-output]]:text-[12.5px] [&_[data-slot=slider-output]]:text-az-strong"
+            onInput={previewWarning}
+            onChange={commitWarning}
+            class="w-full min-w-0"
           />
         </div>
       </Row>
@@ -2592,13 +2603,10 @@ function Row(props: {
  * the point of these is to drag them and watch the window, and a value that
  * only lands on release cannot be judged.
  */
-/** How long after the last tick a drag counts as finished. */
-const GLASS_COMMIT_DELAY_MS = 180;
-
 /**
  * One appearance axis.
  *
- * Dragging paints immediately and persists only once the knob settles. It used
+ * Dragging paints immediately and persists only when the drag settles. It used
  * to call `saveSettings` on every tick, and each of those awaited a serialized
  * store write before it even applied the CSS, then made a native window call:
  * one session's log held 75 `set_settings` and 76 `set_window_chrome` round
@@ -2606,9 +2614,7 @@ const GLASS_COMMIT_DELAY_MS = 180;
  * the panel lagged, and why dragging depth could starve paint until the window
  * went blank and only recovered once the drag stopped.
  *
- * The live value is local while dragging so the knob tracks the pointer without
- * waiting for anything, and it defers back to the record between drags, which
- * keeps the store the one source of truth.
+ * The live/settled split is the slider's own now, so there is no timer here.
  */
 function GlassAxis(props: {
   label: string;
@@ -2623,27 +2629,7 @@ function GlassAxis(props: {
   format: (value: number) => string;
   onChange: (value: number) => void;
 }): JSX.Element {
-  const [dragging, setDragging] = createSignal<number | undefined>();
-  const shown = () => dragging() ?? props.value;
-  const percent = () => ((shown() - props.min) / (props.max - props.min)) * 100;
-
-  let commitTimer: ReturnType<typeof setTimeout> | undefined;
-  onCleanup(() => clearTimeout(commitTimer));
-
-  const change = (value: number): void => {
-    setDragging(value);
-    // Paint now. No store, no AppKit, no await.
-    writeGlassAxis(props.axis, props.toAxis ? props.toAxis(value) : value);
-
-    clearTimeout(commitTimer);
-    commitTimer = setTimeout(() => {
-      // Hand the value back to the record and stop overriding it, so a later
-      // change from anywhere else still wins here.
-      setDragging(undefined);
-      props.onChange(value);
-    }, GLASS_COMMIT_DELAY_MS);
-  };
-
+  const toAxis = (value: number) => (props.toAxis ? props.toAxis(value) : value);
   return (
     <div class="min-w-[260px]">
       <Slider
@@ -2651,12 +2637,12 @@ function GlassAxis(props: {
         min={props.min}
         max={props.max}
         step={props.step}
-        value={shown()}
-        style={{ "--az-slider-percent": `${percent()}%` }}
+        value={props.value}
         formatValue={props.format}
-        onChange={change}
-        size="sm"
-        class="az-cost-warning-slider w-full min-w-0 [&_[data-slot=label]]:sr-only [&_[data-slot=slider-output]]:w-14 [&_[data-slot=slider-output]]:text-right [&_[data-slot=slider-output]]:font-mono [&_[data-slot=slider-output]]:text-[12.5px] [&_[data-slot=slider-output]]:text-az-strong"
+        // Paint now: no store, no AppKit, no await.
+        onInput={(value) => writeGlassAxis(props.axis, toAxis(value))}
+        onChange={(value) => props.onChange(value)}
+        class="w-full min-w-0"
       />
     </div>
   );

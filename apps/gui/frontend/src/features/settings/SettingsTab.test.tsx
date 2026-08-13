@@ -196,22 +196,18 @@ describe("local debug control", () => {
 });
 
 describe("cost warning settings", () => {
-  it("renders the PathScale slider track and thumb instead of a disappearing native range", async () => {
+  it("renders the application's own slider, not a native range", async () => {
     const screen = await mountSettings();
     const slider = screen.container.querySelector<HTMLElement>('[role="slider"]');
     expect(slider).not.toBeNull();
-    if (!slider) throw new Error("PathScale slider thumb was not rendered");
-    const root = slider.closest('[data-slot="slider"]');
-    const labelId = slider.getAttribute("aria-labelledby");
+    if (!slider) throw new Error("the slider thumb was not rendered");
+    const root = slider.closest(".az-slider");
 
     expect(screen.container.querySelector('input[type="range"]')).toBeNull();
-    expect(root?.querySelector('[data-slot="slider-track"]')).toBeTruthy();
-    expect(root?.querySelector('[data-slot="slider-fill"]')).toBeTruthy();
-    expect(root?.querySelector('[data-slot="slider-thumb"]')).toBe(slider);
-    expect(labelId).toBeTruthy();
-    expect(screen.container.querySelector(`#${labelId}`)?.textContent).toBe(
-      "Projected turn warning threshold",
-    );
+    expect(root?.querySelector(".az-slider__track")).toBeTruthy();
+    expect(root?.querySelector(".az-slider__fill")).toBeTruthy();
+    expect(root?.querySelector(".az-slider__thumb")).toBe(slider);
+    expect(slider).toHaveAttribute("aria-label", "Projected turn warning threshold");
     expect(slider).toHaveAttribute("tabindex", "0");
     expect(slider).toHaveAttribute("aria-valuemin", "0.25");
     expect(slider).toHaveAttribute("aria-valuemax", "20");
@@ -219,7 +215,6 @@ describe("cost warning settings", () => {
     expect(slider).toHaveAttribute("aria-valuetext", "$0.75");
     expect(root).toHaveClass("min-w-0");
     expect(root).toHaveClass("w-full");
-    expect(root).toHaveClass("az-cost-warning-slider");
   });
 
   it("is keyboard-operable and persists the selected threshold", async () => {
@@ -235,46 +230,65 @@ describe("cost warning settings", () => {
     await waitFor(() => expect(screen.workspace.state.settings?.costWarningUsd).toBe(1));
   });
 
+  /*
+   * Pressing the track moves the value to the pointer, and the mapping is the
+   * inset one: the usable range is the track shrunk by half the thumb at each
+   * end, so the extremes stay reachable and the knob never leaves the rail.
+   * egui spells it `rect.x_range().shrink(handle_radius)`.
+   */
   it("is draggable and persists the pointer-selected threshold", async () => {
     const screen = await mountSettings();
-    const track = screen.container.querySelector<HTMLElement>('[data-slot="slider-track"]');
+    const track = screen.container.querySelector<HTMLElement>(".az-slider__track");
     const slider = screen.container.querySelector<HTMLElement>('[role="slider"]');
-    expect(track).not.toBeNull();
-    expect(slider).not.toBeNull();
-    if (!track || !slider) throw new Error("PathScale slider geometry was not rendered");
+    if (!track || !slider) throw new Error("the slider geometry was not rendered");
 
-    Object.defineProperty(track, "getBoundingClientRect", {
+    const rect = (width: number) => ({
       value: () => ({
         bottom: 20,
         height: 20,
         left: 0,
-        right: 200,
+        right: width,
         top: 0,
-        width: 200,
+        width,
         x: 0,
         y: 0,
         toJSON: () => ({}),
       }),
     });
-    Object.defineProperty(track, "setPointerCapture", { value: () => {} });
+    // A 200px track with a 20px thumb leaves 180px of travel starting at x=10.
+    Object.defineProperty(track, "getBoundingClientRect", rect(200));
+    Object.defineProperty(slider, "getBoundingClientRect", rect(20));
 
+    // Halfway along the usable range: 10 + 90 = 100.
     fireEvent.pointerDown(track, { clientX: 100, pointerId: 1 });
 
+    // Pressing previews; the value is shown at once but not yet persisted.
     expect(slider).toHaveAttribute("aria-valuenow", "10.25");
+    expect(screen.workspace.state.settings?.costWarningUsd).not.toBe(10.25);
+
+    // Releasing commits. The drag listeners live on the window, because the
+    // pointer leaves a 14px knob immediately.
+    fireEvent.pointerUp(window);
+
     expect(slider).toHaveAttribute("aria-valuetext", "$10.25");
     await waitFor(() => expect(screen.workspace.state.settings?.costWarningUsd).toBe(10.25));
   });
 
-  it("uses Blitz-safe thumb geometry instead of PathScale's unsupported compound calc", async () => {
+  /*
+   * One fraction drives both the thumb and the fill, and the inset arithmetic
+   * lives in the stylesheet as `fraction * (100% - thumb)`. Nothing is measured
+   * in JS to place them, which is what the old percent-plus-offset scheme did.
+   */
+  it("drives the geometry from a single fraction", async () => {
     const screen = await mountSettings();
-    const root = screen.container.querySelector<HTMLElement>('[data-slot="slider"]');
-    const thumb = screen.container.querySelector<HTMLElement>('[data-slot="slider-thumb"]');
-    if (!root || !thumb) throw new Error("PathScale slider geometry was not rendered");
+    const thumb = screen.container.querySelector<HTMLElement>(".az-slider__thumb");
+    const fill = screen.container.querySelector<HTMLElement>(".az-slider__fill");
+    if (!thumb || !fill) throw new Error("the slider geometry was not rendered");
 
-    expect(root).toHaveClass("az-cost-warning-slider");
-    expect(root.style.getPropertyValue("--az-slider-percent")).toBe("2.5316455696202533%");
-    expect(root.style.getPropertyValue("--az-slider-thumb-offset")).toBe("");
-    expect(root.style.getPropertyValue("--az-slider-fill-offset")).toBe("");
+    const fraction = (0.75 - 0.25) / (20 - 0.25);
+    expect(thumb.style.getPropertyValue("--az-slider-fraction")).toBe(String(fraction));
+    expect(fill.style.getPropertyValue("--az-slider-fraction")).toBe(String(fraction));
+    expect(thumb.style.getPropertyValue("--az-slider-percent")).toBe("");
   });
 
   it("does not snap back when an older drag save finishes after a newer value", async () => {
