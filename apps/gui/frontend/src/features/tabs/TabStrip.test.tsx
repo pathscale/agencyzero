@@ -1,4 +1,4 @@
-import { render, waitFor } from "@solidjs/testing-library";
+import { fireEvent, render, waitFor } from "@solidjs/testing-library";
 import { beforeEach, describe, expect, it } from "vitest";
 import { horizontalRevealTarget, TabStrip } from "~/features/tabs/TabStrip";
 import { setPrefs } from "~/stores/prefs";
@@ -127,7 +127,7 @@ describe("TabStrip", () => {
   });
 
   it("declares the strip a window drag region", async () => {
-    const { container } = await mountStrip();
+    const { container, getByRole } = await mountStrip();
     expect(container.querySelector('[data-tauri-drag-region="deep"]')).toBeTruthy();
   });
 
@@ -138,6 +138,23 @@ describe("TabStrip", () => {
 });
 
 describe("overflow", () => {
+  it("keeps navigation arrows in flex layout under the PathScale adapter", async () => {
+    const { container, getByRole } = await mountStrip();
+    const strip = container.querySelector<HTMLElement>(".az-scroll-x");
+    if (!strip) throw new Error("tab strip was not rendered");
+    Object.defineProperties(strip, {
+      clientWidth: { configurable: true, get: () => 200 },
+      scrollWidth: { configurable: true, get: () => 400 },
+      scrollLeft: { configurable: true, get: () => 0, set: () => {} },
+    });
+    fireEvent.scroll(strip);
+    await waitFor(() => expect(getByRole("button", { name: "Scroll tabs right" })).toBeTruthy());
+    const right = getByRole("button", { name: "Scroll tabs right" });
+    expect(right.className).toContain("flex");
+    expect(right.className).toContain("size-6");
+    expect(right.className).toContain("shrink-0");
+  });
+
   it("computes an immediate reveal position for an offscreen active pill", () => {
     const strip = { clientWidth: 160, scrollLeft: 0, scrollWidth: 400 };
     const stripRect = { left: 100, right: 260 };
@@ -175,6 +192,90 @@ describe("overflow", () => {
       (pill) => (pill as HTMLElement).dataset.tabKey,
     );
     expect(keyed).toEqual(workspace.state.tabs.map((tab) => tab.key));
+  });
+
+  it("reveals the active tab again after overflow arrows shrink the strip", async () => {
+    const { container, getByRole, findByLabelText } = await mountStrip();
+    const strip = container.querySelector<HTMLElement>(".az-scroll-x");
+    const home = getByRole("button", { name: "Home" }).closest<HTMLElement>("[data-tab-key]");
+    if (!strip || !home) throw new Error("tab strip geometry was not rendered");
+
+    let scrollLeft = 0;
+    Object.defineProperties(strip, {
+      clientWidth: { configurable: true, get: () => 200 },
+      scrollWidth: { configurable: true, get: () => 400 },
+      scrollLeft: {
+        configurable: true,
+        get: () => scrollLeft,
+        set: (value: number) => {
+          scrollLeft = value;
+        },
+      },
+    });
+    strip.getBoundingClientRect = () => ({ left: 100, right: 300, width: 200 }) as DOMRect;
+    home.getBoundingClientRect = () =>
+      ({ left: 260 - scrollLeft, right: 330 - scrollLeft, width: 70 }) as DOMRect;
+
+    fireEvent.scroll(strip);
+    await findByLabelText("Scroll tabs right");
+    await Promise.resolve();
+
+    expect(scrollLeft).toBe(38);
+  });
+
+  /*
+   * Driving the live strip, "Scroll tabs right" cycled 0 -> 11 -> 586 -> 0
+   * instead of walking to the end. `nudge` was right every time; the
+   * reveal-the-active-tab effect undid it.
+   *
+   * The effect has to re-reveal when the arrows appear, because they shrink the
+   * strip (the test above). But it depended on `left` and `right` separately,
+   * and those flip on their own at each end of the travel: leaving 0 turns
+   * `left` on, and reaching the maximum turns `right` off. Neither changes the
+   * width, so neither should move the reader back. That is why this only ever
+   * bit at the two ends, and looked intermittent in between.
+   */
+  it("does not snap back to the active tab when a nudge reaches an end", async () => {
+    const { container, getByRole, findByLabelText } = await mountStrip();
+    const strip = container.querySelector<HTMLElement>(".az-scroll-x");
+    const home = getByRole("button", { name: "Home" }).closest<HTMLElement>("[data-tab-key]");
+    if (!strip || !home) throw new Error("tab strip geometry was not rendered");
+
+    let scrollLeft = 0;
+    Object.defineProperties(strip, {
+      clientWidth: { configurable: true, get: () => 200 },
+      scrollWidth: { configurable: true, get: () => 400 },
+      scrollLeft: {
+        configurable: true,
+        get: () => scrollLeft,
+        set: (value: number) => {
+          scrollLeft = value;
+        },
+      },
+    });
+    strip.getBoundingClientRect = () => ({ left: 100, right: 300, width: 200 }) as DOMRect;
+    // Fully inside the strip at rest, so settling the arrows does not scroll
+    // and the signal reaches the press reading `left: false`. Revealing on the
+    // way in would call `measure` itself and pre-flip the flag, which is what
+    // made an earlier version of this test pass against the broken code.
+    home.getBoundingClientRect = () =>
+      ({ left: 150 - scrollLeft, right: 220 - scrollLeft, width: 70 }) as DOMRect;
+
+    // Settle with the arrows already on screen, so this scenario is only about
+    // travel and not about the strip changing width.
+    fireEvent.scroll(strip);
+    const right = await findByLabelText("Scroll tabs right");
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(scrollLeft).toBe(0);
+
+    // One press is a screenful: max(180, 200 * 0.7) = 180, clamped to 200.
+    // Leaving 0 turns `left` on, and that flip is what used to drag the strip
+    // back onto the active tab (to 42 here) instead of leaving the reader
+    // where the press put them.
+    fireEvent.click(right);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(scrollLeft).toBe(180);
   });
 });
 

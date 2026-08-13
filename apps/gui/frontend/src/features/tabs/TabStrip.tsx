@@ -1,4 +1,13 @@
-import { createEffect, createSignal, For, type JSX, onCleanup, onMount, Show } from "solid-js";
+import {
+  createEffect,
+  createMemo,
+  createSignal,
+  For,
+  type JSX,
+  onCleanup,
+  onMount,
+  Show,
+} from "solid-js";
 import { Button } from "~/components/Button";
 import { Icon, type IconProps } from "~/components/Icon";
 import { StatusDot } from "~/components/StatusDot";
@@ -10,7 +19,13 @@ import type { Tab } from "~/types";
 
 const PILL = "flex h-8 shrink-0 items-center rounded-full transition-colors";
 const ACTIVE = "bg-az-tab shadow-[inset_0_1px_0_rgb(var(--az-sheen)/14%)]";
-const IDLE = "border border-transparent text-az-muted hover:bg-white/5 hover:text-base-content";
+/*
+ * `bg-az-hover`, not `bg-white/5`. Every surface here is hue-tinted
+ * (`--az-hue`), so a flat white wash over one reads as grey laid on blue
+ * rather than as the surface lifting. `--color-az-hover` is the same ladder one
+ * step above `--color-az-tab`, which is what the row hover was named for.
+ */
+const IDLE = "border border-transparent text-az-muted hover:bg-az-hover hover:text-base-content";
 
 const TAB_ICON: Record<Tab["kind"], IconProps["name"] | null> = {
   home: "layout-grid",
@@ -55,6 +70,8 @@ export function TabStrip(): JSX.Element {
 
   let strip!: HTMLDivElement;
   const [overflow, setOverflow] = createSignal({ left: false, right: false });
+  /** Arrows on screen at all, which is what changes the strip's usable width. */
+  const arrowsShown = createMemo(() => overflow().left || overflow().right);
 
   const reorder = createTabReorder({
     onMove: actions.moveTab,
@@ -67,7 +84,10 @@ export function TabStrip(): JSX.Element {
     const slack = strip.scrollWidth - strip.clientWidth;
     // A pixel of tolerance: fractional layout widths make an exact comparison
     // report scrollable-by-0.4px and leave an arrow enabled forever.
-    setOverflow({ left: strip.scrollLeft > 1, right: strip.scrollLeft < slack - 1 });
+    const next = { left: strip.scrollLeft > 1, right: strip.scrollLeft < slack - 1 };
+    setOverflow((current) =>
+      current.left === next.left && current.right === next.right ? current : next,
+    );
   }
 
   /** Roughly a screenful, so repeated presses walk the strip without overshooting. */
@@ -125,7 +145,21 @@ export function TabStrip(): JSX.Element {
   createEffect(() => {
     const key = state.activeKey;
     state.tabs.length;
-
+    // Whether the arrows are on screen at all, rather than each end's flag.
+    // The arrows take horizontal room, so the strip narrows when they appear
+    // and the active tab has to be revealed again — but that is this
+    // disjunction changing, not `left` or `right` moving on their own.
+    //
+    // Depending on them separately meant every trip to an end re-revealed:
+    // leaving 0 turns `left` on and reaching the maximum turns `right` off,
+    // neither of which changes the width. Driving the live strip, that cycled
+    // "Scroll tabs right" between 0, 11 and 586 instead of walking to the end,
+    // and looked intermittent because the middle of the travel flips nothing.
+    //
+    // It has to be the memo and not `overflow().left || overflow().right`:
+    // reading the signal subscribes to the object, so either flag flipping
+    // re-runs this no matter what is done with the values afterwards.
+    arrowsShown();
     queueMicrotask(() => {
       reveal(key);
     });
@@ -153,7 +187,7 @@ export function TabStrip(): JSX.Element {
       <div
         ref={strip}
         onScroll={measure}
-        class="az-scroll-x flex min-w-0 flex-1 items-center gap-2"
+        class="az-scroll-x relative flex min-w-0 flex-1 items-center gap-2"
       >
         <For each={state.tabs}>
           {(tab) => <TabPill tab={tab} reorder={reorder} strip={() => strip} />}
@@ -174,13 +208,20 @@ export function TabStrip(): JSX.Element {
         <ScrollArrow direction={1} isDisabled={!overflow().right} onScroll={() => nudge(1)} />
       </Show>
 
-      <div class="flex flex-none items-center gap-1.5">
+      {/*
+        The mask that tabs scroll under.
+        `az-desk`, not `base-100`: it has to match what is actually behind the
+        strip, and the panel colour is a different rung of the ladder — so it
+        read as a foreign block with hard edges sitting on the desk. The fade
+        carries the tab into it instead of cutting it off at a straight seam.
+      */}
+      <div class="az-strip-cap relative z-20 flex flex-none items-center gap-1.5 rounded-full pr-1 pl-5">
         <Button
           type="button"
           onClick={() => actions.openAnalytics()}
           title={tx("Analytics")}
           aria-label={tx("Analytics")}
-          class={`relative flex size-[30px] items-center justify-center rounded-full transition-colors hover:bg-white/6 ${
+          class={`relative flex size-[30px] items-center justify-center rounded-full transition-colors hover:bg-az-hover ${
             state.activeKey === "analytics"
               ? "text-primary"
               : "text-az-muted hover:text-base-content"
@@ -199,7 +240,7 @@ export function TabStrip(): JSX.Element {
               : tx("Settings")
           }
           aria-label={tx("Settings")}
-          class={`relative flex size-[30px] items-center justify-center rounded-full transition-colors hover:bg-white/6 ${
+          class={`relative flex size-[30px] items-center justify-center rounded-full transition-colors hover:bg-az-hover ${
             state.activeKey === "settings"
               ? "text-primary"
               : "text-az-muted hover:text-base-content"
@@ -239,7 +280,7 @@ function ScrollArrow(props: {
       onClick={props.onScroll}
       disabled={props.isDisabled}
       aria-label={props.direction === -1 ? tx("Scroll tabs left") : tx("Scroll tabs right")}
-      class="flex size-6 shrink-0 items-center justify-center rounded-full text-az-muted transition-colors hover:bg-white/6 hover:text-base-content disabled:pointer-events-none disabled:opacity-25"
+      class="flex size-6 shrink-0 items-center justify-center rounded-full text-az-muted transition-colors hover:bg-az-hover hover:text-base-content disabled:pointer-events-none disabled:opacity-25"
     >
       <Icon
         name="chevron-right"
@@ -361,7 +402,7 @@ function TabPill(props: {
           data-no-drag
           onClick={() => actions.closeTab(props.tab.key)}
           aria-label={tx("Close {name}", { name: props.tab.label })}
-          class={`mr-1.5 flex size-[18px] shrink-0 items-center justify-center rounded-full text-az-faint transition-[color,background-color,opacity] hover:bg-white/10 hover:text-base-content focus-visible:opacity-100 ${
+          class={`mr-1.5 flex size-[18px] shrink-0 items-center justify-center rounded-full text-az-faint transition-[color,background-color,opacity] hover:bg-az-hover hover:text-base-content focus-visible:opacity-100 ${
             isActive() ? "opacity-100" : "opacity-0 group-hover:opacity-100"
           }`}
         >
