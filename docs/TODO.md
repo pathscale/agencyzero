@@ -97,7 +97,7 @@ The detail stays in the sections below; this is an index, not a second copy.
 | 14 | `BLITZ_PRESENT_MODE=mailbox` | **closed 2026-08-12, measured worse** |
 | 15 | Pass Stylo a thread pool | open |
 | 16 | Enable `blitz-dom/parallel-construct` | open, amended by 19 |
-| 17 | Heavy read-only Tauri commands off the window thread | open |
+| 17 | Heavy read-only Tauri commands off the window thread | open, **now measured** |
 | 18 | Renderer on its own thread | gated on 17 |
 | 19 | Genet's shaping pre-pass, all four parts | amends 16 |
 | 20 | A paint-list IR between layout and the renderer | prerequisite of 12, 18 |
@@ -133,6 +133,32 @@ invisible until a crash report and a `sample` could name a function of ours.
 The cost is real and accepted: `log-phase-times` rides that feature, so a
 timing taken from a release build now contains its own instrument. Constraint 2
 below therefore stands rather than being retired.
+
+Item 17 was measured on 2026-08-14, against a copy of the real Experimental
+profile (247 projects, five open tabs), with the tab-load instrumentation now in
+`workspace.tsx`. The reads are synchronous `#[tauri::command]` functions, so they
+run on the window thread: dispatch overlaps freely, up to 37 in flight at once,
+but execution is one at a time in issue order. The same `list_items` call took
+**27ms issued first and 347ms issued third**, and the last project's fetch
+finished at **547ms** against the first one's **35ms**. Sharing that queue were
+`list_quota` at **1186ms**, `check_for_update` at 940ms and `claude_usage` at
+722ms, all network-bound, all ahead of store reads a visible tab was waiting on.
+
+The cheap half of the fix shipped with the measurement: boot now issues the
+active tab's reads first, which took that tab's fetch from 473ms to **56ms**. It
+does not make the work concurrent, it just stops the tab someone is looking at
+being last in line. The expensive half is item 17 proper, and the numbers above
+are the case for it.
+
+Two more from the same run, neither yet addressed:
+
+- `reconcile` of 2,422 messages costs **237ms** on the main thread, the largest
+  single frontend cost in a cold load.
+- Boot waits for every open project before reporting ready, so one heavy tab
+  delays four light ones. Loading the active tab, going ready, then filling the
+  rest in the background is the obvious shape; it needs care around
+  `drainEventBuffer`, since an event for a project that has not hydrated yet
+  must not be dropped.
 
 ## Three constraints that govern the order
 

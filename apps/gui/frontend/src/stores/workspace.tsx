@@ -802,15 +802,33 @@ function createWorkspace() {
    */
   async function fetchProject(projectId: string): Promise<void> {
     const backend = client();
+    const started = performance.now();
+    /*
+     * Timed per call, not just as a group.
+     *
+     * The seven run concurrently, so the group costs whatever the slowest one
+     * costs and the other six are free. Reporting only the total says "the
+     * fetch took 900ms" and hides which single call to go and look at, which is
+     * the only actionable part.
+     */
+    const timings = new Map<string, number>();
+    const timed = <T,>(label: string, work: Promise<T>): Promise<T> => {
+      const from = performance.now();
+      return work.then((value) => {
+        timings.set(label, performance.now() - from);
+        return value;
+      });
+    };
     const [items, messages, running, taskLog, io, prs, questions] = await Promise.all([
-      backend.listItems(projectId),
-      backend.listMessages(projectId),
-      backend.listRunningTasks(projectId),
-      backend.listTaskLog(projectId, TASK_LOG_PAGE),
-      backend.listAgentIo(projectId),
-      backend.listPullRequests(projectId),
-      backend.listQuestions(projectId),
+      timed("items", backend.listItems(projectId)),
+      timed("messages", backend.listMessages(projectId)),
+      timed("running", backend.listRunningTasks(projectId)),
+      timed("taskLog", backend.listTaskLog(projectId, TASK_LOG_PAGE)),
+      timed("agentIo", backend.listAgentIo(projectId)),
+      timed("prs", backend.listPullRequests(projectId)),
+      timed("questions", backend.listQuestions(projectId)),
     ]);
+    const fetched = performance.now();
     const project = state.projects.find((candidate) => candidate.id === projectId);
     const hydratedTab = project ? projectTab(project, messages) : null;
     batch(() => {
@@ -834,6 +852,19 @@ function createWorkspace() {
         }
       }
     });
+    const reconciled = performance.now();
+    /*
+     * Time to the first frame carrying this project, which is the number that
+     * matches what a person waiting on a tab actually experiences. The state
+     * write above returns as soon as the store is updated; the rows are not on
+     * screen until the renderer has produced a frame, and on this renderer that
+     * frame is the whole window.
+     */
+    let paintedAt: number | undefined;
+    requestAnimationFrame(() => {
+      paintedAt = performance.now();
+    });
+
     const lastReceivedAt = messages.at(-1)?.createdAt ?? "";
     // Reattachment is recovery for live proxy-owned work, not hydration of the
     // persisted workspace. A dead proxy must not hide the projects and the
@@ -841,13 +872,38 @@ function createWorkspace() {
     await backend
       .syncProject(projectId, lastReceivedAt)
       .catch((cause) => log.warn(`could not reattach ${projectId}: ${describeError(cause)}`));
+    const synced = performance.now();
+
+    const ms = (value: number) => `${value.toFixed(0)}ms`;
+    const slowest = [...timings.entries()].sort((left, right) => right[1] - left[1]);
+    /*
+     * Read, never awaited. Instrumentation must not gate the thing it measures:
+     * awaiting the frame made a load that never painted never resolve at all,
+     * which turned four transcript tests into one-second timeouts.
+     */
+    const paint = paintedAt === undefined ? "not yet" : ms(paintedAt - reconciled);
+    log.info(
+      `project ${projectId} cold load ${ms(synced - started)}: ` +
+        `fetch ${ms(fetched - started)} [${slowest.map(([name, value]) => `${name} ${ms(value)}`).join(" ")}], ` +
+        `reconcile ${ms(reconciled - fetched)}, ` +
+        `paint ${paint}, ` +
+        `sync ${ms(synced - reconciled)} ` +
+        `(${messages.length} messages, ${items.length} items, ${taskLog.entries.length}/${taskLog.total} log, ` +
+        `${io.length} io, ${prs.length} prs, ${questions.length} questions)`,
+    );
   }
 
   /** One snapshot request per project, shared by boot and a simultaneous tab open. */
   function loadProject(projectId: string): Promise<void> {
     if (hydratedProjects.has(projectId)) return Promise.resolve();
     const pending = projectLoads.get(projectId);
-    if (pending) return pending;
+    if (pending) {
+      // Worth naming: a tab opened while boot is already fetching the same
+      // project waits on boot's request rather than issuing a second one, so
+      // its apparent cost is however much of that request was left.
+      log.debug(`project ${projectId} load already in flight, joining it`);
+      return pending;
+    }
 
     const load = fetchProject(projectId)
       .then(() => {
@@ -989,9 +1045,24 @@ function createWorkspace() {
         setState("activeKey", lastPortableActiveKey);
       });
 
-      const openProjectIds = state.tabs.flatMap((tab) =>
-        tab.projectId === null ? [] : [tab.projectId],
-      );
+      /*
+       * The tab in front goes first, and that is the whole change: everything
+       * below still runs, still concurrently, and still finishes before ready.
+       *
+       * It matters because the reads do not actually run concurrently. They are
+       * synchronous Tauri commands, so they execute on the window thread one at
+       * a time in the order they were issued, and only their dispatch overlaps.
+       * Measured on a real profile with five open tabs: the same `list_items`
+       * call took 27ms issued first and 347ms issued third, and the last
+       * project's fetch finished at 547ms against the first one's 35ms. In tab
+       * order the project someone is actually looking at was as likely as not
+       * to be the one at the back of that queue.
+       */
+      const openProjectIds = state.tabs
+        .flatMap((tab) => (tab.projectId === null ? [] : [tab.projectId]))
+        .sort((left, right) =>
+          left === state.activeKey ? -1 : right === state.activeKey ? 1 : 0,
+        );
       log.info(`boot: loading ${openProjectIds.length} open project(s); ${projects.length} total`);
       await Promise.all([
         ...openProjectIds.map(loadProject),
@@ -1721,12 +1792,37 @@ function createWorkspace() {
   function openProject(projectId: string): void {
     const project = state.projects.find((candidate) => candidate.id === projectId);
     if (!project) return;
+    /*
+     * Measured from the click, not from the fetch, and reported separately from
+     * the cold-load breakdown inside `fetchProject`.
+     *
+     * The two answer different questions. This one is what the person waiting
+     * experienced; that one is where the time went. They differ whenever the
+     * tab was already hydrated, or joined a request boot had started, and the
+     * difference is exactly the part a cache is supposed to remove.
+     */
+    const clicked = performance.now();
+    const cached = hydratedProjects.has(projectId);
     if (!state.tabs.some((tab) => tab.key === projectId)) {
       setState("tabs", (tabs) => [...tabs, projectTab(project)]);
     }
-    void loadProject(projectId).catch((cause) =>
-      log.error(`could not load ${projectId}: ${describeError(cause)}`),
-    );
+    const opened = performance.now();
+    void loadProject(projectId)
+      .then(() => {
+        const settled = performance.now();
+        // One frame later, so this is time to the tab being on screen rather
+        // than time to the store being correct. Reported from inside the frame
+        // callback so a load that never paints still logs its own number.
+        requestAnimationFrame(() => {
+          const painted = performance.now();
+          log.info(
+            `tab ${projectId} open ${(settled - clicked).toFixed(0)}ms ` +
+              `+ ${(painted - settled).toFixed(0)}ms to paint ` +
+              `(${cached ? "cache hit" : "cache MISS"}, strip ${(opened - clicked).toFixed(0)}ms)`,
+          );
+        });
+      })
+      .catch((cause) => log.error(`could not load ${projectId}: ${describeError(cause)}`));
     focus(projectId);
   }
 
