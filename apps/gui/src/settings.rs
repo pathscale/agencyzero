@@ -580,6 +580,12 @@ pub fn normalize(settings: &mut GlobalSettings) {
     ) {
         settings.agent_restart_policy = "disabled".into();
     }
+    // Deep profiling is a child capability of inspection, not an independent
+    // dormant preference. Clear the stored value as well as making it
+    // ineffective so re-enabling inspection cannot restart an old trace.
+    if !settings.blitz_control_enabled {
+        settings.blitz_deep_profiling_enabled = false;
+    }
 }
 
 /// Keep the moderator on one of the models selected in Settings.
@@ -921,6 +927,19 @@ mod tests {
         let mut settings = GlobalSettings::default();
         normalize_for_store(&mut settings, true);
         assert_eq!(settings.onboarding_completed, Some(true));
+    }
+
+    #[test]
+    fn normalization_clears_deep_profiling_when_inspection_is_off() {
+        let mut settings = GlobalSettings {
+            blitz_control_enabled: false,
+            blitz_deep_profiling_enabled: true,
+            ..GlobalSettings::default()
+        };
+
+        normalize(&mut settings);
+
+        assert!(!settings.blitz_deep_profiling_enabled);
     }
 
     #[test]
