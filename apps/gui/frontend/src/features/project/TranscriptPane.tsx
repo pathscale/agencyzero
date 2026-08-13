@@ -130,6 +130,8 @@ export function noteTranscriptChromeChanged(): void {
 }
 
 export const TRANSCRIPT_MAX_ENTRIES = TRANSCRIPT_PAGE_SIZE * 4;
+/** What the first frame mounts, before the window fills to a full page. */
+const INITIAL_VISIBLE_ENTRIES = 4;
 
 /** One row of the transcript: a message, or an answered question above it. */
 type TimelineEntry =
@@ -310,7 +312,23 @@ export function TranscriptPane(props: {
       value ? 0 : encodeTranscriptPosition(scroller.scrollTop),
     );
   };
-  const [visibleEntries, setVisibleEntries] = createSignal(TRANSCRIPT_PAGE_SIZE);
+  /*
+   * The first frame carries only what a reader can actually see; the rest of the
+   * page arrives over the frames after it.
+   *
+   * A row costs 8 to 14ms to build in this engine, almost all of it message body
+   * rendering, so a full page of twelve is 94 to 168ms of the pane's first
+   * reveal no matter how few of them fit on screen. Four covers the visible tail
+   * at any panel width, and the window fills to a full page immediately after,
+   * re-pinning as it goes so the newest row stays put while older ones mount
+   * above it.
+   *
+   * The panel being open or closed changes the pane's width and therefore how
+   * tall each row is, so this cannot be a count that assumes a shape. It is
+   * deliberately below what the shortest rows would fill and corrected by
+   * `followTail`, rather than computed from a height that is not settled yet.
+   */
+  const [visibleEntries, setVisibleEntries] = createSignal(INITIAL_VISIBLE_ENTRIES);
   /*
    * The newest row the window is allowed to mount, by key, once the window has
    * reached its ceiling and begun sliding. Undefined means the window ends at
@@ -361,6 +379,36 @@ export function TranscriptPane(props: {
     if (typeof requestAnimationFrame === "undefined") queueMicrotask(restoreAnchor);
     else revealFrame = requestAnimationFrame(restoreAnchor);
   };
+  /*
+   * Fill the window to a full page over the frames after the first.
+   *
+   * Each step re-pins, because the rows arriving mount *above* the newest one:
+   * without that the tail would walk down the screen as the page filled. A
+   * reader who has scrolled away is left alone, since `followTail` is a no-op
+   * once unpinned.
+   *
+   * Driven by frames rather than a timer so it yields between steps and cannot
+   * turn into one long block, which is the thing it exists to avoid.
+   */
+  onMount(() => {
+    if (typeof requestAnimationFrame === "undefined") {
+      setVisibleEntries(TRANSCRIPT_PAGE_SIZE);
+      return;
+    }
+    let fillFrame: number | undefined;
+    const fill = (): void => {
+      const size = untrack(visibleEntries);
+      if (size >= TRANSCRIPT_PAGE_SIZE) return;
+      setVisibleEntries(Math.min(TRANSCRIPT_PAGE_SIZE, size + INITIAL_VISIBLE_ENTRIES));
+      followTail();
+      fillFrame = requestAnimationFrame(fill);
+    };
+    fillFrame = requestAnimationFrame(fill);
+    onCleanup(() => {
+      if (fillFrame !== undefined) cancelAnimationFrame(fillFrame);
+    });
+  });
+
   const revealEarlier = (afterRestore?: () => void): void => {
     const view = visibleTimeline();
     /*
