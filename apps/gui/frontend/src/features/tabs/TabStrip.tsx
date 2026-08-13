@@ -149,31 +149,40 @@ export function TabStrip(): JSX.Element {
         <ScrollArrow direction={-1} isDisabled={!overflow().left} onScroll={() => nudge(-1)} />
       </Show>
 
-      <div
-        ref={strip}
-        onScroll={measure}
-        class="az-scroll-x flex min-w-0 flex-1 items-center gap-2"
-      >
-        <For each={state.tabs}>
-          {(tab) => <TabPill tab={tab} reorder={reorder} strip={() => strip} />}
-        </For>
-
-        <button
-          type="button"
-          onClick={() => actions.openDraft()}
-          title={tx("New project")}
-          aria-label={tx("New project")}
-          class="flex h-8 shrink-0 items-center justify-center rounded-full border border-primary/22 border-dashed px-3 text-az-muted transition-colors hover:border-primary hover:bg-primary/8 hover:text-primary"
+      {/*
+        The scroller owns navigation, while this outer box owns clipping.
+        Blitz currently lays out the scroller to the correct width but can
+        paint horizontally overflowing children beyond its scroll clip. An
+        independent non-scrolling clip keeps those tabs below the fixed
+        analytics/settings/avatar controls without changing scroll geometry.
+      */}
+      <div data-tab-viewport class="min-w-0 flex-1 overflow-hidden">
+        <div
+          ref={strip}
+          onScroll={measure}
+          class="az-scroll-x flex w-full min-w-0 items-center gap-2"
         >
-          <Icon name="plus" class="text-[15px]" />
-        </button>
+          <For each={state.tabs}>
+            {(tab) => <TabPill tab={tab} reorder={reorder} strip={() => strip} />}
+          </For>
+
+          <button
+            type="button"
+            onClick={() => actions.openDraft()}
+            title={tx("New project")}
+            aria-label={tx("New project")}
+            class="flex h-8 shrink-0 items-center justify-center rounded-full border border-primary/22 border-dashed px-3 text-az-muted transition-colors hover:border-primary hover:bg-primary/8 hover:text-primary"
+          >
+            <Icon name="plus" class="text-[15px]" />
+          </button>
+        </div>
       </div>
 
       <Show when={overflow().left || overflow().right}>
         <ScrollArrow direction={1} isDisabled={!overflow().right} onScroll={() => nudge(1)} />
       </Show>
 
-      <div class="flex flex-none items-center gap-1.5">
+      <div data-tab-controls class="flex flex-none items-center gap-1.5">
         <button
           type="button"
           onClick={() => actions.openAnalytics()}

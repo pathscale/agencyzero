@@ -168,6 +168,17 @@ describe("overflow", () => {
     expect(container.querySelector(".az-scroll-x")).toBeTruthy();
   });
 
+  it("clips overflowing tabs before the fixed right-side controls", async () => {
+    const { container } = await mountStrip();
+    const viewport = container.querySelector("[data-tab-viewport]");
+    const controls = container.querySelector("[data-tab-controls]");
+
+    expect(viewport?.className).toContain("overflow-hidden");
+    expect(viewport?.querySelector(".az-scroll-x")).toBeTruthy();
+    expect(viewport?.parentElement).toBe(controls?.parentElement);
+    expect(viewport?.contains(controls)).toBe(false);
+  });
+
   /** How the scroll-into-view effect locates the active pill. */
   it("keys every pill so the active one can be scrolled into view", async () => {
     const { container, workspace } = await mountStrip();
