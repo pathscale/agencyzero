@@ -151,7 +151,28 @@ export interface AgencyZeroApi {
 
   // — Settings ————————————————————————————————————————————————
   getSettings(): Promise<GlobalSettings>;
+  /**
+   * Copy the store, now, because the owner asked.
+   *
+   * Unlike a backup this does not restart: the process holding the only writer
+   * lock takes the copy itself, so a drain is enough. Resolves with the name
+   * of the snapshot that was written.
+   */
+  createStoreSnapshot(): Promise<string>;
   setSettings(patch: DeepPartial<GlobalSettings>): Promise<GlobalSettings>;
+  /**
+   * Carry the window chrome's colours from the stylesheet to the native frame.
+   *
+   * The theme is CSS and moves at runtime; the glass view behind the window is
+   * an AppKit object made once at launch. Without this the two drift apart.
+   * The values are read from computed style here so Rust never holds a second
+   * copy of the palette.
+   */
+  setWindowChrome(chrome: {
+    tint?: [number, number, number, number];
+    radius?: number;
+    enabled: boolean;
+  }): Promise<void>;
   getStudySummary(): Promise<StudySummary>;
   /** Native save picker; `null` means it was cancelled. */
   exportStudyEvents(): Promise<string | null>;

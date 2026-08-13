@@ -89,7 +89,9 @@ export function createCommandApi(call: CommandCaller, on: EventListener): Agency
     resolveModeration: (messageId, approve) => call("resolve_moderation", { messageId, approve }),
 
     getSettings: () => call("get_settings"),
+    createStoreSnapshot: () => call("create_store_snapshot"),
     setSettings: (patch) => call("set_settings", { patch }),
+    setWindowChrome: (chrome) => call("set_window_chrome", chrome),
     getStudySummary: () => call("get_study_summary"),
     exportStudyEvents: () => call("export_study_events"),
     clearStudyEvents: () => call("clear_study_events"),

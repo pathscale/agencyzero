@@ -691,6 +691,16 @@ export interface ThemeSettings {
    */
   softness: number;
   /**
+   * Panel lift, as a percentage mixed toward the `az-badge` rung. 0 is
+   * untouched. Toward a lighter rung of the same hue, never toward white —
+   * a white film on a dark surface reads as grey haze, not as frost.
+   */
+  glassLift?: number;
+  /** Panel edge, as the accent's alpha percentage. 16 is the untouched hairline. */
+  glassBorder?: number;
+  /** Panel drop shadow, 0 to 1. 0 is none. */
+  glassShadow?: number;
+  /**
    * How much of the surface colour is mixed into every surface, as a percentage.
    * Ignored while `surface` is empty.
    */

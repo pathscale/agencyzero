@@ -21,7 +21,7 @@ import { AgentStateDot } from "~/components/StatusDot";
 import { countdown, formatBytes, relativeTime } from "~/lib/format";
 import { AGENT_LABELS, agentStateLabel, envPolicyLabel, permissionLabel } from "~/lib/labels";
 import { describeError, log } from "~/lib/log";
-import { DEFAULT_WASH, normalizeWash } from "~/lib/theme";
+import { DEFAULT_GLASS, DEFAULT_WASH, normalizeWash } from "~/lib/theme";
 import { t, tx, type UiMessage } from "~/stores/i18n";
 import { prefs, setPrefs } from "~/stores/prefs";
 import { useNow, useWorkspace } from "~/stores/workspace";
@@ -191,14 +191,12 @@ export function SettingsTab(): JSX.Element {
     setPendingBlitzControl(enabled);
     setBlitzControlPending(true);
     setBlitzControlError("");
+    // Only inspection. Deep profiling is its own runtime switch and keeps
+    // whatever it was set to: clearing it here meant turning inspection off and
+    // back on silently dropped a preference the owner had chosen, with nothing
+    // on screen saying it had gone.
     void actions
-      .saveSettings({
-        blitzControlEnabled: enabled,
-        // Do not silently restart an intrusive trace if inspection is later
-        // re-enabled. The shared runtime enforces this too; persisting the
-        // coherent pair keeps the application setting honest.
-        ...(!enabled ? { blitzDeepProfilingEnabled: false } : {}),
-      })
+      .saveSettings({ blitzControlEnabled: enabled })
       .catch((cause) => setBlitzControlError(describeError(cause)))
       .finally(() => {
         setPendingBlitzControl(null);
@@ -398,7 +396,17 @@ export function SettingsTab(): JSX.Element {
         <Show when={settings()}>
           {(current) => (
             <>
-              <div class="overflow-hidden rounded-panel border border-az-hairline bg-base-100">
+              {/*
+                `flex-none` for the same reason every Section carries it. This
+                is a flex item in the settings column, and `overflow-hidden`
+                zeroes an item's automatic minimum size, so this was the one
+                panel here allowed to shrink — and in an over-constrained
+                column it absorbed all of the shrink. Measured in the running
+                app: a 2px box (its two borders) around 163px of content, with
+                the toggle clipped away. Reachable by search, which does not
+                depend on the box, and by nothing else.
+              */}
+              <div class="flex-none overflow-hidden rounded-panel border border-az-hairline az-panel">
                 <div class="flex flex-wrap items-baseline gap-x-2.5 gap-y-1 px-3.5 pt-3 pb-2.5">
                   <Icon name="gauge" class="relative top-0.5 text-[14px] text-primary" />
                   <h2 class="font-semibold text-[13px] text-az-title">{tx("Diagnostics")}</h2>
@@ -444,18 +452,23 @@ export function SettingsTab(): JSX.Element {
                   isLast
                 >
                   <div class="flex flex-col items-end gap-1">
+                    {/*
+                      Not gated on inspection. This is a runtime switch of its
+                      own: the collectors feed the frame log and phase timings,
+                      which need no socket, and gating it here left a control
+                      that looked available, did nothing, and then lost its
+                      value when inspection was toggled.
+                    */}
                     <SettingToggle
                       label={tx("Enable deep intrusive profiling")}
-                      checked={displayedBlitzControl() && current().blitzDeepProfilingEnabled}
-                      disabled={blitzControlPending() || !displayedBlitzControl()}
+                      checked={current().blitzDeepProfilingEnabled}
+                      disabled={blitzControlPending()}
                       onChange={setBlitzDeepProfiling}
                     />
                     <span class="max-w-[260px] text-right text-[10.5px] text-az-muted">
-                      {!displayedBlitzControl()
-                        ? tx("Enable inspection first")
-                        : current().blitzDeepProfilingEnabled
-                          ? tx("Intrusive profiling active")
-                          : tx("No deep samples collected")}
+                      {current().blitzDeepProfilingEnabled
+                        ? tx("Intrusive profiling active")
+                        : tx("No deep samples collected")}
                     </span>
                   </div>
                 </Row>
@@ -990,6 +1003,55 @@ export function SettingsTab(): JSX.Element {
                     })
                   }
                 />
+
+                {/*
+                  Three axes, and every one of them moves something. There is no
+                  blur slider: blur belongs to the compositor's glass view and
+                  CSS cannot drive it on either shipping renderer, so it would
+                  be a control that does nothing.
+
+                  All three lean on the hue ladder rather than white. Frost
+                  needs something light beneath it to diffuse; on a dark surface
+                  a white film is grey haze on the colour, not material.
+                */}
+                <Row
+                  label={tx("Panel lift")}
+                  hint={tx("how far panels sit off the desk")}
+                >
+                  <GlassAxis
+                    label={tx("Panel lift")}
+                    min={0}
+                    max={60}
+                    step={2}
+                    value={current().theme.glassLift ?? 0}
+                    format={(value) => `${value}%`}
+                    onChange={(glassLift) => void actions.saveSettings({ theme: { glassLift } })}
+                  />
+                </Row>
+                <Row label={tx("Panel edge")} hint={tx("strength of the hairline around a panel")}>
+                  <GlassAxis
+                    label={tx("Panel edge")}
+                    min={0}
+                    max={60}
+                    step={2}
+                    value={current().theme.glassBorder ?? 16}
+                    format={(value) => `${value}%`}
+                    onChange={(glassBorder) => void actions.saveSettings({ theme: { glassBorder } })}
+                  />
+                </Row>
+                <Row label={tx("Panel depth")} hint={tx("drop shadow under a panel")} isLast>
+                  <GlassAxis
+                    label={tx("Panel depth")}
+                    min={0}
+                    max={60}
+                    step={2}
+                    value={Math.round((current().theme.glassShadow ?? 0) * 100)}
+                    format={(value) => `${value}%`}
+                    onChange={(percent) =>
+                      void actions.saveSettings({ theme: { glassShadow: percent / 100 } })
+                    }
+                  />
+                </Row>
               </Section>
 
               <Section
@@ -1091,9 +1153,22 @@ export function SettingsTab(): JSX.Element {
                       <Row
                         label={tx("Backups")}
                         hint={tx("closed-store copies verified byte for byte")}
-                        isLast
                       >
                         <StoreBackupControls />
+                      </Row>
+                      {/*
+                        Manual, and only manual. This ran on every launch, which
+                        cost a full copy of the store per boot and left ten of
+                        them in one profile — while the corruption that did
+                        happen was copied faithfully into the rolling snapshots,
+                        so neither could restore past it.
+                      */}
+                      <Row
+                        label={tx("Snapshot")}
+                        hint={tx("a copy of the store as it stands, without closing the app")}
+                        isLast
+                      >
+                        <StoreSnapshotControl />
                       </Row>
                     </>
                   )}
@@ -2173,6 +2248,15 @@ function CostSection(): JSX.Element {
   const [summary, setSummary] = createSignal<CostSummary | null>(null);
   const [warningPreview, setWarningPreview] = createSignal<number | null>(null);
   const warningUsd = () => warningPreview() ?? state.settings?.costWarningUsd ?? 0.75;
+  let warningSaveRevision = 0;
+
+  const previewWarning = (costWarningUsd: number): void => {
+    setWarningPreview(costWarningUsd);
+    const revision = ++warningSaveRevision;
+    void actions.saveSettings({ costWarningUsd }).finally(() => {
+      if (revision === warningSaveRevision) setWarningPreview(null);
+    });
+  };
 
   // Asked once per visit: the ledger only grows when a run finishes, and
   // Settings is not a screen left open while runs happen.
@@ -2273,13 +2357,13 @@ function CostSection(): JSX.Element {
             max={20}
             step={0.25}
             value={warningUsd()}
-            formatValue={(value) => `$${value.toFixed(2)}`}
-            onChange={(costWarningUsd) => {
-              setWarningPreview(costWarningUsd);
-              void actions.saveSettings({ costWarningUsd }).finally(() => setWarningPreview(null));
+            style={{
+              "--az-slider-percent": `${((warningUsd() - 0.25) / 19.75) * 100}%`,
             }}
+            formatValue={(value) => `$${value.toFixed(2)}`}
+            onChange={previewWarning}
             size="sm"
-            class="[&_[data-slot=label]]:sr-only [&_[data-slot=slider-output]]:w-14 [&_[data-slot=slider-output]]:text-right [&_[data-slot=slider-output]]:font-mono [&_[data-slot=slider-output]]:text-[12.5px] [&_[data-slot=slider-output]]:text-az-strong"
+            class="az-cost-warning-slider w-full min-w-0 [&_[data-slot=label]]:sr-only [&_[data-slot=slider-output]]:w-14 [&_[data-slot=slider-output]]:text-right [&_[data-slot=slider-output]]:font-mono [&_[data-slot=slider-output]]:text-[12.5px] [&_[data-slot=slider-output]]:text-az-strong"
           />
         </div>
       </Row>
@@ -2485,6 +2569,85 @@ function Row(props: {
         </Show>
       </span>
       {props.children}
+    </div>
+  );
+}
+
+/**
+ * One glass axis.
+ *
+ * Same slider the cost threshold uses, so these rows read as the rest of
+ * Settings rather than as a debug panel. Saving on every change is deliberate:
+ * the point of these is to drag them and watch the window, and a value that
+ * only lands on release cannot be judged.
+ */
+function GlassAxis(props: {
+  label: string;
+  min: number;
+  max: number;
+  step: number;
+  value: number;
+  format: (value: number) => string;
+  onChange: (value: number) => void;
+}): JSX.Element {
+  const percent = () => ((props.value - props.min) / (props.max - props.min)) * 100;
+  return (
+    <div class="min-w-[260px]">
+      <Slider
+        label={props.label}
+        min={props.min}
+        max={props.max}
+        step={props.step}
+        value={props.value}
+        style={{ "--az-slider-percent": `${percent()}%` }}
+        formatValue={props.format}
+        onChange={props.onChange}
+        size="sm"
+        class="az-cost-warning-slider w-full min-w-0 [&_[data-slot=label]]:sr-only [&_[data-slot=slider-output]]:w-14 [&_[data-slot=slider-output]]:text-right [&_[data-slot=slider-output]]:font-mono [&_[data-slot=slider-output]]:text-[12.5px] [&_[data-slot=slider-output]]:text-az-strong"
+      />
+    </div>
+  );
+}
+
+/** The manual snapshot button, beside Backups. */
+function StoreSnapshotControl(): JSX.Element {
+  const { actions, isLive } = useWorkspace();
+  const [busy, setBusy] = createSignal(false);
+  const [note, setNote] = createSignal("");
+  const [failed, setFailed] = createSignal(false);
+
+  const take = (): void => {
+    setBusy(true);
+    setFailed(false);
+    setNote("");
+    void actions
+      .createStoreSnapshot()
+      .then((name) => setNote(tx("Written to {name}", { name })))
+      .catch((cause) => {
+        setFailed(true);
+        setNote(describeError(cause));
+      })
+      .finally(() => setBusy(false));
+  };
+
+  return (
+    <div class="flex max-w-[390px] flex-col items-end gap-1.5">
+      <Show when={note()}>
+        <span
+          role={failed() ? "alert" : "status"}
+          class={`text-right text-[10.5px] ${failed() ? "text-error" : "text-success"}`}
+        >
+          {note()}
+        </span>
+      </Show>
+      <Button
+        type="button"
+        disabled={busy() || !isLive("createStoreSnapshot")}
+        onClick={take}
+        class="rounded-lg border border-az-hairline-strong px-3 py-[5px] text-[12px] text-az-muted transition-colors hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-40"
+      >
+        {busy() ? tx("Taking snapshot…") : tx("Take snapshot")}
+      </Button>
     </div>
   );
 }

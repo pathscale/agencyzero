@@ -527,7 +527,7 @@ function createWorkspace() {
     }
     // The record is the only source for the palette, so the document follows
     // whatever came back rather than what was optimistically sent.
-    applyTheme(next.theme);
+    void client().setWindowChrome(applyTheme(next.theme)).catch(() => undefined);
   }
 
   function portableWorkspaceTabs() {
@@ -919,7 +919,7 @@ function createWorkspace() {
       // flash of the old colours on every launch.
       restorePortablePrefs(settings.uiPreferences, settings.uiPreferencesRevision);
       await i18n.setLocale(settings.locale);
-      applyTheme(settings.theme);
+      void client().setWindowChrome(applyTheme(settings.theme)).catch(() => undefined);
 
       batch(() => {
         setState("projects", reconcile(projects));
@@ -1226,7 +1226,7 @@ function createWorkspace() {
         setState("settings", reconcile(settings));
         reconcileTabModels(settings);
       });
-      applyTheme(settings.theme);
+      void client().setWindowChrome(applyTheme(settings.theme)).catch(() => undefined);
     });
 
     await bind("project:deleted", ({ id }) => purgeProject(id));
@@ -2592,6 +2592,14 @@ function createWorkspace() {
       });
       markPortablePrefsCurrent(revision);
       return client().createStoreBackup();
+    },
+    /**
+     * Copy the store where it stands. No restart, unlike a backup: this process
+     * holds the only writer lock, so draining is enough for the copy to be
+     * consistent.
+     */
+    createStoreSnapshot() {
+      return client().createStoreSnapshot();
     },
     /** Pick and validate a restore package; only its display name crosses IPC. */
     selectStoreBackup() {
