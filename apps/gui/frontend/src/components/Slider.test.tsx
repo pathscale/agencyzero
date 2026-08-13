@@ -73,6 +73,17 @@ describe("Slider", () => {
     expect(block).toContain("background-color: var(--color-primary)");
   });
 
+  /*
+   * The rail was `--color-base-300`, one rung from the panel it is drawn on, so
+   * the range behind the knob was invisible: the control read as a dot floating
+   * in space.
+   */
+  it("draws a visible rail behind the knob", () => {
+    const block = CSS.slice(CSS.indexOf(".az-slider__track {"), CSS.indexOf(".az-slider__fill"));
+    expect(block).toContain("color-mix(in oklab, var(--color-base-content) 18%, transparent)");
+    expect(block).not.toContain("var(--color-base-300)");
+  });
+
   it("reports its value to assistive technology", () => {
     const { thumb } = mount(30);
     expect(thumb.getAttribute("aria-valuenow")).toBe("30");

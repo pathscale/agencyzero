@@ -636,11 +636,19 @@
     color: var(--color-az-strong);
   }
 
+  /*
+   * The unfilled rail has to be visible, which `--color-base-300` was not: it
+   * sits one rung from the panel it is drawn on, so on screen the slider read
+   * as a knob floating in space with no range behind it.
+   *
+   * An alpha of the text colour rather than another surface rung, so the
+   * contrast holds wherever the slider is placed and in both colour modes.
+   */
   .az-slider__track {
     position: relative;
     height: var(--az-slider-rail);
     border-radius: 9999px;
-    background-color: var(--color-base-300);
+    background-color: color-mix(in oklab, var(--color-base-content) 18%, transparent);
     cursor: pointer;
   }
 
