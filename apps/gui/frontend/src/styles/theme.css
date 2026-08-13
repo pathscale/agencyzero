@@ -93,6 +93,14 @@
 
     --color-accent: #d2ad3f;
     --color-accent-content: #111111;
+    /* PathScale/UI 1.3.1's Slider and inactive Toggle tracks use the
+     * default vocabulary rather than base-300. Without these aliases the
+     * unfilled slider track is transparent under Blitz, leaving only its tiny
+     * fill and thumb visible and making the range look like a toggle. */
+    --color-default: var(--color-base-300);
+    --color-default-foreground: var(--color-base-content);
+    --color-default-hover: var(--color-az-hover);
+    --color-accent-foreground: var(--color-accent-content);
 
     --color-neutral: oklch(20% 0.008 240);
     --color-neutral-content: oklch(84% 0.008 245);
@@ -365,7 +373,33 @@
   body {
     margin: 0;
     overflow: hidden;
-    background-color: var(--color-az-void);
+    /*
+     * `--az-glass-alpha` is the one knob for glass, and it belongs to the two
+     * surfaces that cover the whole window: this and `.az-desk`. At the default
+     * 100% both are the flat colours they always were, so glass costs nothing
+     * until it is turned down.
+     *
+     * Body has to follow the desk rather than stay opaque. The desk paints over
+     * it, so a translucent desk above an opaque body shows the body, not the
+     * window behind — the glass would never appear no matter how low the desk
+     * went.
+     *
+     * Content surfaces are deliberately *not* included. Making the page
+     * translucent puts the backdrop behind every panel at once and the contrast
+     * of the whole UI collapses; this was tried and it was unreadable. Glass
+     * belongs to the backdrop and the chrome, and content keeps its own opaque
+     * surface — the same split `24x.ai` settled on ("Real blur — key surfaces
+     * only").
+     *
+     * The blur itself is the compositor's, through `NSGlassEffectView` behind a
+     * transparent window. CSS `backdrop-filter` is not involved: it works in
+     * `vello_cpu` but the shipping renderers cannot carry it yet.
+     */
+    background-color: color-mix(
+      in oklab,
+      var(--color-az-void) var(--az-glass-alpha, 100%),
+      transparent
+    );
     color: var(--color-base-content);
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
     font-size: 13px;
@@ -442,9 +476,60 @@
    * edge rather than two lines, and every card in the workspace is bounded by
    * the accent instead of by grey.
    */
+  /*
+   * The Panel surface.
+   *
+   * Its own class rather than `bg-base-100`, because a Tailwind utility on the
+   * same element wins on layer order no matter what this rule says — the lift
+   * was written and then painted over. `.rounded-panel` could not carry it
+   * either: that is a shape, used with four different backgrounds
+   * (`bg-az-sunken`, `bg-primary`) that must keep theirs.
+   *
+   * At 0% the mix is pure `base-100`, which is the untouched panel.
+   */
+  /*
+   * The cap at the end of the tab strip.
+   *
+   * Opaque where the controls sit so tabs vanish cleanly behind them, and a
+   * fade on the leading edge so a tab slides under it rather than meeting a
+   * straight cut. Built from `az-desk` because that is the surface behind the
+   * strip; the panel colour used here before belonged to a different rung and
+   * read as a block laid on top.
+   *
+   * It takes the same lift as a panel, so the appearance sliders reach the
+   * chrome and not only the cards.
+   */
+  .az-strip-cap {
+    background-image: linear-gradient(
+      to right,
+      transparent 0,
+      color-mix(in oklab, var(--color-az-badge) var(--az-glass-lift, 0%), var(--color-az-desk))
+        18px
+    );
+  }
+
+  .az-panel {
+    background-color: color-mix(
+      in oklab,
+      var(--color-az-badge) var(--az-glass-lift, 0%),
+      var(--color-base-100)
+    );
+  }
+
   .rounded-panel {
-    outline: 1px solid rgb(from var(--color-primary) r g b / 16%);
+    /*
+     * The three glass axes, all defaulting to exactly what this was before.
+     *
+     * Deliberately not white. Frost diffuses white through a translucent layer,
+     * which needs something light underneath; on a dark surface a white film
+     * reads as grey haze sitting on the colour rather than as material. So the
+     * lift mixes toward `az-badge`, a lighter rung of the *same* hue ladder,
+     * and the border carries the accent rather than white.
+     */
+    outline: 1px solid
+      rgb(from var(--color-primary) r g b / var(--az-glass-border, 16%));
     outline-offset: -1px;
+    box-shadow: 0 8px 32px rgb(0 0 0 / var(--az-glass-shadow, 0));
   }
 
   @media (prefers-reduced-motion: reduce) {
@@ -461,10 +546,103 @@
   }
 }
 
+@layer components {
+  /*
+   * AgencyZero's Button adapter uses PathScale/UI for behaviour while its
+   * existing call sites continue to own appearance. PathScale/UI's unconfigured
+   * Button is a 40px primary pill, which is an intentional library default but
+   * not a neutral replacement for a native button. Keep this reset in one
+   * named boundary instead of repeating counteracting utility classes across
+   * every icon, tab, disclosure, and row action.
+   *
+   * Caller utilities live in Tailwind's later utilities layer and therefore
+   * override these native-compatible defaults. Explicit PathScale/UI variants
+   * do not receive this class at all.
+   *
+   * Not `:where()`. That zeroes this rule's specificity, and PathScale/UI's own
+   * `.button` (0,1,0) sits in this same layer and later in source, so the reset
+   * lost every declaration it makes and the 40px pill came back with its hover
+   * fill and `isolation: isolate`. Measured in the running app: a "GitHub ›"
+   * link 46px tall (40px zoomed) inside a 36px row, its hover background
+   * painting across the branch name beside it.
+   *
+   * The `:where()` was there so caller utilities could win, but layer order
+   * already guarantees that — `utilities` comes after `components`, and a
+   * later layer beats any specificity. So it bought nothing and cost the reset
+   * its effect.
+   */
+  .button.az-ui-button-neutral {
+    position: static;
+    isolation: auto;
+    display: inline-block;
+    width: auto;
+    min-width: 0;
+    height: auto;
+    align-items: normal;
+    justify-content: normal;
+    gap: normal;
+    white-space: normal;
+    border: 0;
+    border-radius: 0;
+    padding: 0;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    line-height: inherit;
+    box-shadow: none;
+    cursor: default;
+    touch-action: auto;
+    transition: none;
+    transform: none;
+    --button-bg: transparent;
+    --button-bg-hover: transparent;
+    --button-bg-pressed: transparent;
+  }
+
+  .button.az-ui-button-neutral:active,
+  .button.az-ui-button-neutral[data-pressed="true"] {
+    transform: none;
+  }
+
+  .az-cost-warning-slider [data-slot="slider-thumb"] {
+    top: var(--slider-pad);
+    left: var(--az-slider-percent) !important;
+    transform: translateX(-50%);
+  }
+
+  .az-cost-warning-slider [data-slot="slider-fill"] {
+    width: var(--az-slider-percent) !important;
+  }
+
+  .az-cost-warning-slider [data-slot="slider-thumb"][data-dragging="true"] {
+    transform: translateX(-50%) scale(0.9);
+  }
+}
+
 @layer utilities {
+
   /* The desk: dot grid over the window interior. */
   .az-desk {
-    background-color: var(--color-az-desk);
+    /*
+     * The window border, such as it can be.
+     *
+     * macOS owns the frame, so there is no border property to set — but this
+     * fills the window and is clipped to its rounded corners, so an inset ring
+     * drawn to the edges reads as the border and follows the corner radius
+     * without having to guess it. Driven by the same edge axis as a panel, so
+     * the chrome moves with the cards instead of staying fixed while
+     * everything else responds.
+     */
+    box-shadow: inset 0 0 0 1px
+      rgb(from var(--color-primary) r g b / var(--az-glass-border, 16%));
+
+    /* The window's real backdrop, and so the surface glass is actually about.
+     * See `body` above for why both carry the same alpha. */
+    background-color: color-mix(
+      in oklab,
+      var(--color-az-desk) var(--az-glass-alpha, 100%),
+      transparent
+    );
     /* The dot grid is the largest single surface in the window; in the accent
      * rather than white it tints the whole desk at a density the eye reads as
      * texture. */

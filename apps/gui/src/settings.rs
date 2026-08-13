@@ -259,6 +259,27 @@ pub struct Theme {
     /// wants are separate and this is the second one. Negative dims further,
     /// positive brightens; 0 leaves the ladder where softness put it.
     pub text_brightness: f32,
+    /// How far panels lift off the desk, as a percentage mixed toward the
+    /// `az-badge` rung. 0 is the untouched surface.
+    ///
+    /// Toward a lighter rung of the same hue, never toward white: frost works
+    /// by diffusing white through a translucent layer, and on a dark surface
+    /// there is nothing light underneath for that to read against — a white
+    /// film becomes grey haze on the colour instead of material.
+    #[serde(default)]
+    pub glass_lift: f32,
+    /// Panel edge strength, as the accent's alpha percentage. 16 is the
+    /// untouched hairline.
+    #[serde(default = "default_glass_border")]
+    pub glass_border: f32,
+    /// Panel drop shadow, 0 to 1. 0 is no shadow, which is untouched.
+    #[serde(default)]
+    pub glass_shadow: f32,
+}
+
+/// The hairline as it was before the axis existed.
+fn default_glass_border() -> f32 {
+    16.0
 }
 
 impl Default for Theme {
@@ -271,6 +292,9 @@ impl Default for Theme {
             // of five useful coloured stops preserves a neutral foundation.
             wash: 30.0,
             text_brightness: 0.0,
+            glass_lift: 0.0,
+            glass_border: 16.0,
+            glass_shadow: 0.0,
         }
     }
 }
@@ -579,12 +603,6 @@ pub fn normalize(settings: &mut GlobalSettings) {
         "disabled" | "restart" | "restart_and_update"
     ) {
         settings.agent_restart_policy = "disabled".into();
-    }
-    // Deep profiling is a child capability of inspection, not an independent
-    // dormant preference. Clear the stored value as well as making it
-    // ineffective so re-enabling inspection cannot restart an old trace.
-    if !settings.blitz_control_enabled {
-        settings.blitz_deep_profiling_enabled = false;
     }
 }
 
@@ -929,8 +947,12 @@ mod tests {
         assert_eq!(settings.onboarding_completed, Some(true));
     }
 
+    /// Deep profiling is a runtime switch of its own, not a child of
+    /// inspection. Clearing it here destroyed a stored preference as a side
+    /// effect of toggling something else: turning inspection off and back on
+    /// silently lost it, with nothing in the UI saying so.
     #[test]
-    fn normalization_clears_deep_profiling_when_inspection_is_off() {
+    fn normalization_keeps_deep_profiling_when_inspection_is_off() {
         let mut settings = GlobalSettings {
             blitz_control_enabled: false,
             blitz_deep_profiling_enabled: true,
@@ -939,7 +961,7 @@ mod tests {
 
         normalize(&mut settings);
 
-        assert!(!settings.blitz_deep_profiling_enabled);
+        assert!(settings.blitz_deep_profiling_enabled);
     }
 
     #[test]

@@ -183,6 +183,7 @@ fn create_blitz_document(url: &str) -> Result<blitz_script::ScriptDocument, Stri
 /// window fails rather than falling back.
 const IMPLEMENTED: &[&str] = &[
     "greet",
+    "set_window_chrome",
     "get_data_location",
     "set_data_location",
     "get_store_backup_status",
@@ -1740,6 +1741,29 @@ fn ephemeral_location() -> location::DataLocation {
     }
 }
 
+/// Carry the window chrome's colours from the stylesheet to AppKit.
+///
+/// The theme is CSS and changes at runtime; the glass view behind the window is
+/// an AppKit object created once at launch. Without this the two drift: the page
+/// restyles and the frame around it keeps whatever it was born with.
+///
+/// The webview reads its own computed values and sends them, so there is no
+/// second copy of the palette in Rust to fall out of date.
+#[cfg(all(feature = "blitz-runtime", target_os = "macos"))]
+#[tauri::command]
+fn set_window_chrome(tint: Option<[u8; 4]>, radius: Option<f64>, enabled: bool) {
+    tauri_runtime_blitz::set_window_glass(
+        tint.map(|[r, g, b, a]| (r, g, b, a)),
+        radius,
+        enabled,
+    );
+}
+
+/// Not macOS, or not the Blitz runtime: nothing to carry across.
+#[cfg(not(all(feature = "blitz-runtime", target_os = "macos")))]
+#[tauri::command]
+fn set_window_chrome(_tint: Option<[u8; 4]>, _radius: Option<f64>, _enabled: bool) {}
+
 /// Refresh the rolling pre-open snapshot of the store: `db.snapshot-1` is
 /// the last boot's state, `db.snapshot-2` the boot before that.
 ///
@@ -1973,6 +1997,15 @@ fn main() {
 
     adopt_login_shell_path();
 
+    // The runtime narrates window creation through this hook, and nothing was
+    // listening, so those lines went nowhere. They are the only account of what
+    // the native window actually did — whether a glass backdrop was applied, or
+    // refused, and why.
+    #[cfg(feature = "blitz-runtime")]
+    tauri_runtime_blitz::set_runtime_trace(|message| {
+        crate::log!(log::Level::Info, "blitz", "{message}");
+    });
+
     #[cfg(feature = "blitz-runtime")]
     let startup_store_lock = match preflight_blitz_profile() {
         Ok(BlitzPreflight::Busy) => return,
@@ -2112,6 +2145,7 @@ fn main() {
             quit_app,
             quit_app_and_proxy,
             set_settings,
+            set_window_chrome,
             list_agent_status,
             models::list_models,
             pricing::pricing_table,
