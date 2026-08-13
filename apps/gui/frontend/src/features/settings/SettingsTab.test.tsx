@@ -129,15 +129,39 @@ describe("AgencyProxy lifecycle", () => {
 describe("local debug control", () => {
   it("shows whether the local MCP socket is listening", async () => {
     const screen = await mountSettings();
-    const toggle = screen.getByLabelText("Enable local Blitz control") as HTMLInputElement;
+    const toggle = (await screen.findByLabelText(
+      "Enable inspection and agent control",
+    )) as HTMLInputElement;
 
     expect(toggle.checked).toBe(false);
-    expect(screen.getByText("Local control disabled")).toBeTruthy();
+    expect(screen.getByText("Inspection and control disabled")).toBeTruthy();
 
     fireEvent.click(toggle);
 
     await waitFor(() => expect(screen.workspace.state.settings?.blitzControlEnabled).toBe(true));
     await waitFor(() => expect(screen.getByText("Listening on local MCP socket")).toBeTruthy());
+  });
+
+  it("keeps intrusive profiling unavailable until inspection is enabled", async () => {
+    const screen = await mountSettings();
+    const profiling = (await screen.findByLabelText(
+      "Enable deep intrusive profiling",
+    )) as HTMLInputElement;
+    expect(profiling.disabled).toBe(true);
+    expect(screen.getByText("Enable inspection first")).toBeTruthy();
+
+    fireEvent.click(await screen.findByLabelText("Enable inspection and agent control"));
+    await waitFor(() => expect(profiling.disabled).toBe(false));
+    fireEvent.click(profiling);
+    await waitFor(() =>
+      expect(screen.workspace.state.settings?.blitzDeepProfilingEnabled).toBe(true),
+    );
+    expect(screen.getByText("Intrusive profiling active")).toBeTruthy();
+
+    fireEvent.click(await screen.findByLabelText("Enable inspection and agent control"));
+    await waitFor(() => expect(screen.workspace.state.settings?.blitzControlEnabled).toBe(false));
+    expect(screen.workspace.state.settings?.blitzDeepProfilingEnabled).toBe(false);
+    expect(profiling.disabled).toBe(true);
   });
 });
 

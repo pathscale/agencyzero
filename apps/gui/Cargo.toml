@@ -15,21 +15,11 @@ blitz-runtime = [
     "dep:tauri-runtime-blitz",
     "dep:url",
 ]
-# Per-frame phase timings belong here, not on the dependency line.
-#
-# On the base `blitz-dom` line they were compiled into every release build,
-# which builds `--features blitz-runtime`. That is a `HashMap` entry per
-# `compute_child_layout` (16,842 of them per keystroke, measured), a `Vec` of
-# every distinct node sorted once a frame, and a `format!` plus a locked
-# `stdout` write per frame — into a descriptor a Finder-launched bundle throws
-# away.
-#
-# It also distorted what it measured. `note_computed` is called from inside
-# `compute_child_layout`, so its cost is charged to the layout phase: the one
-# phase that dominates every reading taken so far.
+# Compile the full diagnostics capability into the binary. The engine-wide
+# runtime setting still leaves its clocks, counters, maps, and sample stores
+# dormant until the user explicitly enables deep profiling.
 blitz-inspector = [
     "blitz-runtime",
-    "dep:anyrender_vello",
     "blitz-dom/log-phase-times",
     "tauri-runtime-blitz/diagnostics",
 ]
@@ -66,16 +56,9 @@ uuid = "1"
 chrono = { version = "0.4", default-features = false, features = ["clock", "serde", "std"] }
 tokio = { version = "1", features = ["process", "rt-multi-thread", "time"] }
 tauri = { version = "2", features = [] }
-tauri-runtime-blitz = { git = "https://github.com/pathscale/tauri-runtime-blitz.git", rev = "1279f3f9baa539f9c4a9063641756140da30a15f", optional = true }
-blitz-dom = { package = "ps-blitz-dom", git = "https://github.com/pathscale/ps-blitz.git", rev = "064ba1e0d809ac09405739c2bd68563b942c3725", features = ["system-fonts", "parallel-construct"], optional = true }
-blitz-script = { package = "ps-blitz-script", git = "https://github.com/pathscale/ps-blitz.git", rev = "064ba1e0d809ac09405739c2bd68563b942c3725", features = ["system-fonts"], optional = true }
-# Named only to turn on its per-frame phase timer, which splits the one opaque
-# "renderer" figure into scene encode, GPU submit and present. The renderer
-# arrives through tauri-runtime-blitz, so a feature added anywhere in the
-# ps-blitz workspace is never consulted on this path; cargo unifies features
-# across the graph, so asking for it here is what reaches the copy actually
-# built. Inspector-only: it prints a line per frame.
-anyrender_vello = { package = "ps-anyrender-vello", version = "0.13.0", features = ["log_frame_times"], optional = true }
+tauri-runtime-blitz = { git = "https://github.com/pathscale/tauri-runtime-blitz.git", rev = "569870356a99f8b19951089e844570ab03d3b93b", optional = true }
+blitz-dom = { package = "ps-blitz-dom", git = "https://github.com/pathscale/ps-blitz.git", rev = "5445fad77018849a8412a710458ca099072fae2e", features = ["system-fonts", "parallel-construct"], optional = true }
+blitz-script = { package = "ps-blitz-script", git = "https://github.com/pathscale/ps-blitz.git", rev = "5445fad77018849a8412a710458ca099072fae2e", features = ["system-fonts"], optional = true }
 brotli = { version = "8.0.4", default-features = false, features = ["std"], optional = true }
 url = { version = "2.5.8", optional = true }
 tauri-plugin-updater = "2"
