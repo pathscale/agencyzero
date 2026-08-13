@@ -1,4 +1,13 @@
-import { createEffect, createMemo, createSignal, For, type JSX, onCleanup, Show } from "solid-js";
+import {
+  createEffect,
+  createMemo,
+  createSignal,
+  For,
+  type JSX,
+  onCleanup,
+  onMount,
+  Show,
+} from "solid-js";
 import { Button } from "~/components/Button";
 import { EditableTitle } from "~/components/EditableTitle";
 import { Icon } from "~/components/Icon";
@@ -97,6 +106,38 @@ export function ProjectTab(props: { tab: Tab; project: Project }): JSX.Element {
           (message.author === "agent" || message.author === "user") && message.model.length > 0,
       ),
   );
+
+  /*
+   * First-reveal attribution.
+   *
+   * A pane is added to `retainedProjects` only when its tab first becomes
+   * active, so the first switch to a tab constructs this whole subtree. Measured
+   * on the owner's profile that is 305ms for a 68-message project and 397ms for
+   * a 473-message one, against 46 to 71ms for every later switch: nearly all of
+   * it fixed cost, not per-message.
+   *
+   * `mark` renders nothing and evaluates in JSX order during construction, so
+   * the gaps between marks are what each child cost to build.
+   */
+  const built = performance.now();
+  const marks: Array<[string, number]> = [];
+  const mark = (label: string) => {
+    marks.push([label, performance.now()]);
+    return null;
+  };
+  onMount(() => {
+    let previous = built;
+    const parts = marks.map(([label, at]) => {
+      const cost = at - previous;
+      previous = at;
+      return `${label} ${cost.toFixed(0)}ms`;
+    });
+    log.info(
+      `pane ${props.project.id} first build ${(performance.now() - built).toFixed(0)}ms: ` +
+        `${parts.join(", ")}, mount ${(performance.now() - previous).toFixed(0)}ms ` +
+        `(${messages().length} messages)`,
+    );
+  });
 
   const running = () => state.running[props.project.id] ?? [];
   const canFollowUp = () => {
@@ -365,11 +406,13 @@ export function ProjectTab(props: { tab: Tab; project: Project }): JSX.Element {
             />
           </header>
 
+          {mark("header")}
           <TranscriptPane
             project={props.project}
             messages={messages()}
             streaming={state.streaming[props.project.id] ?? ""}
           />
+          {mark("transcript")}
 
           {/*
             Everything below the transcript that can appear and disappear. Each
@@ -435,6 +478,7 @@ export function ProjectTab(props: { tab: Tab; project: Project }): JSX.Element {
                 </For>
               </div>
             </Show>
+            {mark("between")}
             <Composer
               draftKey={props.tab.key}
               onChromeChange={noteTranscriptChromeChanged}
@@ -542,7 +586,9 @@ export function ProjectTab(props: { tab: Tab; project: Project }): JSX.Element {
               : "pointer-events-none ml-0 w-0 translate-x-3 opacity-0"
           }`}
         >
+          {mark("composer+chrome")}
           <ProjectPanel project={props.project} agent={props.tab.agent} />
+          {mark("projectPanel")}
         </div>
       </Show>
     </div>

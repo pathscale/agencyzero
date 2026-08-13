@@ -1,4 +1,5 @@
 import { EmptyState } from "@pathscale/ui";
+import { log } from "~/lib/log";
 import {
   createEffect,
   createMemo,
@@ -593,7 +594,19 @@ export function TranscriptPane(props: {
     return index >= 0 ? index + 1 : 0;
   };
   const openQuestion = () => nextOpenQuestion(questionsFor());
-  const turnLabels = createMemo(() => agentTurnLabels(props.messages));
+  let timelineReported = false;
+  let turnLabelsReported = false;
+  const turnLabels = createMemo(() => {
+    const from = performance.now();
+    const labels = agentTurnLabels(props.messages);
+    if (!turnLabelsReported) {
+      turnLabelsReported = true;
+      log.info(
+        `turnLabels first build ${(performance.now() - from).toFixed(0)}ms over ${props.messages.length} messages`,
+      );
+    }
+    return labels;
+  });
   /*
    * Stable identities, deliberately.
    *
@@ -617,16 +630,35 @@ export function TranscriptPane(props: {
   };
 
   const timeline = createMemo(() => {
+    const phaseStart = performance.now();
+    /*
+     * One pass to index the replies, then a lookup per question.
+     *
+     * This was `props.messages.find(...)` inside the map, which scans every
+     * message once per answered question. Measured on a real project with 79
+     * answered questions over 2,422 messages: 930ms of a 976ms timeline build,
+     * which was itself the bulk of a 1,499ms first tab reveal. 191,338
+     * iterations of a closure is not free in this engine.
+     *
+     * Only the timestamp is wanted, so the index holds that rather than the row.
+     */
+    const replyAt = new Map<string, string>();
+    for (const message of props.messages) {
+      const target = message.replyToQuestionId;
+      if (target !== undefined && target !== null && !replyAt.has(target)) {
+        replyAt.set(target, message.createdAt);
+      }
+    }
     const questions = questionsFor()
       .filter((question) => question.answered)
-      .map((q) => {
-        const reply = props.messages.find((message) => message.replyToQuestionId === q.id);
-        return stableEntry(`q:${q.id}`, {
+      .map((q) =>
+        stableEntry(`q:${q.id}`, {
           kind: "question" as const,
-          at: reply?.createdAt ?? q.createdAt,
+          at: replyAt.get(q.id) ?? q.createdAt,
           question: q,
-        });
-      });
+        }),
+      );
+    const questionsAt = performance.now();
     const messages = props.messages.map((message, index) =>
       stableEntry(`m:${message.id}`, {
         kind: "message" as const,
@@ -635,6 +667,7 @@ export function TranscriptPane(props: {
         index,
       }),
     );
+    const messagesAt = performance.now();
     // Rows that no longer exist must not pin their wrapper alive: a long
     // session would otherwise accumulate one entry per message ever seen.
     if (entryCache.size > messages.length + questions.length) {
@@ -646,7 +679,8 @@ export function TranscriptPane(props: {
         if (!live.has(key)) entryCache.delete(key);
       }
     }
-    return [...messages, ...questions].sort((a, b) => {
+    const sweptAt = performance.now();
+    const sorted = [...messages, ...questions].sort((a, b) => {
       if (a.at !== b.at) return a.at < b.at ? -1 : 1;
       // A linked ask shares its reply's timestamp and sits immediately above
       // it, even after reload. Unrelated ties retain insertion order.
@@ -666,6 +700,18 @@ export function TranscriptPane(props: {
       }
       return 0;
     });
+    if (!timelineReported) {
+      timelineReported = true;
+      const done = performance.now();
+      log.info(
+        `timeline first build ${(done - phaseStart).toFixed(0)}ms: ` +
+          `questions ${(questionsAt - phaseStart).toFixed(0)}ms (${questions.length} over ${props.messages.length} messages), ` +
+          `messages ${(messagesAt - questionsAt).toFixed(0)}ms, ` +
+          `sweep ${(sweptAt - messagesAt).toFixed(0)}ms, ` +
+          `sort ${(done - sweptAt).toFixed(0)}ms`,
+      );
+    }
+    return sorted;
   });
   const visibleTimeline = createMemo(() => {
     const entries = timeline();
