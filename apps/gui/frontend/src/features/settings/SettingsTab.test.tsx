@@ -1,5 +1,5 @@
 import { fireEvent, render, waitFor } from "@solidjs/testing-library";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { setMockProxyActiveRuns } from "~/api/mock";
 import { SettingsTab } from "~/features/settings/SettingsTab";
 import { useWorkspace, type Workspace, WorkspaceProvider } from "~/stores/workspace";
@@ -145,29 +145,53 @@ describe("local debug control", () => {
     await waitFor(() => expect(screen.getByText("Listening on local MCP socket")).toBeTruthy());
   });
 
-  it("keeps intrusive profiling unavailable until inspection is enabled", async () => {
+  /*
+   * Deep profiling is its own runtime switch. It used to be gated on
+   * inspection and cleared whenever inspection went off, so turning inspection
+   * off and back on silently dropped it — which is exactly what happened to
+   * the owner's setting while driving the running app.
+   */
+  it("toggles intrusive profiling on its own, with inspection off", async () => {
     const screen = await mountSettings();
     const profiling = (await screen.findByLabelText(
       "Enable deep intrusive profiling",
     )) as HTMLInputElement;
-    expect(profiling.disabled).toBe(true);
-    expect(screen.getByText("Enable inspection first")).toBeTruthy();
+    expect(profiling.disabled).toBe(false);
 
-    fireEvent.click(await screen.findByLabelText("Enable inspection and agent control"));
-    await waitFor(() => expect(profiling.disabled).toBe(false));
     fireEvent.click(profiling);
     await waitFor(() =>
       expect(screen.workspace.state.settings?.blitzDeepProfilingEnabled).toBe(true),
     );
     expect(screen.getByText("Intrusive profiling active")).toBeTruthy();
 
-    fireEvent.click(await screen.findByLabelText("Enable inspection and agent control"));
-    expect(profiling.checked).toBe(false);
-    expect(profiling.disabled).toBe(true);
-    expect(screen.getByText("Enable inspection first")).toBeTruthy();
+    // And back off again, without inspection ever being involved.
+    fireEvent.click(profiling);
+    await waitFor(() =>
+      expect(screen.workspace.state.settings?.blitzDeepProfilingEnabled).toBe(false),
+    );
+    expect(screen.getByText("No deep samples collected")).toBeTruthy();
+  });
+
+  it("keeps intrusive profiling set while inspection is turned off and on", async () => {
+    const screen = await mountSettings();
+    const profiling = (await screen.findByLabelText(
+      "Enable deep intrusive profiling",
+    )) as HTMLInputElement;
+    const inspection = await screen.findByLabelText("Enable inspection and agent control");
+
+    fireEvent.click(profiling);
+    await waitFor(() =>
+      expect(screen.workspace.state.settings?.blitzDeepProfilingEnabled).toBe(true),
+    );
+
+    fireEvent.click(inspection);
+    await waitFor(() => expect(screen.workspace.state.settings?.blitzControlEnabled).toBe(true));
+    fireEvent.click(inspection);
     await waitFor(() => expect(screen.workspace.state.settings?.blitzControlEnabled).toBe(false));
-    expect(screen.workspace.state.settings?.blitzDeepProfilingEnabled).toBe(false);
-    expect(profiling.disabled).toBe(true);
+
+    expect(screen.workspace.state.settings?.blitzDeepProfilingEnabled).toBe(true);
+    expect(profiling.checked).toBe(true);
+    expect(screen.getByText("Intrusive profiling active")).toBeTruthy();
   });
 });
 
@@ -193,6 +217,9 @@ describe("cost warning settings", () => {
     expect(slider).toHaveAttribute("aria-valuemax", "20");
     expect(slider).toHaveAttribute("aria-valuenow", "0.75");
     expect(slider).toHaveAttribute("aria-valuetext", "$0.75");
+    expect(root).toHaveClass("min-w-0");
+    expect(root).toHaveClass("w-full");
+    expect(root).toHaveClass("az-cost-warning-slider");
   });
 
   it("is keyboard-operable and persists the selected threshold", async () => {
@@ -237,6 +264,39 @@ describe("cost warning settings", () => {
     expect(slider).toHaveAttribute("aria-valuetext", "$10.25");
     await waitFor(() => expect(screen.workspace.state.settings?.costWarningUsd).toBe(10.25));
   });
+
+  it("uses Blitz-safe thumb geometry instead of PathScale's unsupported compound calc", async () => {
+    const screen = await mountSettings();
+    const root = screen.container.querySelector<HTMLElement>('[data-slot="slider"]');
+    const thumb = screen.container.querySelector<HTMLElement>('[data-slot="slider-thumb"]');
+    if (!root || !thumb) throw new Error("PathScale slider geometry was not rendered");
+
+    expect(root).toHaveClass("az-cost-warning-slider");
+    expect(root.style.getPropertyValue("--az-slider-percent")).toBe("2.5316455696202533%");
+    expect(root.style.getPropertyValue("--az-slider-thumb-offset")).toBe("");
+    expect(root.style.getPropertyValue("--az-slider-fill-offset")).toBe("");
+  });
+
+  it("does not snap back when an older drag save finishes after a newer value", async () => {
+    const screen = await mountSettings();
+    const slider = screen.container.querySelector<HTMLElement>('[role="slider"]');
+    if (!slider) throw new Error("PathScale slider thumb was not rendered");
+    const releases: Array<() => void> = [];
+    vi.spyOn(screen.workspace.actions, "saveSettings").mockImplementation(
+      () => new Promise<void>((resolve) => releases.push(resolve)),
+    );
+
+    fireEvent.keyDown(slider, { key: "ArrowRight" });
+    fireEvent.keyDown(slider, { key: "ArrowRight" });
+    expect(slider).toHaveAttribute("aria-valuenow", "1.25");
+    expect(releases).toHaveLength(2);
+
+    releases[0]();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(slider).toHaveAttribute("aria-valuenow", "1.25");
+    releases[1]();
+  });
 });
 
 describe("moderator settings", () => {
@@ -258,6 +318,17 @@ describe("appearance settings", () => {
       screen.container.querySelectorAll<HTMLInputElement>('input[name="surface-colour"]'),
     );
     expect(darkSwatches).toHaveLength(31);
+    const petals = Array.from(
+      screen.container.querySelectorAll<HTMLElement>("[data-surface-petal]"),
+    );
+    expect(petals).toHaveLength(31);
+    expect(new Set(petals.map((petal) => `${petal.style.left}|${petal.style.top}`)).size).toBe(31);
+    expect(darkSwatches.every((input) => input.style.left === "" && input.style.top === "")).toBe(
+      true,
+    );
+    expect(
+      petals.every((petal) => petal.querySelector('[data-slot="radio-control"]') !== null),
+    ).toBe(true);
 
     const darkHex = darkSwatches[0].value;
     fireEvent.click(darkSwatches[0]);
@@ -273,6 +344,16 @@ describe("appearance settings", () => {
     ).toBe(true);
 
     fireEvent.click(screen.getByRole("button", { name: "Dark" }));
+  });
+
+  it("uses the shared PathScale radio hover outline for colour petals", async () => {
+    const screen = await mountSettings();
+    const petal = screen.container.querySelector<HTMLElement>("[data-surface-petal]");
+    const control = petal?.querySelector<HTMLElement>('[data-slot="radio-control"]');
+    if (!petal || !control) throw new Error("surface colour petal was not rendered");
+
+    expect(control.parentElement?.className).toContain("border-az-hairline-strong");
+    expect(control.parentElement?.className).not.toContain("hovered");
   });
 
   it("offers curated accents without opening a colour input", async () => {
@@ -324,5 +405,48 @@ describe("open source actions", () => {
       screen.getByText("If AgencyZero is useful, a GitHub star helps more people find it."),
     ).toBeTruthy();
     expect(screen.queryByRole("dialog", { name: /star/i })).toBeNull();
+  });
+});
+
+describe("diagnostics panel", () => {
+  /*
+   * Driving the running app, this panel measured 2px tall — its two borders —
+   * around 163px of content, so `overflow-hidden` clipped the inspection
+   * toggle out of the page. It could be found by search and by nothing else.
+   *
+   * It is a flex item in the settings column, and `overflow: hidden` zeroes an
+   * item's automatic minimum size, so it was the only panel there allowed to
+   * shrink and absorbed all of an over-constrained column's shrink. Every
+   * Section carries `flex-none` for exactly this reason; this one was
+   * hand-rolled and did not.
+   *
+   * Asserted as a class rather than a height because jsdom lays nothing out: a
+   * geometry assertion here would pass against the broken markup too.
+   */
+  it("keeps the diagnostics panel from shrinking away in the settings column", async () => {
+    const screen = await mountSettings();
+    const toggle = screen.container.querySelector('[aria-label="Enable inspection and agent control"]');
+    expect(toggle).toBeTruthy();
+
+    const panel = toggle?.closest(".overflow-hidden");
+    expect(panel).toBeTruthy();
+    expect(panel?.className).toContain("flex-none");
+  });
+});
+
+describe("store snapshot", () => {
+  /*
+   * Manual, and only manual. This ran on every launch, which cost a full copy
+   * of the store per boot and left ten copies in one profile — while the
+   * corruption that actually happened was copied faithfully into both rolling
+   * snapshots, so neither could restore past it.
+   */
+  it("offers a snapshot button and takes one on demand", async () => {
+    const screen = await mountSettings();
+    const button = await screen.findByRole("button", { name: "Take snapshot" });
+    expect(button).toBeTruthy();
+
+    fireEvent.click(button);
+    await waitFor(() => expect(screen.getByText(/Written to/)).toBeTruthy());
   });
 });

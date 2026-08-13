@@ -597,6 +597,14 @@ export function createMockApi(): AgencyZeroApi {
 
     getSettings: () => settle(settings),
 
+    // No native window to restyle behind the mock, so this answers and stops.
+    async setWindowChrome(): Promise<void> {},
+
+    // The mock has no store to copy; it answers with the name one would take.
+    async createStoreSnapshot(): Promise<string> {
+      return "db.snapshot-1";
+    },
+
     async setSettings(patch): Promise<GlobalSettings> {
       const wasEnabled = settings.studyAnalytics.enabled;
       settings = deepMerge(settings, patch);
