@@ -79,6 +79,22 @@ export function Slider(props: SliderProps): JSX.Element {
   };
 
   /**
+   * The geometry a drag needs, measured once when it starts.
+   *
+   * Reading it per move calls `getBoundingClientRect` twice a tick, and each
+   * call forces a layout flush. Neither the rail nor the thumb changes size
+   * while the pointer is down, so measuring every move buys nothing and costs a
+   * flush per event on a window that repaints whole.
+   */
+  let rail: { x: number; inset: number; usable: number } | undefined;
+
+  const measureRail = (): void => {
+    const box = track.getBoundingClientRect();
+    const inset = thumb.getBoundingClientRect().width / 2;
+    rail = { x: box.x, inset, usable: box.width - inset * 2 };
+  };
+
+  /**
    * A pointer x, in client space, as a value.
    *
    * Inset by half the thumb at each end so that the far ends are reachable:
@@ -86,11 +102,8 @@ export function Slider(props: SliderProps): JSX.Element {
    * the extremes that the thumb can actually display.
    */
   const valueAt = (clientX: number): number => {
-    const rail = track.getBoundingClientRect();
-    const inset = thumb.getBoundingClientRect().width / 2;
-    const usable = rail.width - inset * 2;
-    if (usable <= 0) return props.value;
-    const ratio = Math.min(1, Math.max(0, (clientX - rail.x - inset) / usable));
+    if (!rail || rail.usable <= 0) return props.value;
+    const ratio = Math.min(1, Math.max(0, (clientX - rail.x - rail.inset) / rail.usable));
     return clampToStep(props.min + ratio * (props.max - props.min));
   };
 
@@ -112,22 +125,43 @@ export function Slider(props: SliderProps): JSX.Element {
   const beginDrag = (event: PointerEvent, jumpTo: boolean): void => {
     if (props.disabled) return;
     event.preventDefault();
+    measureRail();
     setDragging(true);
     // Pressing the track moves the value under the pointer. Pressing the thumb
     // does not: grabbing a knob should not shift what it is holding.
     let latest = jumpTo ? valueAt(event.clientX) : props.value;
     if (jumpTo) emit(latest, false);
 
-    const move = (moved: PointerEvent): void => {
-      latest = valueAt(moved.clientX);
+    /*
+     * One update per frame, not one per event.
+     *
+     * The pointer reports far faster than the window can paint, and this window
+     * has no damage tracking: every accepted move repaints all of it. Coalescing
+     * to an animation frame means a burst of moves produces the position the
+     * pointer is at now, rather than a queue of positions it has already left.
+     */
+    let pending: number | undefined;
+    let frame: number | undefined;
+    const flush = (): void => {
+      frame = undefined;
+      if (pending === undefined) return;
+      latest = pending;
+      pending = undefined;
       emit(latest, false);
+    };
+    const move = (moved: PointerEvent): void => {
+      pending = valueAt(moved.clientX);
+      frame ??= requestAnimationFrame(flush);
     };
     const up = (): void => {
       stopDrag?.();
+      flush();
       setDragging(false);
       props.onChange(latest);
     };
     stopDrag = () => {
+      if (frame !== undefined) cancelAnimationFrame(frame);
+      frame = undefined;
       window.removeEventListener("pointermove", move);
       window.removeEventListener("pointerup", up);
       window.removeEventListener("pointercancel", up);
