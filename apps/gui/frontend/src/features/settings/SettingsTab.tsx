@@ -1,4 +1,4 @@
-import { Checkbox, Input, Select, TextArea, Toggle } from "@pathscale/ui";
+import { Checkbox, Input, Select, Slider, TextArea, Toggle } from "@pathscale/ui";
 import {
   createContext,
   createEffect,
@@ -16,7 +16,6 @@ import { Button } from "~/components/Button";
 import { Icon, type IconProps } from "~/components/Icon";
 import { LanguageSwitcher } from "~/components/LanguageSwitcher";
 import { Panel } from "~/components/Panel";
-import { Slider } from "~/components/Slider";
 import { PillMenu } from "~/components/PillMenu";
 import { AgentStateDot } from "~/components/StatusDot";
 import { countdown, formatBytes, relativeTime } from "~/lib/format";
@@ -2273,7 +2272,27 @@ function CostSection(): JSX.Element {
    */
   const previewWarning = (costWarningUsd: number): void => {
     setWarningPreview(costWarningUsd);
+    /*
+     * Any save already in flight is now stale, so it must not clear the preview
+     * when it lands: doing so would snap the knob back to a value the user has
+     * already moved past. The revision has to advance here and not only at
+     * commit, because with the write debounced a new value can arrive while an
+     * older save is still open.
+     */
+    warningSaveRevision++;
   };
+
+  /*
+   * A drag reports far faster than a store write completes, and every write
+   * awaits the one before it. Persisting per tick meant the knob raced its own
+   * saves: one session's log held 75 settings writes for a few drags.
+   */
+  let warningSettle: ReturnType<typeof setTimeout> | undefined;
+  const settleWarning = (costWarningUsd: number): void => {
+    clearTimeout(warningSettle);
+    warningSettle = setTimeout(() => commitWarning(costWarningUsd), SETTLE_MS);
+  };
+  onCleanup(() => clearTimeout(warningSettle));
 
   const commitWarning = (costWarningUsd: number): void => {
     setWarningPreview(costWarningUsd);
@@ -2383,9 +2402,15 @@ function CostSection(): JSX.Element {
             step={0.25}
             value={warningUsd()}
             formatValue={(value) => `$${value.toFixed(2)}`}
-            onInput={previewWarning}
-            onChange={commitWarning}
-            class="w-full min-w-0"
+            // Live while dragging, persisted when it settles. @pathscale/ui
+            // 2.0.0 carries `onChangeEnd` for exactly this; 1.3.1, which is
+            // what ships here, does not, so the settle is timed locally.
+            onChange={(value) => {
+              previewWarning(value);
+              settleWarning(value);
+            }}
+            size="sm"
+            class="w-full min-w-0 [&_[data-slot=label]]:sr-only"
           />
         </div>
       </Row>
@@ -2603,6 +2628,9 @@ function Row(props: {
  * the point of these is to drag them and watch the window, and a value that
  * only lands on release cannot be judged.
  */
+/** How long the knob must be still before its value is written to the store. */
+const SETTLE_MS = 180;
+
 /**
  * One appearance axis.
  *
@@ -2630,6 +2658,12 @@ function GlassAxis(props: {
   onChange: (value: number) => void;
 }): JSX.Element {
   const toAxis = (value: number) => (props.toAxis ? props.toAxis(value) : value);
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  onCleanup(() => clearTimeout(timer));
+  const settle = (value: number): void => {
+    clearTimeout(timer);
+    timer = setTimeout(() => props.onChange(value), SETTLE_MS);
+  };
   return (
     <div class="min-w-[260px]">
       <Slider
@@ -2639,10 +2673,14 @@ function GlassAxis(props: {
         step={props.step}
         value={props.value}
         formatValue={props.format}
-        // Paint now: no store, no AppKit, no await.
-        onInput={(value) => writeGlassAxis(props.axis, toAxis(value))}
-        onChange={(value) => props.onChange(value)}
-        class="w-full min-w-0"
+        // Paint now: no store, no AppKit, no await. The persist waits for the
+        // knob to settle, since 1.3.1 has no `onChangeEnd` to hang it on.
+        onChange={(value) => {
+          writeGlassAxis(props.axis, toAxis(value));
+          settle(value);
+        }}
+        size="sm"
+        class="w-full min-w-0 [&_[data-slot=label]]:sr-only"
       />
     </div>
   );

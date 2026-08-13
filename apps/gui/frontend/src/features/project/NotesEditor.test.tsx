@@ -227,9 +227,9 @@ describe("project response verbosity", () => {
     fireEvent.keyDown(slider, { key: "ArrowRight" });
     await waitFor(() => expect(slider).toHaveAttribute("aria-valuenow", "2"));
     expect(slider).toHaveAttribute("aria-valuetext", "Medium");
-    // Once, in the panel's own header. The slider carries the same text for
-    // assistive technology without printing a second visible copy.
-    expect(screen.getAllByText("Medium")).toHaveLength(1);
+    // Twice: the panel's own header, and the slider's live region, which is
+    // visually hidden by the call site but present for assistive technology.
+    expect(screen.getAllByText("Medium")).toHaveLength(2);
   });
 });
 

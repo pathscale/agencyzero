@@ -1,4 +1,4 @@
-import { Checkbox, Input, TextArea, Toggle } from "@pathscale/ui";
+import { Checkbox, Input, Slider, TextArea, Toggle } from "@pathscale/ui";
 import { createEffect, createMemo, createSignal, For, type JSX, Show } from "solid-js";
 import { NOTES_BUDGET } from "~/api/client";
 import { AppModal, type ModalAnchor } from "~/components/AppModal";
@@ -6,7 +6,6 @@ import { Button } from "~/components/Button";
 import { Icon } from "~/components/Icon";
 import { SectionPanel } from "~/components/Panel";
 import { PillMenu } from "~/components/PillMenu";
-import { Slider } from "~/components/Slider";
 import { ItemMarker } from "~/components/StatusDot";
 import { copyText } from "~/features/project/MessageBody";
 import { clockTime, elapsed, taskMeta } from "~/lib/format";
@@ -594,8 +593,8 @@ function ConciseResponseToggle(props: { projectId: string }): JSX.Element {
           onChange={(value) => void choose(value)}
           // The chosen label is already printed above the track.
           formatValue={(value) => labels()[value] ?? labels()[0]}
-          showValue={false}
-          class="mt-1"
+          size="sm"
+          class="mt-1 [&_[data-slot=label]]:sr-only [&_[data-slot=slider-output]]:sr-only"
         />
         <span class="mt-1 block text-[10.5px] text-az-muted">{hints()[index()]}</span>
       </div>

@@ -20,17 +20,22 @@ describe("PathScale UI theme contract", () => {
   });
 
   /*
-   * The slider is the application's own now, and its geometry is asserted
-   * beside it in `components/Slider.test.tsx`. What belongs here is that the
-   * overrides are gone: three rounds of `!important` against PathScale/UI's
-   * slider is what made replacing it the cheaper option, and leaving the dead
-   * rules behind would invite a fourth.
+   * The slider is the library's, themed through the variables it exposes rather
+   * than overridden through its internals. Three rounds of `!important` against
+   * `[data-slot=slider-thumb]` is what made a bespoke copy look tempting; the
+   * copy was thrown away and the real defects fixed upstream instead.
    */
-  it("keeps no overrides for the library slider it replaced", () => {
+  it("themes the library slider through its own variables", () => {
     expect(CSS).not.toContain("az-cost-warning-slider");
-    expect(CSS).not.toContain('[data-slot="slider-thumb"]');
     expect(CSS).not.toContain("--az-slider-percent");
-    expect(CSS).toContain(".az-slider__thumb");
+    expect(CSS).not.toContain(".az-slider__thumb");
+
+    // The rail has to be visible against the panel it sits on.
+    expect(CSS).toContain(
+      "--slider-track-bg: color-mix(in oklab, var(--color-base-content) 18%, transparent)",
+    );
+    // And the knob must not be the accent's *text* colour, which is near black.
+    expect(CSS).toContain("--slider-thumb-bg: var(--color-primary)");
   });
 });
 
