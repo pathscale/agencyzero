@@ -196,18 +196,21 @@ describe("local debug control", () => {
 });
 
 describe("cost warning settings", () => {
-  it("renders the application's own slider, not a native range", async () => {
+  it("renders the library slider, not a native range", async () => {
     const screen = await mountSettings();
     const slider = screen.container.querySelector<HTMLElement>('[role="slider"]');
     expect(slider).not.toBeNull();
     if (!slider) throw new Error("the slider thumb was not rendered");
-    const root = slider.closest(".az-slider");
+    const root = slider.closest('[data-slot="slider"]');
+    const labelId = slider.getAttribute("aria-labelledby");
 
     expect(screen.container.querySelector('input[type="range"]')).toBeNull();
-    expect(root?.querySelector(".az-slider__track")).toBeTruthy();
-    expect(root?.querySelector(".az-slider__fill")).toBeTruthy();
-    expect(root?.querySelector(".az-slider__thumb")).toBe(slider);
-    expect(slider).toHaveAttribute("aria-label", "Projected turn warning threshold");
+    expect(root?.querySelector('[data-slot="slider-track"]')).toBeTruthy();
+    expect(root?.querySelector('[data-slot="slider-fill"]')).toBeTruthy();
+    expect(root?.querySelector('[data-slot="slider-thumb"]')).toBe(slider);
+    expect(screen.container.querySelector(`#${labelId}`)?.textContent).toBe(
+      "Projected turn warning threshold",
+    );
     expect(slider).toHaveAttribute("tabindex", "0");
     expect(slider).toHaveAttribute("aria-valuemin", "0.25");
     expect(slider).toHaveAttribute("aria-valuemax", "20");
@@ -231,63 +234,60 @@ describe("cost warning settings", () => {
   });
 
   /*
-   * Pressing the track moves the value to the pointer, and the mapping is the
-   * inset one: the usable range is the track shrunk by half the thumb at each
-   * end, so the extremes stay reachable and the knob never leaves the rail.
-   * egui spells it `rect.x_range().shrink(handle_radius)`.
+   * The installed @pathscale/ui maps the pointer across the full track width.
+   * That disagrees with where it draws the thumb, whose centre travels an inset
+   * range; the fix is committed in the library and arrives with 2.0.0. This
+   * asserts what this version actually does, so the upgrade will show up here
+   * as a failure rather than as a surprise.
    */
   it("is draggable and persists the pointer-selected threshold", async () => {
     const screen = await mountSettings();
-    const track = screen.container.querySelector<HTMLElement>(".az-slider__track");
+    const track = screen.container.querySelector<HTMLElement>('[data-slot="slider-track"]');
     const slider = screen.container.querySelector<HTMLElement>('[role="slider"]');
     if (!track || !slider) throw new Error("the slider geometry was not rendered");
 
-    const rect = (width: number) => ({
+    Object.defineProperty(track, "getBoundingClientRect", {
       value: () => ({
         bottom: 20,
         height: 20,
         left: 0,
-        right: width,
+        right: 200,
         top: 0,
-        width,
+        width: 200,
         x: 0,
         y: 0,
         toJSON: () => ({}),
       }),
     });
-    // A 200px track with a 20px thumb leaves 180px of travel starting at x=10.
-    Object.defineProperty(track, "getBoundingClientRect", rect(200));
-    Object.defineProperty(slider, "getBoundingClientRect", rect(20));
+    Object.defineProperty(track, "setPointerCapture", { value: () => {} });
 
-    // Halfway along the usable range: 10 + 90 = 100.
     fireEvent.pointerDown(track, { clientX: 100, pointerId: 1 });
 
-    // Pressing previews; the value is shown at once but not yet persisted.
+    // Shown at once. The write waits for the knob to settle, so a drag does not
+    // queue one serialized store round trip per tick.
     expect(slider).toHaveAttribute("aria-valuenow", "10.25");
+    expect(slider).toHaveAttribute("aria-valuetext", "$10.25");
     expect(screen.workspace.state.settings?.costWarningUsd).not.toBe(10.25);
 
-    // Releasing commits. The drag listeners live on the window, because the
-    // pointer leaves a 14px knob immediately.
-    fireEvent.pointerUp(window);
-
-    expect(slider).toHaveAttribute("aria-valuetext", "$10.25");
-    await waitFor(() => expect(screen.workspace.state.settings?.costWarningUsd).toBe(10.25));
+    await waitFor(() => expect(screen.workspace.state.settings?.costWarningUsd).toBe(10.25), {
+      timeout: 2000,
+    });
   });
 
   /*
-   * One fraction drives both the thumb and the fill, and the inset arithmetic
-   * lives in the stylesheet as `fraction * (100% - thumb)`. Nothing is measured
-   * in JS to place them, which is what the old percent-plus-offset scheme did.
+   * The thumb's centre travels a range inset by half the knob plus the track
+   * padding, so it rides the rail instead of hanging off either end. That
+   * arithmetic is the library's, in the `left` it writes; this asserts the app
+   * is not second-guessing it with geometry of its own, which is what three
+   * rounds of `!important` overrides had been doing.
    */
-  it("drives the geometry from a single fraction", async () => {
+  it("leaves the thumb geometry to the library", async () => {
     const screen = await mountSettings();
-    const thumb = screen.container.querySelector<HTMLElement>(".az-slider__thumb");
-    const fill = screen.container.querySelector<HTMLElement>(".az-slider__fill");
-    if (!thumb || !fill) throw new Error("the slider geometry was not rendered");
+    const thumb = screen.container.querySelector<HTMLElement>('[data-slot="slider-thumb"]');
+    if (!thumb) throw new Error("the slider geometry was not rendered");
 
-    const fraction = (0.75 - 0.25) / (20 - 0.25);
-    expect(thumb.style.getPropertyValue("--az-slider-fraction")).toBe(String(fraction));
-    expect(fill.style.getPropertyValue("--az-slider-fraction")).toBe(String(fraction));
+    expect(thumb.style.left).toContain("var(--slider-thumb-w)");
+    expect(thumb.style.left).toContain("var(--slider-pad)");
     expect(thumb.style.getPropertyValue("--az-slider-percent")).toBe("");
   });
 
@@ -300,16 +300,23 @@ describe("cost warning settings", () => {
       () => new Promise<void>((resolve) => releases.push(resolve)),
     );
 
+    // Two steps in quick succession. The display follows at once; the store
+    // write waits for the knob to settle, so this is one save and not two.
     fireEvent.keyDown(slider, { key: "ArrowRight" });
     fireEvent.keyDown(slider, { key: "ArrowRight" });
     expect(slider).toHaveAttribute("aria-valuenow", "1.25");
-    expect(releases).toHaveLength(2);
+    expect(releases).toHaveLength(0);
 
+    await waitFor(() => expect(releases).toHaveLength(1), { timeout: 2000 });
+
+    // The preview is held until the save it belongs to lands, so a slow write
+    // finishing late cannot pull the display back to a value already left.
+    fireEvent.keyDown(slider, { key: "ArrowRight" });
+    expect(slider).toHaveAttribute("aria-valuenow", "1.5");
     releases[0]();
     await Promise.resolve();
     await Promise.resolve();
-    expect(slider).toHaveAttribute("aria-valuenow", "1.25");
-    releases[1]();
+    expect(slider).toHaveAttribute("aria-valuenow", "1.5");
   });
 });
 
