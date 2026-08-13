@@ -604,33 +604,99 @@
     transform: none;
   }
 
-  .az-cost-warning-slider [data-slot="slider-thumb"] {
-    top: var(--slider-pad);
-    left: var(--az-slider-percent) !important;
+  /*
+   * The application's own slider. PathScale/UI's was replaced rather than
+   * overridden a fourth time; see `components/Slider.tsx` for what kept
+   * breaking and why egui's interaction model is the one being copied.
+   *
+   * The whole geometry is layout. Nothing here uses a transform, because a
+   * transform in this renderer moves the paint and leaves the box the pointer
+   * is tested against exactly where it was.
+   */
+  .az-slider {
     /*
-     * A margin, not `translateX(-50%)`.
-     *
-     * Transforms are paint-only in this renderer, so a translated thumb paints
-     * half a thumb to the left of the box that actually receives the pointer.
-     * Measured on the live window at value 30: the thumb painted across
-     * x 868..888 while its hit box sat at 878..897. Pressing the left half of
-     * the thumb you can see therefore missed it and landed on the track, and
-     * the value jumped away from the pointer instead of dragging: 30 became 28.
-     *
-     * A negative margin moves the box itself, so paint and hit test agree.
+     * A thin rail with a round knob riding it, and the knob in the same colour
+     * as the fill. Both references the owner supplied agree on exactly that:
+     * the knob is the accent, larger than the rail, and centred on it.
      */
-    margin-left: calc(var(--slider-thumb-w) / -2);
-    transform: none;
+    --az-slider-thumb: 0.875rem;
+    --az-slider-rail: 0.25rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
   }
 
-  .az-cost-warning-slider [data-slot="slider-fill"] {
-    width: var(--az-slider-percent) !important;
+  .az-slider__readout {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 0.5rem;
+    font-variant-numeric: tabular-nums;
+    font-size: 12.5px;
+    color: var(--color-az-strong);
   }
 
-  /* Scale alone now. The offset is a margin, and paint-only is fine for a
-     symmetric shrink: it does not move the box the pointer is testing. */
-  .az-cost-warning-slider [data-slot="slider-thumb"][data-dragging="true"] {
-    transform: scale(0.9);
+  .az-slider__track {
+    position: relative;
+    height: var(--az-slider-rail);
+    border-radius: 9999px;
+    background-color: var(--color-base-300);
+    cursor: pointer;
+  }
+
+  /*
+   * The fill stops at the thumb's centre, which is why it carries the same
+   * inset as the thumb rather than being a plain percentage of the track.
+   */
+  .az-slider__fill {
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: calc(
+      var(--az-slider-fraction) * (100% - var(--az-slider-thumb)) + var(--az-slider-thumb) / 2
+    );
+    border-radius: 9999px;
+    background-color: var(--color-primary);
+  }
+
+  /*
+   * `left: fraction * (100% - thumb)` is the inset travel range written as one
+   * expression: at 0 the thumb's left edge is the track's, at 1 its right edge
+   * is, and its centre never leaves the rail. egui spells the same thing
+   * `rect.x_range().shrink(handle_radius)`.
+   *
+   * The knob is deliberately not `--color-accent-foreground`, which is what the
+   * library used: this theme derives that from `readableInk(accent)`, the
+   * colour for *text on* the accent, which against a light blue accent is near
+   * black. That is where the dark blob came from.
+   */
+  .az-slider__thumb {
+    position: absolute;
+    width: var(--az-slider-thumb);
+    height: var(--az-slider-thumb);
+    top: calc(50% - var(--az-slider-thumb) / 2);
+    left: calc(var(--az-slider-fraction) * (100% - var(--az-slider-thumb)));
+    border-radius: 9999px;
+    background-color: var(--color-primary);
+    cursor: grab;
+  }
+
+  .az-slider__thumb[data-dragging="true"] {
+    cursor: grabbing;
+    /* A ring while held, so the knob reads as picked up without moving. */
+    box-shadow: 0 0 0 3px rgb(from var(--color-primary) r g b / 28%);
+  }
+
+  .az-slider__thumb:focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 2px;
+  }
+
+  .az-slider--disabled .az-slider__track,
+  .az-slider--disabled .az-slider__thumb {
+    cursor: default;
+    opacity: 0.55;
   }
 }
 
