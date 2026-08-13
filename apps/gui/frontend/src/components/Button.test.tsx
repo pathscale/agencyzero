@@ -27,15 +27,24 @@ describe("Button", () => {
     expect(button.classList.contains("az-ui-button-neutral")).toBe(false);
   });
 
-  it("keeps the compatibility reset below every caller utility", () => {
-    expect(themeCss).toContain(":where(.button.az-ui-button-neutral)");
-    expect(themeCss).not.toContain("\n  .button.az-ui-button-neutral {");
+  /*
+   * Written first against `:where(.button.az-ui-button-neutral)`, which was
+   * wrong in the one way that matters: `:where()` zeroes specificity, so the
+   * library's own `.button` outranked the reset and kept its fill. That is what
+   * sized section headers to a 40px control and put a blob around the chevron.
+   *
+   * The bare selector is therefore load-bearing, and these assert it stays bare.
+   */
+  it("keeps the compatibility reset above the library's own .button", () => {
+    expect(themeCss).toContain(".button.az-ui-button-neutral {");
+    expect(themeCss).not.toContain(":where(.button.az-ui-button-neutral)");
   });
 
   it("neutralizes transient PathScale pressed paint", () => {
-    expect(themeCss).toContain(":where(.button.az-ui-button-neutral:active)");
-    expect(themeCss).toContain(':where(.button.az-ui-button-neutral[data-pressed="true"])');
+    expect(themeCss).toContain(".button.az-ui-button-neutral:active");
+    expect(themeCss).toContain('.button.az-ui-button-neutral[data-pressed="true"]');
     expect(themeCss).toContain("transform: none");
+    expect(themeCss).not.toContain(":where(.button.az-ui-button-neutral:active)");
   });
 
   it("does not override existing call-site hover paint", () => {
