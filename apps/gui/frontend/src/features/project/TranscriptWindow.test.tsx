@@ -71,6 +71,34 @@ describe("transcript window bounds", () => {
     expect(screen.queryByText("row 187")).toBeNull();
   });
 
+  it("keeps the Page Up movement after revealing an earlier history page", () => {
+    const frames: FrameRequestCallback[] = [];
+    vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => {
+      frames.push(callback);
+      return frames.length;
+    });
+    vi.stubGlobal("cancelAnimationFrame", () => {});
+    const { screen } = mount(thread(200));
+    const scroller = screen.container.querySelector("[data-selectable]") as HTMLDivElement;
+    Object.defineProperties(scroller, {
+      clientHeight: { configurable: true, get: () => 400 },
+      scrollHeight: {
+        configurable: true,
+        get: () => (screen.container.querySelectorAll("[data-selectable]").length - 1) * 100,
+      },
+    });
+    scroller.scrollTop = 300;
+
+    fireEvent.keyDown(scroller, { key: "PageUp" });
+    expect(screen.getByText("row 187")).toBeInTheDocument();
+    for (const callback of frames.splice(0)) callback(0);
+
+    // The reveal adds 1,200px above and anchors the old reading position at
+    // 1,500px. Page Up must then move one 400px viewport to 1,100px instead of
+    // letting the reveal's anchor restoration erase the keyboard command.
+    expect(scroller.scrollTop).toBe(1_100);
+  });
+
   it("stops growing at the ceiling and evicts the tail to keep reading upward", () => {
     // The anchor restore runs on the next frame and holds the reveal open
     // until it does; running frames inline lets the test page repeatedly.
