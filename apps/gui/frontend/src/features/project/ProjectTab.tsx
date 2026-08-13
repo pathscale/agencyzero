@@ -119,6 +119,20 @@ export function ProjectTab(props: { tab: Tab; project: Project }): JSX.Element {
    * `mark` renders nothing and evaluates in JSX order during construction, so
    * the gaps between marks are what each child cost to build.
    */
+  /*
+   * The side panel is built one frame after the pane, not with it.
+   *
+   * It is a flat 74 to 182ms of the first reveal and it is not the
+   * conversation: measured across four projects it barely moved with message
+   * count, so it is fixed construction cost sitting directly in the path
+   * between a keystroke and the transcript appearing. Deferring it by a frame
+   * takes it off that path without changing what is eventually on screen.
+   */
+  const [panelReady, setPanelReady] = createSignal(false);
+  onMount(() => {
+    requestAnimationFrame(() => setPanelReady(true));
+  });
+
   const built = performance.now();
   const marks: Array<[string, number]> = [];
   const mark = (label: string) => {
@@ -577,7 +591,7 @@ export function ProjectTab(props: { tab: Tab; project: Project }): JSX.Element {
         </Show>
       </div>
 
-      <Show when={!forkInfo()}>
+      <Show when={panelReady() && !forkInfo()}>
         <div
           aria-hidden={!prefs.projectPanelVisible}
           class={`min-h-0 flex-none overflow-hidden ${
