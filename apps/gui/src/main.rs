@@ -188,6 +188,7 @@ const IMPLEMENTED: &[&str] = &[
     "set_data_location",
     "get_store_backup_status",
     "create_store_backup",
+    "create_store_snapshot",
     "select_store_backup",
     "restore_store_backup",
     "choose_data_directory",
@@ -1178,6 +1179,36 @@ fn get_store_backup_status(
     store_backup::status(&state.location.path)
 }
 
+/// Take a snapshot of the store, now, because the owner asked for one.
+///
+/// This used to happen on every launch, which cost a full copy per boot and
+/// left ten copies of a 128MB store in one profile. It also bought less than it
+/// looked like: the corruption that actually occurred was copied faithfully
+/// into both rolling snapshots, so neither could restore past it.
+///
+/// No restart, unlike a backup. A backup drains and exits because the angel
+/// copies the store from outside the process; here the process holding the only
+/// writer lock takes the copy itself, so draining first is enough to make what
+/// lands on disk consistent.
+///
+/// # Errors
+/// Refuses an ephemeral session, which has no durable store to copy, and
+/// reports a drain that failed rather than snapshotting a store mid-write.
+#[tauri::command]
+async fn create_store_snapshot(state: State<'_, AppState>) -> Result<String, String> {
+    if state.location.source == "ephemeral" {
+        return Err("an ephemeral session has no durable store to snapshot".into());
+    }
+    state.drain_tables_once().await?;
+    snapshot_store(&state.location.path);
+    Ok(state
+        .location
+        .path
+        .file_name()
+        .map(|name| format!("{}.snapshot-1", name.to_string_lossy()))
+        .unwrap_or_else(|| "snapshot-1".into()))
+}
+
 /// Choose a profile-agnostic package, then let the restart angel archive and
 /// byte-verify the closed store.
 ///
@@ -1807,7 +1838,7 @@ fn snapshot_store(store: &std::path::Path) {
         Ok(()) => crate::log!(
             log::Level::Info,
             "boot",
-            "store snapshot refreshed at {newest:?} in {}ms; restore with: rm -rf {store:?} && cp -R {newest:?} {store:?}",
+            "store snapshot written to {newest:?} in {}ms",
             started.elapsed().as_millis()
         ),
         Err(error) => {
@@ -2064,6 +2095,7 @@ fn main() {
             set_data_location,
             get_store_backup_status,
             create_store_backup,
+            create_store_snapshot,
             select_store_backup,
             restore_store_backup,
             choose_data_directory,
@@ -2289,19 +2321,18 @@ fn main() {
             };
 
             /*
-             * The rolling snapshot, taken the moment the lock is held and
-             * before any table opens. Boot is the one time the store is
-             * guaranteed whole and unheld: every corruption so far was
-             * written during a session and discovered at the next launch,
-             * which is exactly the window between two snapshots. Restoring
-             * is `rm -rf db && cp -R db.snapshot-1 db`, costs at most one
-             * session, and needs no tooling at all. A failed snapshot warns
-             * and boots anyway: a launch that fails because a backup could
-             * not be taken would invert the point.
+             * No snapshot here.
+             *
+             * It used to copy the whole store on every launch, which cost a
+             * full duplicate per boot and littered the profile: this machine
+             * reached ten copies of a 128MB store. It also bought less than it
+             * appeared to — the tear that actually happened was copied
+             * faithfully into both rolling snapshots, so neither could restore
+             * past it.
+             *
+             * It is a button in Settings now, beside Backups, taken when the
+             * owner asks for one. See `create_store_snapshot`.
              */
-            if !no_persist {
-                snapshot_store(&location.path);
-            }
 
             /*
              * The fingerprint is read through the kv table alone, before any
@@ -2383,29 +2414,13 @@ fn main() {
                 );
             }
 
-            let mut persisted_settings = tables
+            // Deep profiling is read straight from the row. It used to be
+            // rewritten to false here whenever inspection was off, which threw
+            // away a preference the owner had set rather than merely leaving it
+            // inert, and did it at boot where nothing could report it.
+            let persisted_settings = tables
                 .kv_get(settings::KEY)
                 .and_then(|raw| serde_json::from_str::<GlobalSettings>(&raw).ok());
-            if let Some(settings) = persisted_settings.as_mut()
-                && !settings.blitz_control_enabled
-                && settings.blitz_deep_profiling_enabled
-            {
-                // Repair rows written before deep profiling became a strict
-                // child of inspection. Keeping the stale true on disk would
-                // make a later inspection enable silently restart a trace.
-                settings.blitz_deep_profiling_enabled = false;
-                if let Ok(serialized) = serde_json::to_string(settings)
-                    && let Err(error) = tauri::async_runtime::block_on(
-                        tables.kv_put(settings::KEY, serialized),
-                    )
-                {
-                    crate::log!(
-                        log::Level::Warn,
-                        "settings",
-                        "could not persist the disabled deep-profiling repair: {error}"
-                    );
-                }
-            }
             let configured_proxy = persisted_settings
                 .as_ref()
                 .map(|settings| settings.agent_proxy_binary.clone())
