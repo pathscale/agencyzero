@@ -363,6 +363,17 @@ export function TranscriptPane(props: {
   };
   const revealEarlier = (afterRestore?: () => void): void => {
     const view = visibleTimeline();
+    /*
+     * The store holds a page, not the whole transcript. Reaching the top of it
+     * is the moment the rest is actually wanted, so it is fetched here rather
+     * than on every tab open. `loadOlderMessages` is idempotent per project.
+     */
+    if (view.hidden === 0 && (state.messageTotals[props.project.id] ?? 0) > props.messages.length) {
+      void actions
+        .loadOlderMessages(props.project.id)
+        .catch((cause) => log.warn(`could not load older messages: ${cause}`));
+      return;
+    }
     if (slidingWindow || view.hidden === 0) return;
     setPinned(false);
     slideWindow(() => {

@@ -83,7 +83,7 @@ export function createCommandApi(call: CommandCaller, on: EventListener): Agency
     listQuestions: (projectId) => call("list_questions", { projectId }),
     answerQuestion: (id, answered) => call("answer_question", { id, answered }),
 
-    listMessages: (projectId) => call("list_messages", { projectId }),
+    listMessages: (projectId, limit) => call("list_messages", { projectId, limit: limit ?? null }),
     syncProject: (projectId, lastReceivedAt) => call("sync_project", { projectId, lastReceivedAt }),
     sendMessage: (input) => call("send_message", { input }),
     resolveModeration: (messageId, approve) => call("resolve_moderation", { messageId, approve }),

@@ -63,7 +63,7 @@ describe("projects", () => {
     expect(fork.id).not.toBe("worktable");
     expect(fork.forkedFrom).toEqual({ projectId: "worktable", messageId: "wt-2" });
 
-    const carried = await api.listMessages(fork.id);
+    const carried = (await api.listMessages(fork.id)).messages;
     expect(carried.map((message: Message) => message.body)).toEqual([
       expect.stringContaining("Review the foo.bar upgrade"),
       expect.stringContaining("Phase A"),
@@ -77,7 +77,7 @@ describe("projects", () => {
     expect(fork.name).toBe("Phase B — engine observability (API break)");
     expect(fork.forkedFrom).toEqual({ projectId: "worktable", itemId: "worktable-1" });
     expect(reopened.id).toBe(fork.id);
-    expect(await api.listMessages(fork.id)).toEqual([]);
+    expect((await api.listMessages(fork.id)).messages).toEqual([]);
   });
 });
 
@@ -135,7 +135,7 @@ describe("items", () => {
 
 describe("moderation", () => {
   it("clears the hold on approval, so the run is no longer waiting", async () => {
-    const before = await api.listMessages("cafe");
+    const before = (await api.listMessages("cafe")).messages;
     const hold = before.find((message) => message.moderation?.needsApproval);
     expect(hold?.moderation?.severity).toBe("critical");
 
@@ -145,7 +145,9 @@ describe("moderation", () => {
   });
 
   it("denying also releases the hold, but does not mark it as having run", async () => {
-    const [hold] = (await api.listMessages("cafe")).filter((m) => m.moderation?.needsApproval);
+    const [hold] = (await api.listMessages("cafe")).messages.filter(
+      (m) => m.moderation?.needsApproval,
+    );
     const resolved = await api.resolveModeration(hold.id, false);
     expect(resolved.moderation).toMatchObject({ needsApproval: false, verdict: "noted" });
   });

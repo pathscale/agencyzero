@@ -58,6 +58,16 @@ import type {
 } from "~/types";
 
 const TASK_LOG_PAGE = 40;
+/*
+ * How many messages a project's first read fetches.
+ *
+ * Comfortably above `TRANSCRIPT_MAX_ENTRIES`, which is the most the pane will
+ * ever show at once, so the existing client-side window keeps working
+ * untouched. Reading everything cost a `message_chunk` lookup per message on
+ * the Rust side and a reconcile of the whole array into the store: on the
+ * owner's largest project, 2,422 rows to display twelve.
+ */
+const MESSAGE_PAGE = 60;
 
 /** Matches `MAX_IO_ENTRIES` in `projects.rs`; see the `agent:io` handler. */
 const AGENT_IO_LIMIT = 500;
@@ -107,6 +117,8 @@ type WorkspaceState = {
   /** Latest chat item-link request; ProjectPanel consumes it after mounting. */
   itemReveal: { id: string; revision: number } | null;
   messages: Record<string, Message[]>;
+  /** How many messages each project has, against the page held in `messages`. */
+  messageTotals: Record<string, number>;
   /** Agent-turn counts for Home, available without hydrating every transcript. */
   turnCounts: Record<string, number>;
   /** Live sent/read acknowledgements, keyed by project and message id. */
@@ -403,6 +415,7 @@ function createWorkspace() {
     items: {},
     itemReveal: null,
     messages: {},
+    messageTotals: {},
     turnCounts: {},
     messageReceipts: {},
     running: {},
@@ -819,9 +832,9 @@ function createWorkspace() {
         return value;
       });
     };
-    const [items, messages, running, taskLog, io, prs, questions] = await Promise.all([
+    const [items, messagePage, running, taskLog, io, prs, questions] = await Promise.all([
       timed("items", backend.listItems(projectId)),
-      timed("messages", backend.listMessages(projectId)),
+      timed("messages", backend.listMessages(projectId, MESSAGE_PAGE)),
       timed("running", backend.listRunningTasks(projectId)),
       timed("taskLog", backend.listTaskLog(projectId, TASK_LOG_PAGE)),
       timed("agentIo", backend.listAgentIo(projectId)),
@@ -829,11 +842,13 @@ function createWorkspace() {
       timed("questions", backend.listQuestions(projectId)),
     ]);
     const fetched = performance.now();
+    const messages = messagePage.messages;
     const project = state.projects.find((candidate) => candidate.id === projectId);
     const hydratedTab = project ? projectTab(project, messages) : null;
     batch(() => {
       setState("items", projectId, reconcile(items));
       setState("messages", projectId, reconcile(messages));
+      setState("messageTotals", projectId, messagePage.total);
       setState("turnCounts", projectId, usageTotals(messages).turns);
       setState("running", projectId, reconcile(running));
       setState("taskLog", projectId, reconcile(taskLog.entries));
@@ -888,9 +903,34 @@ function createWorkspace() {
         `reconcile ${ms(reconciled - fetched)}, ` +
         `paint ${paint}, ` +
         `sync ${ms(synced - reconciled)} ` +
-        `(${messages.length} messages, ${items.length} items, ${taskLog.entries.length}/${taskLog.total} log, ` +
+        `(${messages.length}/${messagePage.total} messages, ${items.length} items, ${taskLog.entries.length}/${taskLog.total} log, ` +
         `${io.length} io, ${prs.length} prs, ${questions.length} questions)`,
     );
+  }
+
+  /**
+   * Fetch the rest of a transcript, once the reader has paged back past the
+   * window that was loaded.
+   *
+   * The first read takes `MESSAGE_PAGE` rows, which is everything the pane can
+   * display and nothing more. Reaching the top of that is the first moment the
+   * older history is actually wanted, and it is the only moment worth paying
+   * for it.
+   */
+  const fullyLoaded = new Set<string>();
+  async function loadOlderMessages(projectId: string): Promise<void> {
+    if (fullyLoaded.has(projectId)) return;
+    fullyLoaded.add(projectId);
+    const page = await client()
+      .listMessages(projectId)
+      .catch((cause) => {
+        fullyLoaded.delete(projectId);
+        throw cause;
+      });
+    batch(() => {
+      setState("messages", projectId, reconcile(page.messages));
+      setState("messageTotals", projectId, page.total);
+    });
   }
 
   /** One snapshot request per project, shared by boot and a simultaneous tab open. */
@@ -2507,6 +2547,7 @@ function createWorkspace() {
     commitTabOrder,
     openProject,
     revealItem,
+    loadOlderMessages,
     openSettings,
     openOnboarding,
     deferOnboarding,

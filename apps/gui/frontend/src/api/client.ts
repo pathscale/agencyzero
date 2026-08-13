@@ -27,6 +27,7 @@ import type {
   RunningTask,
   StoreBackupSelection,
   StoreBackupStatus,
+  MessagePage,
   StudySummary,
   StudyTurnMetadata,
   TableSize,
@@ -125,7 +126,15 @@ export interface AgencyZeroApi {
   answerQuestion(id: string, answered: boolean): Promise<void>;
 
   // — Conversation ————————————————————————————————————————————
-  listMessages(projectId: string): Promise<Message[]>;
+  /**
+   * The newest `limit` messages of a project, and how many it has in total.
+   *
+   * Unlimited by default, for callers that want the whole transcript. The pane
+   * passes a limit: it never shows more than a few dozen rows at once, and the
+   * unlimited read cost a `message_chunk` lookup per message on the Rust side
+   * plus a reconcile of every row into the store.
+   */
+  listMessages(projectId: string, limit?: number): Promise<MessagePage>;
   syncProject(projectId: string, lastReceivedAt: string): Promise<void>;
   sendMessage(input: {
     projectId: string;
