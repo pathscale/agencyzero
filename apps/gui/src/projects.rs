@@ -2908,10 +2908,10 @@ fn message_page(tables: &Tables, project_id: String, limit: Option<usize>) -> Me
         .unwrap_or_default();
     let total = raw.len();
     raw.sort_by(|left, right| left.created_at.cmp(&right.created_at));
-    if let Some(limit) = limit {
-        if total > limit {
-            raw.drain(..total - limit);
-        }
+    if let Some(limit) = limit
+        && total > limit
+    {
+        raw.drain(..total - limit);
     }
     let mut rows: Vec<MessageDto> = raw
         .into_iter()
