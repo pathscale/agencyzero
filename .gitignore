@@ -19,3 +19,19 @@ __pycache__/
 # compaction. Machine-local paths and in-flight state; it describes the working
 # session, not the repository.
 docs/HANDOVER.md
+
+# Machine-local cargo overrides.
+#
+# `.cargo/config.toml` is tracked and has to stay tracked: it carries the macOS
+# link flags and the usvg patch that every build needs. What must never be
+# committed is the `[patch]` block that redirects the renderer packages to
+# working checkouts, because the paths in it exist on one machine.
+#
+# This line alone does nothing, since git does not consult .gitignore for a
+# tracked path. It is the pair to the command in AGENTS.md:
+#
+#     git update-index --skip-worktree .cargo/config.toml
+#
+# That is what makes local edits invisible to `git status` and `git add -A`. The
+# entry here covers the other direction, if the file is ever untracked.
+.cargo/config.toml

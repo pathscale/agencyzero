@@ -96,6 +96,27 @@ paraphrases were how the old checkbox contract created near-duplicates. Full con
 
 ## Git workflow
 
+- **Freeze `.cargo/config.toml` before you touch it.** Run this once per clone,
+  including every worktree:
+
+  ```sh
+  git update-index --skip-worktree .cargo/config.toml
+  ```
+
+  The file is tracked and has to stay tracked, because it carries the macOS link
+  flags and the `usvg` patch every build needs. What must never be committed is
+  the `[patch]` block redirecting the renderer packages to working checkouts,
+  since those paths exist on one machine and CI fails on them. It has gone in
+  four times without this. `.gitignore` cannot help: git does not consult it for
+  a tracked path. To change the shared part, unset with `--no-skip-worktree`,
+  commit, set it again.
+
+  The cost of the redirect is that no local build ever fetches the pins in
+  `apps/gui/Cargo.toml`, so they rot unseen and only a macOS release build finds
+  out. Before claiming a branch is releasable, build once with the file at its
+  committed state.
+
+
 - **One change per commit.** Shared files are an ordering problem, not an excuse.
 - **Name the branch when pushing**: `git push origin branch-name`.
 - **Branch naming**: `fix/description` or `feat/description`.
