@@ -828,7 +828,10 @@ export function ReviewButtons(props: { pr: PullRequest }): JSX.Element {
               title={tx("Review with {agent}", { agent: AGENT_LABELS[reviewer.agent] })}
               aria-label={tx("Review with {agent}", { agent: AGENT_LABELS[reviewer.agent] })}
               aria-busy={isPending(reviewer.agent)}
-              data-state={isPending(reviewer.agent) ? "running" : "idle"}
+              // Not `data-state`: the library writes that one from the
+              // component's own `state` prop, and its spread wins. This is a
+              // different fact anyway, and naming it says which.
+              data-review-state={isPending(reviewer.agent) ? "running" : "idle"}
               class={`flex size-[22px] shrink-0 items-center justify-center rounded-md transition-colors ${
                 isPending(reviewer.agent)
                   ? "bg-success/15 text-success ring-1 ring-success/45 ring-inset disabled:opacity-100"
