@@ -18,7 +18,7 @@ export function Panel(props: PanelProps): JSX.Element {
   const [own, rest] = splitProps(props, ["children", "class"]);
   return (
     <div
-      class={`isolate overflow-hidden rounded-panel border border-az-hairline az-panel ${own.class ?? ""}`}
+      class={`az-panel isolate overflow-hidden rounded-panel border border-az-hairline ${own.class ?? ""}`}
       {...rest}
     >
       {own.children}

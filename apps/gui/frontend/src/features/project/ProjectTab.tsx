@@ -147,7 +147,7 @@ export function ProjectTab(props: { tab: Tab; project: Project }): JSX.Element {
   });
 
   const built = performance.now();
-  const marks: Array<[string, number]> = [];
+  const marks: [string, number][] = [];
   const mark = (label: string) => {
     marks.push([label, performance.now()]);
     return null;

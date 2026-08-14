@@ -127,7 +127,7 @@ describe("TabStrip", () => {
   });
 
   it("declares the strip a window drag region", async () => {
-    const { container, getByRole } = await mountStrip();
+    const { container } = await mountStrip();
     expect(container.querySelector('[data-tauri-drag-region="deep"]')).toBeTruthy();
   });
 

@@ -18,7 +18,6 @@ import { describeError, installGlobalErrorLogging, log } from "~/lib/log";
 import { record as recordPerf } from "~/lib/perf";
 import { usageTotals } from "~/lib/stats";
 import { applyTheme } from "~/lib/theme";
-import type { ThemeSettings } from "~/types";
 import { i18n } from "~/stores/i18n";
 import {
   markPortablePrefsCurrent,
@@ -56,6 +55,7 @@ import type {
   Tab,
   TabStatus,
   TaskLogEntry,
+  ThemeSettings,
   WorkspaceRoot,
 } from "~/types";
 
@@ -1119,9 +1119,7 @@ function createWorkspace() {
        */
       const openProjectIds = state.tabs
         .flatMap((tab) => (tab.projectId === null ? [] : [tab.projectId]))
-        .sort((left, right) =>
-          left === state.activeKey ? -1 : right === state.activeKey ? 1 : 0,
-        );
+        .sort((left, right) => (left === state.activeKey ? -1 : right === state.activeKey ? 1 : 0));
       log.info(`boot: loading ${openProjectIds.length} open project(s); ${projects.length} total`);
       await Promise.all([
         ...openProjectIds.map(loadProject),

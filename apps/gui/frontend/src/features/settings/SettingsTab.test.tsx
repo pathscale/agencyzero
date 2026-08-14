@@ -472,7 +472,9 @@ describe("diagnostics panel", () => {
    */
   it("keeps the diagnostics panel from shrinking away in the settings column", async () => {
     const screen = await mountSettings();
-    const toggle = screen.container.querySelector('[aria-label="Enable inspection and agent control"]');
+    const toggle = screen.container.querySelector(
+      '[aria-label="Enable inspection and agent control"]',
+    );
     expect(toggle).toBeTruthy();
 
     const panel = toggle?.closest(".overflow-hidden");

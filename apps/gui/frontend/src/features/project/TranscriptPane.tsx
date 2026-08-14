@@ -1,6 +1,4 @@
 import { Empty } from "@pathscale/ui";
-import { log } from "~/lib/log";
-import { record as recordPerf } from "~/lib/perf";
 import {
   createEffect,
   createMemo,
@@ -27,6 +25,8 @@ import {
   relativeTime,
 } from "~/lib/format";
 import { AGENT_LABELS } from "~/lib/labels";
+import { log } from "~/lib/log";
+import { record as recordPerf } from "~/lib/perf";
 import { costLabel, estimateTurnCost } from "~/lib/pricing";
 import { compactCount } from "~/lib/stats";
 import { agentTurnLabels } from "~/lib/turns";

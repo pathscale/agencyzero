@@ -1,4 +1,4 @@
-import { Checkbox, Input, Slider, Textarea, Switch } from "@pathscale/ui";
+import { Checkbox, Input, Slider, Switch, Textarea } from "@pathscale/ui";
 import { createEffect, createMemo, createSignal, For, type JSX, Show } from "solid-js";
 import { NOTES_BUDGET } from "~/api/client";
 import { AppModal, type ModalAnchor } from "~/components/AppModal";
