@@ -72,7 +72,7 @@ dependencies = [
 
 [[package]]
 name = "agency-tools"
-version = "0.7.1"
+version = "0.7.2"
 dependencies = [
  "derive_more 2.1.1",
  "dirs",
@@ -364,11 +364,11 @@ checksum = "f2032f911046de80f0a198e0901378627c33f59ea0ac00e363d481118bd70a53"
 
 [[package]]
 name = "az-core"
-version = "0.7.1"
+version = "0.7.2"
 
 [[package]]
 name = "az-gui"
-version = "0.7.1"
+version = "0.7.2"
 dependencies = [
  "agency-proxy-client",
  "agency-proxy-protocol",
@@ -407,7 +407,7 @@ dependencies = [
 
 [[package]]
 name = "az-mcp-proxy"
-version = "0.7.1"
+version = "0.7.2"
 dependencies = [
  "az-core",
 ]
@@ -498,7 +498,7 @@ dependencies = [
 
 [[package]]
 name = "blitz-bench"
-version = "0.7.1"
+version = "0.7.2"
 dependencies = [
  "blitz-control-protocol",
  "endpoint-libs",
@@ -9086,7 +9086,7 @@ dependencies = [
 
 [[package]]
 name = "wt-migrate"
-version = "0.7.1"
+version = "0.7.2"
 dependencies = [
  "chrono",
  "derive_more 2.1.1",
@@ -9375,23 +9375,3 @@ checksum = "29ce2c8a9384ad323cf564b67da86e21d3cfdff87908bc1223ed5c99bc792713"
 dependencies = [
  "zune-core",
 ]
-
-[[patch.unused]]
-name = "ps-anyrender"
-version = "0.12.0"
-source = "git+https://github.com/pathscale/ps-anyrender.git?rev=0e4122bff9220b85e4e462d1c3213c24beace3ea#0e4122bff9220b85e4e462d1c3213c24beace3ea"
-
-[[patch.unused]]
-name = "ps-anyrender-vello"
-version = "0.13.0"
-source = "git+https://github.com/pathscale/ps-anyrender.git?rev=0e4122bff9220b85e4e462d1c3213c24beace3ea#0e4122bff9220b85e4e462d1c3213c24beace3ea"
-
-[[patch.unused]]
-name = "ps-anyrender-vello-cpu"
-version = "0.15.0"
-source = "git+https://github.com/pathscale/ps-anyrender.git?rev=0e4122bff9220b85e4e462d1c3213c24beace3ea#0e4122bff9220b85e4e462d1c3213c24beace3ea"
-
-[[patch.unused]]
-name = "ps-anyrender-vello-hybrid"
-version = "0.9.0"
-source = "git+https://github.com/pathscale/ps-anyrender.git?rev=0e4122bff9220b85e4e462d1c3213c24beace3ea#0e4122bff9220b85e4e462d1c3213c24beace3ea"

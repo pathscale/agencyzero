@@ -26,17 +26,13 @@ rustflags = ["-C", "link-arg=-Wl,-dead_strip_dylibs"]
 # anyrender is not patched here any more: ps-blitz takes the whole ps-anyrender
 # family by git rev now, so upstream's crates are no longer in the graph.
 #
-# The ps-anyrender entries are the same problem one level out. ps-blitz takes
-# that family by git rev; tauri-runtime-blitz still takes ps-anyrender-vello
-# from crates.io. Same version, different source, so cargo builds two copies of
-# ps-anyrender and `VelloWindowRenderer` implements a `WindowRenderer` that is
-# not the one `BlitzApplication` asks for. Sixty type errors, all of them that.
+# The ps-anyrender entries that used to sit here are gone, on the condition this
+# comment set for dropping them: tauri-runtime-blitz is repinned at a ps-blitz
+# rev that carries the repin and takes the same ps-anyrender, so nothing reaches
+# for that family on crates.io any more and there is no second copy to unify.
 #
-# Drop these once tauri-runtime-blitz is repinned at a ps-blitz rev that carries
-# the repin, and takes the same ps-anyrender.
+# Leaving them would not have been harmless. They named a rev of their own, so
+# once the manifests moved forward the lockfile held ps-anyrender at two
+# revisions, which `scripts/check-one-rev-per-git-source.sh` exists to refuse.
 [patch.crates-io]
 usvg = { git = "https://github.com/DioxusLabs/resvg", branch = "devin/1785858271-intrinsic-dimensions" }
-ps-anyrender = { git = "https://github.com/pathscale/ps-anyrender.git", rev = "0e4122bff9220b85e4e462d1c3213c24beace3ea" }
-ps-anyrender-vello = { git = "https://github.com/pathscale/ps-anyrender.git", rev = "0e4122bff9220b85e4e462d1c3213c24beace3ea" }
-ps-anyrender-vello-cpu = { git = "https://github.com/pathscale/ps-anyrender.git", rev = "0e4122bff9220b85e4e462d1c3213c24beace3ea" }
-ps-anyrender-vello-hybrid = { git = "https://github.com/pathscale/ps-anyrender.git", rev = "0e4122bff9220b85e4e462d1c3213c24beace3ea" }
