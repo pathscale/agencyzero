@@ -1,4 +1,4 @@
-import { Checkbox, Input, TextArea } from "@pathscale/ui";
+import { Checkbox, Input, Textarea } from "@pathscale/ui";
 import { createMemo, createSignal, For, type JSX, Show } from "solid-js";
 import { NOTES_BUDGET } from "~/api/client";
 import { AppModal, type ModalAnchor } from "~/components/AppModal";
@@ -311,7 +311,7 @@ export function CleanupRowActions(props: {
     <div class="flex shrink-0 items-center gap-1 rounded-md border border-warning/35 bg-warning/8 px-1.5 py-0.5">
       <Checkbox
         checked
-        isDisabled={busy() !== null}
+        state={busy() !== null ? "disabled" : undefined}
         aria-label={tx("Delete {name}", { name: props.item.title })}
         onChange={(event) => {
           if (event.currentTarget.checked) return;
@@ -586,7 +586,7 @@ function TaskManagerComposer(): JSX.Element {
             />
           }
         >
-          <TextArea
+          <Textarea
             autofocus
             rows={6}
             value={draft()}
@@ -1074,7 +1074,7 @@ function GroupItemRow(props: {
                   {draft().context.length} / {NOTES_BUDGET}
                 </span>
               </div>
-              <TextArea
+              <Textarea
                 autofocus
                 value={draft().context}
                 maxLength={NOTES_BUDGET}
@@ -1159,7 +1159,7 @@ function GroupItemRow(props: {
                     {forkDraft()?.length ?? 0} / {NOTES_BUDGET}
                   </span>
                 </div>
-                <TextArea
+                <Textarea
                   id={`home-fork-description-${props.item.id}`}
                   autofocus
                   value={forkDraft() ?? ""}

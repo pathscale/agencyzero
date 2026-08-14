@@ -1,4 +1,4 @@
-import { Checkbox, Input, Select, Slider, TextArea, Toggle } from "@pathscale/ui";
+import { Checkbox, Input, Select, Slider, Textarea, Switch } from "@pathscale/ui";
 import {
   createContext,
   createEffect,
@@ -713,7 +713,7 @@ export function SettingsTab(): JSX.Element {
                   hint={tx("what a PR review asks; empty uses the built-in prompt")}
                   stack
                 >
-                  <TextArea
+                  <Textarea
                     rows={3}
                     value={current().review?.prompt ?? ""}
                     placeholder={tx(
@@ -2846,11 +2846,11 @@ function SettingToggle(props: {
   onChange: (checked: boolean) => void;
 }): JSX.Element {
   return (
-    <Toggle
+    <Switch
       aria-label={props.label}
       checked={props.checked}
       disabled={props.disabled}
-      color="accent"
+      flavor="accent"
       class="shrink-0"
       onChange={(event) => props.onChange(event.currentTarget.checked)}
     />
@@ -2997,7 +2997,7 @@ function ModelRow(props: {
         class="shrink-0"
         title={props.isLastEnabled ? tx("The last enabled model cannot be removed") : undefined}
         checked={props.isEnabled}
-        isDisabled={props.isLastEnabled}
+        state={props.isLastEnabled ? "disabled" : undefined}
         aria-label={tx("Offer {name}", { name: props.model.name })}
         onChange={(event) =>
           void actions.toggleModel(props.agent, props.model.id, event.currentTarget.checked)
