@@ -2127,13 +2127,27 @@ function NotesEditor(props: { projectId: string }): JSX.Element {
             {tx("Revert")}
           </Button>
         </Show>
+        {/*
+         * Saving is a state, not a different label. The library draws the
+         * spinner and sets `aria-busy` from `state`, which is what 2.2 wants,
+         * and it keeps the caption static.
+         *
+         * Static matters beyond taste here. A reactive expression placed
+         * directly inside a Layout component updates once and then freezes,
+         * because the compiler's `children` is a memo built on first read and
+         * owned by whichever effect reads it first, which disposes it when it
+         * re-runs. This button swapped "Save" for "Saving…" on click and never
+         * swapped back, so the caption lied and nothing could find the control
+         * again. See section 8 of SOLID-LAYOUTS-ISSUES.md.
+         */}
         <Button
           type="button"
           onClick={() => void save(draft())}
+          state={status() === "saving" ? "loading" : undefined}
           disabled={!dirty() || status() === "saving" || !isLive("setProjectNotes")}
           class="shrink-0 rounded-lg border border-primary/18 px-2.5 py-[3px] text-[11.5px] text-az-body transition-colors hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-40"
         >
-          {status() === "saving" ? tx("Saving…") : tx("Save")}
+          {tx("Save")}
         </Button>
         {/* Forgetting on purpose is a real thing to want: a project that
               changed direction is better off with nothing than with rules
