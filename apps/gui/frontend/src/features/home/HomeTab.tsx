@@ -355,9 +355,28 @@ function HomeItemSortControls(): JSX.Element {
         class="rounded-md border border-az-hairline bg-az-inset px-1.5 py-0.5 font-medium text-[10.5px] text-az-muted transition-colors hover:text-az-strong"
         title={tx("Cycle Home sort between status, time, and turns")}
       >
-        {tx(
-          prefs.homeSortBy === "status" ? "Status" : prefs.homeSortBy === "time" ? "Time" : "Turns",
-        )}
+        {/*
+         * The span is load-bearing. A reactive expression placed directly
+         * inside a Layout component updates exactly once and then freezes:
+         * the compiler's `children` is a memo built on first read, so it is
+         * owned by whichever effect reads it first, and that effect disposes
+         * it when it re-runs. The first click repaints, the second does not.
+         *
+         * A plain element in between means the memo never re-runs at all: it
+         * builds this span once, and the text inside updates through the
+         * span's own effect, which nothing disposes. Same workaround chuzz
+         * uses, and section 8 of SOLID-LAYOUTS-ISSUES.md; remove it once the
+         * memo is built under the component's own owner.
+         */}
+        <span>
+          {tx(
+            prefs.homeSortBy === "status"
+              ? "Status"
+              : prefs.homeSortBy === "time"
+                ? "Time"
+                : "Turns",
+          )}
+        </span>
       </Button>
       <Button
         type="button"

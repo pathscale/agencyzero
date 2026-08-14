@@ -555,13 +555,32 @@ export function SettingsTab(): JSX.Element {
                     onClick={() => restartProxy("drain")}
                     class="rounded-lg border border-warning/40 px-3 py-[5px] text-[12px] text-warning transition-colors hover:border-warning hover:bg-warning/8 disabled:cursor-not-allowed disabled:opacity-40"
                   >
-                    {proxyAction() === "drain"
-                      ? tx("Waiting…")
-                      : state.agencyProxy?.connected === false
-                        ? tx("Start")
-                        : (state.agencyProxy?.activeRuns ?? 0) > 0
-                          ? tx("Wait & restart")
-                          : tx("Restart")}
+                    {/*
+                     * The spans on these three captions are load-bearing, not
+                     * markup for its own sake.
+                     *
+                     * A reactive expression placed directly inside a Layout
+                     * component updates once and then freezes: the compiler's
+                     * `children` is a memo built on first read and owned by
+                     * whichever effect reads it first, and that effect disposes
+                     * it when it re-runs. These captions each have three
+                     * states, so the second change is the one that silently
+                     * does not happen and the button then lies about what it
+                     * will do. A plain element in between keeps the memo from
+                     * tracking the signal at all, so the text updates through
+                     * the span's own effect. Section 8 of
+                     * SOLID-LAYOUTS-ISSUES.md; remove once the memo is built
+                     * under the component's own owner.
+                     */}
+                    <span>
+                      {proxyAction() === "drain"
+                        ? tx("Waiting…")
+                        : state.agencyProxy?.connected === false
+                          ? tx("Start")
+                          : (state.agencyProxy?.activeRuns ?? 0) > 0
+                            ? tx("Wait & restart")
+                            : tx("Restart")}
+                    </span>
                   </Button>
                   <Show when={state.agencyProxy?.connected && isLive("stopAgentProxy")}>
                     <Button
@@ -570,11 +589,13 @@ export function SettingsTab(): JSX.Element {
                       onClick={stopProxy}
                       class="rounded-lg border border-az-hairline-strong px-3 py-[5px] text-[12px] text-az-muted transition-colors hover:border-error hover:text-error disabled:cursor-not-allowed disabled:opacity-40"
                     >
-                      {proxyAction() === "stop" && (state.agencyProxy?.activeRuns ?? 0) > 0
-                        ? tx("Waiting…")
-                        : proxyAction() === "stop"
-                          ? tx("Stopping…")
-                          : tx("Stop")}
+                      <span>
+                        {proxyAction() === "stop" && (state.agencyProxy?.activeRuns ?? 0) > 0
+                          ? tx("Waiting…")
+                          : proxyAction() === "stop"
+                            ? tx("Stopping…")
+                            : tx("Stop")}
+                      </span>
                     </Button>
                   </Show>
                   <Show when={(state.agencyProxy?.activeRuns ?? 0) > 0}>
@@ -586,11 +607,13 @@ export function SettingsTab(): JSX.Element {
                       }
                       class="rounded-lg border border-error/40 px-3 py-[5px] text-[12px] text-error transition-colors hover:border-error hover:bg-error/8 disabled:cursor-not-allowed disabled:opacity-40"
                     >
-                      {proxyAction() === "terminate"
-                        ? tx("Terminating…")
-                        : terminateArmed()
-                          ? tx("Confirm terminate & restart")
-                          : tx("Terminate & restart")}
+                      <span>
+                        {proxyAction() === "terminate"
+                          ? tx("Terminating…")
+                          : terminateArmed()
+                            ? tx("Confirm terminate & restart")
+                            : tx("Terminate & restart")}
+                      </span>
                     </Button>
                   </Show>
                 </div>
