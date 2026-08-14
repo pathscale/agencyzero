@@ -32,7 +32,7 @@ async function mountWelcome(): Promise<{
 
 function welcomeDialog(): HTMLElement | null {
   return document.body.querySelector<HTMLElement>(
-    '[data-slot="modal-content"][aria-labelledby="welcome-title"]',
+    '[data-slot="dialog-content"][aria-labelledby="welcome-title"]',
   );
 }
 
@@ -76,7 +76,7 @@ describe("WelcomeFlow", () => {
 
     screen.getByRole("button", { name: "Welcome Tutorial" }).click();
     await waitFor(() => expect(welcomeDialog()).not.toBeNull());
-    const backdrop = document.body.querySelector<HTMLElement>('[data-slot="modal-backdrop"]');
+    const backdrop = document.body.querySelector<HTMLElement>('[data-slot="dialog-backdrop"]');
     expect(backdrop).not.toBeNull();
     if (!backdrop) throw new Error("Welcome backdrop was not rendered");
 
