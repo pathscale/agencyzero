@@ -63,11 +63,11 @@ describe("pull request review buttons", () => {
     fireEvent.click(claude);
     expect(claude.disabled).toBe(true);
     expect(claude).toHaveAttribute("aria-busy", "true");
-    expect(claude).toHaveAttribute("data-state", "running");
+    expect(claude).toHaveAttribute("data-review-state", "running");
     expect(claude).toHaveClass("text-success");
     expect(workspace.state.reviewing[reviewRunKey(PR.url, "claude")]).toBe(true);
     expect(codex.disabled).toBe(false);
-    expect(codex).toHaveAttribute("data-state", "idle");
+    expect(codex).toHaveAttribute("data-review-state", "idle");
     expect(copilot.disabled).toBe(false);
 
     fireEvent.click(codex);
@@ -78,7 +78,7 @@ describe("pull request review buttons", () => {
 
     await waitFor(() => expect(claude.disabled).toBe(false));
     expect(claude).toHaveAttribute("aria-busy", "false");
-    expect(claude).toHaveAttribute("data-state", "idle");
+    expect(claude).toHaveAttribute("data-review-state", "idle");
     await waitFor(() => expect(codex.disabled).toBe(false));
   });
 });
