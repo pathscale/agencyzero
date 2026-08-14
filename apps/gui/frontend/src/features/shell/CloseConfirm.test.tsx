@@ -8,7 +8,7 @@ vi.mock("~/stores/workspace", () => ({
 
 function quitDialog(): HTMLElement | null {
   return document.body.querySelector<HTMLElement>(
-    '[data-slot="modal-content"][aria-labelledby="close-confirm-title"]',
+    '[data-slot="dialog-content"][aria-labelledby="close-confirm-title"]',
   );
 }
 
@@ -49,7 +49,7 @@ describe("CloseConfirm", () => {
     fireEvent.keyDown(document, { key: "Escape" });
     expect(onCancel).toHaveBeenCalledTimes(1);
 
-    const backdrop = document.body.querySelector<HTMLElement>('[data-slot="modal-backdrop"]');
+    const backdrop = document.body.querySelector<HTMLElement>('[data-slot="dialog-backdrop"]');
     expect(backdrop).not.toBeNull();
     fireEvent.click(backdrop!);
     expect(onCancel).toHaveBeenCalledTimes(2);

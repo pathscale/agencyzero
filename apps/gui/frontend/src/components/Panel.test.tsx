@@ -25,7 +25,7 @@ describe("SectionPanel", () => {
     }
 
     const view = render(() => <Harness />);
-    const control = view.container.querySelector<HTMLInputElement>('[data-slot="toggle-input"]');
+    const control = view.container.querySelector<HTMLInputElement>('[data-slot="switch-input"]');
     if (!control) throw new Error("retained disclosure control was not mounted");
     const content = control.parentElement?.parentElement;
     if (!content) throw new Error("retained disclosure content has no wrapper");
@@ -35,13 +35,13 @@ describe("SectionPanel", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Settings" }));
 
-    expect(view.container.querySelector('[data-slot="toggle-input"]')).toBe(control);
+    expect(view.container.querySelector('[data-slot="switch-input"]')).toBe(control);
     expect(content).not.toHaveClass("hidden");
     expect(content).not.toHaveAttribute("aria-hidden");
 
     fireEvent.click(screen.getByRole("button", { name: "Settings" }));
 
-    expect(view.container.querySelector('[data-slot="toggle-input"]')).toBe(control);
+    expect(view.container.querySelector('[data-slot="switch-input"]')).toBe(control);
     expect(content).toHaveClass("hidden");
   });
 });
