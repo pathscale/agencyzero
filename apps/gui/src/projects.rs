@@ -2008,15 +2008,36 @@ pub fn get_home_snapshot(state: State<'_, AppState>) -> HomeSnapshotDto {
 }
 
 #[tauri::command]
-pub fn list_items(project_id: String, state: State<'_, AppState>) -> Vec<ProjectItemDto> {
-    let mut rows: Vec<ProjectItemDto> = state
-        .tables
+pub async fn list_items(
+    project_id: String,
+    state: State<'_, AppState>,
+) -> Result<Vec<ProjectItemDto>, String> {
+    let tables = std::sync::Arc::clone(&state.tables);
+    tokio::task::spawn_blocking(move || list_item_rows(&tables, project_id))
+        .await
+        .map_err(|error| error.to_string())
+}
+
+/// The read itself, off both the window thread and the async workers.
+///
+/// A plain `async fn` was tried first and made this worse, not better:
+/// `list_items` went from 10.8ms average to 52.5ms. Tauri runs async commands
+/// on its async runtime, and that is where the slow network commands already
+/// live, `list_quota` averaging over a second and seen at five. Moving a cheap
+/// store read there stops it queueing behind other reads and starts it queueing
+/// behind those.
+///
+/// `spawn_blocking` is a tokio task on the dedicated blocking pool, which is
+/// neither the window thread nor an async worker, so a read waits on nothing it
+/// has no reason to wait on.
+fn list_item_rows(tables: &Tables, project_id: String) -> Vec<ProjectItemDto> {
+    let mut rows: Vec<ProjectItemDto> = tables
         .project_item
         .select_by_project_id(project_id)
         .execute()
         .unwrap_or_default()
         .into_iter()
-        .map(|row| item_dto(row, &state.tables))
+        .map(|row| item_dto(row, tables))
         .collect();
     rows.sort_by_key(|item| item.order);
     rows
@@ -2817,7 +2838,7 @@ pub async fn reorder_items(
             .await
             .map_err(|error| error.to_string())?;
     }
-    let items = list_items(project_id.clone(), state.clone());
+    let items = list_items(project_id.clone(), state.clone()).await?;
     for item in &items {
         let _ = app.emit("item:updated", item.clone());
     }
@@ -2850,13 +2871,21 @@ pub struct MessagePage {
 ///
 /// Passing `None` still returns everything, for callers that genuinely want it.
 #[tauri::command]
-pub fn list_messages(
+pub async fn list_messages(
     project_id: String,
     limit: Option<usize>,
     state: State<'_, AppState>,
-) -> MessagePage {
-    let reply_targets: std::collections::HashMap<String, String> = state
-        .tables
+) -> Result<MessagePage, String> {
+    let tables = std::sync::Arc::clone(&state.tables);
+    tokio::task::spawn_blocking(move || message_page(&tables, project_id, limit))
+        .await
+        .map_err(|error| error.to_string())
+}
+
+/// See [`list_item_rows`] for why this is a blocking-pool task and not an
+/// `async fn`.
+fn message_page(tables: &Tables, project_id: String, limit: Option<usize>) -> MessagePage {
+    let reply_targets: std::collections::HashMap<String, String> = tables
         .question_reply
         .select_by_project_id(project_id.clone())
         .execute()
@@ -2872,8 +2901,7 @@ pub fn list_messages(
      * `full_body`, which does a `message_chunk` index lookup per message, and
      * the DTO construction after it.
      */
-    let mut raw = state
-        .tables
+    let mut raw = tables
         .message
         .select_by_project_id(project_id)
         .execute()
@@ -2892,7 +2920,7 @@ pub fn list_messages(
             // that spilled across pages reads as the whole thing again.
             let id = row.id.clone();
             let mut dto = MessageDto::from(row);
-            dto.body = full_body(&state.tables, &id, &dto.body);
+            dto.body = full_body(tables, &id, &dto.body);
             dto.reply_to_question_id = reply_targets.get(&id).cloned();
             dto
         })
@@ -5942,12 +5970,20 @@ impl Drop for RunReservation {
 
 /// What is running in this project right now.
 #[tauri::command]
-pub fn list_running_tasks(project_id: String, state: State<'_, AppState>) -> Vec<RunningTaskDto> {
-    state
-        .running
-        .lock()
-        .map(|running| running.get(&project_id).cloned().unwrap_or_default())
-        .unwrap_or_default()
+pub async fn list_running_tasks(
+    project_id: String,
+    state: State<'_, AppState>,
+) -> Result<Vec<RunningTaskDto>, String> {
+    let running = std::sync::Arc::clone(&state.running);
+    // See [`list_item_rows`]: a tokio blocking task, not an async worker.
+    tokio::task::spawn_blocking(move || {
+        running
+            .lock()
+            .map(|tasks| tasks.get(&project_id).cloned().unwrap_or_default())
+            .unwrap_or_default()
+    })
+    .await
+    .map_err(|error| error.to_string())
 }
 
 /// A page of the task log, plus the total the page came out of.
