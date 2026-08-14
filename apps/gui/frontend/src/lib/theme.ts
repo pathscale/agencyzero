@@ -344,7 +344,6 @@ function hexToRgb(value: string): [number, number, number] | null {
   ];
 }
 
-
 /**
  * The wheel's `ColorValue` for a hex string.
  *

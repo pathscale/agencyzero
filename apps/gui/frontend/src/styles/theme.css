@@ -503,8 +503,7 @@
     background-image: linear-gradient(
       to right,
       transparent 0,
-      color-mix(in oklab, var(--color-az-badge) var(--az-glass-lift, 0%), var(--color-az-desk))
-        18px
+      color-mix(in oklab, var(--color-az-badge) var(--az-glass-lift, 0%), var(--color-az-desk)) 18px
     );
   }
 
@@ -526,8 +525,7 @@
      * lift mixes toward `az-badge`, a lighter rung of the *same* hue ladder,
      * and the border carries the accent rather than white.
      */
-    outline: 1px solid
-      rgb(from var(--color-primary) r g b / var(--az-glass-border, 16%));
+    outline: 1px solid rgb(from var(--color-primary) r g b / var(--az-glass-border, 16%));
     outline-offset: -1px;
     box-shadow: 0 8px 32px rgb(0 0 0 / var(--az-glass-shadow, 0));
   }
@@ -603,11 +601,9 @@
   .button.az-ui-button-neutral[data-pressed="true"] {
     transform: none;
   }
-
 }
 
 @layer utilities {
-
   /*
    * The library's slider, themed rather than reimplemented.
    *
@@ -656,8 +652,7 @@
      * the chrome moves with the cards instead of staying fixed while
      * everything else responds.
      */
-    box-shadow: inset 0 0 0 1px
-      rgb(from var(--color-primary) r g b / var(--az-glass-border, 16%));
+    box-shadow: inset 0 0 0 1px rgb(from var(--color-primary) r g b / var(--az-glass-border, 16%));
 
     /* The window's real backdrop, and so the surface glass is actually about.
      * See `body` above for why both carry the same alpha. */

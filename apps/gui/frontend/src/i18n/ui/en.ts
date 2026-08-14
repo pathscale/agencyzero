@@ -958,8 +958,9 @@ const en = {
   "strength of the hairline around a panel": "strength of the hairline around a panel",
   "Panel depth": "Panel depth",
   "drop shadow under a panel": "drop shadow under a panel",
-  "Snapshot": "Snapshot",
-  "a copy of the store as it stands, without closing the app": "a copy of the store as it stands, without closing the app",
+  Snapshot: "Snapshot",
+  "a copy of the store as it stands, without closing the app":
+    "a copy of the store as it stands, without closing the app",
   "Take snapshot": "Take snapshot",
   "Taking snapshot…": "Taking snapshot…",
   "Written to {name}": "Written to {name}",
@@ -967,10 +968,12 @@ const en = {
   "Intrusive profiling active": "Intrusive profiling active",
   "No deep samples collected": "No deep samples collected",
   "Application internal performance": "Application internal performance",
-  "what each part of the app costs, measured in this session": "what each part of the app costs, measured in this session",
-  "Measurements": "Measurements",
-  "since this window opened, or since the last reset": "since this window opened, or since the last reset",
-  "Timings": "Timings",
+  "what each part of the app costs, measured in this session":
+    "what each part of the app costs, measured in this session",
+  Measurements: "Measurements",
+  "since this window opened, or since the last reset":
+    "since this window opened, or since the last reset",
+  Timings: "Timings",
   "worst total first": "worst total first",
   "Nothing measured yet": "Nothing measured yet",
 } as const;

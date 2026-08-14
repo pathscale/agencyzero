@@ -1,4 +1,4 @@
-import { Checkbox, Input, Select, Slider, Textarea, Switch } from "@pathscale/ui";
+import { Checkbox, Input, Select, Slider, Switch, Textarea } from "@pathscale/ui";
 import {
   createContext,
   createEffect,
@@ -16,19 +16,13 @@ import { Button } from "~/components/Button";
 import { Icon, type IconProps } from "~/components/Icon";
 import { LanguageSwitcher } from "~/components/LanguageSwitcher";
 import { Panel } from "~/components/Panel";
-import { reset as perfReset, snapshot as perfSnapshot } from "~/lib/perf";
 import { PillMenu } from "~/components/PillMenu";
 import { AgentStateDot } from "~/components/StatusDot";
 import { countdown, formatBytes, relativeTime } from "~/lib/format";
 import { AGENT_LABELS, agentStateLabel, envPolicyLabel, permissionLabel } from "~/lib/labels";
 import { describeError, log } from "~/lib/log";
-import {
-  DEFAULT_GLASS,
-  DEFAULT_WASH,
-  type GlassAxisName,
-  normalizeWash,
-  writeGlassAxis,
-} from "~/lib/theme";
+import { reset as perfReset, snapshot as perfSnapshot } from "~/lib/perf";
+import { DEFAULT_WASH, type GlassAxisName, normalizeWash, writeGlassAxis } from "~/lib/theme";
 import { t, tx, type UiMessage } from "~/stores/i18n";
 import { prefs, setPrefs } from "~/stores/prefs";
 import { useNow, useWorkspace } from "~/stores/workspace";
@@ -413,7 +407,7 @@ export function SettingsTab(): JSX.Element {
                 the toggle clipped away. Reachable by search, which does not
                 depend on the box, and by nothing else.
               */}
-              <div class="flex-none overflow-hidden rounded-panel border border-az-hairline az-panel">
+              <div class="az-panel flex-none overflow-hidden rounded-panel border border-az-hairline">
                 <div class="flex flex-wrap items-baseline gap-x-2.5 gap-y-1 px-3.5 pt-3 pb-2.5">
                   <Icon name="gauge" class="relative top-0.5 text-[14px] text-primary" />
                   <h2 class="font-semibold text-[13px] text-az-title">{tx("Diagnostics")}</h2>
@@ -1021,10 +1015,7 @@ export function SettingsTab(): JSX.Element {
                   needs something light beneath it to diffuse; on a dark surface
                   a white film is grey haze on the colour, not material.
                 */}
-                <Row
-                  label={tx("Panel lift")}
-                  hint={tx("how far panels sit off the desk")}
-                >
+                <Row label={tx("Panel lift")} hint={tx("how far panels sit off the desk")}>
                   <GlassAxis
                     label={tx("Panel lift")}
                     min={0}
@@ -1045,7 +1036,9 @@ export function SettingsTab(): JSX.Element {
                     value={current().theme.glassBorder ?? 16}
                     axis="border"
                     format={(value) => `${value}%`}
-                    onChange={(glassBorder) => void actions.saveSettings({ theme: { glassBorder } })}
+                    onChange={(glassBorder) =>
+                      void actions.saveSettings({ theme: { glassBorder } })
+                    }
                   />
                 </Row>
                 <Row label={tx("Panel depth")} hint={tx("drop shadow under a panel")} isLast>

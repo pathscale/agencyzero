@@ -1,9 +1,9 @@
 import { render, waitFor } from "@solidjs/testing-library";
 import { describe, expect, it, vi } from "vitest";
-import { applyTheme } from "~/lib/theme";
 import type { AppEvents } from "~/api";
-import type { GlobalSettings } from "~/types";
+import { applyTheme } from "~/lib/theme";
 import { useWorkspace, type Workspace, WorkspaceProvider } from "~/stores/workspace";
+import type { GlobalSettings } from "~/types";
 
 const calls = vi.hoisted(() => ({
   setWindowChrome: vi.fn(async () => undefined),
@@ -78,7 +78,9 @@ describe("window chrome", () => {
      */
     const chrome = applyTheme(workspace.state.settings!.theme);
     const recoloured = applyTheme({ ...workspace.state.settings!.theme, accent: "#ff0000" });
-    expect(chrome, "the chrome now varies with the theme; test the change path").toEqual(recoloured);
+    expect(chrome, "the chrome now varies with the theme; test the change path").toEqual(
+      recoloured,
+    );
     expect(chrome.enabled).toBe(false);
   });
 });
