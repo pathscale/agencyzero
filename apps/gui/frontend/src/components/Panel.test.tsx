@@ -1,4 +1,4 @@
-import { Toggle } from "@pathscale/ui";
+import { Switch } from "@pathscale/ui";
 import { fireEvent, render, screen } from "@solidjs/testing-library";
 import { createSignal } from "solid-js";
 import { describe, expect, it } from "vitest";
@@ -19,7 +19,7 @@ describe("SectionPanel", () => {
       const [open, setOpen] = createSignal(false);
       return (
         <SectionPanel title="Settings" isOpen={open()} onToggle={() => setOpen((value) => !value)}>
-          <Toggle aria-label="Moderator" />
+          <Switch aria-label="Moderator" />
         </SectionPanel>
       );
     }

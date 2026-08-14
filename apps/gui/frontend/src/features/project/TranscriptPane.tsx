@@ -1,4 +1,4 @@
-import { EmptyState } from "@pathscale/ui";
+import { Empty } from "@pathscale/ui";
 import { log } from "~/lib/log";
 import { record as recordPerf } from "~/lib/perf";
 import {
@@ -1770,21 +1770,21 @@ function EmptyTranscript(props: {
 }): JSX.Element {
   return (
     <div class="flex flex-1 flex-col items-center justify-center gap-3.5 pb-8">
-      <EmptyState class="flex flex-col items-center gap-3.5">
-        <EmptyState.Icon>
+      <Empty class="flex flex-col items-center gap-3.5">
+        <Empty.Icon>
           <div class="flex size-[54px] items-center justify-center rounded-2xl border border-az-hairline bg-base-300">
             <Icon name="message-square-dashed" class="text-[24px] text-az-faint" />
           </div>
-        </EmptyState.Icon>
-        <EmptyState.Title class="font-semibold text-[15px] text-base-content">
+        </Empty.Icon>
+        <Empty.Title class="font-semibold text-[15px] text-base-content">
           {tx("Nothing open")}
-        </EmptyState.Title>
-        <EmptyState.Description class="max-w-[360px] text-center text-[12.5px] text-az-muted leading-[1.55]">
+        </Empty.Title>
+        <Empty.Description class="max-w-[360px] text-center text-[12.5px] text-az-muted leading-[1.55]">
           {tx(
             "This project is connected and idle. Start the conversation, or pick an item from the panel on the right.",
           )}
-        </EmptyState.Description>
-        <EmptyState.Actions class="flex max-w-[430px] flex-wrap justify-center gap-2">
+        </Empty.Description>
+        <Empty.Actions class="flex max-w-[430px] flex-wrap justify-center gap-2">
           <For each={STARTERS()}>
             {(starter) => (
               <Button
@@ -1796,8 +1796,8 @@ function EmptyTranscript(props: {
               </Button>
             )}
           </For>
-        </EmptyState.Actions>
-      </EmptyState>
+        </Empty.Actions>
+      </Empty>
     </div>
   );
 }

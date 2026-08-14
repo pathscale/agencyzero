@@ -1,4 +1,4 @@
-import { Modal, Select } from "@pathscale/ui";
+import { Dialog, Select } from "@pathscale/ui";
 import { createEffect, createMemo, createSignal, For, type JSX, Show } from "solid-js";
 import { Button } from "~/components/Button";
 import { Icon, type IconProps } from "~/components/Icon";
@@ -184,27 +184,27 @@ export function WelcomeFlow(): JSX.Element {
 
   return (
     <Show when={visible()}>
-      <Modal
-        isOpen
+      <Dialog
+        open
         isDismissable={false}
         placement="center"
         size="lg"
         backdrop="opaque"
         shouldCloseOnBackdropClick={false}
       >
-        <Modal.Content
+        <Dialog.Content
           aria-labelledby="welcome-title"
           class="max-h-[calc(100dvh-4rem)] w-full max-w-[760px] overflow-hidden rounded-[20px] border border-primary/24 bg-base-200 p-0 shadow-[0_28px_90px_rgba(0,0,0,.7)]"
         >
-          <Modal.Header class="flex-row items-start justify-between gap-5 border-az-hairline-soft border-b px-6 py-5">
+          <Dialog.Header class="flex-row items-start justify-between gap-5 border-az-hairline-soft border-b px-6 py-5">
             <div class="flex min-w-0 items-center gap-3.5">
               <div class="az-halo-primary flex size-11 shrink-0 items-center justify-center rounded-[14px] border border-primary/30 bg-primary/12 text-primary">
                 <Icon name="sparkles" class="text-[21px]" />
               </div>
               <div>
-                <Modal.Heading id="welcome-title" class="font-semibold text-[18px] text-az-title">
+                <Dialog.Heading id="welcome-title" class="font-semibold text-[18px] text-az-title">
                   {tx("Welcome to AgencyZero")}
-                </Modal.Heading>
+                </Dialog.Heading>
                 <p class="mt-0.5 text-[11.5px] text-az-muted">
                   {tx("Set up the workspace once, then start with a real task.")}
                 </p>
@@ -220,7 +220,7 @@ export function WelcomeFlow(): JSX.Element {
             >
               <Icon name="x" class="text-[16px]" />
             </Button>
-          </Modal.Header>
+          </Dialog.Header>
 
           <div
             role="progressbar"
@@ -239,7 +239,7 @@ export function WelcomeFlow(): JSX.Element {
             </For>
           </div>
 
-          <Modal.Body class="az-scroll min-h-0 flex-1 px-6 py-5">
+          <Dialog.Body class="az-scroll min-h-0 flex-1 px-6 py-5">
             <Show when={step() === 0}>
               <SetupHeading
                 icon="folder"
@@ -646,9 +646,9 @@ export function WelcomeFlow(): JSX.Element {
                 </p>
               )}
             </Show>
-          </Modal.Body>
+          </Dialog.Body>
 
-          <Modal.Footer class="justify-between gap-4 border-az-hairline-soft border-t px-6 py-4">
+          <Dialog.Footer class="justify-between gap-4 border-az-hairline-soft border-t px-6 py-4">
             <div class="flex items-center gap-2">
               <Button
                 type="button"
@@ -684,9 +684,9 @@ export function WelcomeFlow(): JSX.Element {
                 <Icon name="chevron-right" class="text-[13px]" />
               </Show>
             </Button>
-          </Modal.Footer>
-        </Modal.Content>
-      </Modal>
+          </Dialog.Footer>
+        </Dialog.Content>
+      </Dialog>
     </Show>
   );
 }

@@ -1,4 +1,4 @@
-import { TextArea } from "@pathscale/ui";
+import { Textarea } from "@pathscale/ui";
 import {
   createEffect,
   createMemo,
@@ -990,7 +990,7 @@ export function Composer(props: ComposerProps): JSX.Element {
             class="min-w-0 overflow-hidden"
             style={{ height: `${promptHeight()}px` }}
           >
-            <TextArea
+            <Textarea
               ref={field}
               autofocus={props.autofocus}
               rows={visibleRows()}

@@ -1,4 +1,4 @@
-import { Modal } from "@pathscale/ui";
+import { Dialog } from "@pathscale/ui";
 import { createMemo, type JSX, Show } from "solid-js";
 import { Button } from "~/components/Button";
 import { Icon } from "~/components/Icon";
@@ -39,21 +39,21 @@ export function CloseConfirm(props: CloseConfirmProps): JSX.Element {
 
   return (
     <Show when={props.isOpen}>
-      <Modal
-        isOpen
+      <Dialog
+        open
         onOpenChange={(isOpen) => !isOpen && props.onCancel()}
         placement="center"
         size="md"
         backdrop="opaque"
       >
-        <Modal.Content
+        <Dialog.Content
           aria-labelledby="close-confirm-title"
           class="az-ring w-full max-w-[420px] rounded-[17px] bg-transparent p-0 shadow-none"
         >
           <div class="flex flex-col gap-3.5 rounded-2xl bg-az-inset p-5">
-            <Modal.Header class="flex-row items-baseline gap-2.5">
+            <Dialog.Header class="flex-row items-baseline gap-2.5">
               <Icon name="info" class="relative top-0.5 text-[15px] text-primary" />
-              <Modal.Heading
+              <Dialog.Heading
                 id="close-confirm-title"
                 class="font-semibold text-[14.5px] text-az-title"
               >
@@ -64,10 +64,10 @@ export function CloseConfirm(props: CloseConfirmProps): JSX.Element {
                       ? "Quit AgencyZero and AgencyProxy?"
                       : "Work is still in progress",
                 )}
-              </Modal.Heading>
-            </Modal.Header>
+              </Dialog.Heading>
+            </Dialog.Header>
 
-            <Modal.Body class="overflow-visible text-[12.5px] text-az-body leading-[1.55]">
+            <Dialog.Body class="overflow-visible text-[12.5px] text-az-body leading-[1.55]">
               <Show
                 when={!props.error}
                 fallback={
@@ -114,9 +114,9 @@ export function CloseConfirm(props: CloseConfirmProps): JSX.Element {
                   </Show>
                 </p>
               </Show>
-            </Modal.Body>
+            </Dialog.Body>
 
-            <Modal.Footer class="pt-0.5">
+            <Dialog.Footer class="pt-0.5">
               <Button
                 type="button"
                 onClick={props.onCancel}
@@ -134,10 +134,10 @@ export function CloseConfirm(props: CloseConfirmProps): JSX.Element {
                   {tx(props.quitsProxy ? "Quit both" : "Exit now")}
                 </Button>
               </Show>
-            </Modal.Footer>
+            </Dialog.Footer>
           </div>
-        </Modal.Content>
-      </Modal>
+        </Dialog.Content>
+      </Dialog>
     </Show>
   );
 }

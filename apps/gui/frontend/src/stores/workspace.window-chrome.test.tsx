@@ -1,7 +1,8 @@
 import { render, waitFor } from "@solidjs/testing-library";
 import { describe, expect, it, vi } from "vitest";
 import { applyTheme } from "~/lib/theme";
-import type { AppEvents, GlobalSettings } from "~/types";
+import type { AppEvents } from "~/api";
+import type { GlobalSettings } from "~/types";
 import { useWorkspace, type Workspace, WorkspaceProvider } from "~/stores/workspace";
 
 const calls = vi.hoisted(() => ({
@@ -59,7 +60,7 @@ describe("window chrome", () => {
     // Five broadcasts of the theme the window already has, which is what five
     // settled slider values look like from here.
     for (let index = 0; index < 5; index += 1) {
-      calls.broadcast?.(workspace.state.settings);
+      calls.broadcast?.(workspace.state.settings as GlobalSettings);
     }
     await Promise.resolve();
 
@@ -75,8 +76,8 @@ describe("window chrome", () => {
      * fails this line instead of quietly leaving the guard untested on the
      * only path where it could suppress something real.
      */
-    const chrome = applyTheme(workspace.state.settings.theme);
-    const recoloured = applyTheme({ ...workspace.state.settings.theme, accent: "#ff0000" });
+    const chrome = applyTheme(workspace.state.settings!.theme);
+    const recoloured = applyTheme({ ...workspace.state.settings!.theme, accent: "#ff0000" });
     expect(chrome, "the chrome now varies with the theme; test the change path").toEqual(recoloured);
     expect(chrome.enabled).toBe(false);
   });

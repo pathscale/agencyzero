@@ -1,4 +1,4 @@
-import { Checkbox, Input, Slider, TextArea, Toggle } from "@pathscale/ui";
+import { Checkbox, Input, Slider, Textarea, Switch } from "@pathscale/ui";
 import { createEffect, createMemo, createSignal, For, type JSX, Show } from "solid-js";
 import { NOTES_BUDGET } from "~/api/client";
 import { AppModal, type ModalAnchor } from "~/components/AppModal";
@@ -218,7 +218,7 @@ function IoPersistToggle(props: { projectId: string }): JSX.Element {
   return (
     <Checkbox
       checked={enabled()}
-      isDisabled={!isLive("setIoPersist")}
+      state={!isLive("setIoPersist") ? "disabled" : undefined}
       onChange={(event) => void toggle(event.currentTarget.checked)}
       title={tx(
         "Keep this project's raw exchange in the database, so it survives a restart. Off by default: a long run writes thousands of rows.",
@@ -484,10 +484,10 @@ function SettingsSection(props: { project: Project; agent: Agent }): JSX.Element
               {tx("this session · global default is")} {moderatorDefault() ? tx("on") : tx("off")}
             </span>
           </span>
-          <Toggle
+          <Switch
             aria-label={tx("Moderator for this session")}
             checked={props.project.moderatorEnabled}
-            color="accent"
+            flavor="accent"
             size="sm"
             onChange={(event) =>
               void actions.setProjectModerator(props.project.id, event.currentTarget.checked)
@@ -1601,7 +1601,7 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
                         {draft().context.length} / {NOTES_BUDGET}
                       </span>
                     </div>
-                    <TextArea
+                    <Textarea
                       autofocus
                       value={draft().context}
                       maxLength={NOTES_BUDGET}
@@ -1726,7 +1726,7 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
                     {draft().context.length} / {NOTES_BUDGET}
                   </span>
                 </div>
-                <TextArea
+                <Textarea
                   id="item-description"
                   autofocus
                   value={draft().context}
@@ -2002,10 +2002,10 @@ function CheckpointToggle(props: { projectId: string }): JSX.Element {
             {tx("this project · off by default")}
           </span>
         </span>
-        <Toggle
+        <Switch
           aria-label={tx("Knowledge checkpoints for this project")}
           checked={enabled()}
-          color="accent"
+          flavor="accent"
           size="sm"
           disabled={!isLive("setCheckpoints")}
           onChange={(event) => void toggle(event.currentTarget.checked)}
@@ -2094,7 +2094,7 @@ function NotesEditor(props: { projectId: string }): JSX.Element {
         compaction is worth having on its own. Waiting for a compaction to earn
         the right to state a house rule would be an odd thing to enforce.
       */}
-      <TextArea
+      <Textarea
         value={draft()}
         onInput={(event) => setDraft(event.currentTarget.value)}
         rows={8}
