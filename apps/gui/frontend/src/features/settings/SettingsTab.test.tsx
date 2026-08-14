@@ -2,6 +2,7 @@ import { fireEvent, render, waitFor } from "@solidjs/testing-library";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { setMockProxyActiveRuns } from "~/api/mock";
 import { SettingsTab } from "~/features/settings/SettingsTab";
+import { record as perfRecord, reset as perfReset } from "~/lib/perf";
 import { useWorkspace, type Workspace, WorkspaceProvider } from "~/stores/workspace";
 
 async function mountSettings() {
@@ -317,6 +318,31 @@ describe("cost warning settings", () => {
     await Promise.resolve();
     await Promise.resolve();
     expect(slider).toHaveAttribute("aria-valuenow", "1.5");
+  });
+});
+
+/*
+ * The whole Settings tab is mounted at boot and merely hidden with a class, so
+ * this component runs once. Its table would otherwise freeze at whatever had
+ * been measured by the time boot finished, which is exactly what it did: five
+ * project loads and nothing that happened afterwards, however much the app was
+ * used between then and looking at it.
+ */
+describe("internal performance table", () => {
+  it("re-reads the measurements when Settings comes to the front", async () => {
+    const screen = await mountSettings();
+
+    perfReset();
+    perfRecord("something measured after this mounted", 12.5);
+    expect(screen.queryByText("something measured after this mounted")).toBeNull();
+
+    // Leaving and coming back is the moment the numbers are wanted.
+    screen.workspace.actions.focus("home");
+    screen.workspace.actions.openSettings();
+
+    await waitFor(() =>
+      expect(screen.getByText("something measured after this mounted")).toBeTruthy(),
+    );
   });
 });
 

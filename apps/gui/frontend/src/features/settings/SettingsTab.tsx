@@ -2489,8 +2489,24 @@ function admitSection(ordinal: number): void {
  * collector only ever appends numbers and does no formatting.
  */
 function InternalPerformance(): JSX.Element {
+  const { state } = useWorkspace();
   const [table, setTable] = createSignal(perfSnapshot());
   const refresh = () => setTable(perfSnapshot());
+
+  /*
+   * Re-read whenever Settings comes to the front.
+   *
+   * The whole tab is mounted at boot and merely hidden with a class, so this
+   * component runs once and its snapshot would otherwise freeze at whatever had
+   * been measured by the time boot finished: the table showed the five project
+   * loads and nothing that happened afterwards, however much the app was used.
+   *
+   * Still no timer. Becoming visible is the moment the numbers are wanted, and
+   * Refresh covers watching them move while sitting here.
+   */
+  createEffect(() => {
+    if (state.activeKey === "settings") refresh();
+  });
   const ms = (value: number) =>
     value >= 1 ? `${value.toFixed(1)}ms` : `${(value * 1000).toFixed(0)}\u00b5s`;
 
@@ -2520,7 +2536,11 @@ function InternalPerformance(): JSX.Element {
           </Button>
         </div>
       </Row>
-      <Row label={tx("Timings")} hint={tx("worst total first")} isLast>
+      {/*
+        Stacked: a full-width table beside a `flex-1` label squeezes the label to
+        min-content, and the hint then wraps one letter per line.
+      */}
+      <Row label={tx("Timings")} hint={tx("worst total first")} stack isLast>
         <Show
           when={table().entries.length > 0}
           fallback={<span class="text-[11.5px] text-az-muted">{tx("Nothing measured yet")}</span>}
