@@ -160,6 +160,35 @@ Two more from the same run, neither yet addressed:
   `drainEventBuffer`, since an event for a project that has not hydrated yet
   must not be dropped.
 
+### Item 17: plain `async` is the wrong shape, measured 2026-08-14
+
+Converting the eleven synchronous per-project reads to `async fn` was tried and
+reverted. It does move them off the window thread, and it made things worse:
+`list_items` went from 10.8ms average to 52.5ms, with the min/max spread still
+at 3.3x.
+
+The reason is in the same table. Tauri runs `async` commands on its async
+runtime, and that is where the slow network commands already live:
+`list_quota` averages 1118ms and has been seen at 5048ms, `check_for_update`
+906ms, `claude_usage` 657ms, `discover_chat_imports` 396ms. Cheap store reads
+moved there stop queueing behind each other and start queueing behind
+multi-second network calls instead.
+
+So the fix is not `async`, it is a pool that is not shared with the network:
+`spawn_blocking` with the `Arc<Tables>` cloned out of `State`, or an explicit
+reader pool. Whichever is chosen, the check is the spread rather than the
+average, because the average hides which end of the queue a call landed in.
+
+Two other things the table surfaced and neither is the renderer:
+
+- `ProjectPanel` issues six further per-project commands beyond the seven in
+  `fetchProject`: `get_project_verbosity`, `get_io_persist`, `get_checkpoints`,
+  `get_project_notes`, `get_project_concise`, `list_approval_rules`, each around
+  17ms. Four panes make that 24 extra round trips. One `get_project_panel`
+  would make it four.
+- `list_quota` calls `proxy.account_usage()`, which is the endpoint recorded
+  elsewhere as dead. It costs seconds per call and runs twice at startup.
+
 ## Three constraints that govern the order
 
 1. **The Taffy layout cache gates almost every speed number.** Style is 167 microseconds
