@@ -1783,11 +1783,7 @@ fn ephemeral_location() -> location::DataLocation {
 #[cfg(all(feature = "blitz-runtime", target_os = "macos"))]
 #[tauri::command]
 fn set_window_chrome(tint: Option<[u8; 4]>, radius: Option<f64>, enabled: bool) {
-    tauri_runtime_blitz::set_window_glass(
-        tint.map(|[r, g, b, a]| (r, g, b, a)),
-        radius,
-        enabled,
-    );
+    tauri_runtime_blitz::set_window_glass(tint.map(|[r, g, b, a]| (r, g, b, a)), radius, enabled);
 }
 
 /// Not macOS, or not the Blitz runtime: nothing to carry across.

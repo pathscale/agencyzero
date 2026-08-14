@@ -623,7 +623,12 @@ async fn dom(client: &mut Client, want: &str, depth: usize) -> Result<()> {
             let Some(current) = parent.and_then(|id| by_id.get(&id)) else {
                 break;
             };
-            println!("  {}^{} {}", "  ".repeat(level), level + 1, describe(current));
+            println!(
+                "  {}^{} {}",
+                "  ".repeat(level),
+                level + 1,
+                describe(current)
+            );
             parent = current.parent;
         }
         println!();
