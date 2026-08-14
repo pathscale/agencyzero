@@ -16,6 +16,7 @@ import { Button } from "~/components/Button";
 import { Icon, type IconProps } from "~/components/Icon";
 import { LanguageSwitcher } from "~/components/LanguageSwitcher";
 import { Panel } from "~/components/Panel";
+import { reset as perfReset, snapshot as perfSnapshot } from "~/lib/perf";
 import { PillMenu } from "~/components/PillMenu";
 import { AgentStateDot } from "~/components/StatusDot";
 import { countdown, formatBytes, relativeTime } from "~/lib/format";
@@ -1366,6 +1367,8 @@ export function SettingsTab(): JSX.Element {
                 <ExperimentalSettings />
               </Show>
 
+              <InternalPerformance />
+
               <p class="flex gap-2 text-[11.5px] text-az-muted leading-[1.5]">
                 <Icon name="info" class="relative top-0.5 shrink-0 text-[13px]" />
                 <span>
@@ -2471,6 +2474,93 @@ function revealAllSections(): void {
 /** Admit sections up to and including `ordinal`. Never gives one back. */
 function admitSection(ordinal: number): void {
   setSettingsBudget((budget) => (ordinal < budget ? budget : ordinal + 1));
+}
+
+/**
+ * Application internal performance.
+ *
+ * Every Tauri command, every project load, every tab switch and the transcript
+ * phases underneath them, aggregated by `~/lib/perf`. Written as a table rather
+ * than log lines because the interesting questions about a thing that happens
+ * hundreds of times are how often, how bad at worst, and what it usually is.
+ *
+ * The snapshot is taken when this renders and on demand, never on a timer: a
+ * panel nobody has open should cost nothing at all, which is also why the
+ * collector only ever appends numbers and does no formatting.
+ */
+function InternalPerformance(): JSX.Element {
+  const [table, setTable] = createSignal(perfSnapshot());
+  const refresh = () => setTable(perfSnapshot());
+  const ms = (value: number) =>
+    value >= 1 ? `${value.toFixed(1)}ms` : `${(value * 1000).toFixed(0)}\u00b5s`;
+
+  return (
+    <Section
+      icon="gauge"
+      title={tx("Application internal performance")}
+      hint={tx("what each part of the app costs, measured in this session")}
+    >
+      <Row
+        label={tx("Measurements")}
+        hint={tx("since this window opened, or since the last reset")}
+      >
+        <div class="flex items-center gap-2">
+          <Button type="button" class="az-ui-button-neutral" onClick={refresh}>
+            {tx("Refresh")}
+          </Button>
+          <Button
+            type="button"
+            class="az-ui-button-neutral"
+            onClick={() => {
+              perfReset();
+              refresh();
+            }}
+          >
+            {tx("Reset")}
+          </Button>
+        </div>
+      </Row>
+      <Row label={tx("Timings")} hint={tx("worst total first")} isLast>
+        <Show
+          when={table().entries.length > 0}
+          fallback={<span class="text-[11.5px] text-az-muted">{tx("Nothing measured yet")}</span>}
+        >
+          <div class="az-scroll max-h-[320px] w-full min-w-0 overflow-y-auto">
+            <table class="w-full text-[11.5px] tabular-nums">
+              <thead class="text-az-muted">
+                <tr>
+                  <th class="py-1 text-left font-normal">{"What"}</th>
+                  <th class="py-1 text-right font-normal">{"n"}</th>
+                  <th class="py-1 text-right font-normal">{"avg"}</th>
+                  <th class="py-1 text-right font-normal">{"min"}</th>
+                  <th class="py-1 text-right font-normal">{"max"}</th>
+                  <th class="py-1 text-right font-normal">{"last"}</th>
+                </tr>
+              </thead>
+              <tbody>
+                <For each={table().entries}>
+                  {(entry) => (
+                    <tr class="border-az-hairline-soft border-t">
+                      <td class="max-w-[220px] truncate py-1 pr-2 text-az-body" title={entry.name}>
+                        {entry.name}
+                      </td>
+                      <td class="py-1 pl-2 text-right text-az-muted">{entry.count}</td>
+                      <td class="py-1 pl-2 text-right text-az-strong">
+                        {ms(entry.total / entry.count)}
+                      </td>
+                      <td class="py-1 pl-2 text-right text-az-muted">{ms(entry.min)}</td>
+                      <td class="py-1 pl-2 text-right text-az-muted">{ms(entry.max)}</td>
+                      <td class="py-1 pl-2 text-right text-az-muted">{ms(entry.last)}</td>
+                    </tr>
+                  )}
+                </For>
+              </tbody>
+            </table>
+          </div>
+        </Show>
+      </Row>
+    </Section>
+  );
 }
 
 function Section(props: {

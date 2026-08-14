@@ -19,6 +19,7 @@ import { noteTranscriptChromeChanged, TranscriptPane } from "~/features/project/
 import { providerUsageLabel } from "~/features/shell/UsageReadout";
 import { AGENT_LABELS } from "~/lib/labels";
 import { describeError, log } from "~/lib/log";
+import { record as recordPerf } from "~/lib/perf";
 import { turnCostTotals } from "~/lib/pricing";
 import {
   cacheBreak,
@@ -158,8 +159,10 @@ export function ProjectTab(props: { tab: Tab; project: Project }): JSX.Element {
     const parts = marks.map(([label, at]) => {
       const cost = at - previous;
       previous = at;
+      recordPerf(`pane build: ${label}`, cost);
       return `${label} ${cost.toFixed(0)}ms`;
     });
+    recordPerf("pane first build", performance.now() - built);
     log.info(
       `pane ${props.project.id} first build ${(performance.now() - built).toFixed(0)}ms: ` +
         `${parts.join(", ")}, mount ${(performance.now() - previous).toFixed(0)}ms ` +

@@ -15,6 +15,7 @@ import { selectApi } from "~/api";
 import { setItemReferenceHandler } from "~/lib/itemReference";
 import { PERMISSION_ORDER } from "~/lib/labels";
 import { describeError, installGlobalErrorLogging, log } from "~/lib/log";
+import { record as recordPerf } from "~/lib/perf";
 import { usageTotals } from "~/lib/stats";
 import { applyTheme } from "~/lib/theme";
 import { i18n } from "~/stores/i18n";
@@ -888,6 +889,11 @@ function createWorkspace() {
       .syncProject(projectId, lastReceivedAt)
       .catch((cause) => log.warn(`could not reattach ${projectId}: ${describeError(cause)}`));
     const synced = performance.now();
+
+    recordPerf("project cold load", synced - started);
+    recordPerf("project cold load: fetch", fetched - started);
+    recordPerf("project cold load: reconcile", reconciled - fetched);
+    recordPerf("project cold load: sync", synced - reconciled);
 
     const ms = (value: number) => `${value.toFixed(0)}ms`;
     const slowest = [...timings.entries()].sort((left, right) => right[1] - left[1]);
@@ -1801,6 +1807,9 @@ function createWorkspace() {
     requestAnimationFrame(() => {
       const painted = performance.now();
       const rows = state.messages[key]?.length ?? 0;
+      recordPerf("tab switch", painted - started);
+      recordPerf("tab switch: commit", committed - started);
+      recordPerf("tab switch: frame", painted - committed);
       log.info(
         `tab switch ${from} -> ${key}: commit ${(committed - started).toFixed(0)}ms, ` +
           `frame ${(painted - committed).toFixed(0)}ms, ` +

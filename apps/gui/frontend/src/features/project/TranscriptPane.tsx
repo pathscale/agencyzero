@@ -1,5 +1,6 @@
 import { EmptyState } from "@pathscale/ui";
 import { log } from "~/lib/log";
+import { record as recordPerf } from "~/lib/perf";
 import {
   createEffect,
   createMemo,
@@ -658,6 +659,7 @@ export function TranscriptPane(props: {
   const turnLabels = createMemo(() => {
     const from = performance.now();
     const labels = agentTurnLabels(props.messages);
+    recordPerf("transcript: turn labels", performance.now() - from);
     if (!turnLabelsReported) {
       turnLabelsReported = true;
       log.info(
@@ -759,6 +761,7 @@ export function TranscriptPane(props: {
       }
       return 0;
     });
+    recordPerf("transcript: timeline", performance.now() - phaseStart);
     if (!timelineReported) {
       timelineReported = true;
       const done = performance.now();
