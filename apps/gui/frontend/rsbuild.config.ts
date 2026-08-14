@@ -2,9 +2,19 @@ import { defineConfig } from "@rsbuild/core";
 import { pluginBabel } from "@rsbuild/plugin-babel";
 import { pluginSolid } from "@rsbuild/plugin-solid";
 import ForkTsCheckerWebpackPlugin from "fork-ts-checker-webpack-plugin";
+import { pluginSolidLayoutsApplication } from "rsbuild-plugin-solid-layouts";
 
 export default defineConfig({
-  plugins: [pluginBabel({ include: /\.(?:jsx|tsx|ts)$/ }), pluginSolid()],
+  plugins: [
+    // Must run before Babel and Solid. Once the Solid JSX transform has run
+    // there is no <Button> left to resolve against the Layout manifest, only
+    // _$createComponent calls.
+    pluginSolidLayoutsApplication({
+      layouts: ["@pathscale/ui"],
+    }),
+    pluginBabel({ include: /\.(?:jsx|tsx|ts)$/ }),
+    pluginSolid(),
+  ],
   resolve: {
     alias: {
       "~": "./src",

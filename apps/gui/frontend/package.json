@@ -1,7 +1,7 @@
 {
   "name": "az-gui-frontend",
   "version": "0.1.0",
-  "description": "AgencyZero — Tauri GUI frontend",
+  "description": "AgencyZero \u2014 Tauri GUI frontend",
   "type": "module",
   "private": true,
   "scripts": {
@@ -20,12 +20,13 @@
   "license": "MIT",
   "dependencies": {
     "@iconify/tailwind4": "^1.0.6",
-    "@pathscale/ui": "^1.3.1",
+    "@pathscale/ui": "^2.2.0",
     "@tauri-apps/api": "^2.1.1",
     "clsx": "^2.1.1",
     "popmotion": "^11.0.5",
     "promptsyntax": "^0.1.0",
     "solid-js": "^1.9.5",
+    "solid-layouts": "^0.1.2",
     "tailwind-merge": "^3.6.0"
   },
   "devDependencies": {
@@ -40,6 +41,7 @@
     "@vitest/coverage-v8": "^4.1.10",
     "fork-ts-checker-webpack-plugin": "^9.1.0",
     "jsdom": "^30.0.0",
+    "rsbuild-plugin-solid-layouts": "^0.1.3",
     "tailwindcss": "^4.0.7",
     "typescript": "^5.7.2",
     "vite-plugin-solid": "^2.11.14",

@@ -2,10 +2,7 @@ import { Button as UiButton } from "@pathscale/ui";
 import type { ButtonProps as UiButtonProps } from "@pathscale/ui/components/button";
 import { type JSX, splitProps } from "solid-js";
 
-export type ButtonProps = UiButtonProps & {
-  /** Compatibility with native call sites while they move to PathScale/UI. */
-  disabled?: boolean;
-};
+export type ButtonProps = UiButtonProps;
 
 /*
  * PathScale/UI intentionally gives an unconfigured Button a complete primary
@@ -17,40 +14,26 @@ export type ButtonProps = UiButtonProps & {
  *
  * This is the native-button-compatible baseline for call sites that do not ask
  * for a PathScale/UI variant. It remains a real PathScale/UI Button, including
- * its disabled, pending, icon, and group behaviour. Classes supplied by the
- * caller come last, so they continue to own every intentional visual choice.
+ * its state, icon, and group behaviour. Classes supplied by the caller come
+ * last, so they continue to own every intentional visual choice.
  */
 const NEUTRAL_BUTTON = "az-ui-button-neutral";
 
 /**
  * The application button boundary.
  *
- * PathScale/UI calls the disabled prop `isDisabled`, while existing application
- * controls used the native spelling. Keeping that translation here makes the
- * migration behavior-preserving and leaves PathScale/UI as the only button
- * implementation.
+ * All this does now is choose the default look. It used to translate the native
+ * `disabled` attribute into `isDisabled`, because the library spelled the
+ * condition as a prop of its own; 2.2 removed that prop in favour of `state`
+ * and stopped omitting `disabled`, so the translation had nothing left to do
+ * and the native spelling passes straight through.
  */
 export function Button(props: ButtonProps): JSX.Element {
-  const [local, rest] = splitProps(props, [
-    "disabled",
-    "isDisabled",
-    "variant",
-    "class",
-    "className",
-  ]);
+  const [local, rest] = splitProps(props, ["variant", "class"]);
   const classes = () =>
-    [local.variant ? undefined : NEUTRAL_BUTTON, local.class, local.className]
-      .filter(Boolean)
-      .join(" ");
+    [local.variant ? undefined : NEUTRAL_BUTTON, local.class].filter(Boolean).join(" ");
 
-  return (
-    <UiButton
-      {...rest}
-      variant={local.variant ?? "ghost"}
-      class={classes()}
-      isDisabled={local.isDisabled ?? local.disabled}
-    />
-  );
+  return <UiButton {...rest} variant={local.variant ?? "ghost"} class={classes()} />;
 }
 
 export default Button;
