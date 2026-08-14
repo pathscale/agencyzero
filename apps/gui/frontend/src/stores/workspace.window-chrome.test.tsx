@@ -1,5 +1,6 @@
 import { render, waitFor } from "@solidjs/testing-library";
 import { describe, expect, it, vi } from "vitest";
+import { applyTheme } from "~/lib/theme";
 import type { AppEvents, GlobalSettings } from "~/types";
 import { useWorkspace, type Workspace, WorkspaceProvider } from "~/stores/workspace";
 
@@ -64,12 +65,19 @@ describe("window chrome", () => {
 
     expect(calls.setWindowChrome).toHaveBeenCalledTimes(1);
 
-    // A theme that genuinely differs still crosses, or the guard would be a
-    // way of never updating the frame at all.
-    calls.broadcast?.({
-      ...workspace.state.settings,
-      theme: { ...workspace.state.settings.theme, accent: "#ff0000" },
-    });
-    await waitFor(() => expect(calls.setWindowChrome).toHaveBeenCalledTimes(2));
+    /*
+     * The other half of a guard is that it still lets a real change through,
+     * and that cannot be exercised from here yet: while the window is opaque
+     * `applyTheme` reports the same chrome for every theme, so no palette
+     * change can produce a different payload to send.
+     *
+     * Asserted rather than assumed, so that turning the window transparent
+     * fails this line instead of quietly leaving the guard untested on the
+     * only path where it could suppress something real.
+     */
+    const chrome = applyTheme(workspace.state.settings.theme);
+    const recoloured = applyTheme({ ...workspace.state.settings.theme, accent: "#ff0000" });
+    expect(chrome, "the chrome now varies with the theme; test the change path").toEqual(recoloured);
+    expect(chrome.enabled).toBe(false);
   });
 });
