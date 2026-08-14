@@ -935,6 +935,13 @@ const zh = {
   "Enable deep intrusive profiling": "启用深度侵入式性能分析",
   "Intrusive profiling active": "侵入式性能分析已启用",
   "No deep samples collected": "未收集深度样本",
+  "Application internal performance": "应用内部性能",
+  "what each part of the app costs, measured in this session": "本次会话中各部分的开销",
+  "Measurements": "测量",
+  "since this window opened, or since the last reset": "自本窗口打开或上次重置以来",
+  "Timings": "耗时",
+  "worst total first": "按总耗时降序",
+  "Nothing measured yet": "尚无测量数据",
 } satisfies Record<keyof typeof en, string>;
 
 export default zh;

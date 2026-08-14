@@ -966,6 +966,13 @@ const en = {
   "Enable deep intrusive profiling": "Enable deep intrusive profiling",
   "Intrusive profiling active": "Intrusive profiling active",
   "No deep samples collected": "No deep samples collected",
+  "Application internal performance": "Application internal performance",
+  "what each part of the app costs, measured in this session": "what each part of the app costs, measured in this session",
+  "Measurements": "Measurements",
+  "since this window opened, or since the last reset": "since this window opened, or since the last reset",
+  "Timings": "Timings",
+  "worst total first": "worst total first",
+  "Nothing measured yet": "Nothing measured yet",
 } as const;
 
 export default en;

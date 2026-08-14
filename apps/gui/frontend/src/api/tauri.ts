@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { describeError, log } from "~/lib/log";
+import { record } from "~/lib/perf";
 import type { AgencyZeroApi, AppEvents, Unlisten } from "./client";
 
 /**
@@ -31,9 +32,13 @@ async function tauriCall<T>(command: string, args?: Record<string, unknown>): Pr
   try {
     const result = await invoke<T>(command, args);
     log.debug(`<- ${command} #${id} in ${took()}ms`);
+    // Every command, for free: this is the only place they go through, so the
+    // table gets the whole backend surface without a call site knowing.
+    record(`command ${command}`, performance.now() - startedAt);
     return result;
   } catch (cause) {
     log.error(`!! ${command} #${id} failed after ${took()}ms: ${describeError(cause)}`);
+    record(`command ${command} (failed)`, performance.now() - startedAt);
     throw cause;
   }
 }
