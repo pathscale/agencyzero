@@ -121,28 +121,26 @@ export function ProjectTab(props: { tab: Tab; project: Project }): JSX.Element {
    * the gaps between marks are what each child cost to build.
    */
   /*
-   * The side panel is built one frame after the pane, not with it.
+   * The side panel's contents are built one frame after the pane, not with it.
    *
    * It is a flat 74 to 182ms of the first reveal and it is not the
    * conversation: measured across four projects it barely moved with message
    * count, so it is fixed construction cost sitting directly in the path
    * between a keystroke and the transcript appearing. Deferring it by a frame
    * takes it off that path without changing what is eventually on screen.
+   *
+   * Its box is not deferred with it. See where it is rendered below.
    */
   const [panelReady, setPanelReady] = createSignal(false);
   onMount(() => {
     requestAnimationFrame(() => {
       setPanelReady(true);
       /*
-       * The pane is a different width the moment the panel arrives, and the
-       * transcript had already measured itself against the layout without it.
-       * Without this the bottom pin is computed against a layout that no longer
-       * exists, and the last rows sit under the composer's chrome.
-       *
-       * Same signal the composer raises when its own chrome grows, which is
-       * exactly the case this regressed: the projected-cost notice appearing
-       * has to push the transcript up, and it could not while the alignment was
-       * stale.
+       * The transcript measured itself before the panel filled in. It does not
+       * change width any more, but the pin is still recomputed here, because
+       * this is the same signal the composer raises when its own chrome grows
+       * and the projected-cost notice arriving has to push the transcript up.
+       * One measurement per pane, on a frame that is already doing work.
        */
       noteTranscriptChromeChanged();
     });
@@ -608,7 +606,19 @@ export function ProjectTab(props: { tab: Tab; project: Project }): JSX.Element {
         </Show>
       </div>
 
-      <Show when={panelReady() && !forkInfo()}>
+      {mark("composer+chrome")}
+      {/*
+       * The box is here from the first frame; only what goes in it waits.
+       *
+       * Deferring the whole thing deferred its width too, so the pane laid out
+       * once without the panel and again with it, and the transcript visibly
+       * sprang wide and back inside a frame or two. Holding the geometry and
+       * filling it a frame later keeps the deferral's whole point, which was to
+       * take the panel's construction off the path between a keystroke and the
+       * conversation, and costs one frame of empty panel rather than a reflow
+       * of everything beside it.
+       */}
+      <Show when={!forkInfo()}>
         <div
           aria-hidden={!prefs.projectPanelVisible}
           class={`min-h-0 flex-none overflow-hidden ${
@@ -617,9 +627,10 @@ export function ProjectTab(props: { tab: Tab; project: Project }): JSX.Element {
               : "pointer-events-none ml-0 w-0 translate-x-3 opacity-0"
           }`}
         >
-          {mark("composer+chrome")}
-          <ProjectPanel project={props.project} agent={props.tab.agent} />
-          {mark("projectPanel")}
+          <Show when={panelReady()}>
+            <ProjectPanel project={props.project} agent={props.tab.agent} />
+            {mark("projectPanel")}
+          </Show>
         </div>
       </Show>
     </div>
