@@ -35,3 +35,7 @@ docs/HANDOVER.md
 # That is what makes local edits invisible to `git status` and `git add -A`. The
 # entry here covers the other direction, if the file is ever untracked.
 .cargo/config.toml
+
+# Renderer redirect for local builds. Untracked on purpose: the paths exist on
+# one machine. See scripts/local-renderer.sh.
+.cargo/local-renderer.toml

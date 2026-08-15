@@ -96,26 +96,32 @@ paraphrases were how the old checkbox contract created near-duplicates. Full con
 
 ## Git workflow
 
-- **Freeze `.cargo/config.toml` before you touch it.** Run this once per clone,
-  including every worktree:
+- **Building the renderer from a working checkout is opt-in, and never edits a
+  tracked file.** Put the `[patch]` tables in `.cargo/local-renderer.toml`,
+  which is gitignored, and reach for them per command:
 
   ```sh
-  git update-index --skip-worktree .cargo/config.toml
+  scripts/local-renderer.sh check -p az-gui --features blitz-runtime
   ```
 
-  The file is tracked and has to stay tracked, because it carries the macOS link
-  flags and the `usvg` patch every build needs. What must never be committed is
-  the `[patch]` block redirecting the renderer packages to working checkouts,
-  since those paths exist on one machine and CI fails on them. It has gone in
-  four times without this. `.gitignore` cannot help: git does not consult it for
-  a tracked path. To change the shared part, unset with `--no-skip-worktree`,
-  commit, set it again.
+  It used to be a block inside `.cargo/config.toml`, defended by
+  `git update-index --skip-worktree`. That failed four ways at once. The file is
+  tracked, because it carries the macOS link flags and the `usvg` patch every
+  build needs, so `.gitignore` could not protect it and the paths went in four
+  times. `skip-worktree` hid the file from `git status` as well and blocked
+  branch switches. The redirect was always on, so no ordinary build ever fetched
+  the revisions in `apps/gui/Cargo.toml` and they rotted unseen until a macOS
+  release build found out. And a redirected build rewrites the committed
+  `Cargo.lock`, replacing git revisions with paths, which reached a commit twice.
 
-  The cost of the redirect is that no local build ever fetches the pins in
-  `apps/gui/Cargo.toml`, so they rot unseen and only a macOS release build finds
-  out. Before claiming a branch is releasable, build once with the file at its
-  committed state.
+  The wrapper snapshots and restores the lockfile around the build, so none of
+  that is left to remember. `.cargo/config.toml` needs no flag now: its working
+  copy should equal its commit, and `git status` will say so if it does not.
 
+  Pins still want checking before a release, because the opt-in path skips them
+  by definition. `scripts/check-one-rev-per-git-source.sh` refuses a lockfile
+  holding one git source at two revisions, which is what a half-finished repin
+  produces.
 
 - **One change per commit.** Shared files are an ordering problem, not an excuse.
 - **Name the branch when pushing**: `git push origin branch-name`.
