@@ -24,6 +24,24 @@ mod tasks;
 mod update;
 mod workers;
 
+// Exactly one runtime, chosen explicitly.
+//
+// Cargo features are additive, so a default runtime could not be turned off by
+// naming the other one: `--features blitz-inspector` used to compile the
+// webview in as well, which is how a Blitz build ended up declaring a WebKit
+// dependency it never called. Neither selected is the more common slip and
+// used to surface as a wall of missing-type errors from Tauri.
+#[cfg(all(feature = "blitz-runtime", feature = "webview-runtime"))]
+compile_error!(
+    "pick one runtime: `blitz-runtime` or `webview-runtime`, not both. \
+     Both compiles the WebKit webview into a binary that renders with Blitz."
+);
+#[cfg(not(any(feature = "blitz-runtime", feature = "webview-runtime")))]
+compile_error!(
+    "pick a runtime: `--features blitz-runtime` for the Blitz renderer, which \
+     is what ships, or `--features webview-runtime` for Tauri's WKWebView."
+);
+
 use std::ffi::OsString;
 #[cfg(feature = "blitz-runtime")]
 use std::io::Read;

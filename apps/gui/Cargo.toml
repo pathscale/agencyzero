@@ -6,8 +6,23 @@ edition.workspace = true
 publish.workspace = true
 
 [features]
+# No runtime by default, on purpose. This crate can host either, they are
+# mutually exclusive, and a default meant that naming one still compiled the
+# other: cargo features are additive, so `--features blitz-inspector` never
+# removed the webview. Picking neither is now a compile error naming both,
+# which is the failure a wrong build should have.
 default = []
 experimental = ["dep:agent-experimental"]
+# Tauri's own runtime: a WKWebView on macOS.
+#
+# The `tauri` dependency is taken without default features precisely so this is
+# a decision rather than a default. That set contains `wry`, so taking tauri
+# plainly pulled the whole webview stack into every build, including the ones
+# that render with Blitz and never call into it. The binary then declared a
+# WebKit dependency it did not have, and a linker flag in `.cargo/config.toml`
+# stripped the load command back out again. `apps/blitz-preview` and the chuzz
+# workspace both already take tauri this way, and neither needs that flag.
+webview-runtime = ["tauri/wry"]
 blitz-runtime = [
     "dep:blitz-dom",
     "dep:blitz-script",
@@ -55,7 +70,8 @@ dirs = "6"
 uuid = "1"
 chrono = { version = "0.4", default-features = false, features = ["clock", "serde", "std"] }
 tokio = { version = "1", features = ["process", "rt-multi-thread", "time"] }
-tauri = { version = "2", features = [] }
+# Default features are off; see `webview-runtime` for why.
+tauri = { version = "2", default-features = false, features = ["compression"] }
 tauri-runtime-blitz = { git = "https://github.com/pathscale/tauri-runtime-blitz.git", rev = "9d8c6318bc57b442e11fab289d0fa27c40aa087b", optional = true }
 blitz-dom = { package = "ps-blitz-dom", git = "https://github.com/pathscale/ps-blitz.git", rev = "6e6649bae2a5392f382726e920cea4646d93027b", features = ["system-fonts", "parallel-construct"], optional = true }
 blitz-script = { package = "ps-blitz-script", git = "https://github.com/pathscale/ps-blitz.git", rev = "6e6649bae2a5392f382726e920cea4646d93027b", features = ["system-fonts"], optional = true }
