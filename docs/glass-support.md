@@ -134,6 +134,71 @@ Note also that the hybrid renderer rasterises visibly softer than vello proper.
 That was measured and is **not** a scale-factor bug: scene and surface were both
 2688x1800.
 
+### What the passes cost, measured 2026-08-15
+
+Skia was ruled out (C++), and forking vello was ruled out: vello 0.9 already
+exposes `render_to_texture` and `Scene::draw_image`, so a backdrop can be built
+above it. That left a three-multiplier design - batch the passes, limit and
+downsample the region, cache on damage - and two of its premises have now been
+measured. Both were wrong, and neither failure is fatal, but they move where the
+work goes.
+
+**Premise 1: panels at one level share a backdrop, so six of them cost two
+render passes rather than seven.** They do not, at this application's spacing.
+
+The settings column stacks its Section panels with `gap-3`, twelve pixels
+(`features/settings/SettingsTab.tsx`, the `max-w-[720px] flex-col gap-3`
+column). The blur the panels want is sigma=12, and a gaussian reaches about
+three standard deviations, so each panel's blur samples 36px past its own edge
+and lands 24px inside its neighbour. The neighbour is painted after the snapshot
+a shared batch would take, so sharing it would blur a stale backdrop.
+
+There is no tolerance available here. At a separation of exactly one sigma, 16%
+of the kernel's weight is still outside the gap: a sixth of every edge pixel,
+not a tail worth rounding away.
+
+Measured in `ps-blitz/tests/blitz-tests/tests/glass_pass_count.rs`, which paints
+this application's own markup and stylesheet into `anyrender::PlanningScene` and
+counts. The sweep prints the transition landing exactly at the blur's reach:
+
+| gap | render passes |
+|---|---|
+| 6px, 12px (the app), 20px, 30px | 7 |
+| 36px, 37px, 48px | 2 |
+
+What follows:
+
+- Batching is still worth having. It is correct, it costs nothing when it does
+  not apply, and it pays on any layout where glass is sparse. It is simply not
+  the lever here.
+- If two passes are wanted for their own sake that is a design decision with a
+  number on it: about 37px of clear space between panels, or a blur down at
+  sigma=4.
+- The lever has to be the other two multipliers, and neither cares how far apart
+  the panels are. Downsampling turns sigma=12 at quarter resolution into sigma=3
+  over a sixteenth of the texels; caching turns a still frame into zero blurs.
+
+**Premise 2: "blitz-dom's damage.rs has the information" needed to key a
+backdrop cache.** It does not, as written. `damage.rs` carries Stylo's
+`RestyleDamage`, which is an input to layout, and `resolve()` clears every node's
+damage at [`resolve.rs:313-320`](../../ps-blitz/packages/blitz-dom/src/resolve.rs)
+before painting begins. `paint_scene` therefore runs against a document whose
+damage is uniformly empty. There are no damage rectangles anywhere in
+`blitz-dom`, `blitz-paint` or `blitz-shell`, and no document generation counter:
+blitz repaints the whole window every frame.
+
+The signal is still obtainable, and cheaply, but it has to be built rather than
+plumbed. The one place damage is both alive and complete is that clearing loop,
+which walks every node already. Capturing the border boxes of the nodes with
+non-empty damage there yields a per-frame damage region in document space, which
+is exactly what a backdrop cache needs to key on. Two things damage does not
+cover have to come with it, and both are known at the same point: scroll offset
+deltas and animation time.
+
+That is a real piece of work in `blitz-dom` rather than a plumbing job in
+`anyrender`, and it is the piece the whole cost argument rests on. It should be
+built before the region limiting, not after.
+
 ### Also open
 
 - **Window transparency is off**, and native glass is gated behind
