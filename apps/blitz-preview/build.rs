@@ -38,7 +38,44 @@ fn compress_asset(path: &Path, output: &Path, quality: u32) -> usize {
     input.len()
 }
 
+
+
+
+/// Drop framework load commands that nothing in this binary references.
+///
+/// On macOS `tauri` and `tauri-runtime` depend on `objc2-web-kit`
+/// unconditionally, not behind the `wry` feature, because `tauri-runtime`'s
+/// public API names WKWebView types. That crate carries
+/// `#[link(name = "WebKit", kind = "framework")]`, which travels in rlib
+/// metadata rather than on the rustc command line, so a build that renders with
+/// Blitz and never calls WebKit still gets an `LC_LOAD_DYLIB` for it and dyld
+/// still loads the framework at launch.
+///
+/// This crate already takes `tauri` with `default-features = false`, and that
+/// is not enough: the dependency is on `tauri` itself. Measured on `az-gui`,
+/// and on chuzz, which takes tauri the same way and ships the load command.
+///
+/// `-dead_strip_dylibs` drops load commands nothing references, which decides
+/// per link rather than per feature: stripped from a Blitz build, kept in a
+/// webview build, with no second dependency graph. `otool -L` on a
+/// `--features blitz-runtime` binary reports WebKit without this and does not
+/// with it.
+///
+/// Here rather than in `.cargo/config.toml`, which is where it used to live.
+/// That file also carried a `[patch]` table, machine-local paths kept ending up
+/// beside it, and defending them cost four accidental commits and a
+/// `skip-worktree` flag that hid the file from `git status` too. A build script
+/// says the same thing without a file anything else can be added to, and scopes
+/// it to the crates that link Tauri rather than every target in the workspace.
+fn strip_unused_frameworks() {
+    if std::env::var("CARGO_CFG_TARGET_OS").as_deref() != Ok("macos") {
+        return;
+    }
+    println!("cargo::rustc-link-arg-bins=-Wl,-dead_strip_dylibs");
+}
+
 fn main() {
+    strip_unused_frameworks();
     let manifest = PathBuf::from(std::env::var_os("CARGO_MANIFEST_DIR").unwrap());
     let dist = manifest.join("../gui/dist");
     let css_path = only_asset(&dist.join("static/css"), "css");
