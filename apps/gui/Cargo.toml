@@ -56,9 +56,9 @@ uuid = "1"
 chrono = { version = "0.4", default-features = false, features = ["clock", "serde", "std"] }
 tokio = { version = "1", features = ["process", "rt-multi-thread", "time"] }
 tauri = { version = "2", features = [] }
-tauri-runtime-blitz = { git = "https://github.com/pathscale/tauri-runtime-blitz.git", rev = "a7eadbcc6d351ad5c037dbd10e6171184264fa75", optional = true }
-blitz-dom = { package = "ps-blitz-dom", git = "https://github.com/pathscale/ps-blitz.git", rev = "e5f4bd4f139145183dd97cdea4555b7718579230", features = ["system-fonts", "parallel-construct"], optional = true }
-blitz-script = { package = "ps-blitz-script", git = "https://github.com/pathscale/ps-blitz.git", rev = "e5f4bd4f139145183dd97cdea4555b7718579230", features = ["system-fonts"], optional = true }
+tauri-runtime-blitz = { git = "https://github.com/pathscale/tauri-runtime-blitz.git", rev = "5494be08f3b718b9304a7af80a5f500748f88879", optional = true }
+blitz-dom = { package = "ps-blitz-dom", git = "https://github.com/pathscale/ps-blitz.git", rev = "6e6649bae2a5392f382726e920cea4646d93027b", features = ["system-fonts", "parallel-construct"], optional = true }
+blitz-script = { package = "ps-blitz-script", git = "https://github.com/pathscale/ps-blitz.git", rev = "6e6649bae2a5392f382726e920cea4646d93027b", features = ["system-fonts"], optional = true }
 brotli = { version = "8.0.4", default-features = false, features = ["std"], optional = true }
 url = { version = "2.5.8", optional = true }
 tauri-plugin-updater = "2"
