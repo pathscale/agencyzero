@@ -1,19 +1,13 @@
-[target.'cfg(target_os = "macos")']
-# `tauri-runtime` exposes WKWebView types even when the selected custom runtime never uses WebKit.
-# Remove those otherwise-unused framework load commands from final binaries.
-rustflags = ["-C", "link-arg=-Wl,-dead_strip_dylibs"]
+# The one setting that cannot live in `Cargo.toml`: a manifest has no way to
+# pass a flag to the linker, and `RUSTFLAGS` in the environment would have to be
+# set by every caller.
+#
+# Everything else that used to be here has moved. The renderer redirect went to
+# `.cargo/local-renderer.toml`, gitignored and opt-in; the usvg patch went to
+# the root `Cargo.toml`, where patches belong. See AGENTS.md.
 
-# What is left here is what every build needs: the link flags above and the
-# usvg patch below. The renderer redirect that used to sit here has moved to
-# `.cargo/local-renderer.toml`, which is gitignored and applied per command by
-# `scripts/local-renderer.sh`. See AGENTS.md for why.
-#
-# `Tree::intrinsic_dimensions` lives on no released usvg and `blitz-dom` calls
-# it. Cargo honours `[patch]` only from the root workspace, so depending on the
-# renderer from here needs the same redirection it applies to itself.
-#
-# The patch is version 0.48.1, so it only covers a dependent asking for ^0.48.
-# One still on ^0.46 silently gets a *second* usvg rather than an error, which
-# surfaces much later as a type error naming two identically-spelled types.
-[patch.crates-io]
-usvg = { git = "https://github.com/DioxusLabs/resvg", branch = "devin/1785858271-intrinsic-dimensions" }
+[target.'cfg(target_os = "macos")']
+# `tauri-runtime` exposes WKWebView types even when the selected custom runtime
+# never uses WebKit. Remove those otherwise-unused framework load commands from
+# final binaries.
+rustflags = ["-C", "link-arg=-Wl,-dead_strip_dylibs"]
