@@ -3,36 +3,17 @@
 # Remove those otherwise-unused framework load commands from final binaries.
 rustflags = ["-C", "link-arg=-Wl,-dead_strip_dylibs"]
 
-# LOCAL ONLY — not committed. Builds the renderer from the working checkout
-# instead of the pinned rev.
+# What is left here is what every build needs: the link flags above and the
+# usvg patch below. The renderer redirect that used to sit here has moved to
+# `.cargo/local-renderer.toml`, which is gitignored and applied per command by
+# `scripts/local-renderer.sh`. See AGENTS.md for why.
 #
-# It lives here rather than in `Cargo.toml` because it must never be committed:
-# the paths exist only on this machine, so a build anywhere else would fail. In
-# the manifest it sat one `git add` away from shipping and went in three times
-# in a single session. Here it is a local edit to an already-tracked file, so
-# `git status` still shows it and `git diff` still explains it.
-#
-# Remove once ps-blitz is pushed and the revs in apps/gui/Cargo.toml name
-# commits carrying these fixes.
-# The renderer workspace patches usvg to an unreleased branch, and cargo only
-# honours `[patch]` from the root workspace, so building it from here needs the
-# same redirection. `Tree::intrinsic_dimensions` lives on no released usvg and
-# `blitz-dom` calls it.
+# `Tree::intrinsic_dimensions` lives on no released usvg and `blitz-dom` calls
+# it. Cargo honours `[patch]` only from the root workspace, so depending on the
+# renderer from here needs the same redirection it applies to itself.
 #
 # The patch is version 0.48.1, so it only covers a dependent asking for ^0.48.
 # One still on ^0.46 silently gets a *second* usvg rather than an error, which
 # surfaces much later as a type error naming two identically-spelled types.
-#
-# anyrender is not patched here any more: ps-blitz takes the whole ps-anyrender
-# family by git rev now, so upstream's crates are no longer in the graph.
-#
-# The ps-anyrender entries that used to sit here are gone, on the condition this
-# comment set for dropping them: tauri-runtime-blitz is repinned at a ps-blitz
-# rev that carries the repin and takes the same ps-anyrender, so nothing reaches
-# for that family on crates.io any more and there is no second copy to unify.
-#
-# Leaving them would not have been harmless. They named a rev of their own, so
-# once the manifests moved forward the lockfile held ps-anyrender at two
-# revisions, which `scripts/check-one-rev-per-git-source.sh` exists to refuse.
 [patch.crates-io]
 usvg = { git = "https://github.com/DioxusLabs/resvg", branch = "devin/1785858271-intrinsic-dimensions" }
