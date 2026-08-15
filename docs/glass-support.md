@@ -199,6 +199,45 @@ That is a real piece of work in `blitz-dom` rather than a plumbing job in
 `anyrender`, and it is the piece the whole cost argument rests on. It should be
 built before the region limiting, not after.
 
+### The blur landed in the renderer that ships, 2026-08-15
+
+`anyrender_vello` blurs backdrops now, built above vello rather than inside it,
+so nothing is forked and the pins stay on crates.io vello 0.9.
+
+The scene is cut at a filtered layer, what has been drawn is rendered to a
+texture, a separable gaussian compute pass runs over the region the filter
+reads, and the result is drawn back through the element's own shape before the
+next segment continues. Verified in pixels through the headless image renderer,
+against the same fixture and assertions as the Skia backend's test so the two
+read side by side: a hard black and white seam under a blurring panel comes out
+`[18, 43, 82, 132, 180, 217, 240]` across the seam, and stays hard outside it.
+
+Two costs the shape of vello's API forces, both measured off its own
+documentation rather than guessed:
+
+- `render_to_texture` clears its target, so a segment cannot render *onto* the
+  previous one. It has to draw it back as a full-frame image.
+- `register_texture` copies into vello's image atlas at the start of **every**
+  render, not once.
+
+So a segment boundary costs a full-frame vello render plus two full-frame
+bandwidth passes, before the blur itself. That is the number that makes the
+batching worth having, and it is why the 12px panel gap above is expensive in a
+way no renderer can fix.
+
+**Skia is no longer needed for this.** The `skia-renderer` feature described
+under "Getting the blur on screen" was the cheapest route while vello had
+nothing; it is now the more expensive one, and it brings C++ back.
+
+Two things still stand between this and glass on screen:
+
+1. The `ps-blitz` and `tauri-runtime-blitz` pins have to move to the
+   `ps-anyrender` revision carrying it.
+2. **`.rounded-panel` has no `backdrop-filter` declaration.** The only one in a
+   current build is on `.modal__backdrop--blur`. Nothing will blur until the
+   panel asks for it, and asking for it at `blur(12px)` on a `gap-3` column is
+   the seven-pass case above.
+
 ### Also open
 
 - **Window transparency is off**, and native glass is gated behind
