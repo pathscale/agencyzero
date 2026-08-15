@@ -109,9 +109,6 @@ fn stamp_build() {
     println!("cargo:rerun-if-changed=src");
 }
 
-
-
-
 /// Drop framework load commands that nothing in this binary references.
 ///
 /// On macOS `tauri` and `tauri-runtime` depend on `objc2-web-kit`
