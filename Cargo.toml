@@ -66,3 +66,18 @@ debug = 0
 # Release runners retain `target` through rust-cache. Incremental artifacts make
 # the next standard or experimental bundle reuse unchanged Tauri dependencies.
 incremental = true
+
+# `Tree::intrinsic_dimensions` lives on no released usvg and `blitz-dom` calls
+# it. Cargo honours `[patch]` only from the root workspace, so depending on the
+# renderer from here needs the same redirection it applies to itself.
+#
+# The patch is version 0.48.1, so it only covers a dependent asking for ^0.48.
+# One still on ^0.46 silently gets a *second* usvg rather than an error, which
+# surfaces much later as a type error naming two identically-spelled types.
+#
+# Here rather than in `.cargo/config.toml`, which is where it used to sit: it
+# shared a `[patch.crates-io]` table there with paths that existed on one
+# machine, and that coupling is why a file nobody could delete was also a file
+# nobody could safely commit. ps-blitz keeps the same patch in its own manifest.
+[patch.crates-io]
+usvg = { git = "https://github.com/DioxusLabs/resvg", branch = "devin/1785858271-intrinsic-dimensions" }

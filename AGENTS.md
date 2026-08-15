@@ -118,6 +118,13 @@ paraphrases were how the old checkbox contract created near-duplicates. Full con
   that is left to remember. `.cargo/config.toml` needs no flag now: its working
   copy should equal its commit, and `git status` will say so if it does not.
 
+  It is also down to one setting, the macOS linker flag, which is the only thing
+  in it that cannot live in a manifest. The usvg patch moved to the root
+  `Cargo.toml`, where patches belong and where ps-blitz keeps the same one. That
+  it ever sat in `.cargo/config.toml` is the whole story: a shared patch shared a
+  `[patch.crates-io]` table with paths that existed on one machine, which is how
+  a file nobody could delete became a file nobody could safely commit.
+
   Pins still want checking before a release, because the opt-in path skips them
   by definition. `scripts/check-one-rev-per-git-source.sh` refuses a lockfile
   holding one git source at two revisions, which is what a half-finished repin
