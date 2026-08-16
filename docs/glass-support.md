@@ -77,10 +77,30 @@ The second can ship without the first and is where the existing groundwork is.
   handful of properties and neither `outline` nor `box-shadow` is among them.
   See `tests/blitz-tests/tests/panel_axes.rs`.
 
-### Not built: the blur, in the renderer that ships
+### Superseded 2026-08-16: the blur landed, the switches did not
 
-This is the whole remaining gap, and it is worth stating precisely because
-"backdrop-filter is implemented" and "the app cannot blur" are both true.
+The table below is kept because its reasoning is still useful, but its verdict
+is out of date. `anyrender_vello` — the backend that ships — now carries a real
+backdrop pass: `record_backdrop`, with a blur sigma and an expansion rect,
+reached from `push_layer` in
+[`anyrender_vello/src/scene.rs`](../../ps-anyrender/crates/anyrender_vello/src/scene.rs).
+`ce156b0` recorded that landing and this section was never revised to match.
+
+**So the remaining gap is not the renderer. It is that nothing turns glass on.**
+Three gates, and all of them are shut by choice:
+
+| gate | state | where |
+|---|---|---|
+| `transparent: true` on the window | **absent** | `apps/gui/tauri.conf.json` |
+| `WINDOW_GLASS_ENABLED` | **`false`** | `apps/gui/frontend/src/lib/theme.ts:290` |
+| renderer backdrop pass | **present** | `anyrender_vello/src/scene.rs` |
+
+The first two are a pair: attaching an `NSGlassEffectView` over an *opaque*
+window flattens every surface under one colour, which is what the flag is
+defending against, so neither moves without the other. Opening them is the
+feature landing this document plans, not a bug fix, and the risk note below
+still governs it — a black window is the shared failure mode of three separate
+stages, so change one thing at a time and confirm each.
 
 | renderer | ships in `az-gui`? | filters |
 |---|---|---|
