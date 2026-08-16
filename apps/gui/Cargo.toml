@@ -72,9 +72,9 @@ chrono = { version = "0.4", default-features = false, features = ["clock", "serd
 tokio = { version = "1", features = ["process", "rt-multi-thread", "time"] }
 # Default features are off; see `webview-runtime` for why.
 tauri = { version = "2", default-features = false, features = ["compression"] }
-tauri-runtime-blitz = { git = "https://github.com/pathscale/tauri-runtime-blitz.git", rev = "9d8c6318bc57b442e11fab289d0fa27c40aa087b", optional = true }
-blitz-dom = { package = "ps-blitz-dom", git = "https://github.com/pathscale/ps-blitz.git", rev = "6e6649bae2a5392f382726e920cea4646d93027b", features = ["system-fonts", "parallel-construct"], optional = true }
-blitz-script = { package = "ps-blitz-script", git = "https://github.com/pathscale/ps-blitz.git", rev = "6e6649bae2a5392f382726e920cea4646d93027b", features = ["system-fonts"], optional = true }
+tauri-runtime-blitz = { git = "https://github.com/pathscale/tauri-runtime-blitz.git", rev = "070ab3a2fd460d7c9b2f3f341e7d6c50af669682", optional = true }
+blitz-dom = { package = "ps-blitz-dom", git = "https://github.com/pathscale/ps-blitz.git", rev = "a81bea599c2f67a9a1568e0f8911435c59af8874", features = ["system-fonts", "parallel-construct"], optional = true }
+blitz-script = { package = "ps-blitz-script", git = "https://github.com/pathscale/ps-blitz.git", rev = "a81bea599c2f67a9a1568e0f8911435c59af8874", features = ["system-fonts"], optional = true }
 brotli = { version = "8.0.4", default-features = false, features = ["std"], optional = true }
 url = { version = "2.5.8", optional = true }
 tauri-plugin-updater = "2"

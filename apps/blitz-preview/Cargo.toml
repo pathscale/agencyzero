@@ -16,7 +16,7 @@ blitz-traits = { path = "../../../blitz-rust/packages/blitz-traits" }
 brotli = { version = "=8.0.4", default-features = false, features = ["std"] }
 png = { version = "=0.18.1", optional = true }
 tauri = { version = "=2.11.5", default-features = false, features = ["compression"] }
-tauri-runtime-blitz = { git = "https://github.com/pathscale/tauri-runtime-blitz.git", rev = "9d8c6318bc57b442e11fab289d0fa27c40aa087b" }
+tauri-runtime-blitz = { git = "https://github.com/pathscale/tauri-runtime-blitz.git", rev = "070ab3a2fd460d7c9b2f3f341e7d6c50af669682" }
 url = "=2.5.8"
 
 [build-dependencies]
