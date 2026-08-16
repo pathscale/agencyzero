@@ -1,3 +1,4 @@
+import { applyGlassTokens, GLASS_DEFAULTS, type GlassMode } from "@pathscale/ui";
 import type { ColorValue } from "@pathscale/ui/components/color-wheel-flower";
 import type { ThemeSettings } from "~/types";
 
@@ -225,16 +226,50 @@ export function applyTheme(
    * Each default is the untouched look: no lift, the 16% hairline, no shadow.
    * A property is removed rather than written at its default, so the
    * stylesheet's own value applies and nothing inline needs explaining later.
-   *
-   * There is no blur axis. Blur belongs to the compositor's glass view, and CSS
-   * `backdrop-filter` cannot drive it on either shipping renderer, so a blur
-   * slider would move nothing.
    */
   writeGlassAxis("lift", theme.glassLift);
   writeGlassAxis("border", theme.glassBorder);
   writeGlassAxis("shadow", theme.glassShadow);
+  writeGlassTuning(theme, root);
 
   return windowChrome(accent, theme);
+}
+
+/**
+ * The library's glass, from the three numbers it derives everything else from.
+ *
+ * `@pathscale/ui` styles `material="glass"` off a family of `--glass-*` custom
+ * properties and ships `applyGlassTokens` to write the twenty-five derived ones
+ * from `blur`, `refraction` and `depth`. Calling it here rather than keeping a
+ * local copy of the curves means the app and the library cannot disagree about
+ * what glass looks like, and a library that retunes them retunes this too.
+ *
+ * An axis the settings leave undefined falls to `GLASS_DEFAULTS` for the
+ * current colour mode, so this is always a complete set: three of the tokens
+ * are read by the component CSS without a fallback, and a partial set gives a
+ * card with no background rather than a plainer one.
+ *
+ * Blur used to be excluded here, on the grounds that neither shipping renderer
+ * could carry `backdrop-filter`. That stopped being true: vello now has a real
+ * backdrop pass (`record_backdrop`), so the blur axis reaches the screen.
+ */
+function writeGlassTuning(theme: ThemeSettings, root: HTMLElement): void {
+  // Read from the root rather than importing the prefs store: this module is a
+  // pure function of the theme it is handed, and `stores/prefs` already writes
+  // the mode here on every change.
+  const mode: GlassMode = root.dataset.colorMode === "light" ? "light" : "dark";
+  const defaults = GLASS_DEFAULTS[mode];
+  applyGlassTokens(
+    {
+      blur: Number.isFinite(theme.glassBlur) ? Number(theme.glassBlur) : defaults.blur,
+      refraction: Number.isFinite(theme.glassRefraction)
+        ? Number(theme.glassRefraction)
+        : defaults.refraction,
+      depth: Number.isFinite(theme.glassDepth) ? Number(theme.glassDepth) : defaults.depth,
+    },
+    mode,
+    root,
+  );
 }
 
 /**

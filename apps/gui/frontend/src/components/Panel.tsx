@@ -13,12 +13,18 @@ export type PanelProps = JSX.HTMLAttributes<HTMLDivElement> & {
  * Radius 14 on `base-100` with a `base-content/9%` hairline — the design's
  * panel token. Everything that looks like a card on screen is either this or a
  * row inside it.
+ *
+ * `az-glass` is what makes that surface material rather than a flat fill: it
+ * takes the twenty-five `--glass-*` tokens `@pathscale/ui` derives from three
+ * numbers, so the Appearance sliders reach every panel at once. It is listed
+ * after `az-panel` because it replaces that opaque background — a backdrop
+ * filter behind an opaque fill blurs nothing anyone can see.
  */
 export function Panel(props: PanelProps): JSX.Element {
   const [own, rest] = splitProps(props, ["children", "class"]);
   return (
     <div
-      class={`az-panel isolate overflow-hidden rounded-panel border border-az-hairline ${own.class ?? ""}`}
+      class={`az-panel az-glass isolate overflow-hidden rounded-panel border border-az-hairline ${own.class ?? ""}`}
       {...rest}
     >
       {own.children}

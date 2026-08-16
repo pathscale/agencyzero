@@ -1,4 +1,17 @@
-import { Checkbox, Flex, Input, Select, Slider, Switch, Textarea } from "@pathscale/ui";
+import {
+  applyGlassTokens,
+  Checkbox,
+  Flex,
+  GLASS_DEFAULTS,
+  GLASS_LIMITS,
+  type GlassMode,
+  type GlassTuning,
+  Input,
+  Select,
+  Slider,
+  Switch,
+  Textarea,
+} from "@pathscale/ui";
 import {
   createContext,
   createEffect,
@@ -44,6 +57,7 @@ import type {
   StudySummary,
   TableSize,
   TaskManagerSettings,
+  ThemeSettings,
 } from "~/types";
 import { ThemePicker } from "./ThemePicker";
 
@@ -1029,14 +1043,20 @@ export function SettingsTab(): JSX.Element {
                 />
 
                 {/*
-                  Three axes, and every one of them moves something. There is no
-                  blur slider: blur belongs to the compositor's glass view and
-                  CSS cannot drive it on either shipping renderer, so it would
-                  be a control that does nothing.
+                  Two families of axis, and the split is real rather than
+                  historical.
 
-                  All three lean on the hue ladder rather than white. Frost
-                  needs something light beneath it to diffuse; on a dark surface
-                  a white film is grey haze on the colour, not material.
+                  These three style AgencyZero's own `.az-panel`, which is
+                  opaque, and they lean on the hue ladder rather than white:
+                  frost needs something light beneath it to diffuse, so on a
+                  dark surface a white film is grey haze on the colour, not
+                  material.
+
+                  The three below them are the library's, and they style
+                  anything rendered with `material="glass"`. `@pathscale/ui`
+                  derives twenty-five `--glass-*` tokens from exactly those
+                  numbers, so they are passed straight through rather than
+                  reinterpreted here.
                 */}
                 <Row label={tx("Panel lift")} hint={tx("how far panels sit off the desk")}>
                   <GlassAxis
@@ -1064,7 +1084,7 @@ export function SettingsTab(): JSX.Element {
                     }
                   />
                 </Row>
-                <Row label={tx("Panel depth")} hint={tx("drop shadow under a panel")} isLast>
+                <Row label={tx("Panel depth")} hint={tx("drop shadow under a panel")}>
                   <GlassAxis
                     label={tx("Panel depth")}
                     min={0}
@@ -1078,6 +1098,57 @@ export function SettingsTab(): JSX.Element {
                     onChange={(percent) =>
                       void actions.saveSettings({ theme: { glassShadow: percent / 100 } })
                     }
+                  />
+                </Row>
+
+                <Row
+                  label={tx("Glass blur")}
+                  hint={tx("how far a glass surface smears what is behind it")}
+                >
+                  <GlassTuningAxis
+                    label={tx("Glass blur")}
+                    axis="blur"
+                    theme={current().theme}
+                    step={1}
+                    value={current().theme.glassBlur}
+                    format={(value) => `${Math.round(value)}px`}
+                    onChange={(glassBlur) => void actions.saveSettings({ theme: { glassBlur } })}
+                  />
+                </Row>
+                <Row
+                  label={tx("Glass refraction")}
+                  hint={tx("how much a glass surface asserts its own tint, border and highlight")}
+                >
+                  <GlassTuningAxis
+                    label={tx("Glass refraction")}
+                    axis="refraction"
+                    theme={current().theme}
+                    // The axis runs 0 to 0.4, so a whole-number step would be
+                    // three usable positions. Shown as a percentage of its own
+                    // range, which is what the number means.
+                    step={0.01}
+                    value={current().theme.glassRefraction}
+                    format={(value) =>
+                      `${Math.round((value / GLASS_LIMITS.refraction.max) * 100)}%`
+                    }
+                    onChange={(glassRefraction) =>
+                      void actions.saveSettings({ theme: { glassRefraction } })
+                    }
+                  />
+                </Row>
+                <Row
+                  label={tx("Glass depth")}
+                  hint={tx("how far a glass surface sits off the page: glow, sheen and shadow")}
+                  isLast
+                >
+                  <GlassTuningAxis
+                    label={tx("Glass depth")}
+                    axis="depth"
+                    theme={current().theme}
+                    step={1}
+                    value={current().theme.glassDepth}
+                    format={(value) => `${Math.round((value / GLASS_LIMITS.depth.max) * 100)}%`}
+                    onChange={(glassDepth) => void actions.saveSettings({ theme: { glassDepth } })}
                   />
                 </Row>
               </Section>
@@ -2745,16 +2816,15 @@ function Row(props: {
   );
 }
 
-/**
- * One glass axis.
- *
- * Same slider the cost threshold uses, so these rows read as the rest of
- * Settings rather than as a debug panel. Saving on every change is deliberate:
- * the point of these is to drag them and watch the window, and a value that
- * only lands on release cannot be judged.
- */
 /** How long the knob must be still before its value is written to the store. */
 const SETTLE_MS = 180;
+
+/** Which settings field carries each of the library's three glass numbers. */
+const GLASS_SETTING_KEYS = {
+  blur: "glassBlur",
+  refraction: "glassRefraction",
+  depth: "glassDepth",
+} as const satisfies Record<keyof GlassTuning, keyof ThemeSettings>;
 
 /**
  * One appearance axis.
@@ -2808,6 +2878,71 @@ function GlassAxis(props: {
          * them, paint starved, and the window blanked until the drag stopped.
          * 2.5 has the real event, so the persist happens exactly once.
          */
+        onChangeEnd={(value) => props.onChange(value)}
+        size="sm"
+        class="w-full min-w-0 [&_[data-slot=label]]:sr-only"
+      />
+    </div>
+  );
+}
+
+/**
+ * One of the library's three glass numbers.
+ *
+ * Separate from {@link GlassAxis} because it writes a different thing: that one
+ * sets a single `--az-glass-*` property on AgencyZero's own opaque panel, and
+ * this one hands `blur`/`refraction`/`depth` to `@pathscale/ui`, which derives
+ * twenty-five `--glass-*` tokens from the three together. A preview therefore
+ * has to re-derive the whole set from the other two axes as they stand, which
+ * is what `applyGlassTokens` does when given a complete tuning.
+ *
+ * Range and default both come from the library rather than being restated here.
+ * That is the point of the exercise: glass is the library's primitive now, so
+ * an app that hardcoded `max={0.4}` would be a second place to update when the
+ * curves are retuned.
+ */
+function GlassTuningAxis(props: {
+  label: string;
+  axis: keyof GlassTuning;
+  step: number;
+  /** Undefined means "whatever the library defaults this axis to". */
+  value: number | undefined;
+  /** The theme these three axes live on, for re-deriving the whole set. */
+  theme: ThemeSettings;
+  format: (value: number) => string;
+  onChange: (value: number) => void;
+}): JSX.Element {
+  const mode = (): GlassMode =>
+    document.documentElement.dataset.colorMode === "light" ? "light" : "dark";
+  const resolved = (axis: keyof GlassTuning): number => {
+    const value = props.theme[GLASS_SETTING_KEYS[axis]];
+    return Number.isFinite(value) ? Number(value) : GLASS_DEFAULTS[mode()][axis];
+  };
+  const limits = () => GLASS_LIMITS[props.axis];
+
+  return (
+    <div class="min-w-[260px]">
+      <Slider
+        label={props.label}
+        min={limits().min}
+        max={limits().max}
+        step={props.step}
+        value={props.value ?? GLASS_DEFAULTS[mode()][props.axis]}
+        formatValue={props.format}
+        // Paint now, from the full set: one axis alone does not describe glass,
+        // and a partial tuning leaves three tokens the component CSS reads
+        // without a fallback undefined, which drops the declaration entirely.
+        onChange={(value) =>
+          applyGlassTokens(
+            {
+              blur: resolved("blur"),
+              refraction: resolved("refraction"),
+              depth: resolved("depth"),
+              [props.axis]: value,
+            },
+            mode(),
+          )
+        }
         onChangeEnd={(value) => props.onChange(value)}
         size="sm"
         class="w-full min-w-0 [&_[data-slot=label]]:sr-only"

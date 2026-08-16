@@ -927,6 +927,14 @@ const zh = {
   "strength of the hairline around a panel": "面板细边框的强度",
   "Panel depth": "面板深度",
   "drop shadow under a panel": "面板下的投影",
+  "Glass blur": "玻璃模糊",
+  "how far a glass surface smears what is behind it": "玻璃表面对背后内容的模糊程度",
+  "Glass refraction": "玻璃折射",
+  "how much a glass surface asserts its own tint, border and highlight":
+    "玻璃表面自身色调、边框和高光的强度",
+  "Glass depth": "玻璃深度",
+  "how far a glass surface sits off the page: glow, sheen and shadow":
+    "玻璃表面离页面的高度：辉光、光泽和阴影",
   Snapshot: "快照",
   "a copy of the store as it stands, without closing the app": "在不关闭应用的情况下复制当前存储",
   "Take snapshot": "创建快照",

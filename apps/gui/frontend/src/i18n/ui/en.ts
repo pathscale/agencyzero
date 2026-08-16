@@ -958,6 +958,15 @@ const en = {
   "strength of the hairline around a panel": "strength of the hairline around a panel",
   "Panel depth": "Panel depth",
   "drop shadow under a panel": "drop shadow under a panel",
+  "Glass blur": "Glass blur",
+  "how far a glass surface smears what is behind it":
+    "how far a glass surface smears what is behind it",
+  "Glass refraction": "Glass refraction",
+  "how much a glass surface asserts its own tint, border and highlight":
+    "how much a glass surface asserts its own tint, border and highlight",
+  "Glass depth": "Glass depth",
+  "how far a glass surface sits off the page: glow, sheen and shadow":
+    "how far a glass surface sits off the page: glow, sheen and shadow",
   Snapshot: "Snapshot",
   "a copy of the store as it stands, without closing the app":
     "a copy of the store as it stands, without closing the app",
