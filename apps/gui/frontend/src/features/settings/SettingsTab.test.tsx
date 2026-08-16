@@ -231,6 +231,11 @@ describe("cost warning settings", () => {
 
     expect(slider).toHaveAttribute("aria-valuenow", "1");
     expect(slider).toHaveAttribute("aria-valuetext", "$1.00");
+
+    // Releasing the key ends the keyboard interaction, which is what persists:
+    // the library raises `onChangeEnd` from `keyup` and `blur`, so holding an
+    // arrow down repeats the preview without repeating the store write.
+    fireEvent.keyUp(slider, { key: "ArrowRight" });
     await waitFor(() => expect(screen.workspace.state.settings?.costWarningUsd).toBe(1));
   });
 
@@ -264,11 +269,15 @@ describe("cost warning settings", () => {
 
     fireEvent.pointerDown(track, { clientX: 100, pointerId: 1 });
 
-    // Shown at once. The write waits for the knob to settle, so a drag does not
-    // queue one serialized store round trip per tick.
+    // Shown at once, and not yet written: the store round trip belongs to the
+    // release, so a drag cannot queue one serialized write per tick.
     expect(slider).toHaveAttribute("aria-valuenow", "10.25");
     expect(slider).toHaveAttribute("aria-valuetext", "$10.25");
     expect(screen.workspace.state.settings?.costWarningUsd).not.toBe(10.25);
+
+    // Releasing is what persists. The drag has to be finished for the value to
+    // reach the store at all, which is the whole point of `onChangeEnd`.
+    fireEvent.pointerUp(track, { clientX: 100, pointerId: 1 });
 
     await waitFor(() => expect(screen.workspace.state.settings?.costWarningUsd).toBe(10.25), {
       timeout: 2000,
@@ -301,13 +310,15 @@ describe("cost warning settings", () => {
       () => new Promise<void>((resolve) => releases.push(resolve)),
     );
 
-    // Two steps in quick succession. The display follows at once; the store
-    // write waits for the knob to settle, so this is one save and not two.
+    // Two steps inside one keypress-and-release. The display follows each at
+    // once; the store write belongs to the release, so this is one save and
+    // not two.
     fireEvent.keyDown(slider, { key: "ArrowRight" });
     fireEvent.keyDown(slider, { key: "ArrowRight" });
     expect(slider).toHaveAttribute("aria-valuenow", "1.25");
     expect(releases).toHaveLength(0);
 
+    fireEvent.keyUp(slider, { key: "ArrowRight" });
     await waitFor(() => expect(releases).toHaveLength(1), { timeout: 2000 });
 
     // The preview is held until the save it belongs to lands, so a slow write
