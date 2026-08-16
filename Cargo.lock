@@ -104,7 +104,7 @@ dependencies = [
 [[package]]
 name = "agent-experimental"
 version = "0.1.3"
-source = "git+https://gitlab.com/anonymous-28282828282/agent-experimental.git?rev=afe3a70e02ef844a092385859ab8f5f3ab8a039e#afe3a70e02ef844a092385859ab8f5f3ab8a039e"
+source = "git+https://gitlab.com/anonymous-28282828282/agent-experimental.git?branch=master#afe3a70e02ef844a092385859ab8f5f3ab8a039e"
 dependencies = [
  "anyhow",
  "reqwest",
@@ -511,7 +511,7 @@ dependencies = [
 [[package]]
 name = "blitz-control-protocol"
 version = "0.1.0"
-source = "git+https://github.com/pathscale/tauri-runtime-blitz.git?rev=71d7bd897fc936b54fc4731e56600b9497e402ad#71d7bd897fc936b54fc4731e56600b9497e402ad"
+source = "git+https://github.com/pathscale/tauri-runtime-blitz.git?branch=master#71d7bd897fc936b54fc4731e56600b9497e402ad"
 dependencies = [
  "endpoint-libs",
  "serde",
@@ -6616,7 +6616,7 @@ dependencies = [
 [[package]]
 name = "tauri-runtime-blitz"
 version = "0.1.0"
-source = "git+https://github.com/pathscale/tauri-runtime-blitz.git?rev=71d7bd897fc936b54fc4731e56600b9497e402ad#71d7bd897fc936b54fc4731e56600b9497e402ad"
+source = "git+https://github.com/pathscale/tauri-runtime-blitz.git?branch=master#71d7bd897fc936b54fc4731e56600b9497e402ad"
 dependencies = [
  "blitz-control-protocol",
  "endpoint-libs",
