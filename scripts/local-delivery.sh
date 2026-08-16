@@ -112,12 +112,17 @@ if [ "$mode" != "quick" ]; then
   (
     cd "$repo_root"
     cargo fmt --all --check
-    cargo clippy --workspace --all-targets --all-features -- -D warnings
+    # Not `--all-features`. `blitz-runtime` and `webview-runtime` are mutually
+    # exclusive, and `apps/gui/src/main.rs` makes enabling both a compile error,
+    # so the flag that means "check everything" is the one flag this workspace
+    # cannot take: it fails before any lint or test runs. Name the runtime that
+    # ships, with the inspector `stable` builds against.
+    cargo clippy --workspace --all-targets --features az-gui/blitz-inspector -- -D warnings
     # Store-backed tests open several files apiece. macOS's default descriptor
     # ceiling can make the parallel harness fail with `Too many open files`,
     # masking healthy assertions as a broken release. Serial execution adds less
     # than a second here and keeps the delivery gate deterministic.
-    RUST_TEST_THREADS=${RUST_TEST_THREADS:-1} cargo test --workspace --all-features
+    RUST_TEST_THREADS=${RUST_TEST_THREADS:-1} cargo test --workspace --features az-gui/blitz-inspector
   )
 fi
 
