@@ -561,12 +561,12 @@
     background-color: color-mix(
       in oklab,
       var(--color-az-badge),
-      transparent calc(100% - var(--glass-app-surface-opacity, 38%))
+      transparent calc(100% - var(--glass-background-opacity, 55%))
     );
     outline-color: color-mix(
       in oklab,
       var(--color-primary),
-      transparent calc(100% - var(--glass-app-border-opacity, 30%))
+      transparent calc(100% - var(--glass-border-opacity, 12%))
     );
     box-shadow:
       var(--glass-shadow-depth, 0 8px 32px rgb(0 0 0 / 10%)),
