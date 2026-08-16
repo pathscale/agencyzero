@@ -1,5 +1,5 @@
 import { onCleanup, onMount } from "solid-js";
-import { copyText } from "~/features/project/MessageBody";
+import { copyText, pasteText } from "~/features/project/MessageBody";
 import { isBlitz, isTauri } from "~/lib/platform";
 import { useWorkspace } from "~/stores/workspace";
 
@@ -65,6 +65,45 @@ export function useTabShortcuts(): void {
 
       const selected = document.getSelection()?.toString() ?? "";
       if (selected.length > 0) void copyText(selected);
+      return;
+    }
+
+    /*
+     * Cmd+V and Ctrl+V into a text field, for the same reason Copy is here.
+     *
+     * Blitz dispatches no `paste` event to JS, and answers the chord itself
+     * only for a focused native text input. That covers the composer, so this
+     * is not where pasting into it comes from — but the native route writes
+     * straight into the editor's own buffer, and a controlled Solid field then
+     * holds a `value` the DOM no longer matches. Answering it here keeps the
+     * signal and the element in step.
+     *
+     * Only fields. A paste with nothing focused to receive it has no meaning,
+     * and reading the clipboard to discard it would be a permission prompt for
+     * nothing.
+     */
+    if ((event.metaKey || event.ctrlKey) && (event.key === "v" || event.code === "KeyV")) {
+      const target = event.target as HTMLElement | null;
+      const field =
+        target instanceof HTMLTextAreaElement || target instanceof HTMLInputElement ? target : null;
+      if (!field || field.readOnly || field.disabled) return;
+
+      // Prevent the native insert, so text cannot land twice when the renderer
+      // also handles the chord.
+      event.preventDefault();
+
+      const from = field.selectionStart ?? field.value.length;
+      const to = field.selectionEnd ?? from;
+      void pasteText().then((text) => {
+        if (text === null || text.length === 0) return;
+        field.value = `${field.value.slice(0, from)}${text}${field.value.slice(to)}`;
+        const caret = from + text.length;
+        field.setSelectionRange(caret, caret);
+        // A controlled field takes its value from a signal that only an `input`
+        // event updates. Without this the character count, the autosize and the
+        // submitted text all keep the value from before the paste.
+        field.dispatchEvent(new Event("input", { bubbles: true }));
+      });
       return;
     }
 
