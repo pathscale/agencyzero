@@ -192,7 +192,17 @@ function SurfaceColorWheel(props: { value: string; onPick: (value: string) => vo
                     style={{ "background-color": color }}
                   />
                 }
-                class="size-7 cursor-pointer rounded-full [&_[data-slot=radio-control]]:m-0 [&_[data-slot=radio-control]]:size-7 [&_[data-slot=radio-control]]:border-2 [&_[data-slot=radio-control]]:border-az-hairline-strong [&_[data-slot=radio-indicator]]:overflow-hidden [&_[data-slot=radio-indicator]]:rounded-full"
+                /*
+                 * `bg-transparent` on the control is load-bearing, not tidying.
+                 *
+                 * The petal's colour is the indicator, and the control is the
+                 * box drawn around it. 2.x gives that box its own
+                 * `background-color: var(--color-base-100)`, which is painted
+                 * over the indicator and turns all 31 petals into identical
+                 * empty circles. The v1 control had no fill, so this override
+                 * was not needed and its absence was invisible.
+                 */
+                class="size-7 cursor-pointer rounded-full [&_[data-slot=radio-control]]:m-0 [&_[data-slot=radio-control]]:size-7 [&_[data-slot=radio-control]]:border-2 [&_[data-slot=radio-control]]:border-az-hairline-strong [&_[data-slot=radio-control]]:bg-transparent [&_[data-slot=radio-indicator]]:overflow-hidden [&_[data-slot=radio-indicator]]:rounded-full"
               />
             </span>
           );
