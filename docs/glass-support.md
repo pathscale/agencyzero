@@ -77,6 +77,25 @@ The second can ship without the first and is where the existing groundwork is.
   handful of properties and neither `outline` nor `box-shadow` is among them.
   See `tests/blitz-tests/tests/panel_axes.rs`.
 
+### Landed 2026-08-16: in-app glass, from the library's three numbers
+
+In-app glass ships. `@pathscale/ui` 2.5 carries `styles/glass.ts`, which derives
+twenty-five `--glass-*` tokens from `blur`, `refraction` and `depth` — the
+curves lifted from the same consulting.parcle.ai tuning surface, against this
+same token vocabulary. `applyTheme` calls its `applyGlassTokens`, Settings
+exposes the three axes with `GLASS_LIMITS`/`GLASS_DEFAULTS` supplying ranges and
+defaults, and `.az-glass` on `components/Panel.tsx` is what reads the tokens, so
+every panel in the app is one glass surface.
+
+That is the **in-app** half of the split this document opens with, and it needed
+no window transparency: it is CSS `backdrop-filter`, blurring what is behind a
+panel inside an opaque window.
+
+**Window glass is still off, and the section below is still why.** The two
+switches named there are unchanged, because an `NSGlassEffectView` over an
+opaque window still flattens the app under one colour. What changed is that
+in-app glass no longer waits on them.
+
 ### Superseded 2026-08-16: the blur landed, the switches did not
 
 The table below is kept because its reasoning is still useful, but its verdict
