@@ -392,8 +392,16 @@
      * only").
      *
      * The blur itself is the compositor's, through `NSGlassEffectView` behind a
-     * transparent window. CSS `backdrop-filter` is not involved: it works in
-     * `vello_cpu` but the shipping renderers cannot carry it yet.
+     * transparent window, and none of it is on yet: the window config carries
+     * no `transparent: true`, so `WINDOW_GLASS_ENABLED` in `lib/theme.ts` stays
+     * false and the effect view is never attached. Attaching it over an opaque
+     * window washes the whole app out under one flat colour, which is what that
+     * flag exists to prevent.
+     *
+     * CSS `backdrop-filter` is a separate route to the same look, and it is no
+     * longer the impossible one: the shipping vello backend gained a real
+     * backdrop pass (`record_backdrop` in `anyrender_vello/src/scene.rs`), so
+     * the claim that only `vello_cpu` can carry it is out of date.
      */
     background-color: color-mix(
       in oklab,
