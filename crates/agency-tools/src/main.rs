@@ -71,6 +71,10 @@ commands:
                              fixed mapping and drops identifying strings.
                              The window has no default and must be given.
 
+Set AZ_PROFILE=experimental to read the experimental build's store; it keeps
+its own config directory, pointer file and tables, so the default resolves
+the standard build only.
+
 The store location honours the same overrides as the GUI: $AZ_DATA_DIR,
 then the data-location.json pointer next to the app's config, then the
 platform app-data directory.";
@@ -198,7 +202,19 @@ fn main() -> ExitCode {
 }
 
 fn run(command: Command) -> eyre::Result<()> {
-    let location = agency_tools::data_location()?;
+    // `AZ_DATA_DIR` still wins, as it does for the GUI. Without it, an
+    // experimental window's store is only reachable through its own bundle
+    // identifier: a different identifier means a different config directory,
+    // a different pointer file and a different store, so resolving the stable
+    // one reports another profile's numbers as if they were this profile's.
+    let identifier = if std::env::var_os("AZ_PROFILE")
+        .is_some_and(|value| value.eq_ignore_ascii_case("experimental"))
+    {
+        agency_tools::IDENTIFIER_EXPERIMENTAL
+    } else {
+        agency_tools::IDENTIFIER_STABLE
+    };
+    let location = agency_tools::data_location_for(identifier)?;
     let dir = location.path;
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
