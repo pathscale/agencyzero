@@ -57,6 +57,9 @@ pub mod message;
 pub mod project;
 #[path = "../../../apps/gui/src/db/schema/project_item.rs"]
 pub mod project_item;
+pub mod ps_usage;
+#[path = "../../../apps/gui/src/db/schema/study_event.rs"]
+pub mod study_event;
 #[path = "../../../apps/gui/src/db/schema/task_log.rs"]
 pub mod task_log;
 #[path = "../../../apps/gui/src/db/schema/usage_cache.rs"]
@@ -69,6 +72,7 @@ use kv::KvWorkTable;
 use message::{MessageRow, MessageWorkTable};
 use project::{ProjectRow, ProjectWorkTable};
 use project_item::{ProjectItemRow, ProjectItemWorkTable};
+use study_event::StudyEventWorkTable;
 use usage_cache::UsageCacheWorkTable;
 use usage_ledger::UsageLedgerWorkTable;
 
@@ -183,6 +187,15 @@ open_read_only!(
     /// apart needs a reader that is not the app.
     open_messages,
     MessageWorkTable
+);
+open_read_only!(
+    /// The content-free directive-usage table, read-only.
+    ///
+    /// Written only while the opt-in setting is on, and holding no prompt text,
+    /// titles, paths or URLs by construction. `ps_usage_report` reads it to
+    /// count how the declared operations were used.
+    open_study_events,
+    StudyEventWorkTable
 );
 
 /// A project row as the CLI prints it: one JSON object, one line.
