@@ -11,7 +11,7 @@ publish.workspace = true
 # `tauri-runtime-blitz` for the same types would build a browser engine to send
 # a wheel event. `cargo tree -p blitz-bench` is the check.
 [dependencies]
-blitz-control-protocol = { git = "https://github.com/pathscale/tauri-runtime-blitz.git", rev = "070ab3a2fd460d7c9b2f3f341e7d6c50af669682" }
+blitz-control-protocol = { git = "https://github.com/pathscale/tauri-runtime-blitz.git", rev = "9edbec23ce4ca9bcb052a364577fd9a736fd81a3" }
 # The same framing the server uses, from the same crate, for the same reason as
 # the protocol types: a hand-rolled length-prefix reader is how the Python
 # client hung on its first malformed frame.
