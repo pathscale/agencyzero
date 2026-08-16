@@ -1,4 +1,4 @@
-import { Checkbox, Input, Select, Slider, Switch, Textarea } from "@pathscale/ui";
+import { Checkbox, Flex, Input, Select, Slider, Switch, Textarea } from "@pathscale/ui";
 import {
   createContext,
   createEffect,
@@ -1097,7 +1097,7 @@ export function SettingsTab(): JSX.Element {
                           : tx("recommended, and not created yet")
                       }
                     >
-                      <div class="flex items-center gap-2">
+                      <Flex align="center" gap="sm">
                         <span class="max-w-[280px] truncate font-mono text-[11.5px] text-az-body">
                           {root().path}
                         </span>
@@ -1110,7 +1110,7 @@ export function SettingsTab(): JSX.Element {
                             {tx("Create it")}
                           </Button>
                         </Show>
-                      </div>
+                      </Flex>
                     </Row>
                   )}
                 </Show>
@@ -1152,7 +1152,7 @@ export function SettingsTab(): JSX.Element {
                         <TableSizes />
                       </Row>
                       <Row label={tx("Change it")}>
-                        <div class="flex items-center gap-2">
+                        <Flex align="center" gap="sm">
                           <Button
                             type="button"
                             disabled={!location().isEditable || !isLive("chooseDataDirectory")}
@@ -1176,7 +1176,7 @@ export function SettingsTab(): JSX.Element {
                           >
                             {tx("Use the default")}
                           </Button>
-                        </div>
+                        </Flex>
                       </Row>
                       <Row
                         label={tx("Backups")}
@@ -1684,7 +1684,7 @@ function StudySettings(): JSX.Element {
         }
         isLast
       >
-        <div class="flex items-center gap-2">
+        <Flex align="center" gap="sm">
           <Button
             type="button"
             disabled={busy()}
@@ -1706,7 +1706,7 @@ function StudySettings(): JSX.Element {
           >
             {confirmingDelete() ? tx("Confirm delete") : tx("Delete data")}
           </Button>
-        </div>
+        </Flex>
       </Row>
     </Section>
   );
@@ -1822,7 +1822,7 @@ function ExperimentalSettings(): JSX.Element {
         }
         isLast
       >
-        <div class="flex items-center gap-2">
+        <Flex align="center" gap="sm">
           <Show when={note()}>
             {(message) => <span class="max-w-[230px] text-[11px] text-error">{message()}</span>}
           </Show>
@@ -1834,7 +1834,7 @@ function ExperimentalSettings(): JSX.Element {
           >
             {busy() ? tx("Refreshing…") : tx("Refresh")}
           </Button>
-        </div>
+        </Flex>
       </Row>
     </Section>
   );
@@ -1975,7 +1975,7 @@ function StoreBackupControls(): JSX.Element {
           {error()}
         </span>
       </Show>
-      <div class="flex items-center gap-2">
+      <Flex align="center" gap="sm">
         <Button
           type="button"
           disabled={!isLive("createStoreBackup")}
@@ -2015,7 +2015,7 @@ function StoreBackupControls(): JSX.Element {
             {tx("Cancel")}
           </Button>
         </Show>
-      </div>
+      </Flex>
     </div>
   );
 }
@@ -2155,7 +2155,7 @@ function SourceActions(): JSX.Element {
   const { actions } = useWorkspace();
   const openRepository = () => void actions.openExternal(AGENCYZERO_REPOSITORY);
   return (
-    <div class="flex items-center gap-2">
+    <Flex align="center" gap="sm">
       <Button
         type="button"
         onClick={openRepository}
@@ -2170,7 +2170,7 @@ function SourceActions(): JSX.Element {
       >
         {tx("Star on GitHub")}
       </Button>
-    </div>
+    </Flex>
   );
 }
 
@@ -2209,7 +2209,7 @@ function UpdateControl(): JSX.Element {
   };
 
   return (
-    <div class="flex items-center gap-2">
+    <Flex align="center" gap="sm">
       <Show when={note()}>
         {(text) => <span class="max-w-[220px] truncate text-[11.5px] text-az-muted">{text()}</span>}
       </Show>
@@ -2242,7 +2242,7 @@ function UpdateControl(): JSX.Element {
           </>
         )}
       </Show>
-    </div>
+    </Flex>
   );
 }
 
@@ -2536,7 +2536,7 @@ function InternalPerformance(): JSX.Element {
         label={tx("Measurements")}
         hint={tx("since this window opened, or since the last reset")}
       >
-        <div class="flex items-center gap-2">
+        <Flex align="center" gap="sm">
           <Button type="button" class="az-ui-button-neutral" onClick={refresh}>
             {tx("Refresh")}
           </Button>
@@ -2550,7 +2550,7 @@ function InternalPerformance(): JSX.Element {
           >
             {tx("Reset")}
           </Button>
-        </div>
+        </Flex>
       </Row>
       {/*
         Stacked: a full-width table beside a `flex-1` label squeezes the label to

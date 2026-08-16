@@ -1,4 +1,4 @@
-import { Dialog, Select } from "@pathscale/ui";
+import { Dialog, Flex, Select } from "@pathscale/ui";
 import { createEffect, createMemo, createSignal, For, type JSX, Show } from "solid-js";
 import { Button } from "~/components/Button";
 import { Icon, type IconProps } from "~/components/Icon";
@@ -264,7 +264,7 @@ export function WelcomeFlow(): JSX.Element {
                   <code class="max-w-full truncate font-mono text-[11px] text-az-body">
                     {state.workspaceRoot?.path ?? tx("Not available")}
                   </code>
-                  <div class="flex items-center gap-2">
+                  <Flex align="center" gap="sm">
                     <Button
                       type="button"
                       disabled={busy()}
@@ -283,7 +283,7 @@ export function WelcomeFlow(): JSX.Element {
                         {tx("Create recommended folder")}
                       </Button>
                     </Show>
-                  </div>
+                  </Flex>
                 </div>
               </SetupRow>
               <div class="mt-4 flex items-center justify-between gap-5 rounded-xl border border-primary/22 bg-primary/7 px-4 py-3.5">
@@ -649,7 +649,7 @@ export function WelcomeFlow(): JSX.Element {
           </Dialog.Body>
 
           <Dialog.Footer class="justify-between gap-4 border-az-hairline-soft border-t px-6 py-4">
-            <div class="flex items-center gap-2">
+            <Flex align="center" gap="sm">
               <Button
                 type="button"
                 disabled={busy() || step() === 0}
@@ -666,7 +666,7 @@ export function WelcomeFlow(): JSX.Element {
               >
                 {isReplay() ? tx("Close") : tx("Finish later")}
               </Button>
-            </div>
+            </Flex>
             <Button
               type="button"
               disabled={busy() || !canContinue()}

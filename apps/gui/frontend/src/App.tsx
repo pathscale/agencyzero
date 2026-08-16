@@ -1,3 +1,4 @@
+import { Flex } from "@pathscale/ui";
 import {
   createEffect,
   createMemo,
@@ -278,7 +279,7 @@ export function BootFailed(props: {
           {props.message}
         </p>
       </div>
-      <div class="flex items-center gap-2">
+      <Flex align="center" gap="sm">
         <Button
           type="button"
           onClick={props.onRetry}
@@ -293,7 +294,7 @@ export function BootFailed(props: {
         >
           {tx("Open Settings")}
         </Button>
-      </div>
+      </Flex>
     </div>
   );
 }

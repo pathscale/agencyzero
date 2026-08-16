@@ -1,4 +1,4 @@
-import { Radio } from "@pathscale/ui";
+import { Flex, Radio } from "@pathscale/ui";
 import { createEffect, For, type JSX, Show } from "solid-js";
 import { Button } from "~/components/Button";
 import {
@@ -239,7 +239,7 @@ function AccentSelector(props: {
         </span>
         <span class="text-[11px] text-az-faint">{t("appearance.accentColourHint")}</span>
       </div>
-      <div class="flex items-center gap-2">
+      <Flex align="center" gap="sm">
         <For each={options()}>
           {(option, index) => {
             const selected = () => props.accent === option.value;
@@ -264,7 +264,7 @@ function AccentSelector(props: {
             );
           }}
         </For>
-      </div>
+      </Flex>
     </div>
   );
 }
@@ -298,7 +298,7 @@ function Axis(props: {
         <span class="text-[11px] text-az-faint">{props.hint}</span>
         {props.action}
       </div>
-      <div class="flex items-center gap-2">
+      <Flex align="center" gap="sm">
         <For each={props.stops}>
           {(stop, index) => (
             <Button
@@ -326,7 +326,7 @@ function Axis(props: {
             </Button>
           )}
         </For>
-      </div>
+      </Flex>
     </div>
   );
 }
