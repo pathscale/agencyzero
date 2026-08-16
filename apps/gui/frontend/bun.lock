@@ -6,7 +6,7 @@
       "name": "az-gui-frontend",
       "dependencies": {
         "@iconify/tailwind4": "^1.0.6",
-        "@pathscale/ui": "^2.2.2",
+        "@pathscale/ui": "^2.5.0",
         "@tauri-apps/api": "^2.1.1",
         "clsx": "^2.1.1",
         "popmotion": "^11.0.5",
@@ -192,7 +192,7 @@
 
     "@oxc-project/types": ["@oxc-project/types@0.139.0", "", {}, "sha512-r9gHphtCs+1M7J0pw6Sn/hh/Wpa/iQrOOkrNAlVLF/gHq+/CJmHIWKKUUhdWjcD6CIa8idarspCsASiXCXvFUw=="],
 
-    "@pathscale/ui": ["@pathscale/ui@2.2.2", "", { "dependencies": { "@tanstack/solid-virtual": "^3.13.27", "clsx": "^2.1.1", "tailwind-merge": "^3.6.0" }, "peerDependencies": { "@solid-primitives/event-listener": "^2.3.0", "@solid-primitives/intersection-observer": "^2.1.3", "@solid-primitives/keyboard": "^1.2.5", "@solid-primitives/media": "^2.2.5", "@solid-primitives/props": "^3.1.8", "@solid-primitives/resize-observer": "^2.0.22", "@solid-primitives/scheduled": "^1.4.1", "@solid-primitives/scroll": "^2.0.20", "@solid-primitives/storage": "^2.1.1", "@solid-primitives/utils": "^6.2.1", "@standard-schema/spec": "^1.0.0", "@tanstack/solid-form": "^1.29.0", "@tanstack/solid-table": "^8.0.0", "popmotion": "^11.0.5", "solid-js": "^1.9", "solid-layouts": "^0.1.3" }, "optionalPeers": ["@standard-schema/spec", "popmotion"] }, "sha512-Lv8wVYlnWe1+ggI89NGnOHs3QXt0H1rbxD+hCdjEaRVeOMGbKzxXbex8OK5KpLY3dWV9cA0Q0oxY8Q3Y7eFVHQ=="],
+    "@pathscale/ui": ["@pathscale/ui@2.5.0", "", { "dependencies": { "@tanstack/solid-virtual": "^3.13.27", "clsx": "^2.1.1", "tailwind-merge": "^3.6.0" }, "peerDependencies": { "@solid-primitives/event-listener": "^2.3.0", "@solid-primitives/intersection-observer": "^2.1.3", "@solid-primitives/keyboard": "^1.2.5", "@solid-primitives/media": "^2.2.5", "@solid-primitives/props": "^3.1.8", "@solid-primitives/resize-observer": "^2.0.22", "@solid-primitives/scheduled": "^1.4.1", "@solid-primitives/scroll": "^2.0.20", "@solid-primitives/storage": "^2.1.1", "@solid-primitives/utils": "^6.2.1", "@standard-schema/spec": "^1.0.0", "@tanstack/solid-form": "^1.29.0", "@tanstack/solid-table": "^8.0.0", "popmotion": "^11.0.5", "solid-js": "^1.9", "solid-layouts": "^0.1.3" }, "optionalPeers": ["@standard-schema/spec", "popmotion"] }, "sha512-CjtKk9nFZRlKjQ15W6F+6aUm77Te5XN5JnxAsNIgSTPL7Owk/NiMl4sEc2msxflzv5wCTOdeJIXvJqph0BfbIg=="],
 
     "@rolldown/binding-android-arm64": ["@rolldown/binding-android-arm64@1.1.5", "", { "os": "android", "cpu": "arm64" }, "sha512-lZg8fqIv2v7FF237bwMgzGZEJvGL79/s5knJ/i6FmsGF4XXlzccZ4jb+TrFIxtSSxFtIpdsgrPZeMk1I9AFcyQ=="],
 
