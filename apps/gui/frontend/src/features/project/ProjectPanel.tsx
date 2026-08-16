@@ -1,4 +1,4 @@
-import { Checkbox, Input, Slider, Switch, Textarea } from "@pathscale/ui";
+import { Checkbox, Flex, Input, Slider, Switch, Textarea } from "@pathscale/ui";
 import { createEffect, createMemo, createSignal, For, type JSX, Show } from "solid-js";
 import { NOTES_BUDGET } from "~/api/client";
 import { AppModal, type ModalAnchor } from "~/components/AppModal";
@@ -908,7 +908,7 @@ function ApprovalRules(props: { projectId: string }): JSX.Element {
   return (
     <Show when={rules().length > 0}>
       <div class="my-0.5 h-px bg-az-hairline-soft" />
-      <div class="flex items-center gap-2">
+      <Flex align="center" gap="sm">
         <span class="min-w-0 flex-1 text-[11.5px] text-az-muted">
           {tx("Remembered approvals · auto-allowed")}
         </span>
@@ -919,7 +919,7 @@ function ApprovalRules(props: { projectId: string }): JSX.Element {
         >
           {tx("Forget all")}
         </Button>
-      </div>
+      </Flex>
       <For each={rules()}>
         {(rule) => (
           <code class="block truncate rounded-md bg-base-300 px-2 py-1 font-mono text-[11px] text-az-body">
@@ -2105,7 +2105,7 @@ function NotesEditor(props: { projectId: string }): JSX.Element {
         disabled={!isLive("setProjectNotes")}
         class="az-scroll w-full resize-y rounded-lg border border-az-hairline-strong bg-base-300 p-2.5 font-mono text-[11.5px] text-az-body leading-[1.6] placeholder:text-az-faint focus:border-primary/40 focus:outline-none disabled:opacity-50"
       />
-      <div class="flex items-center gap-2">
+      <Flex align="center" gap="sm">
         <span
           class={`text-[11px] ${remaining() < 0 ? "text-error" : "text-az-faint"}`}
           title={tx(
@@ -2160,7 +2160,7 @@ function NotesEditor(props: { projectId: string }): JSX.Element {
         >
           {tx("Forget")}
         </Button>
-      </div>
+      </Flex>
 
       <Show when={status() === "error"}>
         <p role="alert" class="text-[11.5px] text-error">

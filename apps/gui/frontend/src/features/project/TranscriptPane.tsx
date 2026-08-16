@@ -1,4 +1,4 @@
-import { Empty } from "@pathscale/ui";
+import { Empty, Flex } from "@pathscale/ui";
 import {
   createEffect,
   createMemo,
@@ -1380,7 +1380,7 @@ function AgentBubble(props: {
        * different places and the eye had to go looking. A timestamp is what
        * the message turned out to be, not an announcement before it.
        */}
-      <div class="flex items-center gap-2">
+      <Flex align="center" gap="sm">
         <Show when={props.turn}>
           {(turn) => (
             <span class="shrink-0 text-[10.5px] text-az-faint">
@@ -1390,7 +1390,7 @@ function AgentBubble(props: {
         </Show>
         <MessageTime at={props.message.createdAt} />
         <MessageCost message={props.message} />
-      </div>
+      </Flex>
     </div>
   );
 }
@@ -1653,7 +1653,7 @@ export function ReviewNote(props: { message: Message }): JSX.Element {
       data-selectable
       class={`group ${AGENT_BUBBLE} ${failed() ? "border-error/40" : "border-info/30"}`}
     >
-      <div class="flex items-center gap-2">
+      <Flex align="center" gap="sm">
         <Icon
           name="messages-square"
           class={`shrink-0 text-[14px] ${failed() ? "text-error" : "text-info"}`}
@@ -1681,7 +1681,7 @@ export function ReviewNote(props: { message: Message }): JSX.Element {
         <span class="ml-auto shrink-0">
           <CopyMessageButton body={props.message.body} />
         </span>
-      </div>
+      </Flex>
       <MessageBody body={props.message.body} class={AGENT_TEXT} />
       <MessageTime at={props.message.createdAt} />
     </div>
