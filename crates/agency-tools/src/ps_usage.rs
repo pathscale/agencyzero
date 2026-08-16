@@ -62,6 +62,23 @@ const OUTCOME_APPLIED: &str = "applied";
 const OUTCOME_REFUSED: &str = "refused";
 const OUTCOME_OBSERVED: &str = "observed";
 
+/// The stage carrying a directive's terminal result.
+///
+/// One directive writes several rows: `parsed` when it was recognised, then
+/// intermediate stages such as `queued`, then this one. Counting outcomes on
+/// "any row that is not `parsed`" tallies the same directive more than once,
+/// which is how the outcome total came to be an exact multiple of the event
+/// total.
+const STAGE_COMPLETED: &str = "completed";
+
+/// The unit every count in this report is expressed in.
+///
+/// One parsed directive is one event. The surface table, the verb table, the
+/// per-day table and the outcome table all count that same unit, so their
+/// totals are comparable and their sums agree. A row at any other stage is
+/// bookkeeping about an event already counted, never a new one.
+const EVENT_STAGE: &str = STAGE_PARSED;
+
 /// Which declared surface a verb belongs to.
 ///
 /// Derived from the verb rather than stored, because the verb is what the app
@@ -274,9 +291,11 @@ pub fn build(rows: &[StudyEventRow], start: &str, end: &str) -> eyre::Result<Rep
             continue;
         }
         sessions.insert(row.study_id.clone());
-        *days.entry(day_of(&row.at).to_owned()).or_default() += 1;
 
-        if row.stage == STAGE_PARSED {
+        if row.stage == EVENT_STAGE {
+            // The one place a row becomes an event. Every table below counts
+            // this same unit, so their totals reconcile.
+            *days.entry(day_of(&row.at).to_owned()).or_default() += 1;
             *surfaces.entry(surface_of(&row.operation)).or_default() += 1;
             *verbs.entry(row.operation.clone()).or_default() += 1;
             if !row.interaction_id.is_empty() {
@@ -285,7 +304,11 @@ pub fn build(rows: &[StudyEventRow], start: &str, end: &str) -> eyre::Result<Rep
             continue;
         }
 
-        // Terminal record for a directive already counted at parse time.
+        // Intermediate stages are bookkeeping about an event already counted.
+        // Only the terminal stage carries the result.
+        if row.stage != STAGE_COMPLETED {
+            continue;
+        }
         if !row.interaction_id.is_empty() {
             terminal.insert(row.interaction_id.clone());
         }
@@ -635,6 +658,20 @@ mod tests {
                 "",
                 "{}",
             ),
+            // The intermediate stage a real directive also writes. Counting it
+            // as an event, or as an outcome, is what inflated both totals.
+            row(
+                "2026-08-10T10:00:01Z",
+                "study-a",
+                "t2",
+                "i3",
+                PATHWAY_DIRECTIVE,
+                "pr.link",
+                "queued",
+                OUTCOME_OBSERVED,
+                "",
+                "{}",
+            ),
             row(
                 "2026-08-10T10:00:02Z",
                 "study-a",
@@ -762,6 +799,40 @@ mod tests {
         assert_eq!(states, 2, "the row exactly at the end is included");
     }
 
+    /// Every table counts the same unit, so every total is the same number.
+    ///
+    /// This is the assertion that would have caught the outcome total coming
+    /// back at twice the event total and the per-day total at three times it:
+    /// a directive writes a `parsed`, a `queued` and a `completed` row, and
+    /// tables that disagreed about which of those is an event disagreed about
+    /// how many there were.
+    #[test]
+    fn every_table_totals_the_same_number_of_events() {
+        let report = build(&fixture(), START, END).expect("fixture builds");
+        let surfaces: usize = report.surfaces.iter().map(|entry| entry.events).sum();
+        let verbs: usize = report.verbs.iter().map(|entry| entry.events).sum();
+        let per_day: usize = report
+            .sustained
+            .events_per_day
+            .iter()
+            .map(|entry| entry.events)
+            .sum();
+
+        assert_eq!(surfaces, verbs, "surface and verb tables disagree");
+        assert_eq!(per_day, verbs, "per-day table counts a different unit");
+
+        // Outcomes are per terminal record, which is at most one per event.
+        // Equal would be wrong to assert: a directive that never completed has
+        // no outcome, and that gap is reported rather than hidden.
+        let outcomes =
+            report.outcomes.honored + report.outcomes.normalized + report.outcomes.failed;
+        assert_eq!(
+            outcomes + report.outcomes.events_without_outcome,
+            verbs,
+            "outcomes plus unresolved events must account for every event"
+        );
+    }
+
     #[test]
     fn surfaces_split_by_verb_and_share_totals_to_a_hundred() {
         let report = build(&fixture(), START, END).expect("fixture builds");
@@ -818,7 +889,10 @@ mod tests {
         assert_eq!(report.sustained.distinct_sessions, 2);
         assert_eq!(report.sustained.events_per_day.len(), 2);
         assert_eq!(report.sustained.events_per_day[0].day, "2026-08-10");
-        assert_eq!(report.sustained.events_per_day[0].events, 6);
+        // Three events on that day: items.add, ask and pr.link. The `queued`
+        // and `completed` rows belong to those same three and are not events
+        // of their own.
+        assert_eq!(report.sustained.events_per_day[0].events, 3);
     }
 
     #[test]
