@@ -323,7 +323,11 @@ pub fn build(rows: &[StudyEventRow], start: &str, end: &str) -> eyre::Result<Rep
         .collect();
     // Descending by count, then by name, so equal counts still order the same
     // way on every run.
-    surface_rows.sort_by(|a, b| b.events.cmp(&a.events).then_with(|| a.surface.cmp(&b.surface)));
+    surface_rows.sort_by(|a, b| {
+        b.events
+            .cmp(&a.events)
+            .then_with(|| a.surface.cmp(&b.surface))
+    });
 
     let mut verb_rows: Vec<VerbCount> = verbs
         .into_iter()
@@ -463,10 +467,7 @@ pub fn render(report: &Report) -> String {
         report.outcomes.failed
     ));
     for entry in &report.outcomes.failed_by_code {
-        out.push_str(&format!(
-            "    {:<24} {:>6}\n",
-            entry.code, entry.events
-        ));
+        out.push_str(&format!("    {:<24} {:>6}\n", entry.code, entry.events));
     }
     out.push_str(&format!(
         "  without an outcome          {:>6}{}\n\n",
@@ -549,25 +550,179 @@ mod tests {
     fn fixture() -> Vec<StudyEventRow> {
         vec![
             // Turn 1: person wrote a directive; agent emitted two.
-            row("2026-08-10T09:00:00Z", "study-a", "t1", "", PATHWAY_TURN, OPERATION_TURN, "submitted", OUTCOME_OBSERVED, "", r#"{"userAuthoredPs":true}"#),
-            row("2026-08-10T09:00:01Z", "study-a", "t1", "i1", PATHWAY_DIRECTIVE, "items.add", STAGE_PARSED, OUTCOME_OBSERVED, "", "{}"),
-            row("2026-08-10T09:00:02Z", "study-a", "t1", "i1", PATHWAY_DIRECTIVE, "items.add", "completed", OUTCOME_APPLIED, "", "{}"),
-            row("2026-08-10T09:00:03Z", "study-a", "t1", "i2", PATHWAY_DIRECTIVE, "ask", STAGE_PARSED, OUTCOME_OBSERVED, "", "{}"),
-            row("2026-08-10T09:00:04Z", "study-a", "t1", "i2", PATHWAY_DIRECTIVE, "ask", "completed", OUTCOME_APPLIED, "", "{}"),
+            row(
+                "2026-08-10T09:00:00Z",
+                "study-a",
+                "t1",
+                "",
+                PATHWAY_TURN,
+                OPERATION_TURN,
+                "submitted",
+                OUTCOME_OBSERVED,
+                "",
+                r#"{"userAuthoredPs":true}"#,
+            ),
+            row(
+                "2026-08-10T09:00:01Z",
+                "study-a",
+                "t1",
+                "i1",
+                PATHWAY_DIRECTIVE,
+                "items.add",
+                STAGE_PARSED,
+                OUTCOME_OBSERVED,
+                "",
+                "{}",
+            ),
+            row(
+                "2026-08-10T09:00:02Z",
+                "study-a",
+                "t1",
+                "i1",
+                PATHWAY_DIRECTIVE,
+                "items.add",
+                "completed",
+                OUTCOME_APPLIED,
+                "",
+                "{}",
+            ),
+            row(
+                "2026-08-10T09:00:03Z",
+                "study-a",
+                "t1",
+                "i2",
+                PATHWAY_DIRECTIVE,
+                "ask",
+                STAGE_PARSED,
+                OUTCOME_OBSERVED,
+                "",
+                "{}",
+            ),
+            row(
+                "2026-08-10T09:00:04Z",
+                "study-a",
+                "t1",
+                "i2",
+                PATHWAY_DIRECTIVE,
+                "ask",
+                "completed",
+                OUTCOME_APPLIED,
+                "",
+                "{}",
+            ),
             // Turn 2: no directive from the person, one from the agent that failed.
-            row("2026-08-10T10:00:00Z", "study-a", "t2", "", PATHWAY_TURN, OPERATION_TURN, "submitted", OUTCOME_OBSERVED, "", r#"{"userAuthoredPs":false}"#),
-            row("2026-08-10T10:00:01Z", "study-a", "t2", "i3", PATHWAY_DIRECTIVE, "pr.link", STAGE_PARSED, OUTCOME_OBSERVED, "", "{}"),
-            row("2026-08-10T10:00:02Z", "study-a", "t2", "i3", PATHWAY_DIRECTIVE, "pr.link", "completed", OUTCOME_REFUSED, "unknown_item", "{}"),
+            row(
+                "2026-08-10T10:00:00Z",
+                "study-a",
+                "t2",
+                "",
+                PATHWAY_TURN,
+                OPERATION_TURN,
+                "submitted",
+                OUTCOME_OBSERVED,
+                "",
+                r#"{"userAuthoredPs":false}"#,
+            ),
+            row(
+                "2026-08-10T10:00:01Z",
+                "study-a",
+                "t2",
+                "i3",
+                PATHWAY_DIRECTIVE,
+                "pr.link",
+                STAGE_PARSED,
+                OUTCOME_OBSERVED,
+                "",
+                "{}",
+            ),
+            row(
+                "2026-08-10T10:00:02Z",
+                "study-a",
+                "t2",
+                "i3",
+                PATHWAY_DIRECTIVE,
+                "pr.link",
+                "completed",
+                OUTCOME_REFUSED,
+                "unknown_item",
+                "{}",
+            ),
             // Turn 3, next day, different session: no directive either way.
-            row("2026-08-11T08:00:00Z", "study-b", "t3", "", PATHWAY_TURN, OPERATION_TURN, "submitted", OUTCOME_OBSERVED, "", r#"{"userAuthoredPs":false}"#),
+            row(
+                "2026-08-11T08:00:00Z",
+                "study-b",
+                "t3",
+                "",
+                PATHWAY_TURN,
+                OPERATION_TURN,
+                "submitted",
+                OUTCOME_OBSERVED,
+                "",
+                r#"{"userAuthoredPs":false}"#,
+            ),
             // Turn 4: a parse with no terminal record, which must surface.
-            row("2026-08-11T09:00:00Z", "study-b", "t4", "", PATHWAY_TURN, OPERATION_TURN, "submitted", OUTCOME_OBSERVED, "", r#"{"userAuthoredPs":false}"#),
-            row("2026-08-11T09:00:01Z", "study-b", "t4", "i4", PATHWAY_DIRECTIVE, "items.state", STAGE_PARSED, OUTCOME_OBSERVED, "", "{}"),
+            row(
+                "2026-08-11T09:00:00Z",
+                "study-b",
+                "t4",
+                "",
+                PATHWAY_TURN,
+                OPERATION_TURN,
+                "submitted",
+                OUTCOME_OBSERVED,
+                "",
+                r#"{"userAuthoredPs":false}"#,
+            ),
+            row(
+                "2026-08-11T09:00:01Z",
+                "study-b",
+                "t4",
+                "i4",
+                PATHWAY_DIRECTIVE,
+                "items.state",
+                STAGE_PARSED,
+                OUTCOME_OBSERVED,
+                "",
+                "{}",
+            ),
             // Exactly at the end of the window: included.
-            row("2026-08-11T23:59:59Z", "study-b", "t5", "i5", PATHWAY_DIRECTIVE, "items.state", STAGE_PARSED, OUTCOME_OBSERVED, "", "{}"),
-            row("2026-08-11T23:59:59Z", "study-b", "t5", "i5", PATHWAY_DIRECTIVE, "items.state", "completed", OUTCOME_APPLIED, "", "{}"),
+            row(
+                "2026-08-11T23:59:59Z",
+                "study-b",
+                "t5",
+                "i5",
+                PATHWAY_DIRECTIVE,
+                "items.state",
+                STAGE_PARSED,
+                OUTCOME_OBSERVED,
+                "",
+                "{}",
+            ),
+            row(
+                "2026-08-11T23:59:59Z",
+                "study-b",
+                "t5",
+                "i5",
+                PATHWAY_DIRECTIVE,
+                "items.state",
+                "completed",
+                OUTCOME_APPLIED,
+                "",
+                "{}",
+            ),
             // One second past the end: excluded.
-            row("2026-08-12T00:00:00Z", "study-c", "t6", "i6", PATHWAY_DIRECTIVE, "items.add", STAGE_PARSED, OUTCOME_OBSERVED, "", "{}"),
+            row(
+                "2026-08-12T00:00:00Z",
+                "study-c",
+                "t6",
+                "i6",
+                PATHWAY_DIRECTIVE,
+                "items.add",
+                STAGE_PARSED,
+                OUTCOME_OBSERVED,
+                "",
+                "{}",
+            ),
         ]
     }
 
@@ -644,7 +799,10 @@ mod tests {
     fn outcomes_split_by_bucket_and_missing_terminals_are_reported() {
         let report = build(&fixture(), START, END).expect("fixture builds");
         assert_eq!(report.outcomes.honored, 3);
-        assert_eq!(report.outcomes.normalized, 0, "the app has no normalized state");
+        assert_eq!(
+            report.outcomes.normalized, 0,
+            "the app has no normalized state"
+        );
         assert_eq!(report.outcomes.failed, 1);
         assert_eq!(report.outcomes.failed_by_code.len(), 1);
         assert_eq!(report.outcomes.failed_by_code[0].code, "unknown_item");
