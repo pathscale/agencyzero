@@ -538,6 +538,89 @@
     box-shadow: 0 8px 32px rgb(0 0 0 / var(--az-glass-shadow, 0));
   }
 
+  /*
+   * Real glass, from the library's tokens.
+   *
+   * `@pathscale/ui` derives twenty-five `--glass-*` properties from three
+   * numbers, and every one below is read with the fallback the library's own
+   * component CSS uses. That is load-bearing rather than tidy: an undefined
+   * custom property does not fall back to its initial value, CSS drops the
+   * whole declaration, so a bare read here would give a panel with no
+   * background at all rather than a plainer one.
+   *
+   * It replaces `.az-panel`'s opaque fill rather than sitting over it, because
+   * a backdrop filter behind an opaque background blurs nothing. The hue ladder
+   * still supplies the tint: `az-badge` is a lighter rung of the same hue, and
+   * a white film on a dark surface reads as grey haze rather than as material.
+   *
+   * Blur reaches the screen now. The vello backend that ships gained a real
+   * backdrop pass, so `backdrop-filter` is no longer a property the renderer
+   * accepts and discards.
+   */
+  .az-glass {
+    background-color: color-mix(
+      in oklab,
+      var(--color-az-badge),
+      transparent calc(100% - var(--glass-app-surface-opacity, 38%))
+    );
+    outline-color: color-mix(
+      in oklab,
+      var(--color-primary),
+      transparent calc(100% - var(--glass-app-border-opacity, 30%))
+    );
+    box-shadow:
+      var(--glass-shadow-depth, 0 8px 32px rgb(0 0 0 / 10%)),
+      inset 0 1px 0
+      color-mix(
+        in oklab,
+        var(--color-az-badge),
+        transparent calc(100% - var(--glass-highlight-opacity, 20%))
+      );
+    backdrop-filter: blur(var(--glass-blur, 9px)) saturate(var(--glass-saturation, 1.2))
+      brightness(var(--glass-brightness, 1));
+    -webkit-backdrop-filter: blur(var(--glass-blur, 9px)) saturate(var(--glass-saturation, 1.2))
+      brightness(var(--glass-brightness, 1));
+  }
+
+  /*
+   * Nested glass is one pane, not two.
+   *
+   * A blurred surface inside another blurred surface reads the already-blurred
+   * pixels and smears them again, which is muddy rather than deeper. The same
+   * rule the library applies to its own nested surfaces.
+   */
+  .az-glass .az-glass {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+
+  /*
+   * No backdrop support, or a reader who asked for less transparency: keep the
+   * surface legible by making it more opaque rather than leaving it a tint over
+   * whatever is behind it.
+   */
+  @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+    .az-glass {
+      background-color: color-mix(
+        in oklab,
+        var(--color-az-badge),
+        transparent calc(100% - var(--glass-fallback-background-opacity, 78%))
+      );
+    }
+  }
+
+  @media (prefers-reduced-transparency: reduce) {
+    .az-glass {
+      background-color: color-mix(
+        in oklab,
+        var(--color-az-badge),
+        transparent calc(100% - var(--glass-fallback-background-opacity, 78%))
+      );
+      backdrop-filter: none;
+      -webkit-backdrop-filter: none;
+    }
+  }
+
   @media (prefers-reduced-motion: reduce) {
     /* biome-ignore lint/style/noDescendingSpecificity: this sets animation and
        transition only, and shares no property with the selection rules above

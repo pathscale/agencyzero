@@ -700,6 +700,24 @@ export interface ThemeSettings {
   glassBorder?: number;
   /** Panel drop shadow, 0 to 1. 0 is none. */
   glassShadow?: number;
+  /*
+   * The library's three glass numbers, which derive twenty-five `--glass-*`
+   * tokens between them. `@pathscale/ui`'s `GLASS_LIMITS` owns the ranges and
+   * `GLASS_DEFAULTS` the values, so nothing here restates either: an axis left
+   * undefined is the library's default for the current colour mode.
+   *
+   * These sit beside the three above rather than replacing them because they
+   * answer different questions. `glassLift`/`glassBorder`/`glassShadow` style
+   * AgencyZero's own opaque `.az-panel` on the hue ladder; these style anything
+   * the library renders with `material="glass"`, which is what the app is
+   * moving to.
+   */
+  /** Backdrop blur radius in pixels, 0 to 50. */
+  glassBlur?: number;
+  /** How much a glass surface asserts itself: tint, border, highlight. 0 to 0.4. */
+  glassRefraction?: number;
+  /** How far a glass surface sits off the page: glow, sheen, shadow. 0 to 30. */
+  glassDepth?: number;
   /**
    * How much of the surface colour is mixed into every surface, as a percentage.
    * Ignored while `surface` is empty.
