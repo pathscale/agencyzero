@@ -137,6 +137,28 @@ paraphrases were how the old checkbox contract created near-duplicates. Full con
 - **Name the branch when pushing**: `git push origin branch-name`.
 - **Branch naming**: `fix/description` or `feat/description`.
 - **Force-push your own branch freely**, with `--force-with-lease`. Never the default branch.
+- **Never create merge commits — this is a hard ban.** Not locally, not to refresh a
+  branch, not to land a pull request. If your branch has fallen behind, **rebase** it onto
+  the moved base (`git rebase origin/master`, then `--force-with-lease`). `git merge master`
+  into a feature branch is not an acceptable shortcut: it adds a commit whose only content
+  is the fact that you were behind, and it turns a readable line of work into a diamond.
+- **Rebase is the default everywhere** — refreshing a branch, and landing a pull request.
+  Individual commits carry information: what was tried, in what order, and why. A rebase
+  keeps that granularity on the base branch, so write commits worth keeping and land them
+  intact.
+- **Landing a pull request means rebase, then fast-forward.** `git rebase origin/master`
+  on the branch, then `git merge --ff-only <branch>` on the base, then push. Those two
+  commands are the whole job, so don't reach for `gh pr merge`: its default writes a
+  merge commit. Rebasing rewrites the commit SHAs, so GitHub cannot always detect that
+  a branch landed — close such pull requests explicitly and say why.
+- **Don't delete remote branches by hand.** Once the work is on the default branch it is
+  reaped automatically. Deleting your own local copy is fine.
+- **Squash is acceptable** where it genuinely makes things easier or is the more
+  appropriate shape for the branch — one logical change scattered across fixup commits, or
+  a long branch whose intermediate states aren't worth preserving. It is a judgement call,
+  not a violation. Merging is the only thing that is never allowed.
+- **Delete what is deprecated.** A superseded file, flag, branch or code path gets removed
+  in the change that supersedes it, not left behind with a deprecation note.
 
 ## Guardrails
 
