@@ -72,7 +72,7 @@ dependencies = [
 
 [[package]]
 name = "agency-tools"
-version = "0.8.6"
+version = "0.8.7"
 dependencies = [
  "derive_more 2.1.1",
  "dirs",
@@ -364,11 +364,11 @@ checksum = "f2032f911046de80f0a198e0901378627c33f59ea0ac00e363d481118bd70a53"
 
 [[package]]
 name = "az-core"
-version = "0.8.6"
+version = "0.8.7"
 
 [[package]]
 name = "az-gui"
-version = "0.8.6"
+version = "0.8.7"
 dependencies = [
  "agency-proxy-client",
  "agency-proxy-protocol",
@@ -407,7 +407,7 @@ dependencies = [
 
 [[package]]
 name = "az-mcp-proxy"
-version = "0.8.6"
+version = "0.8.7"
 dependencies = [
  "az-core",
 ]
@@ -498,9 +498,9 @@ dependencies = [
 
 [[package]]
 name = "blitz-bench"
-version = "0.8.6"
+version = "0.8.7"
 dependencies = [
- "blitz-control-protocol 0.1.0 (git+https://github.com/pathscale/tauri-runtime-blitz.git?rev=9edbec23ce4ca9bcb052a364577fd9a736fd81a3)",
+ "blitz-control-protocol",
  "endpoint-libs",
  "eyre",
  "serde",
@@ -512,16 +512,6 @@ dependencies = [
 name = "blitz-control-protocol"
 version = "0.1.0"
 source = "git+https://github.com/pathscale/tauri-runtime-blitz.git?rev=71d7bd897fc936b54fc4731e56600b9497e402ad#71d7bd897fc936b54fc4731e56600b9497e402ad"
-dependencies = [
- "endpoint-libs",
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "blitz-control-protocol"
-version = "0.1.0"
-source = "git+https://github.com/pathscale/tauri-runtime-blitz.git?rev=9edbec23ce4ca9bcb052a364577fd9a736fd81a3#9edbec23ce4ca9bcb052a364577fd9a736fd81a3"
 dependencies = [
  "endpoint-libs",
  "serde",
@@ -6628,7 +6618,7 @@ name = "tauri-runtime-blitz"
 version = "0.1.0"
 source = "git+https://github.com/pathscale/tauri-runtime-blitz.git?rev=71d7bd897fc936b54fc4731e56600b9497e402ad#71d7bd897fc936b54fc4731e56600b9497e402ad"
 dependencies = [
- "blitz-control-protocol 0.1.0 (git+https://github.com/pathscale/tauri-runtime-blitz.git?rev=71d7bd897fc936b54fc4731e56600b9497e402ad)",
+ "blitz-control-protocol",
  "endpoint-libs",
  "http",
  "keyboard-types 0.7.0",
@@ -8988,7 +8978,7 @@ dependencies = [
 
 [[package]]
 name = "wt-migrate"
-version = "0.8.6"
+version = "0.8.7"
 dependencies = [
  "chrono",
  "derive_more 2.1.1",
