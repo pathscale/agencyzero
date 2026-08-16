@@ -104,9 +104,9 @@ paraphrases were how the old checkbox contract created near-duplicates. Full con
   scripts/local-renderer.sh check -p az-gui --features blitz-runtime
   ```
 
-  It used to be a block inside `.cargo/config.toml`, defended by
-  `git update-index --skip-worktree`. That failed four ways at once. The file is
-  tracked, because it carries the macOS link flags and the `usvg` patch every
+  It used to be a block inside a tracked `.cargo/config.toml`, defended by
+  `git update-index --skip-worktree`. That failed four ways at once. The file was
+  tracked, because it carried the macOS link flag and the `usvg` patch every
   build needs, so `.gitignore` could not protect it and the paths went in four
   times. `skip-worktree` hid the file from `git status` as well and blocked
   branch switches. The redirect was always on, so no ordinary build ever fetched
@@ -115,15 +115,18 @@ paraphrases were how the old checkbox contract created near-duplicates. Full con
   `Cargo.lock`, replacing git revisions with paths, which reached a commit twice.
 
   The wrapper snapshots and restores the lockfile around the build, so none of
-  that is left to remember. `.cargo/config.toml` needs no flag now: its working
-  copy should equal its commit, and `git status` will say so if it does not.
+  that is left to remember.
 
-  It is also down to one setting, the macOS linker flag, which is the only thing
-  in it that cannot live in a manifest. The usvg patch moved to the root
-  `Cargo.toml`, where patches belong and where ps-blitz keeps the same one. That
-  it ever sat in `.cargo/config.toml` is the whole story: a shared patch shared a
-  `[patch.crates-io]` table with paths that existed on one machine, which is how
-  a file nobody could delete became a file nobody could safely commit.
+  **There is no `.cargo/config.toml` any more**, and nothing should recreate one:
+  `.cargo/` holds only the gitignored `local-renderer.toml`. Both of its former
+  settings found a better home. The usvg patch moved to the root `Cargo.toml`,
+  where patches belong and where ps-blitz keeps the same one. The macOS linker
+  flag moved into [`apps/gui/build.rs`](apps/gui/build.rs), which emits
+  `cargo::rustc-link-arg-bins` for the one binary that wants it rather than for
+  every crate in the workspace. That the two ever shared a file is the whole
+  story: a shared patch shared a `[patch.crates-io]` table with paths that
+  existed on one machine, which is how a file nobody could delete became a file
+  nobody could safely commit.
 
   Pins still want checking before a release, because the opt-in path skips them
   by definition. `scripts/check-one-rev-per-git-source.sh` refuses a lockfile
