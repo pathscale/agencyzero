@@ -2421,13 +2421,12 @@ function CostSection(): JSX.Element {
             step={0.25}
             value={warningUsd()}
             formatValue={(value) => `$${value.toFixed(2)}`}
-            // Live while dragging, persisted when it settles. @pathscale/ui
-            // 2.0.0 carries `onChangeEnd` for exactly this; 1.3.1, which is
-            // what ships here, does not, so the settle is timed locally.
-            onChange={(value) => {
-              previewWarning(value);
-              settleWarning(value);
-            }}
+            // Live while dragging, persisted when the knob is released.
+            // `onChangeEnd` is the event that means exactly that, and it
+            // arrived with the 2.x line this app is now on; the local settle
+            // timer it replaces dated from the pinned 1.3.1, which had none.
+            onChange={(value) => previewWarning(value)}
+            onChangeEnd={(value) => settleWarning(value)}
             size="sm"
             class="w-full min-w-0 [&_[data-slot=label]]:sr-only"
           />
@@ -2760,15 +2759,18 @@ const SETTLE_MS = 180;
 /**
  * One appearance axis.
  *
- * Dragging paints immediately and persists only when the drag settles. It used
- * to call `saveSettings` on every tick, and each of those awaited a serialized
- * store write before it even applied the CSS, then made a native window call:
- * one session's log held 75 `set_settings` and 76 `set_window_chrome` round
- * trips at 7 and 6ms, all on the window thread. That is why the knob led and
- * the panel lagged, and why dragging depth could starve paint until the window
- * went blank and only recovered once the drag stopped.
+ * Dragging paints immediately and persists once, when the knob is released. It
+ * used to call `saveSettings` on every tick, and each of those awaited a
+ * serialized store write before it even applied the CSS, then made a native
+ * window call: one session's log held 75 `set_settings` and 76
+ * `set_window_chrome` round trips at 7 and 6ms, all on the window thread. That
+ * is why the knob led and the panel lagged, and why dragging depth could starve
+ * paint until the window went blank and only recovered once the drag stopped.
  *
- * The live/settled split is the slider's own now, so there is no timer here.
+ * A 180ms debounce replaced that and was a large improvement, but not a cure:
+ * a debounce fires whenever the pointer pauses, so a slow drag is still a
+ * stream of store writes. The live/settled split is the slider's own now
+ * (`onChange` paints, `onChangeEnd` persists), so there is no timer here.
  */
 function GlassAxis(props: {
   label: string;
@@ -2784,12 +2786,6 @@ function GlassAxis(props: {
   onChange: (value: number) => void;
 }): JSX.Element {
   const toAxis = (value: number) => (props.toAxis ? props.toAxis(value) : value);
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  onCleanup(() => clearTimeout(timer));
-  const settle = (value: number): void => {
-    clearTimeout(timer);
-    timer = setTimeout(() => props.onChange(value), SETTLE_MS);
-  };
   return (
     <div class="min-w-[260px]">
       <Slider
@@ -2799,12 +2795,20 @@ function GlassAxis(props: {
         step={props.step}
         value={props.value}
         formatValue={props.format}
-        // Paint now: no store, no AppKit, no await. The persist waits for the
-        // knob to settle, since 1.3.1 has no `onChangeEnd` to hang it on.
-        onChange={(value) => {
-          writeGlassAxis(props.axis, toAxis(value));
-          settle(value);
-        }}
+        // Paint now: no store, no AppKit, no await.
+        onChange={(value) => writeGlassAxis(props.axis, toAxis(value))}
+        /*
+         * Persist once, when the knob is released.
+         *
+         * This used to be a 180ms debounce, because the pinned 1.3.1 had no
+         * `onChangeEnd` to hang it on. A debounce still fires mid-drag whenever
+         * the pointer pauses, and each of those is a `set_settings` round trip
+         * costing 5-6ms on the window thread: measured on the owner's live
+         * session, dragging this slider drove the profile log past 7,800 of
+         * them, paint starved, and the window blanked until the drag stopped.
+         * 2.5 has the real event, so the persist happens exactly once.
+         */
+        onChangeEnd={(value) => props.onChange(value)}
         size="sm"
         class="w-full min-w-0 [&_[data-slot=label]]:sr-only"
       />
