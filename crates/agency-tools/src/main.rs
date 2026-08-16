@@ -33,6 +33,11 @@ enum Command {
     Usage {
         project: Option<String>,
     },
+    PsUsageReport {
+        blinded: bool,
+        start: Option<String>,
+        end: Option<String>,
+    },
 }
 
 const USAGE: &str = "\
@@ -57,6 +62,14 @@ commands:
                              with project names and exact recovery candidates
   usage [--project ID]       token/cost rollup: whole-store totals, the single
                              largest turn, and per-model / per-day breakdowns
+  ps-usage-report [--blinded] [--start RFC3339] [--end RFC3339]
+                             directive-usage statistics over a closed window:
+                             incidence, per-surface and per-verb counts,
+                             outcomes and per-day activity. Prints a table on
+                             stdout and the same numbers as JSON on the last
+                             line. --blinded substitutes every verb through a
+                             fixed mapping and drops identifying strings.
+                             The window has no default and must be given.
 
 The store location honours the same overrides as the GUI: $AZ_DATA_DIR,
 then the data-location.json pointer next to the app's config, then the
@@ -122,6 +135,28 @@ fn parse_args(args: &[String]) -> Result<Command, String> {
         "search-items" => {
             let query = args.next().ok_or("search-items needs a query")?.to_string();
             Command::SearchItems { query }
+        }
+        "ps-usage-report" => {
+            let mut blinded = false;
+            let mut start = None;
+            let mut end = None;
+            while let Some(flag) = args.next() {
+                match flag.as_str() {
+                    "--blinded" => blinded = true,
+                    "--start" => {
+                        start = Some(args.next().ok_or("--start needs a value")?.to_string());
+                    }
+                    "--end" => {
+                        end = Some(args.next().ok_or("--end needs a value")?.to_string());
+                    }
+                    other => return Err(format!("unexpected argument: {other}")),
+                }
+            }
+            return Ok(Command::PsUsageReport {
+                blinded,
+                start,
+                end,
+            });
         }
         "usage" => {
             return Ok(Command::Usage {
@@ -232,6 +267,32 @@ fn run(command: Command) -> eyre::Result<()> {
                 let cache = agency_tools::open_usage_cache(&dir).await?;
                 let summary = agency_tools::usage_summary(&cache, &ledger, project.as_deref())?;
                 println!("{}", serde_json::to_string_pretty(&summary)?);
+                Ok(())
+            }
+            Command::PsUsageReport {
+                blinded,
+                start,
+                end,
+            } => {
+                use agency_tools::ps_usage;
+                use worktable::prelude::SelectQueryExecutor;
+
+                // A flag beats editing the constants for a one-off window, but
+                // the constants stay the declared default so an unset window is
+                // still a refusal rather than a silent choice.
+                let start = start.unwrap_or_else(|| ps_usage::WINDOW_START.to_owned());
+                let end = end.unwrap_or_else(|| ps_usage::WINDOW_END.to_owned());
+
+                let table = agency_tools::open_study_events(&dir).await?;
+                let rows = table.select_all().execute()?;
+                let report = ps_usage::build(&rows, &start, &end)?;
+                let report = if blinded {
+                    ps_usage::blind(&report)
+                } else {
+                    report
+                };
+                print!("{}", ps_usage::render(&report));
+                println!("{}", serde_json::to_string(&report)?);
                 Ok(())
             }
         }
