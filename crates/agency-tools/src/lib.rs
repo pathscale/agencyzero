@@ -99,13 +99,31 @@ const RETRY_BASE_MS: u64 = 50;
 /// Only when the platform reports no home directory at all, which means there
 /// is no default and no pointer file location to check.
 pub fn data_location() -> eyre::Result<location::DataLocation> {
-    const IDENTIFIER: &str = "com.pathscale.agencyzero";
+    data_location_for(IDENTIFIER_STABLE)
+}
+
+/// The bundle identifier of the standard build.
+pub const IDENTIFIER_STABLE: &str = "com.pathscale.agencyzero";
+
+/// The bundle identifier of the experimental build.
+///
+/// A separate identifier means a separate config directory, a separate pointer
+/// file and a separate store. Reading the stable store while the experimental
+/// window is the one running reports another profile's data as if it were this
+/// one's, which is worse than reporting nothing.
+pub const IDENTIFIER_EXPERIMENTAL: &str = "com.pathscale.agencyzero.experimental";
+
+/// The store directory for one bundle identifier.
+///
+/// # Errors
+/// Only when the platform reports no home directory at all.
+pub fn data_location_for(identifier: &str) -> eyre::Result<location::DataLocation> {
     let config_dir = dirs::config_dir()
         .ok_or_else(|| eyre::eyre!("no config directory on this platform"))?
-        .join(IDENTIFIER);
+        .join(identifier);
     let data_dir = dirs::data_dir()
         .ok_or_else(|| eyre::eyre!("no data directory on this platform"))?
-        .join(IDENTIFIER);
+        .join(identifier);
     Ok(location::resolve(&config_dir, &data_dir))
 }
 
