@@ -1,4 +1,4 @@
-import { createMemo, createSignal, For, onMount, Show } from "solid-js";
+import { createMemo, createSignal, For, onSettled, Show } from "solid-js";
 import type { JSX } from "@solidjs/web";
 import { Button } from "~/components/Button";
 import { Icon } from "~/components/Icon";
@@ -101,7 +101,7 @@ export function AnalyticsTab(): JSX.Element {
     }
   };
 
-  onMount(() => {
+  onSettled(() => {
     void refresh().catch(() => setData(null));
   });
 

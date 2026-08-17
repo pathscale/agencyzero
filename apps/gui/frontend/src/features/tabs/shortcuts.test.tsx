@@ -31,7 +31,7 @@ function mount(): () => void {
   return dispose;
 }
 
-/** Mounting runs `onMount`, which is what installs the window listener. */
+/** Mounting runs `onSettled`, which is what installs the window listener. */
 function press(key: string, target: EventTarget): void {
   target.dispatchEvent(
     new KeyboardEvent("keydown", {

@@ -1,5 +1,5 @@
 import type { JSX } from "@solidjs/web";
-import { onCleanup, onMount } from "solid-js";
+import { onCleanup, onSettled } from "solid-js";
 
 /**
  * The viewport rect of the control that opened the dialog.
@@ -78,7 +78,7 @@ export function AppModal(props: {
   children: JSX.Element;
 }): JSX.Element {
   let root!: HTMLDivElement;
-  onMount(() => document.body.append(root));
+  onSettled(() => document.body.append(root));
   onCleanup(() => root.remove());
 
   const placement = (): JSX.CSSProperties | undefined => {

@@ -1,5 +1,5 @@
 import { Flex } from "@pathscale/ui";
-import { createEffect, createMemo, createSignal, For, Match, onCleanup, onMount, Show, Switch } from "solid-js";
+import { createEffect, createMemo, createSignal, For, Match, onCleanup, onSettled, Show, Switch } from "solid-js";
 import type { JSX } from "@solidjs/web";
 import { Button } from "~/components/Button";
 import { Icon } from "~/components/Icon";
@@ -216,7 +216,7 @@ export function Booting(): JSX.Element {
    * driving, so it says when it arrives and when it leaves, with the reason it
    * was allowed to.
    */
-  onMount(() => log.warn("boot: splash mounted"));
+  onSettled(() => log.warn("boot: splash mounted"));
   onCleanup(() => log.info("boot: splash unmounted"));
 
   return (
@@ -306,7 +306,7 @@ function MockBanner(): JSX.Element {
 }
 
 export default function App(): JSX.Element {
-  onMount(() => {
+  onSettled(() => {
     onCleanup(installSelectionCopy());
   });
 

@@ -1,4 +1,4 @@
-import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show } from "solid-js";
+import { createEffect, createMemo, createSignal, For, onCleanup, onSettled, Show } from "solid-js";
 import type { JSX } from "@solidjs/web";
 import { Button } from "~/components/Button";
 import { EditableTitle } from "~/components/EditableTitle";
@@ -124,7 +124,7 @@ export function ProjectTab(props: { tab: Tab; project: Project }): JSX.Element {
    * Its box is not deferred with it. See where it is rendered below.
    */
   const [panelReady, setPanelReady] = createSignal(false);
-  onMount(() => {
+  onSettled(() => {
     requestAnimationFrame(() => {
       setPanelReady(true);
       /*
@@ -144,7 +144,7 @@ export function ProjectTab(props: { tab: Tab; project: Project }): JSX.Element {
     marks.push([label, performance.now()]);
     return null;
   };
-  onMount(() => {
+  onSettled(() => {
     let previous = built;
     const parts = marks.map(([label, at]) => {
       const cost = at - previous;

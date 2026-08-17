@@ -1,4 +1,4 @@
-import { onCleanup, onMount } from "solid-js";
+import { onCleanup, onSettled } from "solid-js";
 import { copyText, pasteText } from "~/features/project/MessageBody";
 import { isBlitz, isTauri } from "~/lib/platform";
 import { useWorkspace } from "~/stores/workspace";
@@ -141,7 +141,7 @@ export function useTabShortcuts(): void {
     actions.cycleTab(isFirst ? -1 : 1);
   };
 
-  onMount(() => {
+  onSettled(() => {
     window.addEventListener("keydown", onKeyDown);
     onCleanup(() => window.removeEventListener("keydown", onKeyDown));
   });

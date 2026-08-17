@@ -1,7 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { type Accessor, createSignal, onCleanup, onMount } from "solid-js";
+import { type Accessor, createSignal, onCleanup, onSettled } from "solid-js";
 import { describeError, log } from "~/lib/log";
 import { isTauri } from "~/lib/platform";
 import { useWorkspace } from "~/stores/workspace";
@@ -69,7 +69,7 @@ export function useAppShell(): {
     setIsClosing(true);
   };
 
-  onMount(() => {
+  onSettled(() => {
     if (!isTauri()) return;
 
     const unlisteners: UnlistenFn[] = [];
