@@ -8,10 +8,11 @@ import {
   defaultAccent,
   isAccent,
   MAX_SOFTNESS,
+  panelAxes,
   surfaceColors,
   toColorValue,
   WASH_STOPS,
-  writeGlassAxis,
+  writePanelAxes,
 } from "~/lib/theme";
 
 let root: HTMLElement;
@@ -236,88 +237,70 @@ describe("toColorValue", () => {
   });
 });
 
-describe("writeGlassAxis", () => {
+describe("panel axes", () => {
+  const base = { surface: "", accent: "", softness: 0, wash: 30, textBrightness: 0 };
+
+  /*
+   * The panel used to carry three sliders of its own, alongside the library's
+   * three, and two of the six were called "depth". They are derived from the
+   * library's numbers now, so there is one place to set glass and no way to
+   * put the two halves into disagreement.
+   */
+  it("derives the panel from the glass tuning, over the library's ranges", () => {
+    // Both ends of each range, so the mapping is pinned rather than sampled.
+    expect(panelAxes({ blur: 0, refraction: 0, depth: 0 })).toEqual({
+      lift: 0,
+      border: 16,
+      shadow: 0,
+    });
+    expect(panelAxes({ blur: 50, refraction: 0.4, depth: 30 })).toEqual({
+      lift: 60,
+      border: 60,
+      shadow: 0.6,
+    });
+  });
+
+  /* The hairline never disappears: at rest it is the stylesheet's own 16%. */
+  it("keeps a hairline at every setting", () => {
+    for (const refraction of [0, 0.1, 0.2, 0.3, 0.4]) {
+      expect(panelAxes({ blur: 0, refraction, depth: 0 }).border).toBeGreaterThanOrEqual(16);
+    }
+  });
+
+  it("writes the derived values onto the document", () => {
+    applyTheme({ ...base, glassRefraction: 0.4, glassDepth: 30 });
+    const root = document.documentElement.style;
+    expect(root.getPropertyValue("--az-glass-lift")).toBe("60%");
+    expect(root.getPropertyValue("--az-glass-border")).toBe("60%");
+    expect(root.getPropertyValue("--az-glass-shadow")).toBe("0.6");
+  });
+
   /*
    * The drag preview. It exists because a slider that persists on every tick
    * awaits a store write before the CSS moves, and one session's log carried 75
    * of those plus 76 native window calls at 7 and 6ms each, on the window
    * thread. This path has to reach the document with no round trip at all, and
-   * has to agree with `applyTheme` about every default.
+   * has to agree with `applyTheme` about every value.
    */
-  it("writes an axis directly, with the same defaults applyTheme uses", () => {
+  it("agrees with applyTheme for the same tuning", () => {
     const root = document.documentElement.style;
+    applyTheme({ ...base, glassRefraction: 0.2, glassDepth: 15 });
+    const viaTheme = [
+      root.getPropertyValue("--az-glass-lift"),
+      root.getPropertyValue("--az-glass-border"),
+      root.getPropertyValue("--az-glass-shadow"),
+    ];
 
-    writeGlassAxis("shadow", 0.4);
-    expect(root.getPropertyValue("--az-glass-shadow")).toBe("0.4");
+    for (const property of ["--az-glass-lift", "--az-glass-border", "--az-glass-shadow"]) {
+      root.removeProperty(property);
+    }
+    writePanelAxes({ blur: 0, refraction: 0.2, depth: 15 });
 
-    writeGlassAxis("border", 40);
-    expect(root.getPropertyValue("--az-glass-border")).toBe("40%");
-
-    // At the default the property is removed, not written, exactly as
-    // applyTheme does it: the stylesheet's own value has to apply.
-    writeGlassAxis("border", 16);
-    expect(root.getPropertyValue("--az-glass-border")).toBe("");
-    writeGlassAxis("shadow", 0);
-    expect(root.getPropertyValue("--az-glass-shadow")).toBe("");
-  });
-
-  it("agrees with applyTheme for the same values", () => {
-    const root = document.documentElement.style;
-    applyTheme({
-      surface: "",
-      accent: "",
-      softness: 0,
-      wash: 30,
-      textBrightness: 0,
-      glassLift: 24,
-    });
-    const viaTheme = root.getPropertyValue("--az-glass-lift");
-
-    root.removeProperty("--az-glass-lift");
-    writeGlassAxis("lift", 24);
-
-    expect(root.getPropertyValue("--az-glass-lift")).toBe(viaTheme);
-  });
-});
-
-describe("glass axes", () => {
-  const base = { surface: "", accent: "", softness: 0, wash: 30, textBrightness: 0 };
-
-  /*
-   * Every default must write nothing at all. A record from before these axes
-   * existed, and one sitting at their defaults, both have to render exactly
-   * what the stylesheet already says — otherwise every install changes
-   * appearance on upgrade.
-   */
-  it("writes nothing when the axes are absent or at their defaults", () => {
-    applyTheme({ ...base });
-    const root = document.documentElement.style;
-    expect(root.getPropertyValue("--az-glass-lift")).toBe("");
-    expect(root.getPropertyValue("--az-glass-border")).toBe("");
-    expect(root.getPropertyValue("--az-glass-shadow")).toBe("");
-
-    applyTheme({ ...base, glassLift: 0, glassBorder: 16, glassShadow: 0 });
-    expect(root.getPropertyValue("--az-glass-lift")).toBe("");
-    expect(root.getPropertyValue("--az-glass-border")).toBe("");
-    expect(root.getPropertyValue("--az-glass-shadow")).toBe("");
-  });
-
-  it("writes each axis when it is moved off its default", () => {
-    applyTheme({ ...base, glassLift: 24, glassBorder: 40, glassShadow: 0.3 });
-    const root = document.documentElement.style;
-    expect(root.getPropertyValue("--az-glass-lift")).toBe("24%");
-    expect(root.getPropertyValue("--az-glass-border")).toBe("40%");
-    expect(root.getPropertyValue("--az-glass-shadow")).toBe("0.3");
-  });
-
-  /* The axes are independent: moving one must not disturb the others. */
-  it("moves one axis without touching the rest", () => {
-    applyTheme({ ...base, glassLift: 24, glassBorder: 40, glassShadow: 0.3 });
-    applyTheme({ ...base, glassLift: 24 });
-    const root = document.documentElement.style;
-    expect(root.getPropertyValue("--az-glass-lift")).toBe("24%");
-    expect(root.getPropertyValue("--az-glass-border")).toBe("");
-    expect(root.getPropertyValue("--az-glass-shadow")).toBe("");
+    expect([
+      root.getPropertyValue("--az-glass-lift"),
+      root.getPropertyValue("--az-glass-border"),
+      root.getPropertyValue("--az-glass-shadow"),
+    ]).toEqual(viaTheme);
   });
 });
 

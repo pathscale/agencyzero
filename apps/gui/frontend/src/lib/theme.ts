@@ -1,4 +1,10 @@
-import { applyGlassTokens, GLASS_DEFAULTS, type GlassMode } from "@pathscale/ui";
+import {
+  applyGlassTokens,
+  GLASS_DEFAULTS,
+  GLASS_LIMITS,
+  type GlassMode,
+  type GlassTuning,
+} from "@pathscale/ui";
 import type { ColorValue } from "@pathscale/ui/components/color-wheel-flower";
 import type { ThemeSettings } from "~/types";
 
@@ -217,19 +223,14 @@ export function applyTheme(
   root.style.setProperty("--az-damp", `${(softness * DAMP_RATIO - brightness).toFixed(2)}%`);
 
   /*
-   * The three glass axes, written straight onto the root.
+   * The panel axes, derived from the same three numbers the library's glass
+   * takes rather than set from three sliders of their own.
    *
    * Applied here rather than from a module of their own so they travel with
    * every other theme value — one call site, so there is no second place a
    * stale value could come from.
-   *
-   * Each default is the untouched look: no lift, the 16% hairline, no shadow.
-   * A property is removed rather than written at its default, so the
-   * stylesheet's own value applies and nothing inline needs explaining later.
    */
-  writeGlassAxis("lift", theme.glassLift);
-  writeGlassAxis("border", theme.glassBorder);
-  writeGlassAxis("shadow", theme.glassShadow);
+  writePanelAxes(glassTuning(theme, root));
   writeGlassTuning(theme, root);
 
   return windowChrome(accent, theme);
@@ -254,45 +255,86 @@ export function applyTheme(
  * backdrop pass (`record_backdrop`), so the blur axis reaches the screen.
  */
 function writeGlassTuning(theme: ThemeSettings, root: HTMLElement): void {
-  // Read from the root rather than importing the prefs store: this module is a
-  // pure function of the theme it is handed, and `stores/prefs` already writes
-  // the mode here on every change.
   const mode: GlassMode = root.dataset.colorMode === "light" ? "light" : "dark";
-  const defaults = GLASS_DEFAULTS[mode];
-  applyGlassTokens(
-    {
-      blur: Number.isFinite(theme.glassBlur) ? Number(theme.glassBlur) : defaults.blur,
-      refraction: Number.isFinite(theme.glassRefraction)
-        ? Number(theme.glassRefraction)
-        : defaults.refraction,
-      depth: Number.isFinite(theme.glassDepth) ? Number(theme.glassDepth) : defaults.depth,
-    },
-    mode,
-    root,
-  );
+  applyGlassTokens(glassTuning(theme, root), mode, root);
 }
 
 /**
- * The three glass axes, and their defaults.
+ * The three numbers glass is made of, with every unset axis resolved.
  *
- * The default is the untouched look: no lift, the 16% hairline, no shadow.
- * A property is *removed* rather than written at its default, so the
- * stylesheet's own value applies and nothing inline needs explaining later.
+ * Read the colour mode from the root rather than importing the prefs store:
+ * this module is a pure function of the theme it is handed, and `stores/prefs`
+ * already writes the mode here on every change.
  *
- * There is no blur axis. Blur belongs to the compositor's glass view, and CSS
- * `backdrop-filter` cannot drive it on either shipping renderer, so a blur
- * slider would move nothing.
+ * Always a complete set. Three of the library's tokens are read by component
+ * CSS without a fallback, and an undefined custom property drops the whole
+ * declaration rather than falling back to an initial value, so a partial
+ * tuning gives a card with no background rather than a plainer one.
  */
-const GLASS_AXES = {
-  lift: { property: "--az-glass-lift", fallback: 0, unit: "%" },
-  border: { property: "--az-glass-border", fallback: 16, unit: "%" },
-  shadow: { property: "--az-glass-shadow", fallback: 0, unit: "" },
-} as const;
+export function glassTuning(theme: ThemeSettings, root: HTMLElement): GlassTuning {
+  const mode: GlassMode = root.dataset.colorMode === "light" ? "light" : "dark";
+  const defaults = GLASS_DEFAULTS[mode];
+  const resolve = (value: number | undefined, fallback: number): number =>
+    Number.isFinite(value) ? Number(value) : fallback;
 
-export type GlassAxisName = keyof typeof GLASS_AXES;
+  return {
+    blur: resolve(theme.glassBlur, defaults.blur),
+    refraction: resolve(theme.glassRefraction, defaults.refraction),
+    depth: resolve(theme.glassDepth, defaults.depth),
+  };
+}
 
 /**
- * Write one axis straight onto the root.
+ * AgencyZero's own panel, expressed in the library's three numbers.
+ *
+ * `.az-panel` is opaque and leans on the hue ladder rather than white, so it
+ * cannot use the library's tokens directly: frost needs something light
+ * beneath it to diffuse, and on a dark surface a white film reads as grey haze
+ * on the colour rather than as material. It still describes the same three
+ * physical properties, so it is derived from them rather than given a second
+ * set of sliders.
+ *
+ * That it *had* a second set is the bug this replaces. Six sliders where the
+ * library says three, and two of them named "depth" — one moving the panel's
+ * drop shadow and one moving glass's glow and sheen — so setting the two
+ * against each other was not just possible, it was the default state after
+ * touching either.
+ *
+ * The three mappings, each over the library's own range:
+ *
+ *   lift    from refraction, since both say how much the surface asserts
+ *           itself over what is behind it.
+ *   border  from refraction too, which is what drives the library's own border
+ *           and rim tokens. Held at the stylesheet's 16% hairline at rest so
+ *           an untouched theme looks untouched.
+ *   shadow  from depth, which is the axis that means "off the page".
+ */
+const PANEL_AXES = {
+  lift: "--az-glass-lift",
+  border: "--az-glass-border",
+  shadow: "--az-glass-shadow",
+} as const;
+
+export type GlassAxisName = keyof typeof PANEL_AXES;
+
+/** The panel values a tuning implies, in the units the stylesheet reads. */
+export function panelAxes(tuning: GlassTuning): Record<GlassAxisName, number> {
+  const refraction = tuning.refraction / GLASS_LIMITS.refraction.max;
+  const depth = tuning.depth / GLASS_LIMITS.depth.max;
+
+  return {
+    // 0 to 60%, the range the panel lift slider used to offer.
+    lift: Math.round(refraction * 60),
+    // The hairline never disappears entirely; it runs from the stylesheet's
+    // 16% up to 60% as the surface asserts itself.
+    border: Math.round(16 + refraction * 44),
+    // A 0..1 alpha rather than a percentage, as the box-shadow reads it.
+    shadow: Number((depth * 0.6).toFixed(3)),
+  };
+}
+
+/**
+ * Write the derived panel axes onto the root.
  *
  * Exported so a slider can paint while it is being dragged. `applyTheme` is
  * reached only after a settings round trip has returned, which for a drag meant
@@ -304,15 +346,12 @@ export type GlassAxisName = keyof typeof GLASS_AXES;
  * A custom property costs one style invalidation, so a preview is free by
  * comparison and the persist can wait until the drag settles.
  */
-export function writeGlassAxis(axis: GlassAxisName, value: number | undefined): void {
-  const root = document.documentElement;
-  const { property, fallback, unit } = GLASS_AXES[axis];
-  const resolved = Number.isFinite(value) ? Number(value) : fallback;
-  if (resolved === fallback) {
-    root.style.removeProperty(property);
-    return;
-  }
-  root.style.setProperty(property, `${resolved}${unit}`);
+export function writePanelAxes(tuning: GlassTuning, root?: HTMLElement): void {
+  const target = root ?? document.documentElement;
+  const values = panelAxes(tuning);
+  target.style.setProperty(PANEL_AXES.lift, `${values.lift}%`);
+  target.style.setProperty(PANEL_AXES.border, `${values.border}%`);
+  target.style.setProperty(PANEL_AXES.shadow, `${values.shadow}`);
 }
 
 /**

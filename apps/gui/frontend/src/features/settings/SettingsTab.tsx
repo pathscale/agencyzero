@@ -35,7 +35,7 @@ import { countdown, formatBytes, relativeTime } from "~/lib/format";
 import { AGENT_LABELS, agentStateLabel, envPolicyLabel, permissionLabel } from "~/lib/labels";
 import { describeError, log } from "~/lib/log";
 import { reset as perfReset, snapshot as perfSnapshot } from "~/lib/perf";
-import { DEFAULT_WASH, type GlassAxisName, normalizeWash, writeGlassAxis } from "~/lib/theme";
+import { DEFAULT_WASH, normalizeWash, writePanelAxes } from "~/lib/theme";
 import { t, tx, type UiMessage } from "~/stores/i18n";
 import { prefs, setPrefs } from "~/stores/prefs";
 import { useNow, useWorkspace } from "~/stores/workspace";
@@ -1043,64 +1043,20 @@ export function SettingsTab(): JSX.Element {
                 />
 
                 {/*
-                  Two families of axis, and the split is real rather than
-                  historical.
+                  Glass is three numbers, and these are they.
 
-                  These three style AgencyZero's own `.az-panel`, which is
-                  opaque, and they lean on the hue ladder rather than white:
-                  frost needs something light beneath it to diffuse, so on a
-                  dark surface a white film is grey haze on the colour, not
-                  material.
+                  `@pathscale/ui` derives twenty-five `--glass-*` tokens from
+                  blur, refraction and depth, so they are passed straight
+                  through rather than reinterpreted here.
 
-                  The three below them are the library's, and they style
-                  anything rendered with `material="glass"`. `@pathscale/ui`
-                  derives twenty-five `--glass-*` tokens from exactly those
-                  numbers, so they are passed straight through rather than
-                  reinterpreted here.
+                  There were six. AgencyZero's own opaque `.az-panel` cannot
+                  use the library's tokens directly, so it had grown a parallel
+                  set of lift/edge/depth sliders, and two of the six were
+                  called "depth" while moving different things. The panel is
+                  derived from these three now (`panelAxes` in `lib/theme`),
+                  which is the same split the library already makes: three
+                  physical properties, one place to set them.
                 */}
-                <Row label={tx("Panel lift")} hint={tx("how far panels sit off the desk")}>
-                  <GlassAxis
-                    label={tx("Panel lift")}
-                    min={0}
-                    max={60}
-                    step={2}
-                    value={current().theme.glassLift ?? 0}
-                    axis="lift"
-                    format={(value) => `${value}%`}
-                    onChange={(glassLift) => void actions.saveSettings({ theme: { glassLift } })}
-                  />
-                </Row>
-                <Row label={tx("Panel edge")} hint={tx("strength of the hairline around a panel")}>
-                  <GlassAxis
-                    label={tx("Panel edge")}
-                    min={0}
-                    max={60}
-                    step={2}
-                    value={current().theme.glassBorder ?? 16}
-                    axis="border"
-                    format={(value) => `${value}%`}
-                    onChange={(glassBorder) =>
-                      void actions.saveSettings({ theme: { glassBorder } })
-                    }
-                  />
-                </Row>
-                <Row label={tx("Panel depth")} hint={tx("drop shadow under a panel")}>
-                  <GlassAxis
-                    label={tx("Panel depth")}
-                    min={0}
-                    max={60}
-                    step={2}
-                    value={Math.round((current().theme.glassShadow ?? 0) * 100)}
-                    axis="shadow"
-                    // The slider counts percent; the token is a 0..1 alpha.
-                    toAxis={(percent) => percent / 100}
-                    format={(value) => `${value}%`}
-                    onChange={(percent) =>
-                      void actions.saveSettings({ theme: { glassShadow: percent / 100 } })
-                    }
-                  />
-                </Row>
-
                 <Row
                   label={tx("Glass blur")}
                   hint={tx("how far a glass surface smears what is behind it")}
@@ -2827,7 +2783,18 @@ const GLASS_SETTING_KEYS = {
 } as const satisfies Record<keyof GlassTuning, keyof ThemeSettings>;
 
 /**
- * One appearance axis.
+ * One of the three glass numbers.
+ *
+ * Hands `blur`/`refraction`/`depth` to `@pathscale/ui`, which derives
+ * twenty-five `--glass-*` tokens from the three together, and to `panelAxes`,
+ * which derives AgencyZero's own opaque panel from the same three. A preview
+ * therefore has to re-derive the whole set from the other two axes as they
+ * stand rather than writing one property.
+ *
+ * Range and default both come from the library rather than being restated here.
+ * That is the point of the exercise: glass is the library's primitive, so an
+ * app that hardcoded `max={0.4}` would be a second place to update when the
+ * curves are retuned.
  *
  * Dragging paints immediately and persists once, when the knob is released. It
  * used to call `saveSettings` on every tick, and each of those awaited a
@@ -2841,65 +2808,6 @@ const GLASS_SETTING_KEYS = {
  * a debounce fires whenever the pointer pauses, so a slow drag is still a
  * stream of store writes. The live/settled split is the slider's own now
  * (`onChange` paints, `onChangeEnd` persists), so there is no timer here.
- */
-function GlassAxis(props: {
-  label: string;
-  min: number;
-  max: number;
-  step: number;
-  value: number;
-  /** Which custom property this axis paints, for the drag preview. */
-  axis: GlassAxisName;
-  /** Slider units to the value the axis takes, where they differ. */
-  toAxis?: (value: number) => number;
-  format: (value: number) => string;
-  onChange: (value: number) => void;
-}): JSX.Element {
-  const toAxis = (value: number) => (props.toAxis ? props.toAxis(value) : value);
-  return (
-    <div class="min-w-[260px]">
-      <Slider
-        label={props.label}
-        min={props.min}
-        max={props.max}
-        step={props.step}
-        value={props.value}
-        formatValue={props.format}
-        // Paint now: no store, no AppKit, no await.
-        onChange={(value) => writeGlassAxis(props.axis, toAxis(value))}
-        /*
-         * Persist once, when the knob is released.
-         *
-         * This used to be a 180ms debounce, because the pinned 1.3.1 had no
-         * `onChangeEnd` to hang it on. A debounce still fires mid-drag whenever
-         * the pointer pauses, and each of those is a `set_settings` round trip
-         * costing 5-6ms on the window thread: measured on the owner's live
-         * session, dragging this slider drove the profile log past 7,800 of
-         * them, paint starved, and the window blanked until the drag stopped.
-         * 2.5 has the real event, so the persist happens exactly once.
-         */
-        onChangeEnd={(value) => props.onChange(value)}
-        size="sm"
-        class="w-full min-w-0 [&_[data-slot=label]]:sr-only"
-      />
-    </div>
-  );
-}
-
-/**
- * One of the library's three glass numbers.
- *
- * Separate from {@link GlassAxis} because it writes a different thing: that one
- * sets a single `--az-glass-*` property on AgencyZero's own opaque panel, and
- * this one hands `blur`/`refraction`/`depth` to `@pathscale/ui`, which derives
- * twenty-five `--glass-*` tokens from the three together. A preview therefore
- * has to re-derive the whole set from the other two axes as they stand, which
- * is what `applyGlassTokens` does when given a complete tuning.
- *
- * Range and default both come from the library rather than being restated here.
- * That is the point of the exercise: glass is the library's primitive now, so
- * an app that hardcoded `max={0.4}` would be a second place to update when the
- * curves are retuned.
  */
 function GlassTuningAxis(props: {
   label: string;
@@ -2932,17 +2840,18 @@ function GlassTuningAxis(props: {
         // Paint now, from the full set: one axis alone does not describe glass,
         // and a partial tuning leaves three tokens the component CSS reads
         // without a fallback undefined, which drops the declaration entirely.
-        onChange={(value) =>
-          applyGlassTokens(
-            {
-              blur: resolved("blur"),
-              refraction: resolved("refraction"),
-              depth: resolved("depth"),
-              [props.axis]: value,
-            },
-            mode(),
-          )
-        }
+        onChange={(value) => {
+          const tuning: GlassTuning = {
+            blur: resolved("blur"),
+            refraction: resolved("refraction"),
+            depth: resolved("depth"),
+            [props.axis]: value,
+          };
+          applyGlassTokens(tuning, mode());
+          // The panel is derived from the same three numbers, so it has to be
+          // repainted with them or it lags a drag by one settle.
+          writePanelAxes(tuning);
+        }}
         onChangeEnd={(value) => props.onChange(value)}
         size="sm"
         class="w-full min-w-0 [&_[data-slot=label]]:sr-only"
