@@ -417,14 +417,29 @@ impl Default for GlobalSettings {
             models: BTreeMap::from([
                 (
                     "claude".to_string(),
-                    // The `[1m]` variants are the only way to get a 1M context window;
-                    // without them here the picker offers 200k and nothing else.
+                    // The `[1m]` variants are the only way to get a 1M context
+                    // window; without them here the picker offers 200k and
+                    // nothing else.
+                    //
+                    // `claude-opus-5` earns its place for the opposite reason.
+                    // Opus 5 is the one 5-series model that is *not* 1M
+                    // natively: it defaults to 200k and takes the suffix to
+                    // widen. The moving `opus` alias does not stand in for it,
+                    // because an alias is whatever the account resolves it to,
+                    // and agent-abstraction verified that `--model opus`
+                    // reported `claude-opus-4-8` on the release where the
+                    // notes already called Opus 5 the default Opus.
+                    //
+                    // So without the pinned id listed, every way to reach Opus
+                    // 5 went through `opus[1m]`, and Opus 5 at 200k could not
+                    // be selected at all.
                     sel(
                         &[
                             "default",
                             "opus",
                             "sonnet",
                             "haiku",
+                            "claude-opus-5",
                             "opus[1m]",
                             "sonnet[1m]",
                         ],
@@ -542,6 +557,27 @@ pub fn normalize(settings: &mut GlobalSettings) {
             selection.clone_from(fallback);
         } else if !selection.enabled.contains(&selection.default) {
             selection.default.clone_from(&selection.enabled[0]);
+        }
+
+        // Give an existing install back the 200k Opus.
+        //
+        // Defaults are read on first launch only, so a settings record written
+        // before `claude-opus-5` was listed keeps a Claude selection whose
+        // only routes to Opus 5 are `opus[1m]` at 1M and the moving `opus`
+        // alias, which resolves to 4.8. That is why "everything is 1M".
+        //
+        // Narrow on purpose: it adds the one id, only for Claude, and only
+        // when the 1M variant is already enabled. Turning a model off is a
+        // real choice, and someone who has never had this id cannot have
+        // turned it off.
+        if agent == "claude"
+            && selection.enabled.iter().any(|model| model == "opus[1m]")
+            && !selection
+                .enabled
+                .iter()
+                .any(|model| model == "claude-opus-5")
+        {
+            selection.enabled.push("claude-opus-5".to_string());
         }
     }
     if !matches!(settings.default_agent.as_str(), "claude" | "codex") {
@@ -806,6 +842,65 @@ pub fn merge(target: &mut Value, patch: &Value) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Opus 5 is the one 5-series model that is not 1M natively, so reaching
+    /// it at 200k needs the pinned id: the moving `opus` alias is whatever the
+    /// account resolves it to, which agent-abstraction measured as 4.8.
+    #[test]
+    fn opus_5_is_offered_at_200k_as_well_as_1m() {
+        let enabled = &GlobalSettings::default().models["claude"].enabled;
+        assert!(
+            enabled.iter().any(|model| model == "claude-opus-5"),
+            "Opus 5 at 200k must be selectable: {enabled:?}"
+        );
+        assert!(enabled.iter().any(|model| model == "opus[1m]"));
+    }
+
+    /// Defaults are read on first launch only, so a record written before the
+    /// pinned id was listed has to be repaired on load or the owner stays on
+    /// 1M forever.
+    #[test]
+    fn normalize_gives_an_existing_install_back_the_200k_opus() {
+        let mut settings = GlobalSettings::default();
+        settings.models.get_mut("claude").unwrap().enabled = [
+            "default",
+            "opus",
+            "sonnet",
+            "haiku",
+            "opus[1m]",
+            "sonnet[1m]",
+        ]
+        .iter()
+        .map(|s| (*s).to_string())
+        .collect();
+
+        normalize(&mut settings);
+
+        assert!(
+            settings.models["claude"]
+                .enabled
+                .iter()
+                .any(|model| model == "claude-opus-5"),
+            "the 200k id should be restored"
+        );
+    }
+
+    /// And turning a model off stays off. The repair may only add an id nobody
+    /// has ever been able to switch off, so a selection without the 1M variant
+    /// is left exactly as the owner left it.
+    #[test]
+    fn normalize_does_not_add_the_200k_opus_to_a_pruned_selection() {
+        let mut settings = GlobalSettings::default();
+        settings.models.get_mut("claude").unwrap().enabled = ["sonnet", "haiku"]
+            .iter()
+            .map(|s| (*s).to_string())
+            .collect();
+        settings.models.get_mut("claude").unwrap().default = "sonnet".to_string();
+
+        normalize(&mut settings);
+
+        assert_eq!(settings.models["claude"].enabled, ["sonnet", "haiku"]);
+    }
 
     #[test]
     fn defaults_round_trip_through_json() {

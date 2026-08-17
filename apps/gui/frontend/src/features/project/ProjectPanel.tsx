@@ -564,6 +564,17 @@ function ConciseResponseToggle(props: { projectId: string }): JSX.Element {
 
   const choose = async (index: number): Promise<void> => {
     const previous = level();
+    /*
+     * Ignore a value that is not a position on this track.
+     *
+     * `levels[NaN]` is `undefined`, so a slider handing us one used to read as
+     * a deliberate choice of "default" and quietly reset the project's
+     * verbosity. The engine fix that produced the NaN is in ps-blitz
+     * (offsetWidth was undefined, so the library's inset arithmetic was NaN),
+     * but a control that silently rewrites a stored setting when handed a
+     * number it cannot place is worth refusing here too.
+     */
+    if (!Number.isInteger(index) || index < 0 || index >= levels.length) return;
     const next = levels[index] ?? "default";
     setLevel(next);
     try {
