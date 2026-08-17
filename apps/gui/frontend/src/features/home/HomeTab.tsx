@@ -475,11 +475,15 @@ function TaskManagerComposer(): JSX.Element {
 
   const attach = async (): Promise<void> => {
     try {
+      setError(null);
       const paths = await actions.chooseAttachments();
       if (paths.length === 0) return;
       setAttachments((current) => [...current, ...paths.filter((path) => !current.includes(path))]);
     } catch (cause) {
-      log.warn(`could not attach: ${describeError(cause)}`);
+      // Visible, for the reason given on the composer's copy of this handler.
+      const detail = describeError(cause);
+      log.warn(`could not attach: ${detail}`);
+      setError(`Could not attach a file. ${detail}`);
     }
   };
 
