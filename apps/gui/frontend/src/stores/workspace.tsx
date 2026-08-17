@@ -568,13 +568,17 @@ function createWorkspace() {
     );
     const next = await request;
     batch(() => {
-      setState("settings", next);
+      setState((d) => {
+        d.settings = next;
+      });
       reconcileTabModels(next);
     });
     if (patch.taskManager) {
       const taskManager = await client().getTaskManager();
       if (taskManagerTicket === taskManagerWrite) {
-        setState("taskManagerSession", taskManager.sessionId);
+        setState((d) => {
+          d.taskManagerSession = taskManager.sessionId;
+        });
       }
     }
     // The record is the only source for the palette, so the document follows
@@ -870,23 +874,31 @@ function createWorkspace() {
     const project = state.projects.find((candidate) => candidate.id === projectId);
     const hydratedTab = project ? projectTab(project, messages) : null;
     batch(() => {
-      setState("items", projectId, reconcile(items));
-      setState("messages", projectId, reconcile(messages));
-      setState("messageTotals", projectId, messagePage.total);
-      setState("turnCounts", projectId, usageTotals(messages).turns);
-      setState("running", projectId, reconcile(running));
-      setState("taskLog", projectId, reconcile(taskLog.entries));
-      setState("logTotals", projectId, taskLog.total);
-      setState("agentIo", projectId, reconcile(io));
-      setState("pullRequests", projectId, reconcile(prs));
-      setState("questions", projectId, reconcile(questions));
+      setState((d) => reconcile(items)(d.items[projectId]));
+      setState((d) => reconcile(messages)(d.messages[projectId]));
+      setState((d) => {
+        d.messageTotals[projectId] = messagePage.total;
+      });
+      setState((d) => {
+        d.turnCounts[projectId] = usageTotals(messages).turns;
+      });
+      setState((d) => reconcile(running)(d.running[projectId]));
+      setState((d) => reconcile(taskLog.entries)(d.taskLog[projectId]));
+      setState((d) => {
+        d.logTotals[projectId] = taskLog.total;
+      });
+      setState((d) => reconcile(io)(d.agentIo[projectId]));
+      setState((d) => reconcile(prs)(d.pullRequests[projectId]));
+      setState((d) => reconcile(questions)(d.questions[projectId]));
       if (hydratedTab) {
         const tabIndex = state.tabs.findIndex((tab) => tab.key === projectId);
         if (tabIndex >= 0) {
-          setState("tabs", tabIndex, {
+          setState((d) => {
+            d.tabs[tabIndex] = {
             agent: hydratedTab.agent,
             model: hydratedTab.model,
             permission: hydratedTab.permission,
+          };
           });
         }
       }
@@ -957,8 +969,10 @@ function createWorkspace() {
         throw cause;
       });
     batch(() => {
-      setState("messages", projectId, reconcile(page.messages));
-      setState("messageTotals", projectId, page.total);
+      setState((d) => reconcile(page.messages)(d.messages[projectId]));
+      setState((d) => {
+        d.messageTotals[projectId] = page.total;
+      });
     });
   }
 
@@ -1010,8 +1024,12 @@ function createWorkspace() {
       log.info(`boot: backend=${kind}, ${live.size} live commands`);
       setApi(() => backend);
       batch(() => {
-        setState("backend", kind);
-        setState("live", [...live]);
+        setState((d) => {
+          d.backend = kind;
+        });
+        setState((d) => {
+          d.live = [...live];
+        });
       });
 
       log.info("boot: subscribing to events");
@@ -1062,16 +1080,26 @@ function createWorkspace() {
       syncWindowChrome(settings.theme);
 
       batch(() => {
-        setState("projects", reconcile(projects));
-        setState("items", reconcile(itemsByProject));
-        setState("turnCounts", reconcile(homeSnapshot.turnCounts));
-        setState("settings", settings);
-        setState("agents", reconcile(agents));
-        setState("agencyProxy", agencyProxy);
-        setState("models", reconcile(models));
-        setState("pricing", pricing);
-        setState("dataLocation", dataLocation);
-        setState("workspaceRoot", workspaceRoot);
+        setState((d) => reconcile(projects)(d.projects));
+        setState((d) => reconcile(itemsByProject)(d.items));
+        setState((d) => reconcile(homeSnapshot.turnCounts)(d.turnCounts));
+        setState((d) => {
+          d.settings = settings;
+        });
+        setState((d) => reconcile(agents)(d.agents));
+        setState((d) => {
+          d.agencyProxy = agencyProxy;
+        });
+        setState((d) => reconcile(models)(d.models));
+        setState((d) => {
+          d.pricing = pricing;
+        });
+        setState((d) => {
+          d.dataLocation = dataLocation;
+        });
+        setState((d) => {
+          d.workspaceRoot = workspaceRoot;
+        });
         setState(
           "rateLimits",
           // A limit whose reset time has already passed is history, not state.
@@ -1101,17 +1129,21 @@ function createWorkspace() {
             }),
           ),
         );
-        setState("tabs", [
+        setState((d) => {
+          d.tabs = [
           HOME_TAB,
           ...Array.from(new Set(rememberedKeys))
             .map((key) => projectsById.get(key))
             .filter((project): project is Project => Boolean(project))
             .map((project) => projectTab(project)),
-        ]);
+        ];
+        });
         const rememberedActive = portableTabs?.activeProjectKey ?? prefs.lastTabKey;
         const restored = state.tabs.some((tab) => tab.key === rememberedActive);
         lastPortableActiveKey = restored ? rememberedActive : "home";
-        setState("activeKey", lastPortableActiveKey);
+        setState((d) => {
+          d.activeKey = lastPortableActiveKey;
+        });
       });
 
       /*
@@ -1141,11 +1173,15 @@ function createWorkspace() {
         loadProject(TASK_MANAGER_ID),
         client()
           .getTaskManager()
-          .then((tm) => setState("taskManagerSession", tm.sessionId)),
+          .then((tm) => setState((d) => {
+                          d.taskManagerSession = tm.sessionId;
+                        })),
       ]);
 
       drainEventBuffer();
-      setState("boot", { status: "ready" });
+      setState((d) => {
+        d.boot = { status: "ready" };
+      });
       log.info("boot: ready");
 
       // After ready, not during: an update nobody has asked to install must
@@ -1159,9 +1195,11 @@ function createWorkspace() {
     } catch (cause) {
       // A half-loaded workspace is not something to render as if it were whole.
       log.error(`boot failed: ${describeError(cause)}`);
-      setState("boot", {
+      setState((d) => {
+        d.boot = {
         status: "error",
         message: cause instanceof Error ? cause.message : String(cause),
+      };
       });
     }
   }
@@ -1186,14 +1224,18 @@ function createWorkspace() {
    */
   async function checkForUpdate(): Promise<AvailableUpdate | null> {
     const found = await client().checkForUpdate();
-    setState("availableUpdate", found);
+    setState((d) => {
+      d.availableUpdate = found;
+    });
     if (found) log.info(`update available: ${found.version}`);
     return found;
   }
 
   async function refreshQuota(): Promise<void> {
     try {
-      setState("quota", await client().listQuota());
+      setState((d) => {
+        d.quota = await client().listQuota();
+      });
     } catch (cause) {
       log.warn(`could not refresh the quota: ${describeError(cause)}`);
     }
@@ -1209,10 +1251,14 @@ function createWorkspace() {
   async function refreshClaudeUsage(options?: { force?: boolean }): Promise<void> {
     if (!options?.force && Date.now() < claudeUsageRetryAt) return;
     try {
-      setState("claudeUsage", await client().claudeUsage());
+      setState((d) => {
+        d.claudeUsage = await client().claudeUsage();
+      });
       claudeUsageFailures = 0;
       claudeUsageRetryAt = 0;
-      setState("claudeUsageError", null);
+      setState((d) => {
+        d.claudeUsageError = null;
+      });
     } catch (cause) {
       claudeUsageFailures += 1;
       const wait = claudeUsageBackoffMs(claudeUsageFailures);
@@ -1230,7 +1276,9 @@ function createWorkspace() {
        * describes, so a Claude Code session running alongside is enough to
        * cause it. That is not a state the window should render as nothing.
        */
-      setState("claudeUsageError", describeError(cause));
+      setState((d) => {
+        d.claudeUsageError = describeError(cause);
+      });
       if (claudeUsageFailures === 1) {
         log.warn(
           `could not refresh Claude usage: ${describeError(cause)}; retrying in ${Math.round(wait / 1000)}s`,
@@ -1245,7 +1293,9 @@ function createWorkspace() {
     for (const unlisten of unlisteners.splice(0)) unlisten();
     buffered = [];
     isHydrating = true;
-    setState("boot", { status: "loading" });
+    setState((d) => {
+      d.boot = { status: "loading" };
+    });
     await init();
   }
 
@@ -1369,7 +1419,9 @@ function createWorkspace() {
     const refreshProxyAfterLifecycleEvent = (): void => {
       void backend
         .getAgentProxyStatus()
-        .then((status) => setState("agencyProxy", status))
+        .then((status) => setState((d) => {
+                            d.agencyProxy = status;
+                          }))
         .catch((cause) =>
           log.warn(
             `could not refresh AgencyProxy after run state changed: ${describeError(cause)}`,
@@ -1389,7 +1441,7 @@ function createWorkspace() {
 
     await bind("settings:updated", (settings) => {
       batch(() => {
-        setState("settings", reconcile(settings));
+        setState((d) => reconcile(settings)(d.settings));
         reconcileTabModels(settings);
       });
       syncWindowChrome(settings.theme);
@@ -1398,12 +1450,14 @@ function createWorkspace() {
     await bind("project:deleted", ({ id }) => purgeProject(id));
 
     const upsertItem = (item: ProjectItem) => {
-      setState("items", item.projectId, (list = []) => {
+      setState((d) => {
+        d.items[item.projectId] = ((list = []) => {
         const index = list.findIndex((existing) => existing.id === item.id);
         if (index < 0) return [...list, item];
         const next = [...list];
         next[index] = item;
         return next;
+      })(d.items[item.projectId]);
       });
     };
     // Both event types upsert. A create buffered during hydration can already
@@ -1414,26 +1468,32 @@ function createWorkspace() {
     await bind("item:updated", upsertItem);
 
     await bind("item:deleted", ({ id, projectId }) => {
-      setState("items", projectId, (list = []) => list.filter((item) => item.id !== id));
+      setState((d) => {
+        d.items[projectId] = ((list = []) => list.filter((item) => item.id !== id))(d.items[projectId]);
+      });
     });
 
     await bind("pr:updated", (pr) => {
-      setState("pullRequests", pr.projectId, (list = []) => {
+      setState((d) => {
+        d.pullRequests[pr.projectId] = ((list = []) => {
         const index = list.findIndex((existing) => existing.id === pr.id);
         if (index < 0) return [...list, pr];
         const next = [...list];
         next[index] = pr;
         return next;
+      })(d.pullRequests[pr.projectId]);
       });
     });
 
     await bind("question:updated", (question) => {
-      setState("questions", question.projectId, (list = []) => {
+      setState((d) => {
+        d.questions[question.projectId] = ((list = []) => {
         const index = list.findIndex((existing) => existing.id === question.id);
         if (index < 0) return [...list, question];
         const next = [...list];
         next[index] = question;
         return next;
+      })(d.questions[question.projectId]);
       });
       if (question.answered && prefs.replyQuestionIds[question.projectId] === question.id) {
         setPrefs("replyQuestionIds", question.projectId, "");
@@ -1441,43 +1501,53 @@ function createWorkspace() {
     });
 
     const appendMessage = (message: Message) => {
-      setState("messages", message.projectId, (list = []) => {
+      setState((d) => {
+        d.messages[message.projectId] = ((list = []) => {
         const index = list.findIndex((existing) => existing.id === message.id);
         if (index < 0) return [...list, message];
         const next = [...list];
         next[index] = message;
         return next;
+      })(d.messages[message.projectId]);
       });
     };
     await bind("message:appended", (message) => {
       batch(() => {
-        if (message.author === "agent") setState("streaming", message.projectId, "");
+        if (message.author === "agent") setState((d) => {
+                                          d.streaming[message.projectId] = "";
+                                        });
         const isNew = !(state.messages[message.projectId] ?? []).some(
           (existing) => existing.id === message.id,
         );
         appendMessage(message);
         if (isNew && message.author === "agent" && message.stop !== "continued") {
-          setState("turnCounts", message.projectId, (count = 0) => count + 1);
+          setState((d) => {
+            d.turnCounts[message.projectId] = ((count = 0) => count + 1)(d.turnCounts[message.projectId]);
+          });
         }
       });
     });
     await bind("message:receipt", ({ projectId, messageId, status }) => {
       // A path setter cannot descend through a missing project record. Replace
       // that record instead, creating it when the first receipt arrives.
-      setState("messageReceipts", projectId, (receipts = {}) => ({
+      setState((d) => {
+        d.messageReceipts[projectId] = ((receipts = {}) => ({
         ...receipts,
         [messageId]: status,
-      }));
+      }))(d.messageReceipts[projectId]);
+      });
     });
     await bind("moderation:blocked", appendMessage);
 
     const upsertTask = (task: RunningTask) => {
-      setState("running", task.projectId, (list = []) => {
+      setState((d) => {
+        d.running[task.projectId] = ((list = []) => {
         const index = list.findIndex((existing) => existing.toolCallId === task.toolCallId);
         if (index < 0) return [...list, task];
         const next = [...list];
         next[index] = task;
         return next;
+      })(d.running[task.projectId]);
       });
     };
     await bind("task:started", (task) => {
@@ -1504,8 +1574,12 @@ function createWorkspace() {
             list.filter((task) => task.toolCallId !== entry.toolCallId),
           );
         }
-        setState("taskLog", entry.projectId, (list = []) => [entry, ...list]);
-        setState("logTotals", entry.projectId, (total = 0) => total + 1);
+        setState((d) => {
+          d.taskLog[entry.projectId] = ((list = []) => [entry, ...list])(d.taskLog[entry.projectId]);
+        });
+        setState((d) => {
+          d.logTotals[entry.projectId] = ((total = 0) => total + 1)(d.logTotals[entry.projectId]);
+        });
         touchRunStatus(entry.projectId, "working…");
       });
     });
@@ -1525,10 +1599,12 @@ function createWorkspace() {
       // A limit replayed from the buffer, or delivered late, can already be
       // spent by the time it lands.
       if (!isLimitLive(limit)) return;
-      setState("rateLimits", limit.projectId, (limits = {}) => ({
+      setState((d) => {
+        d.rateLimits[limit.projectId] = ((limits = {}) => ({
         ...limits,
         [limit.agent]: limit,
-      }));
+      }))(d.rateLimits[limit.projectId]);
+      });
     });
 
     await bind("run:rate_limit_cleared", ({ projectId, agent }) => {
@@ -1554,7 +1630,7 @@ function createWorkspace() {
           produce((limits) => delete limits[projectId]),
         );
       } else {
-        setState("rateLimits", projectId, reconcile(next));
+        setState((d) => reconcile(next)(d.rateLimits[projectId]));
       }
     });
 
@@ -1563,7 +1639,9 @@ function createWorkspace() {
         // Normalize a possibly-missing tool at the boundary: a Codex escalation
         // can omit it, and a bare `undefined` reaching the card crashed the
         // render, hiding the very question the run is blocked on.
-        setState("pendingApprovals", projectId, { approvalId, tool: tool ?? "", input });
+        setState((d) => {
+          d.pendingApprovals[projectId] = { approvalId, tool: tool ?? "", input };
+        });
         touchRunStatus(projectId, "waiting for your approval");
       });
     });
@@ -1620,7 +1698,9 @@ function createWorkspace() {
          * the operation with the wrong explanation for it.
          */
         batch(() => {
-          setState("compacting", projectId, true);
+          setState((d) => {
+            d.compacting[projectId] = true;
+          });
           touchRunStatus(
             projectId,
             phase === "learning"
@@ -1658,7 +1738,9 @@ function createWorkspace() {
 
     await bind("run:text", ({ projectId, delta }) => {
       batch(() => {
-        setState("streaming", projectId, (current = "") => current + delta);
+        setState((d) => {
+          d.streaming[projectId] = ((current = "") => current + delta)(d.streaming[projectId]);
+        });
         touchRunStatus(projectId, "writing…");
       });
     });
@@ -1668,7 +1750,8 @@ function createWorkspace() {
     });
 
     await bind("run:persisted", ({ projectId, chars }) => {
-      setState("runStatus", projectId, (current) => ({
+      setState((d) => {
+        d.runStatus[projectId] = ((current) => ({
         ...runIdentity(projectId, current),
         startedAt: current?.startedAt ?? Date.now(),
         activity: current?.activity ?? "working…",
@@ -1677,21 +1760,25 @@ function createWorkspace() {
         contextTokens: current?.contextTokens ?? null,
         contextWindow: current?.contextWindow ?? null,
         persistedChars: chars,
-      }));
+      }))(d.runStatus[projectId]);
+      });
     });
 
     await bind("run:commands", ({ projectId, agent, all, skills }) => {
       // Same missing-parent case as the first receipt above.
-      setState("commands", projectId, (commands = {}) => ({
+      setState((d) => {
+        d.commands[projectId] = ((commands = {}) => ({
         ...commands,
         [agent]: { all, skills },
-      }));
+      }))(d.commands[projectId]);
+      });
     });
 
     await bind(
       "run:usage",
       ({ projectId, tokens, contextTokens, contextWindow, estimatedCostUsd }) => {
-        setState("runStatus", projectId, (current) => ({
+        setState((d) => {
+          d.runStatus[projectId] = ((current) => ({
           ...runIdentity(projectId, current),
           startedAt: current?.startedAt ?? Date.now(),
           activity: current?.activity ?? "working…",
@@ -1706,7 +1793,8 @@ function createWorkspace() {
           // window once and the tokens thereafter would otherwise blank it.
           contextTokens: contextTokens ?? current?.contextTokens ?? null,
           contextWindow: contextWindow ?? current?.contextWindow ?? null,
-        }));
+        }))(d.runStatus[projectId]);
+        });
       },
     );
 
@@ -1721,14 +1809,20 @@ function createWorkspace() {
       if (projectId === TASK_MANAGER_ID) {
         void client()
           .getTaskManager()
-          .then((tm) => setState("taskManagerSession", tm.sessionId))
+          .then((tm) => setState((d) => {
+                          d.taskManagerSession = tm.sessionId;
+                        }))
           .catch((cause) =>
             log.warn(`could not refresh the task manager session: ${describeError(cause)}`),
           );
       }
       batch(() => {
-        setState("running", projectId, []);
-        setState("streaming", projectId, "");
+        setState((d) => {
+          d.running[projectId] = [];
+        });
+        setState((d) => {
+          d.streaming[projectId] = "";
+        });
         setState(
           "runStatus",
           produce((status) => delete status[projectId]),
@@ -1834,7 +1928,9 @@ function createWorkspace() {
     const from = state.activeKey;
     const started = performance.now();
     batch(() => {
-      setState("activeKey", key);
+      setState((d) => {
+        d.activeKey = key;
+      });
       setPrefs("lastTabKey", key);
     });
     const committed = performance.now();
@@ -1872,11 +1968,13 @@ function createWorkspace() {
     if (from <= 0) return;
     const to = Math.min(Math.max(toIndex, 1), state.tabs.length - 1);
     if (from === to) return;
-    setState("tabs", (tabs) => {
+    setState((d) => {
+      d.tabs = ((tabs) => {
       const next = [...tabs];
       const [moved] = next.splice(from, 1);
       next.splice(to, 0, moved);
       return next;
+    })(d.tabs);
     });
   }
 
@@ -1910,7 +2008,9 @@ function createWorkspace() {
     const clicked = performance.now();
     const cached = hydratedProjects.has(projectId);
     if (!state.tabs.some((tab) => tab.key === projectId)) {
-      setState("tabs", (tabs) => [...tabs, projectTab(project)]);
+      setState((d) => {
+        d.tabs = ((tabs) => [...tabs, projectTab(project)])(d.tabs);
+      });
     }
     const opened = performance.now();
     void loadProject(projectId)
@@ -1945,7 +2045,9 @@ function createWorkspace() {
       setPrefs("projectPanelVisible", true);
       setPrefs("panelSections", "items", true);
       openProject(item.projectId);
-      setState("itemReveal", { id: item.id, revision: ++itemRevealRevision });
+      setState((d) => {
+        d.itemReveal = { id: item.id, revision: ++itemRevealRevision };
+      });
     });
     return true;
   }
@@ -1955,10 +2057,12 @@ function createWorkspace() {
   /** The gear opens Settings as a real tab you can leave open — never a modal. */
   function openSettings(): void {
     if (!state.tabs.some((tab) => tab.kind === "settings")) {
-      setState("tabs", (tabs) => [
+      setState((d) => {
+        d.tabs = ((tabs) => [
         ...tabs,
         { ...HOME_TAB, key: "settings", kind: "settings", label: "Settings" },
-      ]);
+      ])(d.tabs);
+      });
     }
     focus("settings");
   }
@@ -1966,16 +2070,24 @@ function createWorkspace() {
   /** Replay the guide from Help without changing its durable completion flag. */
   function openOnboarding(): void {
     batch(() => {
-      setState("onboardingOpen", true);
-      setState("onboardingDeferred", false);
+      setState((d) => {
+        d.onboardingOpen = true;
+      });
+      setState((d) => {
+        d.onboardingDeferred = false;
+      });
     });
   }
 
   /** Close the guide for this window; an incomplete first run returns next launch. */
   function deferOnboarding(): void {
     batch(() => {
-      setState("onboardingOpen", false);
-      setState("onboardingDeferred", true);
+      setState((d) => {
+        d.onboardingOpen = false;
+      });
+      setState((d) => {
+        d.onboardingDeferred = true;
+      });
     });
   }
 
@@ -1983,8 +2095,12 @@ function createWorkspace() {
   async function completeOnboarding(): Promise<void> {
     await saveSettings({ onboardingCompleted: true });
     batch(() => {
-      setState("onboardingOpen", false);
-      setState("onboardingDeferred", false);
+      setState((d) => {
+        d.onboardingOpen = false;
+      });
+      setState((d) => {
+        d.onboardingDeferred = false;
+      });
     });
     if (
       state.agents.some((status) => isProjectAgent(status.agent) && status.state === "connected")
@@ -1998,10 +2114,12 @@ function createWorkspace() {
   /** The gauge opens Analytics as a real tab, the same way the gear opens Settings. */
   function openAnalytics(): void {
     if (!state.tabs.some((tab) => tab.kind === "analytics")) {
-      setState("tabs", (tabs) => [
+      setState((d) => {
+        d.tabs = ((tabs) => [
         ...tabs,
         { ...HOME_TAB, key: "analytics", kind: "analytics", label: "Analytics" },
-      ]);
+      ])(d.tabs);
+      });
     }
     focus("analytics");
   }
@@ -2015,7 +2133,8 @@ function createWorkspace() {
     }
     const key = `draft-${Date.now()}`;
     const agent = defaultAgent();
-    setState("tabs", (tabs) => [
+    setState((d) => {
+      d.tabs = ((tabs) => [
       ...tabs,
       {
         key,
@@ -2033,7 +2152,8 @@ function createWorkspace() {
         ),
         status: "quiet",
       },
-    ]);
+    ])(d.tabs);
+    });
     focus(key);
   }
 
@@ -2042,7 +2162,9 @@ function createWorkspace() {
     const index = state.tabs.findIndex((tab) => tab.key === key);
     if (index < 0) return;
     batch(() => {
-      setState("tabs", (tabs) => tabs.filter((tab) => tab.key !== key));
+      setState((d) => {
+        d.tabs = ((tabs) => tabs.filter((tab) => tab.key !== key))(d.tabs);
+      });
       setState(
         produce((draft) => {
           delete draft.transcriptPositions[key];
@@ -2065,7 +2187,9 @@ function createWorkspace() {
    */
   function purgeProject(projectId: string): void {
     batch(() => {
-      setState("projects", (projects) => projects.filter((project) => project.id !== projectId));
+      setState((d) => {
+        d.projects = ((projects) => projects.filter((project) => project.id !== projectId))(d.projects);
+      });
       // Every per-project record, not a subset: leaving some behind let the
       // record key-sets diverge, so a value could be absent under a key another
       // record still had — which is how window-wide `Object.values(...)` reads
@@ -2129,11 +2253,13 @@ function createWorkspace() {
        * having been ignored, which is what it looked like.
        */
       if (tab.kind === "draft") {
-        setState("tabs", index, {
+        setState((d) => {
+          d.tabs[index] = {
           agent: defaultAgent,
           model: selection.default,
           permission: compatiblePermission(state.agents, defaultAgent, settings.defaultPermission),
           effort: settings.defaultEffort,
+        };
         });
         return;
       }
@@ -2145,10 +2271,12 @@ function createWorkspace() {
        */
       const tabSelection = settings.models[tab.agent];
       if (isProjectAgent(tab.agent) && tabSelection?.enabled.includes(tab.model)) return;
-      setState("tabs", index, {
+      setState((d) => {
+        d.tabs[index] = {
         agent: defaultAgent,
         model: selection.default,
         permission: compatiblePermission(state.agents, defaultAgent, tab.permission),
+      };
       });
     });
   }
@@ -2196,7 +2324,9 @@ function createWorkspace() {
     state.tabs.forEach((tab, index) => {
       const project = state.projects.find((candidate) => candidate.id === tab.projectId);
       const tabOwner = project?.forkedFrom?.itemId ? project.forkedFrom.projectId : tab.key;
-      if (tabOwner === ownerKey) setState("tabs", index, { extraThinking: enabled });
+      if (tabOwner === ownerKey) setState((d) => {
+                                   d.tabs[index] = { extraThinking: enabled };
+                                 });
     });
     setPrefs("lastExtraThinking", enabled);
   }
@@ -2240,8 +2370,8 @@ function createWorkspace() {
       // The draft becomes the project tab: same position in the strip, so the
       // tab you were typing in is the tab that keeps the conversation. Any tab
       // already holding this project is dropped rather than duplicated.
-      setState("tabs", (tabs) =>
-        tabs
+      setState((d) => {
+        d.tabs = d.tabs
           .filter((candidate) => candidate.key !== created.project.id)
           .map((candidate) =>
             candidate.key === tabKey
@@ -2253,9 +2383,11 @@ function createWorkspace() {
                   label: created.project.name,
                 }
               : candidate,
-          ),
-      );
-      setState("items", created.project.id, created.items);
+          );
+      });
+      setState((d) => {
+        d.items[created.project.id] = created.items;
+      });
       focus(created.project.id);
     });
   }
@@ -2270,10 +2402,13 @@ function createWorkspace() {
     const project = await client().forkItem(itemId);
     batch(() => {
       upsertProject(project);
-      setState("items", project.id, state.items[project.id] ?? []);
+      setState((d) => {
+        d.items[project.id] = state.items[project.id] ?? [];
+      });
       if (!state.tabs.some((tab) => tab.key === project.id)) {
         const tab = projectTab(project);
-        setState("tabs", (tabs) => [
+        setState((d) => {
+          d.tabs = ((tabs) => [
           ...tabs,
           parentTab
             ? {
@@ -2285,7 +2420,8 @@ function createWorkspace() {
                 permission: parentTab.permission,
               }
             : tab,
-        ]);
+        ])(d.tabs);
+        });
       }
       focus(project.id);
     });
@@ -2329,7 +2465,8 @@ function createWorkspace() {
     activity: string,
     identity?: Pick<RunStatus, "agent" | "model" | "permission">,
   ): void {
-    setState("runStatus", projectId, (current) => ({
+    setState((d) => {
+      d.runStatus[projectId] = ((current) => ({
       ...runIdentity(projectId, current, identity),
       startedAt: current?.startedAt ?? Date.now(),
       persistedChars: current?.persistedChars ?? 0,
@@ -2338,7 +2475,8 @@ function createWorkspace() {
       contextTokens: current?.contextTokens ?? null,
       contextWindow: current?.contextWindow ?? null,
       activity,
-    }));
+    }))(d.runStatus[projectId]);
+    });
   }
 
   /** A run is in flight, so a send now would be refused by the backend. */
@@ -2402,10 +2540,12 @@ function createWorkspace() {
     replyQuestionId?: string,
     itemId?: string,
   ): void {
-    setState("queued", projectId, (waiting = []) => [
+    setState((d) => {
+      d.queued[projectId] = ((waiting = []) => [
       ...waiting,
       { body, reason, study, messageId, replyQuestionId, itemId },
-    ]);
+    ])(d.queued[projectId]);
+    });
   }
 
   const sendKnownMessage = async (
@@ -2523,7 +2663,9 @@ function createWorkspace() {
     const next = waiting[0];
     if (next === undefined) return;
     if (isBusy(projectId) && !allowLiveFollowUp) return;
-    setState("queued", projectId, waiting.slice(1));
+    setState((d) => {
+      d.queued[projectId] = waiting.slice(1);
+    });
     try {
       await dispatch(
         projectId,
@@ -2534,7 +2676,9 @@ function createWorkspace() {
         next.itemId,
       );
     } catch (cause) {
-      setState("queued", projectId, (rest = []) => [next, ...rest]);
+      setState((d) => {
+        d.queued[projectId] = ((rest = []) => [next, ...rest])(d.queued[projectId]);
+      });
       if (attempt < 4) {
         window.setTimeout(
           () => void flushQueue(projectId, attempt + 1, allowLiveFollowUp),
@@ -2579,7 +2723,9 @@ function createWorkspace() {
   function setProjectTranscriptPosition(id: string, position: number): void {
     const encoded = Number.isSafeInteger(position) && position > 0 ? position : 0;
     if ((state.transcriptPositions[id] ?? 0) === encoded) return;
-    setState("transcriptPositions", id, encoded);
+    setState((d) => {
+      d.transcriptPositions[id] = encoded;
+    });
   }
 
   const actions = {
@@ -2607,7 +2753,9 @@ function createWorkspace() {
     sendTaskPrompt,
     async resetTaskManager() {
       await client().resetTaskManager();
-      setState("taskManagerSession", null);
+      setState((d) => {
+        d.taskManagerSession = null;
+      });
     },
     deleteProject: (id: string) => client().deleteProject(id),
     renameProject: (id: string, name: string) => client().renameProject(id, name),
@@ -2638,7 +2786,9 @@ function createWorkspace() {
     async reviewPullRequest(projectId: string, url: string, agent: Agent) {
       const key = reviewRunKey(url, agent);
       if (state.reviewing[key]) return;
-      setState("reviewing", key, true);
+      setState((d) => {
+        d.reviewing[key] = true;
+      });
       try {
         await client().reviewPullRequest(projectId, url, agent);
       } finally {
@@ -2707,7 +2857,9 @@ function createWorkspace() {
         await client().compactProject(projectId, agent);
       } catch (cause) {
         if (queueReason(cause) === null) throw cause;
-        setState("pendingCompact", projectId, agent);
+        setState((d) => {
+          d.pendingCompact[projectId] = agent;
+        });
       }
     },
     /** Wave away a compaction that is still waiting for the run to end. */
@@ -2741,8 +2893,12 @@ function createWorkspace() {
     async clearTaskLog(projectId: string) {
       await client().clearTaskLog(projectId);
       batch(() => {
-        setState("taskLog", projectId, []);
-        setState("logTotals", projectId, 0);
+        setState((d) => {
+          d.taskLog[projectId] = [];
+        });
+        setState((d) => {
+          d.logTotals[projectId] = 0;
+        });
       });
     },
     /** Persist a partial settings patch without accepting stale responses. */
@@ -2751,7 +2907,7 @@ function createWorkspace() {
     exportStudyEvents: () => client().exportStudyEvents(),
     clearStudyEvents: () => client().clearStudyEvents(),
     async recheckAgents() {
-      setState("agents", reconcile(await client().listAgentStatus(true)));
+      setState((d) => reconcile(await client().listAgentStatus(true))(d.agents));
     },
     /**
      * Re-read the catalogues, asking each CLI to enumerate where it can.
@@ -2768,7 +2924,9 @@ function createWorkspace() {
      */
     async setDataLocation(path: string | null) {
       await client().setDataLocation(path);
-      setState("dataLocation", await client().getDataLocation());
+      setState((d) => {
+        d.dataLocation = await client().getDataLocation();
+      });
     },
     /**
      * Choose that directory with the OS picker.
@@ -2785,13 +2943,19 @@ function createWorkspace() {
       if (picked) await saveSettings({ agentProxyBinary: picked });
     },
     async refreshAgentProxy() {
-      setState("agencyProxy", await client().getAgentProxyStatus());
+      setState((d) => {
+        d.agencyProxy = await client().getAgentProxyStatus();
+      });
     },
     async restartAgentProxy(mode: "drain" | "terminate") {
-      setState("agencyProxy", await client().restartAgentProxy(mode));
+      setState((d) => {
+        d.agencyProxy = await client().restartAgentProxy(mode);
+      });
     },
     async stopAgentProxy() {
-      setState("agencyProxy", await client().stopAgentProxy());
+      setState((d) => {
+        d.agencyProxy = await client().stopAgentProxy();
+      });
     },
     /** Read the on-disk backup catalogue and the result from the last angel run. */
     getStoreBackupStatus() {
@@ -2847,17 +3011,21 @@ function createWorkspace() {
     },
     /** Create the workspace directory, then re-read so the row updates. */
     async createWorkspaceRoot() {
-      setState("workspaceRoot", await client().createWorkspaceRoot());
+      setState((d) => {
+        d.workspaceRoot = await client().createWorkspaceRoot();
+      });
     },
     /** Pick the Home Project directory, persist it, then show the resolved path. */
     async chooseWorkspaceRoot() {
       const picked = await client().chooseProjectDirectory();
       if (!picked) return;
       await saveSettings({ workspaceRoot: picked });
-      setState("workspaceRoot", await client().getWorkspaceRoot());
+      setState((d) => {
+        d.workspaceRoot = await client().getWorkspaceRoot();
+      });
     },
     async refreshModels() {
-      setState("models", reconcile(await client().listModels(true)));
+      setState((d) => reconcile(await client().listModels(true))(d.models));
     },
     /**
      * Add or remove a model from an agent's picker.
