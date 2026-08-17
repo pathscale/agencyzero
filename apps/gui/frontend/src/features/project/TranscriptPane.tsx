@@ -369,9 +369,20 @@ export function TranscriptPane(props: {
     move();
     const restoreAnchor = (): void => {
       revealFrame = undefined;
-      scroller.scrollTop = anchor?.row.isConnected
+      /*
+       * Clamped, because neither helper knows the viewport.
+       *
+       * Both compute a position from heights alone, and a position past
+       * `scrollHeight - clientHeight` strands the view beyond the last pixel
+       * of content: Blitz keeps the overshoot (its own scroll height measures
+       * larger than the real maximum) and the pane paints nothing. See
+       * `tailScroll.test.ts`.
+       */
+      const furthest = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
+      const restored = anchor?.row.isConnected
         ? anchoredToRow(scroller.scrollTop, anchor.gap, rowGap(scroller, anchor.row))
         : anchoredScrollTop(previousTop, previousHeight, scroller.scrollHeight);
+      scroller.scrollTop = Math.max(0, Math.min(furthest, restored));
       lastScrollTop = scroller.scrollTop;
       if (!untrack(pinned)) rememberReaderPosition();
       slidingWindow = false;
@@ -588,7 +599,10 @@ export function TranscriptPane(props: {
     if (remembered === undefined || untrack(pinned)) return;
     const restore = (): void => {
       if (state.activeKey !== props.project.id || untrack(pinned)) return;
-      scroller.scrollTop = remembered;
+      scroller.scrollTop = Math.max(
+        0,
+        Math.min(scroller.scrollHeight - scroller.clientHeight, remembered),
+      );
       lastScrollTop = scroller.scrollTop;
     };
     queueMicrotask(restore);

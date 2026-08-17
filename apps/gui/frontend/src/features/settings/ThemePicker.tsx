@@ -40,11 +40,34 @@ export function ThemePicker(props: {
   /** Five stops across the comfort range, matching the strength row beside it. */
   const softnessStops = () => Array.from({ length: 5 }, (_, i) => (i * MAX_SOFTNESS) / 4);
 
-  /** The desk as currently configured — what every swatch sits on. */
-  const deskAnchor = (softness: number) =>
-    prefs.colorMode === "light"
-      ? `oklch(calc(93% - ${softness}%) 0.004 240)`
-      : `oklch(calc(10.5% + ${softness}%) 0.004 240)`;
+  /**
+   * The desk as currently configured — what every swatch sits on.
+   *
+   * Chroma and hue come from the live custom properties, not from literals.
+   * `theme.css` builds `--color-az-desk` as
+   *
+   *     color-mix(in oklab, var(--az-surface) var(--az-wash-110),
+   *               oklch(calc(10.5% + var(--az-lift))
+   *                     calc(0.004 * var(--az-tint)) var(--az-hue)))
+   *
+   * and this used to hardcode `0.004` and `240`, dropping the tint multiplier
+   * and pinning the hue to blue-grey. Every theme that moved its hue got
+   * swatches previewing a colour the surface never becomes: the row said
+   * blue-grey while the desk leaned toward the accent. The preview has to be
+   * the same expression or it is decoration.
+   */
+  const deskVar = (name: string, fallback: string): string => {
+    if (typeof getComputedStyle === "undefined") return fallback;
+    const value = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+    return value || fallback;
+  };
+  const deskAnchor = (softness: number) => {
+    const chroma = `calc(0.004 * ${deskVar("--az-tint", "1")})`;
+    const hue = deskVar("--az-hue", "240");
+    return prefs.colorMode === "light"
+      ? `oklch(calc(93% - ${softness}%) ${chroma} ${hue})`
+      : `oklch(calc(10.5% + ${softness}%) ${chroma} ${hue})`;
+  };
   const deskStrength = (wash: number) => Math.min(wash * 1.1, 100);
   const deskPreview = (theme: ThemeSettings) =>
     `color-mix(in oklab, ${theme.surface || DEFAULT_ACCENT} ${deskStrength(theme.wash)}%, ${deskAnchor(theme.softness)})`;

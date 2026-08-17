@@ -275,6 +275,30 @@ pub struct Theme {
     /// Panel drop shadow, 0 to 1. 0 is no shadow, which is untouched.
     #[serde(default)]
     pub glass_shadow: f32,
+    /*
+     * Glass, as the three numbers `@pathscale/ui` derives its twenty-five
+     * tokens from. The panel axes above are derived from these now, rather
+     * than being set independently.
+     *
+     * They have to live here because a field this struct does not declare is
+     * *silently dropped*: the record is `#[serde(default)]`, so an unknown key
+     * is discarded on load rather than refused. The frontend was writing
+     * `glassBlur` into a store that never kept it, the value came back absent
+     * on the next read, and the slider snapped to where it started. It reads
+     * as "the slider bounces back and nothing changes", and no test on either
+     * side of the boundary can see it, because each side is self-consistent.
+     *
+     * `None` means "never set", which is what lets the library's own default
+     * for the current colour mode show through instead of a hardcoded zero.
+     */
+    #[serde(default)]
+    pub glass_blur: Option<f32>,
+    /// How much the surface asserts itself: tint, border, highlights. 0 to 0.4.
+    #[serde(default)]
+    pub glass_refraction: Option<f32>,
+    /// How far the surface sits off the page: glow, sheen, shadow. 0 to 30.
+    #[serde(default)]
+    pub glass_depth: Option<f32>,
 }
 
 /// The hairline as it was before the axis existed.
@@ -295,6 +319,13 @@ impl Default for Theme {
             glass_lift: 0.0,
             glass_border: 16.0,
             glass_shadow: 0.0,
+            // `None`, not a number: unset lets the library's default for the
+            // current colour mode show through, and a hardcoded value here
+            // would silently disagree with it the moment the curves are
+            // retuned.
+            glass_blur: None,
+            glass_refraction: None,
+            glass_depth: None,
         }
     }
 }
@@ -842,6 +873,45 @@ pub fn merge(target: &mut Value, patch: &Value) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /*
+     * Every glass axis the frontend writes has to survive a round trip.
+     *
+     * A field this struct does not declare is *silently dropped*: the record
+     * is `#[serde(default)]`, so an unknown key is discarded on load rather
+     * than refused. `glassBlur`, `glassRefraction` and `glassDepth` were
+     * written by Settings into a store that never kept them, so every value
+     * came back absent and the slider snapped to where it started. Neither
+     * side's tests could see it, because each side was self-consistent.
+     */
+    #[test]
+    fn every_glass_axis_survives_a_round_trip() {
+        let mut settings = GlobalSettings::default();
+        settings.theme.glass_blur = Some(9.0);
+        settings.theme.glass_refraction = Some(0.25);
+        settings.theme.glass_depth = Some(18.0);
+
+        let json = serde_json::to_string(&settings).expect("should serialize");
+        for key in ["glassBlur", "glassRefraction", "glassDepth"] {
+            assert!(json.contains(key), "{key} is not persisted at all: {json}");
+        }
+
+        let back: GlobalSettings = serde_json::from_str(&json).expect("should deserialize");
+        assert_eq!(back.theme.glass_blur, Some(9.0));
+        assert_eq!(back.theme.glass_refraction, Some(0.25));
+        assert_eq!(back.theme.glass_depth, Some(18.0));
+    }
+
+    /// Unset stays unset, so the library's per-mode default shows through
+    /// rather than a zero this struct invented.
+    #[test]
+    fn an_untouched_glass_axis_round_trips_as_unset() {
+        let json = serde_json::to_string(&GlobalSettings::default()).expect("should serialize");
+        let back: GlobalSettings = serde_json::from_str(&json).expect("should deserialize");
+        assert_eq!(back.theme.glass_blur, None);
+        assert_eq!(back.theme.glass_refraction, None);
+        assert_eq!(back.theme.glass_depth, None);
+    }
 
     /// Opus 5 is the one 5-series model that is not 1M natively, so reaching
     /// it at 200k needs the pinned id: the moving `opus` alias is whatever the
