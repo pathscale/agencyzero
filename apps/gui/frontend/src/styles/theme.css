@@ -277,6 +277,19 @@
   --color-az-hairline-strong: rgb(from var(--color-primary) r g b / 18%);
 
   /*
+   * The zebra stripe on a list of items.
+   *
+   * A tinted film rather than a white one. `bg-white/[0.055]` was invisible on
+   * a light theme, where a 5.5% white film over a near-white row is nothing at
+   * all, and on a dark theme it sat close enough to nothing to read as a
+   * rendering smudge rather than a pattern. Deriving it from the accent means
+   * it is felt in both modes and belongs to the theme, like the hairlines
+   * above.
+   */
+  --color-az-stripe: rgb(from var(--color-primary) r g b / 7%);
+  --color-az-stripe-hover: rgb(from var(--color-primary) r g b / 12%);
+
+  /*
    * The transcript's own surface — the one you read for hours.
    *
    * These were hex (#1e1e1e / #2a2a2a / #e0e0e0) because the oklch ladder
@@ -984,6 +997,9 @@
   --color-az-hairline: rgb(from var(--color-primary) r g b / 14%);
   --color-az-hairline-soft: rgb(from var(--color-primary) r g b / 9%);
   --color-az-hairline-strong: rgb(from var(--color-primary) r g b / 22%);
+  /* Light rows take a touch more tint to read as a stripe at all. */
+  --color-az-stripe: rgb(from var(--color-primary) r g b / 9%);
+  --color-az-stripe-hover: rgb(from var(--color-primary) r g b / 15%);
   --color-az-link: #1d4ed8;
   --color-az-highlight: #0e7490;
   --color-az-active: #b45309;

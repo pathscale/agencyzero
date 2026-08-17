@@ -1258,13 +1258,21 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
                 } ${item.archived ? "border border-primary/18 border-dashed opacity-75" : ""} ${
                   item.status === "active"
                     ? "bg-base-300 shadow-[inset_2px_0_0_var(--color-primary)]"
-                    : // Zebra striping so a long list reads row by row; the hover
-                      // still lifts on top of whichever stripe is underneath. The
-                      // odd stripe is deliberately not faint: barely-visible
-                      // striping reads as a rendering smudge, not a pattern.
+                    : /*
+                       * Zebra striping so a long list reads row by row; the hover
+                       * still lifts on top of whichever stripe is underneath. The
+                       * odd stripe is deliberately not faint: barely-visible
+                       * striping reads as a rendering smudge, not a pattern.
+                       *
+                       * Tinted rather than white. `bg-white/[0.055]` was a white
+                       * film over a near-white row in light mode, which is
+                       * nothing at all, and close enough to nothing in dark mode
+                       * to be the smudge this comment warns about. The token is
+                       * derived from the accent per mode, so both read.
+                       */
                       index() % 2 === 1
-                      ? "bg-white/[0.055] hover:bg-white/[0.08]"
-                      : "hover:bg-white/5"
+                      ? "bg-az-stripe hover:bg-az-stripe-hover"
+                      : "hover:bg-az-stripe"
                 }`}
               >
                 <div class="flex min-w-0 flex-1 items-center gap-1">

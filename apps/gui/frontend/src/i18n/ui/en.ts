@@ -536,7 +536,6 @@ const en = {
   "Drop this queued compaction": "Drop this queued compaction",
   "Ask, or type / for commands…": "Ask, or type / for commands…",
   copied: "copied",
-  "GitHub ›": "GitHub ›",
   "Open source": "Open source",
   "View source": "View source",
   "Star on GitHub": "Star on GitHub",

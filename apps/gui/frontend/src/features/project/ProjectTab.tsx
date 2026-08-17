@@ -713,37 +713,44 @@ function PrChip(props: { pr: PullRequest }): JSX.Element {
         class={`shrink-0 text-[14px] ${merged() ? "text-az-pr-strong" : closed() ? "text-az-muted" : "text-success"}`}
       />
       {/*
-       * What the row *is*, and nothing that acts. The whole row used to be the
-       * button that opened the pull request, so the one obvious action was
-       * discoverable only by clicking text that did not look like a link, and
-       * every other click on the row went to GitHub whether or not that was
-       * what you meant.
+       * The branch name is the link.
+       *
+       * The whole row was the button once, so the one obvious action was
+       * discoverable only by clicking text that did not look like a link and
+       * every other click went to GitHub whether or not that was the intent.
+       * The fix for that added a "GitHub ›" button at the end, which spent a
+       * word of the row saying where a pull request URL goes.
+       *
+       * A branch name is what identifies the pull request to the person
+       * reading, it is already the widest thing on the row, and making it the
+       * target gives the click somewhere to land that means something. Only
+       * that span is coloured and underlined, so the rest of the row stays
+       * inert and stays readable.
        */}
       <div class="flex min-w-0 flex-1 items-center gap-2.5">
         <span class={`shrink-0 font-semibold ${merged() ? "text-az-pr-strong" : "text-az-strong"}`}>
           #{props.pr.number}
         </span>
         <span class="shrink-0 text-az-muted">{props.pr.repo}</span>
-        <Show when={props.pr.branch}>
-          <span class="min-w-0 truncate font-mono text-[11px] text-az-body">{props.pr.branch}</span>
-        </Show>
+        <Button
+          type="button"
+          onClick={() =>
+            void actions
+              .openExternal(props.pr.url)
+              .catch((cause) => log.warn(`could not open the PR: ${describeError(cause)}`))
+          }
+          title={tx("Open {url}", { url: props.pr.url })}
+          class="min-w-0 cursor-pointer truncate font-mono text-[11px] text-primary underline decoration-dotted underline-offset-2 transition-opacity hover:opacity-75"
+        >
+          {/* A pull request always has a number; a branch name is what the
+              API may not have given us. Fall back to the number rather than
+              rendering an empty link nobody can hit. */}
+          {props.pr.branch || `#${props.pr.number}`}
+        </Button>
         <Show when={copied()}>
           <span class="shrink-0 text-[10.5px] text-success">{tx("copied")}</span>
         </Show>
       </div>
-      {/* Coloured and underlined, because it leaves the app. */}
-      <Button
-        type="button"
-        onClick={() =>
-          void actions
-            .openExternal(props.pr.url)
-            .catch((cause) => log.warn(`could not open the PR: ${describeError(cause)}`))
-        }
-        title={tx("Open {url}", { url: props.pr.url })}
-        class="shrink-0 cursor-pointer text-primary underline decoration-dotted underline-offset-2 transition-opacity hover:opacity-75"
-      >
-        {tx("GitHub ›")}
-      </Button>
       <Show
         when={merged()}
         fallback={

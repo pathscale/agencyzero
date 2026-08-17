@@ -515,7 +515,6 @@ const zh = {
   "Drop this queued compaction": "移除此排队压缩",
   "Ask, or type / for commands…": "提问，或输入 / 查看命令…",
   copied: "已复制",
-  "GitHub ›": "GitHub ›",
   "Open source": "开源",
   "View source": "查看源代码",
   "Star on GitHub": "在 GitHub 上加星",
