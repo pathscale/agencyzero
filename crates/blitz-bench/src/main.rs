@@ -33,6 +33,9 @@ usage: blitz-bench <mode> [args]
 
   nodes                       tree size and a role histogram
   idle                        one metrics read, as a frame-window summary
+  blink [allowed-missed]      assert the owner's blinking-rectangle repro: no
+                              missed refreshes and no frame interval past two
+                              refresh periods. Exits 1 when the blink is present
   drift [seconds]             what the app does while nothing happens (default 20)
   frames                      one metrics read, laid out for reading
   metrics                     the raw metrics response
@@ -1080,6 +1083,91 @@ async fn main() -> Result<()> {
                 frames as f64 / seconds
             );
             report::show_delta(&before, &after, 0);
+        }
+        /*
+         * The owner's blinking-rectangle repro, asserted rather than described.
+         *
+         * The repro is a project with 0 items and the item list expanded, which
+         * is the state this reads. It exists because the fault was reported
+         * four times and twice called fixed from a reading that did not
+         * actually cover it: an idle window is not quiet here, and saying so
+         * once in prose has not been enough.
+         *
+         * What it asserts, and why each is the honest form of the question:
+         *
+         * - `missed_refreshes` over the sample window. A blink is a frame that
+         *   did not land, so this is the number that has to be zero. It is a
+         *   count over a fixed 256-frame window, not a rate, so it is
+         *   comparable between runs.
+         * - the worst frame interval against the display's own period. A single
+         *   72ms gap on a 60Hz display is four dropped refreshes and is visible
+         *   as a flash; a mean of 13ms is not. The mean is what a naive reading
+         *   reports and it hides exactly this.
+         *
+         * Both are read from one metrics response so they describe the same
+         * window. Exits non-zero when the fault is present, so it can gate a
+         * fix instead of being read by eye.
+         *
+         * Deliberately not asserted: fps. It averages over the window and a
+         * blink does not move it enough to fail on, which is how "the window is
+         * quiet" was concluded from a sample that contained a 477ms stall.
+         */
+        "blink" => {
+            let allowed_missed: u64 = args.get(1).and_then(|v| v.parse().ok()).unwrap_or(0);
+            let reading = metrics(&mut client).await?;
+            report::show("blink", &reading);
+
+            let Some(window) = reading.frame_window.as_ref() else {
+                eyre::bail!(
+                    "the app published no frame window, so there is nothing to assert; \
+                     launch it with --blitz-deep-profiling"
+                );
+            };
+
+            // The refresh period the app itself reports, so this stays right on
+            // a 120Hz panel rather than assuming 60. Unknown falls back to 60,
+            // which is the more forgiving of the two.
+            let period_ms = 1000.0
+                / window
+                    .display_refresh_hz
+                    .filter(|hz| *hz > 0.0)
+                    .unwrap_or(60.0);
+            // Two periods: one late frame is a hiccup, two is a gap a person
+            // sees. Anything under this is not the reported fault.
+            let interval_budget = period_ms * 2.0;
+            let worst_interval = window.interval.max_ms;
+
+            println!();
+            println!("== the owner's repro: a project with 0 items, item list expanded ==");
+            println!(
+                "  missed refreshes : {} over {} frames (allowed {allowed_missed})",
+                window.missed_refreshes, window.window_frames
+            );
+            println!(
+                "  worst interval   : {worst_interval:.1}ms against a {period_ms:.1}ms refresh \
+                 (budget {interval_budget:.1}ms)"
+            );
+
+            let mut faults = Vec::new();
+            if window.missed_refreshes > allowed_missed {
+                faults.push(format!(
+                    "{} missed refreshes over {} frames",
+                    window.missed_refreshes, window.window_frames
+                ));
+            }
+            if worst_interval > interval_budget {
+                faults.push(format!(
+                    "a {worst_interval:.1}ms frame interval, {:.1}x the refresh period",
+                    worst_interval / period_ms
+                ));
+            }
+
+            if faults.is_empty() {
+                println!("\nno blink: the window is quiet by both measures");
+            } else {
+                println!("\nBLINK PRESENT: {}", faults.join(", "));
+                std::process::exit(1);
+            }
         }
         "click" => {
             let want = args.get(1).map(String::as_str).unwrap_or("Settings");
