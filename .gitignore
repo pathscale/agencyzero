@@ -39,3 +39,7 @@ docs/HANDOVER.md
 # Renderer redirect for local builds. Untracked on purpose: the paths exist on
 # one machine. See scripts/local-renderer.sh.
 .cargo/local-renderer.toml
+
+# Handover docs are working notes, never committed. See AGENTS.md.
+docs/HANDOVER.md
+HANDOVER*.md
