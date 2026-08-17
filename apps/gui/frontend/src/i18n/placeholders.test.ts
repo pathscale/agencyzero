@@ -15,7 +15,7 @@ import { describe, expect, it } from "vitest";
 import uiEn from "~/i18n/ui/en";
 import uiZh from "~/i18n/ui/zh";
 
-const CATALOGUES: Array<[string, Record<string, string>]> = [
+const CATALOGUES: [string, Record<string, string>][] = [
   ["en", uiEn as unknown as Record<string, string>],
   ["zh", uiZh as unknown as Record<string, string>],
 ];
