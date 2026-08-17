@@ -72,7 +72,7 @@ dependencies = [
 
 [[package]]
 name = "agency-tools"
-version = "0.8.13"
+version = "0.8.14"
 dependencies = [
  "derive_more 2.1.1",
  "dirs",
@@ -364,11 +364,11 @@ checksum = "f2032f911046de80f0a198e0901378627c33f59ea0ac00e363d481118bd70a53"
 
 [[package]]
 name = "az-core"
-version = "0.8.13"
+version = "0.8.14"
 
 [[package]]
 name = "az-gui"
-version = "0.8.13"
+version = "0.8.14"
 dependencies = [
  "agency-proxy-client",
  "agency-proxy-protocol",
@@ -407,7 +407,7 @@ dependencies = [
 
 [[package]]
 name = "az-mcp-proxy"
-version = "0.8.13"
+version = "0.8.14"
 dependencies = [
  "az-core",
 ]
@@ -498,7 +498,7 @@ dependencies = [
 
 [[package]]
 name = "blitz-bench"
-version = "0.8.13"
+version = "0.8.14"
 dependencies = [
  "blitz-control-protocol",
  "endpoint-libs",
@@ -8978,7 +8978,7 @@ dependencies = [
 
 [[package]]
 name = "wt-migrate"
-version = "0.8.13"
+version = "0.8.14"
 dependencies = [
  "chrono",
  "derive_more 2.1.1",
