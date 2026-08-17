@@ -55,6 +55,38 @@ Run what you build before calling it done. **If you can't run it, say so.**
   (`gh pr merge --delete-branch`). An open PR whose content already shipped reads as
   unfinished work.
 
+## Handover documents are never committed
+
+**Never commit a handover, status or session-summary document to any repository,
+and never push one to `master`.** Not under `docs/`, not at the root, not under
+any name. They are working notes for the owner and they belong in the
+conversation, not in the history of a codebase that outlives the session.
+
+`docs/HANDOVER.md` and `HANDOVER*.md` are gitignored. If you find one tracked,
+untrack it rather than editing it.
+
+## Merged is not fixed
+
+**Only the owner closes a bug.** A merged PR means the change landed, nothing
+more. Marking an item `finished` because CI went green is how a list of real,
+still-broken behaviour quietly emptied itself: Cmd-Z, project renaming, copying
+out of the transcript and the blinking artifact were all reported again after
+being recorded as done.
+
+So:
+
+- `shipped` when the PR merges. That is the honest ceiling for anything you
+  cannot see with your own eyes.
+- `finished` only after the owner says it works, or after you have driven the
+  exact reported path on a running build and watched it behave.
+- A test passing is not the owner saying it works. A guard can assert the
+  precondition you fixed and still leave the feature broken for a reason
+  underneath it — which is exactly what the composer undo guard did, staying
+  green while `blitz-dom` turned out to have no undo stack at all.
+
+When a fix cannot be verified from here, say which part is unverified rather
+than rounding it up.
+
 ## Closing an item you were given
 
 The project prompt supplies item ids and the declared Prompt Syntax surface. Report
