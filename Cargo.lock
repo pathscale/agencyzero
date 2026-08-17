@@ -511,7 +511,7 @@ dependencies = [
 [[package]]
 name = "blitz-control-protocol"
 version = "0.1.0"
-source = "git+https://github.com/pathscale/tauri-runtime-blitz.git?branch=master#f46f9b8f845b70134fd68bb421b47c2d2ffc0fa2"
+source = "git+https://github.com/pathscale/tauri-runtime-blitz.git?branch=master#a0aba446e969ce3c5d3f4cee336a61bdac45da3d"
 dependencies = [
  "endpoint-libs",
  "serde",
@@ -1056,7 +1056,7 @@ checksum = "af491d569909a7e4dee0ad7db7f5341fef5c614d5b8ec8cf765732aba3cff681"
 dependencies = [
  "serde",
  "termcolor",
- "unicode-width 0.2.2",
+ "unicode-width 0.1.14",
 ]
 
 [[package]]
@@ -6616,7 +6616,7 @@ dependencies = [
 [[package]]
 name = "tauri-runtime-blitz"
 version = "0.1.0"
-source = "git+https://github.com/pathscale/tauri-runtime-blitz.git?branch=master#f46f9b8f845b70134fd68bb421b47c2d2ffc0fa2"
+source = "git+https://github.com/pathscale/tauri-runtime-blitz.git?branch=master#a0aba446e969ce3c5d3f4cee336a61bdac45da3d"
 dependencies = [
  "blitz-control-protocol",
  "endpoint-libs",
