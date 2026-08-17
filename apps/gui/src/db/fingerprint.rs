@@ -29,7 +29,7 @@ pub const FINGERPRINT_KEY: &str = "schema-fingerprint";
 pub const SCHEMA_FINGERPRINT: &str = concat!(
     "kv(key,value,updated_at);",
     "project(id,name,status,position,dirs,pinned,moderator_enabled,forked_from,last_activity_at);",
-    "project_item(id,project_id,title,status,position,reference);",
+    "project_item(id,project_id,title,status,position,reference,priority);",
     "message(id,project_id,item_id,author,agent,moderation,model,permission,usage,stop,exit_code,body,created_at);",
     "task_log(id,tool_call_id,project_id,item_id,label,tool,ok,output,duration_ms,exit_code,finished_at);",
     "agent_io_row(id,project_id,at,direction,kind,detail);",

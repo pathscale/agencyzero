@@ -43,7 +43,7 @@ standing_promotion:
 
   arguments:
     agency:items.state: [id, status, pr]
-    agency:items.add: [project, ref, title, status]
+    agency:items.add: [project, ref, title, status, priority]
     agency:items.describe: [id, description]
     agency:items.retire: [id]
     agency:settings.update: [key, value]

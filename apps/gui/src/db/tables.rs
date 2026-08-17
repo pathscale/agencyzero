@@ -388,6 +388,7 @@ mod tests {
             status: String::new(),
             position: 0,
             reference: String::new(),
+            priority: 0,
         };
         /*
          * Exhaustively destructured on purpose. Adding a column stops this
@@ -402,6 +403,7 @@ mod tests {
             status: _,
             position: _,
             reference: _,
+            priority: _,
         } = row;
 
         assert_eq!(
@@ -412,7 +414,8 @@ mod tests {
                 "title",
                 "status",
                 "position",
-                "reference"
+                "reference",
+                "priority"
             ],
             "project_item changed shape without the fingerprint changing, so every \
              row on disk would be read through the wrong layout"

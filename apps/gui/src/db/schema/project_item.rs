@@ -23,6 +23,15 @@ worktable!(
         // stripping the suffix back off at match time is a parse nobody would
         // remember was there.
         reference: String,
+        // How much this item matters, so a turn can carry the few that do
+        // rather than the whole list.
+        //
+        // A small integer rather than a `high`/`normal`/`low` string: it sorts
+        // without a lookup table, and 0 is the normal case, so an item nobody
+        // has prioritised costs nothing to store and needs no backfill.
+        // Higher is more urgent. See `Priority` in `projects.rs` for the names
+        // the surface uses.
+        priority: u8,
     },
     indexes: {
         project_idx: project_id,
@@ -33,6 +42,7 @@ worktable!(
             PositionById(position) by id,
             TitleById(title) by id,
             ReferenceById(reference) by id,
+            PriorityById(priority) by id,
         },
         delete: {
             ByProject() by project_id,

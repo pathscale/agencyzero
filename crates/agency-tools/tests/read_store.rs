@@ -45,6 +45,7 @@ fn item(id: &str, project_id: &str, title: &str, position: u32) -> ProjectItemRo
         status: "pending".into(),
         position,
         reference: String::new(),
+        priority: 0,
     }
 }
 

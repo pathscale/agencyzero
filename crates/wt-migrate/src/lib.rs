@@ -237,12 +237,34 @@ mod v1 {
     );
 }
 
+/// `project_item` as it shipped before `priority` was added.
+mod v2 {
+    use worktable::prelude::*;
+    use worktable::worktable_version;
+
+    worktable_version!(
+        name: ProjectItem,
+        version: 2,
+        columns: {
+            id: String primary_key,
+            project_id: String,
+            title: String,
+            status: String,
+            position: u32,
+            reference: String,
+        },
+        indexes: {
+            project_idx: project_id,
+        },
+    );
+}
+
 // The current shape, restated so the engine has a target. It must match
 // `apps/gui/src/db/schema/project_item.rs`, and `the_target_matches_the_app`
 // asserts that rather than trusting whoever edits one of them next.
 worktable!(
     name: ProjectItem,
-    version: 2,
+    version: 3,
     persist: true,
     columns: {
         id: String primary_key,
@@ -251,6 +273,7 @@ worktable!(
         status: String,
         position: u32,
         reference: String,
+        priority: u8,
     },
     indexes: {
         project_idx: project_id,
@@ -289,11 +312,13 @@ pub struct Context;
 
 pub struct Migrator;
 
-impl Migration<v1::ProjectItemRow, ProjectItemRow> for Migrator {
+// The engine walks the versions in order, so each step carries a row one
+// shape forward: v1 to v2 adds `reference`, v2 to current adds `priority`.
+impl Migration<v1::ProjectItemRow, v2::ProjectItemRow> for Migrator {
     type Context = Context;
 
-    fn migrate(row: v1::ProjectItemRow, _ctx: &Self::Context) -> ProjectItemRow {
-        ProjectItemRow {
+    fn migrate(row: v1::ProjectItemRow, _ctx: &Self::Context) -> v2::ProjectItemRow {
+        v2::ProjectItemRow {
             id: row.id,
             project_id: row.project_id,
             title: row.title,
@@ -310,12 +335,41 @@ impl Migration<v1::ProjectItemRow, ProjectItemRow> for Migrator {
     }
 }
 
+impl Migration<v2::ProjectItemRow, ProjectItemRow> for Migrator {
+    type Context = Context;
+
+    fn migrate(row: v2::ProjectItemRow, _ctx: &Self::Context) -> ProjectItemRow {
+        ProjectItemRow {
+            id: row.id,
+            project_id: row.project_id,
+            title: row.title,
+            status: row.status,
+            position: row.position,
+            reference: row.reference,
+            /*
+             * Normal, which is the only honest answer. Priority says how much
+             * an item matters relative to its neighbours, and a store written
+             * before the column existed holds no evidence either way.
+             * Promoting rows by position would invent an ordering the owner
+             * never expressed.
+             */
+            priority: NORMAL_PRIORITY,
+        }
+    }
+}
+
+/// What an unprioritised item carries. Restated from `projects.rs` rather than
+/// imported: `wt-migrate` does not depend on the app, deliberately, so that a
+/// migration keeps compiling when the app moves on.
+const NORMAL_PRIORITY: u8 = 0;
+
 migration_engine!(
     migration: Migrator,
     current: ProjectItemWorkTable,
     ctx: Context,
     version_tables: {
         1 => v1::ProjectItemWorkTable,
+        2 => v2::ProjectItemWorkTable,
     },
 );
 
@@ -592,7 +646,10 @@ pub async fn salvage_items(source: &Path, target: &Path) -> eyre::Result<(usize,
         let engine = worktable::prelude::ReadOnlyPersistenceEngine::create(config).await?;
         let table = v1::ProjectItemWorkTable::load(engine).await?;
         for row in table.select_all().execute()? {
-            let carried = Migrator::migrate(row, &Context);
+            // Two steps, because each migration carries a row one shape
+            // forward: v1 gains `reference`, then v2 gains `priority`.
+            let carried: v2::ProjectItemRow = Migrator::migrate(row, &Context);
+            let carried: ProjectItemRow = Migrator::migrate(carried, &Context);
             if looks_like_an_item(&carried) {
                 sane.entry(carried.id.clone()).or_insert(carried);
             }
@@ -2056,6 +2113,7 @@ mod tests {
             status,
             position,
             reference,
+            priority,
         } = ProjectItemRow {
             id: "i".into(),
             project_id: "p".into(),
@@ -2063,6 +2121,7 @@ mod tests {
             status: "new".into(),
             position: 1,
             reference: "36".into(),
+            priority: 2,
         };
         let theirs = app_schema::project_item::ProjectItemRow {
             id,
@@ -2071,9 +2130,11 @@ mod tests {
             status,
             position,
             reference,
+            priority,
         };
         assert_eq!(theirs.status, "new");
         assert_eq!(theirs.reference, "36");
+        assert_eq!(theirs.priority, 2);
     }
 
     /// Same drift check for the rebuild verb's restated `task_log`.
@@ -2134,6 +2195,7 @@ mod scrub_tests {
             status: "pending".into(),
             position: 0,
             reference: String::new(),
+            priority: NORMAL_PRIORITY,
         }
     }
 

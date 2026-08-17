@@ -2106,6 +2106,7 @@ pub async fn create_item(
         position: next_item_position(siblings.iter()),
         // Nothing has shipped for a row that was only just proposed.
         reference: String::new(),
+        priority: NORMAL_PRIORITY,
     };
     state
         .tables
@@ -3059,6 +3060,54 @@ impl Verbosity {
     }
 }
 
+/// What an item nobody has ranked carries.
+///
+/// Zero, so adding the column needed no backfill: every row already on disk
+/// migrates to "normal" by holding the value it would have held anyway. Low is
+/// therefore a rank you have to ask for, which is right, since an item nobody
+/// has thought about is not one somebody has deprioritised.
+pub const NORMAL_PRIORITY: u8 = 0;
+/// Ranked below normal: real work, but not what a turn should lead with.
+pub const LOW_PRIORITY: u8 = 1;
+/// The highest rank the surface offers.
+pub const HIGH_PRIORITY: u8 = 2;
+
+/// How much an item matters, as the authoring surface spells it.
+///
+/// Three ranks, not ten. The point of the column is to let a turn carry the
+/// items that matter instead of the whole list, and a scale finer than
+/// "urgent / normal / whenever" is one nobody applies the same way twice.
+///
+/// Note the ordering is deliberately *not* the numeric one: 0 is normal so
+/// that it is also the default. [`priority_rank`] is what sorting uses.
+pub fn parse_priority(raw: &str) -> Option<u8> {
+    match raw.trim().to_ascii_lowercase().as_str() {
+        "high" | "urgent" => Some(HIGH_PRIORITY),
+        "normal" | "medium" | "default" | "" => Some(NORMAL_PRIORITY),
+        "low" | "whenever" => Some(LOW_PRIORITY),
+        _ => None,
+    }
+}
+
+/// The name a stored rank goes back out as.
+pub fn priority_name(priority: u8) -> &'static str {
+    match priority {
+        HIGH_PRIORITY => "high",
+        LOW_PRIORITY => "low",
+        _ => "normal",
+    }
+}
+
+/// Sort key, most urgent first. Separate from the stored value because the
+/// stored value puts the *default* at zero rather than the top.
+pub fn priority_rank(priority: u8) -> u8 {
+    match priority {
+        HIGH_PRIORITY => 0,
+        LOW_PRIORITY => 2,
+        _ => 1,
+    }
+}
+
 /// Read a project's snapshot verbosity, defaulting to adaptive delivery.
 fn project_verbosity(tables: &crate::db::tables::Tables, project_id: &str) -> Verbosity {
     tables
@@ -3315,17 +3364,41 @@ fn state_snapshot(
         ));
     } else {
         out.push_str("Open items in this project. Answer with the id, never the title:\n");
+        /*
+         * Most urgent first, and a tight cap.
+         *
+         * The whole list rode every turn and was re-billed every turn, which
+         * is the largest recurring input cost on a busy project and grows
+         * without bound as a backlog does. Ranking is what makes a cap safe to
+         * apply: an item nobody prioritised is not the item the turn is about,
+         * and the ones that are ranked stay at the top where a cut cannot
+         * reach them.
+         *
+         * `position` still breaks ties, so within a rank the order is the
+         * owner's own.
+         */
+        let mut items: Vec<&ProjectItemRow> = items.iter().collect();
+        items.sort_by_key(|row| (priority_rank(row.priority), row.position));
+
         let cap = if verbosity == Verbosity::Compact {
-            80
+            20
         } else {
-            40
+            12
         };
-        for row in items.iter().take(cap) {
+        for row in items.iter().copied().take(cap) {
+            // Only when it is not the default. Printing "normal" on every line
+            // spends tokens restating the absence of a decision, which is the
+            // cost this whole ranking exists to remove.
+            let priority = if row.priority == NORMAL_PRIORITY {
+                String::new()
+            } else {
+                format!(" · {}", priority_name(row.priority))
+            };
             if verbosity == Verbosity::Compact {
                 // Id and status only: the title and reference were sent when the
                 // item was created and live in the conversation already, so
                 // re-sending them every turn is pure cost.
-                out.push_str(&format!("  {} · {}\n", row.id, row.status));
+                out.push_str(&format!("  {} · {}{}\n", row.id, row.status, priority));
             } else {
                 let reference = if row.reference.is_empty() {
                     String::new()
@@ -3335,8 +3408,8 @@ fn state_snapshot(
                     format!(" (#{})", row.reference)
                 };
                 out.push_str(&format!(
-                    "  {} · {} · {}{}\n",
-                    row.id, row.status, row.title, reference
+                    "  {} · {} · {}{}{}\n",
+                    row.id, row.status, row.title, reference, priority
                 ));
                 if row.status == "active" && focus != Some(row.id.as_str()) {
                     let context = item_context(tables, &row.id);
@@ -3350,8 +3423,12 @@ fn state_snapshot(
             }
         }
         if items.len() > cap {
+            // Say where the rest went. A truncated list that does not admit it
+            // reads as the whole backlog, and an agent that believes it has
+            // seen everything stops asking.
             out.push_str(&format!(
-                "  ... {} more open items omitted\n",
+                "  ... {} lower-priority item(s) not shown. Run `agency-tools list-items` \
+                 for the rest.\n",
                 items.len() - cap
             ));
         }
@@ -3652,6 +3729,7 @@ async fn apply_directive(
             project,
             title,
             status,
+            priority,
         } => {
             if !crate::directives::settable(&status) {
                 return Outcome::Refused {
@@ -3659,6 +3737,22 @@ async fn apply_directive(
                     code: "STATUS_INVALID".into(),
                 };
             }
+            // Refused rather than silently normalised: a rank nobody
+            // recognises means the author believed something about this item
+            // that the app does not, and quietly filing it as normal hides
+            // that.
+            let priority = match priority.as_deref() {
+                Some(raw) => match parse_priority(raw) {
+                    Some(priority) => priority,
+                    None => {
+                        return Outcome::Refused {
+                            what: format!("items.add({title:?} -> priority {raw})"),
+                            code: "PRIORITY_INVALID".into(),
+                        };
+                    }
+                },
+                None => NORMAL_PRIORITY,
+            };
             let target_project = match project.as_deref() {
                 Some(named) => {
                     let projects: Vec<ProjectRow> = match tables.project.select_all().execute() {
@@ -3784,6 +3878,7 @@ async fn apply_directive(
                 status,
                 position: next_item_position(target_rows.iter().copied()),
                 reference: String::new(),
+                priority,
             };
             if row.status == "finished"
                 && let Err(error) = schedule_finished_retirement(tables, &row.id).await
@@ -12671,6 +12766,43 @@ async fn checkpoint_if_due(
 mod tests {
     use super::*;
 
+    /// Normal is zero so that adding the column needed no backfill, which
+    /// means the stored value is not the sort order. Mixing the two up would
+    /// file every unranked item below every low one.
+    #[test]
+    fn priority_sorts_high_then_normal_then_low() {
+        let mut ranks = [LOW_PRIORITY, HIGH_PRIORITY, NORMAL_PRIORITY];
+        ranks.sort_by_key(|priority| priority_rank(*priority));
+        assert_eq!(ranks, [HIGH_PRIORITY, NORMAL_PRIORITY, LOW_PRIORITY]);
+    }
+
+    #[test]
+    fn priority_names_round_trip_through_the_stored_value() {
+        for name in ["high", "normal", "low"] {
+            let stored = parse_priority(name).expect("a name the surface offers");
+            assert_eq!(priority_name(stored), name);
+        }
+    }
+
+    /// An absent or empty priority is normal, so an author who says nothing
+    /// gets the row they got before the column existed.
+    #[test]
+    fn an_unstated_priority_is_normal() {
+        assert_eq!(parse_priority(""), Some(NORMAL_PRIORITY));
+        assert_eq!(parse_priority("  "), Some(NORMAL_PRIORITY));
+        assert_eq!(parse_priority("Normal"), Some(NORMAL_PRIORITY));
+    }
+
+    /// And a rank nobody recognises is refused rather than filed as normal:
+    /// the author believed something the app does not, and silently agreeing
+    /// hides it.
+    #[test]
+    fn an_unknown_priority_is_not_guessed() {
+        assert_eq!(parse_priority("urgent-ish"), None);
+        assert_eq!(parse_priority("P0"), None);
+        assert_eq!(parse_priority("1"), None);
+    }
+
     #[test]
     fn startup_visibility_rearms_after_reset_without_repeating_on_later_turns() {
         let visibility = StartupVisibility::default();
@@ -14141,6 +14273,7 @@ mod tests {
                 status: "active".into(),
                 position: 0,
                 reference: String::new(),
+                priority: 0,
             },
         )]);
         let project_names = std::collections::HashMap::from([(
@@ -14266,6 +14399,7 @@ mod tests {
             status: "active".into(),
             position: 0,
             reference: String::new(),
+            priority: 0,
         };
         tables
             .project_item
@@ -14954,6 +15088,7 @@ mod tests {
                 status: "active".into(),
                 position: 0,
                 reference: String::new(),
+                priority: 0,
             })
             .expect("item inserts");
 
@@ -15059,6 +15194,7 @@ mod tests {
                 status: "planning".into(),
                 position: 0,
                 reference: String::new(),
+                priority: 0,
             },
             ProjectItemRow {
                 id: "item-described".into(),
@@ -15067,6 +15203,7 @@ mod tests {
                 status: "active".into(),
                 position: 0,
                 reference: String::new(),
+                priority: 0,
             },
         ] {
             tables.project_item.insert(item).expect("item inserts");
@@ -15215,6 +15352,7 @@ mod tests {
                 status: "active".into(),
                 position: 0,
                 reference: String::new(),
+                priority: 0,
             })
             .expect("adaptive item inserts");
         tables
@@ -15402,6 +15540,7 @@ mod tests {
                 status: "shipped".into(),
                 position: 0,
                 reference: "119".into(),
+                priority: 0,
             })
             .expect("item inserts");
 
@@ -15439,6 +15578,7 @@ mod tests {
             status: "planning".into(),
             position,
             reference: String::new(),
+            priority: 0,
         };
         let rows = [row("one", 2), row("two", 2), row("three", 7)];
 
@@ -15504,6 +15644,7 @@ mod tests {
                 status: "finished".into(),
                 position: 0,
                 reference: String::new(),
+                priority: 0,
             })
             .expect("item inserts");
         schedule_finished_retirement(&tables, "item-anchor")
@@ -15563,6 +15704,7 @@ mod tests {
                 status: "finished".into(),
                 position: 0,
                 reference: String::new(),
+                priority: 0,
             })
             .expect("item inserts");
         schedule_finished_retirement(&tables, "item-retire-later")
@@ -15628,6 +15770,7 @@ mod tests {
                 status: "finished".into(),
                 position: 0,
                 reference: String::new(),
+                priority: 0,
             })
             .expect("legacy finished item inserts");
         assert!(
@@ -15672,6 +15815,7 @@ mod tests {
                 status: "finished".into(),
                 position: 0,
                 reference: String::new(),
+                priority: 0,
             })
             .expect("item inserts");
         schedule_finished_retirement(&tables, "item-two-halves")
@@ -15847,6 +15991,7 @@ mod tests {
             status: "planning".into(),
             position: 0,
             reference: String::new(),
+            priority: 0,
         };
         tables
             .project_item

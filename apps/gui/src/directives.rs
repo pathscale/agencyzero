@@ -119,6 +119,9 @@ pub enum Directive {
         project: Option<String>,
         title: String,
         status: String,
+        /// `high`, `normal` or `low`. `None` leaves the item at normal, which
+        /// is what an item nobody has ranked already carries.
+        priority: Option<String>,
     },
     /// Replace the owner-visible description for an existing item.
     ItemDescribe { id: String, description: String },
@@ -292,6 +295,9 @@ fn from_reference(reference: &Reference) -> Option<Directive> {
             status: arg(args, "status")
                 .unwrap_or_else(|| "new".to_string())
                 .to_ascii_lowercase(),
+            priority: arg(args, "priority")
+                .map(|priority| priority.to_ascii_lowercase())
+                .filter(|priority| !priority.is_empty()),
         });
     }
     if verb.eq_ignore_ascii_case("items.describe") {
@@ -471,8 +477,44 @@ mod tests {
                 project: None,
                 title: "Wrap it, then ship it".into(),
                 status: "new".into(),
+                priority: None,
             })
         );
+    }
+
+    /// The rank rides the same span as the title, so an item can be filed at
+    /// the priority it deserves in the turn that opens it.
+    #[test]
+    fn an_item_add_may_carry_a_priority() {
+        assert_eq!(
+            parse(r#"<ps @agency:items.add(ref: "t1", title: "Ship it", priority: "High")>"#),
+            Some(Directive::ItemAdd {
+                handle: Some("t1".into()),
+                project: None,
+                title: "Ship it".into(),
+                status: "new".into(),
+                priority: Some("high".into()),
+            })
+        );
+    }
+
+    /// An omitted or empty priority stays `None`, so the handler applies
+    /// normal rather than the parser inventing a rank here.
+    #[test]
+    fn an_item_add_without_a_priority_leaves_it_unset() {
+        let Some(Directive::ItemAdd { priority, .. }) =
+            parse(r#"<ps @agency:items.add(ref: "t1", title: "Ship it")>"#)
+        else {
+            panic!("expected an items.add");
+        };
+        assert_eq!(priority, None);
+
+        let Some(Directive::ItemAdd { priority, .. }) =
+            parse(r#"<ps @agency:items.add(ref: "t1", title: "Ship it", priority: "")>"#)
+        else {
+            panic!("expected an items.add");
+        };
+        assert_eq!(priority, None);
     }
 
     #[test]
@@ -486,6 +528,7 @@ mod tests {
                 project: Some("Prompt Syntax".into()),
                 title: "Unify the surface".into(),
                 status: "planning".into(),
+                priority: None,
             })
         );
     }
