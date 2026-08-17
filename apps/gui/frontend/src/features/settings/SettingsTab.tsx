@@ -2877,8 +2877,7 @@ function GlassTuningAxis(props: {
    * through and an external change still moves the thumb.
    */
   const [live, setLive] = createSignal<number | undefined>();
-  const shown = (): number =>
-    live() ?? props.value ?? GLASS_DEFAULTS[mode()][props.axis];
+  const shown = (): number => live() ?? props.value ?? GLASS_DEFAULTS[mode()][props.axis];
 
   return (
     <div class="min-w-[260px]">

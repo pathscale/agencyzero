@@ -147,14 +147,10 @@ describe("the appearance pane's swatches", () => {
     const stops = named(screen.container, /^Colour strength /);
     const before = screen.workspace.state.settings?.theme.wash;
 
-    const target = stops.find(
-      (stop) => stop.getAttribute("aria-pressed") !== "true",
-    );
+    const target = stops.find((stop) => stop.getAttribute("aria-pressed") !== "true");
     expect(target, "every strength swatch already reads as selected").toBeTruthy();
     fireEvent.click(target as HTMLElement);
 
-    await waitFor(() =>
-      expect(screen.workspace.state.settings?.theme.wash).not.toBe(before),
-    );
+    await waitFor(() => expect(screen.workspace.state.settings?.theme.wash).not.toBe(before));
   });
 });

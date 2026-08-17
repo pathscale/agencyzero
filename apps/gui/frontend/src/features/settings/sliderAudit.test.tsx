@@ -58,7 +58,7 @@ function sliders(container: HTMLElement): HTMLElement[] {
   return Array.from(container.querySelectorAll<HTMLElement>('[role="slider"]'));
 }
 
-function valueOf(slider: HTMLElement): number {
+function sliderValue(slider: HTMLElement): number {
   return Number(slider.getAttribute("aria-valuenow"));
 }
 
@@ -99,17 +99,16 @@ describe("every slider in Settings", () => {
 
     for (const slider of sliders(screen.container)) {
       const name = slider.getAttribute("aria-label") ?? "(unnamed)";
-      const value = valueOf(slider);
+      const value = sliderValue(slider);
       expect(Number.isFinite(value), `${name} has a non-finite value: ${value}`).toBe(true);
 
       for (const bound of ["aria-valuemin", "aria-valuemax"]) {
         const raw = Number(slider.getAttribute(bound));
         expect(Number.isFinite(raw), `${name} has a non-finite ${bound}: ${raw}`).toBe(true);
       }
-      expect(
-        Number(slider.getAttribute("aria-valuemin")),
-        `${name} has min >= max`,
-      ).toBeLessThan(Number(slider.getAttribute("aria-valuemax")));
+      expect(Number(slider.getAttribute("aria-valuemin")), `${name} has min >= max`).toBeLessThan(
+        Number(slider.getAttribute("aria-valuemax")),
+      );
     }
   });
 
@@ -123,7 +122,7 @@ describe("every slider in Settings", () => {
 
     for (const slider of sliders(screen.container)) {
       const name = slider.getAttribute("aria-label") ?? "(unnamed)";
-      const before = valueOf(slider);
+      const before = sliderValue(slider);
       const min = Number(slider.getAttribute("aria-valuemin"));
       const max = Number(slider.getAttribute("aria-valuemax"));
 
@@ -135,7 +134,7 @@ describe("every slider in Settings", () => {
 
       await waitFor(
         () => {
-          const after = valueOf(slider);
+          const after = sliderValue(slider);
           expect(
             after,
             `${name} did not move: ${before} -> ${after} (range ${min}..${max}, pressed ${key})`,
