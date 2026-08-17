@@ -1100,16 +1100,17 @@ function createWorkspace() {
         setState((d) => {
           d.workspaceRoot = workspaceRoot;
         });
-        setState(
-          "rateLimits",
+        setState((d) => {
           // A limit whose reset time has already passed is history, not state.
-          rateLimits.filter(isLimitLive).reduce<WorkspaceState["rateLimits"]>((indexed, limit) => {
-            const projectLimits = indexed[limit.projectId] ?? {};
-            projectLimits[limit.agent] = limit;
-            indexed[limit.projectId] = projectLimits;
-            return indexed;
-          }, {}),
-        );
+          d.rateLimits = rateLimits
+            .filter(isLimitLive)
+            .reduce<WorkspaceState["rateLimits"]>((indexed, limit) => {
+              const projectLimits = indexed[limit.projectId] ?? {};
+              projectLimits[limit.agent] = limit;
+              indexed[limit.projectId] = projectLimits;
+              return indexed;
+            }, {});
+        });
         /*
          * Only the tabs that were open when the app last ran. Boot used to
          * open a tab per project, which meant a restart quietly un-did every
@@ -1625,10 +1626,10 @@ function createWorkspace() {
         if (key !== agent) next[key] = value;
       }
       if (Object.keys(next).length === 0) {
-        setState(
-          "rateLimits",
-          produce((limits) => delete limits[projectId]),
-        );
+        setState((d) => {
+          const limits = d.rateLimits;
+          delete limits[projectId];
+        });
       } else {
         setState((d) => reconcile(next)(d.rateLimits[projectId]));
       }
@@ -1648,10 +1649,10 @@ function createWorkspace() {
 
     await bind("run:approval_resolved", ({ projectId }) => {
       batch(() => {
-        setState(
-          "pendingApprovals",
-          produce((pending) => delete pending[projectId]),
-        );
+        setState((d) => {
+          const pending = d.pendingApprovals;
+          delete pending[projectId];
+        });
         touchRunStatus(projectId, "working…");
       });
     });
@@ -1720,14 +1721,14 @@ function createWorkspace() {
         return;
       }
       batch(() => {
-        setState(
-          "compacting",
-          produce((busy) => delete busy[projectId]),
-        );
-        setState(
-          "runStatus",
-          produce((status) => delete status[projectId]),
-        );
+        setState((d) => {
+          const busy = d.compacting;
+          delete busy[projectId];
+        });
+        setState((d) => {
+          const status = d.runStatus;
+          delete status[projectId];
+        });
       });
       // Same cue as `run:stopped`, and the same beat of delay: the slot is
       // released as this run unwinds, a moment after the event goes out.
@@ -1823,15 +1824,15 @@ function createWorkspace() {
         setState((d) => {
           d.streaming[projectId] = "";
         });
-        setState(
-          "runStatus",
-          produce((status) => delete status[projectId]),
-        );
+        setState((d) => {
+          const status = d.runStatus;
+          delete status[projectId];
+        });
         // A question the run can no longer hear the answer to.
-        setState(
-          "pendingApprovals",
-          produce((pending) => delete pending[projectId]),
-        );
+        setState((d) => {
+          const pending = d.pendingApprovals;
+          delete pending[projectId];
+        });
 
         /*
          * A failed run has to say so in the transcript. Clearing the spinner
@@ -1885,8 +1886,7 @@ function createWorkspace() {
   }
 
   function upsertProject(project: Project): void {
-    setState(
-      produce((draft) => {
+    setState((draft) => {
         const index = draft.projects.findIndex((existing) => existing.id === project.id);
         if (index < 0) draft.projects.push(project);
         else draft.projects[index] = project;
@@ -1902,8 +1902,7 @@ function createWorkspace() {
 
         const tab = draft.tabs.find((candidate) => candidate.key === project.id);
         if (tab) tab.label = project.name;
-      }),
-    );
+      });
   }
 
   onCleanup(() => {
@@ -2165,11 +2164,9 @@ function createWorkspace() {
       setState((d) => {
         d.tabs = ((tabs) => tabs.filter((tab) => tab.key !== key))(d.tabs);
       });
-      setState(
-        produce((draft) => {
+      setState((draft) => {
           delete draft.transcriptPositions[key];
-        }),
-      );
+        });
       if (state.activeKey === key) {
         // Fall back to the tab on the left, which is where the eye already is.
         focus(state.tabs[Math.max(0, index - 1)]?.key ?? "home");
@@ -2195,8 +2192,7 @@ function createWorkspace() {
       // record still had — which is how window-wide `Object.values(...)` reads
       // met an undefined value. Delete top-level keys only (nested-node deletes
       // strand the reactive proxy; see `run:rate_limit_cleared`).
-      setState(
-        produce((draft) => {
+      setState((draft) => {
           delete draft.items[projectId];
           delete draft.messages[projectId];
           delete draft.messageReceipts[projectId];
@@ -2215,8 +2211,7 @@ function createWorkspace() {
           delete draft.pendingCompact[projectId];
           delete draft.commands[projectId];
           delete draft.transcriptPositions[projectId];
-        }),
-      );
+        });
       closeTab(projectId);
     });
   }
@@ -2645,10 +2640,10 @@ function createWorkspace() {
   function flushPendingCompact(projectId: string): void {
     const agent = state.pendingCompact[projectId];
     if (agent === undefined) return;
-    setState(
-      "pendingCompact",
-      produce((waiting) => delete waiting[projectId]),
-    );
+    setState((d) => {
+          const waiting = d.pendingCompact;
+          delete waiting[projectId];
+        });
     void client()
       .compactProject(projectId, agent)
       .catch(() => {});
@@ -2792,12 +2787,9 @@ function createWorkspace() {
       try {
         await client().reviewPullRequest(projectId, url, agent);
       } finally {
-        setState(
-          "reviewing",
-          produce((reviewing) => {
-            delete reviewing[key];
-          }),
-        );
+        setState((d) => {
+          delete d.reviewing[key];
+        });
       }
     },
     refreshPullRequest: (id: string) => client().refreshPullRequest(id),
