@@ -300,11 +300,11 @@ function AccentSelector(props: {
                 title={label()}
                 aria-pressed={selected()}
                 onClick={() => props.onPick(option.value)}
-                class="size-7 overflow-hidden rounded-full border-2 p-0 transition-[border-color,transform] hover:scale-110"
-                classList={{
-                  "border-primary": selected(),
-                  "border-az-hairline-strong hover:border-primary": !selected(),
-                }}
+                class={`size-7 overflow-hidden rounded-full border-2 p-0 transition-[border-color,transform] hover:scale-110 ${
+                  selected()
+                    ? "border-primary"
+                    : "border-az-hairline-strong hover:border-primary"
+                }`}
               >
                 {/* The fill is a child: the library's Button drops `style`. */}
                 <span
@@ -358,11 +358,11 @@ function Axis(props: {
               aria-label={`${props.label} ${props.format(stop, index())}`}
               aria-pressed={selected(stop)}
               onClick={() => props.onPick(stop)}
-              class="size-7 overflow-hidden rounded-full border-2 p-0 transition-[border-color,transform] hover:scale-110"
-              classList={{
-                "border-primary": selected(stop),
-                "border-az-hairline-strong hover:border-az-hairline-strong/60": !selected(stop),
-              }}
+              class={`size-7 overflow-hidden rounded-full border-2 p-0 transition-[border-color,transform] hover:scale-110 ${
+                selected(stop)
+                  ? "border-primary"
+                  : "border-az-hairline-strong hover:border-az-hairline-strong/60"
+              }`}
             >
               {/*
                 The fill is a child, not a `style` on the Button.
