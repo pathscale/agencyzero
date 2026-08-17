@@ -235,7 +235,25 @@ export function ProjectTab(props: { tab: Tab; project: Project }): JSX.Element {
 
     if (props.tab.agent === "claude") {
       const window = state.claudeUsage?.sevenDay;
-      if (!window) return null;
+      /*
+       * A failed read is a state worth showing, not an absence.
+       *
+       * `claudeUsage` is null until the first success, and the only unforced
+       * caller is the strip's 60s poll, which returns early while the backoff
+       * is armed. So a streak beginning at boot used to remove the chip
+       * entirely for up to a quarter hour with nothing explaining it — and the
+       * usual cause is another Claude Code session spending the same login's
+       * budget, which is worth saying out loud.
+       */
+      if (!window) {
+        const failure = state.claudeUsageError;
+        if (!failure) return null;
+        return {
+          label: tx("Claude · usage unavailable"),
+          title: failure,
+          severity: "low" as const,
+        };
+      }
       const percent = Math.min(100, Math.max(0, window.utilization));
       return {
         label: providerUsageLabel("Claude", percent, window.resetsAt, usageNow()),

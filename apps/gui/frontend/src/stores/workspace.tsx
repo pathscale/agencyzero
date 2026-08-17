@@ -168,6 +168,15 @@ type WorkspaceState = {
   /** Claude subscription usage, available only in the experimental profile. */
   claudeUsage: ClaudeUsage | null;
   /**
+   * Why the last usage refresh failed, or null when the reading is current.
+   *
+   * Kept because the alternative is a chip that is simply not there: the
+   * request's budget belongs to the login, so another Claude Code session can
+   * take it, and a streak beginning at boot leaves `claudeUsage` null for a
+   * quarter hour with nothing on screen saying so.
+   */
+  claudeUsageError: string | null;
+  /**
    * A newer published version, when the boot-time check found one. Null is
    * both "up to date" and "check failed" — the Settings row distinguishes,
    * the gear-dot nudge deliberately does not.
@@ -441,6 +450,7 @@ function createWorkspace() {
     workspaceRoot: null,
     quota: null,
     claudeUsage: null,
+    claudeUsageError: null,
     availableUpdate: null,
     streaming: {},
     runStatus: {},
@@ -1202,12 +1212,25 @@ function createWorkspace() {
       setState("claudeUsage", await client().claudeUsage());
       claudeUsageFailures = 0;
       claudeUsageRetryAt = 0;
+      setState("claudeUsageError", null);
     } catch (cause) {
       claudeUsageFailures += 1;
       const wait = claudeUsageBackoffMs(claudeUsageFailures);
       claudeUsageRetryAt = Date.now() + wait;
-      // Only the opening failure of a streak says anything new. The rest are
-      // the same rejection on a timer, and the last good reading stays up.
+      /*
+       * Say why, and keep saying it while there is nothing to show.
+       *
+       * "The last good reading stays up" is only true once there *is* one.
+       * `claudeUsage` starts null and the sole unforced caller is the strip's
+       * 60s poll, so a streak that begins at boot backs off to a quarter hour
+       * while that poll returns early at the guard above — and the chip is
+       * simply absent, with the reason thrown away by the `.catch(() =>
+       * undefined)` at the call site. The endpoint's budget belongs to the
+       * login rather than to this app, exactly as `claudeUsageBackoffMs`
+       * describes, so a Claude Code session running alongside is enough to
+       * cause it. That is not a state the window should render as nothing.
+       */
+      setState("claudeUsageError", describeError(cause));
       if (claudeUsageFailures === 1) {
         log.warn(
           `could not refresh Claude usage: ${describeError(cause)}; retrying in ${Math.round(wait / 1000)}s`,
@@ -2921,10 +2944,55 @@ export function useWorkspace(): Workspace {
   return workspace;
 }
 
-/** A ticking clock for the elapsed counters, shared by every running-task row. */
+/**
+ * A ticking clock for the elapsed counters, genuinely shared this time.
+ *
+ * It said "shared by every running-task row" and was not: each call built its
+ * own `setInterval`, so four consumers meant four timers, four signal writes a
+ * second and four renders of whatever read them. Measured on an idle window
+ * with no input at all: ~33 timer callbacks per 10s driving 4-6fps of repaint
+ * forever. A window that never stops repainting is what the eye reads as a
+ * blinking artifact, and it is why holding still did not settle it.
+ *
+ * One interval per period now, reference counted, and it does not run while
+ * nothing is watching it: the last consumer to leave clears it. The signal is
+ * shared too, so every reader of the same period re-renders on one write rather
+ * than on one write each.
+ */
+const CLOCKS = new Map<
+  number,
+  { now: Accessor<number>; set: (value: number) => void; timer: number; readers: number }
+>();
+
 export function useNow(intervalMs = 1000): Accessor<number> {
-  const [now, setNow] = createSignal(Date.now());
-  const timer = setInterval(() => setNow(Date.now()), intervalMs);
-  onCleanup(() => clearInterval(timer));
-  return now;
+  let clock = CLOCKS.get(intervalMs);
+  if (!clock) {
+    const [now, setNow] = createSignal(Date.now());
+    clock = { now, set: setNow, timer: 0, readers: 0 };
+    CLOCKS.set(intervalMs, clock);
+  }
+  const entry = clock;
+  if (entry.readers === 0) {
+    /*
+     * The catch-up write is queued, not immediate.
+     *
+     * A clock that has been idle holds whatever time it stopped at, so the
+     * first new reader wants it refreshed — but this runs during component
+     * setup, and writing reactive state inside an owned scope is exactly what
+     * Solid refuses (`REACTIVE_WRITE_IN_OWNED_SCOPE`). A zero-delay timeout
+     * puts the write back on the task queue where it belongs, and the initial
+     * `createSignal(Date.now())` means the very first reader never sees a
+     * stale value in the meantime.
+     */
+    setTimeout(() => entry.set(Date.now()), 0);
+    entry.timer = window.setInterval(() => entry.set(Date.now()), intervalMs);
+  }
+  entry.readers += 1;
+  onCleanup(() => {
+    entry.readers -= 1;
+    if (entry.readers > 0) return;
+    clearInterval(entry.timer);
+    entry.timer = 0;
+  });
+  return entry.now;
 }
