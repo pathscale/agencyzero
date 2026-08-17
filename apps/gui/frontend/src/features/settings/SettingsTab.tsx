@@ -362,7 +362,15 @@ export function SettingsTab(): JSX.Element {
     <div
       ref={page}
       tabindex="-1"
-      class="az-scroll flex min-w-0 flex-1 justify-center rounded-panel border border-az-hairline bg-az-sunken focus:outline-none"
+      // `items-start` is load-bearing. This is a row flex container that also
+      // scrolls, so its single child is a flex *item* and the cross axis is the
+      // height: the default `align-items: stretch` sizes that child to the
+      // scroller's own box rather than to its content. Measured on a blank
+      // pane: the 720px column reported 830px tall while holding 7,764px of
+      // sections, so the scroll offset ran against content the layout had never
+      // given height to, and a scroll parked an 830px stub thousands of pixels
+      // off screen at 80fps with 13/13 layers and every metric healthy.
+      class="az-scroll flex min-w-0 flex-1 items-start justify-center rounded-panel border border-az-hairline bg-az-sunken focus:outline-none"
     >
       {/*
         `gap-10` (40px) rather than the 12px this used to be, and the number is
@@ -1090,7 +1098,7 @@ export function SettingsTab(): JSX.Element {
                     step={1}
                     value={current().theme.glassBlur}
                     format={(value) => `${Math.round(value)}px`}
-                    onChange={(glassBlur) => void actions.saveSettings({ theme: { glassBlur } })}
+                    onChange={(glassBlur) => actions.saveSettings({ theme: { glassBlur } })}
                   />
                 </Row>
                 <Row
@@ -1110,7 +1118,7 @@ export function SettingsTab(): JSX.Element {
                       `${Math.round((value / GLASS_LIMITS.refraction.max) * 100)}%`
                     }
                     onChange={(glassRefraction) =>
-                      void actions.saveSettings({ theme: { glassRefraction } })
+                      actions.saveSettings({ theme: { glassRefraction } })
                     }
                   />
                 </Row>
@@ -1126,7 +1134,7 @@ export function SettingsTab(): JSX.Element {
                     step={1}
                     value={current().theme.glassDepth}
                     format={(value) => `${Math.round((value / GLASS_LIMITS.depth.max) * 100)}%`}
-                    onChange={(glassDepth) => void actions.saveSettings({ theme: { glassDepth } })}
+                    onChange={(glassDepth) => actions.saveSettings({ theme: { glassDepth } })}
                   />
                 </Row>
               </Section>
@@ -2840,7 +2848,12 @@ function GlassTuningAxis(props: {
   /** The theme these three axes live on, for re-deriving the whole set. */
   theme: ThemeSettings;
   format: (value: number) => string;
-  onChange: (value: number) => void;
+  /**
+   * Persist the axis. Returning the write's promise keeps the thumb under the
+   * pointer until it lands; returning nothing settles immediately, which is
+   * only right for a caller that persists synchronously.
+   */
+  onChange: (value: number) => void | Promise<void>;
 }): JSX.Element {
   const mode = (): GlassMode =>
     document.documentElement.dataset.colorMode === "light" ? "light" : "dark";
@@ -2905,10 +2918,19 @@ function GlassTuningAxis(props: {
           writePanelAxes(tuning);
         }}
         onChangeEnd={(value) => {
-          // Hand the number back to the store, then stop overriding: the
-          // persisted value is the truth again once it has been written.
-          props.onChange(value);
-          setLive(undefined);
+          // Hand the number back to the store, and keep overriding until the
+          // write lands. `onChange` persists asynchronously, so clearing the
+          // override here dropped `shown()` back onto the *old* persisted
+          // value for the length of the round trip: the thumb snapped back to
+          // where the drag started and then jumped forward when the save
+          // arrived. Same snap-back the drag path fixed above, at the release
+          // edge instead.
+          setLive(value);
+          void Promise.resolve(props.onChange(value)).finally(() => {
+            // Only stop overriding if no later drag has taken over, or a
+            // settling save would yank the thumb out from under the pointer.
+            setLive((current) => (current === value ? undefined : current));
+          });
         }}
         size="sm"
         class="w-full min-w-0 [&_[data-slot=label]]:sr-only"

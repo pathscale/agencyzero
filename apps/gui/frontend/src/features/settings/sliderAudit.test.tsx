@@ -62,6 +62,22 @@ function sliderValue(slider: HTMLElement): number {
   return Number(slider.getAttribute("aria-valuenow"));
 }
 
+/**
+ * What a screen reader would call this slider.
+ *
+ * Every one of these is named by `aria-labelledby` pointing at its `sr-only`
+ * label, and none carries an `aria-label`. Reading only the latter reports
+ * `(unnamed)` for the whole screen, which is how a failure here first got
+ * pinned on the wrong control.
+ */
+function sliderName(container: HTMLElement, slider: HTMLElement): string {
+  const label = slider.getAttribute("aria-label")?.trim();
+  if (label) return label;
+  const id = slider.getAttribute("aria-labelledby")?.trim();
+  const target = id ? container.querySelector(`#${CSS.escape(id)}`) : null;
+  return target?.textContent?.trim() || "(unnamed)";
+}
+
 beforeEach(() => setMockProxyActiveRuns(0));
 
 describe("every slider in Settings", () => {
@@ -98,7 +114,7 @@ describe("every slider in Settings", () => {
     const screen = await mountSettings();
 
     for (const slider of sliders(screen.container)) {
-      const name = slider.getAttribute("aria-label") ?? "(unnamed)";
+      const name = sliderName(screen.container, slider);
       const value = sliderValue(slider);
       expect(Number.isFinite(value), `${name} has a non-finite value: ${value}`).toBe(true);
 
@@ -121,7 +137,7 @@ describe("every slider in Settings", () => {
     const screen = await mountSettings();
 
     for (const slider of sliders(screen.container)) {
-      const name = slider.getAttribute("aria-label") ?? "(unnamed)";
+      const name = sliderName(screen.container, slider);
       const before = sliderValue(slider);
       const min = Number(slider.getAttribute("aria-valuemin"));
       const max = Number(slider.getAttribute("aria-valuemax"));
@@ -142,6 +158,59 @@ describe("every slider in Settings", () => {
         },
         { timeout: 2_000 },
       );
+    }
+  });
+
+  /*
+   * And it stays moved.
+   *
+   * The fourth way these shipped broken: the drag itself worked, and the
+   * release undid it. `onChangeEnd` handed the number to an async persist and
+   * dropped its local override in the same breath, so until the write came
+   * back the thumb fell to the *old* persisted value, snapped to where the
+   * drag started, then jumped forward when the save landed.
+   *
+   * Every assertion above passes straight through that: they check the value
+   * changes, never that it is still changed a moment later. So this one waits
+   * out the round trip and looks again.
+   */
+  it("keeps every slider where it was released", async () => {
+    const screen = await mountSettings();
+
+    for (const slider of sliders(screen.container)) {
+      const name = sliderName(screen.container, slider);
+      const before = sliderValue(slider);
+      const max = Number(slider.getAttribute("aria-valuemax"));
+      const key = before >= max ? "ArrowLeft" : "ArrowRight";
+
+      slider.focus();
+      fireEvent.keyDown(slider, { key });
+      const released = sliderValue(slider);
+      expect(released, `${name} did not move under ${key}`).not.toBe(before);
+
+      // The release is the half under test: the library raises `onChangeEnd`
+      // from `keyup`, and a `keydown` alone never runs the persist path.
+      fireEvent.keyUp(slider, { key });
+
+      /*
+       * Sample across the whole write, not after it.
+       *
+       * The regression is a *transient*: the thumb falls back to the persisted
+       * value only until the round trip lands, measured at about 60ms against
+       * the mock. A single delayed read waits it out and sees the correct
+       * final number, which is precisely how this shipped. So watch every
+       * frame of the window and fail on any reading that is not where the
+       * slider was released.
+       */
+      const deadline = Date.now() + 400;
+      while (Date.now() < deadline) {
+        const now = sliderValue(slider);
+        expect(
+          now,
+          `${name} snapped back mid-write: released at ${released}, read ${now} (was ${before})`,
+        ).toBe(released);
+        await new Promise((resolve) => setTimeout(resolve, 5));
+      }
     }
   });
 });
