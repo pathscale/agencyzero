@@ -1,4 +1,4 @@
-import { Show, splitProps } from "solid-js";
+import { omit, Show } from "solid-js";
 import type { JSX } from "@solidjs/web";
 import { Button } from "~/components/Button";
 import { Icon, type IconProps } from "~/components/Icon";
@@ -22,13 +22,15 @@ export type PanelProps = JSX.HTMLAttributes<HTMLDivElement> & {
  * filter behind an opaque fill blurs nothing anyone can see.
  */
 export function Panel(props: PanelProps): JSX.Element {
-  const [own, rest] = splitProps(props, ["children", "class"]);
+  // `omit` rather than `splitProps`: Solid 2 drops the latter, and the half it
+  // returned for reading is just `props`, which is already fine-grained.
+  const rest = omit(props, "children", "class");
   return (
     <div
-      class={`az-panel az-glass isolate overflow-hidden rounded-panel border border-az-hairline ${own.class ?? ""}`}
+      class={`az-panel az-glass isolate overflow-hidden rounded-panel border border-az-hairline ${props.class ?? ""}`}
       {...rest}
     >
-      {own.children}
+      {props.children}
     </div>
   );
 }

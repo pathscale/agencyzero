@@ -1,4 +1,4 @@
-import { splitProps } from "solid-js";
+import { omit } from "solid-js";
 import type { JSX } from "@solidjs/web";
 import type { IconName } from "./IconSprite";
 
@@ -16,7 +16,9 @@ export type IconProps = Omit<JSX.SvgSVGAttributes<SVGSVGElement>, "children"> & 
  * styles the icon and the label together.
  */
 export function Icon(props: IconProps): JSX.Element {
-  const [own, rest] = splitProps(props, ["name", "label", "class"]);
+  // `omit` rather than `splitProps`, which Solid 2 drops: the half that was
+  // read is just `props`, already fine-grained.
+  const rest = omit(props, "name", "label", "class");
 
   return (
     // biome-ignore lint/a11y/noSvgWithoutTitle: a <title> is rendered when `label` is given and the icon is aria-hidden otherwise; the rule reads attributes statically and cannot see that these are two branches of one decision.
@@ -29,13 +31,13 @@ export function Icon(props: IconProps): JSX.Element {
       stroke-width="2"
       stroke-linecap="round"
       stroke-linejoin="round"
-      class={own.class}
-      role={own.label ? "img" : "presentation"}
-      aria-hidden={own.label ? undefined : "true"}
+      class={props.class}
+      role={props.label ? "img" : "presentation"}
+      aria-hidden={props.label ? undefined : "true"}
       {...rest}
     >
-      {own.label ? <title>{own.label}</title> : null}
-      <use href={`#i-${own.name}`} />
+      {props.label ? <title>{props.label}</title> : null}
+      <use href={`#i-${props.name}`} />
     </svg>
   );
 }

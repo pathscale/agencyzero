@@ -1,6 +1,6 @@
 import { Button as UiButton } from "@pathscale/ui";
 import type { ButtonProps as UiButtonProps } from "@pathscale/ui/components/button";
-import { splitProps } from "solid-js";
+import { omit } from "solid-js";
 import type { JSX } from "@solidjs/web";
 
 export type ButtonProps = UiButtonProps;
@@ -30,11 +30,13 @@ const NEUTRAL_BUTTON = "az-ui-button-neutral";
  * and the native spelling passes straight through.
  */
 export function Button(props: ButtonProps): JSX.Element {
-  const [local, rest] = splitProps(props, ["variant", "class"]);
+  // `omit` rather than `splitProps`, which Solid 2 drops: the half that was
+  // read is just `props`, already fine-grained.
+  const rest = omit(props, "variant", "class");
   const classes = () =>
-    [local.variant ? undefined : NEUTRAL_BUTTON, local.class].filter(Boolean).join(" ");
+    [props.variant ? undefined : NEUTRAL_BUTTON, props.class].filter(Boolean).join(" ");
 
-  return <UiButton {...rest} variant={local.variant ?? "ghost"} class={classes()} />;
+  return <UiButton {...rest} variant={props.variant ?? "ghost"} class={classes()} />;
 }
 
 export default Button;

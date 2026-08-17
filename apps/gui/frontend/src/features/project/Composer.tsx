@@ -1,5 +1,5 @@
 import { Textarea } from "@pathscale/ui";
-import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show } from "solid-js";
+import { createEffect, createMemo, createSignal, For, onCleanup, onSettled, Show } from "solid-js";
 import type { JSX } from "@solidjs/web";
 import { Button } from "~/components/Button";
 import { Icon } from "~/components/Icon";
@@ -644,7 +644,7 @@ export function Composer(props: ComposerProps): JSX.Element {
    * the cursor lands nowhere. Focused explicitly instead, which is the point:
    * open a tab and start typing.
    */
-  onMount(() => {
+  onSettled(() => {
     if (props.autofocus) field.focus();
     resize();
     /*
