@@ -173,6 +173,40 @@ describe("local debug control", () => {
     expect(screen.getByText("No deep samples collected")).toBeTruthy();
   });
 
+  /*
+   * The switch has to move on the click, not when the store answers.
+   *
+   * Both cases above assert after `waitFor`, so they only ever look once the
+   * write has landed — and the failure lives entirely in the window before
+   * that. Rendering `settings()` directly left the toggle in its old position
+   * for the whole round trip, and the control was disabled meanwhile, so a
+   * second click was swallowed rather than queued. On the running app that
+   * reads as a switch that flickers and will not stay on.
+   *
+   * So this samples *across* the write rather than after it, the same way
+   * `sliderAudit` samples a slider mid-release.
+   */
+  it("shows intrusive profiling on immediately, before the write lands", async () => {
+    const screen = await mountSettings();
+    const profiling = (await screen.findByLabelText(
+      "Enable deep intrusive profiling",
+    )) as HTMLInputElement;
+
+    fireEvent.click(profiling);
+
+    // Same tick as the click: the store has not answered yet.
+    expect(screen.workspace.state.settings?.blitzDeepProfilingEnabled).not.toBe(true);
+    expect(profiling.checked).toBe(true);
+    expect(screen.getByText("Intrusive profiling active")).toBeTruthy();
+    // And it must stay usable, so a second click is not dropped on the floor.
+    expect(profiling.disabled).toBe(false);
+
+    await waitFor(() =>
+      expect(screen.workspace.state.settings?.blitzDeepProfilingEnabled).toBe(true),
+    );
+    expect(profiling.checked).toBe(true);
+  });
+
   it("keeps intrusive profiling set while inspection is turned off and on", async () => {
     const screen = await mountSettings();
     const profiling = (await screen.findByLabelText(
