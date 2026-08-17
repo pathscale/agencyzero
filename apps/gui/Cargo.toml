@@ -76,8 +76,8 @@ tokio = { version = "1", features = ["process", "rt-multi-thread", "time"] }
 # Default features are off; see `webview-runtime` for why.
 tauri = { version = "2", default-features = false, features = ["compression"] }
 tauri-runtime-blitz = { git = "https://github.com/pathscale/tauri-runtime-blitz.git", branch = "master", optional = true }
-blitz-dom = { package = "ps-blitz-dom", git = "https://github.com/pathscale/ps-blitz.git", branch = "master", features = ["system-fonts", "parallel-construct"], optional = true }
-blitz-script = { package = "ps-blitz-script", git = "https://github.com/pathscale/ps-blitz.git", branch = "master", features = ["system-fonts"], optional = true }
+blitz-dom = { package = "ps-blitz-dom", version = "^0.3.0-beta.3", git = "https://github.com/pathscale/ps-blitz.git", branch = "master", features = ["system-fonts", "parallel-construct"], optional = true }
+blitz-script = { package = "ps-blitz-script", version = "^0.3.0-beta.3", git = "https://github.com/pathscale/ps-blitz.git", branch = "master", features = ["system-fonts"], optional = true }
 brotli = { version = "8.0.4", default-features = false, features = ["std"], optional = true }
 url = { version = "2.5.8", optional = true }
 tauri-plugin-updater = "2"
