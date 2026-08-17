@@ -997,7 +997,9 @@ export function SettingsTab(): JSX.Element {
                         <Button
                           type="button"
                           aria-pressed={prefs.colorMode === option.value}
-                          onClick={() => setPrefs("colorMode", option.value)}
+                          onClick={() => setPrefs((d) => {
+                                           d.colorMode = option.value;
+                                         })}
                           class={`rounded-full px-3 py-1 font-semibold text-[11px] transition-colors ${
                             prefs.colorMode === option.value
                               ? "bg-primary text-primary-content"
@@ -1028,7 +1030,9 @@ export function SettingsTab(): JSX.Element {
                           type="button"
                           aria-label={`${option.name} ${t("appearance.size")}`}
                           aria-pressed={prefs.uiSize === option.value}
-                          onClick={() => setPrefs("uiSize", option.value)}
+                          onClick={() => setPrefs((d) => {
+                                           d.uiSize = option.value;
+                                         })}
                           class={`flex size-7 items-center justify-center rounded-full font-semibold text-[10.5px] transition-colors ${
                             prefs.uiSize === option.value
                               ? "bg-primary text-primary-content"
@@ -2510,7 +2514,9 @@ function CostSection(): JSX.Element {
         <SettingToggle
           label={tx("Show projected-cost warnings")}
           checked={!prefs.costWarningsDisabled}
-          onChange={(enabled) => setPrefs("costWarningsDisabled", !enabled)}
+          onChange={(enabled) => setPrefs((d) => {
+                                   d.costWarningsDisabled = !enabled;
+                                 })}
         />
       </Row>
     </Section>

@@ -638,8 +638,12 @@ function createWorkspace() {
   createEffect(() => {
     if (state.boot.status !== "ready") return;
     const workspaceTabs = portableWorkspaceTabs();
-    setPrefs("openTabKeys", workspaceTabs.openProjectKeys);
-    setPrefs("lastTabKey", workspaceTabs.activeProjectKey);
+    setPrefs((d) => {
+      d.openTabKeys = workspaceTabs.openProjectKeys;
+    });
+    setPrefs((d) => {
+      d.lastTabKey = workspaceTabs.activeProjectKey;
+    });
     if (workspaceTabsWriteTimer) clearTimeout(workspaceTabsWriteTimer);
     workspaceTabsWriteTimer = setTimeout(() => {
       workspaceTabsWriteTimer = undefined;
@@ -1229,8 +1233,9 @@ function createWorkspace() {
 
   async function refreshQuota(): Promise<void> {
     try {
+      const next17 = await client().listQuota();
       setState((d) => {
-        d.quota = await client().listQuota();
+        d.quota = next17;
       });
     } catch (cause) {
       log.warn(`could not refresh the quota: ${describeError(cause)}`);
@@ -1247,8 +1252,9 @@ function createWorkspace() {
   async function refreshClaudeUsage(options?: { force?: boolean }): Promise<void> {
     if (!options?.force && Date.now() < claudeUsageRetryAt) return;
     try {
+      const next61 = await client().claudeUsage();
       setState((d) => {
-        d.claudeUsage = await client().claudeUsage();
+        d.claudeUsage = next61;
       });
       claudeUsageFailures = 0;
       claudeUsageRetryAt = 0;
@@ -1491,7 +1497,9 @@ function createWorkspace() {
       })(d.questions[question.projectId]);
       });
       if (question.answered && prefs.replyQuestionIds[question.projectId] === question.id) {
-        setPrefs("replyQuestionIds", question.projectId, "");
+        setPrefs((d) => {
+          d.replyQuestionIds[question.projectId] = "";
+        });
       }
     });
 
@@ -1914,7 +1922,9 @@ function createWorkspace() {
         setState((d) => {
       d.activeKey = key;
     });
-    setPrefs("lastTabKey", key);
+    setPrefs((d) => {
+      d.lastTabKey = key;
+    });
   
     const committed = performance.now();
     requestAnimationFrame(() => {
@@ -2024,8 +2034,12 @@ function createWorkspace() {
       log.warn(`could not reveal unknown item ${itemId}`);
       return false;
     }
-        setPrefs("projectPanelVisible", true);
-    setPrefs("panelSections", "items", true);
+        setPrefs((d) => {
+          d.projectPanelVisible = true;
+        });
+    setPrefs((d) => {
+      d.panelSections["items"] = true;
+    });
     openProject(item.projectId);
     setState((d) => {
       d.itemReveal = { id: item.id, revision: ++itemRevealRevision };
@@ -2301,7 +2315,9 @@ function createWorkspace() {
                                    d.tabs[index] = { extraThinking: enabled };
                                  });
     });
-    setPrefs("lastExtraThinking", enabled);
+    setPrefs((d) => {
+      d.lastExtraThinking = enabled;
+    });
   }
 
   // — mutations ————————————————————————————————————————————————————
@@ -2498,7 +2514,9 @@ function createWorkspace() {
       ),
     );
     if (prefs.replyQuestionIds[projectId] === target) {
-      setPrefs("replyQuestionIds", projectId, "");
+      setPrefs((d) => {
+        d.replyQuestionIds[projectId] = "";
+      });
     }
   };
 
@@ -2772,10 +2790,14 @@ function createWorkspace() {
     refreshPullRequest: (id: string) => client().refreshPullRequest(id),
     answerQuestion: (id: string, answered = true) => client().answerQuestion(id, answered),
     selectQuestionReply(projectId: string, questionId: string) {
-      setPrefs("replyQuestionIds", projectId, questionId);
+      setPrefs((d) => {
+        d.replyQuestionIds[projectId] = questionId;
+      });
     },
     clearQuestionReply(projectId: string) {
-      setPrefs("replyQuestionIds", projectId, "");
+      setPrefs((d) => {
+        d.replyQuestionIds[projectId] = "";
+      });
     },
     /** Drop one queued prompt — second thoughts are allowed while it waits. */
     removeQueued(projectId: string, index: number) {
@@ -2892,8 +2914,9 @@ function createWorkspace() {
      */
     async setDataLocation(path: string | null) {
       await client().setDataLocation(path);
+      const next70 = await client().getDataLocation();
       setState((d) => {
-        d.dataLocation = await client().getDataLocation();
+        d.dataLocation = next70;
       });
     },
     /**
@@ -2911,18 +2934,21 @@ function createWorkspace() {
       if (picked) await saveSettings({ agentProxyBinary: picked });
     },
     async refreshAgentProxy() {
+      const next3 = await client().getAgentProxyStatus();
       setState((d) => {
-        d.agencyProxy = await client().getAgentProxyStatus();
+        d.agencyProxy = next3;
       });
     },
     async restartAgentProxy(mode: "drain" | "terminate") {
+      const next3 = await client().restartAgentProxy(mode);
       setState((d) => {
-        d.agencyProxy = await client().restartAgentProxy(mode);
+        d.agencyProxy = next3;
       });
     },
     async stopAgentProxy() {
+      const next3 = await client().stopAgentProxy();
       setState((d) => {
-        d.agencyProxy = await client().stopAgentProxy();
+        d.agencyProxy = next3;
       });
     },
     /** Read the on-disk backup catalogue and the result from the last angel run. */
@@ -2979,8 +3005,9 @@ function createWorkspace() {
     },
     /** Create the workspace directory, then re-read so the row updates. */
     async createWorkspaceRoot() {
+      const next56 = await client().createWorkspaceRoot();
       setState((d) => {
-        d.workspaceRoot = await client().createWorkspaceRoot();
+        d.workspaceRoot = next56;
       });
     },
     /** Pick the Home Project directory, persist it, then show the resolved path. */
@@ -2988,8 +3015,9 @@ function createWorkspace() {
       const picked = await client().chooseProjectDirectory();
       if (!picked) return;
       await saveSettings({ workspaceRoot: picked });
+      const next56 = await client().getWorkspaceRoot();
       setState((d) => {
-        d.workspaceRoot = await client().getWorkspaceRoot();
+        d.workspaceRoot = next56;
       });
     },
     async refreshModels() {

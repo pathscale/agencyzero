@@ -34,7 +34,9 @@ vi.mock("~/api", async (importOriginal) => {
 describe("pull-request loading", () => {
   it("does not query GitHub while hydrating the workspace", async () => {
     SETTINGS.workspaceTabs = null;
-    setPrefs("openTabKeys", ["cafe"]);
+    setPrefs((d) => {
+      d.openTabKeys = ["cafe"];
+    });
     let workspace!: Workspace;
 
     function Probe() {

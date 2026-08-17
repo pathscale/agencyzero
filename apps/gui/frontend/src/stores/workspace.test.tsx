@@ -120,9 +120,13 @@ beforeEach(() => {
   setClaudeUsageError(null);
   setSyncProjectError(null);
   SETTINGS.workspaceTabs = null;
-  setPrefs("lastTabKey", "home");
+  setPrefs((d) => {
+    d.lastTabKey = "home";
+  });
   // These scenarios predate tab restore, so they remember everything open.
-  setPrefs("openTabKeys", ["worktable", "cafe", "quux"]);
+  setPrefs((d) => {
+    d.openTabKeys = ["worktable", "cafe", "quux"];
+  });
 });
 
 describe("startup", () => {
@@ -145,7 +149,9 @@ describe("startup", () => {
    * used to open a tab per project, which quietly un-did every close.
    */
   it("leaves a closed tab closed across a restart", async () => {
-    setPrefs("openTabKeys", ["cafe"]);
+    setPrefs((d) => {
+      d.openTabKeys = ["cafe"];
+    });
     const workspace = await mountWorkspace();
     expect(keys(workspace)).toEqual(["home", "cafe"]);
   });
@@ -156,8 +162,12 @@ describe("startup", () => {
       activeProjectKey: "cafe",
       scrollPositions: { quux: 321, cafe: 0 },
     };
-    setPrefs("openTabKeys", ["worktable"]);
-    setPrefs("lastTabKey", "worktable");
+    setPrefs((d) => {
+      d.openTabKeys = ["worktable"];
+    });
+    setPrefs((d) => {
+      d.lastTabKey = "worktable";
+    });
 
     const workspace = await mountWorkspace();
 
@@ -167,8 +177,12 @@ describe("startup", () => {
   });
 
   it("migrates the old webview preference into backup-backed settings", async () => {
-    setPrefs("openTabKeys", ["cafe"]);
-    setPrefs("lastTabKey", "cafe");
+    setPrefs((d) => {
+      d.openTabKeys = ["cafe"];
+    });
+    setPrefs((d) => {
+      d.lastTabKey = "cafe";
+    });
 
     const workspace = await mountWorkspace();
 
@@ -209,8 +223,12 @@ describe("startup", () => {
 describe("item reference routing", () => {
   it("routes the transcript module directly into the mounted workspace", async () => {
     const workspace = await mountWorkspace();
-    setPrefs("projectPanelVisible", false);
-    setPrefs("panelSections", "items", false);
+    setPrefs((d) => {
+      d.projectPanelVisible = false;
+    });
+    setPrefs((d) => {
+      d.panelSections["items"] = false;
+    });
 
     revealItemReference("cafe-0");
 
@@ -222,8 +240,12 @@ describe("item reference routing", () => {
 
   it("opens the owning project and reveals its Items panel", async () => {
     const workspace = await mountWorkspace();
-    setPrefs("projectPanelVisible", false);
-    setPrefs("panelSections", "items", false);
+    setPrefs((d) => {
+      d.projectPanelVisible = false;
+    });
+    setPrefs((d) => {
+      d.panelSections["items"] = false;
+    });
 
     expect(workspace.actions.revealItem("cafe-0")).toBe(true);
     expect(workspace.state.activeKey).toBe("cafe");
@@ -764,9 +786,15 @@ describe("the data location", () => {
 describe("backup portability", () => {
   it("writes stable webview preferences into the store before backup starts", async () => {
     const workspace = await mountWorkspace();
-    setPrefs("uiSize", "extra-large");
-    setPrefs("expandedComposerKeys", ["project:worktable"]);
-    setPrefs("composerDrafts", "project:worktable", "do not treat as a preference");
+    setPrefs((d) => {
+      d.uiSize = "extra-large";
+    });
+    setPrefs((d) => {
+      d.expandedComposerKeys = ["project:worktable"];
+    });
+    setPrefs((d) => {
+      d.composerDrafts["project:worktable"] = "do not treat as a preference";
+    });
 
     await expect(workspace.actions.createStoreBackup()).rejects.toThrow(
       "the fixture backend has no durable store to back up",
@@ -778,9 +806,15 @@ describe("backup portability", () => {
     ]);
     expect(workspace.state.settings?.uiPreferences).not.toHaveProperty("composerDrafts");
 
-    setPrefs("uiSize", "large");
-    setPrefs("expandedComposerKeys", []);
-    setPrefs("composerDrafts", "project:worktable", "");
+    setPrefs((d) => {
+      d.uiSize = "large";
+    });
+    setPrefs((d) => {
+      d.expandedComposerKeys = [];
+    });
+    setPrefs((d) => {
+      d.composerDrafts["project:worktable"] = "";
+    });
   });
 });
 

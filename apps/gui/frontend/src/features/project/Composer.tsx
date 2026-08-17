@@ -234,7 +234,9 @@ export function Composer(props: ComposerProps): JSX.Element {
       setUnkeyed(text);
       return;
     }
-    setPrefs("composerDrafts", props.draftKey, text);
+    setPrefs((d) => {
+      d.composerDrafts[props.draftKey] = text;
+    });
   };
 
   /*
@@ -895,7 +897,9 @@ export function Composer(props: ComposerProps): JSX.Element {
                       <Button
                         type="button"
                         onClick={() => {
-                          setPrefs("costWarningsDisabled", true);
+                          setPrefs((d) => {
+                            d.costWarningsDisabled = true;
+                          });
                           setConfirmDisableCostWarning(false);
                         }}
                         class="rounded border border-error/40 px-2 py-0.5 font-medium text-error hover:bg-error/10"
