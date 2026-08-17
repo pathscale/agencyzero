@@ -276,7 +276,21 @@ function ScrollArrow(props: {
       onClick={props.onScroll}
       disabled={props.isDisabled}
       aria-label={props.direction === -1 ? tx("Scroll tabs left") : tx("Scroll tabs right")}
-      class="flex size-6 shrink-0 items-center justify-center rounded-full text-az-muted transition-colors hover:bg-az-hover hover:text-base-content disabled:pointer-events-none disabled:opacity-25"
+      /*
+       * Above the cap, and a real target rather than a 24px one.
+       *
+       * The strip cap beside this is `relative z-20`, so with no stacking
+       * context of its own the arrow was painted under it: measured on the
+       * running app, "Scroll tabs right" spans x=1168-1195.8 while the New
+       * project button beside it starts at 1153.6, about 27px of the arrow
+       * sitting beneath something else that takes the click. `z-30` puts it
+       * back on top of its neighbour.
+       *
+       * `size-7` rather than `size-6` because 24px is below the 28px the rest
+       * of this strip uses and below any reasonable pointer target; the icon
+       * inside is unchanged, so only the hit area grows.
+       */
+      class="relative z-30 flex size-7 shrink-0 items-center justify-center rounded-full text-az-muted transition-colors hover:bg-az-hover hover:text-base-content disabled:pointer-events-none disabled:opacity-25"
     >
       <Icon
         name="chevron-right"

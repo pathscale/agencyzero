@@ -153,8 +153,18 @@ describe("overflow", () => {
     await waitFor(() => expect(getByRole("button", { name: "Scroll tabs right" })).toBeTruthy());
     const right = getByRole("button", { name: "Scroll tabs right" });
     expect(right.className).toContain("flex");
-    expect(right.className).toContain("size-6");
     expect(right.className).toContain("shrink-0");
+    /*
+     * A real target, above the cap beside it.
+     *
+     * `size-6` is 24px, below the 28px the rest of this strip uses and below
+     * any reasonable pointer target, and the arrow carried no stacking context
+     * while the strip cap next to it is `relative z-20` — measured on the
+     * running app, about 27px of the arrow sat underneath the New project
+     * button, which took the click instead.
+     */
+    expect(right.className).toContain("size-7");
+    expect(right.className).toContain("z-30");
   });
 
   it("computes an immediate reveal position for an offscreen active pill", () => {

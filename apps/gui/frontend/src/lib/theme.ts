@@ -527,7 +527,21 @@ function readableInk(hex: string): string {
     return srgb <= 0.03928 ? srgb / 12.92 : ((srgb + 0.055) / 1.055) ** 2.4;
   };
   const luminance = 0.2126 * channel(0) + 0.7152 * channel(2) + 0.0722 * channel(4);
-  // Against #111111 rather than pure black: the palette's own ink, and a hair
-  // softer than the maximum contrast the pairing would otherwise reach for.
-  return 1.05 / (luminance + 0.05) >= (luminance + 0.05) / 0.062 ? "#ffffff" : "#111111";
+  /*
+   * White unless it is genuinely unreadable, rather than whichever scores higher.
+   *
+   * Picking the larger of the two contrast ratios is defensible arithmetic and
+   * wrong to look at. A mid-tone accent hands the win to black — measured on
+   * the pink the owner reported, black scores 7.83 against white's 2.16 — so
+   * the selected pill rendered as black text on a pink fill. Filled controls
+   * across the rest of this app carry light ink, so the one that flipped read
+   * as a rendering fault rather than as a contrast decision.
+   *
+   * 3.4:1 is the threshold, a little above the 3:1 that WCAG asks of large
+   * text: these are pills and badges, short and set in a semibold face at
+   * 11-12px. Below it the accent is light enough that white really is illegible
+   * and the dark ink is the honest answer.
+   */
+  const onWhite = 1.05 / (luminance + 0.05);
+  return onWhite >= 3.4 ? "#ffffff" : "#111111";
 }

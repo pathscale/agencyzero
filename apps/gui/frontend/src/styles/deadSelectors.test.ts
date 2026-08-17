@@ -121,3 +121,32 @@ describe("selectors that reach into a component's internals", () => {
     expect(probes.filter((probe) => /backdrop-filter|filter\s*:/.test(probe))).toEqual([]);
   });
 });
+
+/*
+ * Glass is defeated by anything the engine answers wrongly, and it has now
+ * happened twice from two different at-rules: `@supports (backdrop-filter: …)`,
+ * which stylo fails for a property blitz implements, and
+ * `@media (prefers-reduced-transparency: reduce)`, which is not a registered
+ * media feature in stylo's servo path at all.
+ *
+ * Both put an opaque rule after the translucent one, so the fallback won the
+ * cascade and glass painted flat. The rule is that no glass fallback may be
+ * gated on the engine's own answer — the app knows which renderer it is.
+ */
+describe("glass fallbacks are app decisions, not engine questions", () => {
+  const CSS_TEXT = code(join(SRC, "styles/theme.css"));
+
+  it("does not gate the glass fallback on a media feature", () => {
+    const gated = [...CSS_TEXT.matchAll(/@media[^{]*\{[^}]*\.az-glass/g)].map(([m]) => m.trim());
+    expect(gated).toEqual([]);
+  });
+
+  it("keeps the standard backdrop-filter, not only the prefixed one", () => {
+    // Declared after `-webkit-`, so a minifier that keeps the last declaration
+    // cannot drop the standard property for its default targets.
+    const webkit = CSS_TEXT.indexOf("-webkit-backdrop-filter: blur(var(--glass-blur");
+    const standard = CSS_TEXT.indexOf("backdrop-filter: blur(var(--glass-blur", webkit + 10);
+    expect(webkit).toBeGreaterThanOrEqual(0);
+    expect(standard).toBeGreaterThan(webkit);
+  });
+});
