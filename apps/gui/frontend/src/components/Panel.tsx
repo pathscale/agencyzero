@@ -1,4 +1,5 @@
-import { type JSX, Show, splitProps } from "solid-js";
+import { Show, splitProps } from "solid-js";
+import type { JSX } from "@solidjs/web";
 import { Button } from "~/components/Button";
 import { Icon, type IconProps } from "~/components/Icon";
 import { tx } from "~/stores/i18n";

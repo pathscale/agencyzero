@@ -1,4 +1,4 @@
-import type { JSX } from "solid-js";
+import type { JSX } from "@solidjs/web";
 import { Panel } from "~/components/Panel";
 import { Composer } from "~/features/project/Composer";
 import { tx } from "~/stores/i18n";

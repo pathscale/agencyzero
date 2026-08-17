@@ -1,5 +1,6 @@
 import { Input } from "@pathscale/ui";
-import { createSignal, type JSX, Show } from "solid-js";
+import { createSignal, Show } from "solid-js";
+import type { JSX } from "@solidjs/web";
 import { Button } from "~/components/Button";
 import { Icon } from "~/components/Icon";
 import { describeError, log } from "~/lib/log";

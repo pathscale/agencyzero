@@ -12,19 +12,8 @@ import {
   Switch,
   Textarea,
 } from "@pathscale/ui";
-import {
-  createContext,
-  createEffect,
-  createMemo,
-  createRoot,
-  createSignal,
-  For,
-  type JSX,
-  onCleanup,
-  onMount,
-  Show,
-  useContext,
-} from "solid-js";
+import { createContext, createEffect, createMemo, createRoot, createSignal, For, onCleanup, onMount, Show, useContext } from "solid-js";
+import type { JSX } from "@solidjs/web";
 import { Button } from "~/components/Button";
 import { Icon, type IconProps } from "~/components/Icon";
 import { LanguageSwitcher } from "~/components/LanguageSwitcher";

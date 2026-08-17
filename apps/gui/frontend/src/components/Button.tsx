@@ -1,6 +1,7 @@
 import { Button as UiButton } from "@pathscale/ui";
 import type { ButtonProps as UiButtonProps } from "@pathscale/ui/components/button";
-import { type JSX, splitProps } from "solid-js";
+import { splitProps } from "solid-js";
+import type { JSX } from "@solidjs/web";
 
 export type ButtonProps = UiButtonProps;
 

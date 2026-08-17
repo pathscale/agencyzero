@@ -1,4 +1,5 @@
-import { createMemo, createSignal, For, type JSX, onMount, Show } from "solid-js";
+import { createMemo, createSignal, For, onMount, Show } from "solid-js";
+import type { JSX } from "@solidjs/web";
 import { Button } from "~/components/Button";
 import { Icon } from "~/components/Icon";
 import { duration } from "~/lib/format";

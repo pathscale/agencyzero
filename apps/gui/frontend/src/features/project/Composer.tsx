@@ -1,14 +1,6 @@
 import { Textarea } from "@pathscale/ui";
-import {
-  createEffect,
-  createMemo,
-  createSignal,
-  For,
-  type JSX,
-  onCleanup,
-  onMount,
-  Show,
-} from "solid-js";
+import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show } from "solid-js";
+import type { JSX } from "@solidjs/web";
 import { Button } from "~/components/Button";
 import { Icon } from "~/components/Icon";
 import { PillMenu } from "~/components/PillMenu";
