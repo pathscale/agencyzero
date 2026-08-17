@@ -1,5 +1,6 @@
 import { PromptSyntaxParser } from "promptsyntax";
-import { createMemo, createSignal, For, type JSX, Show } from "solid-js";
+import { createMemo, createSignal, For, Show } from "solid-js";
+import type { JSX } from "@solidjs/web";
 import { Button } from "~/components/Button";
 import { Icon } from "~/components/Icon";
 import { isItemId, itemReferenceLabel, revealItemReference } from "~/lib/itemReference";

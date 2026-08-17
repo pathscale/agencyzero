@@ -1,5 +1,6 @@
 import { Checkbox, Input, Textarea } from "@pathscale/ui";
-import { createMemo, createSignal, For, type JSX, Show } from "solid-js";
+import { createMemo, createSignal, For, Show } from "solid-js";
+import type { JSX } from "@solidjs/web";
 import { NOTES_BUDGET } from "~/api/client";
 import { AppModal, type ModalAnchor } from "~/components/AppModal";
 import { Button } from "~/components/Button";

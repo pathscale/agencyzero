@@ -1,5 +1,6 @@
 import { Dialog } from "@pathscale/ui";
-import { createMemo, type JSX, Show } from "solid-js";
+import { createMemo, Show } from "solid-js";
+import type { JSX } from "@solidjs/web";
 import { Button } from "~/components/Button";
 import { Icon } from "~/components/Icon";
 import { tx } from "~/stores/i18n";
