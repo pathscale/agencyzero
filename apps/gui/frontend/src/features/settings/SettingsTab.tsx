@@ -2863,6 +2863,23 @@ function GlassTuningAxis(props: {
       : limits;
   };
 
+  /*
+   * The value the track shows while it is being moved.
+   *
+   * `value` is the persisted setting, and the persist deliberately waits for
+   * the drag to settle. Binding the thumb straight to it meant the control
+   * could not move until release: every `onChange` painted CSS and then
+   * re-rendered the slider at the *old* number, so the thumb snapped back
+   * under the pointer and arrow keys did nothing at all. A slider whose value
+   * never changes is the bug this file's audit test now refuses to ship.
+   *
+   * `undefined` means "not being touched", so the persisted value shows
+   * through and an external change still moves the thumb.
+   */
+  const [live, setLive] = createSignal<number | undefined>();
+  const shown = (): number =>
+    live() ?? props.value ?? GLASS_DEFAULTS[mode()][props.axis];
+
   return (
     <div class="min-w-[260px]">
       <Slider
@@ -2870,12 +2887,13 @@ function GlassTuningAxis(props: {
         min={limits().min}
         max={limits().max}
         step={props.step}
-        value={props.value ?? GLASS_DEFAULTS[mode()][props.axis]}
+        value={shown()}
         formatValue={props.format}
         // Paint now, from the full set: one axis alone does not describe glass,
         // and a partial tuning leaves three tokens the component CSS reads
         // without a fallback undefined, which drops the declaration entirely.
         onChange={(value) => {
+          setLive(value);
           const tuning: GlassTuning = {
             blur: resolved("blur"),
             refraction: resolved("refraction"),
@@ -2887,7 +2905,12 @@ function GlassTuningAxis(props: {
           // repainted with them or it lags a drag by one settle.
           writePanelAxes(tuning);
         }}
-        onChangeEnd={(value) => props.onChange(value)}
+        onChangeEnd={(value) => {
+          // Hand the number back to the store, then stop overriding: the
+          // persisted value is the truth again once it has been written.
+          props.onChange(value);
+          setLive(undefined);
+        }}
         size="sm"
         class="w-full min-w-0 [&_[data-slot=label]]:sr-only"
       />
