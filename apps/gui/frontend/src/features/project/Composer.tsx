@@ -645,6 +645,24 @@ export function Composer(props: ComposerProps): JSX.Element {
   onMount(() => {
     if (props.autofocus) field.focus();
     resize();
+    /*
+     * And again once layout has settled.
+     *
+     * The call above runs before the field has been laid out, which is exactly
+     * the case `resize` documents as reporting `scrollHeight = 0`: it then
+     * writes the 22px compact floor. Nothing re-measures afterwards, because
+     * the effect below only re-runs when the draft or the expanded flag
+     * changes, so an untouched composer keeps that floor for the life of the
+     * tab.
+     *
+     * The viewport wrapper takes its height from `promptHeight` and clips,
+     * while the textarea keeps its own `rows` height. Measured on a fresh
+     * launch: the textbox was 836x44 inside an 836x26 parent at the same
+     * origin. The 18px that do not fit are painted by the caret, which blinks
+     * on its own 500ms clock, so the overflow reads as a small horizontal
+     * rectangle flashing near the composer with nothing logical next to it.
+     */
+    queueMicrotask(() => resize());
   });
 
   /* What the last resize actually wrote, so a keystroke that changes no

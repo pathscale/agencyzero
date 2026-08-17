@@ -729,10 +729,10 @@ const zh = {
   "effective cost": "有效成本",
   "includes local estimates": "包含本地估算",
   "Sol cache write estimate":
-    "根据相邻轮次的缓存增长估算 Sol 缓存写入约为 {{tokens}}；最新轮次仍未知",
+    "根据相邻轮次的缓存增长估算 Sol 缓存写入约为 {tokens}；最新轮次仍未知",
   "estimated write": "估算写入",
   "estimated from adjacent cache reads": "根据相邻轮次的缓存读取量估算",
-  "imported usage coverage": "已恢复 {{recovered}} / {{total}} 个导入的助手轮次用量",
+  "imported usage coverage": "已恢复 {recovered} / {total} 个导入的助手轮次用量",
   "Import chats": "导入聊天",
   "Import all": "全部导入",
   "Importing all…": "正在全部导入…",
