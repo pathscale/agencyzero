@@ -544,8 +544,25 @@ export function TranscriptPane(props: {
     if (!untrack(pinned)) return;
     const moveToTail = (): void => {
       if (!untrack(pinned)) return;
-      const bottom = scroller.scrollHeight - scroller.clientHeight;
-      scroller.scrollTop = bottom > 0 ? bottom + TAIL_SLACK : 0;
+      /*
+       * The tail, and never past it.
+       *
+       * This used to write `bottom + TAIL_SLACK` and rely on the platform
+       * taking the overshoot back, which is what a browser does. Blitz clamps
+       * an assigned `scrollTop` against its own `scroll_height`, and that
+       * number runs larger than `scrollHeight - clientHeight` on real panes:
+       * measured on a fresh launch, this scroller sat at 2583 with a true
+       * maximum of 2226.8, so the viewport was parked 356px past the end of
+       * the transcript and the pane painted nothing at all. It reads as the
+       * app going blank, and it comes back on any scroll because a scroll
+       * re-runs the clamp.
+       *
+       * The slack exists so a near-miss still counts as the tail; it belongs
+       * in the comparison that decides whether we are pinned, not in the
+       * offset we write. Asking for exactly the bottom is unambiguous.
+       */
+      const bottom = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
+      scroller.scrollTop = bottom;
       lastScrollTop = scroller.scrollTop;
     };
     queueMicrotask(moveToTail);

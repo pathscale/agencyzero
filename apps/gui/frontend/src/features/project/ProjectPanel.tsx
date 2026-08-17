@@ -248,7 +248,16 @@ export function AgentIoList(props: { projectId: string }): JSX.Element {
   createEffect(() => {
     // Track the count so a new entry scrolls the view down.
     lines().length;
-    if (scroller) scroller.scrollTop = scroller.scrollHeight;
+    /*
+     * The bottom, not past it. `scrollTop = scrollHeight` overshoots by a
+     * whole viewport and relies on the platform taking it back; Blitz clamps
+     * against its own scroll height, which measures larger than
+     * `scrollHeight - clientHeight` on real panes, so the overshoot sticks and
+     * the view is parked past the end showing nothing.
+     */
+    if (scroller) {
+      scroller.scrollTop = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
+    }
   });
 
   const copyAll = async (): Promise<void> => {
