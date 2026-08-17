@@ -216,16 +216,28 @@ function SurfaceColorWheel(props: { value: string; onPick: (value: string) => vo
                   />
                 }
                 /*
-                 * `bg-transparent` on the control is load-bearing, not tidying.
+                 * Addressed by the class the library renders, not by a slot.
                  *
-                 * The petal's colour is the indicator, and the control is the
-                 * box drawn around it. 2.x gives that box its own
-                 * `background-color: var(--color-base-100)`, which is painted
-                 * over the indicator and turns all 31 petals into identical
-                 * empty circles. The v1 control had no fill, so this override
-                 * was not needed and its absence was invisible.
+                 * These overrides used to target `[data-slot=radio-control]`
+                 * and `[data-slot=radio-indicator]`. `@pathscale/ui` emits
+                 * neither — its radio is `.radio__control` and
+                 * `.radio__indicator`, with no `data-slot` attribute anywhere —
+                 * so every one of them matched nothing. The live app shows it
+                 * as a 32px petal where `size-7` asks for 28.
+                 *
+                 * Hover is the library's, not a local override. Its rule tints
+                 * `.radio__indicator:empty::before`, which a petal cannot match
+                 * because the indicator holds the swatch, and moves
+                 * `border-color` on the control, which the border below would
+                 * cancel. It now lifts the control too, so the feedback
+                 * survives being restyled from out here.
+                 *
+                 * `bg-transparent` is load-bearing rather than tidying: the
+                 * petal's colour is the indicator and the control is the box
+                 * drawn around it, and the control carries its own
+                 * `background-color: var(--color-base-100)` over the top.
                  */
-                class="size-7 cursor-pointer rounded-full [&_[data-slot=radio-control]]:m-0 [&_[data-slot=radio-control]]:size-7 [&_[data-slot=radio-control]]:border-2 [&_[data-slot=radio-control]]:border-az-hairline-strong [&_[data-slot=radio-control]]:bg-transparent [&_[data-slot=radio-indicator]]:overflow-hidden [&_[data-slot=radio-indicator]]:rounded-full"
+                class="az-petal size-7 cursor-pointer rounded-full"
               />
             </span>
           );

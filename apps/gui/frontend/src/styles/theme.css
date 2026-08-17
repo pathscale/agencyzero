@@ -520,6 +520,55 @@
    * It takes the same lift as a panel, so the appearance sliders reach the
    * chrome and not only the cards.
    */
+  /*
+   * A colour-wheel petal: the swatch is the control, not a dot beside one.
+   *
+   * Written here rather than as `[&_.radio__control]:…` utilities on the
+   * component. Tailwind reads the `__` in an arbitrary variant as an escaped
+   * space, so those utilities compile to a selector that matches nothing —
+   * which is how the previous spelling, `[data-slot=radio-control]`, went
+   * unnoticed: the library emits no `data-slot` attribute at all, so 31 petals
+   * silently kept the library's own 1rem control and none of this.
+   *
+   * Hover is fixed in `@pathscale/ui` as well, but that fix is on 2.6.x and
+   * this app is on 2.5.0 — a gap that is a Solid 1 to 2 migration rather than a
+   * version bump, so it is not available here yet. On 2.5.0 the library's rule
+   * only moves `border-color` on the control and tints
+   * `.radio__indicator:empty::before`; a petal overrides that border and its
+   * indicator holds the swatch, so neither half survives and 31 petals give no
+   * sign of which one the pointer is on. Hence the lift below, which the
+   * library's own rule will simply agree with once the migration lands.
+   */
+  .az-petal .radio__control {
+    margin: 0;
+    width: 1.75rem;
+    height: 1.75rem;
+    border: 2px solid var(--color-az-hairline-strong);
+    /* The petal's colour is the indicator; the control is the ring around it,
+     * and its own fill would paint straight over the top. */
+    background-color: transparent;
+    transition:
+      border-color 200ms ease,
+      transform 100ms ease;
+  }
+
+  .az-petal .radio__indicator {
+    overflow: hidden;
+    border-radius: var(--radius-pill, 9999px);
+  }
+
+  @media (hover: hover) {
+    .az-petal:hover .radio__control {
+      border-color: var(--color-primary);
+      transform: scale(1.12);
+    }
+  }
+
+  /* Pressed reads as pressed, and must come after the lift to win. */
+  .az-petal:active .radio__control {
+    transform: scale(0.95);
+  }
+
   .az-strip-cap {
     background-image: linear-gradient(
       to right,
