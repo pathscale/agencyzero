@@ -539,6 +539,43 @@
    * sign of which one the pointer is on. Hence the lift below, which the
    * library's own rule will simply agree with once the migration lands.
    */
+  /*
+   * Two more library internals, addressed the only way that works.
+   *
+   * These were `[&_[data-slot=checkbox-control]]:size-4` and
+   * `[&_[data-slot=slider-output]]:sr-only`. `@pathscale/ui` emits `data-slot`
+   * for a handful of semantic parts — `label`, `description`, `separator` — but
+   * its internals are BEM classes, so neither of those slots exists and both
+   * utilities matched nothing.
+   *
+   * Rewriting them as `[&_.checkbox__control]:…` does not work either, and
+   * silently: Tailwind reads the `__` in an arbitrary variant as an escaped
+   * space, so `[&_.slider__output]:sr-only` compiles to
+   * `.slider__output\]\:sr-only .slider output` — a descendant of `.slider`
+   * rather than the class. Same dead selector, new spelling.
+   *
+   * Plain CSS needs no escaping, so this is where these belong.
+   */
+  .az-compact-checkbox .checkbox__control {
+    width: 1rem;
+    height: 1rem;
+  }
+
+  /* The slider reads its value from the hint beneath it, so its own output
+   * would be a second copy of the same number. Hidden from sight, kept for
+   * assistive technology. */
+  .az-quiet-slider .slider__output {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+    border-width: 0;
+  }
+
   .az-petal .radio__control {
     margin: 0;
     width: 1.75rem;
@@ -795,7 +832,17 @@
    * dark blob welded to the end of the fill. Both references the owner supplied
    * put the knob in the fill colour, riding a thin rail.
    */
-  [data-slot="slider"] {
+  /*
+   * `.slider`, not `[data-slot="slider"]`.
+   *
+   * The library's slider root is a class; it emits `data-slot` only for a few
+   * semantic parts. So every variable below was being declared on a selector
+   * that matches nothing, and the whole slider theme — rail, knob and fill —
+   * fell back to the library's defaults. That is why the knob kept reading as
+   * a dark blob welded to the end of the fill however this block was retuned:
+   * none of it ever applied.
+   */
+  .slider {
     --slider-track-bg: color-mix(in oklab, var(--color-base-content) 18%, transparent);
     --slider-thumb-bg: var(--color-primary);
     --slider-fill-bg: var(--color-primary);
