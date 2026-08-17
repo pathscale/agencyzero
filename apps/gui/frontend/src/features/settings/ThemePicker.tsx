@@ -1,5 +1,6 @@
 import { Flex, Radio } from "@pathscale/ui";
-import { createEffect, For, type JSX, Show } from "solid-js";
+import { createEffect, For, Show } from "solid-js";
+import type { JSX } from "@solidjs/web";
 import { Button } from "~/components/Button";
 import {
   accentOptions,

@@ -1,4 +1,5 @@
-import { type JSX, splitProps } from "solid-js";
+import { splitProps } from "solid-js";
+import type { JSX } from "@solidjs/web";
 import type { IconName } from "./IconSprite";
 
 export type IconProps = Omit<JSX.SvgSVGAttributes<SVGSVGElement>, "children"> & {

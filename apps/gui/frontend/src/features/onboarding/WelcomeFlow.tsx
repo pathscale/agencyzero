@@ -1,5 +1,6 @@
 import { Dialog, Flex, Select } from "@pathscale/ui";
-import { createEffect, createMemo, createSignal, For, type JSX, Show } from "solid-js";
+import { createEffect, createMemo, createSignal, For, Show } from "solid-js";
+import type { JSX } from "@solidjs/web";
 import { Button } from "~/components/Button";
 import { Icon, type IconProps } from "~/components/Icon";
 import { LanguageSwitcher } from "~/components/LanguageSwitcher";
