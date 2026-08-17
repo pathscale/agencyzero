@@ -114,8 +114,12 @@ describe("Home item rows", () => {
   });
 
   it("sorts the Home project groups instead of leaving the dominant rows fixed", async () => {
-    setPrefs("homeSortBy", "status");
-    setPrefs("homeSortDirection", "asc");
+    setPrefs((d) => {
+      d.homeSortBy = "status";
+    });
+    setPrefs((d) => {
+      d.homeSortDirection = "asc";
+    });
     const screen = await mountHome();
     const controls = screen.getByRole("group", { name: "Sort projects and items" });
     const [by, direction] = Array.from(controls.querySelectorAll("button"));

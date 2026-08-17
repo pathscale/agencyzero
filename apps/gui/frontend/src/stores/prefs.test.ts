@@ -15,7 +15,9 @@ describe("interface size", () => {
   });
 
   it("applies a picked scale without shrinking the viewport twice", async () => {
-    setPrefs("uiSize", "extra-large");
+    setPrefs((d) => {
+      d.uiSize = "extra-large";
+    });
     await Promise.resolve();
 
     expect(prefs.uiSize).toBe("extra-large");
@@ -26,14 +28,18 @@ describe("interface size", () => {
 
 describe("colour mode", () => {
   it("persists the selected palette on the document root", async () => {
-    setPrefs("colorMode", "light");
+    setPrefs((d) => {
+      d.colorMode = "light";
+    });
     await Promise.resolve();
 
     expect(prefs.colorMode).toBe("light");
     expect(document.documentElement.dataset.colorMode).toBe("light");
     expect(document.documentElement.style.colorScheme).toBe("light");
 
-    setPrefs("colorMode", "dark");
+    setPrefs((d) => {
+      d.colorMode = "dark";
+    });
   });
 });
 
@@ -73,21 +79,37 @@ describe("workspace layout", () => {
   });
 
   it("persists sidebar visibility and expanded composers as UI preferences", () => {
-    setPrefs("projectPanelVisible", false);
-    setPrefs("expandedComposerKeys", ["project:abc"]);
+    setPrefs((d) => {
+      d.projectPanelVisible = false;
+    });
+    setPrefs((d) => {
+      d.expandedComposerKeys = ["project:abc"];
+    });
 
     expect(prefs.projectPanelVisible).toBe(false);
     expect(prefs.expandedComposerKeys).toEqual(["project:abc"]);
 
-    setPrefs("projectPanelVisible", true);
-    setPrefs("expandedComposerKeys", []);
+    setPrefs((d) => {
+      d.projectPanelVisible = true;
+    });
+    setPrefs((d) => {
+      d.expandedComposerKeys = [];
+    });
   });
 
   it("backs up stable preferences and leaves unfinished owner text local", () => {
-    setPrefs("uiSize", "extra-large");
-    setPrefs("expandedComposerKeys", ["project:abc"]);
-    setPrefs("composerDrafts", "project:abc", "unfinished message");
-    setPrefs("replyQuestionIds", "project:abc", "question-1");
+    setPrefs((d) => {
+      d.uiSize = "extra-large";
+    });
+    setPrefs((d) => {
+      d.expandedComposerKeys = ["project:abc"];
+    });
+    setPrefs((d) => {
+      d.composerDrafts["project:abc"] = "unfinished message";
+    });
+    setPrefs((d) => {
+      d.replyQuestionIds["project:abc"] = "question-1";
+    });
 
     const snapshot = portablePrefsSnapshot();
     expect(snapshot.uiSize).toBe("extra-large");
@@ -102,7 +124,9 @@ describe("workspace layout", () => {
     expect(prefs.composerDrafts["project:abc"]).toBe("unfinished message");
     expect(prefs.replyQuestionIds["project:abc"]).toBe("question-1");
 
-    setPrefs("uiSize", "extra-large");
+    setPrefs((d) => {
+      d.uiSize = "extra-large";
+    });
     restorePortablePrefs({ uiSize: "normal" }, "backup-1");
     expect(prefs.uiSize).toBe("extra-large");
 
@@ -110,12 +134,18 @@ describe("workspace layout", () => {
     restorePortablePrefs({ uiSize: "normal" }, "backup-1");
     expect(prefs.uiSize).toBe("normal");
 
-    setPrefs("composerDrafts", "project:abc", "");
-    setPrefs("replyQuestionIds", "project:abc", "");
+    setPrefs((d) => {
+      d.composerDrafts["project:abc"] = "";
+    });
+    setPrefs((d) => {
+      d.replyQuestionIds["project:abc"] = "";
+    });
   });
 
   it("restores portable preferences from a WorkTable settings snapshot", () => {
-    setPrefs("uiSize", "extra-large");
+    setPrefs((d) => {
+      d.uiSize = "extra-large";
+    });
     expect(() => preparePortablePrefsRestore()).not.toThrow();
     expect(() => restorePortablePrefs({ uiSize: "normal" }, "worktable-backup")).not.toThrow();
     expect(prefs.uiSize).toBe("normal");

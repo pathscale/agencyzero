@@ -148,7 +148,9 @@ function ItemSortControls(): JSX.Element {
     >
       <Button
         type="button"
-        onClick={() => setPrefs("itemSortBy", prefs.itemSortBy === "status" ? "time" : "status")}
+        onClick={() => setPrefs((d) => {
+                         d.itemSortBy = prefs.itemSortBy === "status" ? "time" : "status";
+                       })}
         class="rounded-md border border-az-hairline bg-az-inset px-1.5 py-0.5 font-medium text-[10.5px] text-az-muted transition-colors hover:text-az-strong"
         title={tx("Toggle item sort between status and time")}
       >
@@ -157,7 +159,9 @@ function ItemSortControls(): JSX.Element {
       <Button
         type="button"
         onClick={() =>
-          setPrefs("itemSortDirection", prefs.itemSortDirection === "asc" ? "desc" : "asc")
+          setPrefs((d) => {
+            d.itemSortDirection = prefs.itemSortDirection === "asc" ? "desc" : "asc";
+          })
         }
         class="flex size-5 items-center justify-center rounded-md border border-az-hairline bg-az-inset text-az-muted transition-colors hover:text-az-strong"
         aria-label={tx(prefs.itemSortDirection === "asc" ? "Sort descending" : "Sort ascending")}

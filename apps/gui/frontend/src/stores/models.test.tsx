@@ -31,7 +31,9 @@ const claude = (workspace: Workspace) => workspace.state.settings?.models.claude
 
 // Boot restores only remembered tabs now; these scenarios want them all open.
 beforeEach(() => {
-  setPrefs("openTabKeys", ["worktable", "cafe", "quux"]);
+  setPrefs((d) => {
+    d.openTabKeys = ["worktable", "cafe", "quux"];
+  });
 });
 
 describe("the catalogue", () => {

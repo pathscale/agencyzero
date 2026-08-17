@@ -342,7 +342,9 @@ function HomeItemSortControls(): JSX.Element {
   const nextSort = () => {
     const order = ["status", "time", "turns"] as const;
     const current = order.indexOf(prefs.homeSortBy);
-    setPrefs("homeSortBy", order[(current + 1) % order.length]);
+    setPrefs((d) => {
+      d.homeSortBy = order[(current + 1) % order.length];
+    });
   };
 
   return (
@@ -382,7 +384,9 @@ function HomeItemSortControls(): JSX.Element {
       <Button
         type="button"
         onClick={() =>
-          setPrefs("homeSortDirection", prefs.homeSortDirection === "asc" ? "desc" : "asc")
+          setPrefs((d) => {
+            d.homeSortDirection = prefs.homeSortDirection === "asc" ? "desc" : "asc";
+          })
         }
         class="flex size-5 items-center justify-center rounded-md border border-az-hairline bg-az-inset text-az-muted transition-colors hover:text-az-strong"
         aria-label={tx(prefs.homeSortDirection === "asc" ? "Sort descending" : "Sort ascending")}

@@ -217,5 +217,7 @@ export function preparePortablePrefsRestore(): void {
 }
 
 export function togglePanelSection(section: keyof UiPrefs["panelSections"]): void {
-  setPrefs("panelSections", section, (open) => !open);
+  setPrefs((d) => {
+    d.panelSections[section] = ((open) => !open)(d.panelSections[section]);
+  });
 }
