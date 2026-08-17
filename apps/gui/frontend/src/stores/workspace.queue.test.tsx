@@ -56,8 +56,12 @@ beforeEach(() => {
   queueHarness.handlers.clear();
   queueHarness.send.mockReset();
   SETTINGS.workspaceTabs = null;
-  setPrefs("lastTabKey", "quux");
-  setPrefs("openTabKeys", ["quux"]);
+  setPrefs((d) => {
+    d.lastTabKey = "quux";
+  });
+  setPrefs((d) => {
+    d.openTabKeys = ["quux"];
+  });
 });
 
 describe("queued live follow-ups", () => {

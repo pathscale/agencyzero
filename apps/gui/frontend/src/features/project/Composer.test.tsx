@@ -233,18 +233,24 @@ describe("Composer", () => {
   });
 
   it("remeasures a long draft restored reactively for the active tab", async () => {
-    setPrefs("composerDrafts", {});
+    setPrefs((d) => {
+      d.composerDrafts = {};
+    });
     const { field, booted } = mount({ draftKey: "project:restored" });
     Object.defineProperty(field, "scrollHeight", { configurable: true, value: 112 });
 
-    setPrefs("composerDrafts", "project:restored", "a restored prompt ".repeat(80));
+    setPrefs((d) => {
+      d.composerDrafts["project:restored"] = "a restored prompt ".repeat(80);
+    });
 
     await waitFor(() => expect(field.style.height).toBe("112px"));
     await booted();
   });
 
   it("expands a long-prompt editor per tab and restores it", async () => {
-    setPrefs("expandedComposerKeys", []);
+    setPrefs((d) => {
+      d.expandedComposerKeys = [];
+    });
     const screen = mount({ draftKey: "project:abc" });
 
     fireEvent.click(screen.getByLabelText("Expand the prompt"));
@@ -262,7 +268,9 @@ describe("Composer", () => {
 
   it("keeps an expanded long prompt inside a short window", async () => {
     vi.stubGlobal("innerHeight", 640);
-    setPrefs("expandedComposerKeys", []);
+    setPrefs((d) => {
+      d.expandedComposerKeys = [];
+    });
     const screen = mount({ draftKey: "project:short-window" });
     Object.defineProperty(screen.field, "scrollHeight", { configurable: true, value: 900 });
 
@@ -407,7 +415,9 @@ describe("the model pill", () => {
  */
 describe("an unsent draft", () => {
   beforeEach(() => {
-    setPrefs("composerDrafts", {});
+    setPrefs((d) => {
+      d.composerDrafts = {};
+    });
   });
 
   it("survives the screen being unmounted and mounted again", async () => {
@@ -463,11 +473,15 @@ describe("an unsent draft", () => {
   it("still accepts a draft that changed for any reason but typing", async () => {
     const screen = mount({ draftKey: "project:external" });
 
-    setPrefs("composerDrafts", "project:external", "restored from the store");
+    setPrefs((d) => {
+      d.composerDrafts["project:external"] = "restored from the store";
+    });
     await waitFor(() => expect(screen.field.value).toBe("restored from the store"));
 
     // And clearing it after a send still empties the box.
-    setPrefs("composerDrafts", "project:external", "");
+    setPrefs((d) => {
+      d.composerDrafts["project:external"] = "";
+    });
     await waitFor(() => expect(screen.field.value).toBe(""));
     await screen.booted();
   });
@@ -564,7 +578,9 @@ describe("the drift on the composer edge is a render loop, so it follows typing"
 
 describe("a draft belongs to its own tab", () => {
   beforeEach(() => {
-    setPrefs("composerDrafts", {});
+    setPrefs((d) => {
+      d.composerDrafts = {};
+    });
   });
 
   it("follows the key when the same composer is handed a different tab", async () => {
@@ -768,7 +784,9 @@ describe("cost guidance controls", () => {
 
     // Stand in for the ten-minute clock elapsing without making the provider's
     // async boot run under fake timers.
-    setPrefs("costWarningSnoozedUntil", 0);
+    setPrefs((d) => {
+      d.costWarningSnoozedUntil = 0;
+    });
     await waitFor(() => expect(screen.getByText("Permanently disable this warning")).toBeTruthy());
     fireEvent.click(screen.getByText("Permanently disable this warning"));
     fireEvent.click(screen.getByRole("button", { name: "Confirm" }));

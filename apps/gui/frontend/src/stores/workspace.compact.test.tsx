@@ -62,8 +62,12 @@ beforeEach(() => {
   compactHarness.handlers.clear();
   compactHarness.compact.mockReset();
   SETTINGS.workspaceTabs = null;
-  setPrefs("lastTabKey", "quux");
-  setPrefs("openTabKeys", ["quux"]);
+  setPrefs((d) => {
+    d.lastTabKey = "quux";
+  });
+  setPrefs((d) => {
+    d.openTabKeys = ["quux"];
+  });
 });
 
 describe("a compaction asked for while the project is busy", () => {

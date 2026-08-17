@@ -40,7 +40,9 @@ const PROJECT: Project = {
  * ready, so nothing renders a project panel before then either.
  */
 function mount() {
-  setPrefs("panelSections", "notes", true);
+  setPrefs((d) => {
+    d.panelSections["notes"] = true;
+  });
   let workspace!: Workspace;
 
   function Gate() {
@@ -177,7 +179,9 @@ describe("the notes a compaction kept", () => {
 describe("the knowledge checkpoint switch", () => {
   // `mount` opens the notes section; this opens Settings alongside it, which is
   // where the switch lives.
-  const openSettings = () => setPrefs("panelSections", "settings", true);
+  const openSettings = () => setPrefs((d) => {
+                               d.panelSections["settings"] = true;
+                             });
 
   it("is off until it is asked for", async () => {
     openSettings();
@@ -216,7 +220,9 @@ describe("the knowledge checkpoint switch", () => {
 
 describe("project response verbosity", () => {
   it("starts at model default and keeps the project-local choice", async () => {
-    setPrefs("panelSections", "settings", true);
+    setPrefs((d) => {
+      d.panelSections["settings"] = true;
+    });
     const { ready, screen } = mount();
     await ready();
 

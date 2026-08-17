@@ -611,7 +611,9 @@ export function ProjectTab(props: { tab: Tab; project: Project }): JSX.Element {
         <Show when={!forkInfo()}>
           <ProjectPanelToggle
             visible={prefs.projectPanelVisible}
-            onToggle={() => setPrefs("projectPanelVisible", (visible) => !visible)}
+            onToggle={() => setPrefs((d) => {
+                              d.projectPanelVisible = ((visible) => !visible)(d.projectPanelVisible);
+                            })}
           />
         </Show>
       </div>
