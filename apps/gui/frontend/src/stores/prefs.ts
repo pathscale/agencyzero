@@ -1,5 +1,5 @@
 import { createEffect } from "solid-js";
-import { createStore } from "solid-js/store";
+import { createStore } from "solid-js";
 import type { PortableUiPrefs, UiPrefs } from "~/types";
 
 export const UI_SCALES: Record<UiPrefs["uiSize"], number> = {
