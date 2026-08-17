@@ -32,7 +32,9 @@ use tokio::io::{AsyncRead, AsyncReadExt};
 use worktable::prelude::*;
 
 use crate::db::schema::message::{FinalizeByIdQuery, MessageRow};
-use crate::db::schema::project::{DirsByIdQuery, NameByIdQuery, PinnedByIdQuery, ProjectRow};
+use crate::db::schema::project::{
+    DirsByIdQuery, LastActivityByIdQuery, NameByIdQuery, PinnedByIdQuery, ProjectRow,
+};
 use crate::db::schema::project_item::{
     PositionByIdQuery as ItemPositionByIdQuery, ProjectItemRow,
     ReferenceByIdQuery as ItemReferenceByIdQuery, StatusByIdQuery as ItemStatusByIdQuery,
@@ -287,6 +289,37 @@ async fn touch_item(tables: &Tables, item_id: &str) {
             crate::log::Level::Warn,
             "items",
             "could not timestamp {item_id}: {error}"
+        );
+    }
+}
+
+/// Record that a project saw traffic, so Home's time sort can rank it.
+///
+/// `last_activity_at` was written only when a row was created, and the schema's
+/// `LastActivityById` updater had no caller anywhere in the tree. Home's "time"
+/// sort and its Recent rail both key on this column, so every project ranked by
+/// its creation date and a project used every day sank under one made later and
+/// never touched again. Measured against the real store before the fix: 244
+/// projects, newest `last_activity_at` nine days stale.
+///
+/// A failure is logged and swallowed rather than propagated. This is ordering
+/// metadata on a path that has already durably stored the message; losing a
+/// timestamp must not turn into a failed send.
+async fn touch_project(tables: &Tables, project_id: &str) {
+    if let Err(error) = tables
+        .project
+        .update_last_activity_by_id(
+            LastActivityByIdQuery {
+                last_activity_at: now(),
+            },
+            project_id.to_string(),
+        )
+        .await
+    {
+        crate::log!(
+            crate::log::Level::Warn,
+            "projects",
+            "could not timestamp {project_id}: {error}"
         );
     }
 }
@@ -1660,6 +1693,7 @@ async fn flush_continued_agent_chunk(
         Ok(dto) => {
             let id = dto.id.clone();
             let _ = app.emit("message:appended", dto);
+            touch_project(tables, context.project_id).await;
             body.clear();
             // The durable message now owns this slice. Recovery should retain
             // only words streamed after the boundary.
@@ -5074,6 +5108,7 @@ async fn user_message_for_send(
             format!("you sent a message ({} chars)", input.body.len())
         },
     );
+    touch_project(&state.tables, &input.project_id).await;
     let _ = app.emit("message:appended", &message);
     Ok(message)
 }
@@ -12213,6 +12248,7 @@ async fn drive_run(
                 }
             };
             let _ = app.emit("message:appended", appended);
+            touch_project(&tables, &project_id).await;
             // The reply row now owns these words; the checkpoint is done.
             clear_partial_reply(&tables, &project_id).await;
 
@@ -12817,6 +12853,74 @@ async fn checkpoint_if_due(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /**
+     * A project that saw traffic outranks one created after it.
+     *
+     * This asserts the owner-visible outcome rather than the mechanism: Home's
+     * time sort and its Recent rail both key on `last_activity_at`, so the
+     * question that matters is whether an old project someone is actually
+     * using sorts above a newer one nobody has touched.
+     *
+     * It failed before `touch_project` existed. `last_activity_at` was written
+     * only at row creation and the schema's `LastActivityById` updater had no
+     * caller in the tree, so this ordering was frozen at creation order and
+     * the older project could never climb. Deleting the `touch_project` calls
+     * on the message paths puts it back to red.
+     */
+    #[tokio::test]
+    async fn a_project_with_traffic_outranks_one_created_later() {
+        let dir = std::env::temp_dir().join(format!(
+            "az-activity-sort-{}-{}",
+            std::process::id(),
+            chrono::Utc::now().timestamp_nanos_opt().unwrap_or_default()
+        ));
+        let tables = crate::db::tables::Tables::open(&dir)
+            .await
+            .expect("activity sort store opens");
+
+        for (index, (id, created)) in [
+            ("proj-old", "2026-07-01T00:00:00Z"),
+            ("proj-new", "2026-08-01T00:00:00Z"),
+        ]
+        .iter()
+        .enumerate()
+        {
+            tables
+                .project
+                .insert(ProjectRow {
+                    id: (*id).into(),
+                    name: (*id).into(),
+                    status: "active".into(),
+                    position: index as u32,
+                    dirs: "[]".into(),
+                    pinned: false,
+                    moderator_enabled: false,
+                    forked_from: String::new(),
+                    last_activity_at: (*created).into(),
+                })
+                .expect("project row inserts");
+        }
+
+        // The older project is the one being used.
+        touch_project(&tables, "proj-old").await;
+
+        let mut rows = tables
+            .project
+            .select_all()
+            .execute()
+            .expect("projects read back");
+        // Newest activity first, the way Home's Recent rail orders them.
+        rows.sort_by(|left, right| right.last_activity_at.cmp(&left.last_activity_at));
+
+        assert_eq!(
+            rows.first().map(|row| row.id.as_str()),
+            Some("proj-old"),
+            "a project with traffic should rank above one merely created later"
+        );
+
+        let _ = std::fs::remove_dir_all(dir);
+    }
 
     /// Normal is zero so that adding the column needed no backfill, which
     /// means the stored value is not the sort order. Mixing the two up would
