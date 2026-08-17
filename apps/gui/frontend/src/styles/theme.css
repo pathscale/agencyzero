@@ -608,18 +608,34 @@
   }
 
   /*
-   * No backdrop support, or a reader who asked for less transparency: keep the
-   * surface legible by making it more opaque rather than leaving it a tint over
-   * whatever is behind it.
+   * No backdrop support: keep the surface legible by making it more opaque
+   * rather than leaving it a tint over whatever is behind it.
+   *
+   * Gated on a class the app sets, not on `@supports`. The probe this used to
+   * ask was `not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter:
+   * blur(1px)))`, and on the renderer that ships it matched *always*: stylo
+   * carries `backdrop-filter` behind `servo_pref = "layout.unimplemented"`, so
+   * the property is not advertised to `@supports` even though blitz-paint
+   * implements it (`render.rs` builds a real `backdrop_filter` layer). The
+   * fallback therefore won on every frame and painted the 78% opaque surface
+   * over the glass one — which is why glass read as 0% transparent no matter
+   * what the three axes were set to, and why the borders and shadows were the
+   * fallback's rather than the glass rule's.
+   *
+   * A property the engine implements but does not declare cannot be detected
+   * from inside CSS, so the decision moves to the one place that knows which
+   * renderer is running. `webview-runtime` is the only build that needs the
+   * fallback, and it is WebKit, where the unprefixed property is supported
+   * anyway.
    */
-  @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
-    .az-glass {
-      background-color: color-mix(
-        in oklab,
-        var(--color-az-badge),
-        transparent calc(100% - var(--glass-fallback-background-opacity, 78%))
-      );
-    }
+  :root.az-no-backdrop .az-glass {
+    background-color: color-mix(
+      in oklab,
+      var(--color-az-badge),
+      transparent calc(100% - var(--glass-fallback-background-opacity, 78%))
+    );
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
   }
 
   @media (prefers-reduced-transparency: reduce) {
