@@ -364,7 +364,29 @@ export function SettingsTab(): JSX.Element {
       tabindex="-1"
       class="az-scroll flex min-w-0 flex-1 justify-center rounded-panel border border-az-hairline bg-az-sunken focus:outline-none"
     >
-      <div class="flex w-full max-w-[720px] flex-col gap-3 px-6 pt-5.5 pb-7">
+      {/*
+        `gap-10` (40px) rather than the 12px this used to be, and the number is
+        load-bearing rather than taste.
+
+        These sections are glass. `backdrop-filter` cannot read a scene that
+        has not been rasterised, so the renderer cuts the frame into segments,
+        and each segment costs a full-frame render, a full-frame copy into
+        vello's atlas, a blur and a full-frame draw. Two panels share one
+        segment only when neither one's blur can read a pixel the other
+        painted, and a gaussian reaches three sigma.
+
+        At sigma 12 that reach is 36px. A 12px gap put every panel in its own
+        segment: `blitz-tests --test glass_pass_count` prints seven render
+        passes here against two for panels spaced past the reach, and the
+        threshold is exact, 36px fails and 37px batches. Measured on the
+        running app the renderer stage was 119-181ms of a frame against 1.7ms
+        of layout, which is a window repainting twice a second and reading as
+        blank.
+
+        40px clears 36 with room for the blur to be retuned a little without
+        silently falling back to seven passes.
+      */}
+      <div class="flex w-full max-w-[720px] flex-col gap-10 px-6 pt-5.5 pb-7">
         <div class="flex items-baseline gap-2.5 pb-0.5">
           <h1 class="font-semibold text-[18px] text-az-title tracking-[-.01em]">
             {tx("Settings")}
