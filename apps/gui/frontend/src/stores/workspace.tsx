@@ -1119,15 +1119,14 @@ function createWorkspace() {
       const rememberedKeys = portableTabs?.openProjectKeys ?? prefs.openTabKeys;
       const projectsById = new Map(projects.map((project) => [project.id, project]));
       const rememberedPositions = portableTabs?.scrollPositions ?? {};
-      setState(
-        "transcriptPositions",
-        Object.fromEntries(
+      setState((d) => {
+        d.transcriptPositions = Object.fromEntries(
           rememberedKeys.map((key) => {
             const position = rememberedPositions[key];
             return [key, Number.isSafeInteger(position) && position >= 0 ? position : 0];
           }),
-        ),
-      );
+        );
+      });
       setState((d) => {
         d.tabs = [
         HOME_TAB,
@@ -2288,13 +2287,11 @@ function createWorkspace() {
       const project = state.projects.find((candidate) => candidate.id === tab.projectId);
       const tabOwner = project?.forkedFrom?.itemId ? project.forkedFrom.projectId : tab.key;
       if (tabOwner !== ownerKey) return;
-      setState(
-        "tabs",
-        index,
-        effort === undefined
+      setState((d) => {
+        d.tabs[index] = effort === undefined
           ? { agent, model, permission: nextPermission }
-          : { agent, model, permission: nextPermission, effort },
-      );
+          : { agent, model, permission: nextPermission, effort };
+      });
     });
   }
 
@@ -2855,10 +2852,9 @@ function createWorkspace() {
     },
     /** Wave away a compaction that is still waiting for the run to end. */
     dropPendingCompact: (projectId: string): void =>
-      setState(
-        "pendingCompact",
-        produce((waiting) => delete waiting[projectId]),
-      ),
+      setState((d) => {
+        d.pendingCompact = produce((waiting) => delete waiting[projectId]);
+      }),
     /*
      * Read on demand rather than held in the store: the notes change once per
      * compaction, and the only screen that shows them is the panel section that
