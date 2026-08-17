@@ -147,8 +147,11 @@ export function SectionPanel(props: SectionPanelProps): JSX.Element {
        */}
       <div
         aria-hidden={!props.isOpen ? "true" : undefined}
-        class={`overflow-hidden border-az-hairline-soft border-t ${props.contentClass ?? ""}`}
-        classList={{ hidden: !props.isOpen }}
+        // `classList` is gone in Solid 2; the conditional class rides in the
+        // template instead, which is what it compiled to anyway.
+        class={`overflow-hidden border-az-hairline-soft border-t ${props.contentClass ?? ""} ${
+          props.isOpen ? "" : "hidden"
+        }`}
       >
         {props.children}
       </div>

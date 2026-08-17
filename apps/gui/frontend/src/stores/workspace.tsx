@@ -3068,10 +3068,10 @@ const WorkspaceContext = createContext<Workspace>();
 
 export function WorkspaceProvider(
   props: ParentProps,
-): ReturnType<typeof WorkspaceContext.Provider> {
+): JSX.Element {
   const workspace = createWorkspace();
   void workspace.init();
-  return <WorkspaceContext.Provider value={workspace}>{props.children}</WorkspaceContext.Provider>;
+  return <WorkspaceContext value={workspace}>{props.children}</WorkspaceContext>;
 }
 
 export function useWorkspace(): Workspace {

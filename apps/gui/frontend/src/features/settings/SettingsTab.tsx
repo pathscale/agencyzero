@@ -2745,13 +2745,14 @@ function Section(props: {
   };
 
   return (
-    <SearchScope.Provider value={{ titleMatches, report }}>
-      <Panel ref={shell} class="flex-none rounded-[13px]" classList={{ hidden: !visible() }}>
+    <SearchScope value={{ titleMatches, report }}>
+      <Panel ref={shell} class={`flex-none rounded-[13px] ${visible() ? "" : "hidden"}`}>
         <div class="flex flex-wrap items-baseline gap-x-2.5 gap-y-1 px-3.5 pt-3 pb-2.5">
           <Icon name={props.icon} class="relative top-0.5 text-[14px] text-primary" />
           <h2
-            class="font-semibold text-[13px]"
-            classList={{ "text-az-title": !props.pending, "text-az-muted": !!props.pending }}
+            class={`font-semibold text-[13px] ${
+              props.pending ? "text-az-muted" : "text-az-title"
+            }`}
           >
             {props.title}
           </h2>
@@ -2772,7 +2773,7 @@ function Section(props: {
         <div
           // @ts-expect-error inert is valid HTML but not yet in Solid's JSX types
           inert={props.pending ? "" : undefined}
-          classList={{ "pointer-events-none opacity-45": !!props.pending }}
+          class={props.pending ? "pointer-events-none opacity-45" : undefined}
         >
           {/*
             Deferred, not conditional. Once a section has mounted it stays
@@ -2782,7 +2783,7 @@ function Section(props: {
           <Show when={mounted()}>{props.children}</Show>
         </div>
       </Panel>
-    </SearchScope.Provider>
+    </SearchScope>
   );
 }
 
@@ -2810,8 +2811,7 @@ function Row(props: {
 
   return (
     <div
-      classList={{ hidden: !visible() }}
-      class={`px-3.5 py-2.5 ${props.isLast ? "" : "border-az-hairline-soft border-b"} ${
+      class={`px-3.5 py-2.5 ${visible() ? "" : "hidden"} ${props.isLast ? "" : "border-az-hairline-soft border-b"} ${
         props.stack ? "flex flex-col gap-2" : "flex items-center gap-3"
       }`}
     >
