@@ -1029,7 +1029,7 @@ export function Composer(props: ComposerProps): JSX.Element {
                 event.preventDefault();
                 void submit();
               }}
-              class={`az-scroll block max-h-full w-full min-w-0 resize-none overflow-y-auto overflow-x-hidden whitespace-pre-wrap break-words border-0 bg-transparent p-0 text-base-content leading-[1.45] shadow-none [overflow-wrap:anywhere] placeholder:text-az-faint focus:bg-transparent focus:shadow-none focus:outline-none ${
+              class={`az-scroll block max-h-full min-h-0 w-full min-w-0 resize-none overflow-y-auto overflow-x-hidden whitespace-pre-wrap break-words border-0 bg-transparent p-0 text-base-content leading-[1.45] shadow-none [overflow-wrap:anywhere] placeholder:text-az-faint focus:bg-transparent focus:shadow-none focus:outline-none ${
                 props.size === "lg" ? "text-[15px]" : "text-[14.5px]"
               }`}
             />
