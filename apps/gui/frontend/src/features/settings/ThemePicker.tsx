@@ -264,13 +264,19 @@ function AccentSelector(props: {
                 title={label()}
                 aria-pressed={selected()}
                 onClick={() => props.onPick(option.value)}
-                class="size-7 rounded-full border-2 transition-[border-color,transform] hover:scale-110"
+                class="size-7 overflow-hidden rounded-full border-2 p-0 transition-[border-color,transform] hover:scale-110"
                 classList={{
                   "border-primary": selected(),
                   "border-az-hairline-strong hover:border-primary": !selected(),
                 }}
-                style={{ "background-color": option.color }}
-              />
+              >
+                {/* The fill is a child: the library's Button drops `style`. */}
+                <span
+                  aria-hidden="true"
+                  class="block size-full rounded-full"
+                  style={{ "background-color": option.color }}
+                />
+              </Button>
             );
           }}
         </For>
@@ -316,23 +322,43 @@ function Axis(props: {
               aria-label={`${props.label} ${props.format(stop, index())}`}
               aria-pressed={selected(stop)}
               onClick={() => props.onPick(stop)}
-              class="size-7 rounded-full border-2 transition-[border-color,transform] hover:scale-110"
+              class="size-7 overflow-hidden rounded-full border-2 p-0 transition-[border-color,transform] hover:scale-110"
               classList={{
                 "border-primary": selected(stop),
                 "border-az-hairline-strong hover:border-az-hairline-strong/60": !selected(stop),
               }}
-              style={{ "background-color": props.preview(stop) }}
             >
-              <Show when={props.ink}>
-                {(ink) => (
-                  <span
-                    class="font-semibold text-[12px] leading-none"
-                    style={{ color: ink()(stop) }}
-                  >
-                    A
-                  </span>
-                )}
-              </Show>
+              {/*
+                The fill is a child, not a `style` on the Button.
+
+                `@pathscale/ui`'s Button never reads `style`: the prop appears
+                nowhere in the component and it spreads only onto its spinner
+                and icon slots, so an inline `background-color` handed to it is
+                dropped on the floor. Every swatch in this pane rendered as an
+                empty ring because of it, which is a control whose entire job
+                is to show a colour showing none.
+
+                A child element the library does not own carries the colour
+                instead. `p-0` and `overflow-hidden` on the button keep it
+                filling the circle rather than sitting inside the default
+                padding.
+              */}
+              <span
+                aria-hidden="true"
+                class="flex size-full items-center justify-center rounded-full"
+                style={{ "background-color": props.preview(stop) }}
+              >
+                <Show when={props.ink}>
+                  {(ink) => (
+                    <span
+                      class="font-semibold text-[12px] leading-none"
+                      style={{ color: ink()(stop) }}
+                    >
+                      A
+                    </span>
+                  )}
+                </Show>
+              </span>
             </Button>
           )}
         </For>
