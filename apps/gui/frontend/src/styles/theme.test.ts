@@ -308,3 +308,42 @@ describe("the PathScale/UI button compatibility reset", () => {
     expect(reset).toBeGreaterThan(components);
   });
 });
+
+/*
+ * Glass has to survive the renderer that actually ships.
+ *
+ * The opaque fallback used to sit behind `@supports not ((backdrop-filter: …)
+ * or (-webkit-backdrop-filter: …))`, which reads as a safe progressive
+ * enhancement and is anything but on blitz: stylo keeps `backdrop-filter`
+ * behind `servo_pref = "layout.unimplemented"`, so the property is never
+ * advertised to `@supports` even though blitz-paint implements it. The probe
+ * matched on every frame, the 78% opaque fallback won, and glass rendered at no
+ * transparency at all whatever the three axes said.
+ *
+ * A property the engine implements but does not declare cannot be feature
+ * detected from inside CSS, so the guard is that no glass rule may be gated on
+ * asking.
+ */
+describe("glass survives a renderer that under-reports itself", () => {
+  it("never gates the glass fallback on a backdrop-filter @supports probe", () => {
+    // Only real at-rules: the comment above the fallback names the probe it
+    // replaced, and explaining the bug must not read as committing it.
+    const atRules = CSS.replace(/\/\*[\s\S]*?\*\//g, "");
+    expect(atRules).not.toMatch(/@supports[^{]*backdrop-filter/);
+  });
+
+  it("keeps the translucent surface as the rule that normally wins", () => {
+    const glass = CSS.indexOf(".az-glass {");
+    expect(glass).toBeGreaterThanOrEqual(0);
+    // Mixed toward `transparent`, which is what makes it glass rather than a
+    // second opaque colour: `color-mix(… var(--color-base-100))` cannot ever
+    // produce transparency, however the opacity token is tuned.
+    const rule = CSS.slice(glass, CSS.indexOf("}", CSS.indexOf("backdrop-filter", glass)));
+    expect(rule).toContain("transparent calc(100% - var(--glass-background-opacity");
+    expect(rule).toContain("backdrop-filter: blur(var(--glass-blur");
+  });
+
+  it("puts the opaque fallback behind a class the app controls", () => {
+    expect(CSS).toContain(".az-no-backdrop .az-glass {");
+  });
+});
