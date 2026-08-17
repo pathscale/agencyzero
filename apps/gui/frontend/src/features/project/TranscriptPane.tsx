@@ -29,7 +29,7 @@ import { log } from "~/lib/log";
 import { record as recordPerf } from "~/lib/perf";
 import { costLabel, estimateTurnCost } from "~/lib/pricing";
 import { compactCount } from "~/lib/stats";
-import { agentTurnLabels } from "~/lib/turns";
+import { agentTurnLabels, streamingTurnNumber } from "~/lib/turns";
 import { tx } from "~/stores/i18n";
 import { type RunStatus, useNow, useWorkspace } from "~/stores/workspace";
 import type { Message, MessageReceipt as MessageReceiptState, Project, Question } from "~/types";
@@ -292,6 +292,8 @@ export function TranscriptPane(props: {
       .reverse()
       .find((message) => message.author === "user" || message.author === "agent")?.agent ??
     "claude";
+  /** What the reply being written will be numbered once it persists. */
+  const streamingTurn = createMemo(() => streamingTurnNumber(props.messages));
 
   /*
    * Whether the view is at (or near) the tail. Reading up through a long
@@ -997,6 +999,18 @@ export function TranscriptPane(props: {
             // appear, disappear and reappear as the run lands.
             <div class={`${AGENT_BUBBLE}`}>
               <span class="text-[11px] text-az-muted">
+                {/*
+                  Numbered while it is still being written.
+
+                  `agentTurnLabels` keys off message ids and a streaming reply
+                  has none, so this bubble used to read `claude · writing…`
+                  under a column of replies each carrying `Turn 26 · …`. The
+                  number is already determined by the owner message that opened
+                  the run, so holding it back until the run lands hides
+                  something known — and made a live window look like it had lost
+                  its turn bar next to a finished one.
+                */}
+                {tx("Turn {number}", { number: streamingTurn() })} ·{" "}
                 {AGENT_LABELS[streamingAgent()]} {tx("· writing…")}
               </span>
               <MessageBody body={holdBackPartialDirective(text())} class={AGENT_TEXT} />
