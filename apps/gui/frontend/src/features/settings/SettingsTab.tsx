@@ -481,10 +481,21 @@ export function SettingsTab(): JSX.Element {
                   hint={tx("off by default; off removes the MCP socket and discovery descriptor")}
                 >
                   <div class="flex flex-col items-end gap-1">
+                    {/*
+                      Not disabled while the write is in flight.
+
+                      `displayedBlitzControl` already shows the requested state
+                      optimistically, so the switch has moved before the store
+                      answers. Disabling it on top of that made the control
+                      inert for the length of the round trip and swallowed a
+                      second click rather than queueing it — a toggle that
+                      sometimes ignores you, which is exactly how these have
+                      always behaved. The deep profiling switch below had the
+                      same flag and lost it for the same reason.
+                    */}
                     <SettingToggle
                       label={tx("Enable inspection and agent control")}
                       checked={displayedBlitzControl()}
-                      disabled={blitzControlPending()}
                       onChange={setBlitzControl}
                     />
                     <span
