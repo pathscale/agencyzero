@@ -420,6 +420,58 @@ describe("an unsent draft", () => {
     expect(second.field.value).toBe("half a thought");
   });
 
+  /*
+   * Typing must not rewrite the field's own value.
+   *
+   * `value={draft()}` made this fully controlled, so each keystroke went out to
+   * the prefs store and came back as a fresh `value` assignment — 10 `dom:attr=`
+   * writes for 8 keystrokes, measured on the running app. Assigning `value`
+   * resets the browser's native undo history, which is why Cmd-Z and Ctrl-Z did
+   * nothing in the prompt area.
+   *
+   * jsdom has no undo stack to assert against, so what is guarded is the cause:
+   * an input event must leave the element's value alone, while a draft that
+   * changes for any other reason must still land. The two cases below are the
+   * whole contract.
+   */
+  it("does not reassign the field's value while typing, so undo survives", async () => {
+    const screen = mount({ draftKey: "project:undo" });
+    const writes: string[] = [];
+    const descriptor = Object.getOwnPropertyDescriptor(
+      window.HTMLTextAreaElement.prototype,
+      "value",
+    );
+    if (!descriptor?.get || !descriptor.set) throw new Error("no value descriptor to wrap");
+    const { get, set } = descriptor;
+    Object.defineProperty(screen.field, "value", {
+      configurable: true,
+      get,
+      set(next: string) {
+        writes.push(next);
+        set.call(this, next);
+      },
+    });
+
+    fireEvent.input(screen.field, { target: { value: "typed by hand" } });
+    await waitFor(() => expect(prefs.composerDrafts["project:undo"]).toBe("typed by hand"));
+
+    // The store round trip must not come back as a write onto the element.
+    expect(writes).toEqual([]);
+    await screen.booted();
+  });
+
+  it("still accepts a draft that changed for any reason but typing", async () => {
+    const screen = mount({ draftKey: "project:external" });
+
+    setPrefs("composerDrafts", "project:external", "restored from the store");
+    await waitFor(() => expect(screen.field.value).toBe("restored from the store"));
+
+    // And clearing it after a send still empties the box.
+    setPrefs("composerDrafts", "project:external", "");
+    await waitFor(() => expect(screen.field.value).toBe(""));
+    await screen.booted();
+  });
+
   /* Drafts are per tab: typing in one project must not leak into the next. */
   it("is kept per tab rather than shared", async () => {
     const first = mount({ draftKey: "project:abc" });

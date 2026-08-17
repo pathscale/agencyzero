@@ -3380,6 +3380,36 @@ fn state_snapshot(
         let mut items: Vec<&ProjectItemRow> = items.iter().collect();
         items.sort_by_key(|row| (priority_rank(row.priority), row.position));
 
+        /*
+         * Which item a turn with no explicit start is most likely about.
+         *
+         * Only one item's description rides a turn, so when the owner did not
+         * start from one, something has to choose. The most recently touched
+         * active item is the best available answer and costs nothing to
+         * compute: `item_activity_key` is already written on every mutation
+         * and already read by `snapshot_changed_since_last_agent`.
+         *
+         * Ties and missing timestamps fall back to rank order, so an item that
+         * has never been touched can still be chosen when it is the only
+         * active one.
+         */
+        let implied_focus: Option<String> = if focus.is_some() {
+            None
+        } else {
+            items
+                .iter()
+                .filter(|row| row.status == "active")
+                .max_by(|left, right| {
+                    let at = |row: &ProjectItemRow| {
+                        tables
+                            .kv_get(&item_activity_key(&row.id))
+                            .unwrap_or_default()
+                    };
+                    at(left).cmp(&at(right))
+                })
+                .map(|row| row.id.clone())
+        };
+
         let cap = if verbosity == Verbosity::Compact {
             20
         } else {
@@ -3411,7 +3441,29 @@ fn state_snapshot(
                     "  {} · {} · {}{}{}\n",
                     row.id, row.status, row.title, reference, priority
                 ));
-                if row.status == "active" && focus != Some(row.id.as_str()) {
+                /*
+                 * One description per turn, and only the one the turn is about.
+                 *
+                 * The ranked cap bounded how many *lines* rode each turn but
+                 * not how much text, and the descriptions are the bulk of it:
+                 * every active item printed its whole owner-authored context,
+                 * every turn, re-billed each time. A handful of active items is
+                 * enough to dwarf the rest of the snapshot.
+                 *
+                 * When a turn was started from an item, that item's context is
+                 * already printed in full further down, so nothing here needs
+                 * to carry any. When it was not, the most recently touched
+                 * active item is the one the turn is most likely about, and the
+                 * rest are named by id and status alone — which is what the
+                 * agent needs to address them, since the titles and context
+                 * were sent when they were written and are already in the
+                 * conversation.
+                 */
+                let carries_context = match focus {
+                    Some(_) => false,
+                    None => Some(row.id.as_str()) == implied_focus.as_deref(),
+                };
+                if row.status == "active" && carries_context {
                     let context = item_context(tables, &row.id);
                     if !context.trim().is_empty() {
                         out.push_str("    Item context:\n");
@@ -15167,6 +15219,100 @@ mod tests {
         assert!(
             snapshot.len() - optimized.len() > 1_500,
             "the stable system copy should remove a material recurring suffix"
+        );
+
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    /**
+     * One item's description per turn, not every active item's.
+     *
+     * The ranked cap bounded how many item *lines* rode each turn and left the
+     * descriptions alone, which is where the tokens actually are: every active
+     * item printed its whole owner-authored context, every turn, re-billed
+     * each time. A handful of active items dwarfed the rest of the snapshot.
+     *
+     * A turn started from an item already prints that item's context in full
+     * further down, so the list needs to carry none at all. Otherwise the most
+     * recently touched active item is the one the turn is most likely about,
+     * and it is the only one that pays.
+     */
+    #[tokio::test]
+    async fn state_snapshot_sends_one_item_description_rather_than_every_active_one() {
+        let dir = std::env::temp_dir().join(format!(
+            "az-focus-state-{}-{}",
+            std::process::id(),
+            chrono::Utc::now().timestamp_nanos_opt().unwrap_or_default()
+        ));
+        let tables = crate::db::tables::Tables::open(&dir)
+            .await
+            .expect("focus state store opens");
+
+        for (index, item) in ["item-older", "item-newer"].iter().enumerate() {
+            tables
+                .project_item
+                .insert(ProjectItemRow {
+                    id: (*item).into(),
+                    project_id: "project-focus".into(),
+                    title: format!("active item {index}"),
+                    status: "active".into(),
+                    position: index as u32,
+                    reference: String::new(),
+                    priority: NORMAL_PRIORITY,
+                })
+                .expect("item row inserts");
+            tables
+                .kv_put(
+                    &item_context_key(item),
+                    format!("owner-authored context for {item}"),
+                )
+                .await
+                .expect("item context stores");
+        }
+        // `item-newer` was touched most recently, so it is the implied focus.
+        tables
+            .kv_put(
+                &item_activity_key("item-older"),
+                "2026-08-01T00:00:00Z".into(),
+            )
+            .await
+            .expect("older activity stores");
+        tables
+            .kv_put(
+                &item_activity_key("item-newer"),
+                "2026-08-17T00:00:00Z".into(),
+            )
+            .await
+            .expect("newer activity stores");
+
+        // No explicit start: exactly one description, and it is the recent one.
+        let implied = state_snapshot(&tables, "project-focus", None, true, false);
+        assert!(
+            implied.contains("owner-authored context for item-newer"),
+            "the most recently touched active item carries its context"
+        );
+        assert!(
+            !implied.contains("owner-authored context for item-older"),
+            "a second active item must not re-bill its description every turn"
+        );
+        // Both are still addressable: only the prose is dropped, not the row.
+        assert!(implied.contains("item-older"));
+        assert!(implied.contains("item-newer"));
+
+        // Started from an item: the list carries none, because the focus block
+        // below prints that item's context in full already.
+        let focused = state_snapshot(&tables, "project-focus", Some("item-older"), true, false);
+        assert!(focused.contains("This turn was started from item item-older"));
+        assert_eq!(
+            focused
+                .matches("owner-authored context for item-older")
+                .count(),
+            1,
+            "the focused item's context belongs in the focus block, once"
+        );
+        assert!(
+            !focused.contains("owner-authored context for item-newer"),
+            "an unrelated active item must not ride a focused turn"
         );
 
         let _ = std::fs::remove_dir_all(dir);

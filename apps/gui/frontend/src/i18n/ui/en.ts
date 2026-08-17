@@ -757,6 +757,7 @@ const en = {
   "estimated write": "estimated write",
   "estimated from adjacent cache reads": "estimated from adjacent cache reads",
   "imported usage coverage": "usage recovered for {recovered} of {total} imported assistant turns",
+  "Claude · usage unavailable": "Claude · usage unavailable",
   "Import chats": "Import chats",
   "Import all": "Import all",
   "Importing all…": "Importing all…",

@@ -128,6 +128,10 @@ export function TabStrip(): JSX.Element {
   onMount(() => {
     const refresh = () => {
       void actions.refreshQuota();
+      // Rejections are expected here — the endpoint's budget belongs to the
+      // login, so another Claude Code session can take it — but they are
+      // recorded in `claudeUsageError` and shown on the chip rather than
+      // discarded, which is what left the chip simply missing.
       if (isLive("claudeUsage")) void actions.refreshClaudeUsage().catch(() => undefined);
     };
     refresh();
