@@ -35,7 +35,7 @@ import { countdown, formatBytes, relativeTime } from "~/lib/format";
 import { AGENT_LABELS, agentStateLabel, envPolicyLabel, permissionLabel } from "~/lib/labels";
 import { describeError, log } from "~/lib/log";
 import { reset as perfReset, snapshot as perfSnapshot } from "~/lib/perf";
-import { DEFAULT_WASH, normalizeWash, writePanelAxes } from "~/lib/theme";
+import { DEFAULT_WASH, MAX_GLASS_BLUR, normalizeWash, writePanelAxes } from "~/lib/theme";
 import { t, tx, type UiMessage } from "~/stores/i18n";
 import { prefs, setPrefs } from "~/stores/prefs";
 import { useNow, useWorkspace } from "~/stores/workspace";
@@ -2826,7 +2826,20 @@ function GlassTuningAxis(props: {
     const value = props.theme[GLASS_SETTING_KEYS[axis]];
     return Number.isFinite(value) ? Number(value) : GLASS_DEFAULTS[mode()][axis];
   };
-  const limits = () => GLASS_LIMITS[props.axis];
+  /*
+   * The library's range, narrowed for blur.
+   *
+   * Its 50px maximum reaches 150px, and two glass panels can share a render
+   * pass only when neither blur can read a pixel the other painted. Offering a
+   * radius the app then clamps would be a slider that lies, so the track stops
+   * where `glassTuning` stops. See `MAX_GLASS_BLUR`.
+   */
+  const limits = () => {
+    const limits = GLASS_LIMITS[props.axis];
+    return props.axis === "blur"
+      ? { min: limits.min, max: Math.min(limits.max, MAX_GLASS_BLUR) }
+      : limits;
+  };
 
   return (
     <div class="min-w-[260px]">

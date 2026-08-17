@@ -278,11 +278,39 @@ export function glassTuning(theme: ThemeSettings, root: HTMLElement): GlassTunin
     Number.isFinite(value) ? Number(value) : fallback;
 
   return {
-    blur: resolve(theme.glassBlur, defaults.blur),
+    blur: Math.min(resolve(theme.glassBlur, DEFAULT_GLASS_BLUR), MAX_GLASS_BLUR),
     refraction: resolve(theme.glassRefraction, defaults.refraction),
     depth: resolve(theme.glassDepth, defaults.depth),
   };
 }
+
+/**
+ * How far a glass surface smears what is behind it, and the ceiling on it.
+ *
+ * Blur radius is the single biggest cost in a frame this app draws, and not
+ * because blurring is expensive. `backdrop-filter` cannot read a scene that
+ * has not been rasterised, so the renderer cuts the frame into segments, and
+ * each segment costs a full-frame render, a full-frame texture copy into the
+ * atlas, a blur, and a full-frame draw. Two panels can share one segment only
+ * when neither one's blur can read a pixel the other painted, and a gaussian
+ * reaches about 3σ past its own edge.
+ *
+ * The library ships 50px, which reaches 150px. This app's panels sit 12px
+ * apart, so at that radius **nothing can ever batch**: six panels cost seven
+ * render passes where six spaced-out ones cost two
+ * (`blitz-tests --test glass_pass_count`). Measured on the running app that
+ * was 119-181ms of renderer per frame against 1.7ms of layout, a window
+ * repainting two or three times a second and reading as blank.
+ *
+ * 12 keeps the reach at 36px, which is still more than the gap, so panels in a
+ * column do not batch either. It is chosen as the point where the blur still
+ * reads as glass while costing a quarter of the bandwidth, and the ceiling
+ * stops a slider drag from walking back into the pathological range. Widening
+ * the gaps past 3σ is the change that would let batching work at all, and it
+ * belongs to the layout rather than here.
+ */
+export const DEFAULT_GLASS_BLUR = 12;
+export const MAX_GLASS_BLUR = 24;
 
 /**
  * AgencyZero's own panel, expressed in the library's three numbers.

@@ -7,6 +7,9 @@ import {
   DEFAULT_WASH,
   defaultAccent,
   isAccent,
+  DEFAULT_GLASS_BLUR,
+  glassTuning,
+  MAX_GLASS_BLUR,
   MAX_SOFTNESS,
   panelAxes,
   surfaceColors,
@@ -234,6 +237,35 @@ describe("toColorValue", () => {
     expect(toColorValue("#0000ff").hsl.h).toBe(240);
     expect(toColorValue("#808080").hsl.s).toBe(0);
     expect(toColorValue("#fff").rgb).toEqual({ r: 255, g: 255, b: 255, a: 1 });
+  });
+});
+
+describe("glass blur bound", () => {
+  const base = { surface: "", accent: "", softness: 0, wash: 30, textBrightness: 0 };
+
+  /*
+   * Blur radius decides whether the renderer can batch glass panels at all. A
+   * gaussian reaches about 3 sigma, two panels share a render pass only when
+   * neither blur reads the other's pixels, and this app's panels sit 12px
+   * apart. The library's 50px reaches 150px, which made every panel its own
+   * render pass and the renderer 119-181ms of a frame.
+   */
+  it("defaults blur well below the library's 50px", () => {
+    applyTheme({ ...base });
+    expect(DEFAULT_GLASS_BLUR).toBe(12);
+    expect(DEFAULT_GLASS_BLUR).toBeLessThan(50);
+  });
+
+  it("clamps a stored blur to the ceiling", () => {
+    const root = document.documentElement;
+    applyTheme({ ...base, glassBlur: 50 });
+    const clamped = glassTuning({ ...base, glassBlur: 50 }, root).blur;
+    expect(clamped).toBe(MAX_GLASS_BLUR);
+    expect(clamped).toBeLessThan(50);
+  });
+
+  it("leaves a blur inside the range alone", () => {
+    expect(glassTuning({ ...base, glassBlur: 8 }, document.documentElement).blur).toBe(8);
   });
 });
 
