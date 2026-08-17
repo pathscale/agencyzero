@@ -1,5 +1,5 @@
 import { Empty, Flex } from "@pathscale/ui";
-import { createEffect, createMemo, createSignal, For, Match, on, onCleanup, onMount, Show, Switch, untrack } from "solid-js";
+import { createEffect, createMemo, createSignal, For, Match, on, onCleanup, onSettled, Show, Switch, untrack } from "solid-js";
 import type { JSX } from "@solidjs/web";
 import { Button } from "~/components/Button";
 import { Icon } from "~/components/Icon";
@@ -392,7 +392,7 @@ export function TranscriptPane(props: {
    * Driven by frames rather than a timer so it yields between steps and cannot
    * turn into one long block, which is the thing it exists to avoid.
    */
-  onMount(() => {
+  onSettled(() => {
     if (typeof requestAnimationFrame === "undefined") {
       setVisibleEntries(TRANSCRIPT_PAGE_SIZE);
       return;
@@ -615,7 +615,7 @@ export function TranscriptPane(props: {
    */
   let resizeObserver: ResizeObserver | undefined;
   let mutationObserver: MutationObserver | undefined;
-  onMount(() => {
+  onSettled(() => {
     if (typeof ResizeObserver !== "undefined") {
       resizeObserver = new ResizeObserver(() => {
         // A width transition can leave an overflow-hidden element with a real,

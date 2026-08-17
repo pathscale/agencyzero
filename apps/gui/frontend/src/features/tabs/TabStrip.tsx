@@ -1,4 +1,4 @@
-import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show } from "solid-js";
+import { createEffect, createMemo, createSignal, For, onCleanup, onSettled, Show } from "solid-js";
 import type { JSX } from "@solidjs/web";
 import { Button } from "~/components/Button";
 import { Icon, type IconProps } from "~/components/Icon";
@@ -107,7 +107,7 @@ export function TabStrip(): JSX.Element {
     measure();
   }
 
-  onMount(() => {
+  onSettled(() => {
     measure();
     // Width changes with the window and with how many tabs are open; neither
     // fires `scroll`. Guarded because jsdom has no ResizeObserver.
@@ -117,7 +117,7 @@ export function TabStrip(): JSX.Element {
     onCleanup(() => observer.disconnect());
   });
 
-  onMount(() => {
+  onSettled(() => {
     const refresh = () => {
       void actions.refreshQuota();
       if (isLive("claudeUsage")) void actions.refreshClaudeUsage().catch(() => undefined);

@@ -12,7 +12,7 @@ import {
   Switch,
   Textarea,
 } from "@pathscale/ui";
-import { createContext, createEffect, createMemo, createRoot, createSignal, For, onCleanup, onMount, Show, useContext } from "solid-js";
+import { createContext, createEffect, createMemo, createRoot, createSignal, For, onCleanup, onSettled, Show, useContext } from "solid-js";
 import type { JSX } from "@solidjs/web";
 import { Button } from "~/components/Button";
 import { Icon, type IconProps } from "~/components/Icon";
@@ -159,7 +159,7 @@ export function SettingsTab(): JSX.Element {
   // Settings needs one current snapshot when it opens. Later changes arrive
   // from run lifecycle events or the explicit Refresh button, without a timer
   // that repeatedly wakes or respawns an otherwise idle sidecar.
-  onMount(refreshProxy);
+  onSettled(refreshProxy);
 
   const restartProxy = (mode: "drain" | "terminate"): void => {
     const active = state.agencyProxy?.activeRuns ?? 0;
@@ -362,7 +362,7 @@ export function SettingsTab(): JSX.Element {
    * programmatically without adding a stop to the tab order.
    */
   let page!: HTMLDivElement;
-  onMount(() => page.focus({ preventScroll: true }));
+  onSettled(() => page.focus({ preventScroll: true }));
 
   return (
     <div
@@ -1478,7 +1478,7 @@ function ChatImportSettings(): JSX.Element {
     setSources(await actions.discoverChatImports());
   };
 
-  onMount(() => {
+  onSettled(() => {
     void refresh().catch((cause) => setNote(describeError(cause)));
   });
 
@@ -1644,7 +1644,7 @@ function StudySettings(): JSX.Element {
     setSummary(await actions.getStudySummary());
   };
 
-  onMount(() => {
+  onSettled(() => {
     void refresh().catch((cause) => {
       setNote(`Study status unavailable: ${describeError(cause)}`);
     });
@@ -1794,7 +1794,7 @@ function ExperimentalSettings(): JSX.Element {
     }
   };
 
-  onMount(() => void refresh());
+  onSettled(() => void refresh());
 
   const windowValue = (value: { utilization: number; resetsAt: string | null } | null): string => {
     if (!value) return tx("not reported");
@@ -1921,7 +1921,7 @@ function TableSizes(): JSX.Element {
   const [sizes, setSizes] = createSignal<TableSize[] | null>(null);
   const [failed, setFailed] = createSignal(false);
 
-  onMount(() => {
+  onSettled(() => {
     void actions
       .listTableSizes()
       .then(setSizes)
@@ -1982,7 +1982,7 @@ function StoreBackupControls(): JSX.Element {
   const [error, setError] = createSignal("");
   const [selection, setSelection] = createSignal<StoreBackupSelection | null>(null);
 
-  onMount(() => {
+  onSettled(() => {
     void actions
       .getStoreBackupStatus()
       .then(setStatus)
@@ -2192,7 +2192,7 @@ function BuildStamp(): JSX.Element {
 
   // Once per visit: the answer cannot change without the process being
   // replaced, and a replaced process remounts this anyway.
-  onMount(() => {
+  onSettled(() => {
     void actions
       .getBuildInfo()
       .then(setBuild)
@@ -2385,7 +2385,7 @@ function CostSection(): JSX.Element {
 
   // Asked once per visit: the ledger only grows when a run finishes, and
   // Settings is not a screen left open while runs happen.
-  onMount(() => {
+  onSettled(() => {
     void actions
       .getCostSummary()
       .then(setSummary)
@@ -2695,7 +2695,7 @@ function Section(props: {
    * reader approaches it.
    */
   const mounted = createMemo(() => ordinal < settingsBudget());
-  onMount(() => {
+  onSettled(() => {
     if (!shell) return;
     const scroller = shell.closest(".az-scroll");
     if (!scroller) {
