@@ -438,14 +438,32 @@ describe("appearance settings", () => {
     fireEvent.click(screen.getByRole("button", { name: "Dark" }));
   });
 
-  it("uses the shared PathScale radio hover outline for colour petals", async () => {
+  /*
+   * The petal is styled through the class the library renders.
+   *
+   * This used to reach for `[data-slot="radio-control"]` and assert that the
+   * *class string* carried `border-az-hairline-strong`. Both halves were empty:
+   * `@pathscale/ui` emits no `data-slot` attribute anywhere in its radio, and a
+   * utility sitting in a string is not a utility that applies to anything. The
+   * live app showed the cost — 31 petals kept the library's own 1rem control
+   * where `size-7` asks for 28, and no hover feedback at all.
+   *
+   * So what is asserted now is the hook the stylesheet actually uses. The
+   * geometry and the hover lift belong to `theme.css` and are guarded there;
+   * jsdom applies no stylesheet, so asserting them here would only re-test a
+   * string.
+   */
+  it("hooks colour petals up to the class the library renders", async () => {
     const screen = await mountSettings();
     const petal = screen.container.querySelector<HTMLElement>("[data-surface-petal]");
-    const control = petal?.querySelector<HTMLElement>('[data-slot="radio-control"]');
-    if (!petal || !control) throw new Error("surface colour petal was not rendered");
+    const radio = petal?.querySelector<HTMLElement>(".radio");
+    if (!petal || !radio) throw new Error("surface colour petal was not rendered");
 
-    expect(control.parentElement?.className).toContain("border-az-hairline-strong");
-    expect(control.parentElement?.className).not.toContain("hovered");
+    expect(radio.className).toContain("az-petal");
+    expect(radio.querySelector(".radio__control")).not.toBeNull();
+    // The swatch lives in the indicator, which is why the library's own
+    // `:empty::before` hover tint can never reach a petal.
+    expect(radio.querySelector(".radio__indicator")?.children.length).toBeGreaterThan(0);
   });
 
   it("offers curated accents without opening a colour input", async () => {
