@@ -674,6 +674,94 @@ export function Composer(props: ComposerProps): JSX.Element {
     queueMicrotask(() => resize());
   });
 
+  /*
+   * The composer's own undo stack, because the renderer has none.
+   *
+   * `blitz-dom` has no undo anywhere in its source: text editing runs through
+   * parley's text input, and `apply_apple_standard_keybinding`
+   * (`packages/blitz-dom/src/node/text.rs`) matches the insert, delete and move
+   * commands with no `undo:` or `redo:` case at all. So Cmd-Z has never done
+   * anything in any text field in this app, and removing the controlled
+   * `value={draft()}` binding — which was a real bug, since assigning `value`
+   * discards a native stack — could not fix it on its own, because there was
+   * no native stack underneath to preserve.
+   *
+   * Snapshots are coalesced by a short idle gap rather than taken per
+   * keystroke, so one undo removes a word or a burst of typing rather than a
+   * single character, which is what every other editor does.
+   */
+  const UNDO_LIMIT = 100;
+  const UNDO_COALESCE_MS = 350;
+  let undoStack: { text: string; caret: number }[] = [];
+  let redoStack: { text: string; caret: number }[] = [];
+  let lastSnapshotAt = 0;
+
+  const snapshot = (): void => {
+    const now = Date.now();
+    const previous = undoStack[undoStack.length - 1];
+    // Coalesce a burst into one entry, but always keep the first state of it.
+    if (previous && now - lastSnapshotAt < UNDO_COALESCE_MS) {
+      lastSnapshotAt = now;
+      return;
+    }
+    /*
+     * The store, not the field.
+     *
+     * `input` fires after the element already holds the new text, so reading
+     * `field.value` here records the state being *entered* rather than the one
+     * being left, and the first undo of a fresh composer then has nothing to
+     * go back to. `draft()` is still the previous value at this point, because
+     * `remember` has not run yet.
+     */
+    const text = draft();
+    if (previous?.text === text) return;
+    undoStack.push({ text, caret: field?.selectionStart ?? text.length });
+    if (undoStack.length > UNDO_LIMIT) undoStack.shift();
+    redoStack = [];
+    lastSnapshotAt = now;
+  };
+
+  /** Put `entry` in the box and tell the store, as though it had been typed. */
+  const restore = (entry: { text: string; caret: number }): void => {
+    if (field) {
+      field.value = entry.text;
+      const at = Math.min(entry.caret, entry.text.length);
+      field.setSelectionRange?.(at, at);
+    }
+    remember(entry.text);
+    resize();
+  };
+
+  const undo = (): void => {
+    const current = { text: field?.value ?? draft(), caret: field?.selectionStart ?? 0 };
+    /*
+     * Skip an entry that is already what is on screen, rather than popping
+     * blindly.
+     *
+     * `snapshot` records the state being *left*, so after one burst of typing
+     * the stack holds the text as it was before it. Popping without this check
+     * is right in that case and wrong when a burst is still open, where the top
+     * entry is the current text and undo would appear to do nothing for one
+     * press. Dropping matching entries handles both without a special case.
+     */
+    while (undoStack.length > 0 && undoStack[undoStack.length - 1].text === current.text) {
+      undoStack.pop();
+    }
+    const entry = undoStack.pop();
+    if (!entry) return;
+    redoStack.push(current);
+    lastSnapshotAt = 0;
+    restore(entry);
+  };
+
+  const redo = (): void => {
+    const entry = redoStack.pop();
+    if (!entry) return;
+    undoStack.push({ text: field?.value ?? draft(), caret: field?.selectionStart ?? 0 });
+    lastSnapshotAt = 0;
+    restore(entry);
+  };
+
   /* What the last resize actually wrote, so a keystroke that changes no
    * geometry writes nothing. Every style write marks layout stale, and the
    * `scrollHeight` read below then has to resolve the whole document before it
@@ -1045,11 +1133,35 @@ export function Composer(props: ComposerProps): JSX.Element {
               aria-label={props.placeholder}
               onBlur={stopDrift}
               onInput={(event) => {
+                // Before the store, so the stack holds the state being left.
+                snapshot();
                 remember(event.currentTarget.value);
                 resize();
                 keepDrifting();
               }}
               onKeyDown={(event) => {
+                /*
+                 * Undo and redo, handled here because nothing below handles
+                 * them. Cmd on macOS, Ctrl elsewhere; Shift+Z redoes, as does
+                 * Ctrl+Y. `preventDefault` is belt and braces — the renderer
+                 * has no default action to suppress — but it keeps this correct
+                 * if the app is ever built against the WKWebView runtime, where
+                 * there *is* a native stack and two of them would fight.
+                 */
+                if ((event.metaKey || event.ctrlKey) && !event.altKey) {
+                  const key = event.key.toLowerCase();
+                  if (key === "z") {
+                    event.preventDefault();
+                    if (event.shiftKey) redo();
+                    else undo();
+                    return;
+                  }
+                  if (key === "y") {
+                    event.preventDefault();
+                    redo();
+                    return;
+                  }
+                }
                 // Enter sends; Shift+Enter is a newline. Standard for a chat box,
                 // and the reason this is a textarea rather than an input.
                 if (event.key !== "Enter" || event.shiftKey) return;

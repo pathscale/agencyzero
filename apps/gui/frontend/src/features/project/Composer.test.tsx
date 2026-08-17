@@ -486,6 +486,51 @@ describe("an unsent draft", () => {
     await screen.booted();
   });
 
+  /*
+   * Undo has to work, not merely be un-prevented.
+   *
+   * The earlier guard asserted that typing does not reassign the field's
+   * `value` — true, necessary, and it stayed green while Cmd-Z did nothing at
+   * all, because `blitz-dom` has no undo stack anywhere in its source. There
+   * was no native behaviour to preserve, so the composer keeps its own.
+   *
+   * So this drives the keystroke and asserts the text came back.
+   */
+  it("undoes and redoes typing in the prompt area", async () => {
+    const screen = mount({ draftKey: "project:undo-behaviour" });
+
+    fireEvent.input(screen.field, { target: { value: "first thought" } });
+    await waitFor(() =>
+      expect(prefs.composerDrafts["project:undo-behaviour"]).toBe("first thought"),
+    );
+    // A separate burst, so the two states do not coalesce into one entry.
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    fireEvent.input(screen.field, { target: { value: "first thought, then a second" } });
+    await waitFor(() =>
+      expect(prefs.composerDrafts["project:undo-behaviour"]).toBe("first thought, then a second"),
+    );
+
+    fireEvent.keyDown(screen.field, { key: "z", metaKey: true });
+    await waitFor(() => expect(screen.field.value).toBe("first thought"));
+    // The store follows the box, or the next tab switch resurrects the text.
+    expect(prefs.composerDrafts["project:undo-behaviour"]).toBe("first thought");
+
+    fireEvent.keyDown(screen.field, { key: "z", metaKey: true, shiftKey: true });
+    await waitFor(() => expect(screen.field.value).toBe("first thought, then a second"));
+    await screen.booted();
+  });
+
+  it("undoes with Ctrl+Z as well, for a non-Apple keyboard", async () => {
+    const screen = mount({ draftKey: "project:undo-ctrl" });
+
+    fireEvent.input(screen.field, { target: { value: "typed" } });
+    await waitFor(() => expect(prefs.composerDrafts["project:undo-ctrl"]).toBe("typed"));
+
+    fireEvent.keyDown(screen.field, { key: "z", ctrlKey: true });
+    await waitFor(() => expect(screen.field.value).toBe(""));
+    await screen.booted();
+  });
+
   /* Drafts are per tab: typing in one project must not leak into the next. */
   it("is kept per tab rather than shared", async () => {
     const first = mount({ draftKey: "project:abc" });
