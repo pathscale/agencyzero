@@ -1101,7 +1101,7 @@ function GroupItemRow(props: {
               <Textarea
                 autofocus
                 value={draft().context}
-                maxLength={NOTES_BUDGET}
+                maxlength={NOTES_BUDGET}
                 onInput={(event) =>
                   setDescriptionDraft({ ...draft(), context: event.currentTarget.value })
                 }
@@ -1187,7 +1187,7 @@ function GroupItemRow(props: {
                   id={`home-fork-description-${props.item.id}`}
                   autofocus
                   value={forkDraft() ?? ""}
-                  maxLength={NOTES_BUDGET}
+                  maxlength={NOTES_BUDGET}
                   onInput={(event) => setForkDraft(event.currentTarget.value)}
                   placeholder={tx(
                     "Describe constraints, acceptance criteria, decisions, and useful pointers…",
@@ -1293,12 +1293,11 @@ function ProjectGroup(props: {
   };
 
   const toggleCollapsed = (): void => {
-    setPrefs(
-      "collapsedGroups",
-      collapsed()
+    setPrefs((d) => {
+      d.collapsedGroups = collapsed()
         ? prefs.collapsedGroups.filter((id) => id !== props.project.id)
-        : [...prefs.collapsedGroups, props.project.id],
-    );
+        : [...prefs.collapsedGroups, props.project.id];
+    });
   };
 
   return (
@@ -1322,7 +1321,7 @@ function ProjectGroup(props: {
       {/* biome-ignore lint/a11y/useSemanticElements: the header carries its own buttons (pencil, pin, delete), and nesting those in a native button is invalid HTML — the same split SectionPanel makes. */}
       <div
         role="button"
-        tabIndex={0}
+        tabindex={0}
         aria-expanded={!collapsed()}
         onClick={foldSoon}
         onDblClick={openNow}

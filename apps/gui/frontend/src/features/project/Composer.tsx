@@ -383,21 +383,19 @@ export function Composer(props: ComposerProps): JSX.Element {
   };
   const toggleAdvanced = () => {
     const key = bucket();
-    setPrefs(
-      "advancedComposerKeys",
-      advanced()
+    setPrefs((d) => {
+      d.advancedComposerKeys = advanced()
         ? prefs.advancedComposerKeys.filter((candidate) => candidate !== key)
-        : [...prefs.advancedComposerKeys, key],
-    );
+        : [...prefs.advancedComposerKeys, key];
+    });
   };
   const toggleExpanded = () => {
     const key = bucket();
-    setPrefs(
-      "expandedComposerKeys",
-      expanded()
+    setPrefs((d) => {
+      d.expandedComposerKeys = expanded()
         ? prefs.expandedComposerKeys.filter((candidate) => candidate !== key)
-        : [...prefs.expandedComposerKeys, key],
-    );
+        : [...prefs.expandedComposerKeys, key];
+    });
   };
   const [errors, setErrors] = createSignal<Record<string, string | null>>({});
   const [staged, setStaged] = createSignal<Record<string, string[]>>({});

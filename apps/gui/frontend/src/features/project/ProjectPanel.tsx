@@ -1252,7 +1252,7 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
             <div class="rounded-[9px]">
               <div
                 data-item-id={item.id}
-                tabIndex={-1}
+                tabindex={-1}
                 onPointerEnter={() => setHoveredItemId(item.id)}
                 onPointerLeave={() => setHoveredItemId(null)}
                 onFocusIn={() => {
@@ -1637,7 +1637,7 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
                     <Textarea
                       autofocus
                       value={draft().context}
-                      maxLength={NOTES_BUDGET}
+                      maxlength={NOTES_BUDGET}
                       onInput={(event) =>
                         setDescriptionDraft({ ...draft(), context: event.currentTarget.value })
                       }
@@ -1763,7 +1763,7 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
                   id="item-description"
                   autofocus
                   value={draft().context}
-                  maxLength={NOTES_BUDGET}
+                  maxlength={NOTES_BUDGET}
                   onInput={(event) =>
                     setContextDraft({
                       item: draft().item,
