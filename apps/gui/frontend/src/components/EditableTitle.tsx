@@ -37,9 +37,17 @@ export function EditableTitle(props: {
   const [draft, setDraft] = createSignal("");
   const [busy, setBusy] = createSignal(false);
 
+  let field: HTMLInputElement | undefined;
+
   const start = () => {
     setDraft(props.value);
     setEditing(true);
+    // After the style swap has been applied, so the field is displayed by the
+    // time it is asked to take focus.
+    queueMicrotask(() => {
+      field?.focus();
+      field?.select();
+    });
   };
 
   const commit = async (): Promise<void> => {
@@ -60,43 +68,67 @@ export function EditableTitle(props: {
   };
 
   return (
-    <Show
-      when={editing()}
-      fallback={
-        <span class={`flex min-w-0 items-center gap-1.5 ${props.class ?? ""}`}>
-          <Show
-            when={props.onActivate}
-            fallback={<span class="min-w-0 truncate">{props.value}</span>}
-          >
-            {(activate) => (
-              <Button type="button" onClick={() => activate()()} class="min-w-0 truncate text-left">
-                {props.value}
-              </Button>
-            )}
-          </Show>
-          <Button
-            type="button"
-            // Stopped so a rename click cannot double as the header's own
-            // click (on Home, that click folds the group).
-            onClick={(event) => {
-              event.stopPropagation();
-              start();
-            }}
-            disabled={busy()}
-            aria-label={props.label ?? tx("Rename {name}", { name: props.value })}
-            // Always visible. Hover-to-reveal hides the only clue that a name
-            // can be changed at all, from the one person who wants to change it.
-            class="flex size-[18px] shrink-0 items-center justify-center rounded text-az-faint transition-colors hover:bg-white/8 hover:text-az-body"
-          >
-            <Icon name="pencil" class="text-[11px]" />
-          </Button>
-        </span>
-      }
-    >
+    /*
+     * One stable parent, both branches always mounted, swapped with `hidden`.
+     *
+     * The obvious shape is a `<Show>` whose fallback is the read-only name and
+     * whose body is the field. Measured against a running 0.8.25, that shape
+     * never displays: the editing branch is built but never attached, so its
+     * textbox has exactly one parent and no further ancestors, where an input
+     * that is merely hidden still walks eight levels to the window root. The
+     * pencil stayed on screen and each click leaked another orphan.
+     *
+     * `scripts/repro/rename-editor-detached.sh` measures all of that. Keeping
+     * both subtrees mounted under one parent means the swap is a style change
+     * on nodes that are already in the document, which is a path the renderer
+     * does honour.
+     */
+    <span class={`flex min-w-0 items-center gap-1.5 ${props.class ?? ""}`}>
+      <span
+        class={editing() ? "hidden" : "flex min-w-0 flex-1 items-center gap-1.5"}
+        aria-hidden={editing() ? "true" : undefined}
+      >
+        <Show
+          when={props.onActivate}
+          fallback={<span class="min-w-0 truncate">{props.value}</span>}
+        >
+          {(activate) => (
+            <Button type="button" onClick={() => activate()()} class="min-w-0 truncate text-left">
+              {props.value}
+            </Button>
+          )}
+        </Show>
+        <Button
+          type="button"
+          // Stopped so a rename click cannot double as the header's own
+          // click (on Home, that click folds the group).
+          onClick={(event) => {
+            event.stopPropagation();
+            start();
+          }}
+          disabled={busy()}
+          aria-label={props.label ?? tx("Rename {name}", { name: props.value })}
+          // Always visible. Hover-to-reveal hides the only clue that a name
+          // can be changed at all, from the one person who wants to change it.
+          class="flex size-[18px] shrink-0 items-center justify-center rounded text-az-faint transition-colors hover:bg-white/8 hover:text-az-body"
+        >
+          <Icon name="pencil" class="text-[11px]" />
+        </Button>
+      </span>
       <Input.Field
-        // The field only exists once you have asked to edit, so focusing it is
-        // completing the action rather than stealing focus on load.
-        autofocus
+        // Hidden rather than unmounted, for the reason above.
+        style={editing() ? undefined : { display: "none" }}
+        /*
+         * Focused when editing begins, not by `autofocus`.
+         *
+         * The field is mounted for the life of the component now, so there is
+         * no mount to hang focus off, and `autofocus` is applied once at the
+         * end of the flush that appends a node. `Composer` reaches for
+         * `field.focus()` for the same reason.
+         */
+        ref={(element: HTMLInputElement) => {
+          field = element;
+        }}
         value={draft()}
         aria-label={props.label ?? tx("Project name")}
         /*
@@ -108,7 +140,12 @@ export function EditableTitle(props: {
         onDblClick={(event) => event.stopPropagation()}
         onMouseDown={(event) => event.stopPropagation()}
         onInput={(event) => setDraft(event.currentTarget.value)}
-        onBlur={() => void commit()}
+        // Only a blur that leaves an open editor commits. The field is mounted
+        // for the life of the component now, so it also blurs while hidden,
+        // and committing on that would close the editor as soon as it opened.
+        onBlur={() => {
+          if (editing()) void commit();
+        }}
         onKeyDown={(event) => {
           if (event.key === "Enter") {
             event.preventDefault();
@@ -124,6 +161,6 @@ export function EditableTitle(props: {
         }}
         class={`min-w-0 flex-1 rounded-md border border-az-hairline-strong bg-az-inset px-2 py-0.5 text-az-title outline-none focus:border-az-link ${props.inputClass ?? ""}`}
       />
-    </Show>
+    </span>
   );
 }
