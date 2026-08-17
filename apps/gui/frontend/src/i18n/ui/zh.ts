@@ -733,6 +733,7 @@ const zh = {
   "estimated write": "估算写入",
   "estimated from adjacent cache reads": "根据相邻轮次的缓存读取量估算",
   "imported usage coverage": "已恢复 {recovered} / {total} 个导入的助手轮次用量",
+  "Claude · usage unavailable": "Claude · 用量不可用",
   "Import chats": "导入聊天",
   "Import all": "全部导入",
   "Importing all…": "正在全部导入…",

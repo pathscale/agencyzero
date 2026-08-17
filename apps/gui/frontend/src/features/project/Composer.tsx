@@ -719,12 +719,26 @@ export function Composer(props: ComposerProps): JSX.Element {
     return Math.max(floor, Math.min(explicitLines, modeCeiling, viewportCeiling));
   });
 
+  /*
+   * The field owns its own text while you are typing in it.
+   *
+   * `value={draft()}` made this fully controlled, so every keystroke went out
+   * to the prefs store and came back as a fresh `value` written onto the
+   * element — measured on the running app as 10 `dom:attr=` writes for 8
+   * keystrokes. Assigning `value` resets the browser's native undo history,
+   * which is why Cmd-Z and Ctrl-Z did nothing here: there was never more than
+   * one state to go back to.
+   *
+   * The store is still the source of truth, and a draft that changes for a
+   * reason other than typing — switching tabs, a restored session, `remember("")`
+   * after a send — still lands, because those genuinely differ from what the
+   * field holds. Typing does not, so the undo stack survives it.
+   */
   createEffect(() => {
-    // A keyed draft can change without an input event when the user returns to
-    // a tab. Track it here so a restored long prompt is measured just like one
-    // typed into the field. Waiting a microtask lets the controlled value land
-    // before scrollHeight is read.
-    draft();
+    const text = draft();
+    if (field && field.value !== text) field.value = text;
+    // Measured like a typed one: a restored long prompt has to size the field
+    // the same way. The microtask lets the write above land first.
     expanded();
     queueMicrotask(() => resize());
   });
@@ -1005,7 +1019,6 @@ export function Composer(props: ComposerProps): JSX.Element {
               autofocus={props.autofocus}
               rows={visibleRows()}
               wrap="soft"
-              value={draft()}
               placeholder={props.placeholder}
               aria-label={props.placeholder}
               onBlur={stopDrift}

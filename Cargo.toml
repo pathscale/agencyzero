@@ -10,7 +10,7 @@ members = [
 ]
 
 [workspace.package]
-version = "0.8.21"
+version = "0.8.23"
 edition = "2024"
 publish = false
 
@@ -66,6 +66,34 @@ debug = 0
 # Release runners retain `target` through rust-cache. Incremental artifacts make
 # the next standard or experimental bundle reuse unchanged Tauri dependencies.
 incremental = true
+
+# Size, measured rather than guessed, and deliberately not applied.
+#
+# Everything below is an environment override for the same reason the profiling
+# one above is: it needs no manifest edit and cannot reach a commit by accident.
+#
+#   CARGO_PROFILE_RELEASE_LTO=thin CARGO_PROFILE_RELEASE_INCREMENTAL=false \
+#     CARGO_PROFILE_RELEASE_CODEGEN_UNITS=1 CARGO_PROFILE_RELEASE_PANIC=abort \
+#     cargo build --release -p az-gui --features blitz-runtime
+#
+# Measured 2026-08-17 on this machine, against 59.92 MB:
+#
+#   thin LTO + codegen-units=1, no incremental   ~47 MB    -21%   4m08s
+#   the same, plus panic = "abort"                39.05 MB -34.8% 3m20s
+#
+# `panic = "abort"` is most of the second step and is the part that is not free:
+# it removes unwinding, so a panic aborts the process rather than unwinding to a
+# catch. Nothing here relies on `catch_unwind`, but the restart angel's
+# behaviour on a panicking build is untested, which is why this is a recorded
+# measurement and not a default.
+#
+# The tradeoff on the rest is build time against `incremental`, which the note
+# above wants for CI cache reuse. That is the owner's call to make, not a
+# tidy-up: quadrupling release build time to save 20 MB is a judgement about
+# which cost is felt more often.
+#
+# `blitz-inspector` stays in release builds regardless. It costs size, and it is
+# what made every diagnosis in this codebase's recent history possible.
 
 # `Tree::intrinsic_dimensions` lives on no released usvg and `blitz-dom` calls
 # it. Cargo honours `[patch]` only from the root workspace, so depending on the

@@ -57,6 +57,36 @@ describe("Claude usage backoff", () => {
     await workspace.actions.refreshClaudeUsage();
     expect(workspace.state.claudeUsage).not.toBeNull();
   });
+
+  /*
+   * A failure has to leave a reason behind.
+   *
+   * The comment on the backoff says the last good reading stays up, and that is
+   * only true once there is one. `claudeUsage` starts null and the sole
+   * unforced caller is the strip's 60s poll, which returns early while the
+   * backoff is armed — so a streak beginning at boot removed the chip entirely
+   * for up to a quarter of an hour, with the reason discarded by the
+   * `.catch(() => undefined)` at the call site. The endpoint's budget belongs
+   * to the login, so a Claude Code or Claude Desktop session alongside this app
+   * is enough to cause it.
+   */
+  it("records why usage is missing, so the chip can say so", async () => {
+    const workspace = await mountWorkspace();
+    expect(workspace.state.claudeUsageError).toBeNull();
+
+    setClaudeUsageError("Claude usage is rate limited; retry after 0");
+    await expect(workspace.actions.refreshClaudeUsage()).rejects.toThrow(/rate limited/);
+
+    // No reading, and a reason rather than silence.
+    expect(workspace.state.claudeUsage).toBeNull();
+    expect(workspace.state.claudeUsageError).toMatch(/rate limited/);
+
+    // And it clears on the next success, so a recovered budget stops nagging.
+    setClaudeUsageError(null);
+    await workspace.actions.refreshClaudeUsage({ force: true });
+    expect(workspace.state.claudeUsage).not.toBeNull();
+    expect(workspace.state.claudeUsageError).toBeNull();
+  });
 });
 
 /**

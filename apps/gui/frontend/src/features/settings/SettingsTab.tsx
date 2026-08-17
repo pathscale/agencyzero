@@ -1777,7 +1777,10 @@ function StudySettings(): JSX.Element {
 /** Provider usage controls compiled and advertised only by the experimental profile. */
 function ExperimentalSettings(): JSX.Element {
   const { state, actions } = useWorkspace();
-  const now = useNow();
+  // Every reader below is a countdown or a relative time, none finer than a
+  // minute, so the 1s default was a re-render a second for text that does not
+  // change that fast.
+  const now = useNow(30_000);
   const [busy, setBusy] = createSignal(false);
   const [note, setNote] = createSignal<string | null>(null);
 
@@ -2407,8 +2410,13 @@ function CostSection(): JSX.Element {
    * "$4.10 today" reads very differently at 23:50 than at 00:10.
    *
    * On the app's coarse clock, so these tick without a timer of their own.
+   *
+   * 30s rather than the 1s default: these are countdowns to midnight and to
+   * the first of the month, so a per-second tick bought a re-render a second
+   * for a figure that changes by the minute. Settings is open a lot, and that
+   * clock ran whether or not anything on screen was counting.
    */
-  const now = useNow();
+  const now = useNow(30_000);
   const nextMidnight = (from: number): Date => {
     const at = new Date(from);
     at.setUTCHours(24, 0, 0, 0);

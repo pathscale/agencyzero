@@ -118,12 +118,25 @@ describe("the project side panel", () => {
     const expand = screen.queryByRole("button", { name: "Expand Agent I/O" });
     if (expand) fireEvent.click(expand);
 
+    /*
+     * The control is `.checkbox__control`, not `[data-slot=checkbox-control]`.
+     *
+     * `@pathscale/ui` emits `data-slot` for a few semantic parts — `checkbox`
+     * here — and BEM classes for its internals, so the slot this used to query
+     * does not exist. It passed anyway, because it went on to assert that the
+     * *class string* contained `[&_[data-slot=checkbox-control]]:size-4`: a
+     * utility sitting in a string, naming a selector that matches nothing.
+     *
+     * The sizing now lives in `theme.css` behind `.az-compact-checkbox`, which
+     * is guarded there and by `deadSelectors.test.ts`. What matters here is
+     * that the hook is on the element and the control is where it belongs.
+     */
     const input = screen.getByRole("checkbox", { name: "Keep across restarts" });
     const label = input.closest<HTMLElement>('[data-slot="checkbox"]');
-    const control = label?.querySelector<HTMLElement>('[data-slot="checkbox-control"]');
+    const control = label?.querySelector<HTMLElement>(".checkbox__control");
     if (!label || !control) throw new Error("Agent I/O checkbox control was not rendered");
     expect(label).toHaveClass("py-2");
-    expect(label.className).toContain("[&_[data-slot=checkbox-control]]:size-4");
+    expect(label).toHaveClass("az-compact-checkbox");
     expect(input.nextElementSibling).toBe(control);
   });
 

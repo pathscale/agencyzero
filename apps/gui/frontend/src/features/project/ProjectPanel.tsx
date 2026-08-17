@@ -224,7 +224,7 @@ function IoPersistToggle(props: { projectId: string }): JSX.Element {
       title={tx(
         "Keep this project's raw exchange in the database, so it survives a restart. Off by default: a long run writes thousands of rows.",
       )}
-      class="px-3.5 py-2 text-[11px] text-az-muted [&_[data-slot=checkbox-control]]:size-4"
+      class="az-compact-checkbox px-3.5 py-2 text-[11px] text-az-muted"
     >
       {tx("Keep across restarts")}
     </Checkbox>
@@ -615,7 +615,7 @@ function ConciseResponseToggle(props: { projectId: string }): JSX.Element {
           // The chosen label is already printed above the track.
           formatValue={(value) => labels()[value] ?? labels()[0]}
           size="sm"
-          class="mt-1 [&_[data-slot=label]]:sr-only [&_[data-slot=slider-output]]:sr-only"
+          class="az-quiet-slider mt-1 [&_[data-slot=label]]:sr-only"
         />
         <span class="mt-1 block text-[10.5px] text-az-muted">{hints()[index()]}</span>
       </div>
