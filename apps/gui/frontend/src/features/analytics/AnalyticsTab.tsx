@@ -517,8 +517,23 @@ function HeadlineRow(props: {
               <div class={`mt-0.5 truncate font-bold font-mono text-[15px] ${tile.tone}`}>
                 {tile.value}
               </div>
+              {/*
+                Footnotes wrap; the label and value above still truncate.
+                A tile in this grid is about 150px wide, and two of these
+                details are whole sentences — the Sol cache-write estimate is
+                over a hundred characters. `truncate` gave them one line and
+                clipped the rest, so the reading was "~28.7M of Sol cache
+                writes inferred from…" with the caveat that the latest turn is
+                unknown cut off entirely. That caveat is the point of the
+                sentence, so losing it is worse than a taller tile.
+
+                `title` carries the full text for the two that set one, but a
+                footnote that can only be read by hovering is not a footnote.
+              */}
               <Show when={tile.detail}>
-                <div class="mt-0.5 truncate text-[9px] text-az-faint">{tile.detail}</div>
+                <div class="mt-0.5 text-[9px] text-az-faint leading-[1.35]" title={tile.detail}>
+                  {tile.detail}
+                </div>
               </Show>
             </div>
           )}

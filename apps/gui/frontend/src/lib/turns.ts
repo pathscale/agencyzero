@@ -47,3 +47,41 @@ export function agentTurnLabels(messages: Message[]): Record<string, string> {
   finish();
   return labels;
 }
+
+/**
+ * What the reply being written right now will be numbered.
+ *
+ * `agentTurnLabels` keys off message ids, and a streaming reply has none: it is
+ * never persisted, and is replaced by the real row when the run lands. So the
+ * live bubble had no number at all and read as `claude · writing…` while every
+ * finished reply above it carried `Turn 26 · …`. The number is knowable during
+ * the run — it is the turn the owner's last message opened — so withholding it
+ * until the run finishes hides something already determined.
+ *
+ * Counted the same way `agentTurnLabels` counts, so the number the live bubble
+ * shows is the one the persisted row inherits rather than a parallel guess.
+ */
+export function streamingTurnNumber(messages: Message[]): number {
+  let turn = 0;
+  let runOpen = false;
+
+  for (const message of messages) {
+    if (message.author === "user") {
+      if (!runOpen) {
+        turn += 1;
+        runOpen = true;
+      }
+      continue;
+    }
+    if (message.author !== "agent") continue;
+    if (!runOpen) {
+      turn += 1;
+      runOpen = true;
+    }
+    if (message.stop !== "continued") runOpen = false;
+  }
+
+  // A run whose owner message is already in the transcript continues that turn;
+  // one streaming ahead of it opens the next.
+  return runOpen ? turn : turn + 1;
+}

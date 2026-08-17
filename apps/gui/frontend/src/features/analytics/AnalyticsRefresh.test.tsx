@@ -46,6 +46,20 @@ describe("analytics refresh", () => {
     await waitFor(() => expect(getUsageAnalytics).toHaveBeenCalledTimes(2));
   });
 
+  /*
+   * Two tile footnotes are whole sentences — the Sol cache-write estimate runs
+   * past a hundred characters — and a tile in this grid is about 150px wide.
+   * `truncate` gave them one line and clipped the rest, so the caveat that the
+   * latest turn is unknown never reached the screen. That caveat is the point
+   * of the sentence, which makes a taller tile the cheaper cost.
+   */
+  it("wraps tile footnotes rather than clipping them to one line", async () => {
+    const screen = render(() => <AnalyticsTab />);
+    await waitFor(() => expect(screen.getByText("Largest agent run")).toBeInTheDocument());
+
+    expect(screen.getByText("completed and reconstructed agent runs")).not.toHaveClass("truncate");
+  });
+
   it("keeps the headline compact and exposes each report as a tab", async () => {
     const screen = render(() => <AnalyticsTab />);
     await waitFor(() => expect(screen.getByRole("tablist")).toBeInTheDocument());

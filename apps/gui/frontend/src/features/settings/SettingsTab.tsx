@@ -144,6 +144,19 @@ export function SettingsTab(): JSX.Element {
   const [pendingBlitzControl, setPendingBlitzControl] = createSignal<boolean | null>(null);
   const displayedBlitzControl = () =>
     pendingBlitzControl() ?? settings()?.blitzControlEnabled ?? false;
+  /*
+   * Deep profiling gets the same optimistic overlay as inspection above.
+   *
+   * Without it the switch rendered `settings()` directly, which does not change
+   * until `saveSettings` resolves and the store round trip lands. The click
+   * therefore left the toggle sitting in its old position for the whole write
+   * and then jumped — and because the control is disabled while pending, a
+   * second click in that window was swallowed rather than queued. That reads as
+   * a switch that flickers and cannot be turned on.
+   */
+  const [pendingDeepProfiling, setPendingDeepProfiling] = createSignal<boolean | null>(null);
+  const displayedDeepProfiling = () =>
+    pendingDeepProfiling() ?? settings()?.blitzDeepProfilingEnabled ?? false;
 
   const refreshProxy = (): void => {
     setProxyAction("refresh");
@@ -220,12 +233,16 @@ export function SettingsTab(): JSX.Element {
   };
 
   const setBlitzDeepProfiling = (enabled: boolean): void => {
+    setPendingDeepProfiling(enabled);
     setBlitzControlPending(true);
     setBlitzControlError("");
     void actions
       .saveSettings({ blitzDeepProfilingEnabled: enabled })
       .catch((cause) => setBlitzControlError(describeError(cause)))
-      .finally(() => setBlitzControlPending(false));
+      .finally(() => {
+        setPendingDeepProfiling(null);
+        setBlitzControlPending(false);
+      });
   };
 
   /**
@@ -506,12 +523,11 @@ export function SettingsTab(): JSX.Element {
                     */}
                     <SettingToggle
                       label={tx("Enable deep intrusive profiling")}
-                      checked={current().blitzDeepProfilingEnabled}
-                      disabled={blitzControlPending()}
+                      checked={displayedDeepProfiling()}
                       onChange={setBlitzDeepProfiling}
                     />
                     <span class="max-w-[260px] text-right text-[10.5px] text-az-muted">
-                      {current().blitzDeepProfilingEnabled
+                      {displayedDeepProfiling()
                         ? tx("Intrusive profiling active")
                         : tx("No deep samples collected")}
                     </span>
