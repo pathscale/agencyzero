@@ -79,4 +79,36 @@ describe("Home project sorting", () => {
       "zero",
     ]);
   });
+
+  /**
+   * The owner's report was "recent projects with issues aren't showing up at
+   * the top". The store half of that was `last_activity_at` never being
+   * written after creation; this is the comparator half, which had no
+   * coverage at all because the fixture above pins every row to "".
+   */
+  it("puts the most recently active project first when sorting by time", () => {
+    const dated = (id: string, order: number, at: string): Project => ({
+      ...project(id, order),
+      lastActivityAt: at,
+    });
+    // `stale` was created first and carries the lower durable order, so it
+    // leads unless activity actually moves the row.
+    const projects = [
+      dated("stale", 0, "2026-07-01T00:00:00Z"),
+      dated("fresh", 1, "2026-08-18T00:00:00Z"),
+    ];
+
+    expect(sortProjects(projects, "time", "desc").map((row) => row.id)).toEqual(["fresh", "stale"]);
+    expect(sortProjects(projects, "time", "asc").map((row) => row.id)).toEqual(["stale", "fresh"]);
+  });
+
+  it("sinks projects with no recorded activity in both directions", () => {
+    const projects = [
+      { ...project("never", 0), lastActivityAt: "" },
+      { ...project("touched", 1), lastActivityAt: "2026-08-18T00:00:00Z" },
+    ];
+
+    expect(sortProjects(projects, "time", "desc")[0]?.id).toBe("touched");
+    expect(sortProjects(projects, "time", "asc")[0]?.id).toBe("touched");
+  });
 });

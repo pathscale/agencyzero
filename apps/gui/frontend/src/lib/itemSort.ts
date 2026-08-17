@@ -30,6 +30,10 @@ export function sortProjects(
     const leftTime = left.lastActivityAt;
     const rightTime = right.lastActivityAt;
     if (!leftTime && !rightTime) return (left.order - right.order) * sign;
+    // Undated rows sink in both directions. These deliberately do not take
+    // `sign`: negating them would float a project that has never been touched
+    // above genuinely recent ones the moment the sort is reversed, which is
+    // the opposite of what "most recent first" means.
     if (!leftTime) return 1;
     if (!rightTime) return -1;
     const time = leftTime.localeCompare(rightTime);
