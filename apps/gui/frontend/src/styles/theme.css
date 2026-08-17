@@ -675,9 +675,22 @@
         var(--color-az-badge),
         transparent calc(100% - var(--glass-highlight-opacity, 20%))
       );
-    backdrop-filter: blur(var(--glass-blur, 9px)) saturate(var(--glass-saturation, 1.2))
-      brightness(var(--glass-brightness, 1));
+    /*
+     * Prefixed first, unprefixed last, and that order is load-bearing.
+     *
+     * Written the other way round, the build emitted only
+     * `-webkit-backdrop-filter`: Lightning CSS sees the pair, decides the
+     * unprefixed form is not needed for its default targets, and drops it. The
+     * renderer that ships is not WebKit, so what reached the screen was a glass
+     * surface with no blur at all — which is the other half of why glass looked
+     * flat, alongside the media-query fallback below.
+     *
+     * Declaring the standard property second means a minifier that keeps "the
+     * last one wins" cannot remove it without changing behaviour.
+     */
     -webkit-backdrop-filter: blur(var(--glass-blur, 9px)) saturate(var(--glass-saturation, 1.2))
+      brightness(var(--glass-brightness, 1));
+    backdrop-filter: blur(var(--glass-blur, 9px)) saturate(var(--glass-saturation, 1.2))
       brightness(var(--glass-brightness, 1));
   }
 
@@ -724,16 +737,30 @@
     -webkit-backdrop-filter: none;
   }
 
-  @media (prefers-reduced-transparency: reduce) {
-    .az-glass {
-      background-color: color-mix(
-        in oklab,
-        var(--color-az-badge),
-        transparent calc(100% - var(--glass-fallback-background-opacity, 78%))
-      );
-      backdrop-filter: none;
-      -webkit-backdrop-filter: none;
-    }
+  /*
+   * A reader who asked for less transparency gets the opaque surface.
+   *
+   * Behind the same app-set class as the no-backdrop fallback, and for the same
+   * reason the `@supports` probe had to go: `prefers-reduced-transparency` is
+   * not a registered media feature in stylo's servo path — the list is
+   * `prefers-color-scheme`, `hover`, `pointer`, the dimensions, and little
+   * else. An unknown feature does not evaluate to false, and on the renderer
+   * that ships this block applied unconditionally.
+   *
+   * That made it the *last* `.az-glass` background rule in the sheet, so it won
+   * the cascade over the translucent one above and glass painted fully opaque —
+   * the same symptom as the `@supports` bug, from a different at-rule. Anything
+   * that gates glass on the engine's own answer has to be treated as suspect
+   * here; `deadSelectors.test.ts` guards both now.
+   */
+  :root.az-reduced-transparency .az-glass {
+    background-color: color-mix(
+      in oklab,
+      var(--color-az-badge),
+      transparent calc(100% - var(--glass-fallback-background-opacity, 78%))
+    );
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
   }
 
   @media (prefers-reduced-motion: reduce) {
