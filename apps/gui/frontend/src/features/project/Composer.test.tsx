@@ -200,6 +200,38 @@ describe("Composer", () => {
     await booted();
   });
 
+  /*
+   * The viewport clips to `promptHeight`, so a floor written while layout was
+   * still settling has to be provisional. It was not: the floor was cached in
+   * the same bookkeeping a real measurement uses, and the "did the height
+   * change" guard then suppressed the corrective write. The wrapper stayed 26px
+   * around a 44px textarea (measured on a live instance: wrapper 836.2x25.5,
+   * textbox 836.2x44.1, range=0,18) and the caret painted the 18px that did not
+   * fit as a blinking rectangle.
+   *
+   * Asserting the floor alone passes either way, which is why this needs the
+   * second measurement rather than a stricter version of the test above.
+   */
+  /*
+   * `@pathscale/ui`'s `.textarea` carries `min-height: 2.375rem`, so a computed
+   * 38px floors every height `resize` writes. The viewport wrapper has no such
+   * floor and clips to `promptHeight`, so an empty composer put a 44px textarea
+   * inside a 26px parent (measured on a live instance: textbox 836.2x44.1 in
+   * wrapper 836.2x25.5, range=0,18). The caret painted the 18px that did not
+   * fit on its own 500ms clock, which is the blinking rectangle by the composer.
+   *
+   * The class list already zeroes the library's padding and border; `min-h-0`
+   * is the third default it has to answer. Asserted as a class rather than a
+   * measurement because jsdom applies no stylesheet, so the geometry this
+   * guards cannot be reproduced here — only the override that prevents it.
+   */
+  it("clears the library's min-height so the viewport cannot clip the field", async () => {
+    const { field, booted } = mount();
+
+    expect(field).toHaveClass("min-h-0");
+    await booted();
+  });
+
   it("remeasures a long draft restored reactively for the active tab", async () => {
     setPrefs("composerDrafts", {});
     const { field, booted } = mount({ draftKey: "project:restored" });
