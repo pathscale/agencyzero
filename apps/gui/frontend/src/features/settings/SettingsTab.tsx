@@ -98,11 +98,14 @@ const [settingsQuery, setSettingsQuery] = createSignal("");
 
 createRoot(() => {
   createEffect(
-    () => {
+    // Tracked: the query being typed.
+    () => settingsQuery(),
+    // Untracked: revealing sections writes state, which would re-arm the
+    // computation on its own write if it ran in the compute.
+    (query) => {
       // Any query at all, including one being typed, needs every row present.
-      if (settingsQuery().trim() !== "") revealAllSections();
+      if (query.trim() !== "") revealAllSections();
     },
-    () => {},
   );
 });
 
@@ -2627,10 +2630,13 @@ function InternalPerformance(): JSX.Element {
    * Refresh covers watching them move while sitting here.
    */
   createEffect(
-    () => {
-      if (state.activeKey === "settings") refresh();
+    // Tracked: which tab is in front.
+    () => state.activeKey,
+    // Untracked: the refresh writes state, and doing that in the compute
+    // re-arms the computation on its own write and never settles.
+    (activeKey) => {
+      if (activeKey === "settings") refresh();
     },
-    () => {},
   );
   const ms = (value: number) =>
     value >= 1 ? `${value.toFixed(1)}ms` : `${(value * 1000).toFixed(0)}\u00b5s`;
