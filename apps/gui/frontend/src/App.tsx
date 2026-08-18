@@ -16,7 +16,7 @@ import { TabStrip } from "~/features/tabs/TabStrip";
 import { installSelectionCopy } from "~/lib/clipboard";
 import { log } from "~/lib/log";
 import { tx } from "~/stores/i18n";
-import { useWorkspace, WorkspaceProvider } from "~/stores/workspace";
+import { type BootState, useWorkspace, WorkspaceProvider } from "~/stores/workspace";
 
 export const RETAINED_PROJECT_LIMIT = 8;
 
@@ -97,7 +97,18 @@ export function Workspace(): JSX.Element {
         <Switch
           fallback={
             <BootFailed
-              message={state.boot.status === "error" ? state.boot.message : ""}
+              /*
+               * The union is narrowed through an explicit alias. Solid 2's
+               * store proxy maps each property through a wrapper type, and the
+               * discriminant check on `state.boot.status` no longer tells the
+               * checker which arm `state.boot` is, so the `message` arm reads
+               * as absent.
+               */
+              message={
+                (state.boot as Extract<BootState, { status: "error" }>).status === "error"
+                  ? (state.boot as Extract<BootState, { status: "error" }>).message
+                  : ""
+              }
               onRetry={() => void actions.retryInit()}
               onOpenSettings={actions.openSettings}
             />

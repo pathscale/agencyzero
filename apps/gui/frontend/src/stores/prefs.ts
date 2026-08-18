@@ -196,13 +196,16 @@ function writePortableRevision(revision: string): void {
 export function restorePortablePrefs(stored: Partial<PortableUiPrefs>, revision: string): void {
   if (!revision || Object.keys(stored).length === 0) return;
   if (readPortableRevision() === revision) return;
-  setPrefs(
-    normalize({
-      ...stored,
-      composerDrafts: prefs.composerDrafts,
-      replyQuestionIds: prefs.replyQuestionIds,
-    }),
-  );
+  // The setter takes an updater in Solid 2, so the whole-value replacement
+  // becomes a merge into the draft.
+  const next = normalize({
+    ...stored,
+    composerDrafts: prefs.composerDrafts,
+    replyQuestionIds: prefs.replyQuestionIds,
+  });
+  setPrefs((d) => {
+    Object.assign(d, next);
+  });
   writePortableRevision(revision);
 }
 
