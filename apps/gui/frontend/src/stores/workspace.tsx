@@ -2728,6 +2728,21 @@ function createWorkspace() {
     });
   }
 
+  /*
+   * Hoisted out of `actions` because three of its methods called it through
+   * `actions.…`. That made inferring the type of `actions` require the type of
+   * `actions`, a cycle the checker resolves to `never`, and a `never` here
+   * collapsed every consumer of `useWorkspace()` while this file itself stayed
+   * green because nothing in it dereferences the object.
+   */
+  async function setDataLocation(path: string | null): Promise<void> {
+    await client().setDataLocation(path);
+    const location = await client().getDataLocation();
+    setState((d) => {
+      d.dataLocation = location;
+    });
+  }
+
   const actions = {
     retryInit,
     focus,
@@ -2926,22 +2941,16 @@ function createWorkspace() {
      * tables stay open where they are, so only the `pending` half of the answer
      * moves until the next launch.
      */
-    async setDataLocation(path: string | null) {
-      await client().setDataLocation(path);
-      const next70 = await client().getDataLocation();
-      setState((d) => {
-        d.dataLocation = next70;
-      });
-    },
+    setDataLocation,
     /**
      * Choose that directory with the OS picker.
      *
      * A cancelled picker writes nothing. Distinguishing it from a choice is the
      * whole reason the command answers `null` rather than an empty string.
      */
-    async chooseDataLocation() {
+    async chooseDataLocation(): Promise<void> {
       const picked = await client().chooseDataDirectory();
-      if (picked) await actions.setDataLocation(picked);
+      if (picked) await setDataLocation(picked);
     },
     async chooseAgentProxyBinary() {
       const picked = await client().chooseAgentProxyBinary();
@@ -3049,7 +3058,7 @@ function createWorkspace() {
      * offers. Both are enforced here instead of in the UI so a keyboard path or
      * a future caller cannot route around them.
      */
-    async toggleModel(agent: Agent, modelId: string, enabled: boolean) {
+    async toggleModel(agent: Agent, modelId: string, enabled: boolean): Promise<void> {
       const current = state.settings?.models[agent];
       if (!current) return;
 
@@ -3065,7 +3074,7 @@ function createWorkspace() {
         ? catalogue.models.filter((model) => next.includes(model.id)).map((model) => model.id)
         : next;
 
-      await actions.saveSettings({
+      await saveSettings({
         models: {
           [agent]: {
             enabled: ordered,
@@ -3075,7 +3084,7 @@ function createWorkspace() {
       });
     },
     /** Preselect a model. Enabling it first, since a default must be offered. */
-    async setDefaultModel(agent: Agent, modelId: string) {
+    async setDefaultModel(agent: Agent, modelId: string): Promise<void> {
       const current = state.settings?.models[agent];
       if (!current) return;
       /*
@@ -3086,7 +3095,7 @@ function createWorkspace() {
       const enabled = current.enabled.includes(modelId)
         ? [...current.enabled]
         : [...current.enabled, modelId];
-      await actions.saveSettings({ models: { [agent]: { enabled, default: modelId } } });
+      await saveSettings({ models: { [agent]: { enabled, default: modelId } } });
     },
   };
 
@@ -3107,6 +3116,16 @@ function createWorkspace() {
   };
 }
 
+/**
+ * The shape `useWorkspace()` hands out.
+ *
+ * Each member is typed from the local it is returned from, rather than from
+ * `ReturnType<typeof createWorkspace>`. That alias makes every consumer depend
+ * on inferring a 2,600-line function body, and when the checker gives up it
+ * answers `never` — which is why `state` and `actions` read as `never` in
+ * components while this file stayed green, since nothing here dereferences the
+ * object it returns.
+ */
 export type Workspace = ReturnType<typeof createWorkspace>;
 
 const WorkspaceContext = createContext<Workspace>();
