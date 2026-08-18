@@ -1,5 +1,5 @@
-import { Show } from "solid-js";
 import type { JSX } from "@solidjs/web";
+import { Show } from "solid-js";
 import { Icon } from "~/components/Icon";
 import type { AgentState, ProjectStatus, TabStatus } from "~/types";
 

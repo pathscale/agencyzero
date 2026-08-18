@@ -1,8 +1,8 @@
 /* @refresh reload */
 import "./index.css";
 import { enablePopmotion } from "@pathscale/ui/motion";
-import { animate } from "popmotion";
 import { render } from "@solidjs/web";
+import { animate } from "popmotion";
 import App from "./App";
 import { isBlitz } from "./lib/platform";
 import { i18n } from "./stores/i18n";

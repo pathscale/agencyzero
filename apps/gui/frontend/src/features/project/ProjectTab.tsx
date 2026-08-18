@@ -1,5 +1,5 @@
-import { createEffect, createMemo, createSignal, For, onCleanup, onSettled, Show } from "solid-js";
 import type { JSX } from "@solidjs/web";
+import { createEffect, createMemo, createSignal, For, onCleanup, onSettled, Show } from "solid-js";
 import { Button } from "~/components/Button";
 import { EditableTitle } from "~/components/EditableTitle";
 import { Icon } from "~/components/Icon";
@@ -54,14 +54,17 @@ export function ProjectTab(props: { tab: Tab; project: Project }): JSX.Element {
    * same state the footer renders from is exact, and it cannot go stale the way
    * a hand-maintained pixel offset would.
    */
-  createEffect(() => {
-    const id = props.project.id;
-    void (state.pullRequests[id] ?? []).filter((pr) => !pr.dismissed).length;
-    void state.pendingCompact[id];
-    void (state.queued[id] ?? []).length;
-    void state.streaming[id];
-    noteTranscriptChromeChanged();
-  });
+  createEffect(
+    () => {
+      const id = props.project.id;
+      void (state.pullRequests[id] ?? []).filter((pr) => !pr.dismissed).length;
+      void state.pendingCompact[id];
+      void (state.queued[id] ?? []).length;
+      void state.streaming[id];
+      noteTranscriptChromeChanged();
+    },
+    () => {},
+  );
 
   const forkInfo = createMemo(() => {
     const link = props.project.forkedFrom;
@@ -611,9 +614,11 @@ export function ProjectTab(props: { tab: Tab; project: Project }): JSX.Element {
         <Show when={!forkInfo()}>
           <ProjectPanelToggle
             visible={prefs.projectPanelVisible}
-            onToggle={() => setPrefs((d) => {
-                              d.projectPanelVisible = ((visible) => !visible)(d.projectPanelVisible);
-                            })}
+            onToggle={() =>
+              setPrefs((d) => {
+                d.projectPanelVisible = ((visible) => !visible)(d.projectPanelVisible);
+              })
+            }
           />
         </Show>
       </div>

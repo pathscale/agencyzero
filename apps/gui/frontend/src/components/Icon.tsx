@@ -1,5 +1,5 @@
-import { omit } from "solid-js";
 import type { JSX } from "@solidjs/web";
+import { omit } from "solid-js";
 import type { IconName } from "./IconSprite";
 
 export type IconProps = Omit<JSX.SvgSVGAttributes<SVGSVGElement>, "children"> & {

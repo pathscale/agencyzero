@@ -1,6 +1,6 @@
 import { Dropdown } from "@pathscale/ui";
-import { For, Show } from "solid-js";
 import type { JSX } from "@solidjs/web";
+import { For, Show } from "solid-js";
 import { Icon, type IconProps } from "~/components/Icon";
 
 export type PillOption<T extends string> = {

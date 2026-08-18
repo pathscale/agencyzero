@@ -5,11 +5,12 @@ import {
   createEffect,
   createMemo,
   createSignal,
+  createStore,
   onCleanup,
   type ParentProps,
+  reconcile,
   useContext,
 } from "solid-js";
-import { createStore, reconcile } from "solid-js";
 import type { AgencyZeroApi, AppEvents, Unlisten } from "~/api";
 import { selectApi } from "~/api";
 import { setItemReferenceHandler } from "~/lib/itemReference";
@@ -517,8 +518,7 @@ function createWorkspace() {
     isHydrating = false;
     const queued = buffered;
     buffered = [];
-        for (const apply of queued) apply();
-  
+    for (const apply of queued) apply();
   }
 
   /**
@@ -566,11 +566,11 @@ function createWorkspace() {
       () => undefined,
     );
     const next = await request;
-        setState((d) => {
+    setState((d) => {
       d.settings = next;
     });
     reconcileTabModels(next);
-  
+
     if (patch.taskManager) {
       const taskManager = await client().getTaskManager();
       if (taskManagerTicket === taskManagerWrite) {
@@ -635,41 +635,47 @@ function createWorkspace() {
    * being ready, because before hydration the strip is only Home.
    */
   let workspaceTabsWriteTimer: ReturnType<typeof setTimeout> | undefined;
-  createEffect(() => {
-    if (state.boot.status !== "ready") return;
-    const workspaceTabs = portableWorkspaceTabs();
-    setPrefs((d) => {
-      d.openTabKeys = workspaceTabs.openProjectKeys;
-    });
-    setPrefs((d) => {
-      d.lastTabKey = workspaceTabs.activeProjectKey;
-    });
-    if (workspaceTabsWriteTimer) clearTimeout(workspaceTabsWriteTimer);
-    workspaceTabsWriteTimer = setTimeout(() => {
-      workspaceTabsWriteTimer = undefined;
-      void persistWorkspaceTabs().catch((cause) =>
-        log.warn(`could not persist open project tabs: ${describeError(cause)}`),
-      );
-    }, 120);
-  });
+  createEffect(
+    () => {
+      if (state.boot.status !== "ready") return;
+      const workspaceTabs = portableWorkspaceTabs();
+      setPrefs((d) => {
+        d.openTabKeys = workspaceTabs.openProjectKeys;
+      });
+      setPrefs((d) => {
+        d.lastTabKey = workspaceTabs.activeProjectKey;
+      });
+      if (workspaceTabsWriteTimer) clearTimeout(workspaceTabsWriteTimer);
+      workspaceTabsWriteTimer = setTimeout(() => {
+        workspaceTabsWriteTimer = undefined;
+        void persistWorkspaceTabs().catch((cause) =>
+          log.warn(`could not persist open project tabs: ${describeError(cause)}`),
+        );
+      }, 120);
+    },
+    () => {},
+  );
   onCleanup(() => {
     if (workspaceTabsWriteTimer) clearTimeout(workspaceTabsWriteTimer);
   });
 
   let prefsWriteTimer: ReturnType<typeof setTimeout> | undefined;
-  createEffect(() => {
-    if (state.boot.status !== "ready" || !state.settings) return;
-    const snapshot = portablePrefsSnapshot();
-    if (samePortablePrefs(snapshot, state.settings.uiPreferences)) return;
-    if (prefsWriteTimer) clearTimeout(prefsWriteTimer);
-    prefsWriteTimer = setTimeout(() => {
-      prefsWriteTimer = undefined;
-      const revision = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-      void saveSettings({ uiPreferences: snapshot, uiPreferencesRevision: revision })
-        .then(() => markPortablePrefsCurrent(revision))
-        .catch((cause) => log.warn(`could not persist UI preferences: ${describeError(cause)}`));
-    }, 250);
-  });
+  createEffect(
+    () => {
+      if (state.boot.status !== "ready" || !state.settings) return;
+      const snapshot = portablePrefsSnapshot();
+      if (samePortablePrefs(snapshot, state.settings.uiPreferences)) return;
+      if (prefsWriteTimer) clearTimeout(prefsWriteTimer);
+      prefsWriteTimer = setTimeout(() => {
+        prefsWriteTimer = undefined;
+        const revision = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+        void saveSettings({ uiPreferences: snapshot, uiPreferencesRevision: revision })
+          .then(() => markPortablePrefsCurrent(revision))
+          .catch((cause) => log.warn(`could not persist UI preferences: ${describeError(cause)}`));
+      }, 250);
+    },
+    () => {},
+  );
   onCleanup(() => {
     if (prefsWriteTimer) clearTimeout(prefsWriteTimer);
   });
@@ -875,7 +881,7 @@ function createWorkspace() {
     const messages = messagePage.messages;
     const project = state.projects.find((candidate) => candidate.id === projectId);
     const hydratedTab = project ? projectTab(project, messages) : null;
-        setState((d) => reconcile(items)(d.items[projectId]));
+    setState((d) => reconcile(items)(d.items[projectId]));
     setState((d) => reconcile(messages)(d.messages[projectId]));
     setState((d) => {
       d.messageTotals[projectId] = messagePage.total;
@@ -906,7 +912,7 @@ function createWorkspace() {
         });
       }
     }
-  
+
     const reconciled = performance.now();
     /*
      * Time to the first frame carrying this project, which is the number that
@@ -972,11 +978,10 @@ function createWorkspace() {
         fullyLoaded.delete(projectId);
         throw cause;
       });
-        setState((d) => reconcile(page.messages)(d.messages[projectId]));
+    setState((d) => reconcile(page.messages)(d.messages[projectId]));
     setState((d) => {
       d.messageTotals[projectId] = page.total;
     });
-  
   }
 
   /** One snapshot request per project, shared by boot and a simultaneous tab open. */
@@ -1026,13 +1031,12 @@ function createWorkspace() {
       const { api: backend, backend: kind, live } = await selectApi();
       log.info(`boot: backend=${kind}, ${live.size} live commands`);
       setApi(() => backend);
-            setState((d) => {
+      setState((d) => {
         d.backend = kind;
       });
       setState((d) => {
         d.live = [...live];
       });
-    
 
       log.info("boot: subscribing to events");
       await subscribe(backend);
@@ -1081,7 +1085,7 @@ function createWorkspace() {
       await i18n.setLocale(settings.locale);
       syncWindowChrome(settings.theme);
 
-            setState((d) => reconcile(projects)(d.projects));
+      setState((d) => reconcile(projects)(d.projects));
       setState((d) => reconcile(itemsByProject)(d.items));
       setState((d) => reconcile(homeSnapshot.turnCounts)(d.turnCounts));
       setState((d) => {
@@ -1132,12 +1136,12 @@ function createWorkspace() {
       });
       setState((d) => {
         d.tabs = [
-        HOME_TAB,
-        ...Array.from(new Set(rememberedKeys))
-          .map((key) => projectsById.get(key))
-          .filter((project): project is Project => Boolean(project))
-          .map((project) => projectTab(project)),
-      ];
+          HOME_TAB,
+          ...Array.from(new Set(rememberedKeys))
+            .map((key) => projectsById.get(key))
+            .filter((project): project is Project => Boolean(project))
+            .map((project) => projectTab(project)),
+        ];
       });
       const rememberedActive = portableTabs?.activeProjectKey ?? prefs.lastTabKey;
       const restored = state.tabs.some((tab) => tab.key === rememberedActive);
@@ -1146,41 +1150,41 @@ function createWorkspace() {
         d.activeKey = lastPortableActiveKey;
       });
 
-    /*
-     * The tab in front goes first, and that is the whole change: everything
-     * below still runs, still concurrently, and still finishes before ready.
-     *
-     * It matters because the reads do not actually run concurrently. They are
-     * synchronous Tauri commands, so they execute on the window thread one at
-     * a time in the order they were issued, and only their dispatch overlaps.
-     * Measured on a real profile with five open tabs: the same `list_items`
-     * call took 27ms issued first and 347ms issued third, and the last
-     * project's fetch finished at 547ms against the first one's 35ms. In tab
-     * order the project someone is actually looking at was as likely as not
-     * to be the one at the back of that queue.
-     */
-    const openProjectIds = state.tabs
-      .flatMap((tab) => (tab.projectId === null ? [] : [tab.projectId]))
-      .sort((left, right) => (left === state.activeKey ? -1 : right === state.activeKey ? 1 : 0));
-    log.info(`boot: loading ${openProjectIds.length} open project(s); ${projects.length} total`);
-    await Promise.all([
-      ...openProjectIds.map(loadProject),
       /*
-       * The task manager rides along: it has no project row, so it is not
-       * in `projects`, but its transcript, harvested items and I/O live
-       * under its fixed id like anyone else's.
+       * The tab in front goes first, and that is the whole change: everything
+       * below still runs, still concurrently, and still finishes before ready.
+       *
+       * It matters because the reads do not actually run concurrently. They are
+       * synchronous Tauri commands, so they execute on the window thread one at
+       * a time in the order they were issued, and only their dispatch overlaps.
+       * Measured on a real profile with five open tabs: the same `list_items`
+       * call took 27ms issued first and 347ms issued third, and the last
+       * project's fetch finished at 547ms against the first one's 35ms. In tab
+       * order the project someone is actually looking at was as likely as not
+       * to be the one at the back of that queue.
        */
-      loadProject(TASK_MANAGER_ID),
-      client()
-        .getTaskManager()
-        .then((tm) =>
-          setState((d) => {
-            d.taskManagerSession = tm.sessionId;
-          }),
-        ),
-    ]);
+      const openProjectIds = state.tabs
+        .flatMap((tab) => (tab.projectId === null ? [] : [tab.projectId]))
+        .sort((left, right) => (left === state.activeKey ? -1 : right === state.activeKey ? 1 : 0));
+      log.info(`boot: loading ${openProjectIds.length} open project(s); ${projects.length} total`);
+      await Promise.all([
+        ...openProjectIds.map(loadProject),
+        /*
+         * The task manager rides along: it has no project row, so it is not
+         * in `projects`, but its transcript, harvested items and I/O live
+         * under its fixed id like anyone else's.
+         */
+        loadProject(TASK_MANAGER_ID),
+        client()
+          .getTaskManager()
+          .then((tm) =>
+            setState((d) => {
+              d.taskManagerSession = tm.sessionId;
+            }),
+          ),
+      ]);
 
-    drainEventBuffer();
+      drainEventBuffer();
       setState((d) => {
         d.boot = { status: "ready" };
       });
@@ -1199,9 +1203,9 @@ function createWorkspace() {
       log.error(`boot failed: ${describeError(cause)}`);
       setState((d) => {
         d.boot = {
-        status: "error",
-        message: cause instanceof Error ? cause.message : String(cause),
-      };
+          status: "error",
+          message: cause instanceof Error ? cause.message : String(cause),
+        };
       });
     }
   }
@@ -1423,9 +1427,11 @@ function createWorkspace() {
     const refreshProxyAfterLifecycleEvent = (): void => {
       void backend
         .getAgentProxyStatus()
-        .then((status) => setState((d) => {
-                            d.agencyProxy = status;
-                          }))
+        .then((status) =>
+          setState((d) => {
+            d.agencyProxy = status;
+          }),
+        )
         .catch((cause) =>
           log.warn(
             `could not refresh AgencyProxy after run state changed: ${describeError(cause)}`,
@@ -1444,9 +1450,9 @@ function createWorkspace() {
     await bind("project:updated", upsertProject);
 
     await bind("settings:updated", (settings) => {
-            setState((d) => reconcile(settings)(d.settings));
+      setState((d) => reconcile(settings)(d.settings));
       reconcileTabModels(settings);
-    
+
       syncWindowChrome(settings.theme);
     });
 
@@ -1455,12 +1461,12 @@ function createWorkspace() {
     const upsertItem = (item: ProjectItem) => {
       setState((d) => {
         d.items[item.projectId] = ((list = []) => {
-        const index = list.findIndex((existing) => existing.id === item.id);
-        if (index < 0) return [...list, item];
-        const next = [...list];
-        next[index] = item;
-        return next;
-      })(d.items[item.projectId]);
+          const index = list.findIndex((existing) => existing.id === item.id);
+          if (index < 0) return [...list, item];
+          const next = [...list];
+          next[index] = item;
+          return next;
+        })(d.items[item.projectId]);
       });
     };
     // Both event types upsert. A create buffered during hydration can already
@@ -1472,31 +1478,33 @@ function createWorkspace() {
 
     await bind("item:deleted", ({ id, projectId }) => {
       setState((d) => {
-        d.items[projectId] = ((list = []) => list.filter((item) => item.id !== id))(d.items[projectId]);
+        d.items[projectId] = ((list = []) => list.filter((item) => item.id !== id))(
+          d.items[projectId],
+        );
       });
     });
 
     await bind("pr:updated", (pr) => {
       setState((d) => {
         d.pullRequests[pr.projectId] = ((list = []) => {
-        const index = list.findIndex((existing) => existing.id === pr.id);
-        if (index < 0) return [...list, pr];
-        const next = [...list];
-        next[index] = pr;
-        return next;
-      })(d.pullRequests[pr.projectId]);
+          const index = list.findIndex((existing) => existing.id === pr.id);
+          if (index < 0) return [...list, pr];
+          const next = [...list];
+          next[index] = pr;
+          return next;
+        })(d.pullRequests[pr.projectId]);
       });
     });
 
     await bind("question:updated", (question) => {
       setState((d) => {
         d.questions[question.projectId] = ((list = []) => {
-        const index = list.findIndex((existing) => existing.id === question.id);
-        if (index < 0) return [...list, question];
-        const next = [...list];
-        next[index] = question;
-        return next;
-      })(d.questions[question.projectId]);
+          const index = list.findIndex((existing) => existing.id === question.id);
+          if (index < 0) return [...list, question];
+          const next = [...list];
+          next[index] = question;
+          return next;
+        })(d.questions[question.projectId]);
       });
       if (question.answered && prefs.replyQuestionIds[question.projectId] === question.id) {
         setPrefs((d) => {
@@ -1508,37 +1516,39 @@ function createWorkspace() {
     const appendMessage = (message: Message) => {
       setState((d) => {
         d.messages[message.projectId] = ((list = []) => {
-        const index = list.findIndex((existing) => existing.id === message.id);
-        if (index < 0) return [...list, message];
-        const next = [...list];
-        next[index] = message;
-        return next;
-      })(d.messages[message.projectId]);
+          const index = list.findIndex((existing) => existing.id === message.id);
+          if (index < 0) return [...list, message];
+          const next = [...list];
+          next[index] = message;
+          return next;
+        })(d.messages[message.projectId]);
       });
     };
     await bind("message:appended", (message) => {
-            if (message.author === "agent") setState((d) => {
-                                        d.streaming[message.projectId] = "";
-                                      });
+      if (message.author === "agent")
+        setState((d) => {
+          d.streaming[message.projectId] = "";
+        });
       const isNew = !(state.messages[message.projectId] ?? []).some(
         (existing) => existing.id === message.id,
       );
       appendMessage(message);
       if (isNew && message.author === "agent" && message.stop !== "continued") {
         setState((d) => {
-          d.turnCounts[message.projectId] = ((count = 0) => count + 1)(d.turnCounts[message.projectId]);
+          d.turnCounts[message.projectId] = ((count = 0) => count + 1)(
+            d.turnCounts[message.projectId],
+          );
         });
       }
-    
     });
     await bind("message:receipt", ({ projectId, messageId, status }) => {
       // A path setter cannot descend through a missing project record. Replace
       // that record instead, creating it when the first receipt arrives.
       setState((d) => {
         d.messageReceipts[projectId] = ((receipts = {}) => ({
-        ...receipts,
-        [messageId]: status,
-      }))(d.messageReceipts[projectId]);
+          ...receipts,
+          [messageId]: status,
+        }))(d.messageReceipts[projectId]);
       });
     });
     await bind("moderation:blocked", appendMessage);
@@ -1546,23 +1556,22 @@ function createWorkspace() {
     const upsertTask = (task: RunningTask) => {
       setState((d) => {
         d.running[task.projectId] = ((list = []) => {
-        const index = list.findIndex((existing) => existing.toolCallId === task.toolCallId);
-        if (index < 0) return [...list, task];
-        const next = [...list];
-        next[index] = task;
-        return next;
-      })(d.running[task.projectId]);
+          const index = list.findIndex((existing) => existing.toolCallId === task.toolCallId);
+          if (index < 0) return [...list, task];
+          const next = [...list];
+          next[index] = task;
+          return next;
+        })(d.running[task.projectId]);
       });
     };
     await bind("task:started", (task) => {
-            upsertTask(task);
+      upsertTask(task);
       touchRunStatus(task.projectId, `running ${task.name}…`);
-    
     });
     await bind("task:progress", upsertTask);
 
     await bind("task:finished", (entry) => {
-            /*
+      /*
        * Matched on identity, never on label. Two shell commands, two reads of
        * the same file or two calls to the same MCP tool share a label, and
        * removing by label would clear all of them when the first finished —
@@ -1585,7 +1594,6 @@ function createWorkspace() {
         d.logTotals[entry.projectId] = ((total = 0) => total + 1)(d.logTotals[entry.projectId]);
       });
       touchRunStatus(entry.projectId, "working…");
-    
     });
 
     /*
@@ -1607,9 +1615,9 @@ function createWorkspace() {
       if (!isLimitLive(limit)) return;
       setState((d) => {
         d.rateLimits[limit.projectId] = ((limits = {}) => ({
-        ...limits,
-        [limit.agent]: limit,
-      }))(d.rateLimits[limit.projectId]);
+          ...limits,
+          [limit.agent]: limit,
+        }))(d.rateLimits[limit.projectId]);
       });
     });
 
@@ -1641,23 +1649,21 @@ function createWorkspace() {
     });
 
     await bind("run:approval", ({ projectId, approvalId, tool, input }) => {
-            // Normalize a possibly-missing tool at the boundary: a Codex escalation
+      // Normalize a possibly-missing tool at the boundary: a Codex escalation
       // can omit it, and a bare `undefined` reaching the card crashed the
       // render, hiding the very question the run is blocked on.
       setState((d) => {
         d.pendingApprovals[projectId] = { approvalId, tool: tool ?? "", input };
       });
       touchRunStatus(projectId, "waiting for your approval");
-    
     });
 
     await bind("run:approval_resolved", ({ projectId }) => {
-            setState((d) => {
+      setState((d) => {
         const pending = d.pendingApprovals;
         delete pending[projectId];
       });
       touchRunStatus(projectId, "working…");
-    
     });
 
     await bind("run:accepted", ({ projectId, agent, model, permission }) => {
@@ -1701,7 +1707,7 @@ function createWorkspace() {
          * leave the user watching a held composer through the longest part of
          * the operation with the wrong explanation for it.
          */
-                setState((d) => {
+        setState((d) => {
           d.compacting[projectId] = true;
         });
         touchRunStatus(
@@ -1712,17 +1718,17 @@ function createWorkspace() {
           {
             agent,
             model:
-              state.tabs.find((tab) => tab.projectId === projectId && tab.agent === agent)
-                ?.model ?? "",
+              state.tabs.find((tab) => tab.projectId === projectId && tab.agent === agent)?.model ??
+              "",
             permission:
               state.tabs.find((tab) => tab.projectId === projectId && tab.agent === agent)
                 ?.permission ?? "read_only",
           },
         );
-      
+
         return;
       }
-            setState((d) => {
+      setState((d) => {
         const busy = d.compacting;
         delete busy[projectId];
       });
@@ -1730,7 +1736,7 @@ function createWorkspace() {
         const status = d.runStatus;
         delete status[projectId];
       });
-    
+
       // Same cue as `run:stopped`, and the same beat of delay: the slot is
       // released as this run unwinds, a moment after the event goes out.
       if ((state.queued[projectId] ?? []).length > 0) {
@@ -1739,11 +1745,10 @@ function createWorkspace() {
     });
 
     await bind("run:text", ({ projectId, delta }) => {
-            setState((d) => {
+      setState((d) => {
         d.streaming[projectId] = ((current = "") => current + delta)(d.streaming[projectId]);
       });
       touchRunStatus(projectId, "writing…");
-    
     });
 
     await bind("run:thinking", ({ projectId }) => {
@@ -1753,15 +1758,15 @@ function createWorkspace() {
     await bind("run:persisted", ({ projectId, chars }) => {
       setState((d) => {
         d.runStatus[projectId] = ((current) => ({
-        ...runIdentity(projectId, current),
-        startedAt: current?.startedAt ?? Date.now(),
-        activity: current?.activity ?? "working…",
-        liveTokens: current?.liveTokens ?? null,
-        liveCostUsd: current?.liveCostUsd ?? null,
-        contextTokens: current?.contextTokens ?? null,
-        contextWindow: current?.contextWindow ?? null,
-        persistedChars: chars,
-      }))(d.runStatus[projectId]);
+          ...runIdentity(projectId, current),
+          startedAt: current?.startedAt ?? Date.now(),
+          activity: current?.activity ?? "working…",
+          liveTokens: current?.liveTokens ?? null,
+          liveCostUsd: current?.liveCostUsd ?? null,
+          contextTokens: current?.contextTokens ?? null,
+          contextWindow: current?.contextWindow ?? null,
+          persistedChars: chars,
+        }))(d.runStatus[projectId]);
       });
     });
 
@@ -1769,9 +1774,9 @@ function createWorkspace() {
       // Same missing-parent case as the first receipt above.
       setState((d) => {
         d.commands[projectId] = ((commands = {}) => ({
-        ...commands,
-        [agent]: { all, skills },
-      }))(d.commands[projectId]);
+          ...commands,
+          [agent]: { all, skills },
+        }))(d.commands[projectId]);
       });
     });
 
@@ -1780,21 +1785,21 @@ function createWorkspace() {
       ({ projectId, tokens, contextTokens, contextWindow, estimatedCostUsd }) => {
         setState((d) => {
           d.runStatus[projectId] = ((current) => ({
-          ...runIdentity(projectId, current),
-          startedAt: current?.startedAt ?? Date.now(),
-          activity: current?.activity ?? "working…",
-          persistedChars: current?.persistedChars ?? 0,
-          // A provider can begin a new accounting snapshot after compacting.
-          // Processed traffic and its cost are cumulative for this run, so a
-          // lower snapshot must not erase work already shown. Context below is
-          // latest-wins on purpose: compacting is expected to shrink it.
-          liveTokens: monotonicUsage(current?.liveTokens, tokens),
-          liveCostUsd: monotonicUsage(current?.liveCostUsd, estimatedCostUsd),
-          // Held rather than overwritten with a null: an agent that reports the
-          // window once and the tokens thereafter would otherwise blank it.
-          contextTokens: contextTokens ?? current?.contextTokens ?? null,
-          contextWindow: contextWindow ?? current?.contextWindow ?? null,
-        }))(d.runStatus[projectId]);
+            ...runIdentity(projectId, current),
+            startedAt: current?.startedAt ?? Date.now(),
+            activity: current?.activity ?? "working…",
+            persistedChars: current?.persistedChars ?? 0,
+            // A provider can begin a new accounting snapshot after compacting.
+            // Processed traffic and its cost are cumulative for this run, so a
+            // lower snapshot must not erase work already shown. Context below is
+            // latest-wins on purpose: compacting is expected to shrink it.
+            liveTokens: monotonicUsage(current?.liveTokens, tokens),
+            liveCostUsd: monotonicUsage(current?.liveCostUsd, estimatedCostUsd),
+            // Held rather than overwritten with a null: an agent that reports the
+            // window once and the tokens thereafter would otherwise blank it.
+            contextTokens: contextTokens ?? current?.contextTokens ?? null,
+            contextWindow: contextWindow ?? current?.contextWindow ?? null,
+          }))(d.runStatus[projectId]);
         });
       },
     );
@@ -1810,14 +1815,16 @@ function createWorkspace() {
       if (projectId === TASK_MANAGER_ID) {
         void client()
           .getTaskManager()
-          .then((tm) => setState((d) => {
-                          d.taskManagerSession = tm.sessionId;
-                        }))
+          .then((tm) =>
+            setState((d) => {
+              d.taskManagerSession = tm.sessionId;
+            }),
+          )
           .catch((cause) =>
             log.warn(`could not refresh the task manager session: ${describeError(cause)}`),
           );
       }
-            setState((d) => {
+      setState((d) => {
         d.running[projectId] = [];
       });
       setState((d) => {
@@ -1862,7 +1869,7 @@ function createWorkspace() {
           createdAt: new Date().toISOString(),
         });
       }
-    
+
       /*
        * The slot just freed is the queue's cue. Delayed a beat: `run:stopped`
        * is emitted from inside the run's own teardown, a moment before the
@@ -1886,22 +1893,22 @@ function createWorkspace() {
 
   function upsertProject(project: Project): void {
     setState((draft) => {
-        const index = draft.projects.findIndex((existing) => existing.id === project.id);
-        if (index < 0) draft.projects.push(project);
-        else draft.projects[index] = project;
+      const index = draft.projects.findIndex((existing) => existing.id === project.id);
+      if (index < 0) draft.projects.push(project);
+      else draft.projects[index] = project;
 
-        /*
-         * Kept sorted so the array agrees with `order` at all times.
-         * `listProjects` returns them sorted, so without this a reorder made
-         * during a session leaves the two disagreeing until the next restart
-         * quietly fixes it — the kind of difference that only shows up in the
-         * one place nobody thought to sort.
-         */
-        draft.projects.sort((a, b) => a.order - b.order);
+      /*
+       * Kept sorted so the array agrees with `order` at all times.
+       * `listProjects` returns them sorted, so without this a reorder made
+       * during a session leaves the two disagreeing until the next restart
+       * quietly fixes it — the kind of difference that only shows up in the
+       * one place nobody thought to sort.
+       */
+      draft.projects.sort((a, b) => a.order - b.order);
 
-        const tab = draft.tabs.find((candidate) => candidate.key === project.id);
-        if (tab) tab.label = project.name;
-      });
+      const tab = draft.tabs.find((candidate) => candidate.key === project.id);
+      if (tab) tab.label = project.name;
+    });
   }
 
   onCleanup(() => {
@@ -1925,13 +1932,13 @@ function createWorkspace() {
      */
     const from = state.activeKey;
     const started = performance.now();
-        setState((d) => {
+    setState((d) => {
       d.activeKey = key;
     });
     setPrefs((d) => {
       d.lastTabKey = key;
     });
-  
+
     const committed = performance.now();
     requestAnimationFrame(() => {
       const painted = performance.now();
@@ -1969,11 +1976,11 @@ function createWorkspace() {
     if (from === to) return;
     setState((d) => {
       d.tabs = ((tabs) => {
-      const next = [...tabs];
-      const [moved] = next.splice(from, 1);
-      next.splice(to, 0, moved);
-      return next;
-    })(d.tabs);
+        const next = [...tabs];
+        const [moved] = next.splice(from, 1);
+        next.splice(to, 0, moved);
+        return next;
+      })(d.tabs);
     });
   }
 
@@ -2040,9 +2047,9 @@ function createWorkspace() {
       log.warn(`could not reveal unknown item ${itemId}`);
       return false;
     }
-        setPrefs((d) => {
-          d.projectPanelVisible = true;
-        });
+    setPrefs((d) => {
+      d.projectPanelVisible = true;
+    });
     setPrefs((d) => {
       d.panelSections["items"] = true;
     });
@@ -2050,7 +2057,7 @@ function createWorkspace() {
     setState((d) => {
       d.itemReveal = { id: item.id, revision: ++itemRevealRevision };
     });
-  
+
     return true;
   }
 
@@ -2061,9 +2068,9 @@ function createWorkspace() {
     if (!state.tabs.some((tab) => tab.kind === "settings")) {
       setState((d) => {
         d.tabs = ((tabs) => [
-        ...tabs,
-        { ...HOME_TAB, key: "settings", kind: "settings", label: "Settings" },
-      ])(d.tabs);
+          ...tabs,
+          { ...HOME_TAB, key: "settings", kind: "settings", label: "Settings" },
+        ])(d.tabs);
       });
     }
     focus("settings");
@@ -2071,36 +2078,34 @@ function createWorkspace() {
 
   /** Replay the guide from Help without changing its durable completion flag. */
   function openOnboarding(): void {
-        setState((d) => {
+    setState((d) => {
       d.onboardingOpen = true;
     });
     setState((d) => {
       d.onboardingDeferred = false;
     });
-  
   }
 
   /** Close the guide for this window; an incomplete first run returns next launch. */
   function deferOnboarding(): void {
-        setState((d) => {
+    setState((d) => {
       d.onboardingOpen = false;
     });
     setState((d) => {
       d.onboardingDeferred = true;
     });
-  
   }
 
   /** Persist completion before handing the owner to the first project draft. */
   async function completeOnboarding(): Promise<void> {
     await saveSettings({ onboardingCompleted: true });
-        setState((d) => {
+    setState((d) => {
       d.onboardingOpen = false;
     });
     setState((d) => {
       d.onboardingDeferred = false;
     });
-  
+
     if (
       state.agents.some((status) => isProjectAgent(status.agent) && status.state === "connected")
     ) {
@@ -2115,9 +2120,9 @@ function createWorkspace() {
     if (!state.tabs.some((tab) => tab.kind === "analytics")) {
       setState((d) => {
         d.tabs = ((tabs) => [
-        ...tabs,
-        { ...HOME_TAB, key: "analytics", kind: "analytics", label: "Analytics" },
-      ])(d.tabs);
+          ...tabs,
+          { ...HOME_TAB, key: "analytics", kind: "analytics", label: "Analytics" },
+        ])(d.tabs);
       });
     }
     focus("analytics");
@@ -2134,24 +2139,24 @@ function createWorkspace() {
     const agent = defaultAgent();
     setState((d) => {
       d.tabs = ((tabs) => [
-      ...tabs,
-      {
-        key,
-        kind: "draft",
-        projectId: null,
-        label: "Untitled",
-        agent,
-        model: defaultModel(),
-        effort: defaultEffort(),
-        extraThinking: prefs.lastExtraThinking,
-        permission: compatiblePermission(
-          state.agents,
+        ...tabs,
+        {
+          key,
+          kind: "draft",
+          projectId: null,
+          label: "Untitled",
           agent,
-          state.settings?.defaultPermission ?? "read_only",
-        ),
-        status: "quiet",
-      },
-    ])(d.tabs);
+          model: defaultModel(),
+          effort: defaultEffort(),
+          extraThinking: prefs.lastExtraThinking,
+          permission: compatiblePermission(
+            state.agents,
+            agent,
+            state.settings?.defaultPermission ?? "read_only",
+          ),
+          status: "quiet",
+        },
+      ])(d.tabs);
     });
     focus(key);
   }
@@ -2160,17 +2165,16 @@ function createWorkspace() {
     if (key === "home") return; // Home is not closable.
     const index = state.tabs.findIndex((tab) => tab.key === key);
     if (index < 0) return;
-        setState((d) => {
+    setState((d) => {
       d.tabs = ((tabs) => tabs.filter((tab) => tab.key !== key))(d.tabs);
     });
     setState((draft) => {
-        delete draft.transcriptPositions[key];
-      });
+      delete draft.transcriptPositions[key];
+    });
     if (state.activeKey === key) {
       // Fall back to the tab on the left, which is where the eye already is.
       focus(state.tabs[Math.max(0, index - 1)]?.key ?? "home");
     }
-  
   }
 
   /**
@@ -2182,8 +2186,10 @@ function createWorkspace() {
    * the delete.
    */
   function purgeProject(projectId: string): void {
-        setState((d) => {
-      d.projects = ((projects) => projects.filter((project) => project.id !== projectId))(d.projects);
+    setState((d) => {
+      d.projects = ((projects) => projects.filter((project) => project.id !== projectId))(
+        d.projects,
+      );
     });
     // Every per-project record, not a subset: leaving some behind let the
     // record key-sets diverge, so a value could be absent under a key another
@@ -2191,27 +2197,26 @@ function createWorkspace() {
     // met an undefined value. Delete top-level keys only (nested-node deletes
     // strand the reactive proxy; see `run:rate_limit_cleared`).
     setState((draft) => {
-        delete draft.items[projectId];
-        delete draft.messages[projectId];
-        delete draft.messageReceipts[projectId];
-        delete draft.running[projectId];
-        delete draft.taskLog[projectId];
-        delete draft.logTotals[projectId];
-        delete draft.rateLimits[projectId];
-        delete draft.agentIo[projectId];
-        delete draft.streaming[projectId];
-        delete draft.pullRequests[projectId];
-        delete draft.questions[projectId];
-        delete draft.pendingApprovals[projectId];
-        delete draft.runStatus[projectId];
-        delete draft.queued[projectId];
-        delete draft.compacting[projectId];
-        delete draft.pendingCompact[projectId];
-        delete draft.commands[projectId];
-        delete draft.transcriptPositions[projectId];
-      });
+      delete draft.items[projectId];
+      delete draft.messages[projectId];
+      delete draft.messageReceipts[projectId];
+      delete draft.running[projectId];
+      delete draft.taskLog[projectId];
+      delete draft.logTotals[projectId];
+      delete draft.rateLimits[projectId];
+      delete draft.agentIo[projectId];
+      delete draft.streaming[projectId];
+      delete draft.pullRequests[projectId];
+      delete draft.questions[projectId];
+      delete draft.pendingApprovals[projectId];
+      delete draft.runStatus[projectId];
+      delete draft.queued[projectId];
+      delete draft.compacting[projectId];
+      delete draft.pendingCompact[projectId];
+      delete draft.commands[projectId];
+      delete draft.transcriptPositions[projectId];
+    });
     closeTab(projectId);
-  
   }
 
   /**
@@ -2399,7 +2404,7 @@ function createWorkspace() {
     if (!item) throw new Error(`unknown item: ${itemId}`);
     const parentTab = state.tabs.find((tab) => tab.projectId === item.projectId);
     const project = await client().forkItem(itemId);
-        upsertProject(project);
+    upsertProject(project);
     setState((d) => {
       d.items[project.id] = state.items[project.id] ?? [];
     });
@@ -2407,22 +2412,22 @@ function createWorkspace() {
       const tab = projectTab(project);
       setState((d) => {
         d.tabs = ((tabs) => [
-        ...tabs,
-        parentTab
-          ? {
-              ...tab,
-              agent: parentTab.agent,
-              model: parentTab.model,
-              effort: parentTab.effort,
-              extraThinking: parentTab.extraThinking,
-              permission: parentTab.permission,
-            }
-          : tab,
-      ])(d.tabs);
+          ...tabs,
+          parentTab
+            ? {
+                ...tab,
+                agent: parentTab.agent,
+                model: parentTab.model,
+                effort: parentTab.effort,
+                extraThinking: parentTab.extraThinking,
+                permission: parentTab.permission,
+              }
+            : tab,
+        ])(d.tabs);
       });
     }
     focus(project.id);
-  
+
     void loadProject(project.id).catch((cause) =>
       log.error(`could not load item fork ${project.id}: ${describeError(cause)}`),
     );
@@ -2465,15 +2470,15 @@ function createWorkspace() {
   ): void {
     setState((d) => {
       d.runStatus[projectId] = ((current) => ({
-      ...runIdentity(projectId, current, identity),
-      startedAt: current?.startedAt ?? Date.now(),
-      persistedChars: current?.persistedChars ?? 0,
-      liveTokens: current?.liveTokens ?? null,
-      liveCostUsd: current?.liveCostUsd ?? null,
-      contextTokens: current?.contextTokens ?? null,
-      contextWindow: current?.contextWindow ?? null,
-      activity,
-    }))(d.runStatus[projectId]);
+        ...runIdentity(projectId, current, identity),
+        startedAt: current?.startedAt ?? Date.now(),
+        persistedChars: current?.persistedChars ?? 0,
+        liveTokens: current?.liveTokens ?? null,
+        liveCostUsd: current?.liveCostUsd ?? null,
+        contextTokens: current?.contextTokens ?? null,
+        contextWindow: current?.contextWindow ?? null,
+        activity,
+      }))(d.runStatus[projectId]);
     });
   }
 
@@ -2542,9 +2547,9 @@ function createWorkspace() {
   ): void {
     setState((d) => {
       d.queued[projectId] = ((waiting = []) => [
-      ...waiting,
-      { body, reason, study, messageId, replyQuestionId, itemId },
-    ])(d.queued[projectId]);
+        ...waiting,
+        { body, reason, study, messageId, replyQuestionId, itemId },
+      ])(d.queued[projectId]);
     });
   }
 
@@ -2646,9 +2651,9 @@ function createWorkspace() {
     const agent = state.pendingCompact[projectId];
     if (agent === undefined) return;
     setState((d) => {
-          const waiting = d.pendingCompact;
-          delete waiting[projectId];
-        });
+      const waiting = d.pendingCompact;
+      delete waiting[projectId];
+    });
     void client()
       .compactProject(projectId, agent)
       .catch(() => {});
@@ -2909,13 +2914,12 @@ function createWorkspace() {
       client().setProjectNotes(projectId, notes),
     async clearTaskLog(projectId: string) {
       await client().clearTaskLog(projectId);
-            setState((d) => {
+      setState((d) => {
         d.taskLog[projectId] = [];
       });
       setState((d) => {
         d.logTotals[projectId] = 0;
       });
-    
     },
     /** Persist a partial settings patch without accepting stale responses. */
     saveSettings,
@@ -3130,9 +3134,7 @@ export type Workspace = ReturnType<typeof createWorkspace>;
 
 const WorkspaceContext = createContext<Workspace>();
 
-export function WorkspaceProvider(
-  props: ParentProps,
-): JSX.Element {
+export function WorkspaceProvider(props: ParentProps): JSX.Element {
   const workspace = createWorkspace();
   void workspace.init();
   return <WorkspaceContext value={workspace}>{props.children}</WorkspaceContext>;

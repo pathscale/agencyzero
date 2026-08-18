@@ -1,5 +1,5 @@
-import { omit, Show } from "solid-js";
 import type { JSX } from "@solidjs/web";
+import { omit, Show } from "solid-js";
 import { Button } from "~/components/Button";
 import { Icon, type IconProps } from "~/components/Icon";
 import { tx } from "~/stores/i18n";

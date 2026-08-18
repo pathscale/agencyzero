@@ -179,9 +179,10 @@ describe("the notes a compaction kept", () => {
 describe("the knowledge checkpoint switch", () => {
   // `mount` opens the notes section; this opens Settings alongside it, which is
   // where the switch lives.
-  const openSettings = () => setPrefs((d) => {
-                               d.panelSections["settings"] = true;
-                             });
+  const openSettings = () =>
+    setPrefs((d) => {
+      d.panelSections["settings"] = true;
+    });
 
   it("is off until it is asked for", async () => {
     openSettings();

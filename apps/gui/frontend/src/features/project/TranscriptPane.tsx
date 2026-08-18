@@ -1,6 +1,17 @@
 import { Empty, Flex } from "@pathscale/ui";
-import { createEffect, createMemo, createSignal, For, Match, onCleanup, onSettled, Show, Switch, untrack } from "solid-js";
 import type { JSX } from "@solidjs/web";
+import {
+  createEffect,
+  createMemo,
+  createSignal,
+  For,
+  Match,
+  onCleanup,
+  onSettled,
+  Show,
+  Switch,
+  untrack,
+} from "solid-js";
 import { Button } from "~/components/Button";
 import { Icon } from "~/components/Icon";
 import { ApprovalCard } from "~/features/project/ApprovalCard";
@@ -639,10 +650,13 @@ export function TranscriptPane(props: {
   // The footer changed height, so the tail moved. `untrack` inside `followTail`
   // keeps this from subscribing to `pinned`: a reader who scrolled up must not
   // be yanked back by a PR chip arriving.
-  createEffect(() => {
-    chromeRevision();
-    followTail();
-  });
+  createEffect(
+    () => {
+      chromeRevision();
+      followTail();
+    },
+    () => {},
+  );
   onCleanup(() => {
     resizeObserver?.disconnect();
     mutationObserver?.disconnect();
@@ -819,13 +833,17 @@ export function TranscriptPane(props: {
   // Follow the tail as content arrives: new messages, streaming deltas, the
   // status line appearing. Reading these is what subscribes the effect;
   // `pinned` is untracked so scrolling around cannot itself re-run it.
-  createEffect(() => {
-    props.messages.length;
-    props.streaming;
-    void state.runStatus[props.project.id];
-    void (state.questions[props.project.id] ?? []).filter((question) => !question.answered).length;
-    followTail();
-  });
+  createEffect(
+    () => {
+      props.messages.length;
+      props.streaming;
+      void state.runStatus[props.project.id];
+      void (state.questions[props.project.id] ?? []).filter((question) => !question.answered)
+        .length;
+      followTail();
+    },
+    () => {},
+  );
 
   // Retained project panes are `display:none` while another tab is active.
   // Layout work performed while hidden cannot provide a useful tail position,
@@ -839,14 +857,17 @@ export function TranscriptPane(props: {
    * other reason, which matters because the body reads several signals it
    * must not subscribe to.
    */
-  createEffect(() => {
-    const activeKey = state.activeKey;
-    untrack(() => {
-      if (activeKey !== props.project.id) return;
-      if (pinned()) followTail();
-      else restoreReaderPosition();
-    });
-  });
+  createEffect(
+    () => {
+      const activeKey = state.activeKey;
+      untrack(() => {
+        if (activeKey !== props.project.id) return;
+        if (pinned()) followTail();
+        else restoreReaderPosition();
+      });
+    },
+    () => {},
+  );
 
   return (
     /*
