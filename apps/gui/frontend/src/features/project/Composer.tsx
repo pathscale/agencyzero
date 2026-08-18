@@ -686,16 +686,19 @@ export function Composer(props: ComposerProps): JSX.Element {
   });
 
   /*
-   * The composer's own undo stack, because the renderer has none.
+   * The composer's own undo stack, for a field whose text lives in a signal.
    *
-   * `blitz-dom` has no undo anywhere in its source: text editing runs through
-   * parley's text input, and `apply_apple_standard_keybinding`
-   * (`packages/blitz-dom/src/node/text.rs`) matches the insert, delete and move
-   * commands with no `undo:` or `redo:` case at all. So Cmd-Z has never done
-   * anything in any text field in this app, and removing the controlled
-   * `value={draft()}` binding — which was a real bug, since assigning `value`
-   * discards a native stack — could not fix it on its own, because there was
-   * no native stack underneath to preserve.
+   * `blitz-dom` used to have no undo at all — text editing runs through
+   * parley's text input, and parley has no history — so Cmd-Z did nothing in
+   * any field in this app. It has one now (`TextEditHistory` in
+   * `packages/blitz-dom/src/node/text.rs`), which is what every uncontrolled
+   * field in the app uses.
+   *
+   * This one stays because the composer is controlled: the draft is a signal
+   * that only an `input` event updates and is persisted per tab, so an undo
+   * that moved only the DOM would be overwritten by the next render and lost
+   * on a tab switch. The keydown handler below cancels the renderer's undo so
+   * that exactly one stack owns this field.
    *
    * Snapshots are coalesced by a short idle gap rather than taken per
    * keystroke, so one undo removes a word or a burst of typing rather than a
@@ -1189,12 +1192,25 @@ export function Composer(props: ComposerProps): JSX.Element {
               }}
               onKeyDown={(event) => {
                 /*
-                 * Undo and redo, handled here because nothing below handles
-                 * them. Cmd on macOS, Ctrl elsewhere; Shift+Z redoes, as does
-                 * Ctrl+Y. `preventDefault` is belt and braces — the renderer
-                 * has no default action to suppress — but it keeps this correct
-                 * if the app is ever built against the WKWebView runtime, where
-                 * there *is* a native stack and two of them would fight.
+                 * Undo and redo, kept here and kept authoritative.
+                 *
+                 * The renderer now has a stack of its own — `TextEditHistory`
+                 * in `blitz-dom`'s `text.rs` — so this is no longer the only
+                 * one, and two stacks over one field is the failure mode the
+                 * clipboard had: each does half the work and they disagree.
+                 * `preventDefault` is what stops that, because Blitz gates its
+                 * default action on `is_cancelled()`; cancelling here leaves
+                 * exactly one stack in charge.
+                 *
+                 * This one stays in charge rather than the renderer's because
+                 * the composer is a controlled Solid field. Its text lives in a
+                 * signal that only an `input` event updates, and the draft is
+                 * persisted per tab from that signal, so an undo has to move
+                 * the signal, not just the DOM. The renderer's stack is the
+                 * right one for an ordinary text input, and it is what every
+                 * other field in the app now gets.
+                 *
+                 * Cmd on macOS, Ctrl elsewhere; Shift+Z redoes, as does Ctrl+Y.
                  */
                 if ((event.metaKey || event.ctrlKey) && !event.altKey) {
                   const key = event.key.toLowerCase();

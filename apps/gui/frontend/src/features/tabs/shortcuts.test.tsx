@@ -58,96 +58,123 @@ beforeEach(() => {
   });
 });
 
+/**
+ * Paste belongs to the renderer, and the job here is to stay out of its way.
+ *
+ * This file used to assert the opposite: that ⌘V was answered in JS by reading
+ * `navigator.clipboard` and splicing the text into the field. Those tests
+ * passed for years while pasting was broken in the real app, because jsdom is
+ * given a working `navigator.clipboard` mock two screens up and the shipping
+ * renderer had none. They were testing the mock.
+ *
+ * What actually has to hold is that Blitz's own paste — `text.rs`, the `Paste`
+ * arm, which reads the shell clipboard and emits `input` itself — is allowed to
+ * run. Blitz gates every default action on `is_cancelled()`, so a
+ * `preventDefault` here silently disables pasting everywhere.
+ */
 describe("paste", () => {
-  it("inserts the clipboard at the caret and tells the field it changed", async () => {
-    readText.mockResolvedValueOnce("world");
+  it("lets the renderer's own paste run instead of answering the chord", () => {
     const field = document.createElement("textarea");
     field.value = "hello ";
-    field.setSelectionRange(6, 6);
-    document.body.append(field);
-    const onInput = vi.fn();
-    field.addEventListener("input", onInput);
-
-    const dispose = mount();
-    press("v", field);
-    await vi.waitFor(() => expect(field.value).toBe("hello world"));
-
-    // A controlled Solid field reads its value from a signal that only an
-    // `input` event updates, so without this the paste is invisible to the app.
-    expect(onInput).toHaveBeenCalled();
-    expect(field.selectionStart).toBe("hello world".length);
-
-    dispose();
-    field.remove();
-  });
-
-  it("replaces the selection rather than inserting beside it", async () => {
-    readText.mockResolvedValueOnce("there");
-    const field = document.createElement("input");
-    field.value = "hi world";
-    field.setSelectionRange(3, 8);
     document.body.append(field);
 
     const dispose = mount();
-    press("v", field);
-    await vi.waitFor(() => expect(field.value).toBe("hi there"));
+    const event = new KeyboardEvent("keydown", {
+      key: "v",
+      code: "KeyV",
+      metaKey: true,
+      bubbles: true,
+      cancelable: true,
+    });
+    field.dispatchEvent(event);
 
-    dispose();
-    field.remove();
-  });
+    /*
+     * The regression guard. Blitz checks `is_cancelled()` before running the
+     * default action that pastes, so cancelling here stops the paste dead —
+     * which is precisely what made pasting into the composer, and into a new
+     * project's prompt, do nothing at all.
+     */
+    expect(event.defaultPrevented).toBe(false);
 
-  it("leaves a read-only field alone and never reads the clipboard for it", () => {
-    const field = document.createElement("textarea");
-    field.value = "untouched";
-    field.readOnly = true;
-    document.body.append(field);
-
-    const dispose = mount();
-    press("v", field);
-
-    expect(readText).not.toHaveBeenCalled();
-    expect(field.value).toBe("untouched");
-
-    dispose();
-    field.remove();
-  });
-
-  it("does not read the clipboard when the paste lands outside a field", () => {
-    const dispose = mount();
-    press("v", document.body);
-
+    // And nothing is spliced in by hand: the renderer owns the insertion.
+    expect(field.value).toBe("hello ");
     expect(readText).not.toHaveBeenCalled();
 
     dispose();
+    field.remove();
   });
 
-  it("keeps the field's text when the clipboard is refused", async () => {
-    readText.mockRejectedValueOnce(new Error("denied"));
-    const field = document.createElement("textarea");
-    field.value = "kept";
-    document.body.append(field);
-
+  it("does not claim the chord outside a field either", () => {
     const dispose = mount();
-    press("v", field);
-    await vi.waitFor(() => expect(readText).toHaveBeenCalled());
+    const event = new KeyboardEvent("keydown", {
+      key: "v",
+      code: "KeyV",
+      metaKey: true,
+      bubbles: true,
+      cancelable: true,
+    });
+    document.body.dispatchEvent(event);
 
-    expect(field.value).toBe("kept");
+    expect(event.defaultPrevented).toBe(false);
+    expect(readText).not.toHaveBeenCalled();
 
     dispose();
-    field.remove();
   });
 });
 
 describe("copy", () => {
-  it("copies a field's selection rather than the whole value", async () => {
+  /**
+   * The bug this handler exists for.
+   *
+   * `blitz-dom`'s `keyboard.rs` copies a document selection only
+   * `if !has_focused_text_input`. The composer holds focus almost all the time,
+   * so selecting a passage in the transcript and pressing ⌘C hit that guard and
+   * copied nothing — the "copy from the chat area does not work" report.
+   */
+  it("copies a transcript selection even while a field holds focus", async () => {
+    const passage = document.createElement("p");
+    passage.textContent = "the selected transcript passage";
+    document.body.append(passage);
+
+    // Focused, but with no selection of its own: exactly the state that made
+    // the renderer decline the copy.
     const field = document.createElement("textarea");
-    field.value = "one two three";
-    field.setSelectionRange(4, 7);
     document.body.append(field);
+    field.focus();
+
+    const range = document.createRange();
+    range.selectNodeContents(passage);
+    const selection = document.getSelection();
+    selection?.removeAllRanges();
+    selection?.addRange(range);
 
     const dispose = mount();
     press("c", field);
-    await vi.waitFor(() => expect(writeText).toHaveBeenCalledWith("two"));
+    await vi.waitFor(() =>
+      expect(writeText).toHaveBeenCalledWith("the selected transcript passage"),
+    );
+
+    dispose();
+    selection?.removeAllRanges();
+    passage.remove();
+    field.remove();
+  });
+
+  /**
+   * The other half: a field with its own selection is the renderer's to copy,
+   * through the same shell clipboard. Answering it here too would mean two
+   * writes for one keystroke.
+   */
+  it("leaves a field's own selection to the renderer", () => {
+    const field = document.createElement("textarea");
+    field.value = "one two three";
+    document.body.append(field);
+    field.setSelectionRange(4, 7);
+
+    const dispose = mount();
+    press("c", field);
+
+    expect(writeText).not.toHaveBeenCalled();
 
     dispose();
     field.remove();
