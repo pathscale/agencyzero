@@ -27,11 +27,11 @@ standing_promotion:
     - agency:app.restart
     # Liveness. `ping` is injected by the run loop into a turn that has gone
     # silent, and `pong` is the agent's reply; neither is persisted or shown.
-    # `alert` is the agent declaring long blocking work up front, and is shown
+    # `extend-watchdog` is the agent declaring long blocking work up front, shown
     # to the owner so an expected silence does not read as a stalled run.
     - agency:ping
     - agency:pong
-    - agency:alert
+    - agency:extend-watchdog
 
   # 13.2.2 Verbs and values reserved to principals above the agent.
   reserved: []
@@ -71,7 +71,7 @@ standing_promotion:
     # `what` is the work, in the agent's own words, and is shown to the owner.
     # `seconds` is how long it is expected to block; the run loop clamps it to
     # its own idle window at the low end and thirty minutes at the high end.
-    agency:alert: [what, seconds]
+    agency:extend-watchdog: [what, seconds]
 
   semantics:
     pr_urls_in_prose: inert

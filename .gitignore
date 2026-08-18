@@ -43,3 +43,6 @@ docs/HANDOVER.md
 # Handover docs are working notes, never committed. See AGENTS.md.
 docs/HANDOVER.md
 HANDOVER*.md
+# Operator runbooks: machine-local paths and one-off recovery state.
+docs/restore.md
+docs/RESTORE*.md

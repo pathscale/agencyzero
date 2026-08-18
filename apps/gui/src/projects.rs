@@ -4276,7 +4276,7 @@ async fn apply_directive(
          * (a replayed transcript, a snapshot scan), where there is no deadline
          * to widen and nothing to do but acknowledge it.
          */
-        Directive::Alert { what, seconds } => {
+        Directive::ExtendWatchdog { what, seconds } => {
             Outcome::Done(format!("noted: {what} (expected to block ~{seconds}s)"))
         }
     }
@@ -4419,7 +4419,7 @@ fn study_target_before(
             id: String::new(),
             before_add: std::collections::HashSet::new(),
         },
-        Directive::Alert { .. } => StudyTarget {
+        Directive::ExtendWatchdog { .. } => StudyTarget {
             kind: "liveness",
             id: String::new(),
             before_add: std::collections::HashSet::new(),
@@ -6038,7 +6038,7 @@ const TASK_CLEANUP_TIMEOUT: std::time::Duration = std::time::Duration::from_secs
 /// streaming has already proven what the ping was asking.
 const LIVENESS_PING_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(90);
 
-/// The longest silence a run may claim for itself with `<ps @agency:alert(…)>`.
+/// The longest silence a run may claim for itself with `<ps @agency:extend-watchdog(…)>`.
 ///
 /// A declaration is a hint from the very turn being watched, so it widens the
 /// window rather than removing it: half an hour covers a cold workspace build
@@ -11741,7 +11741,7 @@ async fn drive_run(
                      * would disable the watchdog entirely.
                      */
                     if let Some(crate::directives::Authored::Directive(
-                        crate::directives::Directive::Alert { what, seconds },
+                        crate::directives::Directive::ExtendWatchdog { what, seconds },
                     )) = authored_directive_line(&line, &mut directives_fenced)
                         .and_then(crate::directives::parse_authored)
                     {
@@ -11759,7 +11759,7 @@ async fn drive_run(
                             &io,
                             &project_id,
                             "received",
-                            "alert",
+                            "extend-watchdog",
                             format!("{what} (expected ~{seconds}s, waiting {granted}s)"),
                         );
                         let _ = app.emit(
