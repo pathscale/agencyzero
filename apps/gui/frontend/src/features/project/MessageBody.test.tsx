@@ -1,5 +1,5 @@
 import { fireEvent, render } from "@solidjs/testing-library";
-import { createSignal } from "solid-js";
+import { createSignal, flush } from "solid-js";
 import { describe, expect, it } from "vitest";
 import {
   createStreamingSplitter,
@@ -133,6 +133,7 @@ describe("MessageBody", () => {
     const link = screen.getByRole("button", { name: `Open item ${id}` });
     expect(link).toHaveTextContent("Item-...ae2660c8d789");
     fireEvent.click(link);
+    flush();
     expect(revealed).toBe(id);
 
     removeHandler();

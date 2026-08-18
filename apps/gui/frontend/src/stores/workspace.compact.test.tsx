@@ -1,3 +1,4 @@
+import { flush } from "solid-js";
 import { render, waitFor } from "@solidjs/testing-library";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { SETTINGS } from "~/api/fixtures";
@@ -79,6 +80,7 @@ describe("a compaction asked for while the project is busy", () => {
     const workspace = await mountWorkspace();
 
     await expect(workspace.actions.compactProject("quux", "claude")).resolves.toBeUndefined();
+    flush();
     expect(workspace.state.pendingCompact.quux).toBe("claude");
 
     stopRun();
@@ -98,6 +100,7 @@ describe("a compaction asked for while the project is busy", () => {
     await workspace.actions.compactProject("quux", "claude");
     await workspace.actions.compactProject("quux", "claude");
     await workspace.actions.compactProject("quux", "claude");
+    flush();
 
     expect(workspace.state.pendingCompact.quux).toBe("claude");
     expect(compactHarness.compact).toHaveBeenCalledTimes(3);
@@ -118,9 +121,11 @@ describe("a compaction asked for while the project is busy", () => {
     const workspace = await mountWorkspace();
 
     await workspace.actions.compactProject("quux", "claude");
+    flush();
     expect(workspace.state.pendingCompact.quux).toBe("claude");
 
     workspace.actions.dropPendingCompact("quux");
+    flush();
     expect(workspace.state.pendingCompact.quux).toBeUndefined();
 
     stopRun();

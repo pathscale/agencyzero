@@ -198,6 +198,7 @@ describe("Composer", () => {
     Object.defineProperty(field, "scrollHeight", { configurable: true, value: 0 });
 
     fireEvent.input(field, { target: { value: "still writable" } });
+    flush();
 
     expect(field.style.height).toBe("22px");
     await booted();
@@ -257,6 +258,7 @@ describe("Composer", () => {
     const screen = mount({ draftKey: "project:abc" });
 
     fireEvent.click(screen.getByLabelText("Expand the prompt"));
+    flush();
     await waitFor(() => expect(prefs.expandedComposerKeys).toContain("project:abc"));
     await waitFor(() => expect(screen.field.style.height).toBe("240px"));
     expect(screen.field).toHaveAttribute("rows", "11");
@@ -265,6 +267,7 @@ describe("Composer", () => {
     });
 
     fireEvent.click(screen.getByLabelText("Restore the prompt size"));
+    flush();
     await waitFor(() => expect(prefs.expandedComposerKeys).not.toContain("project:abc"));
     await screen.booted();
   });
@@ -278,6 +281,7 @@ describe("Composer", () => {
     Object.defineProperty(screen.field, "scrollHeight", { configurable: true, value: 900 });
 
     fireEvent.click(screen.getByLabelText("Expand the prompt"));
+    flush();
 
     await waitFor(() => expect(screen.field.style.height).toBe("240px"));
     expect(screen.field.style.maxHeight).toBe("240px");
@@ -426,6 +430,7 @@ describe("an unsent draft", () => {
   it("survives the screen being unmounted and mounted again", async () => {
     const first = mount({ draftKey: "project:abc" });
     fireEvent.input(first.field, { target: { value: "half a thought" } });
+    flush();
     await waitFor(() => expect(prefs.composerDrafts["project:abc"]).toBe("half a thought"));
     first.unmount();
 
@@ -466,6 +471,7 @@ describe("an unsent draft", () => {
     });
 
     fireEvent.input(screen.field, { target: { value: "typed by hand" } });
+    flush();
     await waitFor(() => expect(prefs.composerDrafts["project:undo"]).toBe("typed by hand"));
 
     // The store round trip must not come back as a write onto the element.
@@ -503,22 +509,26 @@ describe("an unsent draft", () => {
     const screen = mount({ draftKey: "project:undo-behaviour" });
 
     fireEvent.input(screen.field, { target: { value: "first thought" } });
+    flush();
     await waitFor(() =>
       expect(prefs.composerDrafts["project:undo-behaviour"]).toBe("first thought"),
     );
     // A separate burst, so the two states do not coalesce into one entry.
     await new Promise((resolve) => setTimeout(resolve, 400));
     fireEvent.input(screen.field, { target: { value: "first thought, then a second" } });
+    flush();
     await waitFor(() =>
       expect(prefs.composerDrafts["project:undo-behaviour"]).toBe("first thought, then a second"),
     );
 
     fireEvent.keyDown(screen.field, { key: "z", metaKey: true });
+    flush();
     await waitFor(() => expect(screen.field.value).toBe("first thought"));
     // The store follows the box, or the next tab switch resurrects the text.
     expect(prefs.composerDrafts["project:undo-behaviour"]).toBe("first thought");
 
     fireEvent.keyDown(screen.field, { key: "z", metaKey: true, shiftKey: true });
+    flush();
     await waitFor(() => expect(screen.field.value).toBe("first thought, then a second"));
     await screen.booted();
   });
@@ -527,9 +537,11 @@ describe("an unsent draft", () => {
     const screen = mount({ draftKey: "project:undo-ctrl" });
 
     fireEvent.input(screen.field, { target: { value: "typed" } });
+    flush();
     await waitFor(() => expect(prefs.composerDrafts["project:undo-ctrl"]).toBe("typed"));
 
     fireEvent.keyDown(screen.field, { key: "z", ctrlKey: true });
+    flush();
     await waitFor(() => expect(screen.field.value).toBe(""));
     await screen.booted();
   });
@@ -538,6 +550,7 @@ describe("an unsent draft", () => {
   it("is kept per tab rather than shared", async () => {
     const first = mount({ draftKey: "project:abc" });
     fireEvent.input(first.field, { target: { value: "for abc" } });
+    flush();
     await waitFor(() => expect(prefs.composerDrafts["project:abc"]).toBe("for abc"));
     first.unmount();
 
@@ -550,9 +563,11 @@ describe("an unsent draft", () => {
   it("is cleared once the message goes", async () => {
     const screen = mount({ draftKey: "project:abc" });
     fireEvent.input(screen.field, { target: { value: "ship it" } });
+    flush();
     await waitFor(() => expect(prefs.composerDrafts["project:abc"]).toBe("ship it"));
 
     fireEvent.click(screen.getByLabelText("Send"));
+    flush();
     await waitFor(() => expect(screen.onSend).toHaveBeenCalled());
     await waitFor(() => expect(prefs.composerDrafts["project:abc"] ?? "").toBe(""));
   });
@@ -660,6 +675,7 @@ describe("a draft belongs to its own tab", () => {
       screen.getByLabelText("Ask, or type / for commands…") as HTMLTextAreaElement;
 
     fireEvent.input(field(), { target: { value: "meant for abc" } });
+    flush();
     await waitFor(() => expect(prefs.composerDrafts["project:abc"]).toBe("meant for abc"));
 
     // The tab changes under the same component instance.
@@ -708,7 +724,9 @@ describe("what the composer holds is per tab", () => {
       screen.getByLabelText("Ask, or type / for commands…") as HTMLTextAreaElement;
 
     fireEvent.input(field(), { target: { value: "/compact" } });
+    flush();
     fireEvent.click(screen.getByLabelText("Send"));
+    flush();
     await waitFor(() => expect(screen.getByText(/no session to compact/)).toBeTruthy());
 
     // The other tab is a different conversation and never failed at anything.
@@ -744,6 +762,7 @@ describe("the alert slot means failure", () => {
 
     type(field, "/compact");
     fireEvent.click(getByLabelText("Send"));
+    flush();
     await waitFor(() => expect(onCompact).toHaveBeenCalled());
 
     type(field, "and this should wait its turn");
@@ -751,6 +770,7 @@ describe("the alert slot means failure", () => {
     expect(send.disabled).toBe(false);
 
     fireEvent.click(send);
+    flush();
     await waitFor(() =>
       expect(onSend).toHaveBeenCalledWith("and this should wait its turn", {
         authoredCharacterCount: 29,
@@ -768,6 +788,7 @@ describe("the alert slot means failure", () => {
 
     type(field, "/compact");
     fireEvent.click(getByLabelText("Send"));
+    flush();
 
     await waitFor(() => expect(onCompact).toHaveBeenCalled());
     // The transcript reports it — a status line while it runs, a note when it
@@ -782,6 +803,7 @@ describe("the alert slot means failure", () => {
 
     type(field, "/compact");
     fireEvent.click(getByLabelText("Send"));
+    flush();
 
     const alert = await waitFor(() => getByRole("alert"));
     expect(alert.textContent).toContain("a run is already active");
@@ -796,6 +818,7 @@ describe("the alert slot means failure", () => {
 
     type(field, "a real prompt");
     fireEvent.click(getByLabelText("Send"));
+    flush();
 
     const alert = await waitFor(() => getByRole("alert"));
     expect(alert.textContent).toContain("still here");
@@ -829,6 +852,7 @@ describe("cost guidance controls", () => {
     expect(entered).toBeGreaterThan(0);
 
     fireEvent.click(screen.getByLabelText("Dismiss"));
+    flush();
     expect(screen.queryByText(/This turn is projected/)).toBeNull();
     await waitFor(() => expect(onChromeChange.mock.calls.length).toBeGreaterThan(entered));
     expect(prefs.costWarningSnoozedUntil).toBeGreaterThan(Date.now());
@@ -840,7 +864,9 @@ describe("cost guidance controls", () => {
     });
     await waitFor(() => expect(screen.getByText("Permanently disable this warning")).toBeTruthy());
     fireEvent.click(screen.getByText("Permanently disable this warning"));
+    flush();
     fireEvent.click(screen.getByRole("button", { name: "Confirm" }));
+    flush();
 
     expect(prefs.costWarningsDisabled).toBe(true);
     expect(screen.queryByText(/This turn is projected/)).toBeNull();
@@ -860,6 +886,7 @@ describe("cost guidance controls", () => {
     const action = await waitFor(() => screen.getByLabelText("Compact context"));
     expect(action.textContent).toMatch(/Compact \$/);
     fireEvent.click(action);
+    flush();
     expect(onCompact).toHaveBeenCalledOnce();
   });
 });
@@ -875,6 +902,7 @@ describe("Extra Thinking", () => {
     expect(button).toHaveAttribute("aria-pressed", "true");
 
     fireEvent.click(button);
+    flush();
     expect(onExtraThinkingChange).toHaveBeenCalledWith(false);
   });
 
@@ -894,6 +922,7 @@ describe("Extra Thinking", () => {
     expect(button).toHaveAttribute("aria-pressed", "false");
 
     fireEvent.click(button);
+    flush();
     expect(onExtraThinkingChange).not.toHaveBeenCalled();
   });
 });

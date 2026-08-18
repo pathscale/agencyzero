@@ -1,3 +1,4 @@
+import { flush } from "solid-js";
 import { fireEvent, render, waitFor } from "@solidjs/testing-library";
 import { describe, expect, it, vi } from "vitest";
 import { IconSprite } from "~/components/IconSprite";
@@ -61,6 +62,7 @@ describe("pull request review buttons", () => {
     const copilot = getByLabelText("Review with Copilot") as HTMLButtonElement;
 
     fireEvent.click(claude);
+    flush();
     expect(claude.disabled).toBe(true);
     expect(claude).toHaveAttribute("aria-busy", "true");
     expect(claude).toHaveAttribute("data-review-state", "running");
@@ -71,6 +73,7 @@ describe("pull request review buttons", () => {
     expect(copilot.disabled).toBe(false);
 
     fireEvent.click(codex);
+    flush();
     expect(review).toHaveBeenCalledTimes(2);
     expect(claude.disabled).toBe(true);
     expect(codex.disabled).toBe(true);

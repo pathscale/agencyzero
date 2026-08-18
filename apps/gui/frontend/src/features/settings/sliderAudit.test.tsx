@@ -1,3 +1,4 @@
+import { flush } from "solid-js";
 /**
  * Every slider in Settings renders, and every one of them moves.
  *
@@ -147,6 +148,7 @@ describe("every slider in Settings", () => {
       const key = before >= max ? "ArrowLeft" : "ArrowRight";
       slider.focus();
       fireEvent.keyDown(slider, { key });
+      flush();
 
       await waitFor(
         () => {
@@ -185,6 +187,7 @@ describe("every slider in Settings", () => {
 
       slider.focus();
       fireEvent.keyDown(slider, { key });
+      flush();
       const released = sliderValue(slider);
       expect(released, `${name} did not move under ${key}`).not.toBe(before);
 

@@ -1,6 +1,6 @@
 import { Switch } from "@pathscale/ui";
 import { fireEvent, render, screen } from "@solidjs/testing-library";
-import { createSignal } from "solid-js";
+import { createSignal, flush } from "solid-js";
 import { describe, expect, it } from "vitest";
 import { SectionPanel } from "./Panel";
 
@@ -34,12 +34,14 @@ describe("SectionPanel", () => {
     expect(content).toHaveAttribute("aria-hidden", "true");
 
     fireEvent.click(screen.getByRole("button", { name: "Settings" }));
+    flush();
 
     expect(view.container.querySelector('[data-slot="switch-input"]')).toBe(control);
     expect(content).not.toHaveClass("hidden");
     expect(content).not.toHaveAttribute("aria-hidden");
 
     fireEvent.click(screen.getByRole("button", { name: "Settings" }));
+    flush();
 
     expect(view.container.querySelector('[data-slot="switch-input"]')).toBe(control);
     expect(content).toHaveClass("hidden");

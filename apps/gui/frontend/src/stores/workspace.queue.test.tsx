@@ -1,3 +1,4 @@
+import { flush } from "solid-js";
 import { render, waitFor } from "@solidjs/testing-library";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { SETTINGS } from "~/api/fixtures";
@@ -75,6 +76,7 @@ describe("queued live follow-ups", () => {
     });
 
     await workspace.actions.send("quux", "connect?");
+    flush();
     expect(workspace.state.queued.quux).toHaveLength(1);
     expect(queueHarness.send).toHaveBeenCalledTimes(1);
 
@@ -87,6 +89,7 @@ describe("queued live follow-ups", () => {
     const workspace = await mountWorkspace();
 
     await workspace.actions.retry("quux", "msg-interrupted", "continue the audit");
+    flush();
 
     expect(queueHarness.send).toHaveBeenCalledWith(
       expect.objectContaining({
