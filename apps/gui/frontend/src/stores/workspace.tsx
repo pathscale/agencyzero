@@ -1216,17 +1216,28 @@ function createWorkspace() {
           }),
         );
       });
+      /*
+       * Built here and read from here, not through `state.tabs`.
+       *
+       * Solid 2 defers a store write, so `state.tabs` still holds its previous
+       * value on the lines below and every read of it during boot saw Home
+       * alone: nothing matched `rememberedActive`, `openProjectIds` came out
+       * empty, and boot logged "loading 0 open project(s)" while restoring a
+       * strip full of them. Solid 1 applied the write eagerly, which is the
+       * only reason reading the store back here ever worked.
+       */
+      const restoredTabs = [
+        HOME_TAB,
+        ...Array.from(new Set(rememberedKeys))
+          .map((key) => projectsById.get(key))
+          .filter((project): project is Project => Boolean(project))
+          .map((project) => projectTab(project)),
+      ];
       setState((d) => {
-        d.tabs = [
-          HOME_TAB,
-          ...Array.from(new Set(rememberedKeys))
-            .map((key) => projectsById.get(key))
-            .filter((project): project is Project => Boolean(project))
-            .map((project) => projectTab(project)),
-        ];
+        d.tabs = restoredTabs;
       });
       const rememberedActive = portableTabs?.activeProjectKey ?? prefs.lastTabKey;
-      const restored = state.tabs.some((tab) => tab.key === rememberedActive);
+      const restored = restoredTabs.some((tab) => tab.key === rememberedActive);
       lastPortableActiveKey = restored ? rememberedActive : "home";
       setState((d) => {
         d.activeKey = lastPortableActiveKey;
@@ -1245,9 +1256,11 @@ function createWorkspace() {
        * order the project someone is actually looking at was as likely as not
        * to be the one at the back of that queue.
        */
-      const openProjectIds = state.tabs
+      const openProjectIds = restoredTabs
         .flatMap((tab) => (tab.projectId === null ? [] : [tab.projectId]))
-        .sort((left, right) => (left === state.activeKey ? -1 : right === state.activeKey ? 1 : 0));
+        .sort((left, right) =>
+          left === lastPortableActiveKey ? -1 : right === lastPortableActiveKey ? 1 : 0,
+        );
       log.info(`boot: loading ${openProjectIds.length} open project(s); ${projects.length} total`);
       await Promise.all([
         ...openProjectIds.map(loadProject),
@@ -2002,8 +2015,21 @@ function createWorkspace() {
 
   // — tabs ————————————————————————————————————————————————————————
 
-  function focus(key: string): void {
-    if (!state.tabs.some((tab) => tab.key === key)) return;
+  /**
+   * Focus a tab.
+   *
+   * `justOpened` is set by the callers that append a tab and focus it in the
+   * same tick. Solid 2 defers a store write, so the appended tab is *not* in
+   * `state.tabs` when the membership guard below reads it synchronously, and
+   * the guard would reject the very tab its caller just created. Under Solid 1
+   * the write applied eagerly and the read saw it, which is why this worked
+   * before and why the whole strip stopped switching after the upgrade.
+   *
+   * The guard is still worth keeping for every other caller: it is what stops
+   * a focus on a tab that was closed, or never existed.
+   */
+  function focus(key: string, justOpened = false): void {
+    if (!justOpened && !state.tabs.some((tab) => tab.key === key)) return;
     /*
      * A tab switch is one signal write, so everything it costs happens after
      * this returns: the outgoing tab hides, the incoming one reveals, and this
@@ -2120,7 +2146,7 @@ function createWorkspace() {
         });
       })
       .catch((cause) => log.error(`could not load ${projectId}: ${describeError(cause)}`));
-    focus(projectId);
+    focus(projectId, true);
   }
 
   /** Route a compact transcript item link to its owning project and row. */
@@ -2158,7 +2184,7 @@ function createWorkspace() {
         ])(d.tabs);
       });
     }
-    focus("settings");
+    focus("settings", true);
   }
 
   /** Replay the guide from Help without changing its durable completion flag. */
@@ -2210,7 +2236,7 @@ function createWorkspace() {
         ])(d.tabs);
       });
     }
-    focus("analytics");
+    focus("analytics", true);
   }
 
   /** One draft at a time: a second "+" focuses the Untitled tab already open. */
@@ -2243,7 +2269,7 @@ function createWorkspace() {
         },
       ])(d.tabs);
     });
-    focus(key);
+    focus(key, true);
   }
 
   function closeTab(key: string): void {
