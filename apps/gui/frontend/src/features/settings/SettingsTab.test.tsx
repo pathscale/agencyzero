@@ -207,6 +207,12 @@ describe("local debug control", () => {
     )) as HTMLInputElement;
 
     fireEvent.click(profiling);
+    /*
+     * `flush` lands the optimistic signal the click wrote, which is what this
+     * test is about; it does not await the backend. The assertion below still
+     * proves the store has not answered, so the point of the test survives.
+     */
+    flush();
 
     // Same tick as the click: the store has not answered yet.
     expect(screen.workspace.state.settings?.blitzDeepProfilingEnabled).not.toBe(true);
@@ -321,6 +327,8 @@ describe("cost warning settings", () => {
     Object.defineProperty(track, "setPointerCapture", { value: () => {} });
 
     fireEvent.pointerDown(track, { clientX: 100, pointerId: 1 });
+
+    flush();
 
     // Shown at once, and not yet written: the store round trip belongs to the
     // release, so a drag cannot queue one serialized write per tick.
