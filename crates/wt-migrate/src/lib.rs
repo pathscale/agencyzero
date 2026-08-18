@@ -1338,6 +1338,80 @@ pub async fn recover_pull_request_index(
     })
 }
 
+
+/// Insert recovered items, as JSON, into an existing store.
+///
+/// The companion to [`salvage_item_index`] for the case that verb cannot
+/// serve: a table whose primary index is both torn *and* incomplete, where the
+/// rows survive only as field text in the data file. Extraction happens
+/// outside this crate; this is the part that has to go through the real
+/// schema, so what lands is a row the app can read rather than bytes that
+/// merely look right.
+///
+/// Inserts are by id and skip what is already present, so a re-run after a
+/// partial restore adds only the difference.
+pub async fn restore_items_from_json(
+    target: &Path,
+    json: &str,
+) -> eyre::Result<(usize, usize)> {
+    use app_schema::project_item::{
+        ProjectItemPersistenceEngine, ProjectItemRow, ProjectItemWorkTable,
+    };
+
+    #[derive(serde::Deserialize)]
+    struct Recovered {
+        #[serde(rename = "projectId")]
+        project_id: String,
+        title: String,
+        status: String,
+    }
+
+    let parsed: std::collections::BTreeMap<String, Recovered> = serde_json::from_str(json)?;
+    let config = DiskConfig::new_with_table_name(
+        target.to_string_lossy().into_owned(),
+        ProjectItemWorkTable::name_snake_case(),
+        ProjectItemWorkTable::version(),
+    );
+    let engine = ProjectItemPersistenceEngine::new(config).await?;
+    let table = ProjectItemWorkTable::load(engine).await?;
+
+    let existing: std::collections::BTreeSet<String> = table
+        .select_all()
+        .execute()?
+        .into_iter()
+        .map(|row| row.id)
+        .collect();
+
+    let mut inserted = 0usize;
+    let mut skipped = 0usize;
+    for (position, (id, item)) in parsed.into_iter().enumerate() {
+        if existing.contains(&id) {
+            skipped += 1;
+            continue;
+        }
+        let row = ProjectItemRow {
+            id,
+            project_id: item.project_id,
+            title: item.title,
+            status: item.status,
+            position: u32::try_from(position).unwrap_or(0),
+            reference: String::new(),
+            // Recovered rows carry no ranking: the column postdates them, and
+            // guessing an order is worse than letting every row read normal.
+            priority: 0,
+        };
+        table
+            .insert(row)
+            .map_err(|error| eyre::eyre!("project_item: {error}"))?;
+        inserted += 1;
+    }
+    table
+        .wait_for_ops()
+        .await
+        .map_err(|error| eyre::eyre!("project_item persistence failed: {error}"))?;
+    Ok((inserted, skipped))
+}
+
 /// Rebuild `project_item` from its data file, omitting index entries whose row
 /// bytes cannot be read.
 ///

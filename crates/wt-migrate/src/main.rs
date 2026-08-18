@@ -202,6 +202,57 @@ fn main() -> ExitCode {
      * migration then reports `reset: project_item` and exits 0, so the loss
      * looks like a successful upgrade.
      */
+    /*
+     * restore-items <target-store> <items.json>: insert recovered items into a
+     * store that has lost them.
+     *
+     * Writes through the real schema rather than crafting bytes, so what lands
+     * is a row the app can read. Inserts are by id and idempotent, which
+     * matters because the first thing an operator does after a partial restore
+     * is run it again.
+     */
+    if args.first().map(String::as_str) == Some("restore-items") {
+        args.remove(0);
+        let [target, json_path] = args.as_slice() else {
+            eprintln!("usage: wt-migrate restore-items <target-store> <items.json>");
+            return ExitCode::from(2);
+        };
+        let target = PathBuf::from(target);
+        if !target.join("project_item").is_dir() {
+            eprintln!("{target:?} has no project_item table; check the path.");
+            return ExitCode::from(2);
+        }
+        let json = match std::fs::read_to_string(json_path) {
+            Ok(text) => text,
+            Err(error) => {
+                eprintln!("could not read {json_path}: {error}");
+                return ExitCode::from(2);
+            }
+        };
+        let runtime = match tokio::runtime::Builder::new_multi_thread()
+            .worker_threads(2)
+            .enable_io()
+            .enable_time()
+            .build()
+        {
+            Ok(runtime) => runtime,
+            Err(error) => {
+                eprintln!("could not start a runtime: {error}");
+                return ExitCode::FAILURE;
+            }
+        };
+        return match runtime.block_on(wt_migrate::restore_items_from_json(&target, &json)) {
+            Ok((inserted, skipped)) => {
+                println!("restored {inserted} item(s), {skipped} already present");
+                ExitCode::SUCCESS
+            }
+            Err(error) => {
+                eprintln!("restore failed: {error}");
+                ExitCode::FAILURE
+            }
+        };
+    }
+
     if args.first().map(String::as_str) == Some("salvage-item-index") {
         args.remove(0);
         let [source, target] = args.as_slice() else {

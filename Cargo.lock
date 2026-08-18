@@ -83,7 +83,7 @@ dependencies = [
  "serde_json",
  "tokio",
  "uuid",
- "worktable 1.0.0-beta.10 (registry+https://github.com/rust-lang/crates.io-index)",
+ "worktable",
 ]
 
 [[package]]
@@ -400,7 +400,7 @@ dependencies = [
  "tokio",
  "url",
  "uuid",
- "worktable 1.0.0-beta.10 (git+https://github.com/pathscale/WorkTable.git?rev=7ab68d17c31e7dd3e56a364ffbb559dd0819b317)",
+ "worktable",
  "wt-migrate",
  "zip",
 ]
@@ -8835,38 +8835,6 @@ checksum = "1ebf944e87a7c253233ad6766e082e3cd714b5d03812acc24c318f549614536e"
 [[package]]
 name = "worktable"
 version = "1.0.0-beta.10"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "424244aef8a2162ade170468ada2d4046379538bc42a21cbdf48f528a97f5e94"
-dependencies = [
- "WorkTablesIndex",
- "arctic-wt",
- "async-trait",
- "congee-wt",
- "convert_case 0.6.0",
- "crc32fast",
- "data_bucket",
- "derive_more 2.1.1",
- "eyre",
- "fastrand",
- "futures",
- "indexset",
- "log",
- "ordered-float",
- "parking_lot",
- "prettytable-rs",
- "psc-nanoid",
- "rkyv 0.8.17",
- "rustc-hash 2.1.3",
- "smart-default",
- "tokio",
- "tracing",
- "uuid",
- "worktable_codegen 1.0.0-beta.10 (registry+https://github.com/rust-lang/crates.io-index)",
-]
-
-[[package]]
-name = "worktable"
-version = "1.0.0-beta.10"
 source = "git+https://github.com/pathscale/WorkTable.git?rev=7ab68d17c31e7dd3e56a364ffbb559dd0819b317#7ab68d17c31e7dd3e56a364ffbb559dd0819b317"
 dependencies = [
  "WorkTablesIndex",
@@ -8892,21 +8860,7 @@ dependencies = [
  "tokio",
  "tracing",
  "uuid",
- "worktable_codegen 1.0.0-beta.10 (git+https://github.com/pathscale/WorkTable.git?rev=7ab68d17c31e7dd3e56a364ffbb559dd0819b317)",
-]
-
-[[package]]
-name = "worktable_codegen"
-version = "1.0.0-beta.10"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "47b741a448603e7a016bf8369b93883f58186554d25cbb70dbaa28b64047d5a5"
-dependencies = [
- "convert_case 0.6.0",
- "indexmap 2.14.0",
- "proc-macro2",
- "quote",
- "rkyv 0.7.46",
- "syn 2.0.119",
+ "worktable_codegen",
 ]
 
 [[package]]
@@ -8986,10 +8940,12 @@ dependencies = [
  "futures",
  "libc",
  "rkyv 0.8.17",
+ "serde",
+ "serde_json",
  "tempfile",
  "tokio",
  "uuid",
- "worktable 1.0.0-beta.10 (registry+https://github.com/rust-lang/crates.io-index)",
+ "worktable",
 ]
 
 [[package]]
