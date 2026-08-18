@@ -16,7 +16,7 @@
     "lint": "biome check .",
     "format": "biome format . --write",
     "test": "vitest",
-    "test:run": "vitest run",
+    "test:run": "NODE_ENV=production vitest run",
     "test:coverage": "vitest run --coverage",
     "bench": "vitest run --config vitest.bench.config.ts --reporter=verbose"
   },

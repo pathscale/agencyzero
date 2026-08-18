@@ -1323,9 +1323,10 @@ function ProjectGroup(props: {
         (pencil, pin, delete, chevron) stop propagation to stay themselves.
       */}
       {/* biome-ignore lint/a11y/useSemanticElements: the header carries its own buttons (pencil, pin, delete), and nesting those in a native button is invalid HTML — the same split SectionPanel makes. */}
+      {/* biome-ignore lint/a11y/useFocusableInteractive: `tabindex` is here and is a string, which is how Solid 2 types DOM attributes; the rule only recognises the numeric form. */}
       <div
         role="button"
-        tabindex={0}
+        tabindex="0"
         aria-expanded={!collapsed() ? "true" : "false"}
         onClick={foldSoon}
         onDblClick={openNow}

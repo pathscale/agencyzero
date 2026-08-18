@@ -124,10 +124,23 @@ function matchesSearch(text: string): boolean {
  * the DOM stops reporting, and a section that has forgotten it ever had a
  * matching row can never come back when the query changes.
  */
+/*
+ * Defaulted to `null`, because a row outside a section is a supported shape.
+ *
+ * Every consumer reads this as `scope?.…`, so a `Row` rendered without a
+ * `Section` around it has always been allowed. Solid 2 made that throw:
+ * `getContext` raises `ContextNotFoundError` when the resolved value is
+ * `undefined`, and it throws before the optional chain can run.
+ *
+ * The cost was not a bad row. The throw escaped a mount effect, halted the
+ * reactive system, and left `boot.status` on "loading" forever, so every
+ * `waitFor` on ready polled until the process died. That was the settings
+ * suite's out-of-memory abort.
+ */
 const SearchScope = createContext<{
   titleMatches: () => boolean;
   report: (label: string, hit: boolean) => void;
-}>();
+} | null>(null);
 
 /**
  * Global settings, opened by the gear as a real tab you can leave open.
@@ -2836,7 +2849,13 @@ function Row(props: {
   const hit = createMemo(() => matchesSearch(`${props.label} ${props.hint ?? ""}`));
   // Reported rather than read: only the row knows its own words, and the
   // section needs to know whether any of them answered the search.
-  createEffect(() => scope?.report(props.label, hit()));
+  createEffect(
+    // Tracked: whether this row's words answer the query.
+    () => hit(),
+    // Untracked: reporting writes into the section, and a write in the compute
+    // re-arms the computation on its own write.
+    (matched) => scope?.report(props.label, matched),
+  );
   onCleanup(() => scope?.report(props.label, false));
   // A section named by the query shows all of its rows: someone searching
   // "cost" wants the section, not the one row whose label repeats the word.

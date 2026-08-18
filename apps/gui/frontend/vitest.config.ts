@@ -7,7 +7,23 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 
 export default defineConfig({
   plugins: [
-    solidPlugin({ hot: process.env.NODE_ENV !== "test" }),
+    /*
+     * `hot` is keyed off an explicit flag, not `NODE_ENV`.
+     *
+     * The suite has to run with `NODE_ENV=production`, because that is the
+     * only thing that stops `@solidjs/signals` resolving its dev build, and
+     * the dev build carries `REACTIVE_WRITE_IN_OWNED_SCOPE`. That guard
+     * rejects a store write made from a different owner than the one that
+     * created the store, which is this workspace's shape by design: mounting
+     * `SettingsTab` throws, the reactive system halts mid-boot, `boot.status`
+     * never leaves "loading", and every `waitFor` on it polls until the
+     * process is killed for running out of memory.
+     *
+     * Reading `NODE_ENV` here too would have turned hot-reload back on in the
+     * same breath, which is what made the earlier attempt report "no tests":
+     * the transform stopped compiling JSX.
+     */
+    solidPlugin({ hot: process.env.AZ_TEST_HOT === "1" }),
     /*
      * Run the Solid that ships, not the dev build.
      *
