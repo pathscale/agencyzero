@@ -551,14 +551,23 @@ export function SettingsTab(): JSX.Element {
                       that looked available, did nothing, and then lost its
                       value when inspection was toggled.
                     */}
+                    {/*
+                      Permission, not activation, and the wording has to say so.
+                      The switch used to start collection outright, so a profile
+                      enabled once sampled from boot for a reader that was not
+                      there: the consumers are the inspector and blitz-bench,
+                      and both are separate processes. Sampling now runs only
+                      while one of them is attached, and "active" would claim
+                      something this control no longer does on its own.
+                    */}
                     <SettingToggle
-                      label={tx("Enable deep intrusive profiling")}
+                      label={tx("Allow deep intrusive profiling")}
                       checked={displayedDeepProfiling()}
                       onChange={setBlitzDeepProfiling}
                     />
                     <span class="max-w-[260px] text-right text-[10.5px] text-az-muted">
                       {displayedDeepProfiling()
-                        ? tx("Intrusive profiling active")
+                        ? tx("Allowed. Samples only while a profiler is attached")
                         : tx("No deep samples collected")}
                     </span>
                   </div>
