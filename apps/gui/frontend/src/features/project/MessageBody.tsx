@@ -60,30 +60,6 @@ export async function copyText(text: string): Promise<boolean> {
 }
 
 /**
- * Read the clipboard, by whichever route works here.
- *
- * The mirror of {@link copyText}, and it exists for the same reason that one
- * does: the renderer that ships is Blitz, not WebKit, and it dispatches no
- * `paste` event to JS at all. Blitz answers ⌘V itself, but only for a focused
- * native text input (`blitz-dom`'s `text.rs`), so a paste aimed at anything
- * else reached no handler in either language and did nothing at all.
- *
- * `execCommand("paste")` is deliberately not a fallback. It is refused for
- * scripted callers everywhere for the obvious reason — a page that can read the
- * clipboard unprompted can read your password manager — so there is nothing to
- * fall back *to*. A refusal here is the real answer, and the caller leaves the
- * field alone rather than clearing it.
- */
-export async function pasteText(): Promise<string | null> {
-  try {
-    return await navigator.clipboard.readText();
-  } catch (cause) {
-    log.warn(`the clipboard could not be read: ${describeError(cause)}`);
-    return null;
-  }
-}
-
-/**
  * Enough markdown for what the agent actually emits: paragraphs, `**bold**`,
  * `` `code` `` and fenced blocks.
  *

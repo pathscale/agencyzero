@@ -1,5 +1,13 @@
 /**
- * Make Cmd/Ctrl+C copy exactly what is highlighted.
+ * Make Cmd/Ctrl+C copy exactly what is highlighted, under `bun run dev`.
+ *
+ * Dev-only in practice, and worth knowing before reading this as the app's copy
+ * behaviour: it hangs on a `copy` event, and the renderer that ships is Blitz,
+ * which dispatches no `copy`, `cut` or `paste` event and has no `ClipboardEvent`
+ * at all. In the packaged app this listener never fires — copying there is the
+ * renderer's own path in `blitz-dom`, plus the narrow document-selection case
+ * `features/tabs/shortcuts.ts` answers. This stays because the browser dev
+ * server is a real WebKit/Chromium page where it is both live and correct.
  *
  * The app sets `user-select: none` globally (so the window drags like a native
  * one) with `data-selectable` islands opted back in. WebKit's keyboard Copy

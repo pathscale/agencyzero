@@ -1,5 +1,5 @@
-import { onCleanup, onSettled } from "solid-js";
-import { copyText, pasteText } from "~/features/project/MessageBody";
+import { onSettled } from "solid-js";
+import { copyText } from "~/features/project/MessageBody";
 import { isBlitz, isTauri } from "~/lib/platform";
 import { useWorkspace } from "~/stores/workspace";
 
@@ -29,39 +29,31 @@ export function useTabShortcuts(): void {
 
   const onKeyDown = (event: KeyboardEvent) => {
     /*
-     * Cmd+C and Ctrl+C, served here rather than left to the Edit menu.
+     * Cmd+C and Ctrl+C over a document selection, as a fallback.
      *
-     * The menu carries a predefined Copy and it still came back empty, so the
-     * keystroke is answered directly: read what is selected, write it to the
-     * clipboard. Nothing is prevented, so if the native copy does work it puts
-     * the same text there and this costs nothing.
+     * Blitz copies a document selection in `blitz-dom`'s `keyboard.rs`, and it
+     * used to decline whenever *any* text input held focus — so a composer that
+     * keeps focus, which is the normal state of this window, meant selecting a
+     * passage in the transcript and pressing Cmd+C copied nothing. That is now
+     * fixed in the renderer: the field keeps the keystroke only when it has a
+     * selection of its own, which is the same rule applied below.
      *
-     * Fields are included, and skipping them was a bug. The reasoning was that
-     * a text field's own copy is already correct, but the native route is the
-     * one that was broken in the first place, so deferring to it inside the
-     * composer meant copying out of the prompt box silently did nothing. A
-     * field also keeps its selection in `selectionStart`/`selectionEnd` rather
-     * than in the document selection, so it needs reading a different way.
+     * This stays because the two move on different clocks. `apps/gui` pins a
+     * published `ps-blitz`, so until the renderer fix reaches a pin, this is
+     * what makes Cmd+C work in the shipping app. It is also what makes it work
+     * under `bun run dev`, where the renderer is not involved at all.
+     *
+     * Safe to run alongside the renderer's own copy: nothing is prevented, and
+     * both write the identical string to the same shell clipboard, so the worst
+     * case is one redundant write rather than a wrong result.
      */
     if ((event.metaKey || event.ctrlKey) && (event.key === "c" || event.code === "KeyC")) {
       const target = event.target as HTMLElement | null;
       const field =
         target instanceof HTMLTextAreaElement || target instanceof HTMLInputElement ? target : null;
 
-      if (field) {
-        const from = field.selectionStart ?? 0;
-        const to = field.selectionEnd ?? 0;
-        if (to > from) {
-          void copyText(field.value.slice(from, to)).then(() => {
-            // The fallback borrows focus and the selection to do its work, so
-            // both are put back. Otherwise copying inside the composer would
-            // drop the cursor and lose the highlight that was just copied.
-            field.focus();
-            field.setSelectionRange(from, to);
-          });
-        }
-        return;
-      }
+      // The field owns the keystroke whenever it has something selected.
+      if (field && (field.selectionEnd ?? 0) > (field.selectionStart ?? 0)) return;
 
       const selected = document.getSelection()?.toString() ?? "";
       if (selected.length > 0) void copyText(selected);
@@ -69,43 +61,23 @@ export function useTabShortcuts(): void {
     }
 
     /*
-     * Cmd+V and Ctrl+V into a text field, for the same reason Copy is here.
+     * Cmd+V and Ctrl+V are the renderer's, and taking them here was the bug.
      *
-     * Blitz dispatches no `paste` event to JS, and answers the chord itself
-     * only for a focused native text input. That covers the composer, so this
-     * is not where pasting into it comes from — but the native route writes
-     * straight into the editor's own buffer, and a controlled Solid field then
-     * holds a `value` the DOM no longer matches. Answering it here keeps the
-     * signal and the element in step.
+     * Blitz pastes into a focused text input itself (`text.rs`, the `Paste`
+     * arm), reading the same shell clipboard `pasteText` reaches through
+     * `navigator.clipboard`, then emitting the `input` event a controlled Solid
+     * field needs. That is the whole job, done in one place.
      *
-     * Only fields. A paste with nothing focused to receive it has no meaning,
-     * and reading the clipboard to discard it would be a permission prompt for
-     * nothing.
+     * This handler used to call `preventDefault` and redo it in JS. Blitz gates
+     * the default action on `is_cancelled()`, so preventing the keystroke
+     * suppressed the native paste, and the JS half then had to work — leaving
+     * pasting broken whenever the shell clipboard was unavailable, which it
+     * always was until `blitz-shell` stopped rebuilding its `arboard` handle
+     * per keystroke. Two half-implementations cancelling out is why pasting
+     * into the composer and into a new project's prompt did nothing.
+     *
+     * So: no handler. The renderer's paste is the one that runs.
      */
-    if ((event.metaKey || event.ctrlKey) && (event.key === "v" || event.code === "KeyV")) {
-      const target = event.target as HTMLElement | null;
-      const field =
-        target instanceof HTMLTextAreaElement || target instanceof HTMLInputElement ? target : null;
-      if (!field || field.readOnly || field.disabled) return;
-
-      // Prevent the native insert, so text cannot land twice when the renderer
-      // also handles the chord.
-      event.preventDefault();
-
-      const from = field.selectionStart ?? field.value.length;
-      const to = field.selectionEnd ?? from;
-      void pasteText().then((text) => {
-        if (text === null || text.length === 0) return;
-        field.value = `${field.value.slice(0, from)}${text}${field.value.slice(to)}`;
-        const caret = from + text.length;
-        field.setSelectionRange(caret, caret);
-        // A controlled field takes its value from a signal that only an `input`
-        // event updates. Without this the character count, the autosize and the
-        // submitted text all keep the value from before the paste.
-        field.dispatchEvent(new Event("input", { bubbles: true }));
-      });
-      return;
-    }
 
     if (event.altKey || event.shiftKey) return;
 
