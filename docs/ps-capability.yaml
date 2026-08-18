@@ -25,6 +25,13 @@ standing_promotion:
     - agency:pr.retire
     - agency:issue.link
     - agency:app.restart
+    # Liveness. `ping` is injected by the run loop into a turn that has gone
+    # silent, and `pong` is the agent's reply; neither is persisted or shown.
+    # `alert` is the agent declaring long blocking work up front, and is shown
+    # to the owner so an expected silence does not read as a stalled run.
+    - agency:ping
+    - agency:pong
+    - agency:alert
 
   # 13.2.2 Verbs and values reserved to principals above the agent.
   reserved: []
@@ -57,6 +64,14 @@ standing_promotion:
     # mode is disk | update. Both require an explicit owner policy; update uses
     # the signed application updater before the tiny relaunch angel is spawned.
     agency:app.restart: [mode]
+    # Argument-free: a liveness exchange carries no state, only the fact that
+    # the turn reached the line while still running.
+    agency:ping: []
+    agency:pong: []
+    # `what` is the work, in the agent's own words, and is shown to the owner.
+    # `seconds` is how long it is expected to block; the run loop clamps it to
+    # its own idle window at the low end and thirty minutes at the high end.
+    agency:alert: [what, seconds]
 
   semantics:
     pr_urls_in_prose: inert
