@@ -36,6 +36,8 @@ usage: blitz-bench <mode> [args]
   blink [allowed-missed]      assert the owner's blinking-rectangle repro: no
                               missed refreshes and no frame interval past two
                               refresh periods. Exits 1 when the blink is present
+  ghost [min-area]            hidden nodes that still own a painted box, worst
+                              first. Exits 1 when any is found (default 64px2)
   drift [seconds]             what the app does while nothing happens (default 20)
   frames                      one metrics read, laid out for reading
   metrics                     the raw metrics response
@@ -1112,6 +1114,106 @@ async fn main() -> Result<()> {
          * blink does not move it enough to fail on, which is how "the window is
          * quiet" was concluded from a sample that contained a 477ms stall.
          */
+        /*
+         * Controls that are meant to be hidden and still take up space.
+         *
+         * The class of fault this catches has now shipped twice, and neither
+         * time did a component test see it, because both are about geometry in
+         * the real renderer rather than behaviour in a DOM stub. A field hidden
+         * by styling the input alone leaves the library's wrapper in the
+         * layout: measured beside every project name, a 101x46 box painting as
+         * a black rectangle and squeezing the name next to it down to a few
+         * characters.
+         *
+         * The rule is narrow on purpose. A node whose accessible name says it
+         * belongs to an inactive control - a rename editor with no editor open
+         * - must not own a painted box. Anything genuinely displayed is
+         * expected to have one, so this reports only boxes that are both
+         * sizeable and attached to something the tree calls hidden.
+         */
+        "ghost" => {
+            let min_area: f64 = args.get(1).and_then(|v| v.parse().ok()).unwrap_or(64.0);
+            let answer = client
+                .diagnostics(&DiagnosticsRequest::Snapshot(SnapshotRequest {
+                    include_dom: true,
+                    include_layout: true,
+                    include_computed_style: false,
+                }))
+                .await?;
+            let DebugResponse::Snapshot(snapshot) = answer.response else {
+                bail!("asked for a layout snapshot, got {:?}", answer.response);
+            };
+
+            let mut boxes: HashMap<u64, (f64, f64, f64, f64)> = HashMap::new();
+            if let Some(rows) = snapshot.layout.as_ref().and_then(|v| v.as_array()) {
+                for row in rows {
+                    let Some(id) = row.get("nodeId").and_then(|v| v.as_u64()) else {
+                        continue;
+                    };
+                    let read = |key: &str, index: usize| {
+                        row.get("bounds")
+                            .and_then(|b| b.get(key).or_else(|| b.get(index)))
+                            .and_then(|v| v.as_f64())
+                            .unwrap_or(0.0)
+                    };
+                    boxes.insert(id, (read("x", 0), read("y", 1), read("width", 2), read("height", 3)));
+                }
+            }
+
+            let nodes = snapshot
+                .dom
+                .as_ref()
+                .and_then(|v| v.as_array())
+                .cloned()
+                .unwrap_or_default();
+
+            let mut ghosts = Vec::new();
+            for node in &nodes {
+                // The snapshot spells this as `visible`, which is what `dom`
+                // mode prints as HIDDEN. Reading a `hidden` key instead found
+                // nothing and reported a clean run, which is the failure mode a
+                // check like this must not have.
+                let visible = node
+                    .get("visible")
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(true);
+                if visible {
+                    continue;
+                }
+                let Some(id) = node.get("id").and_then(|v| v.as_u64()) else {
+                    continue;
+                };
+                let Some(&(x, y, w, h)) = boxes.get(&id) else {
+                    continue;
+                };
+                if w * h >= min_area {
+                    let name = node
+                        .get("name")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("")
+                        .to_string();
+                    ghosts.push((id, name, x, y, w, h));
+                }
+            }
+            ghosts.sort_by(|a, b| (b.4 * b.5).total_cmp(&(a.4 * a.5)));
+
+            println!(
+                "{} nodes inspected, reporting hidden boxes of {min_area}px2 or more",
+                nodes.len()
+            );
+            for (id, name, x, y, w, h) in &ghosts {
+                println!("  {id:>10}  {w:>7.1}x{h:<7.1} at {x:.0},{y:.0}  {name}");
+            }
+            if ghosts.is_empty() {
+                println!("\nno ghosts: nothing hidden is holding a painted box");
+            } else {
+                println!(
+                    "\nGHOSTS PRESENT: {} hidden node(s) still occupy layout",
+                    ghosts.len()
+                );
+                std::process::exit(1);
+            }
+        }
         "blink" => {
             let allowed_missed: u64 = args.get(1).and_then(|v| v.parse().ok()).unwrap_or(0);
             let reading = metrics(&mut client).await?;
