@@ -136,7 +136,7 @@ describe("startup", () => {
 
     expect(workspace.state.boot.status).toBe("ready");
     workspace.actions.openSettings();
-    expect(workspace.state.activeKey).toBe("settings");
+    await waitFor(() => expect(workspace.state.activeKey).toBe("settings"));
   });
 
   it("opens Home plus the remembered tabs, in project order", async () => {
@@ -172,7 +172,7 @@ describe("startup", () => {
     const workspace = await mountWorkspace();
 
     expect(keys(workspace)).toEqual(["home", "quux", "cafe"]);
-    expect(workspace.state.activeKey).toBe("cafe");
+    await waitFor(() => expect(workspace.state.activeKey).toBe("cafe"));
     expect(workspace.state.transcriptPositions).toEqual({ quux: 321, cafe: 0 });
   });
 
@@ -232,7 +232,7 @@ describe("item reference routing", () => {
 
     revealItemReference("cafe-0");
 
-    expect(workspace.state.activeKey).toBe("cafe");
+    await waitFor(() => expect(workspace.state.activeKey).toBe("cafe"));
     expect(workspace.state.itemReveal?.id).toBe("cafe-0");
     expect(prefs.projectPanelVisible).toBe(true);
     expect(prefs.panelSections.items).toBe(true);
@@ -248,7 +248,7 @@ describe("item reference routing", () => {
     });
 
     expect(workspace.actions.revealItem("cafe-0")).toBe(true);
-    expect(workspace.state.activeKey).toBe("cafe");
+    await waitFor(() => expect(workspace.state.activeKey).toBe("cafe"));
     expect(workspace.state.itemReveal?.id).toBe("cafe-0");
     expect(prefs.projectPanelVisible).toBe(true);
     expect(prefs.panelSections.items).toBe(true);
@@ -259,7 +259,7 @@ describe("item reference routing", () => {
     const before = workspace.state.activeKey;
 
     expect(workspace.actions.revealItem("item-missing")).toBe(false);
-    expect(workspace.state.activeKey).toBe(before);
+    await waitFor(() => expect(workspace.state.activeKey).toBe(before));
   });
 });
 
@@ -269,7 +269,7 @@ describe("cycleTab", () => {
     workspace.actions.focus("quux");
 
     workspace.actions.cycleTab(1);
-    expect(workspace.state.activeKey).toBe("home");
+    await waitFor(() => expect(workspace.state.activeKey).toBe("home"));
   });
 
   it("steps back and wraps at the start", async () => {
@@ -277,7 +277,7 @@ describe("cycleTab", () => {
     workspace.actions.focus("home");
 
     workspace.actions.cycleTab(-1);
-    expect(workspace.state.activeKey).toBe("quux");
+    await waitFor(() => expect(workspace.state.activeKey).toBe("quux"));
   });
 
   /*
@@ -287,11 +287,11 @@ describe("cycleTab", () => {
   it("follows the strip after a reorder rather than the original order", async () => {
     const workspace = await mountWorkspace();
     workspace.actions.moveTab("quux", 1);
-    expect(keys(workspace)).toEqual(["home", "quux", "worktable", "cafe"]);
+    await waitFor(() => expect(keys(workspace)).toEqual(["home", "quux", "worktable", "cafe"]));
 
     workspace.actions.focus("home");
     workspace.actions.cycleTab(1);
-    expect(workspace.state.activeKey).toBe("quux");
+    await waitFor(() => expect(workspace.state.activeKey).toBe("quux"));
   });
 });
 
@@ -299,25 +299,25 @@ describe("moveTab", () => {
   it("moves a tab to the requested index", async () => {
     const workspace = await mountWorkspace();
     workspace.actions.moveTab("cafe", 1);
-    expect(keys(workspace)).toEqual(["home", "cafe", "worktable", "quux"]);
+    await waitFor(() => expect(keys(workspace)).toEqual(["home", "cafe", "worktable", "quux"]));
   });
 
   it("will not move Home, which anchors the strip", async () => {
     const workspace = await mountWorkspace();
     workspace.actions.moveTab("home", 2);
-    expect(keys(workspace)).toEqual(["home", "worktable", "cafe", "quux"]);
+    await waitFor(() => expect(keys(workspace)).toEqual(["home", "worktable", "cafe", "quux"]));
   });
 
   it("will not drop another tab in front of Home", async () => {
     const workspace = await mountWorkspace();
     workspace.actions.moveTab("quux", 0);
-    expect(keys(workspace)).toEqual(["home", "quux", "worktable", "cafe"]);
+    await waitFor(() => expect(keys(workspace)).toEqual(["home", "quux", "worktable", "cafe"]));
   });
 
   it("clamps past the end instead of dropping the tab", async () => {
     const workspace = await mountWorkspace();
     workspace.actions.moveTab("worktable", 99);
-    expect(keys(workspace)).toEqual(["home", "cafe", "quux", "worktable"]);
+    await waitFor(() => expect(keys(workspace)).toEqual(["home", "cafe", "quux", "worktable"]));
   });
 
   it("persists the project order, so it survives a restart", async () => {
@@ -347,15 +347,15 @@ describe("closeTab", () => {
     workspace.actions.focus("cafe");
     workspace.actions.closeTab("cafe");
 
-    expect(keys(workspace)).toEqual(["home", "worktable", "quux"]);
-    expect(workspace.state.activeKey).toBe("worktable");
+    await waitFor(() => expect(keys(workspace)).toEqual(["home", "worktable", "quux"]));
+    await waitFor(() => expect(workspace.state.activeKey).toBe("worktable"));
   });
 
   it("leaves the active tab alone when a different one is closed", async () => {
     const workspace = await mountWorkspace();
     workspace.actions.focus("quux");
     workspace.actions.closeTab("worktable");
-    expect(workspace.state.activeKey).toBe("quux");
+    await waitFor(() => expect(workspace.state.activeKey).toBe("quux"));
   });
 });
 
@@ -369,7 +369,7 @@ describe("openDraft", () => {
     workspace.actions.openDraft();
 
     expect(workspace.state.tabs.filter((tab) => tab.kind === "draft")).toHaveLength(1);
-    expect(workspace.state.activeKey).toBe(draftKey);
+    await waitFor(() => expect(workspace.state.activeKey).toBe(draftKey));
   });
 });
 
@@ -573,7 +573,7 @@ describe("item forks", () => {
     const tab = workspace.state.tabs.find((candidate) => candidate.projectId === fork.id);
 
     expect(reopened.id).toBe(fork.id);
-    expect(workspace.state.activeKey).toBe(fork.id);
+    await waitFor(() => expect(workspace.state.activeKey).toBe(fork.id));
     expect(fork.forkedFrom).toEqual({ projectId: "worktable", itemId: "worktable-1" });
     expect(tab).toMatchObject({
       agent: parent?.agent,

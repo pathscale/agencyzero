@@ -168,7 +168,22 @@ function SurfaceColorWheel(props: { value: string; onPick: (value: string) => vo
 
   // Preserve the same petal across a mode change, and migrate the upstream
   // palette values written by earlier builds to the nearest literal petal.
+  /*
+   * Track the palette; rebase in the effect argument, never the compute one.
+   *
+   * `onPick` writes the value this reads, so running it in the tracked phase
+   * made the write a dependency of its own computation: the effect re-ran on
+   * every pick and the suite died on an out-of-memory abort rather than a
+   * recognisable loop. Solid 2 draws the line for exactly this - the first
+   * argument is what to watch, the second is what to do about it - and a
+   * one-argument `createEffect` is typed `never` to stop the older shape
+   * compiling at all.
+   *
+   * Only the mode is tracked. `props.value` is read untracked inside the
+   * effect because a pick must not retrigger the rebase that produced it.
+   */
   createEffect(
+    () => prefs.colorMode,
     () => {
       const next = colors();
       const value = props.value.trim().toLowerCase();
@@ -180,7 +195,6 @@ function SurfaceColorWheel(props: { value: string; onPick: (value: string) => vo
       }
       previous = next;
     },
-    () => {},
   );
 
   return (
