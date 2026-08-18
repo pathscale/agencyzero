@@ -42,6 +42,9 @@ describe("analytics refresh", () => {
   it("loads on open and refreshes only when the owner asks", async () => {
     const screen = render(() => <AnalyticsTab />);
     await waitFor(() => expect(getUsageAnalytics).toHaveBeenCalledTimes(1));
+    // The first load resolves into a signal, so land it before querying for
+    // the controls that only render once the panel has data.
+    flush();
 
     fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
     flush();

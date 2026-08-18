@@ -1,3 +1,4 @@
+import { flush } from "solid-js";
 import { render, waitFor } from "@solidjs/testing-library";
 import { beforeEach, describe, expect, it } from "vitest";
 import { setPrefs } from "~/stores/prefs";
@@ -222,6 +223,7 @@ describe("what the prompt offers", () => {
   it("sends an OpenAI selection through the Codex agent", async () => {
     const workspace = await mountWorkspace();
     workspace.actions.setTabModel("worktable", "codex", "gpt-5.6-sol", "read_only");
+    flush();
 
     await workspace.actions.send("worktable", "Use OpenAI for this turn");
 
@@ -234,6 +236,7 @@ describe("what the prompt offers", () => {
     const workspace = await mountWorkspace();
     workspace.actions.setTabModel("worktable", "claude", "sonnet", "ask");
     workspace.actions.setTabModel("worktable", "codex", "gpt-5.6-sol", "ask");
+    flush();
 
     const tab = workspace.state.tabs.find((candidate) => candidate.key === "worktable");
     expect(tab?.agent).toBe("codex");
@@ -243,10 +246,12 @@ describe("what the prompt offers", () => {
   it("restores the last provider when a project is closed and reopened", async () => {
     const workspace = await mountWorkspace();
     workspace.actions.setTabModel("worktable", "codex", "gpt-5.6-sol", "auto");
+    flush();
     await workspace.actions.send("worktable", "Keep this project on OpenAI");
 
     workspace.actions.closeTab("worktable");
     workspace.actions.openProject("worktable");
+    flush();
 
     const tab = workspace.state.tabs.find((candidate) => candidate.key === "worktable");
     expect(tab?.agent).toBe("codex");
@@ -274,6 +279,7 @@ describe("settings own the defaults", () => {
   it("does not let a per-tab override seed the next tab", async () => {
     const workspace = await mountWorkspace();
     workspace.actions.setTabModel("worktable", "claude", "haiku", "read_only");
+    flush();
 
     workspace.actions.openDraft();
 
@@ -308,6 +314,7 @@ describe("settings own the defaults", () => {
   it("leaves a tab alone when its model is still offered", async () => {
     const workspace = await mountWorkspace();
     workspace.actions.setTabModel("worktable", "claude", "haiku", "read_only");
+    flush();
 
     await workspace.actions.toggleModel("claude", "fable", true);
 
@@ -342,6 +349,7 @@ describe("posture follows Settings too", () => {
   it("does not let a per-tab posture seed the next tab", async () => {
     const workspace = await mountWorkspace();
     workspace.actions.setTabModel("worktable", "claude", "sonnet", "bypass");
+    flush();
 
     workspace.actions.openDraft();
 

@@ -1,4 +1,4 @@
-import { createRoot } from "solid-js";
+import { createRoot, flush } from "solid-js";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useTabShortcuts } from "~/features/tabs/shortcuts";
 
@@ -28,6 +28,13 @@ function mount(): () => void {
     dispose = disposer;
     useTabShortcuts();
   });
+  /*
+   * The hook registers its `keydown` listener inside `onSettled`, which runs
+   * once the reactive queue drains. A bare `createRoot` never drains it on its
+   * own, so without this the listener was never attached and every chord in
+   * this file went nowhere: the clipboard was not even read.
+   */
+  flush();
   return dispose;
 }
 
