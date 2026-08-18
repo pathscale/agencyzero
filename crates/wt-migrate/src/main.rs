@@ -268,7 +268,10 @@ fn main() -> ExitCode {
         // A new directory, never an existing store: this writes a fresh table
         // and an operator has to look at it before swapping it into place.
         if target.exists() {
-            eprintln!("{} already exists; salvage into a new directory", target.display());
+            eprintln!(
+                "{} already exists; salvage into a new directory",
+                target.display()
+            );
             return ExitCode::from(2);
         }
         if let Err(error) = std::fs::create_dir_all(&target) {

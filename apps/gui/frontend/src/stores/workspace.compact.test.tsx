@@ -1,5 +1,5 @@
-import { flush } from "solid-js";
 import { render, waitFor } from "@solidjs/testing-library";
+import { flush } from "solid-js";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { SETTINGS } from "~/api/fixtures";
 import { setPrefs } from "~/stores/prefs";

@@ -11761,7 +11761,14 @@ async fn drive_run(
                             "run",
                             "{project_id}: pong received; the turn is alive"
                         );
-                        note_io(&app, &io, &project_id, "received", "ping", "pong: still working");
+                        note_io(
+                            &app,
+                            &io,
+                            &project_id,
+                            "received",
+                            "ping",
+                            "pong: still working",
+                        );
                         let _ = app.emit(
                             "run:liveness_pong",
                             serde_json::json!({ "projectId": project_id }),
@@ -11783,10 +11790,8 @@ async fn drive_run(
                     )) = authored_directive_line(&line, &mut directives_fenced)
                         .and_then(crate::directives::parse_authored)
                     {
-                        let granted = seconds.clamp(
-                            RUN_IDLE_TIMEOUT.as_secs(),
-                            MAX_DECLARED_BLOCKING.as_secs(),
-                        );
+                        let granted = seconds
+                            .clamp(RUN_IDLE_TIMEOUT.as_secs(), MAX_DECLARED_BLOCKING.as_secs());
                         crate::log!(
                             crate::log::Level::Info,
                             "run",
@@ -11808,8 +11813,8 @@ async fn drive_run(
                                 "seconds": granted,
                             }),
                         );
-                        idle_deadline = tokio::time::Instant::now()
-                            + std::time::Duration::from_secs(granted);
+                        idle_deadline =
+                            tokio::time::Instant::now() + std::time::Duration::from_secs(granted);
                         ping_outstanding = false;
                         continue;
                     }

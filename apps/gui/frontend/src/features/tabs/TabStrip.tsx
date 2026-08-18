@@ -236,7 +236,7 @@ export function TabStrip(): JSX.Element {
           title={
             state.availableUpdate
               ? tx("Update available: {version} — install from Settings", {
-                  version: state.availableUpdate?.version ?? "",
+                  version: state.availableUpdate.version,
                 })
               : tx("Settings")
           }

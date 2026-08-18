@@ -1,5 +1,5 @@
 import { fireEvent, render, waitFor } from "@solidjs/testing-library";
-import { Show, flush } from "solid-js";
+import { flush, Show } from "solid-js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { noteTranscriptChromeChanged, TranscriptPane } from "~/features/project/TranscriptPane";
 import { useWorkspace, type Workspace, WorkspaceProvider } from "~/stores/workspace";

@@ -1,5 +1,5 @@
 import { fireEvent, render, waitFor } from "@solidjs/testing-library";
-import { Show, flush } from "solid-js";
+import { flush, Show } from "solid-js";
 import { describe, expect, it } from "vitest";
 import { NOTES_BUDGET } from "~/api/client";
 import { ProjectPanel } from "~/features/project/ProjectPanel";

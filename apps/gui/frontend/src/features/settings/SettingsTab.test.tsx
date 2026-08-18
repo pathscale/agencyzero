@@ -1,5 +1,5 @@
-import { flush } from "solid-js";
 import { fireEvent, render, waitFor } from "@solidjs/testing-library";
+import { flush } from "solid-js";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { setMockProxyActiveRuns } from "~/api/mock";
 import { SettingsTab } from "~/features/settings/SettingsTab";

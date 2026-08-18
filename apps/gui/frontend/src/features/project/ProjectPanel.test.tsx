@@ -1,5 +1,5 @@
 import { fireEvent, render, waitFor, within } from "@solidjs/testing-library";
-import { Show, flush } from "solid-js";
+import { flush, Show } from "solid-js";
 import { describe, expect, it, vi } from "vitest";
 import { itemPage, PROJECT_ITEM_PAGE_SIZE, ProjectPanel } from "~/features/project/ProjectPanel";
 import { prefs } from "~/stores/prefs";

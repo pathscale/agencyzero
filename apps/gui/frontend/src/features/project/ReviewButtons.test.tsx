@@ -1,5 +1,5 @@
-import { flush } from "solid-js";
 import { fireEvent, render, waitFor } from "@solidjs/testing-library";
+import { flush } from "solid-js";
 import { describe, expect, it, vi } from "vitest";
 import { IconSprite } from "~/components/IconSprite";
 import { ReviewButtons } from "~/features/project/ProjectTab";

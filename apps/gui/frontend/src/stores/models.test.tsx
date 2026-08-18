@@ -1,5 +1,5 @@
-import { flush } from "solid-js";
 import { render, waitFor } from "@solidjs/testing-library";
+import { flush } from "solid-js";
 import { beforeEach, describe, expect, it } from "vitest";
 import { setPrefs } from "~/stores/prefs";
 import { useWorkspace, type Workspace, WorkspaceProvider } from "~/stores/workspace";

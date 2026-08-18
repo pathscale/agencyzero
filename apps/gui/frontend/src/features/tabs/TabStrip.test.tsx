@@ -1,5 +1,5 @@
-import { flush } from "solid-js";
 import { fireEvent, render, waitFor } from "@solidjs/testing-library";
+import { flush } from "solid-js";
 import { beforeEach, describe, expect, it } from "vitest";
 import { horizontalRevealTarget, TabStrip } from "~/features/tabs/TabStrip";
 import { setPrefs } from "~/stores/prefs";
