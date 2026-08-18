@@ -645,7 +645,7 @@ function TaskManagerComposer(): JSX.Element {
         <Button
           type="button"
           onClick={() => setTall((open) => !open)}
-          aria-pressed={tall()}
+          aria-pressed={tall() ? "true" : "false"}
           title={tall() ? tx("Back to one line") : tx("Expand the prompt area")}
           aria-label={tall() ? tx("Shrink the prompt area") : tx("Expand the prompt area")}
           class="shrink-0 text-az-faint transition-colors hover:text-az-body"
@@ -679,7 +679,7 @@ function TaskManagerComposer(): JSX.Element {
         <Button
           type="button"
           onClick={() => togglePanelSection("tmDebug")}
-          aria-pressed={prefs.panelSections.tmDebug}
+          aria-pressed={prefs.panelSections.tmDebug ? "true" : "false"}
           title={tx("Show the task manager's reply and collected list")}
           class={`shrink-0 transition-colors ${
             prefs.panelSections.tmDebug ? "text-primary" : "text-az-faint hover:text-az-body"
@@ -1038,7 +1038,7 @@ function GroupItemRow(props: {
             type="button"
             onClick={() => void toggleDescription()}
             aria-label={tx("Edit the description for {name}", { name: props.item.title })}
-            aria-expanded={props.descriptionOpen}
+            aria-expanded={props.descriptionOpen ? "true" : "false"}
             aria-controls={`home-item-description-${props.item.id}`}
             title={tx("Description / sub-items")}
             class={`flex size-6 shrink-0 items-center justify-center rounded-md border transition-colors hover:border-primary/70 hover:bg-primary/20 ${
@@ -1326,7 +1326,7 @@ function ProjectGroup(props: {
       <div
         role="button"
         tabindex={0}
-        aria-expanded={!collapsed()}
+        aria-expanded={!collapsed() ? "true" : "false"}
         onClick={foldSoon}
         onDblClick={openNow}
         onKeyDown={(event) => {
@@ -1369,7 +1369,7 @@ function ProjectGroup(props: {
             event.stopPropagation();
             void actions.setProjectPinned(props.project.id, !props.project.pinned);
           }}
-          aria-pressed={props.project.pinned}
+          aria-pressed={props.project.pinned ? "true" : "false"}
           aria-label={props.project.pinned ? tx("Unpin project") : tx("Pin project")}
           class={`shrink-0 transition-colors ${props.project.pinned ? "text-primary" : "text-az-ghost hover:text-az-strong"}`}
         >

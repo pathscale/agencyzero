@@ -86,7 +86,7 @@ export function SectionPanel(props: SectionPanelProps): JSX.Element {
         <Button
           type="button"
           onClick={props.onToggle}
-          aria-expanded={props.isOpen}
+          aria-expanded={props.isOpen ? "true" : "false"}
           // `justify-start` explicitly, rather than relying on the flex
           // default. Every section header rendered centred, which is what a
           // missing or differently defaulted `justify-content` looks like, and

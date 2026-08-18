@@ -1007,7 +1007,7 @@ export function SettingsTab(): JSX.Element {
                       {(option) => (
                         <Button
                           type="button"
-                          aria-pressed={prefs.colorMode === option.value}
+                          aria-pressed={prefs.colorMode === option.value ? "true" : "false"}
                           onClick={() => setPrefs((d) => {
                                            d.colorMode = option.value;
                                          })}
@@ -1040,7 +1040,7 @@ export function SettingsTab(): JSX.Element {
                         <Button
                           type="button"
                           aria-label={`${option.name} ${t("appearance.size")}`}
-                          aria-pressed={prefs.uiSize === option.value}
+                          aria-pressed={prefs.uiSize === option.value ? "true" : "false"}
                           onClick={() => setPrefs((d) => {
                                            d.uiSize = option.value;
                                          })}

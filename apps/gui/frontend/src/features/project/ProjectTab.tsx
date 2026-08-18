@@ -369,7 +369,7 @@ export function ProjectTab(props: { tab: Tab; project: Project }): JSX.Element {
             */}
             <span
               data-turn-totals
-              aria-hidden={headerTurns() <= 0}
+              aria-hidden={headerTurns() <= 0 ? "true" : "false"}
               class={`absolute top-full right-3 z-20 flex w-[270px] max-w-[calc(100%-1.5rem)] items-center gap-1.5 overflow-hidden rounded-b-lg border border-primary/38 border-t-0 bg-base-200 px-3 py-1 font-mono text-[11px] text-az-muted shadow-[0_7px_18px_rgba(0,0,0,0.38)] ${headerTurns() <= 0 ? "invisible" : ""}`}
             >
               {/* No leading agent label: the 7-day readout at the end already says
@@ -632,7 +632,7 @@ export function ProjectTab(props: { tab: Tab; project: Project }): JSX.Element {
        */}
       <Show when={!forkInfo()}>
         <div
-          aria-hidden={!prefs.projectPanelVisible}
+          aria-hidden={!prefs.projectPanelVisible ? "true" : "false"}
           class={`min-h-0 flex-none overflow-hidden ${
             prefs.projectPanelVisible
               ? "ml-4 w-[332px] translate-x-0 opacity-100"
@@ -662,7 +662,7 @@ export function ProjectPanelToggle(props: { visible: boolean; onToggle: () => vo
     <Button
       type="button"
       onClick={props.onToggle}
-      aria-pressed={props.visible}
+      aria-pressed={props.visible ? "true" : "false"}
       aria-label={label()}
       title={label()}
       class="absolute top-1/2 left-full z-20 flex h-9 w-1.5 -translate-y-1/2 items-center justify-center rounded-r-md border border-primary/40 border-l-0 bg-primary/20 text-primary transition-colors duration-200 hover:border-primary/60 hover:bg-primary/30 motion-reduce:transition-none"

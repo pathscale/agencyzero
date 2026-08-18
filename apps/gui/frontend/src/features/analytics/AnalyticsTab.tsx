@@ -133,7 +133,7 @@ export function AnalyticsTab(): JSX.Element {
                         id={`analytics-tab-${tab.key}`}
                         type="button"
                         role="tab"
-                        aria-selected={selected()}
+                        aria-selected={selected() ? "true" : "false"}
                         aria-controls={`analytics-panel-${tab.key}`}
                         tabindex={selected() ? 0 : -1}
                         onClick={() => setActiveTab(tab.key)}

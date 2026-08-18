@@ -1115,7 +1115,7 @@ export function Composer(props: ComposerProps): JSX.Element {
               <Button
                 type="button"
                 onClick={toggleAdvanced}
-                aria-pressed={advanced()}
+                aria-pressed={advanced() ? "true" : "false"}
                 title={tx("Parse Prompt Syntax controls before sending")}
                 class={`flex h-[24px] items-center rounded-full border px-2.5 font-medium text-[11px] transition-colors ${
                   advanced()
@@ -1154,7 +1154,7 @@ export function Composer(props: ComposerProps): JSX.Element {
               <Button
                 type="button"
                 onClick={toggleExpanded}
-                aria-pressed={expanded()}
+                aria-pressed={expanded() ? "true" : "false"}
                 aria-label={tx(expanded() ? "Restore the prompt size" : "Expand the prompt")}
                 title={tx(expanded() ? "Restore the prompt size" : "Expand the prompt")}
                 class={`flex size-[24px] items-center justify-center rounded-full border transition-colors ${
@@ -1200,7 +1200,7 @@ export function Composer(props: ComposerProps): JSX.Element {
                 type="button"
                 onClick={() => props.onExtraThinkingChange?.(!props.extraThinking)}
                 disabled={props.agent !== "claude"}
-                aria-pressed={props.agent === "claude" && props.extraThinking}
+                aria-pressed={props.agent === "claude" && props.extraThinking ? "true" : "false"}
                 title={
                   props.agent === "claude"
                     ? tx(
