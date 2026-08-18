@@ -37,3 +37,24 @@ Object.defineProperty(Element.prototype, "scrollTop", {
     scrollTops.set(this, Math.max(0, Math.min(limit, Number(value) || 0)));
   },
 });
+
+/**
+ * Solid 2 delegates events to *registered containers*, not to the document.
+ *
+ * `render` in the app registers its root, so a click works everywhere in the
+ * real build. `@solidjs/testing-library` 1.0.0-beta.2 does not register the
+ * container it creates, so a compiled `onClick` was attached to the element as
+ * `$$click` and then never dispatched to: every click, in every test, silently
+ * did nothing. It reads as an application bug at each call site rather than as
+ * one missing registration, and it is why suites asserting a handler ran
+ * reported "expected vi.fn() to be called once, but got 0 times" while the
+ * same interaction worked when driven by hand.
+ *
+ * Registering `document.body` covers every container, because testing-library
+ * mounts each one inside it. Solid 1 delegated to the document and needed none
+ * of this.
+ */
+import { delegateEvents, registerDelegatedRoot } from "@solidjs/web";
+
+registerDelegatedRoot(document.body);
+delegateEvents(["click", "input", "change", "keydown", "keyup", "pointerdown", "pointerup"]);

@@ -4,6 +4,7 @@ import {
   createEffect,
   createMemo,
   createSignal,
+  flush,
   For,
   Match,
   onCleanup,
@@ -388,6 +389,9 @@ export function TranscriptPane(props: {
       if (!untrack(pinned)) rememberReaderPosition();
       slidingWindow = false;
       afterRestore?.();
+      // Outside the reactive system: Solid 2 queues these writes and nothing
+      // here drains that queue. See the flush in `fill`.
+      flush();
     };
     if (typeof requestAnimationFrame === "undefined") queueMicrotask(restoreAnchor);
     else revealFrame = requestAnimationFrame(restoreAnchor);
@@ -409,10 +413,33 @@ export function TranscriptPane(props: {
       return;
     }
     let fillFrame: number | undefined;
+    /*
+     * The step count lives here, not in the signal it writes.
+     *
+     * This used to read `untrack(visibleEntries)` at the top of every frame.
+     * Solid 2 defers a signal write, so that read returned the value from
+     * before the previous frame's write every time: `size` stayed at
+     * `INITIAL_VISIBLE_ENTRIES`, each frame rewrote the same number, and the
+     * window never grew past its first step however many frames ran. Solid 1
+     * applied the write eagerly, which is the only reason reading it back
+     * worked.
+     *
+     * A local counter is also simply the honest shape: this loop owns the
+     * progression and does not need to ask the store where it got to.
+     */
+    let filled = untrack(visibleEntries);
     const fill = (): void => {
-      const size = untrack(visibleEntries);
-      if (size >= TRANSCRIPT_PAGE_SIZE) return;
-      setVisibleEntries(Math.min(TRANSCRIPT_PAGE_SIZE, size + INITIAL_VISIBLE_ENTRIES));
+      if (filled >= TRANSCRIPT_PAGE_SIZE) return;
+      filled = Math.min(TRANSCRIPT_PAGE_SIZE, filled + INITIAL_VISIBLE_ENTRIES);
+      setVisibleEntries(filled);
+      /*
+       * A frame callback is outside the reactive system, and Solid 2 queues a
+       * write rather than applying it. Nothing drains that queue from here, so
+       * without this the write sits unapplied: the window stayed at its first
+       * step however many frames ran, and the transcript mounted four rows
+       * instead of a page. Solid 1 applied writes eagerly and needed no flush.
+       */
+      flush();
       followTail();
       fillFrame = requestAnimationFrame(fill);
     };
@@ -442,6 +469,15 @@ export function TranscriptPane(props: {
       const size = untrack(visibleEntries);
       if (size < TRANSCRIPT_MAX_ENTRIES) {
         setVisibleEntries(Math.min(TRANSCRIPT_MAX_ENTRIES, size + TRANSCRIPT_PAGE_SIZE));
+        /*
+         * Land it before the next reveal reads it back.
+         *
+         * Solid 2 queues the write, and `size` above is exactly that read: two
+         * reveals in a row both saw the pre-reveal count, so the second asked
+         * for a window it had already opened and the transcript stopped
+         * growing after one page.
+         */
+        flush();
         return;
       }
       // At the ceiling the page revealed above is paid for by dropping the
@@ -557,6 +593,18 @@ export function TranscriptPane(props: {
     if (!untrack(pinned)) return;
     const moveToTail = (): void => {
       if (!untrack(pinned)) return;
+      /*
+       * The ref may not be bound yet.
+       *
+       * `scroller` is declared with `!`, which was true under Solid 1: refs
+       * were assigned before any effect ran, so a microtask or frame callback
+       * could assume one. Solid 2 runs effects earlier, so both deferred paths
+       * below can fire on a pane whose element does not exist yet, and the
+       * assertion hides that from the type checker rather than preventing it.
+       * There is nothing to scroll until it is bound, and the next follow does
+       * the work.
+       */
+      if (!scroller) return;
       /*
        * The tail, and never past it.
        *
