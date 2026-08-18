@@ -1,4 +1,5 @@
 import { render, waitFor } from "@solidjs/testing-library";
+import { flush } from "solid-js";
 import { beforeEach, describe, expect, it } from "vitest";
 import { SETTINGS, setClaudeUsageError, setSyncProjectError } from "~/api/fixtures";
 import { revealItemReference } from "~/lib/itemReference";
@@ -142,6 +143,24 @@ describe("startup", () => {
   it("opens Home plus the remembered tabs, in project order", async () => {
     const workspace = await mountWorkspace();
     expect(keys(workspace)).toEqual(["home", "worktable", "cafe", "quux"]);
+  });
+
+  /*
+   * A restored tab has its project loaded, not just its key in the strip.
+   *
+   * Boot wrote the restored strip into the store and then read `state.tabs`
+   * back to decide which projects to fetch. Solid 2 defers that write, so the
+   * read saw Home alone: boot logged "loading 0 open project(s)" and fetched
+   * nothing, while the strip still rendered every remembered tab. The tabs
+   * were there and empty, which is why asserting on keys alone missed it.
+   */
+  it("loads the messages for every tab it restored, not just their keys", async () => {
+    const workspace = await mountWorkspace();
+
+    expect(keys(workspace)).toEqual(["home", "worktable", "cafe", "quux"]);
+    for (const project of ["worktable", "cafe", "quux"]) {
+      await waitFor(() => expect(workspace.state.messages[project]).toBeTruthy());
+    }
   });
 
   /*
@@ -339,6 +358,7 @@ describe("closeTab", () => {
   it("refuses to close Home", async () => {
     const workspace = await mountWorkspace();
     workspace.actions.closeTab("home");
+    flush();
     expect(keys(workspace)).toContain("home");
   });
 
@@ -367,6 +387,7 @@ describe("openDraft", () => {
 
     workspace.actions.focus("home");
     workspace.actions.openDraft();
+    flush();
 
     expect(workspace.state.tabs.filter((tab) => tab.kind === "draft")).toHaveLength(1);
     await waitFor(() => expect(workspace.state.activeKey).toBe(draftKey));
@@ -511,6 +532,36 @@ describe("openItemCount", () => {
 });
 
 describe("createProject", () => {
+  /*
+   * The new project takes the eye, and this asserts it without a `flush`.
+   *
+   * `createProject` rewrites the draft tab's key to the project id and then
+   * focuses that key in the same tick. Solid 2 defers the rewrite, so
+   * `focus`'s membership guard did not find the tab its own caller had just
+   * renamed and `activeKey` stayed on the dead draft key: the owner created a
+   * project and was left looking at nothing. The guard now takes `justOpened`
+   * from this path.
+   *
+   * Written against `waitFor` rather than a synchronous read on purpose. The
+   * question is whether focus lands at all, not when the queue drains, so
+   * this stays honest however the harness is flushed.
+   */
+  it("leaves the eye on the project it just created", async () => {
+    const workspace = await mountWorkspace();
+    workspace.actions.openDraft();
+    flush();
+    const draftKey = workspace.state.activeKey;
+
+    await workspace.actions.createProject("Port the emitter", draftKey);
+
+    // The eye moved off the draft and onto a real project tab. Both halves
+    // matter: staying on `draftKey` was the bug, and a key that is no longer
+    // the draft but names no tab would be just as broken.
+    await waitFor(() => expect(workspace.activeTab().kind).toBe("project"));
+    expect(workspace.state.activeKey).not.toBe(draftKey);
+    expect(workspace.activeTab().label).toBe("Port the emitter");
+  });
+
   it("turns the draft into the project tab instead of opening a second one", async () => {
     const workspace = await mountWorkspace();
     workspace.actions.openDraft();
@@ -535,9 +586,11 @@ describe("createProject", () => {
   it("has the project in the store the instant the tab becomes one", async () => {
     const workspace = await mountWorkspace();
     workspace.actions.openDraft();
+    flush();
     const draftKey = workspace.state.activeKey;
 
     await workspace.actions.createProject("Port the emitter", draftKey);
+    flush();
 
     const tab = workspace.activeTab();
     expect(tab.kind).toBe("project");
@@ -586,12 +639,15 @@ describe("item forks", () => {
     ).toHaveLength(1);
 
     workspace.actions.setTabModel("worktable", "codex", "gpt-5.4", "auto", "high");
+
+    flush();
     expect(workspace.state.tabs.find((candidate) => candidate.projectId === fork.id)).toMatchObject(
       { agent: "codex", model: "gpt-5.4", permission: "auto", effort: "high" },
     );
 
     workspace.actions.closeTab(fork.id);
     workspace.actions.openProject(fork.id);
+    flush();
     expect(workspace.state.tabs.find((candidate) => candidate.projectId === fork.id)).toMatchObject(
       { agent: "codex", model: "gpt-5.4", permission: "auto", effort: "high" },
     );
@@ -724,6 +780,7 @@ describe("project deletion", () => {
     expect(workspace.state.messages.worktable).toBeTruthy();
 
     workspace.actions.purgeProject("worktable");
+    flush();
 
     for (const bucket of [
       "items",
@@ -760,6 +817,7 @@ describe("project deletion", () => {
     // Purge removes the whole per-project record (a top-level key delete, the
     // safe way) — the case the buggy nested delete used to strand.
     workspace.actions.purgeProject("cafe");
+    flush();
     expect(workspace.state.rateLimits).not.toHaveProperty("cafe");
     expect(() => workspace.tabStatus("cafe")).not.toThrow();
   });
