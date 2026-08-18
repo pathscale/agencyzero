@@ -1,4 +1,4 @@
-import { createRoot } from "solid-js";
+import { createRoot, flush } from "solid-js";
 import { describe, expect, it, vi } from "vitest";
 import { createTabReorder } from "~/features/tabs/reorder";
 
@@ -171,10 +171,12 @@ describe("createTabReorder", () => {
       expect(reorder.isDragging("a")).toBe(false);
 
       reorder.onPointerMove(fakeEvent(200).event);
+      flush();
       expect(reorder.isDragging("a")).toBe(true);
       expect(reorder.isDragging("b")).toBe(false);
 
       reorder.onPointerUp(fakeEvent(200).event);
+      flush();
       expect(reorder.isDragging("a")).toBe(false);
     });
   });
