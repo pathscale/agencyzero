@@ -143,6 +143,7 @@ export function useTabShortcuts(): void {
 
   onSettled(() => {
     window.addEventListener("keydown", onKeyDown);
-    onCleanup(() => window.removeEventListener("keydown", onKeyDown));
+    // Returned, not `onCleanup`: Solid 2 forbids it inside `onSettled`.
+    return () => window.removeEventListener("keydown", onKeyDown);
   });
 }
