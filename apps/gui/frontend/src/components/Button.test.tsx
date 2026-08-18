@@ -1,3 +1,12 @@
+/*
+ * @vitest-environment node
+ *
+ * This file reads the repository with `node:fs` rather than rendering
+ * anything. Under the suite's default jsdom environment those builtins are
+ * externalised for the browser and the import fails outright with "No such
+ * built-in module: node:". Vitest 4 removed `environmentMatchGlobs`, so the
+ * environment is declared per file.
+ */
 /// <reference types="node" />
 import { readFileSync } from "node:fs";
 import { join } from "node:path";

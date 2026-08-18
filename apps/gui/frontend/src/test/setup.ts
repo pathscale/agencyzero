@@ -1,5 +1,17 @@
 import "@testing-library/jest-dom/vitest";
+import { delegateEvents, registerDelegatedRoot } from "@solidjs/web";
 
+/*
+ * Everything below needs a DOM, and the source-audit files deliberately run
+ * under `@vitest-environment node` so they can read the repository with
+ * `node:fs`. Guarding here keeps one setup file honest for both rather than
+ * splitting it in two.
+ */
+if (typeof window !== "undefined") {
+  installDomTestEnvironment();
+}
+
+function installDomTestEnvironment(): void {
 /**
  * jsdom does not implement `matchMedia`, and `@pathscale/ui`'s barrel calls it
  * at module scope (FloatingDock), so importing any component from the library
@@ -54,7 +66,6 @@ Object.defineProperty(Element.prototype, "scrollTop", {
  * mounts each one inside it. Solid 1 delegated to the document and needed none
  * of this.
  */
-import { delegateEvents, registerDelegatedRoot } from "@solidjs/web";
-
 registerDelegatedRoot(document.body);
 delegateEvents(["click", "input", "change", "keydown", "keyup", "pointerdown", "pointerup"]);
+}
