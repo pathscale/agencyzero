@@ -1,3 +1,4 @@
+import { flush } from "solid-js";
 import { describe, expect, it } from "vitest";
 import {
   portablePrefsSnapshot,
@@ -86,6 +87,8 @@ describe("workspace layout", () => {
       d.expandedComposerKeys = ["project:abc"];
     });
 
+    flush();
+
     expect(prefs.projectPanelVisible).toBe(false);
     expect(prefs.expandedComposerKeys).toEqual(["project:abc"]);
 
@@ -111,6 +114,7 @@ describe("workspace layout", () => {
       d.replyQuestionIds["project:abc"] = "question-1";
     });
 
+    flush();
     const snapshot = portablePrefsSnapshot();
     expect(snapshot.uiSize).toBe("extra-large");
     expect(snapshot.expandedComposerKeys).toEqual(["project:abc"]);
@@ -119,6 +123,7 @@ describe("workspace layout", () => {
 
     preparePortablePrefsRestore();
     restorePortablePrefs({ uiSize: "normal", expandedComposerKeys: [] }, "backup-1");
+    flush();
     expect(prefs.uiSize).toBe("normal");
     expect(prefs.expandedComposerKeys).toEqual([]);
     expect(prefs.composerDrafts["project:abc"]).toBe("unfinished message");
@@ -128,10 +133,12 @@ describe("workspace layout", () => {
       d.uiSize = "extra-large";
     });
     restorePortablePrefs({ uiSize: "normal" }, "backup-1");
+    flush();
     expect(prefs.uiSize).toBe("extra-large");
 
     preparePortablePrefsRestore();
     restorePortablePrefs({ uiSize: "normal" }, "backup-1");
+    flush();
     expect(prefs.uiSize).toBe("normal");
 
     setPrefs((d) => {
