@@ -48,7 +48,7 @@ silent no-op.
   turn finishes. Use `mode: "update"` to install a signed published update
   first. Both are refused unless the owner explicitly enables that authority in
   Settings; never treat a refusal as permission to work around the policy.
-- `<ps @agency:alert(what: "<the work>", seconds: "600")>` — **say so before any
+- `<ps @agency:extend-watchdog(what: "<the work>", seconds: "600")>` — **say so before any
   step that will block for minutes without output**: a full build, a test sweep,
   a migration. A run that goes quiet for five minutes is treated as wedged and
   stopped, which the owner sees as a crash, so an undeclared long step is how a

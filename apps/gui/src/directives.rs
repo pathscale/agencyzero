@@ -73,7 +73,7 @@ pub const SURFACE: Surface = Surface {
         "app.restart",
         "ping",
         "pong",
-        "alert",
+        "extend-watchdog",
     ],
     reserved: &[],
     bound: "any project in this installation's store, named by id or by name; \
@@ -189,7 +189,7 @@ pub enum Directive {
     ///
     /// Owner-visible on purpose. The ping and pong are plumbing; this is the
     /// part that says "this is expected, do not cancel".
-    Alert {
+    ExtendWatchdog {
         /// What is running, in the agent's own words.
         what: String,
         /// How long it is expected to block. Clamped by the run loop.
@@ -213,7 +213,7 @@ impl Directive {
             Self::IssueLink { .. } => "issue.link",
             Self::AppRestart { .. } => "app.restart",
             Self::Pong => "pong",
-            Self::Alert { .. } => "alert",
+            Self::ExtendWatchdog { .. } => "extend-watchdog",
         }
     }
 }
@@ -396,14 +396,14 @@ fn from_reference(reference: &Reference) -> Option<Directive> {
     if verb.eq_ignore_ascii_case("pong") || verb.eq_ignore_ascii_case("ping") {
         return Some(Directive::Pong);
     }
-    if verb.eq_ignore_ascii_case("alert") {
+    if verb.eq_ignore_ascii_case("extend-watchdog") {
         let what = arg(args, "what").or_else(|| arg(args, "text"))?;
         // A declaration with no duration still means "expect silence", so it
         // gets one ordinary idle window rather than being refused outright.
         let seconds = arg(args, "seconds")
             .and_then(|seconds| seconds.parse::<u64>().ok())
             .unwrap_or(300);
-        return (!what.is_empty()).then_some(Directive::Alert { what, seconds });
+        return (!what.is_empty()).then_some(Directive::ExtendWatchdog { what, seconds });
     }
     None
 }
@@ -760,22 +760,22 @@ mod tests {
     #[test]
     fn declared_long_work_names_itself_and_defaults_its_duration() {
         assert_eq!(
-            parse(r#"<ps @agency:alert(what: "cargo build", seconds: "900")>"#),
-            Some(Directive::Alert {
+            parse(r#"<ps @agency:extend-watchdog(what: "cargo build", seconds: "900")>"#),
+            Some(Directive::ExtendWatchdog {
                 what: "cargo build".into(),
                 seconds: 900,
             })
         );
         assert_eq!(
-            parse(r#"<ps @agency:alert(what: "test sweep")>"#),
-            Some(Directive::Alert {
+            parse(r#"<ps @agency:extend-watchdog(what: "test sweep")>"#),
+            Some(Directive::ExtendWatchdog {
                 what: "test sweep".into(),
                 seconds: 300,
             })
         );
         // A duration with no work to name says nothing the owner can act on.
-        assert!(parse(r#"<ps @agency:alert(seconds: "900")>"#).is_none());
-        assert!(parse(r#"<ps @agency:alert(what: "")>"#).is_none());
+        assert!(parse(r#"<ps @agency:extend-watchdog(seconds: "900")>"#).is_none());
+        assert!(parse(r#"<ps @agency:extend-watchdog(what: "")>"#).is_none());
     }
 
     /// The published document is generated from the declaration, not written
