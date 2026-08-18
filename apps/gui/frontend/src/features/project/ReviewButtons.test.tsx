@@ -80,7 +80,10 @@ describe("pull request review buttons", () => {
     expect(copilot.disabled).toBe(false);
 
     await waitFor(() => expect(claude.disabled).toBe(false));
-    expect(claude).toHaveAttribute("aria-busy", "false");
+    // Absent rather than "false": the library omits `aria-busy` when the
+    // button is not loading, which is the same thing to a screen reader.
+    // `data-review-state` is ours and stays explicit either way.
+    expect(claude).not.toHaveAttribute("aria-busy");
     expect(claude).toHaveAttribute("data-review-state", "idle");
     await waitFor(() => expect(codex.disabled).toBe(false));
   });

@@ -356,3 +356,36 @@ describe("glass survives a renderer that under-reports itself", () => {
     expect(CSS).toContain(".az-no-backdrop .az-glass {");
   });
 });
+
+/*
+ * Moved here from `Button.test.tsx`, which renders and therefore needs jsdom.
+ * These assert the shipped stylesheet's text, and reading a file with
+ * `node:fs` is exactly what this file already does.
+ */
+describe("the neutral Button reset", () => {
+  /*
+   * Written first against `:where(.button.az-ui-button-neutral)`, which was
+   * wrong in the one way that matters: `:where()` zeroes specificity, so the
+   * library's own `.button` outranked the reset and kept its fill. That is what
+   * sized section headers to a 40px control and put a blob around the chevron.
+   *
+   * The bare selector is therefore load-bearing, and these assert it stays bare.
+   */
+  it("keeps the compatibility reset above the library's own .button", () => {
+    expect(CSS).toContain(".button.az-ui-button-neutral {");
+    expect(CSS).not.toContain(":where(.button.az-ui-button-neutral)");
+  });
+
+  it("neutralizes transient PathScale pressed paint", () => {
+    expect(CSS).toContain(".button.az-ui-button-neutral:active");
+    expect(CSS).toContain('.button.az-ui-button-neutral[data-pressed="true"]');
+    expect(CSS).toContain("transform: none");
+    expect(CSS).not.toContain(":where(.button.az-ui-button-neutral:active)");
+  });
+
+  it("does not override existing call-site hover paint", () => {
+    expect(CSS).not.toContain(".button.az-ui-button-neutral:hover");
+    expect(CSS).not.toContain('.button.az-ui-button-neutral[data-hovered="true"]');
+    expect(CSS).toContain("--button-bg-hover: transparent");
+  });
+});

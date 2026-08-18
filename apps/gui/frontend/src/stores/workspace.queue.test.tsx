@@ -108,6 +108,9 @@ describe("queued live follow-ups", () => {
       messageId: "msg-session-rejected",
       body: "continue on the same session",
     });
+    // The handler queues the retry through a store write; land it before
+    // reading the queue back.
+    flush();
     expect(workspace.state.queued.quux).toEqual([
       expect.objectContaining({
         messageId: "msg-session-rejected",
