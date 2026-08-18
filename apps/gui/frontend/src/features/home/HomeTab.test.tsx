@@ -1,3 +1,4 @@
+import { flush } from "solid-js";
 import { fireEvent, render, waitFor, within } from "@solidjs/testing-library";
 import { describe, expect, it, vi } from "vitest";
 import {
@@ -54,6 +55,7 @@ describe("Home item rows", () => {
 
     expect(screen.queryByRole("button", { name: "Confirm delete" })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Clean-up" }));
+    flush();
 
     await waitFor(() => expect(send).toHaveBeenCalledWith(TASK_CLEANUP_PROMPT, undefined, true));
     expect(TASK_CLEANUP_PROMPT).toContain('{"deleteItemIds"');
@@ -155,6 +157,8 @@ describe("Home item rows", () => {
     const screen = await mountHome();
 
     fireEvent.click(screen.getAllByRole("button", { name: /^Fork .* into a fresh chat$/ })[0]);
+
+    flush();
     const dialog = await within(document.body).findByRole("dialog");
     expect(dialog.parentElement).toBe(document.body);
     const modal = within(dialog);
@@ -219,12 +223,15 @@ describe("Home item rows", () => {
     expect(title.length).toBeGreaterThan(0);
 
     fireEvent.click(pencil);
+
+    flush();
     const input = document.querySelector('input[aria-label^="Edit "]') as HTMLInputElement;
     expect(input).not.toBeNull();
     expect(input.value).toBe(title);
 
     fireEvent.input(input, { target: { value: "Renamed from Home" } });
     fireEvent.keyDown(input, { key: "Enter" });
+    flush();
 
     await waitFor(() => expect(screen.getByText("Renamed from Home")).toBeTruthy());
   });
@@ -236,9 +243,12 @@ describe("Home item rows", () => {
     const title = (pencil.getAttribute("aria-label") ?? "").replace(/^Edit /, "");
 
     fireEvent.click(pencil);
+
+    flush();
     const input = document.querySelector('input[aria-label^="Edit "]') as HTMLInputElement;
     fireEvent.input(input, { target: { value: "should be discarded" } });
     fireEvent.keyDown(input, { key: "Escape" });
+    flush();
 
     await waitFor(() => expect(screen.getByText(title)).toBeTruthy());
     expect(screen.queryByText("should be discarded")).toBeNull();
@@ -286,6 +296,7 @@ describe("Home item rows", () => {
     );
 
     fireEvent.click(screen.getByLabelText("Delete foo.bar"));
+    flush();
 
     expect(screen.getByText("Delete?")).toBeTruthy();
     expect(screen.workspace.state.projects.some((project) => project.id === "worktable")).toBe(
@@ -296,6 +307,7 @@ describe("Home item rows", () => {
       "Removes this project and its transcript, items, pull requests and sessions from the store. Usage/cost history is kept.",
     );
     fireEvent.click(confirm);
+    flush();
 
     await waitFor(() =>
       expect(screen.workspace.state.projects.some((project) => project.id === "worktable")).toBe(

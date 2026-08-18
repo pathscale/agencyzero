@@ -1,3 +1,4 @@
+import { flush } from "solid-js";
 import { fireEvent, render, waitFor } from "@solidjs/testing-library";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { setMockProxyActiveRuns } from "~/api/mock";
@@ -42,6 +43,7 @@ describe("PS deployment study settings", () => {
     const toggle = screen.getByLabelText("PS deployment study") as HTMLInputElement;
 
     fireEvent.click(toggle);
+    flush();
 
     await waitFor(() => expect(toggle.checked).toBe(true));
     await waitFor(() => expect(screen.getByText("Collection started locally.")).toBeTruthy());
@@ -53,16 +55,20 @@ describe("PS deployment study settings", () => {
     const screen = await mountSettings();
     const toggle = screen.getByLabelText("PS deployment study") as HTMLInputElement;
     fireEvent.click(toggle);
+    flush();
     await waitFor(() => expect(screen.getByText("Collection started locally.")).toBeTruthy());
     expect(screen.getByRole("button", { name: "Delete data" })).toBeDisabled();
 
     fireEvent.click(toggle);
+    flush();
     await waitFor(() => expect(screen.getByText("Collection stopped.")).toBeTruthy());
 
     fireEvent.click(screen.getByRole("button", { name: "Delete data" }));
+    flush();
     expect(screen.getByRole("button", { name: "Confirm delete" })).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: "Confirm delete" }));
+    flush();
     await waitFor(() =>
       expect(
         screen.getByText("Stored study events deleted. The collection setting was not changed."),
@@ -79,12 +85,14 @@ describe("chat imports", () => {
 
     expect(picker.classList).toContain("h-9");
     fireEvent.click(picker);
+    flush();
     await waitFor(() => expect(document.body.querySelector('[role="listbox"]')).not.toBeNull());
     const offered = Array.from(document.body.querySelectorAll<HTMLElement>('[role="option"]')).map(
       (option) => option.getAttribute("data-key"),
     );
     expect(offered).not.toContain("cloud-only");
     fireEvent.click(screen.getByRole("button", { name: "Import all" }));
+    flush();
 
     await waitFor(() => expect(screen.getByText("Imported 2 chats from Claude Code")).toBeTruthy());
   });
@@ -109,12 +117,14 @@ describe("AgencyProxy lifecycle", () => {
     expect(screen.getByText("(fixture endpoint)")).toBeTruthy();
 
     fireEvent.click(stop);
+    flush();
     await waitFor(() => expect(screen.getByText("AgencyProxy stopped")).toBeTruthy());
     expect(screen.workspace.state.agencyProxy?.connected).toBe(false);
 
     const start = screen.getByRole("button", { name: "Start" });
     await waitFor(() => expect(start).toBeEnabled());
     fireEvent.click(start);
+    flush();
     await waitFor(() => expect(screen.getByText("AgencyProxy started")).toBeTruthy());
     expect(screen.workspace.state.agencyProxy?.connected).toBe(true);
   });
@@ -125,6 +135,7 @@ describe("AgencyProxy lifecycle", () => {
     const stop = await screen.findByRole("button", { name: "Stop" });
 
     fireEvent.click(stop);
+    flush();
     expect(screen.getByText("Waiting for 1 live run to finish")).toBeTruthy();
     await waitFor(() => expect(screen.getByText("AgencyProxy stopped")).toBeTruthy());
   });
@@ -141,6 +152,7 @@ describe("local debug control", () => {
     expect(screen.getByText("Inspection and control disabled")).toBeTruthy();
 
     fireEvent.click(toggle);
+    flush();
 
     await waitFor(() => expect(screen.workspace.state.settings?.blitzControlEnabled).toBe(true));
     await waitFor(() => expect(screen.getByText("Listening on local MCP socket")).toBeTruthy());
@@ -160,6 +172,7 @@ describe("local debug control", () => {
     expect(profiling.disabled).toBe(false);
 
     fireEvent.click(profiling);
+    flush();
     await waitFor(() =>
       expect(screen.workspace.state.settings?.blitzDeepProfilingEnabled).toBe(true),
     );
@@ -167,6 +180,7 @@ describe("local debug control", () => {
 
     // And back off again, without inspection ever being involved.
     fireEvent.click(profiling);
+    flush();
     await waitFor(() =>
       expect(screen.workspace.state.settings?.blitzDeepProfilingEnabled).toBe(false),
     );
@@ -215,13 +229,16 @@ describe("local debug control", () => {
     const inspection = await screen.findByLabelText("Enable inspection and agent control");
 
     fireEvent.click(profiling);
+    flush();
     await waitFor(() =>
       expect(screen.workspace.state.settings?.blitzDeepProfilingEnabled).toBe(true),
     );
 
     fireEvent.click(inspection);
+    flush();
     await waitFor(() => expect(screen.workspace.state.settings?.blitzControlEnabled).toBe(true));
     fireEvent.click(inspection);
+    flush();
     await waitFor(() => expect(screen.workspace.state.settings?.blitzControlEnabled).toBe(false));
 
     expect(screen.workspace.state.settings?.blitzDeepProfilingEnabled).toBe(true);
@@ -262,6 +279,7 @@ describe("cost warning settings", () => {
     if (!slider) throw new Error("PathScale slider thumb was not rendered");
 
     fireEvent.keyDown(slider, { key: "ArrowRight" });
+    flush();
 
     expect(slider).toHaveAttribute("aria-valuenow", "1");
     expect(slider).toHaveAttribute("aria-valuetext", "$1.00");
@@ -270,6 +288,7 @@ describe("cost warning settings", () => {
     // the library raises `onChangeEnd` from `keyup` and `blur`, so holding an
     // arrow down repeats the preview without repeating the store write.
     fireEvent.keyUp(slider, { key: "ArrowRight" });
+    flush();
     await waitFor(() => expect(screen.workspace.state.settings?.costWarningUsd).toBe(1));
   });
 
@@ -312,6 +331,7 @@ describe("cost warning settings", () => {
     // Releasing is what persists. The drag has to be finished for the value to
     // reach the store at all, which is the whole point of `onChangeEnd`.
     fireEvent.pointerUp(track, { clientX: 100, pointerId: 1 });
+    flush();
 
     await waitFor(() => expect(screen.workspace.state.settings?.costWarningUsd).toBe(10.25), {
       timeout: 2000,
@@ -349,15 +369,18 @@ describe("cost warning settings", () => {
     // not two.
     fireEvent.keyDown(slider, { key: "ArrowRight" });
     fireEvent.keyDown(slider, { key: "ArrowRight" });
+    flush();
     expect(slider).toHaveAttribute("aria-valuenow", "1.25");
     expect(releases).toHaveLength(0);
 
     fireEvent.keyUp(slider, { key: "ArrowRight" });
+    flush();
     await waitFor(() => expect(releases).toHaveLength(1), { timeout: 2000 });
 
     // The preview is held until the save it belongs to lands, so a slow write
     // finishing late cannot pull the display back to a value already left.
     fireEvent.keyDown(slider, { key: "ArrowRight" });
+    flush();
     expect(slider).toHaveAttribute("aria-valuenow", "1.5");
     releases[0]();
     await Promise.resolve();
@@ -383,7 +406,9 @@ describe("internal performance table", () => {
 
     // Leaving and coming back is the moment the numbers are wanted.
     screen.workspace.actions.focus("home");
+    flush();
     screen.workspace.actions.openSettings();
+    flush();
 
     await waitFor(() =>
       expect(screen.getByText("something measured after this mounted")).toBeTruthy(),
@@ -396,6 +421,7 @@ describe("moderator settings", () => {
     const screen = await mountSettings();
 
     fireEvent.click(screen.getByLabelText("Moderator model"));
+    flush();
 
     await waitFor(() => expect(document.body.textContent).toContain("Codex · GPT-5.6-Sol"));
     expect(document.body.textContent).toContain("Claude · Haiku");
@@ -424,10 +450,12 @@ describe("appearance settings", () => {
 
     const darkHex = darkSwatches[0].value;
     fireEvent.click(darkSwatches[0]);
+    flush();
     await waitFor(() => expect(screen.workspace.state.settings?.theme.surface).toBe(darkHex));
     expect(darkSwatches[0].checked).toBe(true);
 
     fireEvent.click(screen.getByRole("button", { name: "Light" }));
+    flush();
     await waitFor(() => expect(screen.workspace.state.settings?.theme.surface).not.toBe(darkHex));
     expect(
       Array.from(
@@ -559,6 +587,7 @@ describe("store snapshot", () => {
     expect(button).toBeTruthy();
 
     fireEvent.click(button);
+    flush();
     await waitFor(() => expect(screen.getByText(/Written to/)).toBeTruthy());
   });
 });

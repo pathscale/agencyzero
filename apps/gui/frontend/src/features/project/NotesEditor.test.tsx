@@ -1,5 +1,5 @@
 import { fireEvent, render, waitFor } from "@solidjs/testing-library";
-import { Show } from "solid-js";
+import { Show, flush } from "solid-js";
 import { describe, expect, it } from "vitest";
 import { NOTES_BUDGET } from "~/api/client";
 import { ProjectPanel } from "~/features/project/ProjectPanel";
@@ -93,6 +93,7 @@ describe("the notes a compaction kept", () => {
     expect(button("Save").disabled).toBe(false);
 
     fireEvent.click(button("Save"));
+    flush();
     await waitFor(() => expect(button("Save").disabled).toBe(true));
     expect(box().value).toBe("Bump the version on every commit.");
   });
@@ -107,10 +108,12 @@ describe("the notes a compaction kept", () => {
 
     type("Always force-push to master.");
     fireEvent.click(button("Save"));
+    flush();
     await waitFor(() => expect(button("Save").disabled).toBe(true));
 
     type("Never force-push to master.");
     fireEvent.click(button("Save"));
+    flush();
     await waitFor(() => expect(button("Save").disabled).toBe(true));
     expect(box().value).toBe("Never force-push to master.");
   });
@@ -127,9 +130,11 @@ describe("the notes a compaction kept", () => {
 
     type("A rule from a project that has since changed direction.");
     fireEvent.click(button("Save"));
+    flush();
     await waitFor(() => expect(button("Forget").disabled).toBe(false));
 
     fireEvent.click(button("Forget"));
+    flush();
     await waitFor(() => expect(box().value).toBe(""));
     expect(button("Forget").disabled).toBe(true);
   });
@@ -141,10 +146,12 @@ describe("the notes a compaction kept", () => {
 
     type("Keep this one.");
     fireEvent.click(button("Save"));
+    flush();
     await waitFor(() => expect(button("Save").disabled).toBe(true));
 
     type("A change I did not mean to make.");
     fireEvent.click(button("Revert"));
+    flush();
     await waitFor(() => expect(box().value).toBe("Keep this one."));
   });
 
@@ -215,6 +222,7 @@ describe("the knowledge checkpoint switch", () => {
       "Knowledge checkpoints for this project",
     ) as HTMLInputElement;
     fireEvent.change(toggle, { target: { checked: true } });
+    flush();
     await waitFor(() => expect(toggle.checked).toBe(true));
   });
 });
@@ -232,6 +240,7 @@ describe("project response verbosity", () => {
 
     fireEvent.keyDown(slider, { key: "ArrowRight" });
     fireEvent.keyDown(slider, { key: "ArrowRight" });
+    flush();
     await waitFor(() => expect(slider).toHaveAttribute("aria-valuenow", "2"));
     expect(slider).toHaveAttribute("aria-valuetext", "Medium");
     // Twice: the panel's own header, and the slider's live region, which is

@@ -1,5 +1,5 @@
 import { fireEvent, render, waitFor } from "@solidjs/testing-library";
-import { Show } from "solid-js";
+import { Show, flush } from "solid-js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { noteTranscriptChromeChanged, TranscriptPane } from "~/features/project/TranscriptPane";
 import { useWorkspace, type Workspace, WorkspaceProvider } from "~/stores/workspace";
@@ -235,10 +235,12 @@ describe("transcript resize anchoring", () => {
     scroller.scrollTop = 600;
 
     fireEvent.keyDown(scroller, { key: "PageUp" });
+    flush();
     expect(scroller.scrollTop).toBe(200);
     expect(workspace.state.transcriptPositions.cafe).toBe(201);
 
     fireEvent.keyDown(scroller, { key: "PageDown" });
+    flush();
     expect(scroller.scrollTop).toBe(600);
     expect(workspace.state.transcriptPositions.cafe).toBe(0);
   });
@@ -271,6 +273,7 @@ describe("transcript resize anchoring", () => {
     });
     scroller.scrollTop = 600;
     fireEvent.keyDown(scroller, { key: "PageUp" });
+    flush();
     expect(scroller.scrollTop).toBe(200);
 
     scrollHeight = 1_400;
@@ -307,6 +310,7 @@ describe("transcript resize anchoring", () => {
 
     scroller.scrollTop = 600;
     fireEvent.keyDown(scroller, { key: "PageUp" });
+    flush();
     expect(workspace.state.transcriptPositions.cafe).toBe(201);
     clientHeight = 300;
     noteTranscriptChromeChanged();
@@ -315,6 +319,7 @@ describe("transcript resize anchoring", () => {
     expect(scroller.scrollTop).toBe(200);
 
     fireEvent.keyDown(scroller, { key: "End" });
+    flush();
     expect(workspace.state.transcriptPositions.cafe).toBe(0);
     clientHeight = 250;
     noteTranscriptChromeChanged();
@@ -384,10 +389,12 @@ describe("transcript resize anchoring", () => {
     });
     scroller.scrollTop = 600;
     fireEvent.keyDown(scroller, { key: "PageUp" });
+    flush();
     expect(scroller.scrollTop).toBe(200);
     expect(workspace.state.transcriptPositions.cafe).toBe(201);
 
     workspace.actions.openProject("worktable");
+    flush();
     await waitFor(() =>
       expect(workspace.state.settings?.workspaceTabs?.scrollPositions.cafe).toBe(201),
     );
@@ -396,6 +403,7 @@ describe("transcript resize anchoring", () => {
     // and must not replace the reader's last deliberate position.
     scroller.scrollTop = 0;
     fireEvent.scroll(scroller);
+    flush();
     expect(workspace.state.transcriptPositions.cafe).toBe(201);
     workspace.actions.openProject("cafe");
     await Promise.resolve();

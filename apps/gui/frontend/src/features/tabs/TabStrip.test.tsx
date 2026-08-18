@@ -1,3 +1,4 @@
+import { flush } from "solid-js";
 import { fireEvent, render, waitFor } from "@solidjs/testing-library";
 import { beforeEach, describe, expect, it } from "vitest";
 import { horizontalRevealTarget, TabStrip } from "~/features/tabs/TabStrip";
@@ -74,6 +75,7 @@ describe("TabStrip", () => {
   it("hides an inactive tab's close button without unmounting it", async () => {
     const { getByLabelText, workspace } = await mountStrip();
     workspace.actions.focus("worktable");
+    flush();
 
     await waitFor(() => {
       expect(getByLabelText("Close foo.bar").className).toContain("opacity-100");
@@ -101,6 +103,7 @@ describe("TabStrip", () => {
   it("marks only the active tab as current", async () => {
     const { container, workspace } = await mountStrip();
     workspace.actions.focus("cafe");
+    flush();
 
     await waitFor(() => {
       const current = container.querySelectorAll('[aria-current="page"]');
@@ -119,6 +122,7 @@ describe("TabStrip", () => {
   it("clicking a close button closes that tab without selecting it", async () => {
     const { getByLabelText, workspace } = await mountStrip();
     workspace.actions.focus("home");
+    flush();
 
     getByLabelText("Close quux.dev").click();
 
@@ -150,6 +154,7 @@ describe("overflow", () => {
       scrollLeft: { configurable: true, get: () => 0, set: () => {} },
     });
     fireEvent.scroll(strip);
+    flush();
     await waitFor(() => expect(getByRole("button", { name: "Scroll tabs right" })).toBeTruthy());
     const right = getByRole("button", { name: "Scroll tabs right" });
     expect(right.className).toContain("flex");
@@ -276,6 +281,7 @@ describe("overflow", () => {
     // Settle with the arrows already on screen, so this scenario is only about
     // travel and not about the strip changing width.
     fireEvent.scroll(strip);
+    flush();
     const right = await findByLabelText("Scroll tabs right");
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(scrollLeft).toBe(0);
