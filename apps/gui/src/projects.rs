@@ -4259,6 +4259,26 @@ async fn apply_directive(
                 },
             }
         }
+        /*
+         * The run loop consumes a pong while scanning the stream, so reaching
+         * an apply path means no ping was outstanding: either the agent
+         * authored one unprompted, or it answered a ping that had already been
+         * satisfied. Neither should touch the store, and a typed refusal says
+         * so rather than leaving the agent to infer it from silence.
+         */
+        Directive::Pong => Outcome::Refused {
+            what: "pong".into(),
+            code: "NO_PING_OUTSTANDING".into(),
+        },
+        /*
+         * Applied by the run loop, which is the only thing that owns the idle
+         * deadline. Reaching here means the line was parsed outside a live run
+         * (a replayed transcript, a snapshot scan), where there is no deadline
+         * to widen and nothing to do but acknowledge it.
+         */
+        Directive::Alert { what, seconds } => {
+            Outcome::Done(format!("noted: {what} (expected to block ~{seconds}s)"))
+        }
     }
 }
 
@@ -4389,6 +4409,18 @@ fn study_target_before(
         },
         Directive::AppRestart { .. } => StudyTarget {
             kind: "application",
+            id: String::new(),
+            before_add: std::collections::HashSet::new(),
+        },
+        // A liveness reply touches nothing in the store. It is consumed by the
+        // run loop's watchdog and never reaches an apply path.
+        Directive::Pong => StudyTarget {
+            kind: "liveness",
+            id: String::new(),
+            before_add: std::collections::HashSet::new(),
+        },
+        Directive::Alert { .. } => StudyTarget {
+            kind: "liveness",
             id: String::new(),
             before_add: std::collections::HashSet::new(),
         },
@@ -5772,6 +5804,22 @@ fn queue_directive_receipts(
 
 pub type RunningTasks = std::sync::Mutex<std::collections::HashMap<String, Vec<RunningTaskDto>>>;
 
+/// Whether a tool call is outstanding for this project.
+///
+/// The run loop's idle deadline resets on provider events only, and a tool call
+/// produces one when it starts and one when it returns with nothing in between.
+/// A tool that outlives [`RUN_IDLE_TIMEOUT`] is therefore indistinguishable from
+/// a wedged turn by events alone, and the run was being torn down mid-work. This
+/// is the second opinion: the map the running-task UI is drawn from.
+///
+/// A poisoned lock reads as "nothing outstanding" so the watchdog keeps its
+/// original behaviour rather than becoming unable to ever stop a run.
+fn tool_in_flight(running: &RunningTasks, project_id: &str) -> bool {
+    running
+        .lock()
+        .is_ok_and(|tasks| tasks.get(project_id).is_some_and(|calls| !calls.is_empty()))
+}
+
 /// One question a run is blocked on: the way to answer it, and what
 /// remembering the answer would mean.
 pub struct PendingAsk {
@@ -5974,6 +6022,35 @@ const RUN_IDLE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5 *
 
 /// Home cleanup is one classification request, never an open-ended agent turn.
 const TASK_CLEANUP_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
+
+/// How long a liveness ping has to be answered before the run is wedged.
+///
+/// Deliberately shorter than [`RUN_IDLE_TIMEOUT`] and deliberately not tiny.
+/// The ping is delivered into the turn's control channel, so the agent reads it
+/// only after its current tool call returns — a long build or test sweep cannot
+/// answer sooner however alive it is. Thirty seconds would therefore kill the
+/// exact case this exists to protect. Ninety is long enough for a tool to
+/// finish and the model to emit one line, and short enough that a genuinely
+/// wedged run is stopped in RUN_IDLE_TIMEOUT + 90s rather than twice the
+/// window.
+///
+/// Any provider event clears the ping, not just the pong: a run that resumes
+/// streaming has already proven what the ping was asking.
+const LIVENESS_PING_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(90);
+
+/// The longest silence a run may claim for itself with `<ps @agency:alert(…)>`.
+///
+/// A declaration is a hint from the very turn being watched, so it widens the
+/// window rather than removing it: half an hour covers a cold workspace build
+/// or a full test sweep, and a turn that wedges after declaring one is still
+/// stopped rather than sitting until the owner notices.
+const MAX_DECLARED_BLOCKING: std::time::Duration = std::time::Duration::from_secs(30 * 60);
+
+/// The ping injected into a silent turn. Never persisted, never rendered.
+const LIVENESS_PING: &str = "<ps @agency:ping()>\n\nLiveness check, not owner input: this turn has \
+     produced no output for a while. Reply with `<ps @agency:pong()>` on its own \
+     line to confirm you are still working, then carry on with what you were \
+     doing. Do not describe this check to the owner.";
 
 /// The live run in each project: a reservation that there is at most one, and
 /// the signal that stops it.
@@ -11159,6 +11236,9 @@ async fn drive_run(
     // ordinary sliding idle deadline.
     let start_timeout = run_start_timeout(resume.as_deref());
     let mut idle_deadline = tokio::time::Instant::now() + start_timeout;
+    // Set when a liveness ping has been injected and not yet answered. One ping
+    // per silence: a second expiry with this still set is the wedged case.
+    let mut ping_outstanding = false;
     loop {
         let wake = tokio::select! {
             event = run.recv() => match event {
@@ -11199,7 +11279,104 @@ async fn drive_run(
                 break;
             }
             () = tokio::time::sleep_until(idle_deadline) => {
-                if opening_message_read {
+                /*
+                 * A tool still in flight is the turn working, not a wedged run.
+                 *
+                 * The deadline only ever reset on a *provider* event, and a tool
+                 * call emits `ToolCall` when it starts and `ToolResult` when it
+                 * returns — nothing in between. So any single tool that ran
+                 * longer than the window (a full test suite, a cold `cargo
+                 * build`, a long sweep over a repo) tripped this branch while it
+                 * was still running, and the run was torn down mid-work. The
+                 * owner sees that as the agent crashing and being offered a
+                 * retry, rather than as a clean end of turn. The log said as
+                 * much: this branch declared the run wedged and teardown then
+                 * reported "the run had already ended (Canceled)".
+                 *
+                 * `running` is the same map the UI drives its task list from, so
+                 * a non-empty entry here means the agent is genuinely waiting on
+                 * a tool. Extend by one more window instead of killing: a truly
+                 * wedged tool still trips this once its own liveness stops, and
+                 * a run with nothing outstanding is unaffected.
+                 */
+                /*
+                 * Ask before killing, but only once per silence.
+                 *
+                 * A tool still registered in `running` means the turn is
+                 * plausibly working, and that alone was enough to stop the
+                 * old unconditional teardown. It is not proof: a tool hung
+                 * forever stays registered forever. So the first time a
+                 * window expires with a tool outstanding, inject a ping and
+                 * give the run one more window to answer it. A live agent
+                 * emits `<ps pong>`, which lands as an ordinary provider
+                 * event and resets the deadline through the normal path. A
+                 * genuinely wedged run cannot answer, so the next expiry
+                 * finds `ping_outstanding` already set and tears it down.
+                 *
+                 * Neither the ping nor the pong is persisted or rendered.
+                 */
+                if opening_message_read && !ping_outstanding && tool_in_flight(&running, &project_id)
+                {
+                    crate::log!(
+                        crate::log::Level::Debug,
+                        "run",
+                        "{project_id}: no output for {}s with a tool still running — pinging before deciding it is wedged",
+                        RUN_IDLE_TIMEOUT.as_secs()
+                    );
+                    if acknowledgement_control.send(LIVENESS_PING).await.is_ok() {
+                        ping_outstanding = true;
+                        // Visible in the run's I/O trail, so a stop that follows
+                        // reads as "we asked and got nothing" rather than as an
+                        // unexplained crash.
+                        note_io(
+                            &app,
+                            &io,
+                            &project_id,
+                            "sent",
+                            "ping",
+                            format!(
+                                "no output for {}s with a tool still running; waiting {}s for a pong",
+                                RUN_IDLE_TIMEOUT.as_secs(),
+                                LIVENESS_PING_TIMEOUT.as_secs()
+                            ),
+                        );
+                        let _ = app.emit(
+                            "run:liveness_ping",
+                            serde_json::json!({
+                                "projectId": project_id,
+                                "waitSeconds": LIVENESS_PING_TIMEOUT.as_secs(),
+                            }),
+                        );
+                        idle_deadline = tokio::time::Instant::now() + LIVENESS_PING_TIMEOUT;
+                        continue;
+                    }
+                    // The control channel is gone, so there is nothing alive to
+                    // answer. Fall through and stop the run.
+                    crate::log!(
+                        crate::log::Level::Warn,
+                        "run",
+                        "{project_id}: the liveness ping could not be delivered; treating the run as wedged"
+                    );
+                }
+                if opening_message_read && ping_outstanding {
+                    crate::log!(
+                        crate::log::Level::Warn,
+                        "run",
+                        "{project_id}: a liveness ping went unanswered for {}s — the run is wedged and is being stopped",
+                        LIVENESS_PING_TIMEOUT.as_secs()
+                    );
+                    note_io(
+                        &app,
+                        &io,
+                        &project_id,
+                        "received",
+                        "ping",
+                        format!(
+                            "no pong within {}s; stopping the run as wedged",
+                            LIVENESS_PING_TIMEOUT.as_secs()
+                        ),
+                    );
+                } else if opening_message_read {
                     crate::log!(
                         crate::log::Level::Warn,
                         "run",
@@ -11275,6 +11452,9 @@ async fn drive_run(
         // window. Setup events before that point never extend startup.
         if opening_message_read || turn_started {
             idle_deadline = tokio::time::Instant::now() + RUN_IDLE_TIMEOUT;
+            // Any provider event answers the question a ping asks, so a run
+            // that simply resumed streaming is not held to replying in words.
+            ping_outstanding = false;
         }
         if turn_started && !opening_message_read {
             emit_message_receipt(&app, &project_id, &turn_id, "read");
@@ -11517,6 +11697,84 @@ async fn drive_run(
                     let end = directives_scanned_to + at + 1;
                     let line = streamed_text[directives_scanned_to..end].to_string();
                     directives_scanned_to = end;
+                    /*
+                     * A pong is consumed here and never applied.
+                     *
+                     * It answers the run loop's own liveness ping, so it has no
+                     * store effect and no receipt: letting it through to
+                     * `apply_directives_with_state` would record a study row and
+                     * hand the agent back a `NO_PING_OUTSTANDING` refusal for a
+                     * line the app itself asked for. The deadline has already
+                     * been extended by the provider event carrying this text;
+                     * clearing the flag is what stops the next expiry counting
+                     * as an unanswered ping.
+                     */
+                    if ping_outstanding
+                        && matches!(
+                            authored_directive_line(&line, &mut directives_fenced)
+                                .and_then(crate::directives::parse_authored),
+                            Some(crate::directives::Authored::Directive(
+                                crate::directives::Directive::Pong
+                            ))
+                        )
+                    {
+                        crate::log!(
+                            crate::log::Level::Debug,
+                            "run",
+                            "{project_id}: pong received; the turn is alive"
+                        );
+                        note_io(&app, &io, &project_id, "received", "ping", "pong: still working");
+                        let _ = app.emit(
+                            "run:liveness_pong",
+                            serde_json::json!({ "projectId": project_id }),
+                        );
+                        ping_outstanding = false;
+                        continue;
+                    }
+                    /*
+                     * A declared stretch of long, silent work.
+                     *
+                     * Widen the idle window to what the agent says it needs, so
+                     * the watchdog does not have to infer liveness from a
+                     * registered tool call at all. Clamped: a declaration is a
+                     * hint from the turn being watched, and an unbounded one
+                     * would disable the watchdog entirely.
+                     */
+                    if let Some(crate::directives::Authored::Directive(
+                        crate::directives::Directive::Alert { what, seconds },
+                    )) = authored_directive_line(&line, &mut directives_fenced)
+                        .and_then(crate::directives::parse_authored)
+                    {
+                        let granted = seconds.clamp(
+                            RUN_IDLE_TIMEOUT.as_secs(),
+                            MAX_DECLARED_BLOCKING.as_secs(),
+                        );
+                        crate::log!(
+                            crate::log::Level::Info,
+                            "run",
+                            "{project_id}: long work declared ({what}); widening the idle window to {granted}s"
+                        );
+                        note_io(
+                            &app,
+                            &io,
+                            &project_id,
+                            "received",
+                            "alert",
+                            format!("{what} (expected ~{seconds}s, waiting {granted}s)"),
+                        );
+                        let _ = app.emit(
+                            "run:long_work",
+                            serde_json::json!({
+                                "projectId": project_id,
+                                "what": what,
+                                "seconds": granted,
+                            }),
+                        );
+                        idle_deadline = tokio::time::Instant::now()
+                            + std::time::Duration::from_secs(granted);
+                        ping_outstanding = false;
+                        continue;
+                    }
                     /*
                      * Never gate PS parsing on another grammar. The old code
                      * called `apply_directives` only after a checkbox matched,
@@ -12920,6 +13178,63 @@ mod tests {
         );
 
         let _ = std::fs::remove_dir_all(dir);
+    }
+
+    fn running_call(project_id: &str, name: &str) -> RunningTaskDto {
+        RunningTaskDto {
+            tool_call_id: Some(format!("call-{name}")),
+            project_id: project_id.to_string(),
+            item_id: None,
+            name: name.to_string(),
+            label: name.to_string(),
+            started_at: now(),
+            is_cancelable: true,
+        }
+    }
+
+    /*
+     * A long tool call is work, and the watchdog used to kill it.
+     *
+     * The idle deadline resets on provider events, and a tool call emits one
+     * when it starts and one when it returns with nothing in between. Any
+     * single tool outliving the five minute window — a full frontend suite, a
+     * cold `cargo build`, a sweep over a repo — looked exactly like a wedged
+     * turn, so the run was torn down mid-work and the owner was shown a crash
+     * and a retry instead of a finished turn. It happened four times in one
+     * session on 2026-08-18, each landing squarely inside a long test run.
+     *
+     * Deleting the `tool_in_flight` guard in the run loop's timeout branch puts
+     * that back.
+     */
+    #[test]
+    fn a_running_tool_keeps_the_run_alive() {
+        let running: RunningTasks = std::sync::Mutex::new(std::collections::HashMap::new());
+
+        // Nothing outstanding: the watchdog must still be able to stop a run,
+        // which is the whole reason it exists.
+        assert!(!tool_in_flight(&running, "proj-a"));
+
+        running
+            .lock()
+            .unwrap()
+            .entry("proj-a".to_string())
+            .or_default()
+            .push(running_call("proj-a", "Bash"));
+        assert!(tool_in_flight(&running, "proj-a"));
+
+        // Per project, not global: another project's long build is not this
+        // project's liveness.
+        assert!(!tool_in_flight(&running, "proj-b"));
+
+        // The call returns and the entry is drained. An empty vector is left
+        // behind rather than removed, and that must not read as still running.
+        running
+            .lock()
+            .unwrap()
+            .get_mut("proj-a")
+            .expect("the project keeps its entry")
+            .clear();
+        assert!(!tool_in_flight(&running, "proj-a"));
     }
 
     /// Normal is zero so that adding the column needed no backfill, which
