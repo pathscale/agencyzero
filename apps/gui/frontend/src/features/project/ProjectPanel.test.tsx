@@ -164,16 +164,28 @@ describe("the project side panel", () => {
     ));
     await waitFor(() => expect(workspace.state.boot.status).toBe("ready"), { timeout: 5_000 });
     const adopt = vi.spyOn(workspace.actions, "adoptSession").mockResolvedValue();
-    const expandSettings = screen.queryByRole("button", { name: "Expand Settings" });
+    /*
+     * By label rather than by role, to route around a jsdom crash.
+     *
+     * A name-filtered `*ByRole` query runs testing-library's accessibility
+     * check, which calls `getComputedStyle`, and jsdom 30 throws resolving a
+     * font size there: "object null is not iterable" from
+     * `resolveLengthInPixels`. That is a jsdom bug rather than anything about
+     * this panel, and a label query finds the same button without walking the
+     * computed styles.
+     */
+    const expandSettings = screen.queryByLabelText("Expand Settings");
     if (expandSettings) fireEvent.click(expandSettings);
 
     expect(screen.getByText("Attached: existing-claude-session")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Change" }));
+    fireEvent.click(screen.getByText("Change"));
     flush();
     fireEvent.input(screen.getByPlaceholderText("session id, e.g. 019fc95e-…"), {
       target: { value: recovered },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Attach" }));
+    // Land the typed session id before Attach reads it back.
+    flush();
+    fireEvent.click(screen.getByText("Attach"));
     flush();
 
     await waitFor(() => expect(adopt).toHaveBeenCalledWith(PROJECT.id, "claude", recovered));
