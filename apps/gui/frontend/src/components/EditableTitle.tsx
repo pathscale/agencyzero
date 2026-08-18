@@ -102,7 +102,7 @@ export function EditableTitle(props: {
         <button
           type="button"
           /*
-           * A native button, not the library's.
+           * native-control: A native button, not the library's.
            *
            * The library `Button` renders through `Dynamic`, and the click on
            * this one never reached `start()`: driving it against a running
