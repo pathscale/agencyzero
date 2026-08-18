@@ -1419,7 +1419,7 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
                   }}
                   title={tx("Description / sub-items")}
                   aria-label={tx("Edit the description for {name}", { name: item.title })}
-                  aria-expanded={descriptionDraft()?.item.id === item.id}
+                  aria-expanded={descriptionDraft()?.item.id === item.id ? "true" : "false"}
                   aria-controls={`item-description-${item.id}`}
                   /*
                     These action buttons are plain siblings in the row, so

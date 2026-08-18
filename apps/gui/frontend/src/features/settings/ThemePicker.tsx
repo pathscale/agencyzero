@@ -298,7 +298,7 @@ function AccentSelector(props: {
                 type="button"
                 aria-label={label()}
                 title={label()}
-                aria-pressed={selected()}
+                aria-pressed={selected() ? "true" : "false"}
                 onClick={() => props.onPick(option.value)}
                 class={`size-7 overflow-hidden rounded-full border-2 p-0 transition-[border-color,transform] hover:scale-110 ${
                   selected()
@@ -356,7 +356,7 @@ function Axis(props: {
             <Button
               type="button"
               aria-label={`${props.label} ${props.format(stop, index())}`}
-              aria-pressed={selected(stop)}
+              aria-pressed={selected(stop) ? "true" : "false"}
               onClick={() => props.onPick(stop)}
               class={`size-7 overflow-hidden rounded-full border-2 p-0 transition-[border-color,transform] hover:scale-110 ${
                 selected(stop)

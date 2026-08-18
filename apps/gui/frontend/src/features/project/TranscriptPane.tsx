@@ -1,5 +1,5 @@
 import { Empty, Flex } from "@pathscale/ui";
-import { createEffect, createMemo, createSignal, For, Match, on, onCleanup, onSettled, Show, Switch, untrack } from "solid-js";
+import { createEffect, createMemo, createSignal, For, Match, onCleanup, onSettled, Show, Switch, untrack } from "solid-js";
 import type { JSX } from "@solidjs/web";
 import { Button } from "~/components/Button";
 import { Icon } from "~/components/Icon";
@@ -711,7 +711,17 @@ export function TranscriptPane(props: {
     return next;
   };
 
-  const timeline = createMemo(() => {
+  /*
+   * The return type is annotated rather than inferred.
+   *
+   * Solid 2's `createMemo` infers from the body, and this body reads
+   * `entryCache` and calls `stableEntry`, both of which are typed in terms of
+   * `TimelineEntry`. That is a cycle the checker resolves to `never`, and a
+   * `never` here collapses every read inside the memo: `props.messages`,
+   * `questionsFor()`, even `entryCache.keys()`. Naming the type breaks the
+   * cycle and takes nineteen errors with it.
+   */
+  const timeline = createMemo<TimelineEntry[]>(() => {
     const phaseStart = performance.now();
     /*
      * One pass to index the replies, then a lookup per question.
@@ -822,16 +832,21 @@ export function TranscriptPane(props: {
   // and no message signal necessarily changes when the pane becomes visible
   // again. Visibility is therefore an explicit reason to realign, but only for
   // a project whose durable owner choice still says it follows the tail.
-  createEffect(
-    on(
-      () => state.activeKey,
-      (activeKey) => {
-        if (activeKey !== props.project.id) return;
-        if (untrack(pinned)) followTail();
-        else restoreReaderPosition();
-      },
-    ),
-  );
+  /*
+   * `on()` is gone in Solid 2, so the dependency is declared by reading it
+   * first and the body runs untracked. That keeps the previous meaning
+   * exactly: this effect re-runs when the active tab changes and for no
+   * other reason, which matters because the body reads several signals it
+   * must not subscribe to.
+   */
+  createEffect(() => {
+    const activeKey = state.activeKey;
+    untrack(() => {
+      if (activeKey !== props.project.id) return;
+      if (pinned()) followTail();
+      else restoreReaderPosition();
+    });
+  });
 
   return (
     /*

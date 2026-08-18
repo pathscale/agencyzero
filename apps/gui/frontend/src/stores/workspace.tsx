@@ -1,6 +1,6 @@
+import type { JSX } from "@solidjs/web";
 import {
   type Accessor,
-  batch,
   createContext,
   createEffect,
   createMemo,
@@ -895,11 +895,14 @@ function createWorkspace() {
       const tabIndex = state.tabs.findIndex((tab) => tab.key === projectId);
       if (tabIndex >= 0) {
         setState((d) => {
-          d.tabs[tabIndex] = {
-          agent: hydratedTab.agent,
-          model: hydratedTab.model,
-          permission: hydratedTab.permission,
-        };
+          // Merged, not replaced. The path setter this replaced applied a
+          // partial; assigning the object outright drops key, kind, projectId
+          // and label, which is every field the tab is identified by.
+          Object.assign(d.tabs[tabIndex], {
+            agent: hydratedTab.agent,
+            model: hydratedTab.model,
+            permission: hydratedTab.permission,
+          });
         });
       }
     }
@@ -1569,9 +1572,11 @@ function createWorkspace() {
        * stale row is recoverable, a wrongly cancelled one is not.
        */
       if (entry.toolCallId !== null) {
-        setState("running", entry.projectId, (list = []) =>
-          list.filter((task) => task.toolCallId !== entry.toolCallId),
-        );
+        setState((d) => {
+          d.running[entry.projectId] = (d.running[entry.projectId] ?? []).filter(
+            (task) => task.toolCallId !== entry.toolCallId,
+          );
+        });
       }
       setState((d) => {
         d.taskLog[entry.projectId] = ((list = []) => [entry, ...list])(d.taskLog[entry.projectId]);
@@ -1589,9 +1594,11 @@ function createWorkspace() {
      * so the oldest goes first.
      */
     await bind("agent:io", (entry) => {
-      setState("agentIo", entry.projectId, (lines = []) =>
-        [...lines, entry].slice(-AGENT_IO_LIMIT),
-      );
+      setState((d) => {
+        d.agentIo[entry.projectId] = [...(d.agentIo[entry.projectId] ?? []), entry].slice(
+          -AGENT_IO_LIMIT,
+        );
+      });
     });
 
     await bind("run:rate_limit", (limit) => {
@@ -2240,12 +2247,16 @@ function createWorkspace() {
        */
       if (tab.kind === "draft") {
         setState((d) => {
-          d.tabs[index] = {
-          agent: defaultAgent,
-          model: selection.default,
-          permission: compatiblePermission(state.agents, defaultAgent, settings.defaultPermission),
-          effort: settings.defaultEffort,
-        };
+          Object.assign(d.tabs[index], {
+            agent: defaultAgent,
+            model: selection.default,
+            permission: compatiblePermission(
+              state.agents,
+              defaultAgent,
+              settings.defaultPermission,
+            ),
+            effort: settings.defaultEffort,
+          });
         });
         return;
       }
@@ -2258,11 +2269,11 @@ function createWorkspace() {
       const tabSelection = settings.models[tab.agent];
       if (isProjectAgent(tab.agent) && tabSelection?.enabled.includes(tab.model)) return;
       setState((d) => {
-        d.tabs[index] = {
-        agent: defaultAgent,
-        model: selection.default,
-        permission: compatiblePermission(state.agents, defaultAgent, tab.permission),
-      };
+        Object.assign(d.tabs[index], {
+          agent: defaultAgent,
+          model: selection.default,
+          permission: compatiblePermission(state.agents, defaultAgent, tab.permission),
+        });
       });
     });
   }
@@ -2288,9 +2299,12 @@ function createWorkspace() {
       const tabOwner = project?.forkedFrom?.itemId ? project.forkedFrom.projectId : tab.key;
       if (tabOwner !== ownerKey) return;
       setState((d) => {
-        d.tabs[index] = effort === undefined
-          ? { agent, model, permission: nextPermission }
-          : { agent, model, permission: nextPermission, effort };
+        Object.assign(
+          d.tabs[index],
+          effort === undefined
+            ? { agent, model, permission: nextPermission }
+            : { agent, model, permission: nextPermission, effort },
+        );
       });
     });
   }
@@ -2308,9 +2322,10 @@ function createWorkspace() {
     state.tabs.forEach((tab, index) => {
       const project = state.projects.find((candidate) => candidate.id === tab.projectId);
       const tabOwner = project?.forkedFrom?.itemId ? project.forkedFrom.projectId : tab.key;
-      if (tabOwner === ownerKey) setState((d) => {
-                                   d.tabs[index] = { extraThinking: enabled };
-                                 });
+      if (tabOwner === ownerKey)
+        setState((d) => {
+          d.tabs[index].extraThinking = enabled;
+        });
     });
     setPrefs((d) => {
       d.lastExtraThinking = enabled;
@@ -2338,44 +2353,42 @@ function createWorkspace() {
       extraThinking: tab?.extraThinking,
       study,
     });
-    batch(() => {
-      /*
-       * The record goes in from the command's own return value, before the tab
-       * is converted — not left to the `project:created` event.
-       *
-       * This is the one mutation the window is allowed to apply optimistically,
-       * because it is the tab the user is holding. The event is delivered on a
-       * separate hop, so leaving it to arrive first means the tab is already
-       * `kind: "project"` while `state.projects` still has nothing under that
-       * id, and the tab renders "This project could not be loaded" until it
-       * lands. `upsertProject` matches on id, so the event that follows is a
-       * no-op rather than a duplicate.
-       */
-      upsertProject(created.project);
+    /*
+     * The record goes in from the command's own return value, before the tab
+     * is converted — not left to the `project:created` event.
+     *
+     * This is the one mutation the window is allowed to apply optimistically,
+     * because it is the tab the user is holding. The event is delivered on a
+     * separate hop, so leaving it to arrive first means the tab is already
+     * `kind: "project"` while `state.projects` still has nothing under that
+     * id, and the tab renders "This project could not be loaded" until it
+     * lands. `upsertProject` matches on id, so the event that follows is a
+     * no-op rather than a duplicate.
+     */
+    upsertProject(created.project);
 
-      // The draft becomes the project tab: same position in the strip, so the
-      // tab you were typing in is the tab that keeps the conversation. Any tab
-      // already holding this project is dropped rather than duplicated.
-      setState((d) => {
-        d.tabs = d.tabs
-          .filter((candidate) => candidate.key !== created.project.id)
-          .map((candidate) =>
-            candidate.key === tabKey
-              ? {
-                  ...candidate,
-                  key: created.project.id,
-                  kind: "project" as const,
-                  projectId: created.project.id,
-                  label: created.project.name,
-                }
-              : candidate,
-          );
-      });
-      setState((d) => {
-        d.items[created.project.id] = created.items;
-      });
-      focus(created.project.id);
+    // The draft becomes the project tab: same position in the strip, so the
+    // tab you were typing in is the tab that keeps the conversation. Any tab
+    // already holding this project is dropped rather than duplicated.
+    setState((d) => {
+      d.tabs = d.tabs
+        .filter((candidate) => candidate.key !== created.project.id)
+        .map((candidate) =>
+          candidate.key === tabKey
+            ? {
+                ...candidate,
+                key: created.project.id,
+                kind: "project" as const,
+                projectId: created.project.id,
+                label: created.project.name,
+              }
+            : candidate,
+        );
     });
+    setState((d) => {
+      d.items[created.project.id] = created.items;
+    });
+    focus(created.project.id);
   }
 
   /** Create or reopen the dedicated child chat attached to one parent item. */
@@ -2505,11 +2518,11 @@ function createWorkspace() {
     // clears; stacked asks must survive an answer aimed at their neighbour.
     const target = sent.replyToQuestionId;
     if (!target) return;
-    setState("questions", projectId, (questions = []) =>
-      questions.map((question) =>
+    setState((d) => {
+      d.questions[projectId] = (d.questions[projectId] ?? []).map((question) =>
         question.id === target ? { ...question, answered: true } : question,
-      ),
-    );
+      );
+    });
     if (prefs.replyQuestionIds[projectId] === target) {
       setPrefs((d) => {
         d.replyQuestionIds[projectId] = "";
@@ -2798,9 +2811,11 @@ function createWorkspace() {
     },
     /** Drop one queued prompt — second thoughts are allowed while it waits. */
     removeQueued(projectId: string, index: number) {
-      setState("queued", projectId, (waiting = []) =>
-        waiting.filter((_, position) => position !== index),
-      );
+      setState((d) => {
+        d.queued[projectId] = (d.queued[projectId] ?? []).filter(
+          (_, position) => position !== index,
+        );
+      });
     },
     resolveModeration: (messageId: string, approve: boolean) =>
       client().resolveModeration(messageId, approve),
@@ -2853,7 +2868,7 @@ function createWorkspace() {
     /** Wave away a compaction that is still waiting for the run to end. */
     dropPendingCompact: (projectId: string): void =>
       setState((d) => {
-        d.pendingCompact = produce((waiting) => delete waiting[projectId]);
+        delete d.pendingCompact[projectId];
       }),
     /*
      * Read on demand rather than held in the store: the notes change once per
@@ -2893,7 +2908,10 @@ function createWorkspace() {
     exportStudyEvents: () => client().exportStudyEvents(),
     clearStudyEvents: () => client().clearStudyEvents(),
     async recheckAgents() {
-      setState((d) => reconcile(await client().listAgentStatus(true))(d.agents));
+      // Awaited first: the updater is synchronous in Solid 2, so the call
+      // cannot be made from inside it.
+      const next = await client().listAgentStatus(true);
+      setState((d) => reconcile(next)(d.agents));
     },
     /**
      * Re-read the catalogues, asking each CLI to enumerate where it can.
@@ -3017,7 +3035,10 @@ function createWorkspace() {
       });
     },
     async refreshModels() {
-      setState((d) => reconcile(await client().listModels(true))(d.models));
+      // Awaited first: the updater is synchronous in Solid 2, so the call
+      // cannot be made from inside it.
+      const next = await client().listModels(true);
+      setState((d) => reconcile(next)(d.models));
     },
     /**
      * Add or remove a model from an agent's picker.

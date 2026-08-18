@@ -114,7 +114,7 @@ export function Workspace(): JSX.Element {
           >
             <div
               data-retained-tab="home"
-              aria-hidden={activeTab().kind !== "home"}
+              aria-hidden={activeTab().kind !== "home" ? "true" : "false"}
               class={activeTab().kind === "home" ? "flex min-h-0 min-w-0 flex-1" : "hidden"}
             >
               <HomeTab />
@@ -122,7 +122,7 @@ export function Workspace(): JSX.Element {
 
             <div
               data-retained-tab="settings"
-              aria-hidden={activeTab().kind !== "settings"}
+              aria-hidden={activeTab().kind !== "settings" ? "true" : "false"}
               class={activeTab().kind === "settings" ? "flex min-h-0 min-w-0 flex-1" : "hidden"}
             >
               <SettingsTab />
@@ -140,7 +140,7 @@ export function Workspace(): JSX.Element {
                     {(retained) => (
                       <div
                         data-retained-project={projectId}
-                        aria-hidden={state.activeKey !== projectId}
+                        aria-hidden={state.activeKey !== projectId ? "true" : "false"}
                         class={
                           state.activeKey === projectId ? "flex min-h-0 min-w-0 flex-1" : "hidden"
                         }
