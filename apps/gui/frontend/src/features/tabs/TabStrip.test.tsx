@@ -342,6 +342,9 @@ describe("keyboard", () => {
     const globals = window as unknown as Record<string, unknown>;
     const { workspace } = await mountStrip();
     workspace.actions.focus("worktable");
+    // `cycleTab` steps from the active tab, so the focus above has to have
+    // landed before the chord fires or it cycles from the wrong place.
+    flush();
 
     try {
       globals.__TAURI_INTERNALS__ = {};
