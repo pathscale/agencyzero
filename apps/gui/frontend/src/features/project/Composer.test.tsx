@@ -690,6 +690,64 @@ describe("a draft belongs to its own tab", () => {
     setKey("project:abc");
     await waitFor(() => expect(field().value).toBe("meant for abc"));
   });
+
+  /*
+   * Undo is per tab, because the composer instance is not.
+   *
+   * The stacks were plain arrays, so Cmd-Z in one project popped a snapshot
+   * taken in another and wrote that text into *this* tab's draft: an unsent
+   * prompt silently replaced by another project's words, and persisted. Every
+   * other piece of state here is keyed by the tab for exactly this reason.
+   */
+  it("keeps one tab's undo history out of another tab's draft", async () => {
+    const [key, setKey] = createSignal("project:abc");
+    const screen = render(() => (
+      <WorkspaceProvider>
+        <Composer
+          draftKey={key()}
+          placeholder="Ask, or type / for commands…"
+          agent="claude"
+          model="sonnet"
+          modelOptions={[
+            { value: "claude:sonnet", label: "Claude · Sonnet", agent: "claude", model: "sonnet" },
+          ]}
+          efforts={[]}
+          effort=""
+          extraThinking={true}
+          permission="read_only"
+          onModelChange={() => {}}
+          onPermissionChange={() => {}}
+          onSend={vi.fn().mockResolvedValue(undefined)}
+        />
+      </WorkspaceProvider>
+    ));
+    const field = () =>
+      screen.getByLabelText("Ask, or type / for commands…") as HTMLTextAreaElement;
+
+    // Build a real undo history in the first tab.
+    fireEvent.input(field(), { target: { value: "first words" } });
+    flush();
+    fireEvent.input(field(), { target: { value: "first words, then more" } });
+    flush();
+    await waitFor(() =>
+      expect(prefs.composerDrafts["project:abc"]).toBe("first words, then more"),
+    );
+
+    setKey("project:xyz");
+    await waitFor(() => expect(field().value).toBe(""));
+    fireEvent.input(field(), { target: { value: "belongs to xyz" } });
+    flush();
+    await waitFor(() => expect(prefs.composerDrafts["project:xyz"]).toBe("belongs to xyz"));
+
+    // Undo here must not reach into the other tab's history.
+    fireEvent.keyDown(field(), { key: "z", metaKey: true });
+    flush();
+
+    expect(field().value).not.toContain("first words");
+    expect(prefs.composerDrafts["project:xyz"] ?? "").not.toContain("first words");
+    // And the first tab is untouched by any of it.
+    expect(prefs.composerDrafts["project:abc"]).toBe("first words, then more");
+  });
 });
 
 /*
