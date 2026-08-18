@@ -55,6 +55,7 @@ export function Workspace(): JSX.Element {
   const [retainedProjects, setRetainedProjects] = createSignal<string[]>([]);
 
   createEffect(
+    () => [state.tabs, state.activeKey] as const,
     () => {
       const active = activeTab();
       const activeProjectId = active.kind === "project" ? active.projectId : null;
@@ -68,7 +69,6 @@ export function Workspace(): JSX.Element {
           : next;
       });
     },
-    () => {},
   );
 
   return (
@@ -331,7 +331,10 @@ function MockBanner(): JSX.Element {
 
 export default function App(): JSX.Element {
   onSettled(() => {
-    onCleanup(installSelectionCopy());
+    // Returned, not `onCleanup`: Solid 2 forbids it inside `onSettled`, and
+    // this is the root component, so a throw here is the shape that leaves
+    // `boot.status` stuck on "loading".
+    return installSelectionCopy();
   });
 
   return (

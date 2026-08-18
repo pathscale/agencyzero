@@ -204,6 +204,7 @@ function IoPersistToggle(props: { projectId: string }): JSX.Element {
 
   // Read once per project; the flag only changes from this control.
   createEffect(
+    () => props.projectId,
     () => {
       const id = props.projectId;
       void actions
@@ -213,7 +214,6 @@ function IoPersistToggle(props: { projectId: string }): JSX.Element {
           log.warn(`could not read the I/O recording flag: ${describeError(cause)}`),
         );
     },
-    () => {},
   );
 
   const toggle = async (next: boolean): Promise<void> => {
@@ -258,9 +258,10 @@ export function AgentIoList(props: { projectId: string }): JSX.Element {
   /** Newest last, so it reads like a terminal; the view follows the tail. */
   let scroller: HTMLDivElement | undefined;
   createEffect(
+    // The count is the dependency: a new entry scrolls the view down. The
+    // scroll itself belongs in the effect, not the tracked phase.
+    () => lines().length,
     () => {
-      // Track the count so a new entry scrolls the view down.
-      lines().length;
       /*
        * The bottom, not past it. `scrollTop = scrollHeight` overshoots by a
        * whole viewport and relies on the platform taking it back; Blitz clamps
@@ -272,7 +273,6 @@ export function AgentIoList(props: { projectId: string }): JSX.Element {
         scroller.scrollTop = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
       }
     },
-    () => {},
   );
 
   const copyAll = async (): Promise<void> => {
@@ -573,6 +573,7 @@ function ConciseResponseToggle(props: { projectId: string }): JSX.Element {
   const [level, setLevel] = createSignal<(typeof levels)[number]>("default");
 
   createEffect(
+    () => props.projectId,
     () => {
       const id = props.projectId;
       void actions
@@ -586,7 +587,6 @@ function ConciseResponseToggle(props: { projectId: string }): JSX.Element {
         )
         .catch((cause) => log.warn(`could not read response verbosity: ${describeError(cause)}`));
     },
-    () => {},
   );
 
   const choose = async (index: number): Promise<void> => {
@@ -654,6 +654,7 @@ function ContextDetailSelect(props: { projectId: string }): JSX.Element {
   const [level, setLevel] = createSignal("adaptive");
 
   createEffect(
+    () => props.projectId,
     () => {
       const id = props.projectId;
       void actions
@@ -661,7 +662,6 @@ function ContextDetailSelect(props: { projectId: string }): JSX.Element {
         .then(setLevel)
         .catch((cause) => log.warn(`could not read context detail: ${describeError(cause)}`));
     },
-    () => {},
   );
 
   const choose = async (next: string): Promise<void> => {
@@ -932,6 +932,7 @@ function ApprovalRules(props: { projectId: string }): JSX.Element {
   // Re-asked when this project's pending approval appears or resolves — the
   // only moments a rule can be born; forgetting below updates the list itself.
   createEffect(
+    () => [state.pendingApprovals, props.projectId] as const,
     () => {
       void state.pendingApprovals[props.projectId];
       void actions
@@ -939,7 +940,6 @@ function ApprovalRules(props: { projectId: string }): JSX.Element {
         .then(setRules)
         .catch(() => setRules([]));
     },
-    () => {},
   );
 
   const forget = (): void => {
@@ -1031,6 +1031,7 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
   const filtering = () => query().trim().length > 0;
 
   createEffect(
+    () => [state.itemReveal, props.items] as const,
     () => {
       const target = state.itemReveal;
       target?.revision;
@@ -1046,7 +1047,6 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
         row?.focus();
       });
     },
-    () => {},
   );
 
   /** The item whose title is being rewritten in place, if any. */
@@ -2029,6 +2029,7 @@ function CheckpointToggle(props: { projectId: string }): JSX.Element {
   const [enabled, setEnabled] = createSignal(false);
 
   createEffect(
+    () => props.projectId,
     () => {
       const id = props.projectId;
       void actions
@@ -2038,7 +2039,6 @@ function CheckpointToggle(props: { projectId: string }): JSX.Element {
           log.warn(`could not read the checkpoint setting: ${describeError(cause)}`),
         );
     },
-    () => {},
   );
 
   const toggle = async (next: boolean): Promise<void> => {
@@ -2109,6 +2109,7 @@ function NotesEditor(props: { projectId: string }): JSX.Element {
   // Re-read when the tab changes under a reused instance, and after a
   // compaction has had a chance to write.
   createEffect(
+    () => props.projectId,
     () => {
       const projectId = props.projectId;
       void actions
@@ -2119,7 +2120,6 @@ function NotesEditor(props: { projectId: string }): JSX.Element {
         })
         .catch((cause) => log.warn(`could not read the notes: ${describeError(cause)}`));
     },
-    () => {},
   );
 
   const dirty = () => draft() !== saved();

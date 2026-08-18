@@ -279,7 +279,23 @@ function AccentSelector(props: {
   // A palette choice is semantic, not a frozen hex. Keep the same harmony
   // selected while its rendered colour responds to surface, mode, strength,
   // and softness. Older arbitrary hex values migrate to the nearest harmony.
+  /*
+   * Track the palette; rebase in the effect argument, never the compute one.
+   *
+   * `onPick` writes the value this reads, so running it in the tracked phase
+   * makes the write a dependency of its own computation - the same loop
+   * `SurfaceColorWheel` above was rewritten to avoid, which ended the settings
+   * suites in an out-of-memory abort rather than a recognisable error.
+   *
+   * Both the mode and the accent are tracked, because a rebase has to follow
+   * either. What matters is that `onPick` runs in the *effect* argument: the
+   * write still re-enters this computation, but through the ordinary effect
+   * queue rather than from inside the tracked phase, and the
+   * `next[selected]?.value !== props.accent` guard below stops the second
+   * pass, so it settles instead of looping.
+   */
   createEffect(
+    () => [prefs.colorMode, props.accent] as const,
     () => {
       const next = options();
       let selected = previous.findIndex((option) => option.value === props.accent);
@@ -295,7 +311,6 @@ function AccentSelector(props: {
       }
       previous = next;
     },
-    () => {},
   );
   return (
     <div class="flex flex-col gap-1.5">
