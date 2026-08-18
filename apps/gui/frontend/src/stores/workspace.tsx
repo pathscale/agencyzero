@@ -2504,7 +2504,10 @@ function createWorkspace() {
     setState((d) => {
       d.items[created.project.id] = created.items;
     });
-    focus(created.project.id);
+    // `justOpened`: the tab above was rewritten to this key in the same tick,
+    // and Solid 2 defers that write, so `focus`'s membership guard would not
+    // find it and the new project tab would never take the eye.
+    focus(created.project.id, true);
   }
 
   /** Create or reopen the dedicated child chat attached to one parent item. */
