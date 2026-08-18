@@ -82,11 +82,35 @@ describe("Home item rows", () => {
     expect(screen.getByRole("checkbox", { name: "Delete Review before deleting" })).toBeChecked();
     expect(onConfirm).not.toHaveBeenCalled();
 
-    fireEvent.click(screen.getByRole("checkbox", { name: "Delete Review before deleting" }));
-    await waitFor(() => expect(onKeep).toHaveBeenCalledOnce());
+    /*
+     * `change`, not `click`. The row listens for the box being *unchecked*,
+     * and jsdom toggles `checked` on a click without dispatching the `change`
+     * that a browser would, so the handler returned early on a box it still
+     * saw as checked and `onKeep` never ran.
+     */
+    const box = screen.getByRole("checkbox", {
+      name: "Delete Review before deleting",
+    }) as HTMLInputElement;
+    box.checked = false;
+    fireEvent.change(box);
+    flush();
+    // Called synchronously by the change handler, so assert it here: a
+    // `waitFor` retries past the point this row is torn down.
+    expect(onKeep).toHaveBeenCalledOnce();
     expect(onConfirm).not.toHaveBeenCalled();
 
-    fireEvent.click(screen.getByRole("button", { name: "Confirm" }));
+    /*
+     * Wait for the keep run to settle before clicking Confirm.
+     *
+     * Both actions share one `busy` signal and Confirm is `disabled` while it
+     * is set, so clicking while the keep promise is still in flight lands on a
+     * disabled button and does nothing. Solid 1 happened to have cleared it by
+     * now; Solid 2 defers the write that clears it.
+     */
+    const confirm = screen.getByRole("button", { name: "Confirm" }) as HTMLButtonElement;
+    await waitFor(() => expect(confirm.disabled).toBe(false));
+    fireEvent.click(confirm);
+    flush();
     await waitFor(() => expect(onConfirm).toHaveBeenCalledOnce());
   });
 
@@ -109,9 +133,11 @@ describe("Home item rows", () => {
         );
 
     fireEvent.click(by);
+    flush();
     expect(by).toHaveTextContent("Time");
     expect(worktableOrder()[0]).toContain("Phase A");
     fireEvent.click(direction);
+    flush();
     expect(worktableOrder()[0]).toContain("Ship corrective");
   });
 
@@ -132,13 +158,16 @@ describe("Home item rows", () => {
 
     expect(projectOrder()).toEqual(["cafe", "quux", "worktable"]);
     fireEvent.click(direction);
+    flush();
     expect(projectOrder()).toEqual(["worktable", "quux", "cafe"]);
 
     fireEvent.click(by);
+    flush();
     expect(by).toHaveTextContent("Time");
     expect(projectOrder()).toEqual(["worktable", "cafe", "quux"]);
 
     fireEvent.click(by);
+    flush();
     expect(by).toHaveTextContent("Turns");
     expect(projectOrder()).toEqual(["cafe", "worktable", "quux"]);
   });
@@ -181,7 +210,9 @@ describe("Home item rows", () => {
     expect(open.nextElementSibling?.textContent).toMatch(/active|planning|pending|new|shipped/i);
 
     screen.workspace.actions.focus("home");
+    flush();
     fireEvent.click(open);
+    flush();
     expect(screen.workspace.state.activeKey).toBe(fork.id);
   });
 
@@ -230,6 +261,9 @@ describe("Home item rows", () => {
     expect(input.value).toBe(title);
 
     fireEvent.input(input, { target: { value: "Renamed from Home" } });
+    // Land the typed title before Enter commits it, or the rename saves the
+    // value from before the keystroke.
+    flush();
     fireEvent.keyDown(input, { key: "Enter" });
     flush();
 
