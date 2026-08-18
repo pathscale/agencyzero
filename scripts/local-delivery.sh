@@ -84,6 +84,46 @@ pin_inspector_env() {
   echo "==> pinned inspector env in $(basename "$bundle")"
 }
 
+# Ask a running copy of the bundle to quit, and wait for it to go.
+#
+# Replacing a bundle under a live process deletes the executable and signature
+# pages it is still mapped to, and macOS then SIGKILLs it for an invalid
+# signature. That arrives with no shutdown, so the single-writer store is cut
+# off mid-write, and it looks from the outside exactly like the app crashed.
+#
+# So the running copy is asked to quit first, and only ever asked. TERM lets the
+# app run its own shutdown; it is never escalated to KILL, because a hard kill
+# is the very failure this exists to prevent. If it will not go, the build stops
+# and says so rather than pulling the bundle out from under it.
+quit_running_bundle() {
+  bundle=$1
+  executable="$bundle/Contents/MacOS/az-gui"
+  [ -x "$executable" ] || return 0
+
+  pids=$(pgrep -f "$executable" 2>/dev/null || true)
+  [ -n "$pids" ] || return 0
+
+  echo "==> asking $(basename "$bundle") to quit"
+  # shellcheck disable=SC2086 # word splitting is how the pid list is passed
+  kill -TERM $pids 2>/dev/null || true
+
+  # Ten seconds is a graceful shutdown that has finished draining, not a
+  # deadline the app is racing: it flushes and exits well inside that.
+  for _ in $(seq 1 100); do
+    pids=$(pgrep -f "$executable" 2>/dev/null || true)
+    if [ -z "$pids" ]; then
+      echo "==> it quit"
+      return 0
+    fi
+    sleep 0.1
+  done
+
+  echo "$(basename "$bundle") did not quit after SIGTERM." >&2
+  echo "It is deliberately not killed: replacing the bundle under a live" >&2
+  echo "process corrupts the store. Quit it and run this again." >&2
+  exit 1
+}
+
 publish_bundle() {
   built_bundle=$1
   published_bundle=$2
@@ -93,6 +133,9 @@ publish_bundle() {
   # triple; publish it to the canonical local-launch path only after bundling
   # succeeds, moving rather than copying so no duplicate app remains.
   if [ "$built_bundle" != "$published_bundle" ]; then
+    # Before the `rm -rf`, never after: that is the call that pulls the mapped
+    # executable out from under a running copy.
+    quit_running_bundle "$published_bundle"
     rm -rf "$published_bundle"
     mkdir -p "$(dirname "$published_bundle")"
     mv "$built_bundle" "$published_bundle"
@@ -158,6 +201,10 @@ case "$mode" in
       cd "$repo_root"
       cargo build --release --features blitz-inspector -p az-gui
     )
+    # Overwriting the executable and re-signing below both hit a running copy:
+    # macOS SIGKILLs it for the signature it no longer matches, which reads as a
+    # crash and cuts off the store mid-write. Ask it to quit first.
+    quit_running_bundle "$bundle"
     cp "$repo_root/target/release/az-gui" "$bundle/Contents/MacOS/az-gui"
     # Carry the version across too.
     #
