@@ -123,52 +123,61 @@ export function EditableTitle(props: {
           <Icon name="pencil" class="text-[11px]" />
         </button>
       </span>
-      <Input.Field
-        // Hidden rather than unmounted, for the reason above.
-        style={editing() ? undefined : { display: "none" }}
-        /*
-         * Focused when editing begins, not by `autofocus`.
-         *
-         * The field is mounted for the life of the component now, so there is
-         * no mount to hang focus off, and `autofocus` is applied once at the
-         * end of the flush that appends a node. `Composer` reaches for
-         * `field.focus()` for the same reason.
-         */
-        ref={(element: HTMLInputElement) => {
-          field = element;
-        }}
-        value={draft()}
-        aria-label={props.label ?? tx("Project name")}
-        /*
-         * The row behind this field opens a project on double click, so
-         * selecting a word to retype it navigated away and dropped the edit.
-         * A field's own mouse gestures stop here.
-         */
-        onClick={(event) => event.stopPropagation()}
-        onDblClick={(event) => event.stopPropagation()}
-        onMouseDown={(event) => event.stopPropagation()}
-        onInput={(event) => setDraft(event.currentTarget.value)}
-        // Only a blur that leaves an open editor commits. The field is mounted
-        // for the life of the component now, so it also blurs while hidden,
-        // and committing on that would close the editor as soon as it opened.
-        onBlur={() => {
-          if (editing()) void commit();
-        }}
-        onKeyDown={(event) => {
-          if (event.key === "Enter") {
-            event.preventDefault();
-            void commit();
-          }
-          if (event.key === "Escape") {
-            event.preventDefault();
-            // Abandoned, not committed: blur would otherwise save what Escape
-            // was pressed to discard.
-            setDraft(props.value);
-            setEditing(false);
-          }
-        }}
-        class={`min-w-0 flex-1 rounded-md border border-az-hairline-strong bg-az-inset px-2 py-0.5 text-az-title outline-none focus:border-az-link ${props.inputClass ?? ""}`}
-      />
+      {/*
+        Wrapped, and the *wrapper* is what hides.
+
+        `Input.Field` renders inside the library's own control div, so styling
+        the field alone left that div in the layout: measured at 101x46 beside
+        every project name, painting as a black rectangle and squeezing the
+        name it sits next to down to a few characters. Hiding from the outside
+        removes the box as well as its contents.
+      */}
+      <span class={editing() ? "flex min-w-0 flex-1" : "hidden"}>
+        <Input.Field
+          /*
+           * Focused when editing begins, not by `autofocus`.
+           *
+           * The field is mounted for the life of the component now, so there is
+           * no mount to hang focus off, and `autofocus` is applied once at the
+           * end of the flush that appends a node. `Composer` reaches for
+           * `field.focus()` for the same reason.
+           */
+          ref={(element: HTMLInputElement) => {
+            field = element;
+          }}
+          value={draft()}
+          aria-label={props.label ?? tx("Project name")}
+          /*
+           * The row behind this field opens a project on double click, so
+           * selecting a word to retype it navigated away and dropped the edit.
+           * A field's own mouse gestures stop here.
+           */
+          onClick={(event) => event.stopPropagation()}
+          onDblClick={(event) => event.stopPropagation()}
+          onMouseDown={(event) => event.stopPropagation()}
+          onInput={(event) => setDraft(event.currentTarget.value)}
+          // Only a blur that leaves an open editor commits. The field is mounted
+          // for the life of the component now, so it also blurs while hidden,
+          // and committing on that would close the editor as soon as it opened.
+          onBlur={() => {
+            if (editing()) void commit();
+          }}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") {
+              event.preventDefault();
+              void commit();
+            }
+            if (event.key === "Escape") {
+              event.preventDefault();
+              // Abandoned, not committed: blur would otherwise save what Escape
+              // was pressed to discard.
+              setDraft(props.value);
+              setEditing(false);
+            }
+          }}
+          class={`min-w-0 flex-1 rounded-md border border-az-hairline-strong bg-az-inset px-2 py-0.5 text-az-title outline-none focus:border-az-link ${props.inputClass ?? ""}`}
+        />
+      </span>
     </span>
   );
 }
