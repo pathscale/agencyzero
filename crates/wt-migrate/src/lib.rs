@@ -212,6 +212,14 @@ pub struct PullRequestSalvageReport {
     pub skipped: Vec<String>,
 }
 
+/// What an item-index salvage recovered, and what it could not.
+#[derive(Debug, Default, PartialEq, Eq)]
+pub struct ItemSalvageReport {
+    pub rows: usize,
+    pub projects: usize,
+    pub skipped: Vec<String>,
+}
+
 /// `project_item` as it shipped before `reference` was added.
 ///
 /// `worktable_version!` rather than `worktable!`: a historical shape exists to
@@ -1329,6 +1337,156 @@ pub async fn recover_pull_request_index(
         projects: report.projects,
     })
 }
+
+/// Rebuild `project_item` from its data file, omitting index entries whose row
+/// bytes cannot be read.
+///
+/// The same shape as [`salvage_pull_request_index`], for the same reason and
+/// against the same engine fault: the rows are intact in `.wt.data` and the
+/// primary index points at least one of them at a bad offset, so every reader
+/// that walks the index dies on that entry and the table reads as empty.
+///
+/// This is what stands between a torn index and a lost backlog. Every other
+/// route was tried against four separate stores and each failed identically,
+/// on the same row, at the same offset: `wt-migrate` reset the table,
+/// `salvage-items` could not open it in either shape, and the migration
+/// reported success while carrying nothing.
+///
+/// The source is never modified. Surviving rows are validated and written into
+/// a brand-new table, and the skipped keys come back so an operator can see
+/// what was lost before swapping anything into place.
+pub async fn salvage_item_index(source: &Path, target: &Path) -> eyre::Result<ItemSalvageReport> {
+    use app_schema::project_item::{
+        ProjectItemPersistenceEngine, ProjectItemRow, ProjectItemWorkTable,
+    };
+    use tokio::io::AsyncReadExt;
+
+    type StoredItem = <ProjectItemRow as StorableRow>::WrappedRow;
+
+    let table_path = source.join("project_item");
+    let mut primary = <SpaceIndexUnsized<String, { INNER_PAGE_SIZE as u32 }> as SpaceIndexOps<
+        String,
+    >>::primary_from_table_files_path(
+        table_path.to_string_lossy().into_owned(),
+        ProjectItemWorkTable::version(),
+    )
+    .await?;
+    let primary_index = primary.parse_indexset().await?;
+    let mut data_file = tokio::fs::File::open(table_path.join(".wt.data")).await?;
+    let mut rows = BTreeMap::new();
+    let mut skipped = Vec::new();
+    /*
+     * The index is walked first, and it is not trusted to be complete.
+     *
+     * On the store this verb was written for, the index held 61 entries for a
+     * table whose data file carries several hundred rows, and every one of the
+     * 61 failed validation. An index-only recovery therefore returns nothing
+     * while the rows sit intact on disk, which is the worst possible answer:
+     * it looks like the data is gone.
+     *
+     * So whatever the index yields is a starting point, and the data file is
+     * then swept independently below.
+     */
+    for (id, link) in primary_index.iter() {
+        if worktable::data_bucket::seek_by_link(&mut data_file, *link)
+            .await
+            .is_err()
+        {
+            skipped.push(id.clone());
+            continue;
+        }
+        let mut bytes = vec![0u8; link.length as usize];
+        if data_file.read_exact(&mut bytes).await.is_err() {
+            skipped.push(id.clone());
+            continue;
+        }
+        let Ok(stored) = rkyv::from_bytes::<StoredItem, rkyv::rancor::Error>(&bytes) else {
+            skipped.push(id.clone());
+            continue;
+        };
+        if stored.is_deleted() || stored.is_ghosted() || stored.is_vacuumed() {
+            skipped.push(id.clone());
+            continue;
+        }
+        let row = stored.get_inner();
+        // A key that points at another row's bytes is the tear itself. Keeping
+        // it would move one item's title onto another item's id.
+        if row.id != *id {
+            skipped.push(id.clone());
+            continue;
+        }
+        rows.insert(id.clone(), row);
+    }
+    drop(primary);
+
+    /*
+     * Then the data file itself, independently of the index.
+     *
+     * Rows are `rkyv` archives laid end to end, so a row can be recovered by
+     * trying to decode at each offset and keeping what validates. That is
+     * brute force and it is the point: it needs nothing from the index, which
+     * is the part that is broken.
+     *
+     * Alignment is not assumed. The scan steps one byte at a time and lets
+     * validation reject the misaligned reads, because a wrong stride silently
+     * recovers a fraction of the table and reports it as the whole thing.
+     */
+    {
+        let bytes = tokio::fs::read(table_path.join(".wt.data")).await?;
+        let mut offset = 0usize;
+        while offset < bytes.len() {
+            let remaining = &bytes[offset..];
+            if let Ok(stored) = rkyv::from_bytes::<StoredItem, rkyv::rancor::Error>(remaining) {
+                if !stored.is_deleted() && !stored.is_ghosted() && !stored.is_vacuumed() {
+                    let row = stored.get_inner();
+                    // The id convention is the only check that a decode landed
+                    // on a real row rather than on plausible-looking bytes.
+                    if row.id.starts_with("item-") && !row.project_id.is_empty() {
+                        rows.entry(row.id.clone()).or_insert(row);
+                    }
+                }
+            }
+            offset += 1;
+        }
+    }
+
+    let projects = rows
+        .values()
+        .map(|row| row.project_id.clone())
+        .collect::<std::collections::BTreeSet<_>>()
+        .len();
+
+    let open = |dir: &Path| {
+        let config = DiskConfig::new_with_table_name(
+            dir.to_string_lossy().into_owned(),
+            ProjectItemWorkTable::name_snake_case(),
+            ProjectItemWorkTable::version(),
+        );
+        async move {
+            let engine = ProjectItemPersistenceEngine::new(config).await?;
+            ProjectItemWorkTable::load(engine).await
+        }
+    };
+
+    let fresh = open(target).await?;
+    let recovered = rows.len();
+    for row in rows.into_values() {
+        fresh
+            .insert(row)
+            .map_err(|error| eyre::eyre!("project_item: {error}"))?;
+    }
+    fresh
+        .wait_for_ops()
+        .await
+        .map_err(|error| eyre::eyre!("project_item persistence failed: {error}"))?;
+
+    Ok(ItemSalvageReport {
+        rows: recovered,
+        projects,
+        skipped,
+    })
+}
+
 
 /// Rebuild the pull-request table while omitting primary-index entries whose
 /// row bytes are corrupt.
