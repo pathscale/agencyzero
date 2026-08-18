@@ -1,5 +1,5 @@
-import { flush } from "solid-js";
 import { fireEvent, render, waitFor } from "@solidjs/testing-library";
+import { flush } from "solid-js";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AnalyticsTab } from "~/features/analytics/AnalyticsTab";
 import type { UsageAnalytics } from "~/types";

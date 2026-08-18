@@ -11,6 +11,7 @@ import { ItemMarker, StatusDot } from "~/components/StatusDot";
 import { ApprovalCard } from "~/features/project/ApprovalCard";
 import { AttachmentPills } from "~/features/project/Composer";
 import { AgentIoList } from "~/features/project/ProjectPanel";
+import { chooseAttachmentPaths } from "~/lib/attachments";
 import { relativeTime } from "~/lib/format";
 import { defaultItemDescription } from "~/lib/itemDescription";
 import { sortItems, sortProjects } from "~/lib/itemSort";
@@ -479,17 +480,14 @@ function TaskManagerComposer(): JSX.Element {
   const [attachments, setAttachments] = createSignal<string[]>([]);
 
   const attach = async (): Promise<void> => {
-    try {
-      setError(null);
-      const paths = await actions.chooseAttachments();
-      if (paths.length === 0) return;
-      setAttachments((current) => [...current, ...paths.filter((path) => !current.includes(path))]);
-    } catch (cause) {
-      // Visible, for the reason given on the composer's copy of this handler.
-      const detail = describeError(cause);
-      log.warn(`could not attach: ${detail}`);
-      setError(`Could not attach a file. ${detail}`);
+    setError(null);
+    const { paths, error } = await chooseAttachmentPaths(actions.chooseAttachments);
+    if (error) {
+      setError(error);
+      return;
     }
+    if (paths.length === 0) return;
+    setAttachments((current) => [...current, ...paths.filter((path) => !current.includes(path))]);
   };
 
   const isRunning = () =>

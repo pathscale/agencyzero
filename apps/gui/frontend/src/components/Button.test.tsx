@@ -21,5 +21,4 @@ describe("Button", () => {
     expect(button.classList.contains("button--outline")).toBe(true);
     expect(button.classList.contains("az-ui-button-neutral")).toBe(false);
   });
-
 });

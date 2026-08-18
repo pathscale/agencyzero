@@ -1156,7 +1156,15 @@ async fn main() -> Result<()> {
                             .and_then(|v| v.as_f64())
                             .unwrap_or(0.0)
                     };
-                    boxes.insert(id, (read("x", 0), read("y", 1), read("width", 2), read("height", 3)));
+                    boxes.insert(
+                        id,
+                        (
+                            read("x", 0),
+                            read("y", 1),
+                            read("width", 2),
+                            read("height", 3),
+                        ),
+                    );
                 }
             }
 

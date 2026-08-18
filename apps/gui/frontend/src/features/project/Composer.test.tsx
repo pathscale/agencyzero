@@ -729,9 +729,7 @@ describe("a draft belongs to its own tab", () => {
     flush();
     fireEvent.input(field(), { target: { value: "first words, then more" } });
     flush();
-    await waitFor(() =>
-      expect(prefs.composerDrafts["project:abc"]).toBe("first words, then more"),
-    );
+    await waitFor(() => expect(prefs.composerDrafts["project:abc"]).toBe("first words, then more"));
 
     setKey("project:xyz");
     await waitFor(() => expect(field().value).toBe(""));

@@ -55,15 +55,20 @@ export function ProjectTab(props: { tab: Tab; project: Project }): JSX.Element {
    * a hand-maintained pixel offset would.
    */
   createEffect(
+    // Each of these decides whether a strip appears below the transcript, so
+    // each is a dependency. The remeasure belongs in the effect argument.
     () => {
       const id = props.project.id;
-      void (state.pullRequests[id] ?? []).filter((pr) => !pr.dismissed).length;
-      void state.pendingCompact[id];
-      void (state.queued[id] ?? []).length;
-      void state.streaming[id];
+      return [
+        (state.pullRequests[id] ?? []).filter((pr) => !pr.dismissed).length,
+        state.pendingCompact[id],
+        (state.queued[id] ?? []).length,
+        state.streaming[id],
+      ] as const;
+    },
+    () => {
       noteTranscriptChromeChanged();
     },
-    () => {},
   );
 
   const forkInfo = createMemo(() => {
@@ -616,7 +621,7 @@ export function ProjectTab(props: { tab: Tab; project: Project }): JSX.Element {
             visible={prefs.projectPanelVisible}
             onToggle={() =>
               setPrefs((d) => {
-                d.projectPanelVisible = ((visible) => !visible)(d.projectPanelVisible);
+                d.projectPanelVisible = !d.projectPanelVisible;
               })
             }
           />

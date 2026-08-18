@@ -1338,7 +1338,6 @@ pub async fn recover_pull_request_index(
     })
 }
 
-
 /// Insert recovered items, as JSON, into an existing store.
 ///
 /// The companion to [`salvage_item_index`] for the case that verb cannot
@@ -1350,10 +1349,7 @@ pub async fn recover_pull_request_index(
 ///
 /// Inserts are by id and skip what is already present, so a re-run after a
 /// partial restore adds only the difference.
-pub async fn restore_items_from_json(
-    target: &Path,
-    json: &str,
-) -> eyre::Result<(usize, usize)> {
+pub async fn restore_items_from_json(target: &Path, json: &str) -> eyre::Result<(usize, usize)> {
     use app_schema::project_item::{
         ProjectItemPersistenceEngine, ProjectItemRow, ProjectItemWorkTable,
     };
@@ -1608,7 +1604,6 @@ pub async fn salvage_item_index(source: &Path, target: &Path) -> eyre::Result<It
     })
 }
 
-
 /// Rebuild the pull-request table while omitting primary-index entries whose
 /// row bytes are corrupt.
 ///
@@ -1828,7 +1823,9 @@ mod recovery_tests {
         let engine = ProjectItemPersistenceEngine::new(config)
             .await
             .expect("empty engine");
-        let table = ProjectItemWorkTable::load(engine).await.expect("empty table");
+        let table = ProjectItemWorkTable::load(engine)
+            .await
+            .expect("empty table");
         table.close().await.expect("empty store closes");
         std::fs::copy(empty.path().join("project_item/primary.wt.idx"), &index)
             .expect("primary index is replaced with one that knows nothing");

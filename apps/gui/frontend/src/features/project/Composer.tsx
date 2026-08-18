@@ -4,6 +4,7 @@ import { createEffect, createMemo, createSignal, For, onCleanup, onSettled, Show
 import { Button } from "~/components/Button";
 import { Icon } from "~/components/Icon";
 import { PillMenu } from "~/components/PillMenu";
+import { chooseAttachmentPaths } from "~/lib/attachments";
 import { AGENT_LABELS, PERMISSION_ORDER, permissionLabel } from "~/lib/labels";
 import { describeError, log } from "~/lib/log";
 import {
@@ -498,23 +499,15 @@ export function Composer(props: ComposerProps): JSX.Element {
    */
   const attach = async (): Promise<void> => {
     const key = bucket();
-    try {
-      setErrorFor(key, null);
-      const paths = await actions.chooseAttachments();
-      if (paths.length === 0) return;
-      setAttachments((current) => [...current, ...paths.filter((path) => !current.includes(path))]);
-      field.focus();
-    } catch (cause) {
-      /*
-       * Say so on the surface, not only in the log. This used to warn and
-       * return, so a picker that failed to open was indistinguishable from
-       * one the owner cancelled: the button appeared to do nothing at all,
-       * and the only trace was a console nobody has open.
-       */
-      const detail = describeError(cause);
-      log.warn(`could not attach: ${detail}`);
-      setErrorFor(key, `Could not attach a file. ${detail}`);
+    setErrorFor(key, null);
+    const { paths, error } = await chooseAttachmentPaths(actions.chooseAttachments);
+    if (error) {
+      setErrorFor(key, error);
+      return;
     }
+    if (paths.length === 0) return;
+    setAttachments((current) => [...current, ...paths.filter((path) => !current.includes(path))]);
+    field.focus();
   };
 
   /**
