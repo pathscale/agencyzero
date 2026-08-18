@@ -1,5 +1,5 @@
 import { fireEvent, render, waitFor, within } from "@solidjs/testing-library";
-import { Show } from "solid-js";
+import { Show, flush } from "solid-js";
 import { describe, expect, it, vi } from "vitest";
 import { itemPage, PROJECT_ITEM_PAGE_SIZE, ProjectPanel } from "~/features/project/ProjectPanel";
 import { prefs } from "~/stores/prefs";
@@ -58,6 +58,7 @@ describe("the project side panel", () => {
     );
     const more = screen.getByRole("button", { name: /Show \d+ more items/ });
     fireEvent.click(more);
+    flush();
     await waitFor(() =>
       expect(screen.container.querySelectorAll("[data-item-id]").length).toBeGreaterThan(
         PROJECT_ITEM_PAGE_SIZE,
@@ -168,10 +169,12 @@ describe("the project side panel", () => {
 
     expect(screen.getByText("Attached: existing-claude-session")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Change" }));
+    flush();
     fireEvent.input(screen.getByPlaceholderText("session id, e.g. 019fc95e-…"), {
       target: { value: recovered },
     });
     fireEvent.click(screen.getByRole("button", { name: "Attach" }));
+    flush();
 
     await waitFor(() => expect(adopt).toHaveBeenCalledWith(PROJECT.id, "claude", recovered));
   });
@@ -220,6 +223,7 @@ describe("the project side panel", () => {
     await waitFor(() => expect(workspace.state.boot.status).toBe("ready"), { timeout: 5_000 });
 
     fireEvent.click(screen.getAllByLabelText(/Fork .* into a fresh chat/)[0]);
+    flush();
     await waitFor(() => expect(document.body.querySelector('[role="dialog"]')).not.toBeNull());
     const dialog = document.body.querySelector('[role="dialog"]') as HTMLElement;
     expect(dialog.parentElement).toBe(document.body);
@@ -231,6 +235,7 @@ describe("the project side panel", () => {
       target: { value: "Preserve the owner decision and run the focused tests." },
     });
     fireEvent.click(within(dialog).getByRole("button", { name: "Start fork" }));
+    flush();
 
     await waitFor(() =>
       expect(workspace.state.projects.some((project) => project.forkedFrom?.itemId)).toBe(true),
@@ -274,6 +279,7 @@ describe("the project side panel", () => {
       target: { value: "- [ ] Profile prompt cache\n- [ ] Verify cost" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Save description" }));
+    flush();
 
     await waitFor(async () =>
       expect(await workspace.actions.getItemContext("worktable-1")).toContain(
@@ -311,11 +317,13 @@ describe("the project side panel", () => {
     ));
     await waitFor(() => expect(workspace.state.boot.status).toBe("ready"), { timeout: 5_000 });
     workspace.actions.openProject("cafe");
+    flush();
     await waitFor(() => expect(workspace.state.questions.cafe?.[0]?.id).toBe("q-block"), {
       timeout: 5_000,
     });
     await workspace.actions.setItemStatus("cafe-0", "questions");
     await workspace.actions.answerQuestion("q-block", true);
+    flush();
 
     const initialReplies = await screen.findAllByRole("button", {
       name: "Reply to the question for Legacy-data scan on prod snapshot",
@@ -324,6 +332,7 @@ describe("the project side panel", () => {
     const row = screen.container.querySelector('[data-item-id="cafe-0"]');
     if (!row) throw new Error("question item row is missing");
     fireEvent.pointerEnter(row);
+    flush();
     const replies = await screen.findAllByRole("button", {
       name: "Reply to the question for Legacy-data scan on prod snapshot",
     });
@@ -335,6 +344,7 @@ describe("the project side panel", () => {
     expect(reply.className).toContain("border-warning/65");
     expect(row?.querySelector('use[href="#i-circle-help"]')).not.toBeNull();
     fireEvent.click(reply);
+    flush();
 
     await waitFor(() => expect(prefs.replyQuestionIds.cafe).toBe("q-block"));
   });
@@ -362,12 +372,14 @@ describe("the project side panel", () => {
     });
     const send = vi.spyOn(workspace.actions, "send");
     await workspace.actions.setItemStatus("quux-0", "questions");
+    flush();
 
     const work = await screen.findByRole("button", {
       name: "Work on Wire the component library; it has no unanswered question",
     });
     expect(work.className).toContain("size-[22px]");
     fireEvent.click(work);
+    flush();
 
     await waitFor(() => expect(send).toHaveBeenCalled());
     expect(send.mock.calls.at(-1)?.[4]).toBe("quux-0");

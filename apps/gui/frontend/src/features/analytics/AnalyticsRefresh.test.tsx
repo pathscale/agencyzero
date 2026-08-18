@@ -1,3 +1,4 @@
+import { flush } from "solid-js";
 import { fireEvent, render, waitFor } from "@solidjs/testing-library";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AnalyticsTab } from "~/features/analytics/AnalyticsTab";
@@ -43,6 +44,7 @@ describe("analytics refresh", () => {
     await waitFor(() => expect(getUsageAnalytics).toHaveBeenCalledTimes(1));
 
     fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
+    flush();
     await waitFor(() => expect(getUsageAnalytics).toHaveBeenCalledTimes(2));
   });
 
@@ -75,13 +77,16 @@ describe("analytics refresh", () => {
     expect(screen.getByText("Usage records")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("tab", { name: "Models" }));
+    flush();
     expect(screen.getByRole("tab", { name: "Models" })).toHaveAttribute("aria-selected", "true");
     expect(screen.getByRole("tabpanel")).toHaveAccessibleName("Models");
     expect(screen.getByText("Per model")).toBeInTheDocument();
 
     fireEvent.keyDown(screen.getByRole("tab", { name: "Models" }), { key: "ArrowRight" });
+    flush();
     expect(screen.getByRole("tab", { name: "Value" })).toHaveAttribute("aria-selected", "true");
     fireEvent.keyDown(screen.getByRole("tab", { name: "Value" }), { key: "End" });
+    flush();
     expect(screen.getByRole("tab", { name: "Models" })).toHaveAttribute("aria-selected", "true");
   });
 
@@ -106,6 +111,7 @@ describe("analytics refresh", () => {
     const screen = render(() => <AnalyticsTab />);
     await waitFor(() => expect(screen.getByRole("tab", { name: "Items" })).toBeInTheDocument());
     fireEvent.click(screen.getByRole("tab", { name: "Items" }));
+    flush();
 
     expect(screen.getByText("Repair settings drift")).toBeInTheDocument();
     expect(screen.getByText("1h 3m")).toBeInTheDocument();
