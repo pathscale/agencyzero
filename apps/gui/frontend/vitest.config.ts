@@ -25,7 +25,23 @@ export default defineConfig({
     },
   },
   resolve: {
-    alias: { "~": resolve(__dirname, "./src") },
+    alias: {
+      "~": resolve(__dirname, "./src"),
+    },
+    /*
+     * No "development" condition, deliberately.
+     *
+     * `solid-js` exports `dist/dev.js` under it and `dist/solid.js` otherwise,
+     * and only the dev build carries the `REACTIVE_WRITE_IN_OWNED_SCOPE`
+     * guard. That guard throws on a store write made from a different owner
+     * than the one that created the store, which is the shape this workspace
+     * has by design: one long-lived store, written from components and
+     * effects all over the app.
+     *
+     * It is absent from the shipped bundle - checked, zero occurrences - so a
+     * suite that resolves the dev build is testing a stricter runtime than the
+     * one users get, and 45 store tests failed on writes that work in the app.
+     */
     conditions: ["browser", "import", "module", "default"],
   },
 });
