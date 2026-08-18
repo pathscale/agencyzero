@@ -59,6 +59,46 @@ function mount(messages: Message[]) {
   return { screen, rows, showEarlier, showNewer };
 }
 
+/**
+ * Run animation frames inline, but never inside the effect that scheduled them.
+ *
+ * These tests need frames to run synchronously: the anchor restore happens on
+ * the next frame and holds a reveal open until it does, so a deferred frame
+ * means the test cannot page more than once.
+ *
+ * Running them straight from the stub is what broke: `TranscriptPane`'s initial
+ * fill schedules its next frame from inside a tracked effect, and the callback
+ * calls `flush()`, which Solid 2 refuses re-entrantly ("Cannot call flush()
+ * from inside onSettled or createTrackedEffect"). That halted the reactive
+ * system and failed every test in this file. A real `requestAnimationFrame`
+ * never invokes its callback synchronously, so the stub was modelling
+ * something the browser does not do.
+ *
+ * Frames scheduled while mounting are queued; the returned function drains them
+ * once mounting has returned, and from then on frames run inline. Both points
+ * are outside any effect, which is where a browser delivers them.
+ */
+function inlineFramesAfterMount(): () => void {
+  let mounting = true;
+  const queued: FrameRequestCallback[] = [];
+
+  vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => {
+    if (mounting) queued.push(callback);
+    else callback(0);
+    return 1;
+  });
+  vi.stubGlobal("cancelAnimationFrame", () => {});
+
+  return () => {
+    mounting = false;
+    // Each fill step schedules the next, so draining walks the window up to a
+    // full page. The guard stops a scheduling loop from hanging the suite.
+    for (let guard = 0; guard < 100 && queued.length > 0; guard++) {
+      queued.shift()?.(0);
+    }
+  };
+}
+
 describe("transcript window bounds", () => {
   afterEach(() => vi.unstubAllGlobals());
 
@@ -124,13 +164,9 @@ describe("transcript window bounds", () => {
   });
 
   it("stops growing at the ceiling and evicts the tail to keep reading upward", () => {
-    // The anchor restore runs on the next frame and holds the reveal open
-    // until it does; running frames inline lets the test page repeatedly.
-    vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => {
-      callback(0);
-      return 1;
-    });
+    const drainFrames = inlineFramesAfterMount();
     const { screen, rows, showEarlier } = mount(thread(200));
+    drainFrames();
 
     // One page is mounted already, so three reveals fill the window exactly
     // and the tail is still there.
@@ -161,11 +197,9 @@ describe("transcript window bounds", () => {
   });
 
   it("walks back down to the tail and re-engages the follow", () => {
-    vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => {
-      callback(0);
-      return 1;
-    });
+    const drainFrames = inlineFramesAfterMount();
     const { screen, rows, showEarlier, showNewer } = mount(thread(200));
+    drainFrames();
 
     // Three reveals fill the window, the fourth slides it one page off the tail.
     for (let page = 0; page < 4; page++) showEarlier();
@@ -182,10 +216,7 @@ describe("transcript window bounds", () => {
   });
 
   it("holds the reader's rows still while new messages land at the tail", () => {
-    vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => {
-      callback(0);
-      return 1;
-    });
+    const drainFrames = inlineFramesAfterMount();
     const messages = thread(200);
     const [growing, setGrowing] = createSignal(messages);
     const screen = render(() => (
@@ -193,6 +224,7 @@ describe("transcript window bounds", () => {
         <TranscriptPane project={PROJECT} messages={growing()} streaming="" />
       </WorkspaceProvider>
     ));
+    drainFrames();
     const rows = (): number => screen.container.querySelectorAll("[data-selectable]").length - 1;
 
     // Three reveals fill the window, two more slide it two pages off the tail.

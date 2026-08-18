@@ -40,13 +40,32 @@ function fakeEvent(
   return { event: event as unknown as PointerEvent, setPointerCapture, releasePointerCapture };
 }
 
+/**
+ * Build the reorder under an owner, then drive it from outside that owner.
+ *
+ * Solid 2 refuses a reactive write made from inside an owned scope
+ * (`REACTIVE_WRITE_IN_OWNED_SCOPE`), and `onPointerMove` sets the dragging
+ * signal. Running the body inside the `createRoot` callback put every handler
+ * call in that scope, so the first drag threw and all six of these tests failed
+ * — on the test's structure, not on anything `createTabReorder` does.
+ *
+ * A real pointer event arrives from the browser, outside any computation, which
+ * is exactly what this now models: the root exists only to own the signal, and
+ * the handlers are called after it returns. `dispose` runs at the end rather
+ * than before the assertions, so the signal stays live while they read it.
+ */
 function withReorder<T>(run: (ctx: ReturnType<typeof setup>) => T): T {
-  return createRoot((dispose) => {
-    const ctx = setup();
-    const result = run(ctx);
-    dispose();
-    return result;
+  let dispose = (): void => {};
+  const ctx = createRoot((disposer) => {
+    dispose = disposer;
+    return setup();
   });
+
+  try {
+    return run(ctx);
+  } finally {
+    dispose();
+  }
 }
 
 function setup() {
