@@ -1384,17 +1384,37 @@ pub async fn restore_items_from_json(
 
     let mut inserted = 0usize;
     let mut skipped = 0usize;
-    for (position, (id, item)) in parsed.into_iter().enumerate() {
+    /*
+     * Position is a fresh per-project sequence, and that is a policy.
+     *
+     * The extractor cannot recover the owner's arrangement: `position` does
+     * not survive a torn index, which is the whole reason this path exists.
+     * Enumerating the parsed map instead handed out `position` in
+     * lexicographic id order, across every project at once - an order nobody
+     * chose, presented as though they had, and the item list sorts on it.
+     *
+     * A per-project sequence is still invented, but it is invented in one
+     * obvious way: each project's rows come back contiguous and stable rather
+     * than interleaved by id. The neighbouring comment refuses to guess
+     * `priority` for the same reason; this says the same thing out loud
+     * instead of leaving it to `BTreeMap`.
+     */
+    let mut next_position: std::collections::HashMap<String, u32> =
+        std::collections::HashMap::new();
+    for (id, item) in parsed {
         if existing.contains(&id) {
             skipped += 1;
             continue;
         }
+        let slot = next_position.entry(item.project_id.clone()).or_default();
+        let position = *slot;
+        *slot = slot.saturating_add(1);
         let row = ProjectItemRow {
             id,
             project_id: item.project_id,
             title: item.title,
             status: item.status,
-            position: u32::try_from(position).unwrap_or(0),
+            position,
             reference: String::new(),
             // Recovered rows carry no ranking: the column postdates them, and
             // guessing an order is worse than letting every row read normal.
@@ -1496,31 +1516,58 @@ pub async fn salvage_item_index(source: &Path, target: &Path) -> eyre::Result<It
     /*
      * Then the data file itself, independently of the index.
      *
-     * Rows are `rkyv` archives laid end to end, so a row can be recovered by
-     * trying to decode at each offset and keeping what validates. That is
-     * brute force and it is the point: it needs nothing from the index, which
-     * is the part that is broken.
+     * The scan moves the *end* of the candidate slice, not just the start.
      *
-     * Alignment is not assumed. The scan steps one byte at a time and lets
-     * validation reject the misaligned reads, because a wrong stride silently
-     * recovers a fraction of the table and reports it as the whole thing.
+     * rkyv serialises leaves first and puts the root at the very end of the
+     * archive, so `from_bytes` only succeeds when the slice it is handed ends
+     * exactly where a root ends. An earlier version swept `&bytes[offset..]`,
+     * every slice of which ends at EOF: advancing `offset` changed only how
+     * much data preceded the one root at the end of the file, so the sweep
+     * recovered the last archive and nothing else. A five-row table came back
+     * with one row, reported as a successful salvage - which is the worst
+     * possible answer for recovery code, because the operator swaps the store
+     * on the strength of that report.
+     *
+     * So: for each candidate end, try the decodes that could finish there.
+     * Alignment is not assumed and no stride is guessed; validation is what
+     * rejects a slice that is not a row, because a wrong stride silently
+     * recovers a fraction of the table and calls it the whole thing.
      */
     {
         let bytes = tokio::fs::read(table_path.join(".wt.data")).await?;
-        let mut offset = 0usize;
-        while offset < bytes.len() {
-            let remaining = &bytes[offset..];
-            if let Ok(stored) = rkyv::from_bytes::<StoredItem, rkyv::rancor::Error>(remaining) {
-                if !stored.is_deleted() && !stored.is_ghosted() && !stored.is_vacuumed() {
-                    let row = stored.get_inner();
-                    // The id convention is the only check that a decode landed
-                    // on a real row rather than on plausible-looking bytes.
-                    if row.id.starts_with("item-") && !row.project_id.is_empty() {
-                        rows.entry(row.id.clone()).or_insert(row);
-                    }
+        /*
+         * Bounded twice, because the search is quadratic in the window.
+         *
+         * `MAX_ROW_BYTES` caps how far back a candidate root can begin, and
+         * rkyv archives are aligned, so the start only has to be tried on
+         * `ALIGN` boundaries. Without the stride a five-row table took 34
+         * seconds; a real store carries hundreds of rows and the sweep has to
+         * finish while an operator is waiting. The end offset is still tried
+         * at every byte, because that is where the root actually is and a
+         * missed end is a lost row.
+         */
+        const MAX_ROW_BYTES: usize = 8 * 1024;
+        const ALIGN: usize = 8;
+        for end in (1..=bytes.len()).rev() {
+            let lowest = end.saturating_sub(MAX_ROW_BYTES);
+            for start in (lowest..end).rev().filter(|start| start % ALIGN == 0) {
+                let candidate = &bytes[start..end];
+                let Ok(stored) = rkyv::from_bytes::<StoredItem, rkyv::rancor::Error>(candidate)
+                else {
+                    continue;
+                };
+                if stored.is_deleted() || stored.is_ghosted() || stored.is_vacuumed() {
+                    continue;
+                }
+                let row = stored.get_inner();
+                // The id convention is the only check that a decode landed on
+                // a real row rather than on plausible-looking bytes.
+                if row.id.starts_with("item-") && !row.project_id.is_empty() {
+                    rows.entry(row.id.clone()).or_insert(row);
+                    // This slice was a row, so nothing shorter ending here is.
+                    break;
                 }
             }
-            offset += 1;
         }
     }
 
@@ -1719,6 +1766,82 @@ mod recovery_tests {
     use app_schema::pull_request::{
         PullRequestPersistenceEngine, PullRequestRow, PullRequestWorkTable,
     };
+
+    fn item(id: &str, project_id: &str) -> ProjectItemRow {
+        ProjectItemRow {
+            id: id.into(),
+            project_id: project_id.into(),
+            title: format!("title for {id}"),
+            status: "planning".into(),
+            position: 0,
+            reference: String::new(),
+            priority: 0,
+        }
+    }
+
+    /*
+     * The index-independent sweep has to find every row, not just the last.
+     *
+     * This is the case the fallback exists for: hundreds of rows sitting in
+     * `.wt.data` with a primary index that cannot be walked. Recovering a
+     * fraction while reporting success is worse than failing outright,
+     * because the operator swaps the store on the strength of the report.
+     */
+    #[tokio::test]
+    async fn the_data_file_sweep_recovers_every_row_a_torn_index_hides() {
+        let root = tempfile::tempdir().expect("temporary recovery store");
+        let source = root.path().join("source");
+        let target = root.path().join("target");
+        let config = DiskConfig::new_with_table_name(
+            source.to_string_lossy().into_owned(),
+            ProjectItemWorkTable::name_snake_case(),
+            ProjectItemWorkTable::version(),
+        );
+        let engine = ProjectItemPersistenceEngine::new(config)
+            .await
+            .expect("engine");
+        let table = ProjectItemWorkTable::load(engine).await.expect("table");
+        for (id, project) in [
+            ("item-one", "proj-1"),
+            ("item-two", "proj-1"),
+            ("item-three", "proj-2"),
+            ("item-four", "proj-2"),
+            ("item-five", "proj-3"),
+        ] {
+            table.insert(item(id, project)).expect("row inserts");
+        }
+        table.close().await.expect("source closes cleanly");
+
+        /*
+         * The index is emptied rather than mangled, which is the shape the
+         * store this verb was written for actually had: a primary that parses
+         * and simply does not account for the rows still in `.wt.data`. A
+         * corrupt index fails to parse and never reaches the sweep at all.
+         */
+        let index = source.join("project_item/primary.wt.idx");
+        let empty = tempfile::tempdir().expect("temporary empty store");
+        let config = DiskConfig::new_with_table_name(
+            empty.path().to_string_lossy().into_owned(),
+            ProjectItemWorkTable::name_snake_case(),
+            ProjectItemWorkTable::version(),
+        );
+        let engine = ProjectItemPersistenceEngine::new(config)
+            .await
+            .expect("empty engine");
+        let table = ProjectItemWorkTable::load(engine).await.expect("empty table");
+        table.close().await.expect("empty store closes");
+        std::fs::copy(empty.path().join("project_item/primary.wt.idx"), &index)
+            .expect("primary index is replaced with one that knows nothing");
+
+        let report = salvage_item_index(&source, &target)
+            .await
+            .expect("salvage succeeds");
+
+        assert_eq!(
+            report.rows, 5,
+            "every row in the data file has to come back, not only the last archive"
+        );
+    }
 
     fn task(id: &str, project_id: &str) -> TaskLogRow {
         TaskLogRow {

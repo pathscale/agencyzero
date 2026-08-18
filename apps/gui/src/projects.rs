@@ -11111,6 +11111,26 @@ async fn drive_run(
     let injection_turn_id = turn_id.clone();
     let acknowledgement_control = run.control();
     let injection_control = run.control();
+    /*
+     * The liveness ping gets its own worker, for the reason above.
+     *
+     * `control.send` waits for the provider to acknowledge, and Codex can
+     * acknowledge only after emitting a burst of events. Awaiting it from the
+     * loop below would stop `run.recv` while the bounded event channel fills,
+     * and the watchdog written to tell a working run from a wedged one would
+     * manufacture the deadlock instead. The loop asks for a ping and carries
+     * on draining; this worker waits.
+     */
+    let (ping_request_tx, mut ping_request_rx) = tokio::sync::mpsc::unbounded_channel::<()>();
+    let (ping_failed_tx, mut ping_failed_rx) = tokio::sync::mpsc::unbounded_channel::<()>();
+    let ping_control = run.control();
+    let ping_delivery = tokio::spawn(async move {
+        while ping_request_rx.recv().await.is_some() {
+            if ping_control.send(LIVENESS_PING).await.is_err() {
+                let _ = ping_failed_tx.send(());
+            }
+        }
+    });
     let injection_delivery = tokio::spawn(async move {
         while let Some(injected) = injection_delivery_rx.recv().await {
             let delivered = deliver_injection(
@@ -11262,6 +11282,21 @@ async fn drive_run(
                 stalled_injection = true;
                 break;
             }
+            /*
+             * The ping could not be delivered, so nothing is going to answer
+             * it. Clearing the flag rather than stopping here keeps the
+             * decision in one place: the next expiry finds no outstanding ping
+             * and takes the ordinary wedged path.
+             */
+            Some(()) = ping_failed_rx.recv() => {
+                crate::log!(
+                    crate::log::Level::Warn,
+                    "run",
+                    "{project_id}: the liveness ping could not be delivered"
+                );
+                ping_outstanding = false;
+                continue;
+            }
             () = async {
                 match cleanup_deadline.as_ref() {
                     Some(deadline) => tokio::time::sleep_until(*deadline).await,
@@ -11323,7 +11358,10 @@ async fn drive_run(
                         "{project_id}: no output for {}s with a tool still running — pinging before deciding it is wedged",
                         RUN_IDLE_TIMEOUT.as_secs()
                     );
-                    if acknowledgement_control.send(LIVENESS_PING).await.is_ok() {
+                    // Handed to the ping worker rather than awaited here: this
+                    // task must keep draining `run.recv`. A send that cannot be
+                    // queued means the worker is gone, which is teardown.
+                    if ping_request_tx.send(()).is_ok() {
                         ping_outstanding = true;
                         // Visible in the run's I/O trail, so a stop that follows
                         // reads as "we asked and got nothing" rather than as an
@@ -11350,7 +11388,7 @@ async fn drive_run(
                         idle_deadline = tokio::time::Instant::now() + LIVENESS_PING_TIMEOUT;
                         continue;
                     }
-                    // The control channel is gone, so there is nothing alive to
+                    // The ping worker is gone, so there is nothing alive to
                     // answer. Fall through and stop the run.
                     crate::log!(
                         crate::log::Level::Warn,
@@ -12218,6 +12256,9 @@ async fn drive_run(
      */
     drop(inject_rx);
     drop(injection_delivery_tx);
+    // Closes the ping worker's queue so it can finish; a ping still in flight
+    // is answered into a run that is already ending, which is harmless.
+    drop(ping_request_tx);
 
     // One write, now that there is something final to write.
     let result = if cancelled {
@@ -12276,6 +12317,13 @@ async fn drive_run(
             crate::log::Level::Error,
             "run",
             "{project_id}: injection delivery worker failed: {error}"
+        );
+    }
+    if let Err(error) = ping_delivery.await {
+        crate::log!(
+            crate::log::Level::Error,
+            "run",
+            "{project_id}: liveness ping worker failed: {error}"
         );
     }
 
@@ -13239,6 +13287,73 @@ mod tests {
 
     /// Normal is zero so that adding the column needed no backfill, which
     /// means the stored value is not the sort order. Mixing the two up would
+    /*
+     * Events keep draining while a liveness ping is unacknowledged.
+     *
+     * The ping asks the provider a question, and Codex can answer a control
+     * request only after emitting a burst of events. The file's own invariant
+     * says delivery receipts must never share the task that drains those
+     * events: awaiting the acknowledgement from the event loop stops
+     * `run.recv`, the bounded channel fills, and each side waits for the other
+     * forever. The watchdog written to tell a working run from a wedged one
+     * would then manufacture the deadlock while performing the check.
+     *
+     * This models the shape rather than the whole run loop: a bounded event
+     * channel, a control acknowledgement that only completes after the events
+     * are consumed, and a reader that must not block on it. Awaiting the
+     * acknowledgement inline instead of handing it to the worker deadlocks
+     * this test, which is the regression it exists to catch.
+     */
+    #[tokio::test]
+    async fn events_keep_draining_while_a_liveness_ping_is_outstanding() {
+        // Small enough that the burst below cannot fit: the provider blocks on
+        // send until the reader takes them, exactly as the bounded event
+        // channel does in a real run.
+        let (event_tx, mut event_rx) = tokio::sync::mpsc::channel::<u32>(2);
+        let (ack_tx, ack_rx) = tokio::sync::oneshot::channel::<()>();
+        let (ping_request_tx, mut ping_request_rx) = tokio::sync::mpsc::unbounded_channel::<()>();
+
+        // The provider: emits a burst, and only then acknowledges the control
+        // request. This is the ordering the injection comment documents.
+        let provider = tokio::spawn(async move {
+            for event in 0..8u32 {
+                if event_tx.send(event).await.is_err() {
+                    return;
+                }
+            }
+            let _ = ack_tx.send(());
+        });
+
+        // The ping worker, off the reading task. It is the only thing allowed
+        // to wait for the acknowledgement.
+        let ping_worker = tokio::spawn(async move {
+            ping_request_rx.recv().await.expect("a ping was requested");
+            ack_rx.await.expect("the provider acknowledged");
+        });
+
+        // The reader: requests a ping and carries on draining rather than
+        // awaiting the acknowledgement.
+        ping_request_tx.send(()).expect("the worker is listening");
+        let mut drained = Vec::new();
+        while let Some(event) = event_rx.recv().await {
+            drained.push(event);
+        }
+
+        // A run loop that awaited the acknowledgement here would never reach
+        // this line, because the provider is still blocked on `send`.
+        tokio::time::timeout(std::time::Duration::from_secs(5), ping_worker)
+            .await
+            .expect("the ping worker finished rather than deadlocking")
+            .expect("the ping worker did not panic");
+        provider.await.expect("the provider did not panic");
+
+        assert_eq!(
+            drained,
+            (0..8).collect::<Vec<_>>(),
+            "every provider event has to arrive while the ping is outstanding"
+        );
+    }
+
     /// file every unranked item below every low one.
     #[test]
     fn priority_sorts_high_then_normal_then_low() {

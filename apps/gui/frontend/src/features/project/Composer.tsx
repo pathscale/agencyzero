@@ -709,18 +709,52 @@ export function Composer(props: ComposerProps): JSX.Element {
    */
   const UNDO_LIMIT = 100;
   const UNDO_COALESCE_MS = 350;
-  let undoStack: { text: string; caret: number }[] = [];
-  let redoStack: { text: string; caret: number }[] = [];
+  /*
+   * Keyed by `bucket()`, like every other piece of per-tab state here.
+   *
+   * One composer instance serves every tab, so a plain array meant Cmd-Z in
+   * one project popped a snapshot taken in another and `restore` wrote that
+   * text into *this* tab's draft: an unsent prompt silently replaced by
+   * another project's words, and persisted. That is the same failure
+   * `bucket()` already exists to prevent for drafts, errors and attachments.
+   *
+   * A burst is also bounded now. `lastSnapshotAt` used to be refreshed on
+   * every keystroke, so continuous typing never produced a second snapshot
+   * and one undo threw away the whole session; `burstStartedAt` closes the
+   * window after `UNDO_BURST_MS` however fast the typing is.
+   */
+  const UNDO_BURST_MS = 2_000;
+  type UndoEntry = { text: string; caret: number };
+  const undoStacks = new Map<string, UndoEntry[]>();
+  const redoStacks = new Map<string, UndoEntry[]>();
+  const stackFor = (stacks: Map<string, UndoEntry[]>): UndoEntry[] => {
+    const key = bucket();
+    const existing = stacks.get(key);
+    if (existing) return existing;
+    const created: UndoEntry[] = [];
+    stacks.set(key, created);
+    return created;
+  };
+  const undoStack = (): UndoEntry[] => stackFor(undoStacks);
+  const redoStack = (): UndoEntry[] => stackFor(redoStacks);
   let lastSnapshotAt = 0;
+  let burstStartedAt = 0;
 
   const snapshot = (): void => {
     const now = Date.now();
-    const previous = undoStack[undoStack.length - 1];
-    // Coalesce a burst into one entry, but always keep the first state of it.
-    if (previous && now - lastSnapshotAt < UNDO_COALESCE_MS) {
+    const stack = undoStack();
+    const previous = stack[stack.length - 1];
+    // Coalesce a burst into one entry, but always keep the first state of it,
+    // and never let one burst swallow an entire typing session.
+    if (
+      previous &&
+      now - lastSnapshotAt < UNDO_COALESCE_MS &&
+      now - burstStartedAt < UNDO_BURST_MS
+    ) {
       lastSnapshotAt = now;
       return;
     }
+    burstStartedAt = now;
     /*
      * The store, not the field.
      *
@@ -732,9 +766,9 @@ export function Composer(props: ComposerProps): JSX.Element {
      */
     const text = draft();
     if (previous?.text === text) return;
-    undoStack.push({ text, caret: field?.selectionStart ?? text.length });
-    if (undoStack.length > UNDO_LIMIT) undoStack.shift();
-    redoStack = [];
+    stack.push({ text, caret: field?.selectionStart ?? text.length });
+    if (stack.length > UNDO_LIMIT) stack.shift();
+    redoStacks.set(bucket(), []);
     lastSnapshotAt = now;
   };
 
@@ -761,20 +795,21 @@ export function Composer(props: ComposerProps): JSX.Element {
      * entry is the current text and undo would appear to do nothing for one
      * press. Dropping matching entries handles both without a special case.
      */
-    while (undoStack.length > 0 && undoStack[undoStack.length - 1].text === current.text) {
-      undoStack.pop();
+    const undos = undoStack();
+    while (undos.length > 0 && undos[undos.length - 1].text === current.text) {
+      undos.pop();
     }
-    const entry = undoStack.pop();
+    const entry = undos.pop();
     if (!entry) return;
-    redoStack.push(current);
+    redoStack().push(current);
     lastSnapshotAt = 0;
     restore(entry);
   };
 
   const redo = (): void => {
-    const entry = redoStack.pop();
+    const entry = redoStack().pop();
     if (!entry) return;
-    undoStack.push({ text: field?.value ?? draft(), caret: field?.selectionStart ?? 0 });
+    undoStack().push({ text: field?.value ?? draft(), caret: field?.selectionStart ?? 0 });
     lastSnapshotAt = 0;
     restore(entry);
   };
