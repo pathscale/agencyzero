@@ -425,8 +425,22 @@ export function Composer(props: ComposerProps): JSX.Element {
    */
   const setErrorFor = (key: string, message: string | null) =>
     setErrors((current) => ({ ...current, [key]: message }));
-  const setSendingFor = (key: string, value: boolean) =>
+  /*
+   * A plain Set beside the signal, and it is what actually blocks a double
+   * submit.
+   *
+   * `isSending` reads a signal, and Solid 2 defers the write that sets it. Two
+   * Enters in one tick therefore both saw `false` and both sent: the second
+   * keystroke billed a second turn. The signal still drives everything that
+   * renders; this is only the synchronous latch the guard needs.
+   */
+  const sendingNow = new Set<string>();
+  const isSendingNow = (key: string) => sendingNow.has(key);
+  const setSendingFor = (key: string, value: boolean) => {
+    if (value) sendingNow.add(key);
+    else sendingNow.delete(key);
     setSending((current) => ({ ...current, [key]: value }));
+  };
   const setError = (message: string | null) => setErrorFor(bucket(), message);
   const setAttachments = (next: string[] | ((previous: string[]) => string[])) => {
     const key = bucket();
@@ -510,6 +524,9 @@ export function Composer(props: ComposerProps): JSX.Element {
    * also blocks the double-submit that Enter-mashing would otherwise cause.
    */
   async function submit(): Promise<void> {
+    // The latch first: `canSend` reads a deferred signal, so on a second Enter
+    // in the same tick it still reports this tab as idle.
+    if (isSendingNow(bucket())) return;
     if (!canSend()) return;
 
     setError(null);
@@ -840,15 +857,17 @@ export function Composer(props: ComposerProps): JSX.Element {
    * field holds. Typing does not, so the undo stack survives it.
    */
   createEffect(
-    () => {
-      const text = draft();
+    // Watch the draft and the expanded state; write the field in the effect.
+    // This had the body in the compute argument with an empty effect, so the
+    // DOM write ran in the tracked phase and a remounted composer came back
+    // with an empty field rather than the draft it had saved.
+    () => [draft(), expanded()] as const,
+    ([text]) => {
       if (field && field.value !== text) field.value = text;
       // Measured like a typed one: a restored long prompt has to size the field
       // the same way. The microtask lets the write above land first.
-      expanded();
       queueMicrotask(() => resize());
     },
-    () => {},
   );
 
   return (

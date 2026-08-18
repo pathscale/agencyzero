@@ -435,6 +435,9 @@ describe("an unsent draft", () => {
     first.unmount();
 
     const second = mount({ draftKey: "project:abc" });
+    // The restored draft reaches the field through a signal, so land it before
+    // reading the DOM back.
+    flush();
     expect(second.field.value).toBe("half a thought");
   });
 
