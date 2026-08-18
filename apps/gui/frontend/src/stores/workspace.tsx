@@ -636,6 +636,7 @@ function createWorkspace() {
    */
   let workspaceTabsWriteTimer: ReturnType<typeof setTimeout> | undefined;
   createEffect(
+    () => {},
     () => {
       if (state.boot.status !== "ready") return;
       const workspaceTabs = portableWorkspaceTabs();
@@ -653,7 +654,6 @@ function createWorkspace() {
         );
       }, 120);
     },
-    () => {},
   );
   onCleanup(() => {
     if (workspaceTabsWriteTimer) clearTimeout(workspaceTabsWriteTimer);
@@ -661,6 +661,7 @@ function createWorkspace() {
 
   let prefsWriteTimer: ReturnType<typeof setTimeout> | undefined;
   createEffect(
+    () => {},
     () => {
       if (state.boot.status !== "ready" || !state.settings) return;
       const snapshot = portablePrefsSnapshot();
@@ -674,7 +675,6 @@ function createWorkspace() {
           .catch((cause) => log.warn(`could not persist UI preferences: ${describeError(cause)}`));
       }, 250);
     },
-    () => {},
   );
   onCleanup(() => {
     if (prefsWriteTimer) clearTimeout(prefsWriteTimer);
@@ -881,22 +881,43 @@ function createWorkspace() {
     const messages = messagePage.messages;
     const project = state.projects.find((candidate) => candidate.id === projectId);
     const hydratedTab = project ? projectTab(project, messages) : null;
-    setState((d) => reconcile(items)(d.items[projectId]));
-    setState((d) => reconcile(messages)(d.messages[projectId]));
+    setState((d) => {
+      d.items[projectId] ??= [];
+      reconcile(items)(d.items[projectId]);
+    });
+    setState((d) => {
+      d.messages[projectId] ??= [];
+      reconcile(messages)(d.messages[projectId]);
+    });
     setState((d) => {
       d.messageTotals[projectId] = messagePage.total;
     });
     setState((d) => {
       d.turnCounts[projectId] = usageTotals(messages).turns;
     });
-    setState((d) => reconcile(running)(d.running[projectId]));
-    setState((d) => reconcile(taskLog.entries)(d.taskLog[projectId]));
+    setState((d) => {
+      d.running[projectId] ??= [];
+      reconcile(running)(d.running[projectId]);
+    });
+    setState((d) => {
+      d.taskLog[projectId] ??= [];
+      reconcile(taskLog.entries)(d.taskLog[projectId]);
+    });
     setState((d) => {
       d.logTotals[projectId] = taskLog.total;
     });
-    setState((d) => reconcile(io)(d.agentIo[projectId]));
-    setState((d) => reconcile(prs)(d.pullRequests[projectId]));
-    setState((d) => reconcile(questions)(d.questions[projectId]));
+    setState((d) => {
+      d.agentIo[projectId] ??= [];
+      reconcile(io)(d.agentIo[projectId]);
+    });
+    setState((d) => {
+      d.pullRequests[projectId] ??= [];
+      reconcile(prs)(d.pullRequests[projectId]);
+    });
+    setState((d) => {
+      d.questions[projectId] ??= [];
+      reconcile(questions)(d.questions[projectId]);
+    });
     if (hydratedTab) {
       const tabIndex = state.tabs.findIndex((tab) => tab.key === projectId);
       if (tabIndex >= 0) {
@@ -978,7 +999,10 @@ function createWorkspace() {
         fullyLoaded.delete(projectId);
         throw cause;
       });
-    setState((d) => reconcile(page.messages)(d.messages[projectId]));
+    setState((d) => {
+      d.messages[projectId] ??= [];
+      reconcile(page.messages)(d.messages[projectId]);
+    });
     setState((d) => {
       d.messageTotals[projectId] = page.total;
     });
@@ -1644,7 +1668,10 @@ function createWorkspace() {
           delete limits[projectId];
         });
       } else {
-        setState((d) => reconcile(next)(d.rateLimits[projectId]));
+        setState((d) => {
+          d.rateLimits[projectId] ??= {};
+          reconcile(next)(d.rateLimits[projectId]);
+        });
       }
     });
 
