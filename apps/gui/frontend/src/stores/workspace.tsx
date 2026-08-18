@@ -3168,7 +3168,20 @@ export function WorkspaceProvider(props: ParentProps): JSX.Element {
 }
 
 export function useWorkspace(): Workspace {
-  const workspace = useContext(WorkspaceContext);
+  /*
+   * Solid 2 throws from `useContext` itself when a context has no default and
+   * no provider above it, where Solid 1 answered `undefined` and let the check
+   * below produce the message that names the actual mistake. Catching keeps
+   * that message, and keeps a component rendered outside the provider (which
+   * several tests do deliberately) failing on our terms rather than on a
+   * framework error that does not say which context is missing.
+   */
+  let workspace: Workspace | undefined;
+  try {
+    workspace = useContext(WorkspaceContext);
+  } catch {
+    workspace = undefined;
+  }
   if (!workspace) throw new Error("useWorkspace must be used inside <WorkspaceProvider>");
   return workspace;
 }
