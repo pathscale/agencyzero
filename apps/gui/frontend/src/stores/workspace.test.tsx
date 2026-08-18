@@ -202,6 +202,9 @@ describe("startup", () => {
     setPrefs((d) => {
       d.lastTabKey = "cafe";
     });
+    // Boot reads these while deciding what to restore, so they have to land
+    // before the provider mounts rather than after.
+    flush();
 
     const workspace = await mountWorkspace();
 
@@ -342,6 +345,8 @@ describe("moveTab", () => {
   it("persists the project order, so it survives a restart", async () => {
     const workspace = await mountWorkspace();
     workspace.actions.moveTab("quux", 1);
+    // `commitTabOrder` reads the strip the move above rewrote.
+    flush();
     await workspace.actions.commitTabOrder();
 
     await waitFor(() =>
@@ -863,10 +868,14 @@ describe("backup portability", () => {
     setPrefs((d) => {
       d.composerDrafts["project:worktable"] = "do not treat as a preference";
     });
+    // The backup snapshots the prefs store, so the writes above have to have
+    // landed before it reads them.
+    flush();
 
     await expect(workspace.actions.createStoreBackup()).rejects.toThrow(
       "the fixture backend has no durable store to back up",
     );
+    flush();
 
     expect(workspace.state.settings?.uiPreferences.uiSize).toBe("extra-large");
     expect(workspace.state.settings?.uiPreferences.expandedComposerKeys).toEqual([

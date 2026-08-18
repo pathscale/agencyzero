@@ -666,7 +666,19 @@ function createWorkspace() {
    */
   let workspaceTabsWriteTimer: ReturnType<typeof setTimeout> | undefined;
   createEffect(
-    () => {},
+    /*
+     * What to watch, and it has to be named here.
+     *
+     * This read `() => {}`, which tracks nothing: the effect ran once at
+     * creation and never again, so the strip stopped persisting itself the
+     * moment anything changed. Opening, closing or reordering a tab was not
+     * written through to either the legacy preference or the settings row,
+     * and a restart came back with a stale strip.
+     *
+     * Solid 1 re-ran the body on any read inside it, which is why an empty
+     * compute still worked; Solid 2 subscribes to the compute argument alone.
+     */
+    () => [state.boot.status, state.tabs, state.activeKey, state.transcriptPositions] as const,
     () => {
       if (state.boot.status !== "ready") return;
       const workspaceTabs = portableWorkspaceTabs();
@@ -691,7 +703,13 @@ function createWorkspace() {
 
   let prefsWriteTimer: ReturnType<typeof setTimeout> | undefined;
   createEffect(
-    () => {},
+    /*
+     * The snapshot itself is the dependency. An empty compute tracks nothing,
+     * so this ran once at creation and never again: every UI preference the
+     * owner changed after boot - theme, sizing, sort order - was left unsaved
+     * and came back to its old value on the next launch.
+     */
+    () => portablePrefsSnapshot(),
     () => {
       if (state.boot.status !== "ready" || !state.settings) return;
       const snapshot = portablePrefsSnapshot();
