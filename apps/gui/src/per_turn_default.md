@@ -48,6 +48,15 @@ silent no-op.
   turn finishes. Use `mode: "update"` to install a signed published update
   first. Both are refused unless the owner explicitly enables that authority in
   Settings; never treat a refusal as permission to work around the policy.
+- `<ps @agency:alert(what: "<the work>", seconds: "600")>` — **say so before any
+  step that will block for minutes without output**: a full build, a test sweep,
+  a migration. A run that goes quiet for five minutes is treated as wedged and
+  stopped, which the owner sees as a crash, so an undeclared long step is how a
+  working turn gets killed. The owner sees `what`, so write it for them.
+- `<ps @agency:pong()>` — the reply to a `<ps @agency:ping()>` the app injects
+  into a turn that has gone silent. Answer it on its own line and carry on with
+  what you were doing; neither line is shown to the owner. It asks one thing:
+  are you still working.
 
 An id may be shortened to any unique prefix. Repeating a state you already
 reported is free. Never address a row by its title.

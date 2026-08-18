@@ -71,6 +71,9 @@ pub const SURFACE: Surface = Surface {
         "pr.retire",
         "issue.link",
         "app.restart",
+        "ping",
+        "pong",
+        "alert",
     ],
     reserved: &[],
     bound: "any project in this installation's store, named by id or by name; \
@@ -164,6 +167,34 @@ pub enum Directive {
     /// one of them at random. That is not a cleanup tool. This one names the
     /// row it means, and an unknown id is refused like everywhere else.
     ItemRetire { id: String },
+    /// Answer to an injected liveness ping. Never authored by the owner.
+    ///
+    /// The run loop's idle watchdog can only see provider events, and a tool
+    /// call emits one when it starts and one when it returns with nothing in
+    /// between, so a tool that outlives the idle window is indistinguishable
+    /// from a wedged turn by events alone. A ping is injected into the live
+    /// turn instead, and this is the reply that proves the agent is still
+    /// processing rather than merely holding a registered tool call.
+    ///
+    /// Consumed by the run loop and never rendered: the owner sees neither the
+    /// ping nor the pong.
+    Pong,
+    /// Declare that the next stretch of work will be long and silent.
+    ///
+    /// The inverse of a ping: rather than the app asking after five minutes of
+    /// silence, the agent says up front that a build, test sweep or migration
+    /// is about to block for a while. The run loop widens its idle window to
+    /// `seconds`, and the owner sees the reason instead of watching an
+    /// apparently frozen turn and reaching for Stop.
+    ///
+    /// Owner-visible on purpose. The ping and pong are plumbing; this is the
+    /// part that says "this is expected, do not cancel".
+    Alert {
+        /// What is running, in the agent's own words.
+        what: String,
+        /// How long it is expected to block. Clamped by the run loop.
+        seconds: u64,
+    },
 }
 
 impl Directive {
@@ -181,6 +212,8 @@ impl Directive {
             Self::PrRetire { .. } => "pr.retire",
             Self::IssueLink { .. } => "issue.link",
             Self::AppRestart { .. } => "app.restart",
+            Self::Pong => "pong",
+            Self::Alert { .. } => "alert",
         }
     }
 }
@@ -355,6 +388,22 @@ fn from_reference(reference: &Reference) -> Option<Directive> {
         let mode = arg(args, "mode")?.to_ascii_lowercase();
         return matches!(mode.as_str(), "disk" | "update")
             .then_some(Directive::AppRestart { mode });
+    }
+    // Argument-free by design: a pong carries no state, only the fact that the
+    // agent reached this line while the turn was still running. `ping` parses
+    // as the same nothing so that the injected line is inert if it is ever
+    // echoed back rather than answered.
+    if verb.eq_ignore_ascii_case("pong") || verb.eq_ignore_ascii_case("ping") {
+        return Some(Directive::Pong);
+    }
+    if verb.eq_ignore_ascii_case("alert") {
+        let what = arg(args, "what").or_else(|| arg(args, "text"))?;
+        // A declaration with no duration still means "expect silence", so it
+        // gets one ordinary idle window rather than being refused outright.
+        let seconds = arg(args, "seconds")
+            .and_then(|seconds| seconds.parse::<u64>().ok())
+            .unwrap_or(300);
+        return (!what.is_empty()).then_some(Directive::Alert { what, seconds });
     }
     None
 }
@@ -687,6 +736,48 @@ mod tests {
     /// Retiring names the row. The verb it replaces matched by title, which on
     /// a duplicate pair, the exact thing this whole shape exists to stop
     /// producing, would have removed one of the two at random.
+    /*
+     * The liveness exchange parses, and carries no state.
+     *
+     * `ping` folds to the same value as `pong` so that an injected ping echoed
+     * back into the stream is inert rather than becoming an unknown verb the
+     * agent gets a refusal for.
+     */
+    #[test]
+    fn a_liveness_exchange_parses_and_carries_nothing() {
+        assert_eq!(parse("<ps @agency:pong()>"), Some(Directive::Pong));
+        assert_eq!(parse("<ps @agency:ping()>"), Some(Directive::Pong));
+        assert_eq!(parse("<ps @agency:PONG()>"), Some(Directive::Pong));
+    }
+
+    /*
+     * A declared stretch of long work names itself and says how long.
+     *
+     * The duration is a hint the run loop clamps, so a missing one is not a
+     * refusal: silence was still declared, and one ordinary idle window is the
+     * honest default for it.
+     */
+    #[test]
+    fn declared_long_work_names_itself_and_defaults_its_duration() {
+        assert_eq!(
+            parse(r#"<ps @agency:alert(what: "cargo build", seconds: "900")>"#),
+            Some(Directive::Alert {
+                what: "cargo build".into(),
+                seconds: 900,
+            })
+        );
+        assert_eq!(
+            parse(r#"<ps @agency:alert(what: "test sweep")>"#),
+            Some(Directive::Alert {
+                what: "test sweep".into(),
+                seconds: 300,
+            })
+        );
+        // A duration with no work to name says nothing the owner can act on.
+        assert!(parse(r#"<ps @agency:alert(seconds: "900")>"#).is_none());
+        assert!(parse(r#"<ps @agency:alert(what: "")>"#).is_none());
+    }
+
     /// The published document is generated from the declaration, not written
     /// beside it. A capability document that drifts from the parser is worse
     /// than none: it is a promise about behaviour that nothing enforces.
