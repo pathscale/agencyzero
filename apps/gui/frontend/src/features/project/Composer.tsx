@@ -354,14 +354,15 @@ export function Composer(props: ComposerProps): JSX.Element {
     return true;
   };
   createEffect(
+    // Both values change the warning's height, so both are the dependency.
+    // Tracking `props.onChromeChange` instead watched a stable function
+    // reference and the effect never re-ran.
+    () => [showCostAlert(), confirmDisableCostWarning()] as const,
     () => {
-      // Both values change the warning's height. The callback is optional because
-      // draft and test composers have no transcript above them to realign.
-      void showCostAlert();
-      void confirmDisableCostWarning();
+      // The callback is optional because draft and test composers have no
+      // transcript above them to realign.
       props.onChromeChange?.();
     },
-    () => {},
   );
   const compactPressure = () => {
     const tokens = props.contextTokens ?? 0;

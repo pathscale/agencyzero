@@ -12,7 +12,7 @@
         "popmotion": "^11.0.5",
         "promptsyntax": "^0.1.0",
         "solid-js": "2.0.0-rc.0",
-        "solid-layouts": "^0.2.0",
+        "solid-layouts": "^0.2.1",
         "tailwind-merge": "^3.6.0",
       },
       "devDependencies": {
@@ -796,7 +796,7 @@
 
     "solid-js": ["solid-js@2.0.0-rc.0", "", { "dependencies": { "@solidjs/signals": "^2.0.0-rc.0", "csstype": "^3.1.0", "seroval": "~1.5.4", "seroval-plugins": "~1.5.4" } }, "sha512-3enTJ71VL69nM5p/it2InVBDBt316Cqfij+F0S7VuHZLITc8YV7Rvavjoy52nAKKxYWXM+BcXh2K7KcLTf1zdQ=="],
 
-    "solid-layouts": ["solid-layouts@0.2.0", "", { "peerDependencies": { "@solidjs/web": "^2.0.0-rc.0", "solid-js": "^1.9.14 || ^2.0.0-rc.0" }, "optionalPeers": ["@solidjs/web"] }, "sha512-O+tHZsxFp00g2rXtOPdDFwWgdGBKoG31z6l6RJyT1Zab5KPckIg5m6zBBMakzTdZqMLeSsA5N4FZ23gAYzJkOA=="],
+    "solid-layouts": ["solid-layouts@0.2.1", "", { "peerDependencies": { "@solidjs/web": "^2.0.0-rc.0", "solid-js": "^1.9.14 || ^2.0.0-rc.0" }, "optionalPeers": ["@solidjs/web"] }, "sha512-afgDiwRhBNimxCrEUfh2+6rO18ti6X1gFz5peZ4BPycDYGyeBrxLDy97C4BmmmwgqPkLZrIbbQEUJ4i32W9TPA=="],
 
     "solid-layouts-oxc": ["solid-layouts-oxc@0.2.1", "", { "bin": { "solid-layouts-library": "bin/solid-layouts-library.js", "solid-layouts-application": "bin/solid-layouts-application.js", "solid-layouts-lint": "bin/solid-layouts-lint.js" } }, "sha512-u245kTqsNzYOEwpKxaTQOIubOgkXBQDuwP7xKzQ8MNFMHsNP6FrgtTA0tEf5UcUcE+WEyjl17VRRKnmUChat2w=="],
 

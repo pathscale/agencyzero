@@ -122,10 +122,14 @@ export function useAppShell(): {
       }),
     );
 
-    onCleanup(() => {
+    // Returned, not `onCleanup`: Solid 2 forbids it inside `onSettled`. This
+    // one unregisters every Tauri menu listener and the close handler, and
+    // that handler calls `preventDefault`, so leaving it bound after disposal
+    // is worse than leaking a listener.
+    return () => {
       disposed = true;
       for (const unlisten of unlisteners) unlisten();
-    });
+    };
   });
 
   return { isClosing, closeError, quitsProxy, persistenceFailure, cancelClose, confirmClose };
