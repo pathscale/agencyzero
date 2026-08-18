@@ -467,7 +467,21 @@ function createWorkspace() {
     boot: { status: "loading" },
   });
 
-  const [api, setApi] = createSignal<AgencyZeroApi | null>(null);
+  /*
+   * Held in a plain variable, not a signal.
+   *
+   * Solid 2 discards a signal write made from an async continuation that no
+   * longer has an owner: `setApi` ran after `await selectApi()` and `api()`
+   * read `null` on the very next line. Nothing reactively depends on *which*
+   * backend is in use — it is chosen once at boot and never swapped — so the
+   * reactive wrapper bought nothing and cost every `client()` read, which
+   * failed with "workspace used before the backend was selected".
+   */
+  let apiRef: AgencyZeroApi | null = null;
+  const api = (): AgencyZeroApi | null => apiRef;
+  const setApi = (next: AgencyZeroApi): void => {
+    apiRef = next;
+  };
   const unlisteners: Unlisten[] = [];
 
   /** Settings writes are serialized so each full response can safely win. */
@@ -495,9 +509,9 @@ function createWorkspace() {
     const encoded = JSON.stringify(chrome);
     if (encoded === lastWindowChrome) return;
     lastWindowChrome = encoded;
-    void client()
-      .setWindowChrome(chrome)
-      .catch(() => undefined);
+    const backend = clientIfReady();
+    if (!backend) return;
+    void backend.setWindowChrome(chrome).catch(() => undefined);
   }
   let taskManagerWrite = 0;
   let itemRevealRevision = 0;
@@ -537,6 +551,20 @@ function createWorkspace() {
     if (!current) throw new Error("workspace used before the backend was selected");
     return current;
   };
+
+  /*
+   * The backend, or nothing, for work that is allowed to be early.
+   *
+   * Solid 2 runs effects eagerly at mount, so a few of them fire before
+   * `selectApi()` has resolved. `client()` throwing is right for a command the
+   * owner asked for and wrong for background upkeep: it turned window chrome
+   * and a proxy status refresh into a boot failure, which is what 23 of the
+   * settings failures reported.
+   *
+   * Callers that can simply wait for the next run use this; everything the
+   * owner triggers keeps `client()` and its error.
+   */
+  const clientIfReady = (): AgencyZeroApi | null => api();
 
   /** Refuse locally before creating a project or handing a prompt to IPC. */
   function requireReadyAgent(agent: Agent): void {
@@ -1044,7 +1072,25 @@ function createWorkspace() {
    * rather than append blindly — so replaying an event the snapshot already
    * contains is a no-op rather than a duplicate.
    */
+  /*
+   * One boot per workspace, however many times the provider body runs.
+   *
+   * Solid 2 can evaluate a component body more than once, and a second `init`
+   * re-enters `selectApi()` while the first is still in flight: the second
+   * `client()` then reads an `api` signal that has not been set yet and throws
+   * "workspace used before the backend was selected". Boot reports ready, and
+   * a second boot fails immediately after it, which is what 23 of the settings
+   * failures were.
+   */
+  let booting: Promise<void> | undefined;
+
   async function init(): Promise<void> {
+    if (booting) return booting;
+    booting = boot();
+    return booting;
+  }
+
+  async function boot(): Promise<void> {
     // Each step is announced before it is awaited, so a boot that never
     // finishes says which step it stopped on. Without this the window shows
     // "Loading workspace…" forever and the log is silent, which is the state
@@ -1054,7 +1100,18 @@ function createWorkspace() {
     try {
       const { api: backend, backend: kind, live } = await selectApi();
       log.info(`boot: backend=${kind}, ${live.size} live commands`);
-      setApi(() => backend);
+      /*
+       * Set as a value, not through an updater.
+       *
+       * `setApi(() => backend)` is the Solid 1 idiom for storing a function
+       * without it being taken as an updater. Solid 2 reads the callback as a
+       * compute function whatever the stored type is, so this wrote the result
+       * of calling it rather than `backend` itself, and every later `client()`
+       * saw a value that was not the backend. Boot then failed with "workspace
+       * used before the backend was selected" on the first read.
+       */
+      setApi(backend);
+
       setState((d) => {
         d.backend = kind;
       });
@@ -2988,7 +3045,11 @@ function createWorkspace() {
       if (picked) await saveSettings({ agentProxyBinary: picked });
     },
     async refreshAgentProxy() {
-      const next3 = await client().getAgentProxyStatus();
+      // Called from a mount effect, so it can run before the backend exists.
+      // The status is polled again once boot finishes.
+      const backend = clientIfReady();
+      if (!backend) return;
+      const next3 = await backend.getAgentProxyStatus();
       setState((d) => {
         d.agencyProxy = next3;
       });
