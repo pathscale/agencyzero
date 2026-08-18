@@ -99,10 +99,17 @@ export function EditableTitle(props: {
             </Button>
           )}
         </Show>
-        <Button
+        <button
           type="button"
-          // Stopped so a rename click cannot double as the header's own
-          // click (on Home, that click folds the group).
+          /*
+           * A native button, not the library's.
+           *
+           * The library `Button` renders through `Dynamic`, and the click on
+           * this one never reached `start()`: driving it against a running
+           * build acknowledged the hit in 1.5ms with no state change, against
+           * 63ms and a 254-node change for a control button on the same
+           * surface. Nothing here needs the library's variants.
+           */
           onClick={(event) => {
             event.stopPropagation();
             start();
@@ -114,7 +121,7 @@ export function EditableTitle(props: {
           class="flex size-[18px] shrink-0 items-center justify-center rounded text-az-faint transition-colors hover:bg-white/8 hover:text-az-body"
         >
           <Icon name="pencil" class="text-[11px]" />
-        </Button>
+        </button>
       </span>
       <Input.Field
         // Hidden rather than unmounted, for the reason above.
