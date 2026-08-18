@@ -4,6 +4,9 @@
   "description": "AgencyZero — Tauri GUI frontend",
   "type": "module",
   "private": true,
+  "overrides": {
+    "babel-preset-solid": "2.0.0-rc.0"
+  },
   "scripts": {
     "dev": "rsbuild dev",
     "start": "rsbuild dev",
@@ -39,6 +42,7 @@
     "@testing-library/jest-dom": "^7.0.0",
     "@types/node": "^22.15.17",
     "@vitest/coverage-v8": "^4.1.10",
+    "babel-preset-solid": "2.0.0-rc.0",
     "fork-ts-checker-webpack-plugin": "^9.1.0",
     "jsdom": "^30.0.0",
     "rsbuild-plugin-solid-layouts": "^0.2.1",
