@@ -23,7 +23,7 @@
   "license": "MIT",
   "dependencies": {
     "@iconify/tailwind4": "^1.0.6",
-    "@pathscale/ui": "^2.6.4",
+    "@pathscale/ui": "2.6.5",
     "@tauri-apps/api": "^2.1.1",
     "clsx": "^2.1.1",
     "popmotion": "^11.0.5",
