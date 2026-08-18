@@ -417,9 +417,10 @@ export function TranscriptPane(props: {
       fillFrame = requestAnimationFrame(fill);
     };
     fillFrame = requestAnimationFrame(fill);
-    onCleanup(() => {
+    // Returned, not `onCleanup`: Solid 2 forbids it inside `onSettled`.
+    return () => {
       if (fillFrame !== undefined) cancelAnimationFrame(fillFrame);
-    });
+    };
   });
 
   const revealEarlier = (afterRestore?: () => void): void => {

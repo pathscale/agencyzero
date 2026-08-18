@@ -2760,7 +2760,8 @@ function Section(props: {
     };
     check();
     scroller.addEventListener("scroll", check, { passive: true });
-    onCleanup(() => scroller.removeEventListener("scroll", check));
+    // Returned, not `onCleanup`: Solid 2 forbids it inside `onSettled`.
+    return () => scroller.removeEventListener("scroll", check);
   });
   const titleMatches = createMemo(() => matchesSearch(`${props.title} ${props.hint}`));
   const visible = () => settingsQuery().trim() === "" || titleMatches() || hits().size > 0;

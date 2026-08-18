@@ -114,7 +114,8 @@ export function TabStrip(): JSX.Element {
     if (typeof ResizeObserver === "undefined") return;
     const observer = new ResizeObserver(measure);
     observer.observe(strip);
-    onCleanup(() => observer.disconnect());
+    // Returned, not `onCleanup`: Solid 2 forbids it inside `onSettled`.
+    return () => observer.disconnect();
   });
 
   onSettled(() => {
@@ -128,7 +129,8 @@ export function TabStrip(): JSX.Element {
     };
     refresh();
     const interval = window.setInterval(refresh, 60_000);
-    onCleanup(() => window.clearInterval(interval));
+    // Returned, not `onCleanup`: Solid 2 forbids it inside `onSettled`.
+    return () => window.clearInterval(interval);
   });
 
   /**
