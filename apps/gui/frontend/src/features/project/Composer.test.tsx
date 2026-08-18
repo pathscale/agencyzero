@@ -1,5 +1,5 @@
 import { fireEvent, render, waitFor } from "@solidjs/testing-library";
-import { createSignal } from "solid-js";
+import { createSignal, flush } from "solid-js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AGENT_STATUS } from "~/api/fixtures";
 import { Composer } from "~/features/project/Composer";
@@ -59,6 +59,9 @@ function mount(overrides: Partial<Parameters<typeof Composer>[0]> = {}) {
 function type(field: HTMLTextAreaElement, value: string) {
   field.value = value;
   field.dispatchEvent(new Event("input", { bubbles: true }));
+  // Solid 2 queues the signal writes the input handler makes, and a caller
+  // that asserts on the result reads the value from before its own keystroke.
+  flush();
 }
 
 afterEach(() => {
@@ -601,6 +604,7 @@ describe("the drift on the composer edge is a render loop, so it follows typing"
     expect(ring(container).className).toContain("az-ring-drift");
 
     vi.advanceTimersByTime(3_000);
+    flush();
     expect(ring(container).className).not.toContain("az-ring-drift");
   });
 
@@ -610,6 +614,7 @@ describe("the drift on the composer edge is a render loop, so it follows typing"
     vi.advanceTimersByTime(2_000);
     type(field, "ab");
     vi.advanceTimersByTime(2_000);
+    flush();
     expect(ring(container).className).toContain("az-ring-drift");
   });
 
@@ -617,6 +622,7 @@ describe("the drift on the composer edge is a render loop, so it follows typing"
     const { container, field } = mount();
     type(field, "writing something");
     fireEvent.blur(field);
+    flush();
     expect(ring(container).className).not.toContain("az-ring-drift");
   });
 });
