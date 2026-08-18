@@ -193,6 +193,76 @@ fn main() -> ExitCode {
         };
     }
 
+    /*
+     * salvage-item-index <source> <new-target>: rebuild `project_item` from
+     * its data file when the primary index points a key at bad bytes.
+     *
+     * The verb exists because every other route failed on the same row. A
+     * store whose item index is torn reads as an empty backlog, and the
+     * migration then reports `reset: project_item` and exits 0, so the loss
+     * looks like a successful upgrade.
+     */
+    if args.first().map(String::as_str) == Some("salvage-item-index") {
+        args.remove(0);
+        let [source, target] = args.as_slice() else {
+            eprintln!("usage: wt-migrate salvage-item-index <source-store> <new-target-store>");
+            return ExitCode::from(2);
+        };
+        let source = PathBuf::from(source);
+        let target = PathBuf::from(target);
+        if !source.join("project_item").is_dir() {
+            eprintln!("{source:?} has no project_item table; check the path.");
+            return ExitCode::from(2);
+        }
+        // A new directory, never an existing store: this writes a fresh table
+        // and an operator has to look at it before swapping it into place.
+        if target.exists() {
+            eprintln!("{} already exists; salvage into a new directory", target.display());
+            return ExitCode::from(2);
+        }
+        if let Err(error) = std::fs::create_dir_all(&target) {
+            eprintln!("could not create {}: {error}", target.display());
+            return ExitCode::FAILURE;
+        }
+        let runtime = match tokio::runtime::Builder::new_multi_thread()
+            .worker_threads(2)
+            .enable_io()
+            .enable_time()
+            .build()
+        {
+            Ok(runtime) => runtime,
+            Err(error) => {
+                eprintln!("could not start a runtime: {error}");
+                return ExitCode::FAILURE;
+            }
+        };
+        return match runtime.block_on(wt_migrate::salvage_item_index(&source, &target)) {
+            Ok(report) => {
+                println!(
+                    "recovered {} item row(s) across {} project(s) into {}",
+                    report.rows,
+                    report.projects,
+                    target.display()
+                );
+                if report.skipped.is_empty() {
+                    ExitCode::SUCCESS
+                } else {
+                    // Named, not counted: an operator deciding whether to keep
+                    // this needs to know which items did not survive.
+                    eprintln!("skipped {} unreadable row(s):", report.skipped.len());
+                    for id in &report.skipped {
+                        eprintln!("  {id}");
+                    }
+                    ExitCode::SUCCESS
+                }
+            }
+            Err(error) => {
+                eprintln!("salvage failed: {error}");
+                ExitCode::FAILURE
+            }
+        };
+    }
+
     if args.first().map(String::as_str) == Some("recover-pull-request-index") {
         args.remove(0);
         let [source, target] = args.as_slice() else {
