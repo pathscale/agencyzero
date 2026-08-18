@@ -1,6 +1,6 @@
 import { Checkbox, Flex, Input, Slider, Switch, Textarea } from "@pathscale/ui";
-import { createEffect, createMemo, createSignal, For, Show } from "solid-js";
 import type { JSX } from "@solidjs/web";
+import { createEffect, createMemo, createSignal, For, Show } from "solid-js";
 import { NOTES_BUDGET } from "~/api/client";
 import { AppModal, type ModalAnchor } from "~/components/AppModal";
 import { Button } from "~/components/Button";
@@ -148,9 +148,11 @@ function ItemSortControls(): JSX.Element {
     >
       <Button
         type="button"
-        onClick={() => setPrefs((d) => {
-                         d.itemSortBy = prefs.itemSortBy === "status" ? "time" : "status";
-                       })}
+        onClick={() =>
+          setPrefs((d) => {
+            d.itemSortBy = prefs.itemSortBy === "status" ? "time" : "status";
+          })
+        }
         class="rounded-md border border-az-hairline bg-az-inset px-1.5 py-0.5 font-medium text-[10.5px] text-az-muted transition-colors hover:text-az-strong"
         title={tx("Toggle item sort between status and time")}
       >
@@ -201,13 +203,18 @@ function IoPersistToggle(props: { projectId: string }): JSX.Element {
   const [enabled, setEnabled] = createSignal(false);
 
   // Read once per project; the flag only changes from this control.
-  createEffect(() => {
-    const id = props.projectId;
-    void actions
-      .getIoPersist(id)
-      .then(setEnabled)
-      .catch((cause) => log.warn(`could not read the I/O recording flag: ${describeError(cause)}`));
-  });
+  createEffect(
+    () => {
+      const id = props.projectId;
+      void actions
+        .getIoPersist(id)
+        .then(setEnabled)
+        .catch((cause) =>
+          log.warn(`could not read the I/O recording flag: ${describeError(cause)}`),
+        );
+    },
+    () => {},
+  );
 
   const toggle = async (next: boolean): Promise<void> => {
     setEnabled(next);
@@ -250,20 +257,23 @@ export function AgentIoList(props: { projectId: string }): JSX.Element {
 
   /** Newest last, so it reads like a terminal; the view follows the tail. */
   let scroller: HTMLDivElement | undefined;
-  createEffect(() => {
-    // Track the count so a new entry scrolls the view down.
-    lines().length;
-    /*
-     * The bottom, not past it. `scrollTop = scrollHeight` overshoots by a
-     * whole viewport and relies on the platform taking it back; Blitz clamps
-     * against its own scroll height, which measures larger than
-     * `scrollHeight - clientHeight` on real panes, so the overshoot sticks and
-     * the view is parked past the end showing nothing.
-     */
-    if (scroller) {
-      scroller.scrollTop = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
-    }
-  });
+  createEffect(
+    () => {
+      // Track the count so a new entry scrolls the view down.
+      lines().length;
+      /*
+       * The bottom, not past it. `scrollTop = scrollHeight` overshoots by a
+       * whole viewport and relies on the platform taking it back; Blitz clamps
+       * against its own scroll height, which measures larger than
+       * `scrollHeight - clientHeight` on real panes, so the overshoot sticks and
+       * the view is parked past the end showing nothing.
+       */
+      if (scroller) {
+        scroller.scrollTop = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
+      }
+    },
+    () => {},
+  );
 
   const copyAll = async (): Promise<void> => {
     const text = lines()
@@ -562,19 +572,22 @@ function ConciseResponseToggle(props: { projectId: string }): JSX.Element {
   ];
   const [level, setLevel] = createSignal<(typeof levels)[number]>("default");
 
-  createEffect(() => {
-    const id = props.projectId;
-    void actions
-      .getProjectConcise(id)
-      .then((value) =>
-        setLevel(
-          levels.includes(value as (typeof levels)[number])
-            ? (value as (typeof levels)[number])
-            : "default",
-        ),
-      )
-      .catch((cause) => log.warn(`could not read response verbosity: ${describeError(cause)}`));
-  });
+  createEffect(
+    () => {
+      const id = props.projectId;
+      void actions
+        .getProjectConcise(id)
+        .then((value) =>
+          setLevel(
+            levels.includes(value as (typeof levels)[number])
+              ? (value as (typeof levels)[number])
+              : "default",
+          ),
+        )
+        .catch((cause) => log.warn(`could not read response verbosity: ${describeError(cause)}`));
+    },
+    () => {},
+  );
 
   const choose = async (index: number): Promise<void> => {
     const previous = level();
@@ -640,13 +653,16 @@ function ContextDetailSelect(props: { projectId: string }): JSX.Element {
   const { actions, isLive } = useWorkspace();
   const [level, setLevel] = createSignal("adaptive");
 
-  createEffect(() => {
-    const id = props.projectId;
-    void actions
-      .getProjectVerbosity(id)
-      .then(setLevel)
-      .catch((cause) => log.warn(`could not read context detail: ${describeError(cause)}`));
-  });
+  createEffect(
+    () => {
+      const id = props.projectId;
+      void actions
+        .getProjectVerbosity(id)
+        .then(setLevel)
+        .catch((cause) => log.warn(`could not read context detail: ${describeError(cause)}`));
+    },
+    () => {},
+  );
 
   const choose = async (next: string): Promise<void> => {
     const previous = level();
@@ -915,13 +931,16 @@ function ApprovalRules(props: { projectId: string }): JSX.Element {
 
   // Re-asked when this project's pending approval appears or resolves — the
   // only moments a rule can be born; forgetting below updates the list itself.
-  createEffect(() => {
-    void state.pendingApprovals[props.projectId];
-    void actions
-      .listApprovalRules(props.projectId)
-      .then(setRules)
-      .catch(() => setRules([]));
-  });
+  createEffect(
+    () => {
+      void state.pendingApprovals[props.projectId];
+      void actions
+        .listApprovalRules(props.projectId)
+        .then(setRules)
+        .catch(() => setRules([]));
+    },
+    () => {},
+  );
 
   const forget = (): void => {
     void actions
@@ -1011,21 +1030,24 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
   const visibleShown = createMemo(() => itemPage(shown(), itemLimit()));
   const filtering = () => query().trim().length > 0;
 
-  createEffect(() => {
-    const target = state.itemReveal;
-    target?.revision;
-    if (!target || !props.items.some((item) => item.id === target.id)) return;
-    setQuery("");
-    const targetIndex = shown().findIndex((item) => item.id === target.id);
-    if (targetIndex >= 0) {
-      setItemLimit((limit) => Math.max(limit, targetIndex + 1));
-    }
-    queueMicrotask(() => {
-      const row = document.querySelector<HTMLElement>(`[data-item-id="${target.id}"]`);
-      row?.scrollIntoView?.();
-      row?.focus();
-    });
-  });
+  createEffect(
+    () => {
+      const target = state.itemReveal;
+      target?.revision;
+      if (!target || !props.items.some((item) => item.id === target.id)) return;
+      setQuery("");
+      const targetIndex = shown().findIndex((item) => item.id === target.id);
+      if (targetIndex >= 0) {
+        setItemLimit((limit) => Math.max(limit, targetIndex + 1));
+      }
+      queueMicrotask(() => {
+        const row = document.querySelector<HTMLElement>(`[data-item-id="${target.id}"]`);
+        row?.scrollIntoView?.();
+        row?.focus();
+      });
+    },
+    () => {},
+  );
 
   /** The item whose title is being rewritten in place, if any. */
   const [editingId, setEditingId] = createSignal<string | null>(null);
@@ -2006,13 +2028,18 @@ function CheckpointToggle(props: { projectId: string }): JSX.Element {
   const { actions, isLive } = useWorkspace();
   const [enabled, setEnabled] = createSignal(false);
 
-  createEffect(() => {
-    const id = props.projectId;
-    void actions
-      .getCheckpoints(id)
-      .then(setEnabled)
-      .catch((cause) => log.warn(`could not read the checkpoint setting: ${describeError(cause)}`));
-  });
+  createEffect(
+    () => {
+      const id = props.projectId;
+      void actions
+        .getCheckpoints(id)
+        .then(setEnabled)
+        .catch((cause) =>
+          log.warn(`could not read the checkpoint setting: ${describeError(cause)}`),
+        );
+    },
+    () => {},
+  );
 
   const toggle = async (next: boolean): Promise<void> => {
     setEnabled(next);
@@ -2081,16 +2108,19 @@ function NotesEditor(props: { projectId: string }): JSX.Element {
 
   // Re-read when the tab changes under a reused instance, and after a
   // compaction has had a chance to write.
-  createEffect(() => {
-    const projectId = props.projectId;
-    void actions
-      .getProjectNotes(projectId)
-      .then((notes) => {
-        setDraft(notes);
-        setSaved(notes);
-      })
-      .catch((cause) => log.warn(`could not read the notes: ${describeError(cause)}`));
-  });
+  createEffect(
+    () => {
+      const projectId = props.projectId;
+      void actions
+        .getProjectNotes(projectId)
+        .then((notes) => {
+          setDraft(notes);
+          setSaved(notes);
+        })
+        .catch((cause) => log.warn(`could not read the notes: ${describeError(cause)}`));
+    },
+    () => {},
+  );
 
   const dirty = () => draft() !== saved();
   const remaining = () => NOTES_BUDGET - draft().length;

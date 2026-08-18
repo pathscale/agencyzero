@@ -1,6 +1,16 @@
 import { Flex } from "@pathscale/ui";
-import { createEffect, createMemo, createSignal, For, Match, onCleanup, onSettled, Show, Switch } from "solid-js";
 import type { JSX } from "@solidjs/web";
+import {
+  createEffect,
+  createMemo,
+  createSignal,
+  For,
+  Match,
+  onCleanup,
+  onSettled,
+  Show,
+  Switch,
+} from "solid-js";
 import { Button } from "~/components/Button";
 import { Icon } from "~/components/Icon";
 import { IconSprite } from "~/components/IconSprite";
@@ -44,19 +54,22 @@ export function Workspace(): JSX.Element {
   const shell = useAppShell();
   const [retainedProjects, setRetainedProjects] = createSignal<string[]>([]);
 
-  createEffect(() => {
-    const active = activeTab();
-    const activeProjectId = active.kind === "project" ? active.projectId : null;
-    const openProjectIds = state.tabs.flatMap((tab) =>
-      tab.kind === "project" && tab.projectId ? [tab.projectId] : [],
-    );
-    setRetainedProjects((current) => {
-      const next = nextRetainedProjects(current, activeProjectId, openProjectIds);
-      return next.length === current.length && next.every((key, index) => key === current[index])
-        ? current
-        : next;
-    });
-  });
+  createEffect(
+    () => {
+      const active = activeTab();
+      const activeProjectId = active.kind === "project" ? active.projectId : null;
+      const openProjectIds = state.tabs.flatMap((tab) =>
+        tab.kind === "project" && tab.projectId ? [tab.projectId] : [],
+      );
+      setRetainedProjects((current) => {
+        const next = nextRetainedProjects(current, activeProjectId, openProjectIds);
+        return next.length === current.length && next.every((key, index) => key === current[index])
+          ? current
+          : next;
+      });
+    },
+    () => {},
+  );
 
   return (
     <div class="az-desk relative flex h-full flex-col overflow-hidden">

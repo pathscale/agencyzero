@@ -1,6 +1,6 @@
 import { Flex, Radio } from "@pathscale/ui";
-import { createEffect, For, Show } from "solid-js";
 import type { JSX } from "@solidjs/web";
+import { createEffect, For, Show } from "solid-js";
 import { Button } from "~/components/Button";
 import {
   accentOptions,
@@ -168,17 +168,20 @@ function SurfaceColorWheel(props: { value: string; onPick: (value: string) => vo
 
   // Preserve the same petal across a mode change, and migrate the upstream
   // palette values written by earlier builds to the nearest literal petal.
-  createEffect(() => {
-    const next = colors();
-    const value = props.value.trim().toLowerCase();
-    if (value) {
-      let selected = previous.findIndex((color) => color.toLowerCase() === value);
-      if (selected < 0) selected = closestColorIndex(value, previous);
-      const rebased = next[selected];
-      if (rebased && rebased.toLowerCase() !== value) props.onPick(rebased);
-    }
-    previous = next;
-  });
+  createEffect(
+    () => {
+      const next = colors();
+      const value = props.value.trim().toLowerCase();
+      if (value) {
+        let selected = previous.findIndex((color) => color.toLowerCase() === value);
+        if (selected < 0) selected = closestColorIndex(value, previous);
+        const rebased = next[selected];
+        if (rebased && rebased.toLowerCase() !== value) props.onPick(rebased);
+      }
+      previous = next;
+    },
+    () => {},
+  );
 
   return (
     <fieldset
@@ -262,21 +265,24 @@ function AccentSelector(props: {
   // A palette choice is semantic, not a frozen hex. Keep the same harmony
   // selected while its rendered colour responds to surface, mode, strength,
   // and softness. Older arbitrary hex values migrate to the nearest harmony.
-  createEffect(() => {
-    const next = options();
-    let selected = previous.findIndex((option) => option.value === props.accent);
-    if (selected < 1 && props.accent) {
-      const closest = closestColorIndex(
-        props.accent,
-        previous.slice(1).map((option) => option.color),
-      );
-      if (closest >= 0) selected = closest + 1;
-    }
-    if (selected > 0 && next[selected]?.value !== props.accent) {
-      props.onPick(next[selected].value);
-    }
-    previous = next;
-  });
+  createEffect(
+    () => {
+      const next = options();
+      let selected = previous.findIndex((option) => option.value === props.accent);
+      if (selected < 1 && props.accent) {
+        const closest = closestColorIndex(
+          props.accent,
+          previous.slice(1).map((option) => option.color),
+        );
+        if (closest >= 0) selected = closest + 1;
+      }
+      if (selected > 0 && next[selected]?.value !== props.accent) {
+        props.onPick(next[selected].value);
+      }
+      previous = next;
+    },
+    () => {},
+  );
   return (
     <div class="flex flex-col gap-1.5">
       <div class="flex items-baseline gap-2">
@@ -301,9 +307,7 @@ function AccentSelector(props: {
                 aria-pressed={selected() ? "true" : "false"}
                 onClick={() => props.onPick(option.value)}
                 class={`size-7 overflow-hidden rounded-full border-2 p-0 transition-[border-color,transform] hover:scale-110 ${
-                  selected()
-                    ? "border-primary"
-                    : "border-az-hairline-strong hover:border-primary"
+                  selected() ? "border-primary" : "border-az-hairline-strong hover:border-primary"
                 }`}
               >
                 {/* The fill is a child: the library's Button drops `style`. */}

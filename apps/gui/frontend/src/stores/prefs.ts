@@ -1,5 +1,4 @@
-import { createEffect } from "solid-js";
-import { createStore } from "solid-js";
+import { createEffect, createStore } from "solid-js";
 import type { PortableUiPrefs, UiPrefs } from "~/types";
 
 export const UI_SCALES: Record<UiPrefs["uiSize"], number> = {
@@ -124,17 +123,23 @@ function normalize(stored: Partial<UiPrefs>): UiPrefs {
  */
 const [prefs, setPrefs] = createStore<UiPrefs>(DEFAULTS);
 
-createEffect(() => {
-  if (typeof document === "undefined") return;
-  const scale = UI_SCALES[prefs.uiSize];
-  document.documentElement.style.setProperty("--az-ui-scale", String(scale));
-});
+createEffect(
+  () => {
+    if (typeof document === "undefined") return;
+    const scale = UI_SCALES[prefs.uiSize];
+    document.documentElement.style.setProperty("--az-ui-scale", String(scale));
+  },
+  () => {},
+);
 
-createEffect(() => {
-  if (typeof document === "undefined") return;
-  document.documentElement.dataset.colorMode = prefs.colorMode;
-  document.documentElement.style.colorScheme = prefs.colorMode;
-});
+createEffect(
+  () => {
+    if (typeof document === "undefined") return;
+    document.documentElement.dataset.colorMode = prefs.colorMode;
+    document.documentElement.style.colorScheme = prefs.colorMode;
+  },
+  () => {},
+);
 
 export { prefs, setPrefs };
 

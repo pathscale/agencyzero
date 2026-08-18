@@ -12,8 +12,19 @@ import {
   Switch,
   Textarea,
 } from "@pathscale/ui";
-import { createContext, createEffect, createMemo, createRoot, createSignal, For, onCleanup, onSettled, Show, useContext } from "solid-js";
 import type { JSX } from "@solidjs/web";
+import {
+  createContext,
+  createEffect,
+  createMemo,
+  createRoot,
+  createSignal,
+  For,
+  onCleanup,
+  onSettled,
+  Show,
+  useContext,
+} from "solid-js";
 import { Button } from "~/components/Button";
 import { Icon, type IconProps } from "~/components/Icon";
 import { LanguageSwitcher } from "~/components/LanguageSwitcher";
@@ -86,10 +97,13 @@ const AGENT_USE = {
 const [settingsQuery, setSettingsQuery] = createSignal("");
 
 createRoot(() => {
-  createEffect(() => {
-    // Any query at all, including one being typed, needs every row present.
-    if (settingsQuery().trim() !== "") revealAllSections();
-  });
+  createEffect(
+    () => {
+      // Any query at all, including one being typed, needs every row present.
+      if (settingsQuery().trim() !== "") revealAllSections();
+    },
+    () => {},
+  );
 });
 
 /** Whether some label or hint answers what is being searched for. */
@@ -1008,9 +1022,11 @@ export function SettingsTab(): JSX.Element {
                         <Button
                           type="button"
                           aria-pressed={prefs.colorMode === option.value ? "true" : "false"}
-                          onClick={() => setPrefs((d) => {
-                                           d.colorMode = option.value;
-                                         })}
+                          onClick={() =>
+                            setPrefs((d) => {
+                              d.colorMode = option.value;
+                            })
+                          }
                           class={`rounded-full px-3 py-1 font-semibold text-[11px] transition-colors ${
                             prefs.colorMode === option.value
                               ? "bg-primary text-primary-content"
@@ -1041,9 +1057,11 @@ export function SettingsTab(): JSX.Element {
                           type="button"
                           aria-label={`${option.name} ${t("appearance.size")}`}
                           aria-pressed={prefs.uiSize === option.value ? "true" : "false"}
-                          onClick={() => setPrefs((d) => {
-                                           d.uiSize = option.value;
-                                         })}
+                          onClick={() =>
+                            setPrefs((d) => {
+                              d.uiSize = option.value;
+                            })
+                          }
                           class={`flex size-7 items-center justify-center rounded-full font-semibold text-[10.5px] transition-colors ${
                             prefs.uiSize === option.value
                               ? "bg-primary text-primary-content"
@@ -2525,9 +2543,11 @@ function CostSection(): JSX.Element {
         <SettingToggle
           label={tx("Show projected-cost warnings")}
           checked={!prefs.costWarningsDisabled}
-          onChange={(enabled) => setPrefs((d) => {
-                                   d.costWarningsDisabled = !enabled;
-                                 })}
+          onChange={(enabled) =>
+            setPrefs((d) => {
+              d.costWarningsDisabled = !enabled;
+            })
+          }
         />
       </Row>
     </Section>
@@ -2606,9 +2626,12 @@ function InternalPerformance(): JSX.Element {
    * Still no timer. Becoming visible is the moment the numbers are wanted, and
    * Refresh covers watching them move while sitting here.
    */
-  createEffect(() => {
-    if (state.activeKey === "settings") refresh();
-  });
+  createEffect(
+    () => {
+      if (state.activeKey === "settings") refresh();
+    },
+    () => {},
+  );
   const ms = (value: number) =>
     value >= 1 ? `${value.toFixed(1)}ms` : `${(value * 1000).toFixed(0)}\u00b5s`;
 
@@ -2756,9 +2779,7 @@ function Section(props: {
         <div class="flex flex-wrap items-baseline gap-x-2.5 gap-y-1 px-3.5 pt-3 pb-2.5">
           <Icon name={props.icon} class="relative top-0.5 text-[14px] text-primary" />
           <h2
-            class={`font-semibold text-[13px] ${
-              props.pending ? "text-az-muted" : "text-az-title"
-            }`}
+            class={`font-semibold text-[13px] ${props.pending ? "text-az-muted" : "text-az-title"}`}
           >
             {props.title}
           </h2>

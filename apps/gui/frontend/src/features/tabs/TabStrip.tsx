@@ -1,5 +1,5 @@
-import { createEffect, createMemo, createSignal, For, onCleanup, onSettled, Show } from "solid-js";
 import type { JSX } from "@solidjs/web";
+import { createEffect, createMemo, createSignal, For, onCleanup, onSettled, Show } from "solid-js";
 import { Button } from "~/components/Button";
 import { Icon, type IconProps } from "~/components/Icon";
 import { StatusDot } from "~/components/StatusDot";
@@ -138,28 +138,31 @@ export function TabStrip(): JSX.Element {
    * tab that is scrolled out of sight would otherwise look like nothing
    * happened. Reading `tabs.length` as well means a new tab is revealed too.
    */
-  createEffect(() => {
-    const key = state.activeKey;
-    state.tabs.length;
-    // Whether the arrows are on screen at all, rather than each end's flag.
-    // The arrows take horizontal room, so the strip narrows when they appear
-    // and the active tab has to be revealed again — but that is this
-    // disjunction changing, not `left` or `right` moving on their own.
-    //
-    // Depending on them separately meant every trip to an end re-revealed:
-    // leaving 0 turns `left` on and reaching the maximum turns `right` off,
-    // neither of which changes the width. Driving the live strip, that cycled
-    // "Scroll tabs right" between 0, 11 and 586 instead of walking to the end,
-    // and looked intermittent because the middle of the travel flips nothing.
-    //
-    // It has to be the memo and not `overflow().left || overflow().right`:
-    // reading the signal subscribes to the object, so either flag flipping
-    // re-runs this no matter what is done with the values afterwards.
-    arrowsShown();
-    queueMicrotask(() => {
-      reveal(key);
-    });
-  });
+  createEffect(
+    () => {
+      const key = state.activeKey;
+      state.tabs.length;
+      // Whether the arrows are on screen at all, rather than each end's flag.
+      // The arrows take horizontal room, so the strip narrows when they appear
+      // and the active tab has to be revealed again — but that is this
+      // disjunction changing, not `left` or `right` moving on their own.
+      //
+      // Depending on them separately meant every trip to an end re-revealed:
+      // leaving 0 turns `left` on and reaching the maximum turns `right` off,
+      // neither of which changes the width. Driving the live strip, that cycled
+      // "Scroll tabs right" between 0, 11 and 586 instead of walking to the end,
+      // and looked intermittent because the middle of the travel flips nothing.
+      //
+      // It has to be the memo and not `overflow().left || overflow().right`:
+      // reading the signal subscribes to the object, so either flag flipping
+      // re-runs this no matter what is done with the values afterwards.
+      arrowsShown();
+      queueMicrotask(() => {
+        reveal(key);
+      });
+    },
+    () => {},
+  );
 
   return (
     /*

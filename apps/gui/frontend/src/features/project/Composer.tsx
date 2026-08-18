@@ -1,6 +1,6 @@
 import { Textarea } from "@pathscale/ui";
-import { createEffect, createMemo, createSignal, For, onCleanup, onSettled, Show } from "solid-js";
 import type { JSX } from "@solidjs/web";
+import { createEffect, createMemo, createSignal, For, onCleanup, onSettled, Show } from "solid-js";
 import { Button } from "~/components/Button";
 import { Icon } from "~/components/Icon";
 import { PillMenu } from "~/components/PillMenu";
@@ -230,12 +230,16 @@ export function Composer(props: ComposerProps): JSX.Element {
   const draft = () => (props.draftKey ? (prefs.composerDrafts[props.draftKey] ?? "") : unkeyed());
 
   const remember = (text: string) => {
-    if (!props.draftKey) {
+    // Captured, because the narrowing from the guard above does not reach
+    // inside the updater callback: `props.draftKey` is read again there and
+    // is optional at that point.
+    const key = props.draftKey;
+    if (!key) {
       setUnkeyed(text);
       return;
     }
     setPrefs((d) => {
-      d.composerDrafts[props.draftKey] = text;
+      d.composerDrafts[key] = text;
     });
   };
 
@@ -349,13 +353,16 @@ export function Composer(props: ComposerProps): JSX.Element {
     if (!est?.priced || (est.severity === "low" && !isContextSwitch())) return false;
     return true;
   };
-  createEffect(() => {
-    // Both values change the warning's height. The callback is optional because
-    // draft and test composers have no transcript above them to realign.
-    void showCostAlert();
-    void confirmDisableCostWarning();
-    props.onChromeChange?.();
-  });
+  createEffect(
+    () => {
+      // Both values change the warning's height. The callback is optional because
+      // draft and test composers have no transcript above them to realign.
+      void showCostAlert();
+      void confirmDisableCostWarning();
+      props.onChromeChange?.();
+    },
+    () => {},
+  );
   const compactPressure = () => {
     const tokens = props.contextTokens ?? 0;
     const window = props.contextWindow ?? 0;
@@ -744,14 +751,17 @@ export function Composer(props: ComposerProps): JSX.Element {
    * after a send — still lands, because those genuinely differ from what the
    * field holds. Typing does not, so the undo stack survives it.
    */
-  createEffect(() => {
-    const text = draft();
-    if (field && field.value !== text) field.value = text;
-    // Measured like a typed one: a restored long prompt has to size the field
-    // the same way. The microtask lets the write above land first.
-    expanded();
-    queueMicrotask(() => resize());
-  });
+  createEffect(
+    () => {
+      const text = draft();
+      if (field && field.value !== text) field.value = text;
+      // Measured like a typed one: a restored long prompt has to size the field
+      // the same way. The microtask lets the write above land first.
+      expanded();
+      queueMicrotask(() => resize());
+    },
+    () => {},
+  );
 
   return (
     <div class="flex flex-col gap-1.5">

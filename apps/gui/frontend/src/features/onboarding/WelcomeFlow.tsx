@@ -1,6 +1,6 @@
 import { Dialog, Flex, Select } from "@pathscale/ui";
-import { createEffect, createMemo, createSignal, For, Show } from "solid-js";
 import type { JSX } from "@solidjs/web";
+import { createEffect, createMemo, createSignal, For, Show } from "solid-js";
 import { Button } from "~/components/Button";
 import { Icon, type IconProps } from "~/components/Icon";
 import { LanguageSwitcher } from "~/components/LanguageSwitcher";
@@ -64,26 +64,32 @@ export function WelcomeFlow(): JSX.Element {
     );
   };
 
-  createEffect(() => {
-    if (!visible()) {
-      setStep(0);
-      setNote(null);
-      setSecurityConfirmed(false);
-      setAgentsSkipped(false);
-    } else if (isReplay()) {
-      setSecurityConfirmed(true);
-    }
-  });
+  createEffect(
+    () => {
+      if (!visible()) {
+        setStep(0);
+        setNote(null);
+        setSecurityConfirmed(false);
+        setAgentsSkipped(false);
+      } else if (isReplay()) {
+        setSecurityConfirmed(true);
+      }
+    },
+    () => {},
+  );
 
-  createEffect(() => {
-    if (!visible() || step() !== 3 || importsLoaded()) return;
-    setImportsLoaded(true);
-    if (!isLive("discoverChatImports")) return;
-    void actions
-      .discoverChatImports()
-      .then(setSources)
-      .catch((cause) => setNote(describeError(cause)));
-  });
+  createEffect(
+    () => {
+      if (!visible() || step() !== 3 || importsLoaded()) return;
+      setImportsLoaded(true);
+      if (!isLive("discoverChatImports")) return;
+      void actions
+        .discoverChatImports()
+        .then(setSources)
+        .catch((cause) => setNote(describeError(cause)));
+    },
+    () => {},
+  );
 
   const chooseAgent = async (agent: Agent): Promise<void> => {
     setBusy(true);
