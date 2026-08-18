@@ -237,7 +237,27 @@ impl AgencyProxy {
             configured_binary;
         self.clear_failure();
         self.set_connection_state(ConnectionState::Cold);
-        self.status().await
+
+        /*
+         * Report the outcome as a status, not as a bare error.
+         *
+         * `status` only degrades to `disconnected_status` when the state is
+         * already `Crashed` or `Stopped`, and the line above has just set
+         * `Cold` so the relaunch can spawn. So a relaunch that fails returned
+         * `Err` from here, and the Settings panel showed an error while leaving
+         * the button reading "Restart": the state the UI needs in order to
+         * offer "Start" never arrived, and pressing it again did the same
+         * thing. That is the "the proxy died and I could not restart it"
+         * report.
+         *
+         * A failed spawn has already recorded `Crashed` through
+         * `record_failure`, so asking again once is enough to turn it into an
+         * honest disconnected status carrying the real reason.
+         */
+        match self.status().await {
+            Ok(status) => Ok(status),
+            Err(error) => self.disconnected_status(error),
+        }
     }
 
     /// Cancel live runs, close admission, and keep the daemon stopped.
@@ -1033,6 +1053,91 @@ mod tests {
             proxy.failure_message(),
             "socket bind failed: operation not permitted"
         );
+    }
+
+    /// The owner's report: the proxy died, and Restart could not bring it back.
+    ///
+    /// A failed start records `Crashed`, and `connect` returns early on that
+    /// state without spawning, which is correct for an ordinary call: a daemon
+    /// that just failed to come up should not be relaunched by every passing
+    /// request. Restart is the one caller that must clear it, or the button
+    /// reports the old failure forever and the only way out is relaunching the
+    /// app.
+    #[tokio::test]
+    async fn restart_revives_a_proxy_that_recorded_a_crash() {
+        let dir = std::env::temp_dir().join(format!(
+            "agency-proxy-crash-restart-{}-{}",
+            std::process::id(),
+            uuid::Uuid::now_v7()
+        ));
+        std::fs::create_dir_all(&dir).expect("create temp directory");
+        let proxy = AgencyProxy::new(&dir, None);
+
+        proxy.record_failure("could not start /nonexistent/agency-proxy".into());
+        assert_eq!(proxy.connection_state(), ConnectionState::Crashed);
+
+        // Restart against a binary that cannot start: the relaunch still fails,
+        // which is expected here and not what is being asserted.
+        let _ = proxy
+            .restart(
+                Some(std::path::PathBuf::from("/nonexistent/agency-proxy")),
+                agency_proxy_protocol::ShutdownMode::Terminate,
+            )
+            .await;
+
+        // What matters is that it was *attempted*: the stale crash must not
+        // still be short-circuiting `connect`, or no later restart can work
+        // either, however healthy the binary is by then.
+        assert_ne!(
+            proxy.failure_message(),
+            "could not start /nonexistent/agency-proxy",
+            "restart must not keep reporting the previous crash",
+        );
+
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    /// A restart that cannot bring the daemon up must still answer with a
+    /// status, because that is what tells the panel to offer Start.
+    ///
+    /// It used to return `Err`. `restart` sets `Cold` so the relaunch is
+    /// allowed to spawn, and `status` only degrades to a disconnected status
+    /// when the state is already `Crashed` or `Stopped`, so a failed relaunch
+    /// fell through to a hard error. Settings then showed an error and left the
+    /// button reading "Restart", with no state change to make it read "Start",
+    /// which is what "I could not restart it" looked like from the outside.
+    #[tokio::test]
+    async fn a_failed_restart_reports_a_disconnected_status_rather_than_an_error() {
+        let dir = std::env::temp_dir().join(format!(
+            "agency-proxy-failed-restart-{}-{}",
+            std::process::id(),
+            uuid::Uuid::now_v7()
+        ));
+        std::fs::create_dir_all(&dir).expect("create temp directory");
+        let proxy = AgencyProxy::new(&dir, None);
+
+        // A crash first, which is the state the owner was actually in: the
+        // daemon had been running and died.
+        proxy.record_failure("AgencyProxy stopped unexpectedly".into());
+
+        let status = proxy
+            .restart(
+                Some(std::path::PathBuf::from("/nonexistent/agency-proxy")),
+                agency_proxy_protocol::ShutdownMode::Terminate,
+            )
+            .await
+            .expect("a failed restart still reports a status");
+
+        assert!(
+            !status.connected,
+            "the daemon did not come up, so the panel must be told it is down",
+        );
+        assert!(
+            status.detail.is_some(),
+            "the reason it did not start is what the panel shows",
+        );
+
+        let _ = std::fs::remove_dir_all(dir);
     }
 
     #[tokio::test]
