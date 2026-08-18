@@ -33,7 +33,7 @@ export function Icon(props: IconProps): JSX.Element {
       stroke-linejoin="round"
       class={props.class}
       role={props.label ? "img" : "presentation"}
-      aria-hidden={props.label ? undefined : "true" ? "true" : "false"}
+      aria-hidden={props.label ? undefined : "true"}
       {...rest}
     >
       {props.label ? <title>{props.label}</title> : null}

@@ -756,10 +756,10 @@ describe("the alert slot means failure", () => {
 
 describe("cost guidance controls", () => {
   beforeEach(() => {
-    setPrefs({
-      costWarningsDisabled: false,
-      costWarningDismissals: 0,
-      costWarningSnoozedUntil: 0,
+    setPrefs((d) => {
+      d.costWarningsDisabled = false;
+      d.costWarningDismissals = 0;
+      d.costWarningSnoozedUntil = 0;
     });
   });
 

@@ -2777,7 +2777,6 @@ function Section(props: {
         a control added later cannot be accidentally live.
       */}
         <div
-          // @ts-expect-error inert is valid HTML but not yet in Solid's JSX types
           inert={props.pending ? "" : undefined}
           class={props.pending ? "pointer-events-none opacity-45" : undefined}
         >

@@ -338,9 +338,9 @@ export function Composer(props: ComposerProps): JSX.Element {
   const [confirmDisableCostWarning, setConfirmDisableCostWarning] = createSignal(false);
   const dismissCostAlert = () => {
     setConfirmDisableCostWarning(false);
-    setPrefs({
-      costWarningDismissals: prefs.costWarningDismissals + 1,
-      costWarningSnoozedUntil: Date.now() + 10 * 60 * 1_000,
+    setPrefs((d) => {
+      d.costWarningDismissals = prefs.costWarningDismissals + 1;
+      d.costWarningSnoozedUntil = Date.now() + 10 * 60 * 1_000;
     });
   };
   const showCostAlert = () => {
