@@ -7,6 +7,7 @@ import {
   createRoot,
   createSignal,
   createStore,
+  flush,
   onCleanup,
   type ParentProps,
   reconcile,
@@ -2279,6 +2280,15 @@ function createWorkspace() {
     setState((d) => {
       d.tabs = ((tabs) => tabs.filter((tab) => tab.key !== key))(d.tabs);
     });
+    /*
+     * Land the removal before anything reads the strip back.
+     *
+     * Solid 2 defers a store write, so a close followed by an open of the same
+     * project in one tick left `openProject`'s membership guard looking at a
+     * strip that still held the tab: it skipped the append, and reopening a
+     * tab you had just closed did nothing at all.
+     */
+    flush();
     setState((draft) => {
       delete draft.transcriptPositions[key];
     });
@@ -2540,7 +2550,10 @@ function createWorkspace() {
         ])(d.tabs);
       });
     }
-    focus(project.id);
+    // `justOpened`: the tab was appended in the same tick above, and Solid 2
+    // defers that write, so the membership guard would reject the fork's own
+    // tab and the new chat would open without taking the eye.
+    focus(project.id, true);
 
     void loadProject(project.id).catch((cause) =>
       log.error(`could not load item fork ${project.id}: ${describeError(cause)}`),

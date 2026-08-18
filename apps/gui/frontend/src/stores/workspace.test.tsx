@@ -365,7 +365,11 @@ describe("closeTab", () => {
   it("falls back to the tab on the left, which is where the eye already is", async () => {
     const workspace = await mountWorkspace();
     workspace.actions.focus("cafe");
+    // `closeTab` reads `activeKey` to decide where the eye falls back to, so
+    // the focus above has to have landed before it runs.
+    flush();
     workspace.actions.closeTab("cafe");
+    flush();
 
     await waitFor(() => expect(keys(workspace)).toEqual(["home", "worktable", "quux"]));
     await waitFor(() => expect(workspace.state.activeKey).toBe("worktable"));
@@ -383,6 +387,9 @@ describe("openDraft", () => {
   it("focuses the Untitled tab already open rather than stacking a second", async () => {
     const workspace = await mountWorkspace();
     workspace.actions.openDraft();
+    // Land the open before reading which key it produced, or `draftKey` is
+    // whatever was focused beforehand and the assertion below chases it.
+    flush();
     const draftKey = workspace.state.activeKey;
 
     workspace.actions.focus("home");
@@ -565,9 +572,11 @@ describe("createProject", () => {
   it("turns the draft into the project tab instead of opening a second one", async () => {
     const workspace = await mountWorkspace();
     workspace.actions.openDraft();
+    flush();
     const draftKey = workspace.state.activeKey;
 
     await workspace.actions.createProject("Port the emitter", draftKey);
+    flush();
 
     expect(workspace.state.tabs.filter((tab) => tab.kind === "draft")).toHaveLength(0);
     expect(workspace.state.tabs.filter((tab) => tab.label === "Port the emitter")).toHaveLength(1);
@@ -623,6 +632,7 @@ describe("item forks", () => {
 
     const fork = await workspace.actions.forkItem("worktable-1");
     const reopened = await workspace.actions.forkItem("worktable-1");
+    flush();
     const tab = workspace.state.tabs.find((candidate) => candidate.projectId === fork.id);
 
     expect(reopened.id).toBe(fork.id);
