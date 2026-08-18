@@ -15,8 +15,6 @@
  * produced at all.
  */
 
-import { mkdirSync, writeFileSync } from "node:fs";
-import { dirname, resolve } from "node:path";
 import { render } from "@solidjs/testing-library";
 import { describe, expect, it } from "vitest";
 import { TranscriptPane } from "~/features/project/TranscriptPane";
@@ -40,13 +38,12 @@ const PROJECT: Project = {
 
 // From the frontend package root (vitest's cwd) up to ~/code, then across into
 // the renderer checkout that consumes it.
-const OUT = resolve(
-  process.cwd(),
-  "../../../../ps-blitz/tests/blitz-tests/fixtures/transcript.html",
-);
+// Joined as a string rather than through `node:path`, which cannot be
+// imported at module scope here: see the dynamic import below.
+const OUT = `${process.cwd()}/../../../../ps-blitz/tests/blitz-tests/fixtures/transcript.html`;
 
 describe("the transcript's markup, as the engine receives it", () => {
-  it("writes a fixture built from a real thread with the words replaced", () => {
+  it("writes a fixture built from a real thread with the words replaced", async () => {
     const messages = thread as unknown as Message[];
     const { container } = render(() => (
       <WorkspaceProvider>
@@ -57,6 +54,20 @@ describe("the transcript's markup, as the engine receives it", () => {
     const markup = container.innerHTML;
     expect(markup.length).toBeGreaterThan(1_000);
 
+    /*
+     * Imported here rather than at module scope.
+     *
+     * This file renders, so it needs jsdom, and Vite externalises a static
+     * `node:*` import for a browser environment - and a dynamic one too - so
+     * under Vitest 4 this failed outright with "No such built-in module:
+     * node:" and the suite stopped loading. `process.getBuiltinModule` asks
+     * Node directly and never passes through Vite's resolver. The dump is a
+     * side artifact for the engine tests, not the assertion above.
+     */
+    const fs = process.getBuiltinModule("fs");
+    const path = process.getBuiltinModule("path");
+    const { mkdirSync, writeFileSync } = fs;
+    const { dirname } = path;
     mkdirSync(dirname(OUT), { recursive: true });
     writeFileSync(OUT, markup, "utf8");
   });

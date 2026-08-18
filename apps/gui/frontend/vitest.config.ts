@@ -68,6 +68,7 @@ export default defineConfig({
       // plugin rather than being externalised.
       deps: { inline: ["@pathscale/ui"] },
     },
+
     coverage: {
       provider: "v8",
       reporter: ["text", "html"],
@@ -78,6 +79,18 @@ export default defineConfig({
   resolve: {
     alias: {
       "~": resolve(__dirname, "./src"),
+      /*
+       * Node builtins stay reachable from a jsdom test.
+       *
+       * Two files both render components and read the repository with
+       * `node:fs` - the transcript markup dump and the Button baseline audit -
+       * so neither can use a per-file `@vitest-environment node`. Vite
+       * externalises `node:*` for a browser environment and the import failed
+       * outright under Vitest 4 with "No such built-in module: node:".
+       *
+       * Nothing here reaches a bundle: the suite runs on Node under jsdom, and
+       * the application build has its own config.
+       */
     },
     /*
      * No "development" condition, deliberately.

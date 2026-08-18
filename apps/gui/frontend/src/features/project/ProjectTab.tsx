@@ -858,11 +858,19 @@ export function ReviewButtons(props: { pr: PullRequest }): JSX.Element {
           {(reviewer) => (
             <Button
               type="button"
-              disabled={isPending(reviewer.agent)}
+              /*
+               * `state`, not a bare `aria-busy`.
+               *
+               * The library writes `aria-busy` itself from its own loading
+               * state and its spread wins, so the attribute set here was
+               * silently discarded: the button read as idle to a screen
+               * reader while it was visibly running. `state="loading"` is the
+               * supported spelling and implies `disabled` too.
+               */
+              state={isPending(reviewer.agent) ? "loading" : undefined}
               onClick={() => review(reviewer.agent)}
               title={tx("Review with {agent}", { agent: AGENT_LABELS[reviewer.agent] })}
               aria-label={tx("Review with {agent}", { agent: AGENT_LABELS[reviewer.agent] })}
-              aria-busy={isPending(reviewer.agent) ? "true" : "false"}
               // Not `data-state`: the library writes that one from the
               // component's own `state` prop, and its spread wins. This is a
               // different fact anyway, and naming it says which.

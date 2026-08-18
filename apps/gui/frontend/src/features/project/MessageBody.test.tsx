@@ -72,6 +72,8 @@ describe("MessageBody", () => {
     const first = container.querySelectorAll("p")[0];
 
     setBody("Settled paragraph.\n\nStill writing now.");
+    // Land the write before reading the rendered paragraphs back.
+    flush();
 
     const after = container.querySelectorAll("p");
     expect(after[0]).toBe(first);
