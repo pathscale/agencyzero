@@ -167,7 +167,7 @@ describe("local debug control", () => {
   it("toggles intrusive profiling on its own, with inspection off", async () => {
     const screen = await mountSettings();
     const profiling = (await screen.findByLabelText(
-      "Enable deep intrusive profiling",
+      "Allow deep intrusive profiling",
     )) as HTMLInputElement;
     expect(profiling.disabled).toBe(false);
 
@@ -176,7 +176,7 @@ describe("local debug control", () => {
     await waitFor(() =>
       expect(screen.workspace.state.settings?.blitzDeepProfilingEnabled).toBe(true),
     );
-    expect(screen.getByText("Intrusive profiling active")).toBeTruthy();
+    expect(screen.getByText("Allowed. Samples only while a profiler is attached")).toBeTruthy();
 
     // And back off again, without inspection ever being involved.
     fireEvent.click(profiling);
@@ -203,7 +203,7 @@ describe("local debug control", () => {
   it("shows intrusive profiling on immediately, before the write lands", async () => {
     const screen = await mountSettings();
     const profiling = (await screen.findByLabelText(
-      "Enable deep intrusive profiling",
+      "Allow deep intrusive profiling",
     )) as HTMLInputElement;
 
     fireEvent.click(profiling);
@@ -217,7 +217,7 @@ describe("local debug control", () => {
     // Same tick as the click: the store has not answered yet.
     expect(screen.workspace.state.settings?.blitzDeepProfilingEnabled).not.toBe(true);
     expect(profiling.checked).toBe(true);
-    expect(screen.getByText("Intrusive profiling active")).toBeTruthy();
+    expect(screen.getByText("Allowed. Samples only while a profiler is attached")).toBeTruthy();
     // And it must stay usable, so a second click is not dropped on the floor.
     expect(profiling.disabled).toBe(false);
 
@@ -230,7 +230,7 @@ describe("local debug control", () => {
   it("keeps intrusive profiling set while inspection is turned off and on", async () => {
     const screen = await mountSettings();
     const profiling = (await screen.findByLabelText(
-      "Enable deep intrusive profiling",
+      "Allow deep intrusive profiling",
     )) as HTMLInputElement;
     const inspection = await screen.findByLabelText("Enable inspection and agent control");
 
@@ -249,7 +249,7 @@ describe("local debug control", () => {
 
     expect(screen.workspace.state.settings?.blitzDeepProfilingEnabled).toBe(true);
     expect(profiling.checked).toBe(true);
-    expect(screen.getByText("Intrusive profiling active")).toBeTruthy();
+    expect(screen.getByText("Allowed. Samples only while a profiler is attached")).toBeTruthy();
   });
 });
 

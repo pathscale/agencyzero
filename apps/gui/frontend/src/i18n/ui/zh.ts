@@ -940,8 +940,9 @@ const zh = {
   "Take snapshot": "创建快照",
   "Taking snapshot…": "正在创建快照…",
   "Written to {name}": "已写入 {name}",
-  "Enable deep intrusive profiling": "启用深度侵入式性能分析",
-  "Intrusive profiling active": "侵入式性能分析已启用",
+  "Allow deep intrusive profiling": "允许深度侵入式性能分析",
+  "Allowed. Samples only while a profiler is attached":
+    "已允许。仅在性能分析器连接时采样",
   "No deep samples collected": "未收集深度样本",
   "Application internal performance": "应用内部性能",
   "what each part of the app costs, measured in this session": "本次会话中各部分的开销",

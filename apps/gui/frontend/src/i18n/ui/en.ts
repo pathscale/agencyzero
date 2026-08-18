@@ -972,8 +972,9 @@ const en = {
   "Take snapshot": "Take snapshot",
   "Taking snapshot…": "Taking snapshot…",
   "Written to {name}": "Written to {name}",
-  "Enable deep intrusive profiling": "Enable deep intrusive profiling",
-  "Intrusive profiling active": "Intrusive profiling active",
+  "Allow deep intrusive profiling": "Allow deep intrusive profiling",
+  "Allowed. Samples only while a profiler is attached":
+    "Allowed. Samples only while a profiler is attached",
   "No deep samples collected": "No deep samples collected",
   "Application internal performance": "Application internal performance",
   "what each part of the app costs, measured in this session":
