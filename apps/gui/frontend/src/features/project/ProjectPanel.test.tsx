@@ -234,6 +234,9 @@ describe("the project side panel", () => {
     fireEvent.input(context, {
       target: { value: "Preserve the owner decision and run the focused tests." },
     });
+    // Land the edit before the button reads it: Solid 2 queues the write, so
+    // Start fork would otherwise submit the untouched description.
+    flush();
     fireEvent.click(within(dialog).getByRole("button", { name: "Start fork" }));
     flush();
 
@@ -278,6 +281,8 @@ describe("the project side panel", () => {
     fireEvent.input(description, {
       target: { value: "- [ ] Profile prompt cache\n- [ ] Verify cost" },
     });
+    // Land the typed value before Save reads it back.
+    flush();
     fireEvent.click(screen.getByRole("button", { name: "Save description" }));
     flush();
 
@@ -287,8 +292,10 @@ describe("the project side panel", () => {
       ),
     );
     clickDescription();
+    flush();
     expect(screen.queryByLabelText("Description / sub-items")).toBeNull();
     clickDescription();
+    flush();
     await waitFor(() =>
       expect(
         (screen.getByLabelText("Description / sub-items") as HTMLTextAreaElement).value,

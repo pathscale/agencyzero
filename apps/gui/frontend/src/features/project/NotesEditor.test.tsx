@@ -64,6 +64,9 @@ function mount() {
   const button = (label: string) => screen.getByText(label) as HTMLButtonElement;
   const type = (text: string) => {
     fireEvent.input(box(), { target: { value: text } });
+    // Solid 2 queues the draft signal the input handler writes, so a caller
+    // that reads the Save button on the next line sees it still disabled.
+    flush();
   };
   /** Resolves once the panel is on screen and has read from the backend. */
   const ready = async () => {
