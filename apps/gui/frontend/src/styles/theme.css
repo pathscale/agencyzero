@@ -1065,6 +1065,65 @@
    * That is the same surface reading as the same material, so it wants the same
    * alpha rather than an exception.
    */
+  /*
+   * `bg-az-inset` is 38 elements, and 30 of them are surfaces.
+   *
+   * It was held opaque on the grounds that the utility is shared with small
+   * controls, and a translucent button reads as a disabled one. Auditing the
+   * call sites rather than assuming turned that around: 30 are panels, filter
+   * bands, list rows and input wells, and only 8 are round or sized controls.
+   * So the default follows the majority and the controls opt out.
+   *
+   * The filter band above the item list is the case that made this obvious. It
+   * is full-bleed with square corners inside a rounded glass panel, so an
+   * opaque fill there read as a hard band cutting across the surface rather
+   * than as part of it.
+   */
+  .bg-az-inset {
+    background-color: rgb(
+      from var(--color-az-inset) r g b / calc(var(--glass-background-opacity, 55%) * 0.72)
+    );
+  }
+
+  /*
+   * The opt-out, for controls that have to stay solid.
+   *
+   * A switch, a swatch ring or a segmented pill has to read as a control you
+   * can press. Translucent, they read as disabled, and over a busy backdrop
+   * their labels stop being legible.
+   */
+  .az-control-solid {
+    background-color: var(--color-az-inset);
+  }
+
+  /*
+   * The hover wash, and the panel tier Analytics uses as a card.
+   *
+   * `bg-az-hover` was opaque, and its `color-mix` reduces to a bare
+   * `var(--az-surface)` in the fallback Lightning CSS synthesises: on a dark
+   * menu that landed as a bright near-white band across the hovered row.
+   * Carrying the alpha here fixes both, because a hover state has to read as a
+   * lift of the surface underneath rather than as a new opaque surface.
+   *
+   * `bg-base-100` is eight of Analytics' surfaces. It was left opaque on the
+   * grounds that it is a button fill, which is true in `ProjectPanel` and
+   * `SettingsTab` but not there, where it is the card the charts sit on. The
+   * buttons keep their own solid fill through `az-control-solid`.
+   */
+  .bg-az-hover,
+  .hover\:bg-az-hover:hover,
+  .group-hover\/header\:bg-az-hover:is(:where(.group\/header):hover *) {
+    background-color: rgb(
+      from var(--color-az-hover) r g b / calc(var(--glass-background-opacity, 55%) * 0.72)
+    );
+  }
+
+  .bg-base-100 {
+    background-color: rgb(
+      from var(--color-base-100) r g b / calc(var(--glass-background-opacity, 55%) * 0.72)
+    );
+  }
+
   .bg-az-tab {
     background-color: rgb(
       from var(--color-az-tab) r g b / calc(var(--glass-background-opacity, 55%) * 0.72)
