@@ -74,8 +74,12 @@ uuid = "1"
 chrono = { version = "0.4", default-features = false, features = ["clock", "serde", "std"] }
 tokio = { version = "1", features = ["process", "rt-multi-thread", "time"] }
 # Default features are off; see `webview-runtime` for why.
-tauri = { version = "2", default-features = false, features = ["compression"] }
-tauri-runtime-blitz = { git = "https://github.com/pathscale/tauri-runtime-blitz.git", branch = "master", optional = true }
+tauri = { version = "2", default-features = false, features = ["macos-private-api", "compression"] }
+# `macos-private-api` must match the `tauri` dependency above. Tauri's
+# `WindowBuilder` trait declares `transparent` behind that feature, and the
+# runtime gates its implementation behind the same one, so enabling it on only
+# one side makes the trait demand a method the other side compiled out.
+tauri-runtime-blitz = { git = "https://github.com/pathscale/tauri-runtime-blitz.git", branch = "master", optional = true, features = ["macos-private-api"] }
 blitz-dom = { package = "ps-blitz-dom", version = "^0.3.0-beta.3", git = "https://github.com/pathscale/ps-blitz.git", branch = "master", features = ["system-fonts", "parallel-construct"], optional = true }
 blitz-script = { package = "ps-blitz-script", version = "^0.3.0-beta.3", git = "https://github.com/pathscale/ps-blitz.git", branch = "master", features = ["system-fonts"], optional = true }
 brotli = { version = "8.0.4", default-features = false, features = ["std"], optional = true }
