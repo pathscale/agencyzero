@@ -273,6 +273,25 @@ function writeGlassTuning(theme: ThemeSettings, root: HTMLElement): void {
    * theme that never sets it keeps exactly the library's look.
    */
   const opacity = theme.glassOpacity ?? DEFAULT_GLASS_OPACITY;
+
+  /*
+   * The library's material flip, thrown from the same test that decides whether
+   * this app writes its own glass at all.
+   *
+   * `@pathscale/ui` components default to `material="solid"`, so before 2.7.0
+   * glass reached the surfaces styled here and stopped dead at every library
+   * control. In a light palette their `base-100` fill is white, so the language
+   * button, the model pickers, every radio and the analytics tab strip painted
+   * bright slabs on a dark glass panel. One class turns the default over for all
+   * of them, which is why nothing here enumerates components: a control added
+   * next month follows without this file changing.
+   *
+   * Sharing the condition rather than repeating it is the point. Two separate
+   * tests for "is glass on" is how they drift apart and the app ends up with
+   * library controls glassed while its own panels are not.
+   */
+  root.classList.toggle("glass", Number.isFinite(opacity));
+
   if (Number.isFinite(opacity)) {
     root.style.setProperty("--glass-background-opacity", `${Number(opacity)}%`);
 

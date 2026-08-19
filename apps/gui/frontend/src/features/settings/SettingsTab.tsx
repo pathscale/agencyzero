@@ -3013,12 +3013,27 @@ function GlassPercentAxis(props: {
   );
 }
 
-/** Which settings field carries each of the library's three glass numbers. */
+/**
+ * Which settings field carries each of the library's three glass numbers.
+ *
+ * Three of them rather than every axis `GlassTuning` has. The library gained a
+ * fourth, `controlTint`, which decides how much of the film its *controls* take
+ * as opposed to its surfaces. That is a theme-authoring decision - a switch or
+ * a select trigger that goes translucent reads as disabled - and not a thing
+ * this pane offers a slider for, so it stays at the library's opaque default.
+ *
+ * Keyed off this object rather than off `keyof GlassTuning` for that reason: a
+ * new axis in the library should not silently become a fourth slider here, nor
+ * break this file for being absent.
+ */
 const GLASS_SETTING_KEYS = {
   blur: "glassBlur",
   refraction: "glassRefraction",
   depth: "glassDepth",
-} as const satisfies Record<keyof GlassTuning, keyof ThemeSettings>;
+} as const satisfies Partial<Record<keyof GlassTuning, keyof ThemeSettings>>;
+
+/** An axis this pane actually puts a slider on. */
+type GlassSliderAxis = keyof typeof GLASS_SETTING_KEYS;
 
 /**
  * One of the three glass numbers.
@@ -3049,7 +3064,7 @@ const GLASS_SETTING_KEYS = {
  */
 function GlassTuningAxis(props: {
   label: string;
-  axis: keyof GlassTuning;
+  axis: GlassSliderAxis;
   step: number;
   /** Undefined means "whatever the library defaults this axis to". */
   value: number | undefined;
@@ -3065,7 +3080,7 @@ function GlassTuningAxis(props: {
 }): JSX.Element {
   const mode = (): GlassMode =>
     document.documentElement.dataset.colorMode === "light" ? "light" : "dark";
-  const resolved = (axis: keyof GlassTuning): number => {
+  const resolved = (axis: GlassSliderAxis): number => {
     const value = props.theme[GLASS_SETTING_KEYS[axis]];
     return Number.isFinite(value) ? Number(value) : GLASS_DEFAULTS[mode()][axis];
   };
