@@ -314,8 +314,21 @@ function writeGlassTuning(theme: ThemeSettings, root: HTMLElement): void {
   const scrim = theme.glassScrim ?? DEFAULT_GLASS_SCRIM;
   if (Number.isFinite(scrim)) {
     root.style.setProperty("--az-glass-scrim-opacity", `${Number(scrim)}%`);
+    /*
+     * The film colour with the scrim already mixed in.
+     *
+     * Written here rather than composed in CSS. Nesting a `color-mix` inside
+     * the `rgb(from …)` that carries the alpha made Lightning CSS split the
+     * declaration and emit `rgb(0 0 0 / …)` as the fallback, which is a plain
+     * black panel. One variable is a value no minifier rewrites.
+     */
+    root.style.setProperty(
+      "--az-glass-film",
+      `color-mix(in oklab, black ${Number(scrim)}%, var(--color-az-badge))`,
+    );
   } else {
     root.style.removeProperty("--az-glass-scrim-opacity");
+    root.style.removeProperty("--az-glass-film");
   }
 }
 
