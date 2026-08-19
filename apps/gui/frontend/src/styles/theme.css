@@ -1001,7 +1001,24 @@
     gap: normal;
     white-space: normal;
     border: 0;
-    border-radius: 0;
+    /*
+     * Radius is deliberately absent from this block.
+     *
+     * Everything else here strips the library's button chrome so a call site
+     * can style a plain element, and for those properties `0` says "nothing of
+     * your own". Radius is the one call sites routinely set themselves -
+     * `rounded-panel`, `rounded-full`, `rounded-lg` - and those are utilities
+     * in a layer this rule outranks. So `border-radius: 0` here did not clear
+     * the library's radius, it overrode the *application's*: `New Project`
+     * asks for `rounded-panel` and rendered square, and so did every other
+     * button using the neutral wrapper.
+     *
+     * Declaring nothing leaves the library's `.button` radius in place for a
+     * call site that sets none, and lets any call site that does set one win
+     * on its own layer. `revert-layer` would say this more precisely and is
+     * not used: its support in the shipping renderer is unverified, and a
+     * property that silently does nothing here is exactly the bug being fixed.
+     */
     padding: 0;
     background: transparent;
     color: inherit;
@@ -1226,9 +1243,62 @@
    * accents were split apart to avoid. `--color-accent-2` falls back to the
    * first accent, so this is a no-op until someone picks a second one.
    */
-  .az-art,
-  .az-art svg {
+  /*
+   * SVG takes the second accent.
+   *
+   * Icons stroke with `currentColor`, so before this they inherited whatever
+   * text colour they sat in. That is defensible for an icon that labels a
+   * control and it is not what was asked for: artwork is its own axis, and the
+   * point of a second accent is that it can be livelier than the chrome
+   * without dragging a focused ring or a filled slider along with it.
+   *
+   * `--color-accent-2` falls back to the first accent, so a theme that never
+   * picks a second one renders exactly as it did.
+   *
+   * `.az-icon-inherit` is the opt-out, for the icons that genuinely are part
+   * of a label and have to match the text beside them - a chevron inside a
+   * button, a caret in a select trigger - where a second colour would read as
+   * a mistake rather than as artwork.
+   */
+  svg:not(.az-icon-inherit) {
     color: var(--color-accent-2, var(--color-accent));
+  }
+
+  /*
+   * An icon inside a filled control follows its label, not the artwork accent.
+   *
+   * A send button paints its ink from `--color-primary-content` precisely so
+   * the glyph on it stays legible; letting the artwork accent win there puts a
+   * second colour on a surface chosen for one, and can render the glyph
+   * invisible when the two are close.
+   */
+  .btn svg,
+  .button svg,
+  [class*="text-primary-content"] svg,
+  [class*="text-base-content"] svg {
+    color: inherit;
+  }
+
+  /*
+   * The accent as text clears the desk, whatever the accent is.
+   *
+   * `text-primary` on `bg-primary/8` is an accent chip and a reasonable thing
+   * to write, but both sides resolve to the same hue: with a dark accent the
+   * label and its background become the same colour. Measured through the
+   * renderer's computed styles at accent `#662d21` - four elements at a
+   * contrast ratio of exactly 1.00, ninety-seven under 3.0, which is the
+   * "some text is invisible in dark mode" report.
+   *
+   * `--color-primary-text` is the accent lifted only as far as a 4.5 ratio
+   * against this mode's desk requires, so the colour still reads as the one
+   * that was picked. It falls back to the accent itself, so a build that has
+   * not written the token renders exactly as before.
+   *
+   * Fills, borders and rings keep the accent proper: this is only for the
+   * places the accent is being *read* rather than painted.
+   */
+  .text-primary {
+    color: var(--color-primary-text, var(--color-primary));
   }
 
   .az-control-solid {

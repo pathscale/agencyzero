@@ -169,3 +169,51 @@ describe("the second accent", () => {
     expect(read(element, "--color-accent-2")).toBe(read(element, "--color-accent"));
   });
 });
+
+describe("the accent as text", () => {
+  /*
+   * `text-primary` on `bg-primary/8` is an accent chip: both sides resolve to
+   * the same hue, so a dark accent makes the label and its background the same
+   * colour. Measured through the renderer's computed styles at accent #662d21 -
+   * four elements at a contrast ratio of exactly 1.00 and 97 under 3.0.
+   */
+  const luminance = (hex: string) => {
+    const h = hex.replace("#", "");
+    const full = h.length === 3 ? [...h].map((c) => c + c).join("") : h;
+    const channel = (at: number) => {
+      const srgb = Number.parseInt(full.slice(at, at + 2), 16) / 255;
+      return srgb <= 0.03928 ? srgb / 12.92 : ((srgb + 0.055) / 1.055) ** 2.4;
+    };
+    return 0.2126 * channel(0) + 0.7152 * channel(2) + 0.0722 * channel(4);
+  };
+  const against = (hex: string, desk: number) => {
+    const l = luminance(hex);
+    const [hi, lo] = l > desk ? [l, desk] : [desk, l];
+    return (hi + 0.05) / (lo + 0.05);
+  };
+
+  it("lifts a dark accent until it can be read on a dark desk", () => {
+    const element = root();
+    // The accent that produced the 1.00 ratios in the live window.
+    applyTheme(themeWith({ accent: "#662d21" }), element);
+
+    const text = read(element, "--color-primary-text");
+    expect(text).not.toBe("");
+    expect(against(text, 0.02)).toBeGreaterThanOrEqual(4.5);
+  });
+
+  it("leaves an already legible accent alone", () => {
+    const element = root();
+    applyTheme(themeWith({ accent: "#e8c15a" }), element);
+
+    expect(read(element, "--color-primary-text").toLowerCase()).toBe("#e8c15a");
+  });
+
+  it("keeps the fill accent unchanged, so only text moves", () => {
+    const element = root();
+    applyTheme(themeWith({ accent: "#662d21" }), element);
+
+    expect(read(element, "--color-primary")).toBe("#662d21");
+    expect(read(element, "--color-primary-text")).not.toBe("#662d21");
+  });
+});
