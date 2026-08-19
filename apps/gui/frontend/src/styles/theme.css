@@ -1272,10 +1272,25 @@
    * second colour on a surface chosen for one, and can render the glyph
    * invisible when the two are close.
    */
-  .btn svg,
-  .button svg,
+  /*
+   * Only a *filled* control forces its icon back to the label colour.
+   *
+   * This used to name `.button` and `.btn`, which is nearly every icon in the
+   * window: the gauge and the gear in the title bar are library Buttons, so
+   * they inherited the text ladder and rendered near-black while the avatar
+   * and the status dot beside them followed the theme. That is the "svg aren't
+   * picking up accent 2" report, and it was this rule rather than the one that
+   * assigns the accent.
+   *
+   * The case that genuinely needs it is an icon sitting *on* a filled surface,
+   * where the fill was chosen against one ink and a second colour can be
+   * illegible against it. That is what `text-primary-content` marks, so the
+   * opt-out follows the ink rather than the element type.
+   */
   [class*="text-primary-content"] svg,
-  [class*="text-base-content"] svg {
+  [class*="text-accent-content"] svg,
+  .az-icon-inherit,
+  .az-icon-inherit svg {
     color: inherit;
   }
 
@@ -1297,8 +1312,74 @@
    * Fills, borders and rings keep the accent proper: this is only for the
    * places the accent is being *read* rather than painted.
    */
-  .text-primary {
+  /*
+   * Every way the accent is used *as text*, not just the bare utility.
+   *
+   * Fixing `.text-primary` alone left the window as broken as before, because
+   * the accent is read through a dozen spellings: the alpha variants Tailwind
+   * generates (`text-primary/70` and friends), the hover states, and
+   * `text-accent`. Measured in the running window through the renderer's own
+   * computed styles - 195 elements painting `#be234d` at ratios between 1.00
+   * and 2.58 against the green surfaces behind them, while the token that was
+   * supposed to fix it sat correctly at `#e36487` and nothing read it.
+   *
+   * `--color-primary-text` is the accent lifted only as far as a 4.5 ratio
+   * against this mode's desk demands, so the picked colour still reads as
+   * itself. The alpha variants keep their alpha: `color-mix` here would fight
+   * Lightning CSS, so the lift is applied to the colour and the utility's own
+   * `/N` continues to apply on top.
+   *
+   * Fills, borders and rings are untouched. This is only where the accent is
+   * being read rather than painted.
+   */
+  .text-primary,
+  .text-accent,
+  [class*="text-primary\\/"],
+  .hover\:text-primary:hover,
+  [class*="hover\\:text-primary\\/"]:hover {
     color: var(--color-primary-text, var(--color-primary));
+  }
+
+  /*
+   * A filled accent surface that answers the glass axes.
+   *
+   * `bg-primary` is a flat accent fill, so the one large call to action in the
+   * window stayed fully opaque while every panel around it turned to glass.
+   * Reported as "when will you make New Project glass": the audits kept passing
+   * because they checked the glass tokens, and this button never read them.
+   *
+   * It takes the control tint rather than the panel film, because it is a
+   * control and has to stay legible: `--glass-control-opacity` is written a
+   * third of the way from opaque toward the panel, so the accent still reads as
+   * a filled button while belonging to the same material as the surface behind
+   * it. At the 100% default it is exactly the flat fill it was.
+   */
+  /*
+   * Fills, borders and rings keep the colour that was picked.
+   *
+   * `--color-primary` now carries the *lifted* accent, because Tailwind's text
+   * utilities read it and no app rule can outrank them. Everything that paints
+   * the accent rather than reading it has to point somewhere else, or the
+   * button, the ring and the panel edge all drift pale alongside the text.
+   */
+  .bg-primary,
+  .hover\:bg-primary:hover {
+    background-color: var(--color-primary-fill, var(--color-primary));
+  }
+
+  .border-primary {
+    border-color: var(--color-primary-fill, var(--color-primary));
+  }
+
+  .bg-primary-glass {
+    background-color: rgb(from var(--color-primary) r g b / var(--glass-control-opacity, 100%));
+  }
+
+  .bg-primary-glass:hover {
+    background-color: rgb(
+      from var(--color-az-primary-hover) r g b /
+      var(--glass-control-opacity, 100%)
+    );
   }
 
   /*
