@@ -60,6 +60,24 @@ describe("the window can be seen through", () => {
    * Layers 2 and 3. Both must read the same alpha, or the opaque one hides the
    * translucent one and the slider appears to do nothing.
    */
+  /*
+   * A surface inside a glass container must not paint its own film.
+   *
+   * Alpha stacks multiplicatively: two surfaces at 54% composite to 79%, and
+   * the result reads as a flat slab rather than glass. That is what the project
+   * panel's sections did once the sidebar column started carrying the blur, and
+   * it is invisible to every other test here because each declaration is
+   * individually correct.
+   */
+  it("keeps a shared glass surface from painting a second film", () => {
+    const rule = ruleFor("  .az-glass-shared");
+    expect(rule).toContain("backdrop-filter: none");
+    expect(
+      rule,
+      "a shared surface has to clear its background, not just its filter",
+    ).toContain("background-color: transparent");
+  });
+
   it.each(["body", "  .az-desk"])("makes %s follow the opacity axis", (selector) => {
     const rule = ruleFor(selector.trim() === "body" ? "  body" : selector);
     expect(rule).toContain("--az-glass-alpha");

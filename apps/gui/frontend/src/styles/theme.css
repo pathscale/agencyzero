@@ -760,6 +760,20 @@
   .az-glass-shared {
     -webkit-backdrop-filter: none;
     backdrop-filter: none;
+    /*
+     * No film either, not just no filter.
+     *
+     * A shared surface sits inside a container that is already painting the
+     * glass film, so painting its own stacks two alphas. They compose
+     * multiplicatively: at 54% each the pair composites to 79%, and the result
+     * reads as a flat slab rather than as glass. Measured on the project
+     * panel's sections once the sidebar column started carrying the blur.
+     *
+     * The container owns the surface. A section keeps its hairline and its
+     * hover states, and reads as a division of the panel rather than a card
+     * floating on one.
+     */
+    background-color: transparent;
   }
 
   /*
