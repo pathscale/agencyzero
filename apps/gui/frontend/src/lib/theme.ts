@@ -178,13 +178,28 @@ function repaintIconStrokes(root: HTMLElement, accentTwo: string): void {
   const doc = root.ownerDocument;
   if (!doc) return;
   for (const svg of doc.querySelectorAll("svg")) {
-    if (svg.closest(".az-icon-inherit, [class*='text-primary-content'], [class*='text-accent-content']")) {
+    if (
+      svg.closest(
+        ".az-icon-inherit, [class*='text-primary-content'], [class*='text-accent-content']",
+      )
+    ) {
       continue;
     }
     // Only the icons that stroke with the artwork accent. A sprite root, a
     // decorative shape with its own fill, or anything that never asked for
     // `currentColor` is left exactly as authored.
-    if (svg.getAttribute("stroke") === null) continue;
+    const current = svg.getAttribute("stroke");
+    if (current === null) continue;
+    /*
+     * Idempotent, and that is load-bearing rather than tidy.
+     *
+     * `applyTheme` runs from a reactive effect. Writing an attribute mutates
+     * the DOM, which restyles, which runs the effect again: an unconditional
+     * write is an infinite loop that never yields to paint. Measured as
+     * exactly that - the window reported its refresh rate and then rendered
+     * zero frames, and the process had to be killed.
+     */
+    if (current === accentTwo) continue;
     svg.setAttribute("stroke", accentTwo);
   }
 }
