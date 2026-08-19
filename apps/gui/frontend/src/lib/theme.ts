@@ -225,10 +225,28 @@ export function applyTheme(
    * Only lightness moves and only as far as the 4.5 floor demands, so a picked
    * accent still reads as the colour that was picked.
    */
-  root.style.setProperty(
-    "--color-primary-text",
-    legibleAccent(accent, root.dataset.colorMode === "light" ? "light" : "dark"),
-  );
+  const mode = root.dataset.colorMode === "light" ? "light" : "dark";
+  const accentText = legibleAccent(accent, mode);
+  root.style.setProperty("--color-primary-text", accentText);
+
+  /*
+   * The accent Tailwind's own utilities read, lifted at the source.
+   *
+   * A rule of ours cannot win this: `text-primary`, `text-primary/70` and the
+   * hover variants are generated into a later layer, so an app-authored
+   * override loses however it is spelled - measured, after trying exactly
+   * that: eight selectors still painting the raw accent and 195 elements at
+   * contrast ratios between 1.00 and 2.58.
+   *
+   * `--color-primary` and `--color-accent` are what those utilities resolve,
+   * so the lift goes there and every spelling inherits it, alpha variants
+   * included. The *fill* keeps the picked colour through `--color-primary-fill`,
+   * which is what `bg-primary`, the borders and the rings are pointed at, so
+   * this only changes the accent where it is being read.
+   */
+  root.style.setProperty("--color-primary-fill", accent);
+  root.style.setProperty("--color-primary", accentText);
+  root.style.setProperty("--color-accent", accentText);
 
   /*
    * The second accent, for the things that are drawn rather than operated.

@@ -141,7 +141,10 @@ describe("the second accent", () => {
     const element = root();
     applyTheme(themeWith({ accent: "#3366cc" }), element);
 
-    expect(read(element, "--color-accent-2")).toBe(read(element, "--color-accent"));
+    // `--color-accent` now carries the *lifted* accent, because Tailwind's
+    // text utilities read it and no app rule can outrank them; the picked
+    // colour lives on `--color-primary-fill`. Accent 2 follows the picked one.
+    expect(read(element, "--color-accent-2")).toBe(read(element, "--color-primary-fill"));
   });
 
   it("takes its own colour once chosen", () => {
@@ -149,7 +152,7 @@ describe("the second accent", () => {
     applyTheme(themeWith({ accent: "#3366cc", accentTwo: "#cc3366" }), element);
 
     expect(read(element, "--color-accent-2")).toBe("#cc3366");
-    expect(read(element, "--color-accent")).toBe("#3366cc");
+    expect(read(element, "--color-primary-fill")).toBe("#3366cc");
   });
 
   it("gets its own readable ink rather than the first accent's", () => {
@@ -166,7 +169,10 @@ describe("the second accent", () => {
     const element = root();
     applyTheme(themeWith({ accent: "#3366cc", accentTwo: "not a colour" }), element);
 
-    expect(read(element, "--color-accent-2")).toBe(read(element, "--color-accent"));
+    // `--color-accent` now carries the *lifted* accent, because Tailwind's
+    // text utilities read it and no app rule can outrank them; the picked
+    // colour lives on `--color-primary-fill`. Accent 2 follows the picked one.
+    expect(read(element, "--color-accent-2")).toBe(read(element, "--color-primary-fill"));
   });
 });
 
@@ -213,7 +219,8 @@ describe("the accent as text", () => {
     const element = root();
     applyTheme(themeWith({ accent: "#662d21" }), element);
 
-    expect(read(element, "--color-primary")).toBe("#662d21");
+    // The fill keeps the picked colour; the text token carries the lift.
+    expect(read(element, "--color-primary-fill")).toBe("#662d21");
     expect(read(element, "--color-primary-text")).not.toBe("#662d21");
   });
 });
