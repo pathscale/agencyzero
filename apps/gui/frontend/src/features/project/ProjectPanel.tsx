@@ -169,7 +169,7 @@ function ItemSortControls(): JSX.Element {
             d.itemSortDirection = prefs.itemSortDirection === "asc" ? "desc" : "asc";
           })
         }
-        class="flex size-5 items-center justify-center rounded-md border border-az-hairline bg-az-inset az-control-solid text-az-muted transition-colors hover:text-az-strong"
+        class="az-control-solid flex size-5 items-center justify-center rounded-md border border-az-hairline bg-az-inset text-az-muted transition-colors hover:text-az-strong"
         aria-label={tx(prefs.itemSortDirection === "asc" ? "Sort descending" : "Sort ascending")}
         title={tx(prefs.itemSortDirection === "asc" ? "Ascending" : "Descending")}
       >
@@ -1800,7 +1800,7 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
                   placeholder={tx(
                     "Describe constraints, acceptance criteria, decisions, and useful pointers…",
                   )}
-                  class="az-scroll min-h-[220px] resize-y rounded-xl border border-primary/24 bg-az-inset az-control-solid px-3.5 py-3 text-[12.5px] text-az-body leading-[1.55] outline-none placeholder:text-az-faint focus:border-primary/55"
+                  class="az-scroll az-control-solid min-h-[220px] resize-y rounded-xl border border-primary/24 bg-az-inset px-3.5 py-3 text-[12.5px] text-az-body leading-[1.55] outline-none placeholder:text-az-faint focus:border-primary/55"
                 />
                 <p class="text-[11px] text-az-muted leading-[1.5]">
                   {tx(

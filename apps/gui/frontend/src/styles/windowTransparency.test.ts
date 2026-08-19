@@ -72,10 +72,9 @@ describe("the window can be seen through", () => {
   it("keeps a shared glass surface from painting a second film", () => {
     const rule = ruleFor("  .az-glass-shared");
     expect(rule).toContain("backdrop-filter: none");
-    expect(
-      rule,
-      "a shared surface has to clear its background, not just its filter",
-    ).toContain("background-color: transparent");
+    expect(rule, "a shared surface has to clear its background, not just its filter").toContain(
+      "background-color: transparent",
+    );
   });
 
   it.each(["body", "  .az-desk"])("makes %s follow the opacity axis", (selector) => {

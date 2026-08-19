@@ -930,7 +930,8 @@ const zh = {
   "Glass blur": "玻璃模糊",
   "how far a glass surface smears what is behind it": "玻璃表面对背后内容的模糊程度",
   "Glass refraction": "玻璃折射",
-  "how far panels smear the app behind them; the window is blurred by macOS": "面板对其后方应用内容的模糊程度；窗口自身的模糊由 macOS 决定",
+  "how far panels smear the app behind them; the window is blurred by macOS":
+    "面板对其后方应用内容的模糊程度；窗口自身的模糊由 macOS 决定",
   "how much a glass surface asserts its own tint, border and highlight":
     "玻璃表面自身色调、边框和高光的强度",
   "Glass depth": "玻璃深度",

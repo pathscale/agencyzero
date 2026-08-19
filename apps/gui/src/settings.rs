@@ -934,13 +934,21 @@ mod tests {
             Some(0.22),
             "glassRefraction was dropped"
         );
-        assert_eq!(parsed.theme.glass_depth, Some(17.0), "glassDepth was dropped");
+        assert_eq!(
+            parsed.theme.glass_depth,
+            Some(17.0),
+            "glassDepth was dropped"
+        );
         assert_eq!(
             parsed.theme.glass_opacity,
             Some(62.0),
             "glassOpacity was dropped"
         );
-        assert_eq!(parsed.theme.glass_scrim, Some(14.0), "glassScrim was dropped");
+        assert_eq!(
+            parsed.theme.glass_scrim,
+            Some(14.0),
+            "glassScrim was dropped"
+        );
     }
 
     #[test]
