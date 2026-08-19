@@ -333,7 +333,25 @@ function AccentSelector(props: {
    * pass, so it settles instead of looping.
    */
   createEffect(
-    () => [prefs.colorMode, props.accent] as const,
+    /*
+       Track the palette, not the value.
+
+       This tracked `props.accent` as well, so the effect re-ran on every pick
+       and rebased the value the user had just chosen: the first click landed
+       and every one after it was snapped back to the same option, because the
+       index found in `previous` was written straight back from `next`. With
+       two accent rows sharing one set of harmonies that made the second row
+       look completely dead after its first use.
+
+       The rebase exists for a *palette* change: the harmonies are derived from
+       the mode, the surface, the strength and the softness, so moving any of
+       those re-renders all seven swatches and a stored hex has to migrate to
+       whichever one is nearest now. Those are what this watches.
+
+       `props.accent` is not one of them. It is the *output* of this control,
+       and tracking your own output is what makes a control fight its user.
+    */
+    () => [prefs.colorMode, props.surface, props.wash, props.softness] as const,
     () => {
       const next = options();
       let selected = previous.findIndex((option) => option.value === props.accent);
