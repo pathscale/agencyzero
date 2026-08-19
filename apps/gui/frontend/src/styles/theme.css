@@ -1017,6 +1017,26 @@
   }
 
   /*
+   * The agent's message bubble is a surface, not a chip.
+   *
+   * It is the largest single fill in the window after the panels themselves, so
+   * leaving it opaque made the transcript a solid slab sitting on glass, which
+   * is the one place the effect is most obvious. Same alpha as the card tier, so
+   * a bubble and a card read as the same material.
+   *
+   * Deliberately not applied to `bg-az-inset`, `bg-base-100` or `bg-az-badge`.
+   * Those are buttons, chips and count badges: small controls that have to stay
+   * legible against whatever passes behind them, and a translucent button reads
+   * as a disabled one.
+   */
+  .bg-az-bubble {
+    background-color: rgb(
+      from var(--color-az-bubble) r g b /
+        calc(var(--glass-background-opacity, 55%) * 0.72)
+    );
+  }
+
+  /*
    * The composer and the new-project prompt sit inside a 1px gradient ring
    * that fades from primary to a plain hairline — a border-image would not
    * follow the radius, so this is a padded wrapper.
@@ -1067,6 +1087,22 @@
     );
     background-position: 50% 50%;
     background-size: 240% 100%;
+  }
+
+  /*
+   * The composer's own fill, scoped to the composer.
+   *
+   * It is painted with `bg-az-inset`, and that utility is on 38 other things:
+   * chips, small buttons, count badges. Those have to stay solid to remain
+   * legible against whatever passes behind them, and a translucent button reads
+   * as a disabled one. So the alpha is applied through the composer's own ring
+   * class rather than to the utility, which is the only large surface using it.
+   */
+  .az-ring-composer > * {
+    background-color: rgb(
+      from var(--color-az-inset) r g b /
+        calc(var(--glass-background-opacity, 55%) * 0.72)
+    );
   }
 
   .az-ring-drift {
