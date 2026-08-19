@@ -511,8 +511,23 @@ export function windowChrome(
   accent: string,
   theme: ThemeSettings,
 ): { tint?: [number, number, number, number]; radius?: number; enabled: boolean } {
-  const border = Number.isFinite(theme.glassBorder) ? Number(theme.glassBorder) : 16;
   const rgb = hexToRgb(accent);
+  /*
+   * The backdrop's tint follows the opacity axis, not the border axis.
+   *
+   * It used to take its alpha from `glassBorder`, which is the panel hairline:
+   * a number that has nothing to do with how solid the window should look, and
+   * one that never reaches zero. The result was a tinted sheet filling the
+   * window that stayed put at opacity 0, so the app read as solid at the exact
+   * setting where it should have been clearest.
+   *
+   * At zero the view is left untinted rather than tinted with zero alpha, so
+   * the backdrop is the blurred desktop and nothing else.
+   */
+  const filmOpacity = Number.isFinite(theme.glassOpacity)
+    ? Number(theme.glassOpacity)
+    : DEFAULT_GLASS_OPACITY;
+  const tintAlpha = Math.round((Math.min(Math.max(filmOpacity, 0), 100) / 100) * 255);
   /*
    * Off unless the window is actually glass, and it is not: the transparent
    * flag was removed from the window config, so there is nothing behind the
@@ -525,7 +540,7 @@ export function windowChrome(
    */
   if (!rgb || !WINDOW_GLASS_ENABLED) return { enabled: false };
   return {
-    tint: [rgb[0], rgb[1], rgb[2], Math.round((border / 100) * 255)],
+    tint: tintAlpha > 0 ? [rgb[0], rgb[1], rgb[2], tintAlpha] : undefined,
     // macOS 26's own window radius. Stated rather than left to the effect view,
     // which otherwise squares off against a rounded frame.
     radius: 12,

@@ -67,20 +67,22 @@ describe("window chrome", () => {
     expect(calls.setWindowChrome).toHaveBeenCalledTimes(1);
 
     /*
-     * The other half of a guard is that it still lets a real change through,
-     * and that cannot be exercised from here yet: while the window is opaque
-     * `applyTheme` reports the same chrome for every theme, so no palette
-     * change can produce a different payload to send.
+     * The other half of the guard: it has to let a real change through.
      *
-     * Asserted rather than assumed, so that turning the window transparent
-     * fails this line instead of quietly leaving the guard untested on the
-     * only path where it could suppress something real.
+     * This could not be exercised while the window was opaque, because the
+     * chrome was disabled and every theme produced the same payload. The
+     * previous version of this test asserted that sameness deliberately, so
+     * that turning the window transparent would fail here rather than quietly
+     * leave the change path untested. It did fail, which is the point, and this
+     * is the assertion it was holding the place for.
      */
     const chrome = applyTheme(workspace.state.settings!.theme);
     const recoloured = applyTheme({ ...workspace.state.settings!.theme, accent: "#ff0000" });
-    expect(chrome, "the chrome now varies with the theme; test the change path").toEqual(
-      recoloured,
-    );
-    expect(chrome.enabled).toBe(false);
+
+    expect(chrome.enabled, "the backdrop is live now that the window is transparent").toBe(true);
+    expect(
+      recoloured.tint,
+      "a different accent has to produce a different tint, or the guard would suppress it",
+    ).not.toEqual(chrome.tint);
   });
 });
