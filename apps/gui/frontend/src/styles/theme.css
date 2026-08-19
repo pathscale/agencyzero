@@ -168,6 +168,19 @@
     --color-default-hover: var(--color-az-hover);
     --color-accent-foreground: var(--color-accent-content);
 
+    /*
+     * The slider's thumb takes the accent, not the accent's *contrast* colour.
+     *
+     * `--slider-thumb-bg` defaults to `--color-accent-foreground`, which is
+     * the colour text sits in *on* the accent - near-black here, aliased above
+     * to `--color-accent-content`. So the thumb rendered as a pale disc while
+     * the track took `--color-default`, which this theme maps to `base-300`, a
+     * surface rung derived from `--az-surface`. Between them only the thin
+     * filled portion carried the accent, and the control read as following the
+     * base colour rather than the accent it is actually bound to.
+     */
+    --slider-thumb-bg: var(--color-accent);
+
     --color-neutral: oklch(20% 0.008 240);
     --color-neutral-content: oklch(84% 0.008 245);
 

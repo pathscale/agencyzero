@@ -70,3 +70,33 @@ describe("a glass drag looks the same as its release", () => {
     expect(THEME_TS).toContain('setProperty("--az-glass-alpha"');
   });
 });
+describe("reset to default", () => {
+  /*
+   * Reset used to write five theme fields and leave the six glass ones alone,
+   * so a window made unreadable by a glass setting stayed unreadable however
+   * many times the button was pressed. Asserted on the *record* rather than
+   * the rendering, because that is where the omission lived.
+   */
+  it("clears every glass axis, not just the palette ones", () => {
+    // Read the handler the pane actually ships rather than restating it here:
+    // a copy of the object in the test passes no matter what the pane does,
+    // which is precisely the bug it would be pretending to guard.
+    const source = readFileSync(
+      join(process.cwd(), "src", "features", "settings", "SettingsTab.tsx"),
+      "utf8",
+    );
+    const handler = source.slice(source.indexOf("onReset={() =>"));
+    const body = handler.slice(0, handler.indexOf("}\n"));
+
+    for (const axis of [
+      "glassEnabled",
+      "glassBlur",
+      "glassRefraction",
+      "glassDepth",
+      "glassOpacity",
+      "glassScrim",
+    ]) {
+      expect(body, `reset does not clear ${axis}`).toContain(`${axis}: undefined`);
+    }
+  });
+});
