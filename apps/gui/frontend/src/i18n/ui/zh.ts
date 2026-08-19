@@ -935,6 +935,11 @@ const zh = {
   "Glass depth": "玻璃深度",
   "how far a glass surface sits off the page: glow, sheen and shadow":
     "玻璃表面离页面的高度：辉光、光泽和阴影",
+  "Glass opacity": "玻璃不透明度",
+  "how solid the surface's own film is over what it sits on": "表面自身膜层的实心程度",
+  "Glass scrim": "玻璃遮罩",
+  "how much a glass surface darkens what is behind it, for text contrast":
+    "玻璃表面压暗背后内容的程度，用于文字对比度",
   Snapshot: "快照",
   "a copy of the store as it stands, without closing the app": "在不关闭应用的情况下复制当前存储",
   "Take snapshot": "创建快照",

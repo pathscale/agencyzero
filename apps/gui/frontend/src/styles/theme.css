@@ -657,6 +657,17 @@
    * accepts and discards.
    */
   .az-glass {
+    /*
+     * Two layers, not one. The film is the surface's own colour and lightens a
+     * dark desk; the scrim is a dark wash beneath it that holds text contrast
+     * when the backdrop behind the panel is busy. Painting both into one
+     * `background-color` would make them cancel, so the scrim is a second
+     * background layer under the film.
+     */
+    background-image: linear-gradient(
+      rgb(0 0 0 / var(--az-glass-scrim-opacity, 0%)),
+      rgb(0 0 0 / var(--az-glass-scrim-opacity, 0%))
+    );
     background-color: color-mix(
       in oklab,
       var(--color-az-badge),
