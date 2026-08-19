@@ -299,6 +299,20 @@ pub struct Theme {
     /// How far the surface sits off the page: glow, sheen, shadow. 0 to 30.
     #[serde(default)]
     pub glass_depth: Option<f32>,
+    /*
+     * How solid the surface's own film is, as a percentage, 0 to 95.
+     *
+     * AgencyZero's, not the library's. `@pathscale/ui` derives
+     * `--glass-background-opacity` from refraction alone, and on a dark
+     * surface that curve lands near 5%, so the only way to get a surface
+     * anyone could see was to raise refraction and take a shouting border
+     * with it.
+     */
+    #[serde(default)]
+    pub glass_opacity: Option<f32>,
+    /// How much the surface darkens what it sits over, as a percentage, 0 to 70.
+    #[serde(default)]
+    pub glass_scrim: Option<f32>,
 }
 
 /// The hairline as it was before the axis existed.
@@ -326,6 +340,8 @@ impl Default for Theme {
             glass_blur: None,
             glass_refraction: None,
             glass_depth: None,
+            glass_opacity: None,
+            glass_scrim: None,
         }
     }
 }
@@ -890,9 +906,17 @@ mod tests {
         settings.theme.glass_blur = Some(9.0);
         settings.theme.glass_refraction = Some(0.25);
         settings.theme.glass_depth = Some(18.0);
+        settings.theme.glass_opacity = Some(62.0);
+        settings.theme.glass_scrim = Some(14.0);
 
         let json = serde_json::to_string(&settings).expect("should serialize");
-        for key in ["glassBlur", "glassRefraction", "glassDepth"] {
+        for key in [
+            "glassBlur",
+            "glassRefraction",
+            "glassDepth",
+            "glassOpacity",
+            "glassScrim",
+        ] {
             assert!(json.contains(key), "{key} is not persisted at all: {json}");
         }
 
@@ -900,6 +924,8 @@ mod tests {
         assert_eq!(back.theme.glass_blur, Some(9.0));
         assert_eq!(back.theme.glass_refraction, Some(0.25));
         assert_eq!(back.theme.glass_depth, Some(18.0));
+        assert_eq!(back.theme.glass_opacity, Some(62.0));
+        assert_eq!(back.theme.glass_scrim, Some(14.0));
     }
 
     /// Unset stays unset, so the library's per-mode default shows through
@@ -911,6 +937,8 @@ mod tests {
         assert_eq!(back.theme.glass_blur, None);
         assert_eq!(back.theme.glass_refraction, None);
         assert_eq!(back.theme.glass_depth, None);
+        assert_eq!(back.theme.glass_opacity, None);
+        assert_eq!(back.theme.glass_scrim, None);
     }
 
     /// Opus 5 is the one 5-series model that is not 1M natively, so reaching
