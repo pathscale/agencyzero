@@ -233,6 +233,19 @@ pub struct Theme {
     /// against the stylesheet, and the two would drift the first time the
     /// design changed.
     pub accent: String,
+    /// The second accent, as a `#rrggbb` hex string. Drives `--color-accent-2`,
+    /// which icons and SVG artwork read.
+    ///
+    /// Separate from `accent` because chrome and artwork are different jobs:
+    /// the first carries interactive state and has to stay legible on the
+    /// surfaces it sits on, while this one is for the marks that *are* the
+    /// content rather than a signal about it.
+    ///
+    /// Empty follows `accent`, for the same reason `accent` empty follows the
+    /// palette: a record that never chose one should render as it always did,
+    /// and writing a default in here would freeze it against the stylesheet.
+    #[serde(default)]
+    pub accent_two: String,
     /// Lightness added to every surface, in oklch percentage points, with the
     /// matching amount taken off every text rung. One number, because the two
     /// halves only make sense together: lifting the desk without bringing the
@@ -325,6 +338,7 @@ impl Default for Theme {
         Theme {
             surface: Some(String::new()),
             accent: String::new(),
+            accent_two: String::new(),
             softness: 0.0,
             // Matches `DEFAULT_WASH` in the webview's lib/theme.ts: the middle
             // of five useful coloured stops preserves a neutral foundation.
