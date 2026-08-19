@@ -150,6 +150,45 @@ export function isAccent(value: string): boolean {
   return HEX.test(value.trim());
 }
 
+/**
+ * Restroke the icons, because a custom property alone does not reach them.
+ *
+ * Inline SVG is not painted from the DOM on this renderer. `blitz-dom`
+ * serialises the `<svg>` element to a string, substitutes the computed
+ * `currentColor` into it, and hands that to usvg, which has no stylesheet: the
+ * resolved colour is baked into the parsed tree at construction time.
+ *
+ * That tree is rebuilt only when a node carries *construction* damage. Picking
+ * a second accent writes `--color-accent-2` on the root, which is a restyle
+ * that changes the inherited `color` and nothing else, so it produces repaint
+ * damage and the icons keep stroking the colour they were first built with.
+ * Verified against the renderer rather than assumed: with the property written
+ * on the root the cached tree's stroke stayed at its original value, while the
+ * same change made through a class attribute rebuilt it.
+ *
+ * Writing the `stroke` attribute is what closes that gap. It is an attribute
+ * mutation, so it damages the node for construction, the SVG is re-serialised,
+ * and the colour reaches the paint. The value is written literally rather than
+ * as `var(--color-accent-2)` because usvg cannot read custom properties either.
+ *
+ * `.az-icon-inherit` and icons on filled surfaces are skipped: those follow
+ * their label's ink deliberately, and `theme.css` already says so.
+ */
+function repaintIconStrokes(root: HTMLElement, accentTwo: string): void {
+  const doc = root.ownerDocument;
+  if (!doc) return;
+  for (const svg of doc.querySelectorAll("svg")) {
+    if (svg.closest(".az-icon-inherit, [class*='text-primary-content'], [class*='text-accent-content']")) {
+      continue;
+    }
+    // Only the icons that stroke with the artwork accent. A sprite root, a
+    // decorative shape with its own fill, or anything that never asked for
+    // `currentColor` is left exactly as authored.
+    if (svg.getAttribute("stroke") === null) continue;
+    svg.setAttribute("stroke", accentTwo);
+  }
+}
+
 /** Nearest literal palette entry for one older or mode-shifted hex value. */
 export function closestColorIndex(value: string, colors: string[]): number {
   if (!isAccent(value) || colors.length === 0) return -1;
@@ -262,6 +301,7 @@ export function applyTheme(
   const accentTwo = isAccent(theme.accentTwo ?? "") ? theme.accentTwo!.trim() : accent;
   root.style.setProperty("--color-accent-2", accentTwo);
   root.style.setProperty("--color-accent-2-content", readableInk(accentTwo));
+  repaintIconStrokes(root, accentTwo);
 
   root.style.setProperty("--az-lift", `${softness}%`);
   /*
