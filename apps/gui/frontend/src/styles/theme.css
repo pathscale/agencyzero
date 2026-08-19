@@ -416,11 +416,10 @@
      * backdrop pass (`record_backdrop` in `anyrender_vello/src/scene.rs`), so
      * the claim that only `vello_cpu` can carry it is out of date.
      */
-    background-color: color-mix(
-      in oklab,
-      var(--color-az-void) var(--az-glass-alpha, 100%),
-      transparent
-    );
+    /* Relative colour syntax, for the reason `.az-desk` records below: a
+     * `color-mix` here is emitted behind an `@supports` query Blitz does not
+     * match, so the translucent rule never applies. */
+    background-color: rgb(from var(--color-az-void) r g b / var(--az-glass-alpha, 100%));
     color: var(--color-base-content);
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
     font-size: 13px;
@@ -668,16 +667,22 @@
       rgb(0 0 0 / var(--az-glass-scrim-opacity, 0%)),
       rgb(0 0 0 / var(--az-glass-scrim-opacity, 0%))
     );
-    background-color: color-mix(
-      in oklab,
-      var(--color-az-badge),
-      transparent calc(100% - var(--glass-background-opacity, 55%))
+    /*
+     * Relative colour syntax, not `color-mix` with `transparent`.
+     *
+     * Lightning CSS treats a `color-mix` as progressive enhancement: it keeps
+     * a declaration outside `@supports (color: color-mix(in lab, red, red))`
+     * as the fallback and puts the real one inside. For a *colour* that is
+     * harmless, because both are opaque. For a colour carrying alpha it is
+     * not: the fallback it synthesised here was the flat card surface with no
+     * alpha at all, so every panel painted solid and the opacity axis moved
+     * nothing anyone could see. `rgb(from … / alpha)` is one declaration with
+     * nothing for a minifier to split.
+     */
+    background-color: rgb(
+      from var(--color-az-badge) r g b / var(--glass-background-opacity, 55%)
     );
-    outline-color: color-mix(
-      in oklab,
-      var(--color-primary),
-      transparent calc(100% - var(--glass-border-opacity, 12%))
-    );
+    outline-color: rgb(from var(--color-primary) r g b / var(--glass-border-opacity, 12%));
     box-shadow:
       var(--glass-shadow-depth, 0 8px 32px rgb(0 0 0 / 10%)),
       inset 0 1px 0
@@ -939,11 +944,18 @@
 
     /* The window's real backdrop, and so the surface glass is actually about.
      * See `body` above for why both carry the same alpha. */
-    background-color: color-mix(
-      in oklab,
-      var(--color-az-desk) var(--az-glass-alpha, 100%),
-      transparent
-    );
+    /*
+     * `rgb(from … / alpha)` rather than a `color-mix` with `transparent`.
+     *
+     * Lightning CSS treats a `color-mix` as progressive enhancement and emits
+     * it inside `@supports (color: color-mix(in lab, red, red))`, keeping an
+     * opaque declaration outside as the fallback. Blitz does not match that
+     * query, so it took the fallback and the desk stayed solid at every
+     * setting: the alpha was written, shipped, and then never used. Relative
+     * colour syntax carries the alpha in one declaration with nothing for a
+     * minifier to split.
+     */
+    background-color: rgb(from var(--color-az-desk) r g b / var(--az-glass-alpha, 100%));
     /* The dot grid is the largest single surface in the window; in the accent
      * rather than white it tints the whole desk at a density the eye reads as
      * texture. */

@@ -140,6 +140,35 @@ publish_bundle() {
     mkdir -p "$(dirname "$published_bundle")"
     mv "$built_bundle" "$published_bundle"
   fi
+
+  assert_frontend_is_embedded "$published_bundle"
+}
+
+# Refuse to hand over a bundle whose frontend predates the built assets.
+#
+# Tauri compiles `dist` into the executable, so a bundle built before the last
+# frontend build carries the *previous* CSS and JavaScript with no sign of it:
+# the app launches, behaves, and silently lacks the change it was built for.
+# That shipped three times in one session, each time reported as "nothing seems
+# changed", and each round trip cost a rebuild to disprove.
+#
+# Timestamps rather than contents, because the assets are compressed into the
+# binary and cannot be grepped.
+assert_frontend_is_embedded() {
+  bundle=$1
+  binary="$bundle/Contents/MacOS/az-gui"
+  dist="$repo_root/apps/gui/dist"
+
+  [ -x "$binary" ] || return 0
+  [ -d "$dist" ] || return 0
+
+  newest=$(find "$dist" -type f -newer "$binary" -print -quit 2>/dev/null)
+  if [ -n "$newest" ]; then
+    echo "==> the bundle predates the frontend: $newest is newer than the binary" >&2
+    echo "    rebuild without --config '{\"build\":{\"beforeBuildCommand\":\"\"}}', or" >&2
+    echo "    run the frontend build first so the assets are embedded" >&2
+    exit 1
+  fi
 }
 
 if [ "$mode" != "quick" ]; then
