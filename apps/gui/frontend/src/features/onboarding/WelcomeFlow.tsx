@@ -240,7 +240,7 @@ export function WelcomeFlow(): JSX.Element {
             <For each={Array.from({ length: LAST_STEP + 1 })}>
               {(_, index) => (
                 <span
-                  class={`h-1 flex-1 rounded-full ${index() <= step() ? "bg-primary" : "bg-az-inset"}`}
+                  class={`h-1 flex-1 rounded-full ${index() <= step() ? "bg-primary" : "bg-az-inset az-control-solid"}`}
                 />
               )}
             </For>

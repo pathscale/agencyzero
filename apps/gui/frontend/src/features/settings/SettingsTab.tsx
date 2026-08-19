@@ -1049,7 +1049,7 @@ export function SettingsTab(): JSX.Element {
 
               <Section icon="sparkles" title={t("appearance.title")} hint={t("appearance.hint")}>
                 <Row label={t("appearance.mode")} hint={t("appearance.modeHint")}>
-                  <div class="flex items-center gap-1 rounded-full border border-az-hairline bg-az-inset p-1">
+                  <div class="flex items-center gap-1 rounded-full border border-az-hairline bg-az-inset az-control-solid p-1">
                     <For
                       each={[
                         { value: "dark" as const, label: t("appearance.dark") },
@@ -1078,7 +1078,7 @@ export function SettingsTab(): JSX.Element {
                   </div>
                 </Row>
                 <Row label={t("appearance.size")} hint={t("appearance.sizeHint")}>
-                  <div class="flex items-center gap-1 rounded-full border border-az-hairline bg-az-inset p-1">
+                  <div class="flex items-center gap-1 rounded-full border border-az-hairline bg-az-inset az-control-solid p-1">
                     <For
                       each={[
                         { value: "normal" as const, label: "N", name: t("appearance.normal") },

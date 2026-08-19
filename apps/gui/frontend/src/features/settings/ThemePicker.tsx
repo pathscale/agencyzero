@@ -200,7 +200,7 @@ function SurfaceColorWheel(props: { value: string; onPick: (value: string) => vo
   return (
     <fieldset
       aria-label={t("appearance.surfaceColour")}
-      class="relative m-0 size-[190px] rounded-full border border-az-hairline bg-az-inset p-0 shadow-inner"
+      class="relative m-0 size-[190px] rounded-full border border-az-hairline bg-az-inset az-control-solid p-0 shadow-inner"
     >
       <For each={colors()}>
         {(color, index) => {
