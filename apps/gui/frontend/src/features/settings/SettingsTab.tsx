@@ -3251,6 +3251,34 @@ function GlassTuningAxis(props: {
             [props.axis]: value,
           };
           applyGlassTokens(tuning, mode());
+          /*
+           * Put back the two tokens this app owns, which `applyGlassTokens`
+           * has just overwritten.
+           *
+           * The library derives `--glass-background-opacity` from refraction,
+           * and on a dark surface that curve lands near 5%. This app writes its
+           * own value there from a separate slider precisely because 5% is a
+           * film nobody can see. So every frame of a blur, refraction or depth
+           * drag reset the *opacity* to the library's number, and releasing the
+           * knob - which persists and re-runs `writeGlassTuning` - put the
+           * app's number back. The surface visibly changed twice during a drag
+           * of an axis that has nothing to do with it.
+           *
+           * Reported repeatedly as the slider showing one thing while dragging
+           * and another on release, and it survived a first fix because that
+           * one addressed the percentage sliders and this is the other family.
+           */
+          const opacity = props.theme.glassOpacity ?? DEFAULT_GLASS_OPACITY;
+          if (Number.isFinite(opacity)) {
+            const root = document.documentElement;
+            const film = Math.min(Math.max(Number(opacity), 0), 100);
+            root.style.setProperty("--glass-background-opacity", `${Number(opacity)}%`);
+            root.style.setProperty("--az-glass-alpha", `${Math.round(film)}%`);
+            root.style.setProperty(
+              "--glass-control-opacity",
+              `${Math.round(100 - (100 - film) * 0.33)}%`,
+            );
+          }
           // The panel is derived from the same three numbers, so it has to be
           // repainted with them or it lags a drag by one settle.
           writePanelAxes(tuning);
