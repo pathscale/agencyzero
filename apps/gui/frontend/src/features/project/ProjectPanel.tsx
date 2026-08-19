@@ -55,7 +55,11 @@ export function ProjectPanel(props: { project: Project; agent: Agent }): JSX.Ele
   });
 
   return (
-    <div class="az-scroll flex h-full min-h-0 w-[332px] flex-none flex-col gap-2.5 overflow-y-auto overscroll-contain">
+    // `az-glass` on the column, not on each section: one blurred surface behind
+    // the whole sidebar instead of one per section. The sections carry
+    // `az-glass-shared`, so they keep the tint and the hairline and read the
+    // pixels this element already blurred. Seven full-frame passes became two.
+    <div class="az-glass az-scroll flex h-full min-h-0 w-[332px] flex-none flex-col gap-2.5 overflow-y-auto overscroll-contain">
       <SectionPanel
         icon="list-checks"
         title={tx("Items")}
