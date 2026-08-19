@@ -939,6 +939,7 @@ const zh = {
     "玻璃表面离页面的高度：辉光、光泽和阴影",
   Glass: "玻璃",
   "turn every translucent surface solid, in one switch": "一个开关将所有半透明表面变为不透明",
+  "how far a panel smears the app's own content behind it": "面板对其后方应用内容的模糊程度",
   "Glass opacity": "玻璃不透明度",
   "how solid the surface's own film is over what it sits on": "表面自身膜层的实心程度",
   "Glass scrim": "玻璃遮罩",

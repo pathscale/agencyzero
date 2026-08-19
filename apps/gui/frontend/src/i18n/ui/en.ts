@@ -971,6 +971,8 @@ const en = {
   Glass: "Glass",
   "turn every translucent surface solid, in one switch":
     "turn every translucent surface solid, in one switch",
+  "how far a panel smears the app's own content behind it":
+    "how far a panel smears the app's own content behind it",
   "Glass opacity": "Glass opacity",
   "how solid the surface's own film is over what it sits on":
     "how solid the surface's own film is over what it sits on",
