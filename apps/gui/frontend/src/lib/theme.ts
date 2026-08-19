@@ -275,8 +275,27 @@ function writeGlassTuning(theme: ThemeSettings, root: HTMLElement): void {
   const opacity = theme.glassOpacity ?? DEFAULT_GLASS_OPACITY;
   if (Number.isFinite(opacity)) {
     root.style.setProperty("--glass-background-opacity", `${Number(opacity)}%`);
+
+    /*
+     * The same axis, applied to the two surfaces that cover the whole window.
+     *
+     * `--glass-background-opacity` only reaches panels, so on its own the
+     * slider moved the cards and left the desk, the body and the titlebar
+     * exactly as solid as before: the app could not be seen through at any
+     * setting, which is not what a control called opacity promises.
+     *
+     * `--az-glass-alpha` is the knob the stylesheet already had for that, on
+     * `body` and `.az-desk`, and nothing had ever written it. It runs the
+     * other way round: 100% is the flat colour, lower lets the window behind
+     * show through. The desk stays a good deal more solid than the panels at
+     * the same setting, because a fully transparent desk takes the contrast of
+     * every piece of text on the page with it.
+     */
+    const solid = Math.min(Math.max(Number(opacity), 0), 100);
+    root.style.setProperty("--az-glass-alpha", `${Math.round(45 + solid * 0.55)}%`);
   } else {
     root.style.removeProperty("--glass-background-opacity");
+    root.style.removeProperty("--az-glass-alpha");
   }
 
   /*
