@@ -26,6 +26,8 @@ const fr = {
     textBrightness: "Luminosité du texte",
     textBrightnessHint: "contraste du texte avec la surface",
     surfaceColour: "Couleur de surface",
+    accentTwo: "Accent 2",
+    accentTwoHint: "icônes et illustrations, distinct de l'accent des contrôles",
     accentColour: "Couleur d’accent",
     accentColourHint: "indépendante de la couleur des surfaces",
     designedYellow: "Accent jaune du design",
