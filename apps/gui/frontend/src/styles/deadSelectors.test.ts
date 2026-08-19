@@ -150,6 +150,34 @@ describe("glass fallbacks are app decisions, not engine questions", () => {
     expect(gated).toEqual([]);
   });
 
+  /*
+   * The same hazard, for every rule rather than one.
+   *
+   * `.az-glass-shared` was written with the standard property first, so
+   * Lightning CSS emitted only `-webkit-backdrop-filter: none`, the standard
+   * property survived from `.az-glass`, and every sidebar section kept its own
+   * backdrop pass. That is not a cosmetic bug: each pass costs a full-frame
+   * render and a full-frame 19 MB texture, and the app was measured at seven
+   * passes where it needed two, about 380 MB and 25 fps.
+   *
+   * Cheap to state and impossible to get wrong by accident, so it is checked
+   * for every declaration rather than for the one that happened to break.
+   */
+  it("declares the standard backdrop-filter after the prefixed one, everywhere", () => {
+    const offenders = [...CSS_TEXT.matchAll(/[^-\w]backdrop-filter\s*:[^;]*;/g)]
+      .map((match) => ({ at: match.index ?? 0, text: match[0].trim() }))
+      .filter(({ at }) => {
+        // The prefixed twin has to be the declaration immediately before this
+        // one; anything else means the pair is out of order or unpaired.
+        const before = CSS_TEXT.lastIndexOf("-webkit-backdrop-filter", at);
+        if (before < 0) return true;
+        return CSS_TEXT.slice(before, at).includes("}");
+      })
+      .map(({ text }) => text);
+
+    expect(offenders).toEqual([]);
+  });
+
   it("keeps the standard backdrop-filter, not only the prefixed one", () => {
     // Declared after `-webkit-`, so a minifier that keeps the last declaration
     // cannot drop the standard property for its default targets.

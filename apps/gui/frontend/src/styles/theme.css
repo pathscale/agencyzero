@@ -702,8 +702,37 @@
    * rule the library applies to its own nested surfaces.
    */
   .az-glass .az-glass {
-    backdrop-filter: none;
     -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+
+  /*
+   * A stack of glass surfaces costs one full-frame pass each.
+   *
+   * The renderer can only let two backdrop-filtered elements share a snapshot
+   * when the second one's blur reads pixels the first did not paint into. A
+   * blur expands its source rect by roughly three sigma on every side, which is
+   * 42 device pixels at the default 9px radius, and the project panel's
+   * sections sit 23 device pixels apart. Every section therefore reached into
+   * the one above it and bought its own pass: measured on this app, six
+   * sections plus the transcript panel came to seven full-frame renders and
+   * seven full-frame 19 MB textures, about 550 MB of the process.
+   *
+   * `az-glass-shared` marks a surface that sits inside a container which is
+   * already blurring the same backdrop, so it keeps the glass tokens, the tint
+   * and the hairline, and drops only its own filter. Visually identical,
+   * because the pixels behind it were already blurred by the container.
+   */
+  /*
+   * Standard property last, for the same reason the `.az-glass` rule above
+   * says: Lightning CSS keeps "the last one wins" and will drop whichever of
+   * the pair it reads as redundant. Written the other way round it emitted only
+   * `-webkit-backdrop-filter: none`, the standard property survived from
+   * `.az-glass`, and every section kept its own pass.
+   */
+  .az-glass-shared {
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
   }
 
   /*
@@ -733,8 +762,8 @@
       var(--color-az-badge),
       transparent calc(100% - var(--glass-fallback-background-opacity, 78%))
     );
-    backdrop-filter: none;
     -webkit-backdrop-filter: none;
+    backdrop-filter: none;
   }
 
   /*
@@ -759,8 +788,8 @@
       var(--color-az-badge),
       transparent calc(100% - var(--glass-fallback-background-opacity, 78%))
     );
-    backdrop-filter: none;
     -webkit-backdrop-filter: none;
+    backdrop-filter: none;
   }
 
   @media (prefers-reduced-motion: reduce) {

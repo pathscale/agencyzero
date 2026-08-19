@@ -64,7 +64,7 @@ export type SectionPanelProps = {
  */
 export function SectionPanel(props: SectionPanelProps): JSX.Element {
   return (
-    <Panel class={props.class}>
+    <Panel class={`az-glass-shared ${props.class ?? ""}`}>
       {/*
         The header is a row, not one big button: `lead` carries its own control
         (the log's "Clear"), and nesting that inside a button would be invalid
