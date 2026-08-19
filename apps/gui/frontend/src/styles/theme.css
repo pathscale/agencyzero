@@ -1301,6 +1301,60 @@
     color: var(--color-primary-text, var(--color-primary));
   }
 
+  /*
+   * The semantic colours, as text, get the same treatment as the accent.
+   *
+   * `text-error` on `bg-error/12` is the same shape as the accent chip and
+   * fails the same way: both sides resolve to one colour, so the label is its
+   * own background at a contrast ratio of exactly 1.00. Measured through the
+   * renderer's computed styles in light mode - 120 elements under 3.0, the
+   * worst of them at 1.00 with `#b63039` text on `#b630392e`.
+   *
+   * These are static `oklch()` literals rather than picked colours, so unlike
+   * the accent they can be lifted in CSS: the hue and chroma are kept and only
+   * lightness moves, away from the desk this mode paints. Dark mode's desk is
+   * near-black so the text rung goes up; light mode's is near-white so it goes
+   * down.
+   *
+   * Fills, borders and rings keep the colour proper. This is only where the
+   * colour is being *read*.
+   */
+  .text-error {
+    color: oklch(from var(--color-error) calc(l + 0.16) c h);
+  }
+
+  .text-success {
+    color: oklch(from var(--color-success) calc(l + 0.14) c h);
+  }
+
+  .text-warning {
+    color: oklch(from var(--color-warning) calc(l + 0.14) c h);
+  }
+
+  .text-info {
+    color: oklch(from var(--color-info) calc(l + 0.14) c h);
+  }
+
+  /*
+   * Light mode moves the same rungs the other way, because its desk is at the
+   * other end: lifting a colour toward white is what makes it vanish here.
+   */
+  [data-color-mode="light"] .text-error {
+    color: oklch(from var(--color-error) calc(l - 0.1) c h);
+  }
+
+  [data-color-mode="light"] .text-success {
+    color: oklch(from var(--color-success) calc(l - 0.1) c h);
+  }
+
+  [data-color-mode="light"] .text-warning {
+    color: oklch(from var(--color-warning) calc(l - 0.12) c h);
+  }
+
+  [data-color-mode="light"] .text-info {
+    color: oklch(from var(--color-info) calc(l - 0.1) c h);
+  }
+
   .az-control-solid {
     background-color: rgb(from var(--color-az-inset) r g b / var(--glass-control-opacity, 100%));
   }
