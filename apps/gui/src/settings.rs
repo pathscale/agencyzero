@@ -600,6 +600,9 @@ pub fn normalize(settings: &mut GlobalSettings) {
     {
         settings.theme.surface = Some(String::new());
     }
+    if !valid_theme_color(&settings.theme.accent_two) {
+        settings.theme.accent_two.clear();
+    }
     if !valid_theme_color(&settings.theme.accent) {
         settings.theme.accent.clear();
     }
@@ -838,7 +841,7 @@ pub fn prompt_syntax_patch(key: &str, value: &str) -> Result<Value, String> {
     }
 
     match key {
-        "theme.surface" | "theme.accent" => {
+        "theme.surface" | "theme.accent" | "theme.accentTwo" => {
             let value = value.trim();
             if !valid_theme_color(value) {
                 return Err("VALUE_INVALID".into());
