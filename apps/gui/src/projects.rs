@@ -1267,6 +1267,25 @@ fn interrupted_stop(recovery_queued: bool, internally_stalled: bool) -> &'static
     }
 }
 
+/// Whether an idle window with a tool still running should ping again rather
+/// than stop the run.
+///
+/// The ping is only read between tool calls, so one call that outlives a ping
+/// window cannot answer however alive it is: a release build of this app takes
+/// several minutes and emits nothing throughout. Stopping on the first
+/// unanswered ping therefore killed healthy runs, which the owner saw as the
+/// chat disconnecting mid-turn.
+///
+/// Retrying is gated on a tool still being in flight, which is the same
+/// evidence that justified pinging in the first place. With nothing running the
+/// answer is `false` on the first expiry, exactly as before.
+fn should_ping_again(tool_running: bool, ping_outstanding: bool, unanswered: u32) -> bool {
+    if !tool_running {
+        return false;
+    }
+    !ping_outstanding || unanswered < MAX_UNANSWERED_LIVENESS_PINGS
+}
+
 /// Preserve who canceled the run, including a cancellation returned as an outcome.
 ///
 /// AgencyProxy can settle `Run::cancel` with an ordinary outcome instead of an
@@ -6037,6 +6056,24 @@ const TASK_CLEANUP_TIMEOUT: std::time::Duration = std::time::Duration::from_secs
 /// Any provider event clears the ping, not just the pong: a run that resumes
 /// streaming has already proven what the ping was asking.
 const LIVENESS_PING_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(90);
+
+/// How many liveness pings a run with a tool still running may leave unanswered
+/// before it is stopped.
+///
+/// One was not enough. The ping is only read between tool calls, so a single
+/// call that legitimately outlives [`LIVENESS_PING_TIMEOUT`] cannot answer at
+/// all: a release build of this app takes several minutes and emits nothing
+/// while it runs. That killed healthy runs, and the owner saw it as the chat
+/// disconnecting and reconnecting mid-turn.
+///
+/// Retrying only ever happens while a tool is still registered as in flight,
+/// which is the same evidence that justified the first ping. A run that has no
+/// tool outstanding is still stopped on the first expiry, exactly as before, so
+/// this widens the window for long tools without weakening the case where
+/// nothing is running at all. Four windows is about eight minutes of tool time
+/// past the idle timeout, which covers this repo's slowest build with room to
+/// spare, and a truly wedged run is still stopped.
+const MAX_UNANSWERED_LIVENESS_PINGS: u32 = 4;
 
 /// The longest silence a run may claim for itself with `<ps @agency:extend-watchdog(…)>`.
 ///
@@ -11259,6 +11296,9 @@ async fn drive_run(
     // Set when a liveness ping has been injected and not yet answered. One ping
     // per silence: a second expiry with this still set is the wedged case.
     let mut ping_outstanding = false;
+    // Bounded retries, so a tool that legitimately outlives one ping window is
+    // not mistaken for a wedged run. Reset wherever the ping itself is.
+    let mut unanswered_pings: u32 = 0;
     loop {
         let wake = tokio::select! {
             event = run.recv() => match event {
@@ -11295,6 +11335,7 @@ async fn drive_run(
                     "{project_id}: the liveness ping could not be delivered"
                 );
                 ping_outstanding = false;
+                unanswered_pings = 0;
                 continue;
             }
             () = async {
@@ -11350,7 +11391,12 @@ async fn drive_run(
                  *
                  * Neither the ping nor the pong is persisted or rendered.
                  */
-                if opening_message_read && !ping_outstanding && tool_in_flight(&running, &project_id)
+                if opening_message_read
+                    && should_ping_again(
+                        tool_in_flight(&running, &project_id),
+                        ping_outstanding,
+                        unanswered_pings,
+                    )
                 {
                     crate::log!(
                         crate::log::Level::Debug,
@@ -11363,6 +11409,7 @@ async fn drive_run(
                     // queued means the worker is gone, which is teardown.
                     if ping_request_tx.send(()).is_ok() {
                         ping_outstanding = true;
+                        unanswered_pings += 1;
                         // Visible in the run's I/O trail, so a stop that follows
                         // reads as "we asked and got nothing" rather than as an
                         // unexplained crash.
@@ -11493,6 +11540,7 @@ async fn drive_run(
             // Any provider event answers the question a ping asks, so a run
             // that simply resumed streaming is not held to replying in words.
             ping_outstanding = false;
+            unanswered_pings = 0;
         }
         if turn_started && !opening_message_read {
             emit_message_receipt(&app, &project_id, &turn_id, "read");
@@ -11774,6 +11822,7 @@ async fn drive_run(
                             serde_json::json!({ "projectId": project_id }),
                         );
                         ping_outstanding = false;
+                        unanswered_pings = 0;
                         continue;
                     }
                     /*
@@ -11816,6 +11865,7 @@ async fn drive_run(
                         idle_deadline =
                             tokio::time::Instant::now() + std::time::Duration::from_secs(granted);
                         ping_outstanding = false;
+                        unanswered_pings = 0;
                         continue;
                     }
                     /*
@@ -14168,6 +14218,38 @@ mod tests {
             run_start_timeout(Some("019fe585-684c-7240-82b9-7b1a02d25983")),
             RESUMED_RUN_START_TIMEOUT
         );
+    }
+
+    /// A long tool must not be mistaken for a wedged run.
+    ///
+    /// The regression: one unanswered ping stopped the run, so a build that
+    /// legitimately outlived the ping window was torn down and reported as a
+    /// reconnect. Confirmed in the owner's log, where a run with a tool still
+    /// running was pinged at 300s and stopped 90s later.
+    #[test]
+    fn a_running_tool_earns_more_than_one_ping() {
+        // First expiry: nothing outstanding yet, so ping.
+        assert!(should_ping_again(true, false, 0));
+        // Still running and still unanswered: keep asking, up to the bound.
+        for attempt in 1..MAX_UNANSWERED_LIVENESS_PINGS {
+            assert!(
+                should_ping_again(true, true, attempt),
+                "ping {attempt} should still retry while a tool is running",
+            );
+        }
+        // The bound is a real bound: a wedged run is still stopped.
+        assert!(!should_ping_again(
+            true,
+            true,
+            MAX_UNANSWERED_LIVENESS_PINGS
+        ));
+    }
+
+    /// With no tool running, the first unanswered ping still stops the run.
+    #[test]
+    fn an_idle_run_with_no_tool_is_not_given_extra_windows() {
+        assert!(!should_ping_again(false, false, 0));
+        assert!(!should_ping_again(false, true, 0));
     }
 
     #[test]
