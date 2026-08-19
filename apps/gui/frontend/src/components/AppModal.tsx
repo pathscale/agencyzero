@@ -106,7 +106,27 @@ export function AppModal(props: {
         The layer still covers the window when anchored, with no wash: it is
         what catches the click that dismisses the popover.
       */
-      class={`fixed inset-0 z-50 flex items-center justify-center overflow-auto ${
+      /*
+        `isolation` and a z-index above the app, because `z-50` alone lost.
+
+        This element is appended to `document.body`, so its stacking order is
+        decided among body's children rather than against anything inside the
+        app. `@pathscale/ui` gives every `.button` `isolation: isolate`, so each
+        one is its own stacking context, and a control underneath the dialog
+        could take the pointer at a coordinate the dialog was covering.
+
+        Measured through the renderer's own inspection channel rather than
+        inferred: clicking the fork dialog's close button was acknowledged and
+        the dialog stayed open, and the node covering that exact centre point
+        was the "New item" button on the list *behind* it. Both exits looked
+        correct in the markup and both were unreachable in the window.
+
+        A DOM-only test environment has no hit-testing, so it dispatches the
+        click straight at the node it was handed and every one of these passes
+        there. This is why the fix is a stacking rule and not a handler change.
+      */
+      style={{ isolation: "isolate" }}
+      class={`fixed inset-0 z-[100] flex items-center justify-center overflow-auto ${
         props.anchor ? "" : "bg-black/60 p-8"
       }`}
       onClick={(event) => event.currentTarget === event.target && props.onDismiss()}
