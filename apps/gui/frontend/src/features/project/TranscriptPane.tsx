@@ -1200,7 +1200,7 @@ function QuestionCard(props: { question: Question; number: number }): JSX.Elemen
             type="button"
             onClick={() => actions.selectQuestionReply(props.question.projectId, props.question.id)}
             aria-label={tx("Reply to this question")}
-            class="rounded-full border border-primary/30 bg-primary/10 px-2 py-0.5 font-semibold text-[10.5px] text-primary transition-colors hover:bg-primary/18"
+            class="rounded-full border border-primary/30 bg-az-chip px-2 py-0.5 font-semibold text-[10.5px] text-primary transition-colors hover:bg-az-chip"
           >
             {tx("Reply")}
           </Button>

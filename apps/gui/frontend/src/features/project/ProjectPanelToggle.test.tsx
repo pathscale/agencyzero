@@ -17,7 +17,7 @@ describe("the project panel toggle", () => {
     expect(button.classList).toContain("left-full");
     expect(button.classList).toContain("rounded-r-md");
     expect(button.classList).toContain("border-l-0");
-    expect(button.classList).toContain("bg-primary/20");
+    expect(button.classList).toContain("bg-az-chip-strong");
     expect(button.classList).toContain("text-primary");
     expect(button.classList).toContain("h-9");
     expect(button.classList).toContain("w-1.5");

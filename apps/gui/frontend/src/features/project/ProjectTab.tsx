@@ -350,7 +350,7 @@ export function ProjectTab(props: { tab: Tab; project: Project }): JSX.Element {
             >
               {(fork) => (
                 <div class="flex min-w-0 flex-1 items-center gap-2">
-                  <span class="shrink-0 rounded-full border border-primary/30 bg-primary/10 px-2 py-0.5 font-semibold text-[10.5px] text-primary uppercase tracking-wide">
+                  <span class="shrink-0 rounded-full border border-primary/30 bg-az-chip px-2 py-0.5 font-semibold text-[10.5px] text-primary uppercase tracking-wide">
                     {tx("Fork")}
                   </span>
                   <Button
@@ -675,7 +675,7 @@ export function ProjectPanelToggle(props: { visible: boolean; onToggle: () => vo
       aria-pressed={props.visible ? "true" : "false"}
       aria-label={label()}
       title={label()}
-      class="absolute top-1/2 left-full z-20 flex h-9 w-1.5 -translate-y-1/2 items-center justify-center rounded-r-md border border-primary/40 border-l-0 bg-primary/20 text-primary transition-colors duration-200 hover:border-primary/60 hover:bg-primary/30 motion-reduce:transition-none"
+      class="absolute top-1/2 left-full z-20 flex h-9 w-1.5 -translate-y-1/2 items-center justify-center rounded-r-md border border-primary/40 border-l-0 bg-az-chip-strong text-primary transition-colors duration-200 hover:border-primary/60 hover:bg-az-chip-strong motion-reduce:transition-none"
     >
       <Icon
         name="chevron-right"

@@ -1810,7 +1810,7 @@ function ChatImportSettings(): JSX.Element {
                       type="button"
                       disabled={busy() !== null}
                       onClick={() => void importAll(source)}
-                      class="h-9 shrink-0 rounded-lg border border-primary/45 px-2.5 font-medium text-[11px] text-primary transition-colors hover:border-primary hover:bg-primary/10 disabled:opacity-40"
+                      class="h-9 shrink-0 rounded-lg border border-primary/45 px-2.5 font-medium text-[11px] text-primary transition-colors hover:border-primary hover:bg-az-chip disabled:opacity-40"
                     >
                       {busy() === `${source.source}:*` ? tx("Importing all…") : tx("Import all")}
                     </Button>
@@ -2504,7 +2504,7 @@ function UpdateControl(): JSX.Element {
               type="button"
               onClick={install}
               disabled={busy() || !isLive("installUpdate")}
-              class="shrink-0 rounded-lg border border-primary/50 px-3 py-[5px] font-semibold text-[12px] text-primary transition-colors hover:border-primary hover:bg-primary/10 disabled:opacity-40"
+              class="shrink-0 rounded-lg border border-primary/50 px-3 py-[5px] font-semibold text-[12px] text-primary transition-colors hover:border-primary hover:bg-az-chip disabled:opacity-40"
             >
               {busy() ? tx("Installing…") : tx("Install & Restart")}
             </Button>
@@ -3389,7 +3389,7 @@ function AgentRow(props: { status: AgentStatus }): JSX.Element {
       <span class="flex shrink-0 gap-[5px]">
         <For each={props.status.caps}>
           {(cap) => (
-            <span class="rounded-full border border-primary/25 bg-primary/8 px-[7px] py-0.5 font-mono text-[10.5px] text-primary/85">
+            <span class="rounded-full border border-primary/25 bg-az-chip px-[7px] py-0.5 font-mono text-[10.5px] text-primary/85">
               {cap}
             </span>
           )}
