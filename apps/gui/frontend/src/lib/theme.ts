@@ -296,24 +296,6 @@ function writeGlassTuning(theme: ThemeSettings, root: HTMLElement): void {
     root.style.setProperty("--glass-background-opacity", `${Number(opacity)}%`);
 
     /*
-     * Controls take part of the film rather than none of it.
-     *
-     * The library defaults `--glass-control-opacity` to 100%, so that flipping
-     * glass on cannot make a switch or a select trigger unreadable in an app
-     * that has not thought about it. This app has. Its controls sit on glass
-     * panels over a translucent desk, and held fully opaque they are the only
-     * solid things in the window: the language button, the model pickers and
-     * the segmented pills all read as bright slabs rather than as chrome.
-     *
-     * A third of the way from opaque toward the panel, not the whole way. A
-     * control still has to say it is live and keep its label legible against
-     * whatever passes behind it, so it takes just enough of the film to stop
-     * reading as a foreign material. At the default 55% panel that is 85%.
-     */
-    const film = Math.min(Math.max(Number(opacity), 0), 100);
-    root.style.setProperty("--glass-control-opacity", `${Math.round(100 - (100 - film) * 0.33)}%`);
-
-    /*
      * The same axis, applied to the two surfaces that cover the whole window.
      *
      * `--glass-background-opacity` only reaches panels, so on its own the
@@ -338,7 +320,6 @@ function writeGlassTuning(theme: ThemeSettings, root: HTMLElement): void {
     root.style.setProperty("--az-glass-alpha", `${Math.round(solid)}%`);
   } else {
     root.style.removeProperty("--glass-background-opacity");
-    root.style.removeProperty("--glass-control-opacity");
     root.style.removeProperty("--az-glass-alpha");
   }
 
