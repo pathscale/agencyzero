@@ -704,7 +704,7 @@
      */
     background-color: rgb(
       from var(--az-glass-film, var(--color-az-badge)) r g b /
-        var(--glass-background-opacity, 55%)
+      var(--glass-background-opacity, 55%)
     );
     outline-color: rgb(from var(--color-primary) r g b / var(--glass-border-opacity, 12%));
     box-shadow:
@@ -1025,7 +1025,7 @@
   .bg-base-300 {
     background-color: rgb(
       from var(--color-base-300) r g b /
-        calc(var(--glass-background-opacity, 55%) * 0.72)
+      calc(var(--glass-background-opacity, 55%) * 0.72)
     );
   }
 
@@ -1045,7 +1045,7 @@
   .bg-az-bubble {
     background-color: rgb(
       from var(--color-az-bubble) r g b /
-        calc(var(--glass-background-opacity, 55%) * 0.72)
+      calc(var(--glass-background-opacity, 55%) * 0.72)
     );
   }
 
@@ -1081,7 +1081,8 @@
    */
   .bg-az-inset {
     background-color: rgb(
-      from var(--color-az-inset) r g b / calc(var(--glass-background-opacity, 55%) * 0.72)
+      from var(--color-az-inset) r g b /
+      calc(var(--glass-background-opacity, 55%) * 0.72)
     );
   }
 
@@ -1114,32 +1115,37 @@
   .hover\:bg-az-hover:hover,
   .group-hover\/header\:bg-az-hover:is(:where(.group\/header):hover *) {
     background-color: rgb(
-      from var(--color-az-hover) r g b / calc(var(--glass-background-opacity, 55%) * 0.72)
+      from var(--color-az-hover) r g b /
+      calc(var(--glass-background-opacity, 55%) * 0.72)
     );
   }
 
   .bg-base-100 {
     background-color: rgb(
-      from var(--color-base-100) r g b / calc(var(--glass-background-opacity, 55%) * 0.72)
+      from var(--color-base-100) r g b /
+      calc(var(--glass-background-opacity, 55%) * 0.72)
     );
   }
 
   .bg-az-tab {
     background-color: rgb(
-      from var(--color-az-tab) r g b / calc(var(--glass-background-opacity, 55%) * 0.72)
+      from var(--color-az-tab) r g b /
+      calc(var(--glass-background-opacity, 55%) * 0.72)
     );
   }
 
   .bg-az-badge {
     background-color: rgb(
-      from var(--color-az-badge) r g b / calc(var(--glass-background-opacity, 55%) * 0.72)
+      from var(--color-az-badge) r g b /
+      calc(var(--glass-background-opacity, 55%) * 0.72)
     );
   }
 
   .bg-az-sunken,
   .hover\:bg-az-sunken:hover {
     background-color: rgb(
-      from var(--color-az-sunken) r g b / calc(var(--glass-background-opacity, 55%) * 0.72)
+      from var(--color-az-sunken) r g b /
+      calc(var(--glass-background-opacity, 55%) * 0.72)
     );
   }
 
@@ -1220,7 +1226,7 @@
   .az-ring-composer > * {
     background-color: rgb(
       from var(--color-az-inset) r g b /
-        calc(var(--glass-background-opacity, 55%) * 0.72)
+      calc(var(--glass-background-opacity, 55%) * 0.72)
     );
     /* Its own stacking context, so the parent gradient cannot bleed into it. */
     isolation: isolate;
