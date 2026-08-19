@@ -494,7 +494,13 @@ export function SettingsTab(): JSX.Element {
                 the toggle clipped away. Reachable by search, which does not
                 depend on the box, and by nothing else.
               */}
-              <div class="az-panel flex-none overflow-hidden rounded-panel border border-az-hairline">
+              {/*
+                `az-glass` beside `az-panel`, as every other panel in the app
+                has. Without it this one kept `az-panel`'s opaque fill and was
+                the only container in Settings that was not glass, which read as
+                the effect being broken rather than as a deliberate surface.
+              */}
+              <div class="az-panel az-glass flex-none overflow-hidden rounded-panel border border-az-hairline">
                 <div class="flex flex-wrap items-baseline gap-x-2.5 gap-y-1 px-3.5 pt-3 pb-2.5">
                   <Icon name="gauge" class="relative top-0.5 text-[14px] text-primary" />
                   <h2 class="font-semibold text-[13px] text-az-title">{tx("Diagnostics")}</h2>
