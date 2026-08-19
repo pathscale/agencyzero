@@ -26,6 +26,8 @@ const es = {
     textBrightness: "Brillo del texto",
     textBrightnessHint: "cuánto destaca el texto sobre la superficie",
     surfaceColour: "Color de superficie",
+    accentTwo: "Acento 2",
+    accentTwoHint: "iconos e ilustraciones, independiente del acento de los controles",
     accentColour: "Color de acento",
     accentColourHint: "independiente del color de las superficies",
     designedYellow: "Acento amarillo del diseño",

@@ -126,3 +126,46 @@ describe("the control tint", () => {
     );
   });
 });
+
+describe("the second accent", () => {
+  /*
+   * Chrome and artwork are different jobs. The first accent carries
+   * interactive state and has to stay legible on the surfaces it sits on; the
+   * second is for what is *drawn* - icon and SVG fills, where the colour is the
+   * content rather than a signal about it.
+   *
+   * Empty follows the first, so a record written before this axis existed
+   * renders exactly as it did.
+   */
+  it("follows the first accent when unset", () => {
+    const element = root();
+    applyTheme(themeWith({ accent: "#3366cc" }), element);
+
+    expect(read(element, "--color-accent-2")).toBe(read(element, "--color-accent"));
+  });
+
+  it("takes its own colour once chosen", () => {
+    const element = root();
+    applyTheme(themeWith({ accent: "#3366cc", accentTwo: "#cc3366" }), element);
+
+    expect(read(element, "--color-accent-2")).toBe("#cc3366");
+    expect(read(element, "--color-accent")).toBe("#3366cc");
+  });
+
+  it("gets its own readable ink rather than the first accent's", () => {
+    const element = root();
+    // A near-white second accent needs dark ink even when the first is dark.
+    applyTheme(themeWith({ accent: "#111111", accentTwo: "#eeeeee" }), element);
+
+    const ink = read(element, "--color-accent-2-content");
+    expect(ink).not.toBe("");
+    expect(ink).not.toBe(read(element, "--color-accent-content"));
+  });
+
+  it("ignores a value that is not a hex colour", () => {
+    const element = root();
+    applyTheme(themeWith({ accent: "#3366cc", accentTwo: "not a colour" }), element);
+
+    expect(read(element, "--color-accent-2")).toBe(read(element, "--color-accent"));
+  });
+});

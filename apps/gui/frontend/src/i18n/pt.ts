@@ -26,6 +26,8 @@ const pt = {
     textBrightness: "Brilho do texto",
     textBrightnessHint: "quanto o texto se destaca da superfície",
     surfaceColour: "Cor da superfície",
+    accentTwo: "Acento 2",
+    accentTwoHint: "ícones e ilustrações, separado do acento dos controlos",
     accentColour: "Cor de destaque",
     accentColourHint: "independente da cor das superfícies",
     designedYellow: "Destaque amarelo do design",

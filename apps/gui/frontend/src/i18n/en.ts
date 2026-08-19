@@ -26,6 +26,8 @@ const en = {
     textBrightness: "Text brightness",
     textBrightnessHint: "how far the text rises off the surface",
     surfaceColour: "Surface colour",
+    accentTwo: "Accent 2",
+    accentTwoHint: "icons and artwork, separate from the control accent",
     accentColour: "Accent colour",
     accentColourHint: "independent from the workspace surface colour",
     designedYellow: "Designed yellow accent",

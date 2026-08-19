@@ -32,6 +32,8 @@ export function ThemePicker(props: {
   theme: ThemeSettings;
   onSurface: (hex: string) => void;
   onAccent: (hex: string) => void;
+  /** The second accent: icons and artwork, through `--color-accent-2`. */
+  onAccentTwo: (hex: string) => void;
   onSoftness: (value: number) => void;
   onWash: (value: number) => void;
   onBrightness: (value: number) => void;
@@ -149,6 +151,28 @@ export function ThemePicker(props: {
           wash={props.theme.wash}
           softness={props.theme.softness}
           onPick={props.onAccent}
+        />
+
+        {/*
+          The second accent, for what is drawn rather than operated.
+
+          Same harmonies as the first, because both are chosen against the same
+          surface and a second palette would only be a second thing to keep in
+          step. What differs is where the colour lands: the first carries
+          interactive state, this one carries icons and artwork through
+          `--color-accent-2`.
+
+          Empty follows the first accent, so a theme that never touches this row
+          looks exactly as it did before the axis existed.
+        */}
+        <AccentSelector
+          label={t("appearance.accentTwo")}
+          hint={t("appearance.accentTwoHint")}
+          surface={props.theme.surface || DEFAULT_ACCENT}
+          accent={props.theme.accentTwo ?? ""}
+          wash={props.theme.wash}
+          softness={props.theme.softness}
+          onPick={props.onAccentTwo}
         />
       </div>
     </div>
@@ -278,6 +302,9 @@ function SurfaceColorWheel(props: { value: string; onPick: (value: string) => vo
 
 /** An independent high-contrast colour for controls, rings and active states. */
 function AccentSelector(props: {
+  /** Overrides the row's heading, for the second accent. */
+  label?: string;
+  hint?: string;
   surface: string;
   accent: string;
   wash: number;
@@ -327,18 +354,27 @@ function AccentSelector(props: {
     <div class="flex flex-col gap-1.5">
       <div class="flex items-baseline gap-2">
         <span class="font-semibold text-[11px] text-az-muted uppercase tracking-[.04em]">
-          {t("appearance.accentColour")}
+          {props.label ?? t("appearance.accentColour")}
         </span>
-        <span class="text-[11px] text-az-faint">{t("appearance.accentColourHint")}</span>
+        <span class="text-[11px] text-az-faint">
+          {props.hint ?? t("appearance.accentColourHint")}
+        </span>
       </div>
       <Flex align="center" gap="sm">
         <For each={options()}>
           {(option, index) => {
             const selected = () => props.accent === option.value;
+            /*
+              Named for the row it belongs to, so the two accent rows do not
+              answer to the same accessible name. Two swatches called "Accent
+              colour 2" in one pane is ambiguous to anyone navigating by name,
+              and it silently doubled a test that counts them.
+            */
+            const row = () => props.label ?? t("appearance.accentColour");
             const label = () =>
               index() === 0
-                ? t("appearance.designedYellow")
-                : `${t("appearance.accentColour")} ${index() + 1}`;
+                ? `${row()}: ${t("appearance.designedYellow")}`
+                : `${row()} ${index() + 1}`;
             return (
               <Button
                 type="button"

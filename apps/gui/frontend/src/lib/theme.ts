@@ -213,6 +213,23 @@ export function applyTheme(
   root.style.setProperty("--color-primary-content", ink);
   root.style.setProperty("--color-accent-content", ink);
 
+  /*
+   * The second accent, for the things that are drawn rather than operated.
+   *
+   * Icons and SVG fills take this one, so artwork can be livelier than the
+   * chrome without dragging a focused ring or a filled slider along with it.
+   * Empty follows the first accent, which is what a record that never chose
+   * one should look like: one accent behaves exactly as it did before this
+   * axis existed.
+   *
+   * Its own ink for the same reason the first has one: a picked colour can be
+   * anything from near-black to near-white, so a label sitting on it has to be
+   * chosen against it rather than assumed.
+   */
+  const accentTwo = isAccent(theme.accentTwo ?? "") ? theme.accentTwo!.trim() : accent;
+  root.style.setProperty("--color-accent-2", accentTwo);
+  root.style.setProperty("--color-accent-2-content", readableInk(accentTwo));
+
   root.style.setProperty("--az-lift", `${softness}%`);
   /*
    * Damp is what softness takes off the text; brightness gives it back, and may
