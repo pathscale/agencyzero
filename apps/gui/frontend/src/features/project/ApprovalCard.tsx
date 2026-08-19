@@ -112,7 +112,7 @@ export function ApprovalCard(props: { projectId: string; approval: PendingApprov
                     "Remembers this kind of call for this project — the same command family or the same directory — and allows it automatically from now on",
                   )
             }
-            class="rounded-lg border border-primary/50 px-3 py-[5px] font-semibold text-[12px] text-primary transition-colors hover:border-primary hover:bg-primary/10"
+            class="rounded-lg border border-primary/50 px-3 py-[5px] font-semibold text-[12px] text-primary transition-colors hover:border-primary hover:bg-az-chip"
           >
             {isPermissionGrant() ? tx("Always allow these paths") : tx("Always allow similar")}
           </Button>

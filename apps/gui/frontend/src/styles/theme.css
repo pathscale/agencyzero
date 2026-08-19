@@ -1398,8 +1398,29 @@
    * own behind a coloured label - and the accent stays on the text, where it
    * was the point.
    */
-  [class*="bg-primary\\/"] {
+  /*
+   * The accent chip: a tinted *surface* behind accent text, not the accent.
+   *
+   * `text-primary` on `bg-primary/8` puts one colour on itself, so the label is
+   * its own background at a contrast ratio of exactly 1.00 - measured in the
+   * running window, 195 elements between 1.00 and 2.58. Lifting the text cannot
+   * fix it, because the same token feeds the fill and both move together.
+   *
+   * An attribute selector on the generated utilities cannot fix it either:
+   * Tailwind emits `bg-primary/8` into a later layer and escapes the slash, so
+   * the override never matched. A class of this app's own does match, which is
+   * why the seventy-one call sites were changed instead.
+   *
+   * The tint is a rung of the surface ladder, which is what a chip actually is:
+   * a small panel behind a coloured label. The accent stays on the text, where
+   * it was the point.
+   */
+  .bg-az-chip {
     background-color: rgb(from var(--color-az-badge) r g b / 22%);
+  }
+
+  .bg-az-chip-strong {
+    background-color: rgb(from var(--color-az-badge) r g b / 38%);
   }
 
   .bg-primary-glass {

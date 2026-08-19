@@ -502,7 +502,7 @@ function HeadlineRow(props: {
           title={tx("Refresh")}
           onClick={() => void props.onRefresh()}
           disabled={props.refreshing}
-          class="flex size-8 shrink-0 items-center justify-center rounded-lg text-primary transition-colors hover:bg-primary/8 disabled:cursor-wait disabled:opacity-55"
+          class="flex size-8 shrink-0 items-center justify-center rounded-lg text-primary transition-colors hover:bg-az-chip disabled:cursor-wait disabled:opacity-55"
         >
           <Icon name="refresh-cw" class={`text-[13px] ${props.refreshing ? "animate-spin" : ""}`} />
         </Button>

@@ -205,7 +205,7 @@ export function WelcomeFlow(): JSX.Element {
         >
           <Dialog.Header class="flex-row items-start justify-between gap-5 border-az-hairline-soft border-b px-6 py-5">
             <div class="flex min-w-0 items-center gap-3.5">
-              <div class="az-halo-primary flex size-11 shrink-0 items-center justify-center rounded-[14px] border border-primary/30 bg-primary/12 text-primary">
+              <div class="az-halo-primary flex size-11 shrink-0 items-center justify-center rounded-[14px] border border-primary/30 bg-az-chip text-primary">
                 <Icon name="sparkles" class="text-[21px]" />
               </div>
               <div>
@@ -285,7 +285,7 @@ export function WelcomeFlow(): JSX.Element {
                         type="button"
                         disabled={busy()}
                         onClick={() => void actions.createWorkspaceRoot()}
-                        class="rounded-lg border border-primary/50 px-3 py-1.5 text-[11.5px] text-primary hover:bg-primary/10 disabled:opacity-40"
+                        class="rounded-lg border border-primary/50 px-3 py-1.5 text-[11.5px] text-primary hover:bg-az-chip disabled:opacity-40"
                       >
                         {tx("Create recommended folder")}
                       </Button>
@@ -293,7 +293,7 @@ export function WelcomeFlow(): JSX.Element {
                   </Flex>
                 </div>
               </SetupRow>
-              <div class="mt-4 flex items-center justify-between gap-5 rounded-xl border border-primary/22 bg-primary/7 px-4 py-3.5">
+              <div class="mt-4 flex items-center justify-between gap-5 rounded-xl border border-primary/22 bg-az-chip px-4 py-3.5">
                 <div class="min-w-0">
                   <p class="font-medium text-[12.5px] text-az-strong">
                     {tx("Restoring from backup?")}
@@ -458,7 +458,7 @@ export function WelcomeFlow(): JSX.Element {
                             onClick={() => void chooseAgent(status.agent)}
                             class={`rounded-xl border px-4 py-3 text-left transition-colors disabled:opacity-40 ${
                               settings().defaultAgent === status.agent
-                                ? "border-primary/60 bg-primary/10"
+                                ? "border-primary/60 bg-az-chip"
                                 : "border-az-hairline bg-az-inset hover:border-primary/40"
                             }`}
                           >
@@ -525,7 +525,7 @@ export function WelcomeFlow(): JSX.Element {
                               onClick={() => void chooseSecurity(permission)}
                               class={`min-h-[112px] rounded-xl border p-3 text-left transition-colors disabled:opacity-40 ${
                                 settings().defaultPermission === permission && securityConfirmed()
-                                  ? "border-primary/60 bg-primary/10"
+                                  ? "border-primary/60 bg-az-chip"
                                   : "border-az-hairline bg-az-inset hover:border-primary/40"
                               }`}
                             >
@@ -578,7 +578,7 @@ export function WelcomeFlow(): JSX.Element {
                             type="button"
                             disabled={busy() || importable().length === 0}
                             onClick={() => void importAll(source)}
-                            class="rounded-lg border border-primary/45 px-3 py-1.5 font-medium text-[11.5px] text-primary hover:bg-primary/10 disabled:opacity-40"
+                            class="rounded-lg border border-primary/45 px-3 py-1.5 font-medium text-[11.5px] text-primary hover:bg-az-chip disabled:opacity-40"
                           >
                             {tx("Import all")}
                           </Button>
@@ -618,7 +618,7 @@ export function WelcomeFlow(): JSX.Element {
                             }
                             class={`rounded-md px-3 py-1 text-[11.5px] ${
                               settings().automaticUpdateChecks === enabled
-                                ? "bg-primary/16 font-medium text-primary"
+                                ? "bg-az-chip font-medium text-primary"
                                 : "text-az-muted"
                             }`}
                           >
@@ -628,7 +628,7 @@ export function WelcomeFlow(): JSX.Element {
                       </For>
                     </div>
                   </SetupRow>
-                  <div class="mt-4 rounded-xl border border-primary/22 bg-primary/7 px-4 py-4">
+                  <div class="mt-4 rounded-xl border border-primary/22 bg-az-chip px-4 py-4">
                     <p class="font-medium text-[12.5px] text-az-strong">
                       {tx("What happens next")}
                     </p>
@@ -705,7 +705,7 @@ function SetupHeading(props: {
 }): JSX.Element {
   return (
     <div class="flex items-start gap-3">
-      <div class="flex size-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+      <div class="flex size-9 shrink-0 items-center justify-center rounded-xl bg-az-chip text-primary">
         <Icon name={props.icon} class="text-[17px]" />
       </div>
       <div>

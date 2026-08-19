@@ -346,7 +346,7 @@ export function AgentIoList(props: { projectId: string }): JSX.Element {
               <div
                 class={`flex flex-col gap-0.5 rounded-lg border px-2.5 py-1.5 ${
                   line.direction === "sent"
-                    ? "border-primary/22 bg-primary/6"
+                    ? "border-primary/22 bg-az-chip"
                     : (IO_TONE[line.kind] ?? "border-az-hairline-soft bg-base-300")
                 }`}
               >
@@ -1341,7 +1341,7 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
                     onClick={() => advance(item)}
                     aria-label={tx("Change the status of {name}", { name: item.title })}
                     title={`${statusSuffix(item.status)} — click for ${statusLabel(nextStatus(item.status))}`}
-                    class="ml-1.5 flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-full transition-colors hover:bg-primary/12 focus-visible:bg-primary/12"
+                    class="ml-1.5 flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-full transition-colors hover:bg-az-chip focus-visible:bg-az-chip"
                   >
                     <ItemMarker status={item.status} />
                   </Button>
@@ -1454,10 +1454,10 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
                     row cannot carry a `gap` instead: it also holds the title
                     and the status label, which want the wider spacing.
                   */
-                  class={`relative ml-0.5 flex size-[22px] shrink-0 items-center justify-center rounded-md border transition-colors hover:border-primary/70 hover:bg-primary/20 ${
+                  class={`relative ml-0.5 flex size-[22px] shrink-0 items-center justify-center rounded-md border transition-colors hover:border-primary/70 hover:bg-az-chip-strong ${
                     descriptionDraft()?.item.id === item.id || item.context?.trim()
-                      ? "border-primary/45 bg-primary/14 text-primary"
-                      : "border-primary/20 bg-primary/5 text-az-muted"
+                      ? "border-primary/45 bg-az-chip text-primary"
+                      : "border-primary/20 bg-az-chip text-az-muted"
                   }`}
                 >
                   <Icon name="list-checks" class="text-[13px]" />
@@ -1485,10 +1485,10 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
                       ? tx("Open the fork for {name}", { name: item.title })
                       : tx("Fork {name} into a fresh chat", { name: item.title })
                   }
-                  class={`relative ml-0.5 flex size-[22px] shrink-0 items-center justify-center rounded-md border transition-colors hover:border-primary/70 hover:bg-primary/20 disabled:opacity-30 ${
+                  class={`relative ml-0.5 flex size-[22px] shrink-0 items-center justify-center rounded-md border transition-colors hover:border-primary/70 hover:bg-az-chip-strong disabled:opacity-30 ${
                     forkFor(item.id)
-                      ? "border-primary/55 bg-primary/18 text-primary"
-                      : "border-primary/30 bg-primary/8 text-primary/80"
+                      ? "border-primary/55 bg-az-chip text-primary"
+                      : "border-primary/30 bg-az-chip text-primary/80"
                   } ${item.status === "questions" ? "" : "mr-1"}`}
                 >
                   <Icon name="git-fork" class="text-[13px]" />
@@ -1509,7 +1509,7 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
                         aria-label={tx("Work on {name}; it has no unanswered question", {
                           name: item.title,
                         })}
-                        class="relative z-10 mr-1 ml-0.5 flex size-[22px] shrink-0 items-center justify-center rounded-md border border-primary/55 bg-primary/18 text-primary transition-colors hover:border-primary hover:bg-primary/28 disabled:opacity-30"
+                        class="relative z-10 mr-1 ml-0.5 flex size-[22px] shrink-0 items-center justify-center rounded-md border border-primary/55 bg-az-chip text-primary transition-colors hover:border-primary hover:bg-az-chip-strong disabled:opacity-30"
                       >
                         <Icon name="play" class="text-[11px]" />
                       </Button>
@@ -1567,7 +1567,7 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
                         class={`shrink-0 rounded-md border p-1 transition-colors disabled:opacity-30 ${
                           questionFor(item)
                             ? "border-warning/55 bg-warning/18 text-warning hover:border-warning hover:bg-warning/30"
-                            : "border-transparent text-az-faint hover:border-primary/25 hover:bg-primary/12 hover:text-primary"
+                            : "border-transparent text-az-faint hover:border-primary/25 hover:bg-az-chip hover:text-primary"
                         }`}
                       >
                         <Icon
@@ -1691,7 +1691,7 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
                             savingDescriptionId() === item.id || draft().context === draft().saved
                           }
                           onClick={() => void saveDescription()}
-                          class="rounded-md border border-primary/40 bg-primary/15 px-2.5 py-1 font-semibold text-[11px] text-primary hover:bg-primary/24 disabled:opacity-35"
+                          class="rounded-md border border-primary/40 bg-az-chip px-2.5 py-1 font-semibold text-[11px] text-primary hover:bg-az-chip-strong disabled:opacity-35"
                         >
                           {tx("Save description")}
                         </Button>
@@ -1708,7 +1708,7 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
         <Button
           type="button"
           onClick={() => setItemLimit((limit) => limit + PROJECT_ITEM_PAGE_SIZE)}
-          class="mt-1 flex-none rounded-[9px] border border-primary/24 bg-primary/8 px-2.5 py-2 font-semibold text-[11.5px] text-primary transition-colors hover:bg-primary/14"
+          class="mt-1 flex-none rounded-[9px] border border-primary/24 bg-az-chip px-2.5 py-2 font-semibold text-[11.5px] text-primary transition-colors hover:bg-az-chip"
         >
           {tx("Show {count} more items", {
             count: Math.min(PROJECT_ITEM_PAGE_SIZE, shown().length - visibleShown().length),
@@ -1758,7 +1758,7 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
             */}
             <section class="flex max-h-full w-[560px] max-w-full flex-none flex-col overflow-hidden rounded-[14px] border border-az-hairline-strong bg-base-200 shadow-[0_24px_80px_rgba(0,0,0,.65)]">
               <header class="flex items-start gap-3 border-az-hairline-soft border-b px-5 py-4">
-                <div class="flex size-9 shrink-0 items-center justify-center rounded-[11px] border border-primary/28 bg-primary/10 text-primary">
+                <div class="flex size-9 shrink-0 items-center justify-center rounded-[11px] border border-primary/28 bg-az-chip text-primary">
                   <Icon name="git-fork" class="text-[17px]" />
                 </div>
                 <div class="min-w-0 flex-1">
@@ -1821,7 +1821,7 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
                   type="button"
                   disabled={forkingId() === draft().item.id}
                   onClick={() => void saveContext()}
-                  class="rounded-lg border border-primary/45 bg-primary/18 px-3 py-1.5 font-semibold text-[12px] text-primary hover:bg-primary/25 disabled:opacity-40"
+                  class="rounded-lg border border-primary/45 bg-az-chip px-3 py-1.5 font-semibold text-[12px] text-primary hover:bg-az-chip-strong disabled:opacity-40"
                 >
                   {draft().startFork ? tx("Start fork") : tx("Save description")}
                 </Button>

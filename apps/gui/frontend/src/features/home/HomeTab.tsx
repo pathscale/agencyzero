@@ -136,7 +136,7 @@ export function HomeTab(): JSX.Element {
                 aria-label={tx("Search projects and items")}
                 class="min-w-0 flex-1 bg-transparent text-[12.5px] text-base-content placeholder:text-az-muted focus:outline-none"
               />
-              <kbd class="shrink-0 rounded-md border border-primary/25 bg-primary/8 px-[7px] py-0.5 font-mono text-[10.5px] text-primary/70">
+              <kbd class="shrink-0 rounded-md border border-primary/25 bg-az-chip px-[7px] py-0.5 font-mono text-[10.5px] text-primary/70">
                 ⌘K
               </kbd>
             </div>
@@ -164,7 +164,7 @@ export function HomeTab(): JSX.Element {
             <Button
               type="button"
               onClick={() => setProjectLimit((limit) => limit + HOME_PROJECT_PAGE_SIZE)}
-              class="flex-none rounded-xl border border-primary/24 bg-primary/8 px-3.5 py-2.5 font-semibold text-[12px] text-primary transition-colors hover:bg-primary/14"
+              class="flex-none rounded-xl border border-primary/24 bg-az-chip px-3.5 py-2.5 font-semibold text-[12px] text-primary transition-colors hover:bg-az-chip"
             >
               {tx("Show {count} more projects", {
                 count: Math.min(HOME_PROJECT_PAGE_SIZE, matches().length - visibleMatches().length),
@@ -257,7 +257,7 @@ export function HomeTab(): JSX.Element {
               <Button
                 type="button"
                 onClick={() => setRecentLimit((limit) => limit + HOME_RECENT_PAGE_SIZE)}
-                class="rounded-[11px] border border-primary/24 bg-primary/8 px-3 py-2 font-semibold text-[11.5px] text-primary transition-colors hover:bg-primary/14"
+                class="rounded-[11px] border border-primary/24 bg-az-chip px-3 py-2 font-semibold text-[11.5px] text-primary transition-colors hover:bg-az-chip"
               >
                 {tx("Show {count} more projects", {
                   count: Math.min(HOME_RECENT_PAGE_SIZE, recent().length - visibleRecent().length),
@@ -439,7 +439,7 @@ function HomeCleanupButton(): JSX.Element {
       class={`flex shrink-0 items-center gap-1 rounded-md border px-2 py-0.5 font-semibold text-[10.5px] transition-colors disabled:cursor-not-allowed disabled:opacity-45 ${
         error()
           ? "border-error/45 bg-error/10 text-error"
-          : "border-primary/35 bg-primary/10 text-primary hover:bg-primary/18"
+          : "border-primary/35 bg-az-chip text-primary hover:bg-az-chip"
       }`}
     >
       <Icon name="sparkles" class="text-[11px]" />
@@ -653,7 +653,7 @@ function TaskManagerComposer(): JSX.Element {
         <Show
           when={isRunning()}
           fallback={
-            <kbd class="shrink-0 rounded-md border border-primary/25 bg-primary/8 px-[7px] py-0.5 font-mono text-[10.5px] text-primary/70">
+            <kbd class="shrink-0 rounded-md border border-primary/25 bg-az-chip px-[7px] py-0.5 font-mono text-[10.5px] text-primary/70">
               ↵
             </kbd>
           }
@@ -976,7 +976,7 @@ function GroupItemRow(props: {
             }}
             aria-label={tx("Change the status of {name}", { name: props.item.title })}
             title={tx("{status} — click to change", { status: statusSuffix(props.item.status) })}
-            class="flex size-7 shrink-0 items-center justify-center rounded-full transition-colors hover:bg-primary/12 focus-visible:bg-primary/12"
+            class="flex size-7 shrink-0 items-center justify-center rounded-full transition-colors hover:bg-az-chip focus-visible:bg-az-chip"
           >
             <ItemMarker status={props.item.status} />
           </Button>
@@ -1039,10 +1039,10 @@ function GroupItemRow(props: {
             aria-expanded={props.descriptionOpen ? "true" : "false"}
             aria-controls={`home-item-description-${props.item.id}`}
             title={tx("Description / sub-items")}
-            class={`flex size-6 shrink-0 items-center justify-center rounded-md border transition-colors hover:border-primary/70 hover:bg-primary/20 ${
+            class={`flex size-6 shrink-0 items-center justify-center rounded-md border transition-colors hover:border-primary/70 hover:bg-az-chip-strong ${
               props.descriptionOpen || props.item.context?.trim()
-                ? "border-primary/45 bg-primary/14 text-primary"
-                : "border-primary/20 bg-primary/5 text-az-muted"
+                ? "border-primary/45 bg-az-chip text-primary"
+                : "border-primary/20 bg-az-chip text-az-muted"
             }`}
           >
             <Icon name="list-checks" class="text-[12px]" />
@@ -1065,10 +1065,10 @@ function GroupItemRow(props: {
                 ? tx("Open this item's lower-token fork")
                 : tx("Start a fresh fork to avoid resending this project's long chat")
             }
-            class={`flex h-6 shrink-0 items-center justify-center gap-1 rounded-md border font-semibold text-primary transition-colors hover:border-primary/70 hover:bg-primary/22 disabled:opacity-35 ${
+            class={`flex h-6 shrink-0 items-center justify-center gap-1 rounded-md border font-semibold text-primary transition-colors hover:border-primary/70 hover:bg-az-chip-strong disabled:opacity-35 ${
               fork()
-                ? "border-primary/38 bg-primary/12 px-1.5 text-[10.5px]"
-                : "size-6 border-primary/28 bg-primary/7"
+                ? "border-primary/38 bg-az-chip px-1.5 text-[10.5px]"
+                : "size-6 border-primary/28 bg-az-chip"
             }`}
           >
             <Icon name="git-fork" class="text-[12px]" />
@@ -1129,7 +1129,7 @@ function GroupItemRow(props: {
                     type="button"
                     disabled={busy() || draft().context === draft().saved}
                     onClick={() => void saveDescription()}
-                    class="rounded-md border border-primary/40 bg-primary/15 px-2.5 py-1 font-semibold text-[11px] text-primary hover:bg-primary/24 disabled:opacity-35"
+                    class="rounded-md border border-primary/40 bg-az-chip px-2.5 py-1 font-semibold text-[11px] text-primary hover:bg-az-chip-strong disabled:opacity-35"
                   >
                     {tx("Save description")}
                   </Button>
@@ -1152,7 +1152,7 @@ function GroupItemRow(props: {
             */}
             <section class="flex max-h-full w-[560px] max-w-full flex-none flex-col overflow-hidden rounded-[14px] border border-az-hairline-strong bg-base-200 shadow-[0_24px_80px_rgba(0,0,0,.65)]">
               <header class="flex items-start gap-3 border-az-hairline-soft border-b px-5 py-4">
-                <div class="flex size-9 shrink-0 items-center justify-center rounded-[11px] border border-primary/28 bg-primary/10 text-primary">
+                <div class="flex size-9 shrink-0 items-center justify-center rounded-[11px] border border-primary/28 bg-az-chip text-primary">
                   <Icon name="git-fork" class="text-[17px]" />
                 </div>
                 <div class="min-w-0 flex-1">
@@ -1215,7 +1215,7 @@ function GroupItemRow(props: {
                   type="button"
                   disabled={busy()}
                   onClick={() => void startFork()}
-                  class="rounded-lg border border-primary/45 bg-primary/18 px-3 py-1.5 font-semibold text-[12px] text-primary hover:bg-primary/25 disabled:opacity-40"
+                  class="rounded-lg border border-primary/45 bg-az-chip px-3 py-1.5 font-semibold text-[12px] text-primary hover:bg-az-chip-strong disabled:opacity-40"
                 >
                   {tx("Start fork")}
                 </Button>
