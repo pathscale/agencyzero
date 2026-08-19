@@ -28,7 +28,20 @@ import { log } from "~/lib/log";
 import { tx } from "~/stores/i18n";
 import { type BootState, useWorkspace, WorkspaceProvider } from "~/stores/workspace";
 
-export const RETAINED_PROJECT_LIMIT = 8;
+/**
+ * How many project panes keep their DOM while not on screen.
+ *
+ * A retained pane is hidden, not absent: it holds its whole subtree, its style
+ * and layout nodes and its Solid reactive graph. Measured against the live app,
+ * one pane is about a thousand DOM nodes, and at eight the hidden panes held
+ * 5,461 of 10,988 nodes, half the tree, for panes nobody was looking at.
+ *
+ * Two keeps what retention was for. The path retention exists to make cheap is
+ * the back-and-forth between the pane in front of you and the one you just
+ * came from, and two covers exactly that. Going further back rebuilds, which is
+ * the cost retention was already paying on the ninth tab.
+ */
+export const RETAINED_PROJECT_LIMIT = 2;
 
 export function nextRetainedProjects(
   current: readonly string[],
