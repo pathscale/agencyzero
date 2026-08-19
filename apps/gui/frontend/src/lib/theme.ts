@@ -214,6 +214,23 @@ export function applyTheme(
   root.style.setProperty("--color-accent-content", ink);
 
   /*
+   * The accent as *text*, which is a different colour from the accent as fill.
+   *
+   * `text-primary` on `bg-primary/8` is an accent chip, and it is the shape
+   * that fails: both sides resolve to the same hue, so a dark accent gives a
+   * contrast ratio of 1.00 and the label disappears into its own background.
+   * Measured through the renderer's computed styles at accent `#662d21`: four
+   * elements at exactly 1.00 and 97 under 3.0.
+   *
+   * Only lightness moves and only as far as the 4.5 floor demands, so a picked
+   * accent still reads as the colour that was picked.
+   */
+  root.style.setProperty(
+    "--color-primary-text",
+    legibleAccent(accent, root.dataset.colorMode === "light" ? "light" : "dark"),
+  );
+
+  /*
    * The second accent, for the things that are drawn rather than operated.
    *
    * Icons and SVG fills take this one, so artwork can be livelier than the
@@ -707,6 +724,69 @@ function hslToHex(hue: number, saturation: number, lightness: number): string {
  * lines and importing it would drag in the application layer this module exists
  * to avoid.
  */
+/**
+ * Relative luminance of a `#rgb` or `#rrggbb` colour, 0 to 1.
+ *
+ * Shared by the two directions this file needs: the ink that sits *on* the
+ * accent, and the accent lifted so it stays legible *against the desk*.
+ */
+function luminanceOf(hex: string): number {
+  const h = hex.replace("#", "");
+  const full = h.length === 3 ? [...h].map((c) => c + c).join("") : h;
+  const channel = (at: number) => {
+    const srgb = Number.parseInt(full.slice(at, at + 2), 16) / 255;
+    return srgb <= 0.03928 ? srgb / 12.92 : ((srgb + 0.055) / 1.055) ** 2.4;
+  };
+  return 0.2126 * channel(0) + 0.7152 * channel(2) + 0.0722 * channel(4);
+}
+
+/**
+ * The accent, lifted until text painted in it can be read on this app's desk.
+ *
+ * `text-primary` on `bg-primary/8` is a real and reasonable pattern - an accent
+ * chip - and it is exactly the shape that fails: both sides are the same
+ * colour, so a dark accent gives text and background an identical hue at a
+ * contrast ratio of 1.00. Measured through the renderer's own computed styles
+ * rather than inferred: at accent `#662d21` the four worst elements in the
+ * window scored exactly 1.00, and 97 scored under 3.0.
+ *
+ * This is not the ink that sits on a filled accent surface - `readableInk` is
+ * that, and it runs the other way. This is the accent *as text*, which has to
+ * clear the desk behind it whatever the picker was set to.
+ *
+ * Lifted rather than replaced, so a chosen accent still reads as itself: the
+ * hue is kept and only lightness moves, and only as far as the floor requires.
+ */
+function legibleAccent(hex: string, mode: "light" | "dark"): string {
+  const value = hex.trim();
+  if (!isAccent(value)) return value;
+
+  // The desk each mode actually paints, from `theme.css`'s own base-200 rung.
+  const deskLuminance = mode === "light" ? 0.86 : 0.02;
+  const contrast = (luminance: number) => {
+    const [hi, lo] =
+      luminance > deskLuminance ? [luminance, deskLuminance] : [deskLuminance, luminance];
+    return (hi + 0.05) / (lo + 0.05);
+  };
+
+  if (contrast(luminanceOf(value)) >= 4.5) return value;
+
+  const { h, s } = toColorValue(value).hsl;
+  // Walk lightness toward the readable side in one-point steps and stop at the
+  // first that clears the floor, so the result is the smallest change that
+  // works rather than a fixed lightness that discards the picked colour.
+  const towardLight = mode === "dark";
+  for (let step = 1; step <= 100; step += 1) {
+    const l = towardLight
+      ? Math.min(100, toColorValue(value).hsl.l + step)
+      : Math.max(0, toColorValue(value).hsl.l - step);
+    const candidate = hslToHex(h, s, l);
+    if (contrast(luminanceOf(candidate)) >= 4.5) return candidate;
+    if (l === 0 || l === 100) break;
+  }
+  return towardLight ? hslToHex(h, s, 100) : hslToHex(h, s, 0);
+}
+
 function readableInk(hex: string): string {
   const h = hex.replace("#", "");
   const full = h.length === 3 ? [...h].map((c) => c + c).join("") : h;

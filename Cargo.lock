@@ -6679,6 +6679,7 @@ dependencies = [
  "raw-window-handle",
  "serde",
  "serde_json",
+ "stylo",
  "tauri",
  "tauri-runtime",
  "tauri-utils",

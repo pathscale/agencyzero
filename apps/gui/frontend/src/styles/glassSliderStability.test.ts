@@ -100,3 +100,47 @@ describe("reset to default", () => {
     }
   });
 });
+
+describe("dragging one glass axis leaves the others alone", () => {
+  /*
+   * `applyGlassTokens` re-derives all twenty-five library tokens from the
+   * three-number tuning, and `--glass-background-opacity` is one of them. This
+   * app deliberately overrides that token from its own slider, because the
+   * library's curve lands near 5% on a dark surface, which is a film nobody can
+   * see.
+   *
+   * So a blur, refraction or depth drag reset the *opacity* on every frame and
+   * the release put it back: the surface changed twice during a drag of an axis
+   * that has nothing to do with it. This is the second half of the "shows one
+   * thing while dragging and another on release" report; the first fix covered
+   * the percentage sliders and missed this family entirely.
+   */
+  const SETTINGS = readFileSync(
+    join(process.cwd(), "src", "features", "settings", "SettingsTab.tsx"),
+    "utf8",
+  );
+
+  it("restores the app-owned tokens after re-deriving the library's", () => {
+    const drag = SETTINGS.slice(SETTINGS.indexOf("applyGlassTokens(tuning, mode())"));
+    const body = drag.slice(0, drag.indexOf("writePanelAxes(tuning)"));
+
+    for (const token of [
+      "--glass-background-opacity",
+      "--az-glass-alpha",
+      "--glass-control-opacity",
+    ]) {
+      expect(body, `a tuning drag leaves ${token} at the library's value`).toContain(token);
+    }
+  });
+
+  it("puts them back after the library writes, not before", () => {
+    const drag = SETTINGS.slice(SETTINGS.indexOf("applyGlassTokens(tuning, mode())"));
+    const body = drag.slice(0, drag.indexOf("writePanelAxes(tuning)"));
+
+    // Order is the whole point: written first, `applyGlassTokens` would
+    // overwrite them again and the fix would be invisible.
+    expect(body.indexOf("applyGlassTokens")).toBeLessThan(
+      body.indexOf("--glass-background-opacity"),
+    );
+  });
+});
