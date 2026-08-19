@@ -382,8 +382,21 @@ function AccentSelector(props: {
                 title={label()}
                 aria-pressed={selected() ? "true" : "false"}
                 onClick={() => props.onPick(option.value)}
+                /*
+                  A selected swatch cannot be marked in the accent.
+
+                  `border-primary` is the accent, so ringing the *selected*
+                  accent draws its own colour around itself and the one swatch
+                  that matters is the only one with no visible ring. Both accent
+                  rows and the wheel had it. The ring takes the text ladder's top
+                  rung instead, which is chosen to be legible against every
+                  surface this app paints, and a second inset ring separates it
+                  from the swatch beneath.
+                */
                 class={`size-7 overflow-hidden rounded-full border-2 p-0 transition-[border-color,transform] hover:scale-110 ${
-                  selected() ? "border-primary" : "border-az-hairline-strong hover:border-primary"
+                  selected()
+                    ? "border-az-title ring-2 ring-az-void ring-inset"
+                    : "border-az-hairline-strong hover:border-az-title"
                 }`}
               >
                 {/* The fill is a child: the library's Button drops `style`. */}

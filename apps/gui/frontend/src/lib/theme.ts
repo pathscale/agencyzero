@@ -245,8 +245,6 @@ export function applyTheme(
    * this only changes the accent where it is being read.
    */
   root.style.setProperty("--color-primary-fill", accent);
-  root.style.setProperty("--color-primary", accentText);
-  root.style.setProperty("--color-accent", accentText);
 
   /*
    * The second accent, for the things that are drawn rather than operated.
