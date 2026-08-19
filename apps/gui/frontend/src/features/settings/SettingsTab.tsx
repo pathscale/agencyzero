@@ -1135,6 +1135,21 @@ export function SettingsTab(): JSX.Element {
                     normalizeWash(current().theme.wash) === DEFAULT_WASH &&
                     current().theme.textBrightness === 0
                   }
+                  /*
+                    Reset means every axis on this pane, glass included.
+
+                    It used to write five fields and leave the six glass ones
+                    exactly where they were, so a window made unreadable by a
+                    glass setting stayed unreadable however many times the
+                    button was pressed. That is the opposite of what a control
+                    called "reset to default" promises, and it is worst in the
+                    case someone actually reaches for it.
+
+                    `undefined` rather than a literal for each glass axis: the
+                    stored value is optional and absent means "use the shipped
+                    default", so clearing them restores whatever this build
+                    ships rather than pinning today's numbers into the record.
+                  */
                   onReset={() =>
                     void actions.saveSettings({
                       theme: {
@@ -1143,6 +1158,12 @@ export function SettingsTab(): JSX.Element {
                         softness: 0,
                         wash: DEFAULT_WASH,
                         textBrightness: 0,
+                        glassEnabled: undefined,
+                        glassBlur: undefined,
+                        glassRefraction: undefined,
+                        glassDepth: undefined,
+                        glassOpacity: undefined,
+                        glassScrim: undefined,
                       },
                     })
                   }
@@ -1197,11 +1218,23 @@ export function SettingsTab(): JSX.Element {
                   />
                 </Row>
 
+                {/*
+                  Blur only reaches what *this app* painted behind a panel.
+
+                  `backdrop-filter` samples pixels the renderer drew. Behind a
+                  transparent window there are none - the compositor owns them
+                  - so no radius here can blur the desktop, and the window's own
+                  blur comes from `NSGlassEffectView`, which exposes no radius
+                  to set. The axis is therefore real but quiet: it separates
+                  panels from the transcript behind them and nothing more.
+
+                  Kept rather than removed because that separation is the thing
+                  a busy transcript needs, and because 0 is a legitimate setting
+                  that costs nothing. The hint no longer promises the desktop.
+                */}
                 <Row
                   label={tx("Glass blur")}
-                  hint={tx(
-                    "how far panels smear the app behind them; the window is blurred by macOS",
-                  )}
+                  hint={tx("how far a panel smears the app's own content behind it")}
                 >
                   <GlassTuningAxis
                     label={tx("Glass blur")}
@@ -1269,11 +1302,33 @@ export function SettingsTab(): JSX.Element {
                   label={tx("Glass opacity")}
                   hint={tx("how solid the surface's own film is over what it sits on")}
                 >
+                  {/*
+                    100, not 95.
+
+                    The ceiling was five points short of solid, so the one
+                    setting that means "no glass on the surfaces" could not be
+                    reached: the slider bottomed out at a film that was still a
+                    film, and turning glass off needed a separate switch. A
+                    control named for solidity has to be able to say fully
+                    solid.
+                  */}
                   <GlassPercentAxis
                     label={tx("Glass opacity")}
-                    max={95}
+                    max={100}
                     value={current().theme.glassOpacity ?? DEFAULT_GLASS_OPACITY}
                     property="--glass-background-opacity"
+                    /*
+                      The same two tokens `writeGlassTuning` derives from this
+                      number: the desk alpha that `body` and `.az-desk` take,
+                      and the control tint. Without them the drag moved only
+                      the panels and the release moved the rest.
+                    */
+                    sideEffects={{
+                      "--az-glass-alpha": (value) =>
+                        `${Math.round(Math.min(Math.max(value, 0), 100))}%`,
+                      "--glass-control-opacity": (value) =>
+                        `${Math.round(100 - (100 - Math.min(Math.max(value, 0), 100)) * 0.33)}%`,
+                    }}
                     onChange={(glassOpacity) => actions.saveSettings({ theme: { glassOpacity } })}
                   />
                 </Row>
@@ -2999,6 +3054,14 @@ function GlassPercentAxis(props: {
   max: number;
   value: number;
   property: string;
+  /**
+   * The other custom properties this axis moves, keyed by name.
+   *
+   * `writeGlassTuning` derives several tokens from one slider, and a drag that
+   * paints fewer of them than the persist does changes the window's appearance
+   * at the moment of release rather than at the moment of the move.
+   */
+  sideEffects?: Record<string, (value: number) => string>;
   onChange: (value: number) => void | Promise<void>;
 }): JSX.Element {
   const [live, setLive] = createSignal<number | undefined>();
@@ -3027,9 +3090,26 @@ function GlassPercentAxis(props: {
         // Paint immediately so the surface answers the drag, persist on
         // release. One custom property, so unlike the library's axes there is
         // nothing to re-derive.
+        /*
+          Paint everything the persist paints, or the release changes the look.
+
+          This wrote one custom property while `writeGlassTuning` writes three
+          from the same number: the panel film, the desk alpha that `body` and
+          `.az-desk` take, and the control tint. So a drag moved the panels and
+          left the desk alone, and letting go jumped the whole window to a
+          different appearance at the value that was already on screen.
+
+          Reported four times as "what it shows me and when I release differ",
+          and the number was never wrong - only the set of surfaces answering
+          it. `sideEffects` names the rest so the two paths cannot drift again.
+        */
         onChange={(value) => {
           setLive(value);
-          document.documentElement.style.setProperty(props.property, `${value}%`);
+          const root = document.documentElement;
+          root.style.setProperty(props.property, `${value}%`);
+          for (const [name, of] of Object.entries(props.sideEffects ?? {})) {
+            root.style.setProperty(name, of(value));
+          }
         }}
         // `live` is held, not cleared. The persist is a round trip through the
         // store, so clearing on release showed the *old* number for the ~60ms
