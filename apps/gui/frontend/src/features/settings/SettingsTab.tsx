@@ -1159,7 +1159,7 @@ export function SettingsTab(): JSX.Element {
                 */}
                 <Row
                   label={tx("Glass blur")}
-                  hint={tx("how far a glass surface smears what is behind it")}
+                  hint={tx("how far panels smear the app behind them; the window is blurred by macOS")}
                 >
                   <GlassTuningAxis
                     label={tx("Glass blur")}

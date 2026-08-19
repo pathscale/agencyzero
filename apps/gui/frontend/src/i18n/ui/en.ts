@@ -960,6 +960,7 @@ const en = {
   "Glass blur": "Glass blur",
   "how far a glass surface smears what is behind it":
     "how far a glass surface smears what is behind it",
+  "how far panels smear the app behind them; the window is blurred by macOS": "how far panels smear the app behind them; the window's own blur is macOS's",
   "Glass refraction": "Glass refraction",
   "how much a glass surface asserts its own tint, border and highlight":
     "how much a glass surface asserts its own tint, border and highlight",
