@@ -29,8 +29,16 @@
      * light underneath, so on a dark surface a white film reads as grey haze
      * sitting on the colour rather than as material. `az-badge` is a lighter
      * rung of the *same* ladder, built from `--az-surface`, so the tint
-     * follows the surface colour and not the accent. The border is the one
-     * that carries the accent, which is deliberate and matches `.az-glass`.
+     * follows the surface colour and not the accent.
+     *
+     * The border does *not* take the accent, and that is the correction to a
+     * version of this that did. `.az-glass` carries the accent on its own
+     * `outline-color` deliberately: one ring per panel, around 12%, reads as
+     * a lit edge. This token is different, because every library component
+     * reads it, so with the flip on it put an accent edge on every card, row,
+     * control and popover at once. That shipped, and the app came back with a
+     * red cast across the whole transcript. The hairline is the neutral the
+     * rest of the app already draws its edges with.
      *
      * On this selector rather than `:root`, and that is load-bearing: the
      * library's shipped themes declare these under `[data-theme="dark"]`,
@@ -45,8 +53,32 @@
      * landed.
      */
     --glass-background-color: var(--color-az-badge);
-    --glass-border-color: var(--color-primary);
+    --glass-border-color: var(--color-az-hairline-strong);
     --glass-highlight-color: var(--color-az-badge);
+
+    /*
+     * The field vocabulary, which this app had never declared.
+     *
+     * `@pathscale/ui`'s Select, Input and Textarea read `--color-field*` and
+     * fall back to `base-100` with `base-content` text. That is a fill and a
+     * foreground chosen by the library for a solid surface, so on a glass
+     * panel the trigger painted a pale slab and its value sat on it at a
+     * contrast meant for a different background: the dropdowns in Settings
+     * showed their selection as barely-visible grey.
+     *
+     * Pointed at the ladders the rest of the app uses. The value takes
+     * `az-body` rather than `base-content` because it is prose being read at a
+     * glance, and the placeholder takes `az-faint`, which is the design's
+     * stated contrast floor.
+     */
+    --color-field: var(--color-az-inset);
+    --color-field-foreground: var(--color-az-body);
+    --color-field-placeholder: var(--color-az-faint);
+    --color-field-border: var(--color-az-hairline);
+    --color-field-border-hover: var(--color-az-hairline-strong);
+    --color-field-border-focus: var(--color-primary);
+    --color-field-hover: var(--color-az-hover);
+    --color-field-focus: var(--color-az-inset);
 
     /*
      * The axes the theme picker drives. Every surface and text colour below is

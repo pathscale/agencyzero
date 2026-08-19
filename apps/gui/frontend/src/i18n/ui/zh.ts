@@ -937,6 +937,8 @@ const zh = {
   "Glass depth": "玻璃深度",
   "how far a glass surface sits off the page: glow, sheen and shadow":
     "玻璃表面离页面的高度：辉光、光泽和阴影",
+  Glass: "玻璃",
+  "turn every translucent surface solid, in one switch": "一个开关将所有半透明表面变为不透明",
   "Glass opacity": "玻璃不透明度",
   "how solid the surface's own film is over what it sits on": "表面自身膜层的实心程度",
   "Glass scrim": "玻璃遮罩",

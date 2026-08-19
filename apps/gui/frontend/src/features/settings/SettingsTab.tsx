@@ -1163,6 +1163,40 @@ export function SettingsTab(): JSX.Element {
                   which is the same split the library already makes: three
                   physical properties, one place to set them.
                 */}
+                {/*
+                  The switch that turns the whole effect off.
+
+                  Glass is a taste, and on a busy backdrop it is a legibility
+                  cost rather than a look. Every axis below is a shade of "how
+                  much", and none of them is "none": the opacity slider stops
+                  at a film that is still a film, and turning the others down
+                  leaves translucent surfaces behind. So there was no way to
+                  say no to the effect, only to ask for less of it.
+
+                  One flag rather than a remembered set of slider positions.
+                  `writeGlassTuning` reads it to decide whether to write the
+                  tokens and to throw the library's root class, so off means
+                  every surface in the app and every component in the library
+                  goes solid together, and back on restores the numbers that
+                  were already stored.
+                */}
+                <Row
+                  label={tx("Glass")}
+                  hint={tx("turn every translucent surface solid, in one switch")}
+                >
+                  <Switch
+                    aria-label={tx("Glass")}
+                    checked={current().theme.glassEnabled !== false}
+                    flavor="accent"
+                    class="shrink-0"
+                    onChange={(event) =>
+                      actions.saveSettings({
+                        theme: { glassEnabled: event.currentTarget.checked },
+                      })
+                    }
+                  />
+                </Row>
+
                 <Row
                   label={tx("Glass blur")}
                   hint={tx(
