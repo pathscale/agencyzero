@@ -737,6 +737,20 @@ export interface ThemeSettings {
    */
   glassScrim?: number;
   /**
+   * Whether translucent surfaces are drawn at all. Absent means on.
+   *
+   * Every other glass field is a shade of "how much", and none of them is
+   * "none": the opacity axis stops at a film that is still a film, and turning
+   * the rest down leaves translucent surfaces behind. This is the switch that
+   * says no to the effect rather than asking for less of it, and it governs
+   * both this app's own surfaces and the library's, which follow a root class
+   * written from the same flag.
+   *
+   * Optional and defaulting to on, so a record written before it existed keeps
+   * the appearance it already had.
+   */
+  glassEnabled?: boolean;
+  /**
    * How much of the surface colour is mixed into every surface, as a percentage.
    * Ignored while `surface` is empty.
    */

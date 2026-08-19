@@ -272,7 +272,20 @@ function writeGlassTuning(theme: ThemeSettings, root: HTMLElement): void {
    * and leaves the other twenty-four alone. Undefined means untouched, so a
    * theme that never sets it keeps exactly the library's look.
    */
-  const opacity = theme.glassOpacity ?? DEFAULT_GLASS_OPACITY;
+  /*
+   * The off switch, ahead of every axis.
+   *
+   * `glassEnabled: false` means no translucent surfaces anywhere, so it has to
+   * suppress the film, the control tint, the desk alpha and the library's root
+   * class together. Expressed by forcing the opacity axis out of the finite
+   * range every branch below already tests, so there is one condition deciding
+   * this rather than two that can disagree.
+   *
+   * Absent means on, so a record written before the switch existed keeps the
+   * appearance it already had.
+   */
+  const opacity =
+    theme.glassEnabled === false ? Number.NaN : (theme.glassOpacity ?? DEFAULT_GLASS_OPACITY);
 
   /*
    * The library's material flip, thrown from the same test that decides whether
