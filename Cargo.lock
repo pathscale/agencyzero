@@ -500,12 +500,21 @@ dependencies = [
 name = "blitz-bench"
 version = "0.8.28"
 dependencies = [
- "blitz-control-protocol",
+ "blitz-control-protocol 0.1.0 (git+https://github.com/pathscale/tauri-runtime-blitz.git?branch=master)",
  "endpoint-libs",
  "eyre",
  "serde",
  "serde_json",
  "tokio",
+]
+
+[[package]]
+name = "blitz-control-protocol"
+version = "0.1.0"
+dependencies = [
+ "endpoint-libs",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
@@ -521,7 +530,6 @@ dependencies = [
 [[package]]
 name = "blitz-html"
 version = "0.3.0-beta.3"
-source = "git+https://github.com/pathscale/ps-blitz.git?branch=master#0e70b7851d6a3c39c9482b31461eec562da43cf7"
 dependencies = [
  "html5ever 0.39.0",
  "ps-blitz-dom",
@@ -532,7 +540,6 @@ dependencies = [
 [[package]]
 name = "blitz-paint"
 version = "0.3.0-beta.3"
-source = "git+https://github.com/pathscale/ps-blitz.git?branch=master#0e70b7851d6a3c39c9482b31461eec562da43cf7"
 dependencies = [
  "color",
  "euclid",
@@ -565,167 +572,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cdeb9d870516001442e364c5220d3574d2da8dc765554b4a617230d33fa58ef5"
 dependencies = [
  "objc2",
-]
-
-[[package]]
-name = "boa_ast"
-version = "1.0.0-dev"
-source = "git+https://github.com/boa-dev/boa.git?rev=8a1e8fe07f626f7a067afc2c9885d5d87de4bb5d#8a1e8fe07f626f7a067afc2c9885d5d87de4bb5d"
-dependencies = [
- "bitflags 2.13.1",
- "boa_interner",
- "boa_macros",
- "boa_string",
- "indexmap 2.14.0",
- "num-bigint",
- "rustc-hash 2.1.3",
- "strum",
-]
-
-[[package]]
-name = "boa_engine"
-version = "1.0.0-dev"
-source = "git+https://github.com/boa-dev/boa.git?rev=8a1e8fe07f626f7a067afc2c9885d5d87de4bb5d#8a1e8fe07f626f7a067afc2c9885d5d87de4bb5d"
-dependencies = [
- "aligned-vec",
- "arrayvec",
- "async-channel",
- "bitflags 2.13.1",
- "boa_ast",
- "boa_gc",
- "boa_interner",
- "boa_macros",
- "boa_parser",
- "boa_string",
- "bytemuck",
- "cfg-if",
- "cow-utils",
- "dashmap",
- "dynify",
- "either",
- "fast-float2",
- "float16",
- "futures-concurrency",
- "futures-lite",
- "hashbrown 0.17.1",
- "icu_calendar",
- "icu_normalizer",
- "indexmap 2.14.0",
- "intrusive-collections",
- "itertools 0.15.0",
- "num-bigint",
- "num-integer",
- "num-traits",
- "num_enum",
- "oneshot",
- "pastey",
- "portable-atomic",
- "rand 0.10.2",
- "regress",
- "rustc-hash 2.1.3",
- "ryu-js",
- "serde",
- "serde_json",
- "small_btree",
- "static_assertions",
- "tag_ptr",
- "tap",
- "temporal_rs",
- "thin-vec",
- "thiserror 2.0.19",
- "time",
- "timezone_provider",
- "xsum",
-]
-
-[[package]]
-name = "boa_gc"
-version = "1.0.0-dev"
-source = "git+https://github.com/boa-dev/boa.git?rev=8a1e8fe07f626f7a067afc2c9885d5d87de4bb5d#8a1e8fe07f626f7a067afc2c9885d5d87de4bb5d"
-dependencies = [
- "arrayvec",
- "boa_macros",
- "boa_string",
- "either",
- "hashbrown 0.17.1",
- "thin-vec",
-]
-
-[[package]]
-name = "boa_interner"
-version = "1.0.0-dev"
-source = "git+https://github.com/boa-dev/boa.git?rev=8a1e8fe07f626f7a067afc2c9885d5d87de4bb5d#8a1e8fe07f626f7a067afc2c9885d5d87de4bb5d"
-dependencies = [
- "boa_gc",
- "boa_macros",
- "hashbrown 0.17.1",
- "indexmap 2.14.0",
- "once_cell",
- "phf",
- "rustc-hash 2.1.3",
- "static_assertions",
-]
-
-[[package]]
-name = "boa_macros"
-version = "1.0.0-dev"
-source = "git+https://github.com/boa-dev/boa.git?rev=8a1e8fe07f626f7a067afc2c9885d5d87de4bb5d#8a1e8fe07f626f7a067afc2c9885d5d87de4bb5d"
-dependencies = [
- "cfg-if",
- "cow-utils",
- "proc-macro2",
- "quote",
- "syn 2.0.119",
- "synstructure",
-]
-
-[[package]]
-name = "boa_parser"
-version = "1.0.0-dev"
-source = "git+https://github.com/boa-dev/boa.git?rev=8a1e8fe07f626f7a067afc2c9885d5d87de4bb5d#8a1e8fe07f626f7a067afc2c9885d5d87de4bb5d"
-dependencies = [
- "bitflags 2.13.1",
- "boa_ast",
- "boa_interner",
- "boa_macros",
- "fast-float2",
- "icu_properties",
- "num-bigint",
- "num-traits",
- "regress",
- "rustc-hash 2.1.3",
-]
-
-[[package]]
-name = "boa_runtime"
-version = "1.0.0-dev"
-source = "git+https://github.com/boa-dev/boa.git?rev=8a1e8fe07f626f7a067afc2c9885d5d87de4bb5d#8a1e8fe07f626f7a067afc2c9885d5d87de4bb5d"
-dependencies = [
- "base64 0.22.1",
- "boa_engine",
- "boa_gc",
- "bytemuck",
- "comfy-table",
- "either",
- "futures",
- "futures-lite",
- "http",
- "rustc-hash 2.1.3",
- "serde_json",
- "url",
-]
-
-[[package]]
-name = "boa_string"
-version = "1.0.0-dev"
-source = "git+https://github.com/boa-dev/boa.git?rev=8a1e8fe07f626f7a067afc2c9885d5d87de4bb5d#8a1e8fe07f626f7a067afc2c9885d5d87de4bb5d"
-dependencies = [
- "fast-float2",
- "itoa",
- "pastey",
- "rustc-hash 2.1.3",
- "ryu-js",
- "static_assertions",
 ]
 
 [[package]]
@@ -1056,7 +902,7 @@ checksum = "af491d569909a7e4dee0ad7db7f5341fef5c614d5b8ec8cf765732aba3cff681"
 dependencies = [
  "serde",
  "termcolor",
- "unicode-width 0.2.2",
+ "unicode-width 0.1.14",
 ]
 
 [[package]]
@@ -1515,13 +1361,12 @@ dependencies = [
 [[package]]
 name = "debug_timer"
 version = "0.1.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "da220af51a1a335e9a930beaaef53d261e41ea9eecfb3d973a3ddae1a7284b9c"
 
 [[package]]
 name = "debug_timer"
 version = "0.1.3"
-source = "git+https://github.com/pathscale/ps-blitz.git?branch=master#0e70b7851d6a3c39c9482b31461eec562da43cf7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "da220af51a1a335e9a930beaaef53d261e41ea9eecfb3d973a3ddae1a7284b9c"
 
 [[package]]
 name = "deranged"
@@ -1625,7 +1470,7 @@ dependencies = [
  "libc",
  "option-ext",
  "redox_users 0.5.2",
- "windows-sys 0.61.2",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -1896,7 +1741,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -2594,7 +2439,7 @@ dependencies = [
  "log",
  "presser",
  "thiserror 2.0.19",
- "windows 0.62.2",
+ "windows 0.61.3",
 ]
 
 [[package]]
@@ -2926,7 +2771,7 @@ dependencies = [
  "js-sys",
  "log",
  "wasm-bindgen",
- "windows-core 0.62.2",
+ "windows-core 0.61.2",
 ]
 
 [[package]]
@@ -3231,7 +3076,7 @@ checksum = "3640c1c38b8e4e43584d8df18be5fc6b0aa314ce6ebf51b53313d4306cca8e46"
 dependencies = [
  "hermit-abi",
  "libc",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -3641,7 +3486,7 @@ dependencies = [
  "png 0.18.1",
  "serde",
  "thiserror 2.0.19",
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -4533,7 +4378,6 @@ dependencies = [
 [[package]]
 name = "ps-anyrender"
 version = "0.12.0"
-source = "git+https://github.com/pathscale/ps-anyrender.git?rev=f1c53ba12aa8a8691ba5a04976c0cab4bffb76ef#f1c53ba12aa8a8691ba5a04976c0cab4bffb76ef"
 dependencies = [
  "kurbo",
  "peniko",
@@ -4544,7 +4388,6 @@ dependencies = [
 [[package]]
 name = "ps-anyrender-svg"
 version = "0.14.0"
-source = "git+https://github.com/pathscale/ps-anyrender.git?rev=f1c53ba12aa8a8691ba5a04976c0cab4bffb76ef#f1c53ba12aa8a8691ba5a04976c0cab4bffb76ef"
 dependencies = [
  "image",
  "kurbo",
@@ -4555,8 +4398,7 @@ dependencies = [
 
 [[package]]
 name = "ps-anyrender-vello"
-version = "0.13.0"
-source = "git+https://github.com/pathscale/ps-anyrender.git?rev=f1c53ba12aa8a8691ba5a04976c0cab4bffb76ef#f1c53ba12aa8a8691ba5a04976c0cab4bffb76ef"
+version = "0.13.1"
 dependencies = [
  "debug_timer 0.1.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "futures-channel",
@@ -4564,9 +4406,9 @@ dependencies = [
  "peniko",
  "pollster",
  "ps-anyrender",
+ "ps-vello",
  "ps-wgpu-context",
  "rustc-hash 2.1.3",
- "vello",
  "wasm-bindgen-futures",
  "wgpu",
 ]
@@ -4574,7 +4416,6 @@ dependencies = [
 [[package]]
 name = "ps-anyrender-vello-cpu"
 version = "0.15.0"
-source = "git+https://github.com/pathscale/ps-anyrender.git?rev=f1c53ba12aa8a8691ba5a04976c0cab4bffb76ef#f1c53ba12aa8a8691ba5a04976c0cab4bffb76ef"
 dependencies = [
  "debug_timer 0.1.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "glifo",
@@ -4588,7 +4429,6 @@ dependencies = [
 [[package]]
 name = "ps-anyrender-vello-hybrid"
 version = "0.9.0"
-source = "git+https://github.com/pathscale/ps-anyrender.git?rev=f1c53ba12aa8a8691ba5a04976c0cab4bffb76ef#f1c53ba12aa8a8691ba5a04976c0cab4bffb76ef"
 dependencies = [
  "debug_timer 0.1.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "futures-channel",
@@ -4608,7 +4448,6 @@ dependencies = [
 [[package]]
 name = "ps-blitz-debug-control"
 version = "0.3.0-beta.3"
-source = "git+https://github.com/pathscale/ps-blitz.git?branch=master#0e70b7851d6a3c39c9482b31461eec562da43cf7"
 dependencies = [
  "getrandom 0.4.3",
  "serde",
@@ -4618,7 +4457,6 @@ dependencies = [
 [[package]]
 name = "ps-blitz-dom"
 version = "0.3.0-beta.3"
-source = "git+https://github.com/pathscale/ps-blitz.git?branch=master#0e70b7851d6a3c39c9482b31461eec562da43cf7"
 dependencies = [
  "accesskit",
  "app_units",
@@ -4627,7 +4465,7 @@ dependencies = [
  "color",
  "cssparser 0.37.0",
  "cursor-icon",
- "debug_timer 0.1.3 (git+https://github.com/pathscale/ps-blitz.git?branch=master)",
+ "debug_timer 0.1.3",
  "euclid",
  "html-escape",
  "image",
@@ -4663,14 +4501,10 @@ dependencies = [
 [[package]]
 name = "ps-blitz-script"
 version = "0.3.0-beta.3"
-source = "git+https://github.com/pathscale/ps-blitz.git?branch=master#0e70b7851d6a3c39c9482b31461eec562da43cf7"
 dependencies = [
  "base64 0.22.1",
  "blitz-html",
  "blitz-paint",
- "boa_engine",
- "boa_gc",
- "boa_runtime",
  "data-url",
  "getrandom 0.4.3",
  "image",
@@ -4681,6 +4515,9 @@ dependencies = [
  "ps-blitz-debug-control",
  "ps-blitz-dom",
  "ps-blitz-traits",
+ "ps-boa-engine",
+ "ps-boa-gc",
+ "ps-boa-runtime",
  "rustc-hash 2.1.3",
  "serde_json",
  "url",
@@ -4690,7 +4527,6 @@ dependencies = [
 [[package]]
 name = "ps-blitz-shell"
 version = "0.3.0-beta.3"
-source = "git+https://github.com/pathscale/ps-blitz.git?branch=master#0e70b7851d6a3c39c9482b31461eec562da43cf7"
 dependencies = [
  "android-activity",
  "arboard",
@@ -4711,7 +4547,6 @@ dependencies = [
 [[package]]
 name = "ps-blitz-traits"
 version = "0.3.0-beta.3"
-source = "git+https://github.com/pathscale/ps-blitz.git?branch=master#0e70b7851d6a3c39c9482b31461eec562da43cf7"
 dependencies = [
  "atomic_refcell",
  "bitflags 2.13.1",
@@ -4722,6 +4557,175 @@ dependencies = [
  "serde",
  "smol_str",
  "url",
+]
+
+[[package]]
+name = "ps-boa-ast"
+version = "1.0.0-dev"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "76e1f505a952e293994286e9cc04686304bd0d5e633a0941bb0d1292ca4b10ba"
+dependencies = [
+ "bitflags 2.13.1",
+ "indexmap 2.14.0",
+ "num-bigint",
+ "ps-boa-interner",
+ "ps-boa-macros",
+ "ps-boa-string",
+ "rustc-hash 2.1.3",
+ "strum",
+]
+
+[[package]]
+name = "ps-boa-engine"
+version = "1.0.0-dev"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "93fa07fb527f2aff71c04ae73b60f89206e4d463b98b4c5e992c4f0bb57d0fd9"
+dependencies = [
+ "aligned-vec",
+ "arrayvec",
+ "async-channel",
+ "bitflags 2.13.1",
+ "bytemuck",
+ "cfg-if",
+ "cow-utils",
+ "dashmap",
+ "dynify",
+ "either",
+ "fast-float2",
+ "float16",
+ "futures-concurrency",
+ "futures-lite",
+ "hashbrown 0.17.1",
+ "icu_calendar",
+ "icu_normalizer",
+ "indexmap 2.14.0",
+ "intrusive-collections",
+ "itertools 0.15.0",
+ "num-bigint",
+ "num-integer",
+ "num-traits",
+ "num_enum",
+ "oneshot",
+ "pastey",
+ "portable-atomic",
+ "ps-boa-ast",
+ "ps-boa-gc",
+ "ps-boa-interner",
+ "ps-boa-macros",
+ "ps-boa-parser",
+ "ps-boa-string",
+ "rand 0.10.2",
+ "regress",
+ "rustc-hash 2.1.3",
+ "ryu-js",
+ "serde",
+ "serde_json",
+ "small_btree",
+ "static_assertions",
+ "tag_ptr",
+ "tap",
+ "temporal_rs",
+ "thin-vec",
+ "thiserror 2.0.19",
+ "time",
+ "timezone_provider",
+ "xsum",
+]
+
+[[package]]
+name = "ps-boa-gc"
+version = "1.0.0-dev"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3edc6420a0e4d3291239b9245cedaa98c0e64061d56def25310669ffd0420cd9"
+dependencies = [
+ "arrayvec",
+ "either",
+ "hashbrown 0.17.1",
+ "ps-boa-macros",
+ "ps-boa-string",
+ "thin-vec",
+]
+
+[[package]]
+name = "ps-boa-interner"
+version = "1.0.0-dev"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7592c28751f6c1f4baaf86c929755f5572323fc13c5ff66bccc9d02d7b256a48"
+dependencies = [
+ "hashbrown 0.17.1",
+ "indexmap 2.14.0",
+ "once_cell",
+ "phf",
+ "ps-boa-gc",
+ "ps-boa-macros",
+ "rustc-hash 2.1.3",
+ "static_assertions",
+]
+
+[[package]]
+name = "ps-boa-macros"
+version = "1.0.0-dev"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "291bead1f7cf7da4c8075223c59b7a3a704e21080d2bcd59f4bf64dcfb160271"
+dependencies = [
+ "cfg-if",
+ "cow-utils",
+ "proc-macro2",
+ "quote",
+ "syn 2.0.119",
+ "synstructure",
+]
+
+[[package]]
+name = "ps-boa-parser"
+version = "1.0.0-dev"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3e088d99f155ea5c0e174dae08ea7b267b836a1ef4eb45ee6b35886e006dfb26"
+dependencies = [
+ "bitflags 2.13.1",
+ "fast-float2",
+ "icu_properties",
+ "num-bigint",
+ "num-traits",
+ "ps-boa-ast",
+ "ps-boa-interner",
+ "ps-boa-macros",
+ "regress",
+ "rustc-hash 2.1.3",
+]
+
+[[package]]
+name = "ps-boa-runtime"
+version = "1.0.0-dev"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c34f30373d8a260680d02ab3dd1b49be8e4b1701bab4b8c778dfd72efb1c9029"
+dependencies = [
+ "base64 0.22.1",
+ "bytemuck",
+ "comfy-table",
+ "either",
+ "futures",
+ "futures-lite",
+ "http",
+ "ps-boa-engine",
+ "ps-boa-gc",
+ "rustc-hash 2.1.3",
+ "serde_json",
+ "url",
+]
+
+[[package]]
+name = "ps-boa-string"
+version = "1.0.0-dev"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "233851129c85083e0a66d9d216cf54e9ffefa9fb0623d9adf6c72380bbce80d5"
+dependencies = [
+ "fast-float2",
+ "itoa",
+ "pastey",
+ "rustc-hash 2.1.3",
+ "ryu-js",
+ "static_assertions",
 ]
 
 [[package]]
@@ -4736,9 +4740,48 @@ dependencies = [
 ]
 
 [[package]]
+name = "ps-vello"
+version = "0.10.0"
+dependencies = [
+ "bytemuck",
+ "futures-intrusive",
+ "log",
+ "peniko",
+ "png 0.18.1",
+ "ps-vello-encoding",
+ "ps-vello-shaders",
+ "skrifa 0.44.0",
+ "static_assertions",
+ "thiserror 2.0.19",
+ "wgpu",
+]
+
+[[package]]
+name = "ps-vello-encoding"
+version = "0.10.0"
+dependencies = [
+ "bytemuck",
+ "guillotiere",
+ "log",
+ "peniko",
+ "skrifa 0.44.0",
+ "smallvec",
+]
+
+[[package]]
+name = "ps-vello-shaders"
+version = "0.10.0"
+dependencies = [
+ "bytemuck",
+ "log",
+ "naga",
+ "ps-vello-encoding",
+ "thiserror 2.0.19",
+]
+
+[[package]]
 name = "ps-wgpu-context"
 version = "0.8.0"
-source = "git+https://github.com/pathscale/ps-anyrender.git?rev=f1c53ba12aa8a8691ba5a04976c0cab4bffb76ef#f1c53ba12aa8a8691ba5a04976c0cab4bffb76ef"
 dependencies = [
  "futures-intrusive",
  "wgpu",
@@ -5296,7 +5339,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -5352,7 +5395,7 @@ dependencies = [
  "security-framework",
  "security-framework-sys",
  "webpki-root-certs",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -5520,7 +5563,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5b55fb86dfd3a2f5f76ea78310a88f96c4ea21a3031f8d212443d56123fd0521"
 dependencies = [
  "libc",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -5856,7 +5899,8 @@ dependencies = [
 [[package]]
 name = "small_btree"
 version = "0.1.0"
-source = "git+https://github.com/boa-dev/boa.git?rev=8a1e8fe07f626f7a067afc2c9885d5d87de4bb5d#8a1e8fe07f626f7a067afc2c9885d5d87de4bb5d"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0ba60d2df92ba73864714808ca68c059734853e6ab722b40e1cf543ebb3a057a"
 dependencies = [
  "arrayvec",
 ]
@@ -5928,7 +5972,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c3d1e2c7f27f8d4cb10542a02c49005dbd6e93095799d6f3be745fae9f8fedd4"
 dependencies = [
  "libc",
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -6181,7 +6225,6 @@ dependencies = [
 [[package]]
 name = "stylo_taffy"
 version = "0.3.0-beta.3"
-source = "git+https://github.com/pathscale/ps-blitz.git?branch=master#0e70b7851d6a3c39c9482b31461eec562da43cf7"
 dependencies = [
  "ps-taffy",
  "stylo",
@@ -6312,7 +6355,8 @@ dependencies = [
 [[package]]
 name = "tag_ptr"
 version = "0.1.0"
-source = "git+https://github.com/boa-dev/boa.git?rev=8a1e8fe07f626f7a067afc2c9885d5d87de4bb5d#8a1e8fe07f626f7a067afc2c9885d5d87de4bb5d"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c0e973b34477b7823833469eb0f5a3a60370fef7a453e02d751b59180d0a5a05"
 
 [[package]]
 name = "tao"
@@ -6616,9 +6660,8 @@ dependencies = [
 [[package]]
 name = "tauri-runtime-blitz"
 version = "0.1.0"
-source = "git+https://github.com/pathscale/tauri-runtime-blitz.git?branch=master#06c6a0e69854ebff0defb4429e70e4046acd1a6a"
 dependencies = [
- "blitz-control-protocol",
+ "blitz-control-protocol 0.1.0",
  "endpoint-libs",
  "http",
  "keyboard-types 0.7.0",
@@ -6724,10 +6767,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "32497e9a4c7b38532efcdebeef879707aa9f794296a4f0244f6f69e9bc8574bd"
 dependencies = [
  "fastrand",
- "getrandom 0.4.3",
+ "getrandom 0.3.4",
  "once_cell",
  "rustix",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -7404,25 +7447,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "vello"
-version = "0.9.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "261359dbef879f8110ef7e1c442246c838d33d3d91cb05e0ea9288d432760c9f"
-dependencies = [
- "bytemuck",
- "futures-intrusive",
- "log",
- "peniko",
- "png 0.18.1",
- "skrifa 0.42.1",
- "static_assertions",
- "thiserror 2.0.19",
- "vello_encoding",
- "vello_shaders",
- "wgpu",
-]
-
-[[package]]
 name = "vello_common"
 version = "0.0.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7452,19 +7476,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "vello_encoding"
-version = "0.9.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2346f5f0d7dccb3582fcd397b4a57b43165209f1424e0d76e85dd814db164af7"
-dependencies = [
- "bytemuck",
- "guillotiere",
- "peniko",
- "skrifa 0.42.1",
- "smallvec",
-]
-
-[[package]]
 name = "vello_hybrid"
 version = "0.0.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7478,19 +7489,6 @@ dependencies = [
  "vello_common",
  "vello_sparse_shaders",
  "wgpu",
-]
-
-[[package]]
-name = "vello_shaders"
-version = "0.9.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9dd38937516fa4b47423d9255bb5e4a65e839ec9d57c38c4af6189ce56bf46b7"
-dependencies = [
- "bytemuck",
- "log",
- "naga",
- "thiserror 2.0.19",
- "vello_encoding",
 ]
 
 [[package]]
@@ -8091,7 +8089,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]

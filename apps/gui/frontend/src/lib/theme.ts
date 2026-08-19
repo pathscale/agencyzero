@@ -287,12 +287,18 @@ function writeGlassTuning(theme: ThemeSettings, root: HTMLElement): void {
      * `--az-glass-alpha` is the knob the stylesheet already had for that, on
      * `body` and `.az-desk`, and nothing had ever written it. It runs the
      * other way round: 100% is the flat colour, lower lets the window behind
-     * show through. The desk stays a good deal more solid than the panels at
-     * the same setting, because a fully transparent desk takes the contrast of
-     * every piece of text on the page with it.
+     * show through.
+     *
+     * Passed straight through rather than through a curve. The first attempt
+     * mapped the axis onto 45..100 so the desk would stay readable, and the
+     * result was a control that could not do the one thing it is named for:
+     * at the default 55 it wrote 75%, which is a desk nobody would call
+     * transparent, and its floor of 45% meant the window never cleared however
+     * far the slider went. Readability is the owner's call at this point, and
+     * the number on the slider is now the number on the surface.
      */
     const solid = Math.min(Math.max(Number(opacity), 0), 100);
-    root.style.setProperty("--az-glass-alpha", `${Math.round(45 + solid * 0.55)}%`);
+    root.style.setProperty("--az-glass-alpha", `${Math.round(solid)}%`);
   } else {
     root.style.removeProperty("--glass-background-opacity");
     root.style.removeProperty("--az-glass-alpha");

@@ -900,6 +900,49 @@ mod tests {
      * came back absent and the slider snapped to where it started. Neither
      * side's tests could see it, because each side was self-consistent.
      */
+    /*
+     * The path the Settings UI actually takes, which is not the one above.
+     *
+     * `every_glass_axis_survives_a_round_trip` serializes a struct that already
+     * holds the values. The UI never does that: it sends a *partial patch* that
+     * `apply_settings_patch` merges into the stored record, and a patch is only
+     * as good as the merge and the parse that follow it. Testing the struct
+     * alone is how three axes shipped without persisting once.
+     */
+    #[test]
+    fn a_partial_patch_of_one_glass_axis_lands_and_keeps_the_others() {
+        let mut stored = serde_json::to_value(GlobalSettings::default()).expect("serialize");
+
+        for (key, value) in [
+            ("glassBlur", 9.0),
+            ("glassRefraction", 0.22),
+            ("glassDepth", 17.0),
+            ("glassOpacity", 62.0),
+            ("glassScrim", 14.0),
+        ] {
+            // Exactly the shape `saveSettings({ theme: { … } })` sends.
+            let patch = serde_json::json!({ "theme": { key: value } });
+            merge(&mut stored, &patch);
+        }
+
+        let parsed: GlobalSettings =
+            serde_json::from_value(stored).expect("the merged record must still parse");
+
+        assert_eq!(parsed.theme.glass_blur, Some(9.0), "glassBlur was dropped");
+        assert_eq!(
+            parsed.theme.glass_refraction,
+            Some(0.22),
+            "glassRefraction was dropped"
+        );
+        assert_eq!(parsed.theme.glass_depth, Some(17.0), "glassDepth was dropped");
+        assert_eq!(
+            parsed.theme.glass_opacity,
+            Some(62.0),
+            "glassOpacity was dropped"
+        );
+        assert_eq!(parsed.theme.glass_scrim, Some(14.0), "glassScrim was dropped");
+    }
+
     #[test]
     fn every_glass_axis_survives_a_round_trip() {
         let mut settings = GlobalSettings::default();
