@@ -15,6 +15,40 @@
     color-scheme: only dark;
 
     /*
+     * What the library's own glass is tinted with.
+     *
+     * `applyGlassTokens` derives twenty-five numbers and deliberately leaves
+     * the six colours to the theme, because only the theme knows what its
+     * glass is made of. This app set none of them, so every library surface
+     * fell back to `white`. At the 55% film this app asks for, a white sheet
+     * over a dark panel is what turned whole panes of text to haze once the
+     * material flip put that film on every library component at once.
+     *
+     * The same rung `.az-glass` tints with, for the reason its comment gives:
+     * frost diffuses white through a translucent layer and needs something
+     * light underneath, so on a dark surface a white film reads as grey haze
+     * sitting on the colour rather than as material. `az-badge` is a lighter
+     * rung of the *same* ladder, built from `--az-surface`, so the tint
+     * follows the surface colour and not the accent. The border is the one
+     * that carries the accent, which is deliberate and matches `.az-glass`.
+     *
+     * On this selector rather than `:root`, and that is load-bearing: the
+     * library's shipped themes declare these under `[data-theme="dark"]`,
+     * which outranks a bare `:root`, so declaring them there lost and the
+     * white film survived the fix.
+     *
+     * In CSS rather than written from `lib/theme.ts` because they are
+     * constants, and the slider's drag path calls `applyGlassTokens` directly
+     * rather than going through `writeGlassTuning`. Written from JS they were
+     * absent for the length of a drag and appeared on release, so the surface
+     * changed appearance between the value being dragged and the value that
+     * landed.
+     */
+    --glass-background-color: var(--color-az-badge);
+    --glass-border-color: var(--color-primary);
+    --glass-highlight-color: var(--color-az-badge);
+
+    /*
      * The axes the theme picker drives. Every surface and text colour below is
      * written in terms of them, so one write to `:root` recolours the whole app
      * — there is no second place holding a colour.
@@ -605,11 +639,36 @@
     transform: scale(0.95);
   }
 
+  /*
+   * The mask tabs scroll under, on the desk's own alpha.
+   *
+   * Both stops of this gradient are opaque colours, so the cap was opaque by
+   * construction however the glass axes moved. That was invisible while the
+   * desk was solid and became the single most obvious thing in the window once
+   * it was not: a white pill around the gauge, gear and avatar, reported in
+   * four separate screenshots and outliving three rounds of fixes aimed at the
+   * library's controls, which never painted it.
+   *
+   * It has to keep masking, so it cannot simply go transparent. `--az-glass-alpha`
+   * is what `body` and `.az-desk` already take, so the cap now fades to exactly
+   * the desk it sits on rather than to an opaque copy of it, and it hides the
+   * tabs underneath by being that surface instead of by being solid.
+   */
   .az-strip-cap {
     background-image: linear-gradient(
       to right,
       transparent 0,
-      color-mix(in oklab, var(--color-az-badge) var(--az-glass-lift, 0%), var(--color-az-desk)) 18px
+      rgb(
+          from
+            color-mix(
+              in oklab,
+              var(--color-az-badge) var(--az-glass-lift, 0%),
+              var(--color-az-desk)
+            )
+            r g b /
+          var(--az-glass-alpha, 100%)
+        )
+        18px
     );
   }
 
@@ -1093,8 +1152,23 @@
    * can press. Translucent, they read as disabled, and over a busy backdrop
    * their labels stop being legible.
    */
+  /*
+   * Solid relative to the panel, not solid absolutely.
+   *
+   * This wrote `az-inset` flat, which made every control the only opaque thing
+   * left once the panels behind them went translucent: the mode and size pills
+   * in Settings, the wheel and the icon buttons all read as bright slabs
+   * floating on glass rather than as chrome sitting on it. In the light palette
+   * that is a literal white block on a dark desk.
+   *
+   * `--glass-control-opacity` is the library's axis for exactly this and
+   * `lib/theme.ts` writes it a third of the way from opaque toward the panel,
+   * so a control still says it is live and keeps its label legible while
+   * reading as the same material as the surface under it. Its 100% fallback is
+   * what this class used to hardcode, so a build without the token is unchanged.
+   */
   .az-control-solid {
-    background-color: var(--color-az-inset);
+    background-color: rgb(from var(--color-az-inset) r g b / var(--glass-control-opacity, 100%));
   }
 
   /*
