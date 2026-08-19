@@ -657,16 +657,26 @@
    */
   .az-glass {
     /*
-     * Two layers, not one. The film is the surface's own colour and lightens a
-     * dark desk; the scrim is a dark wash beneath it that holds text contrast
-     * when the backdrop behind the panel is busy. Painting both into one
-     * `background-color` would make them cancel, so the scrim is a second
-     * background layer under the film.
+     * The scrim darkens the film rather than covering it.
+     *
+     * It used to be a `linear-gradient` in `background-image`, on the claim
+     * that this put it *under* the colour. It does the opposite: a background
+     * image always paints above `background-color`, so the scrim was an opaque
+     * black sheet laid over the translucent surface. The two sliders then
+     * fought each other, and at 54% film with 58% scrim the panel composited
+     * to 81% and read as solid. Turning opacity up did nothing visible,
+     * because the scrim was already hiding what it admitted.
+     *
+     * The mix is done in `lib/theme.ts` and arrives as `--az-glass-film`,
+     * rather than nested inside this `rgb(from …)`. Nested, Lightning CSS saw
+     * a `color-mix` again and split the declaration, and the fallback it wrote
+     * was `rgb(0 0 0 / …)`: a plain black panel. One variable keeps the whole
+     * value in a form no minifier rewrites.
+     *
+     * One alpha for the surface either way: the scrim chooses how dark it is,
+     * the opacity axis how much of it there is, and neither can cancel the
+     * other.
      */
-    background-image: linear-gradient(
-      rgb(0 0 0 / var(--az-glass-scrim-opacity, 0%)),
-      rgb(0 0 0 / var(--az-glass-scrim-opacity, 0%))
-    );
     /*
      * Relative colour syntax, not `color-mix` with `transparent`.
      *
@@ -680,7 +690,8 @@
      * nothing for a minifier to split.
      */
     background-color: rgb(
-      from var(--color-az-badge) r g b / var(--glass-background-opacity, 55%)
+      from var(--az-glass-film, var(--color-az-badge)) r g b /
+        var(--glass-background-opacity, 55%)
     );
     outline-color: rgb(from var(--color-primary) r g b / var(--glass-border-opacity, 12%));
     box-shadow:

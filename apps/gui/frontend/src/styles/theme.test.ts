@@ -361,9 +361,9 @@ describe("glass survives a renderer that under-reports itself", () => {
     const flat = background.replace(/\s+/g, " ");
     expect(flat).toContain("var(--glass-background-opacity");
     expect(
-      /rgb\( from [^)]*\) r g b \/ var\(--glass-background-opacity/.test(flat) ||
+      /rgb\( from .*\/ var\(--glass-background-opacity/.test(flat) ||
         flat.includes("transparent calc(100% - var(--glass-background-opacity"),
-      `the glass surface cannot produce transparency: ${flat.slice(0, 160)}`,
+      `the glass surface cannot produce transparency: ${flat.slice(0, 200)}`,
     ).toBe(true);
     expect(rule).toContain("backdrop-filter: blur(var(--glass-blur");
   });
