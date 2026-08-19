@@ -18,11 +18,11 @@ describe("startup", () => {
   it("keeps a normal project strip and evicts only beyond the retained limit", () => {
     expect(nextRetainedProjects([], "one", ["one", "two", "three"])).toEqual(["one"]);
     expect(nextRetainedProjects(["one"], "two", ["one", "two", "three"])).toEqual(["one", "two"]);
-    expect(nextRetainedProjects(["one", "two"], "three", ["one", "two", "three"])).toEqual([
-      "one",
-      "two",
-      "three",
-    ]);
+    // Visiting a third pane evicts the oldest: the limit is what bounds the
+    // hidden DOM, so the eviction has to happen at the limit, not past it.
+    expect(nextRetainedProjects(["one", "two"], "three", ["one", "two", "three"])).toEqual(
+      ["one", "two", "three"].slice(-RETAINED_PROJECT_LIMIT),
+    );
     const open = Array.from(
       { length: RETAINED_PROJECT_LIMIT + 1 },
       (_, index) => `project-${index}`,
@@ -30,10 +30,13 @@ describe("startup", () => {
     expect(
       nextRetainedProjects(open.slice(0, RETAINED_PROJECT_LIMIT), open.at(-1) ?? null, open),
     ).toEqual(open.slice(1));
-    expect(RETAINED_PROJECT_LIMIT).toBe(8);
+    // Retention covers the pane in front of you and the one you came from.
+    // Raising this raises hidden DOM roughly linearly, about a thousand nodes
+    // per pane against the live app.
+    expect(RETAINED_PROJECT_LIMIT).toBe(2);
   });
 
-  it("retains Home, Settings, and all visited projects in a normal tab strip", async () => {
+  it("retains Home, Settings, and the most recent projects up to the limit", async () => {
     let workspace!: WorkspaceStore;
 
     function Probe() {
@@ -59,7 +62,10 @@ describe("startup", () => {
     const retained = Array.from(
       screen.container.querySelectorAll<HTMLElement>("[data-retained-project]"),
     ).map((node) => node.dataset.retainedProject);
-    expect(retained).toEqual(["worktable", "cafe", "quux"]);
+    // Three visited, and only the most recent `RETAINED_PROJECT_LIMIT` keep
+    // their DOM. The evicted pane is gone from the tree, not merely hidden:
+    // that eviction is the whole point of the limit.
+    expect(retained).toEqual(["worktable", "cafe", "quux"].slice(-RETAINED_PROJECT_LIMIT));
     expect(screen.container.querySelector('[data-retained-tab="home"]')).not.toBeNull();
     const settings = screen.container.querySelector<HTMLElement>('[data-retained-tab="settings"]');
     expect(settings).not.toBeNull();

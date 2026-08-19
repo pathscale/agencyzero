@@ -32,6 +32,8 @@ const USAGE: &str = "\
 usage: blitz-bench <mode> [args]
 
   nodes                       tree size and a role histogram
+  panes                       node count per retained pane, and what
+                              retention costs against the whole tree
   idle                        one metrics read, as a frame-window summary
   blink [allowed-missed]      assert the owner's blinking-rectangle repro: no
                               missed refreshes and no frame interval past two
@@ -647,6 +649,140 @@ async fn nodes(client: &mut Client) -> Result<usize> {
     Ok(snapshot.nodes.len())
 }
 
+/// What each retained pane costs in nodes.
+///
+/// `RETAINED_PROJECT_LIMIT` keeps eight project panes mounted, and a hidden
+/// pane is a full DOM subtree: it is invisible, not absent. Nobody had priced
+/// one, so this walks every node to its nearest `data-retained-*` ancestor and
+/// totals the subtree. The visible pane is the one the owner is looking at;
+/// every other line is what retention is charging for.
+async fn panes(client: &mut Client) -> Result<()> {
+    let (snapshot, elapsed) = inspect(client).await?;
+    let by_id: HashMap<u64, &SemanticNode> =
+        snapshot.nodes.iter().map(|node| (node.id, node)).collect();
+
+    // The semantic snapshot carries no `data-*` attributes, so a pane cannot be
+    // named by the attribute the shell stamps on it. It can still be found by
+    // shape: a pane is a subtree hanging off a shared shell ancestor, and each
+    // one contains exactly one "Conversation" region. Anchoring on that names
+    // panes without needing new server surface.
+    const ANCHOR: &str = "Conversation";
+
+    let depth_of = |start: u64| -> usize {
+        let mut cursor = Some(start);
+        let mut depth = 0usize;
+        for _ in 0..256 {
+            let Some(current) = cursor.and_then(|id| by_id.get(&id)) else {
+                break;
+            };
+            let Some(parent) = current.parent else { break };
+            cursor = Some(parent);
+            depth += 1;
+        }
+        depth
+    };
+
+    // Pane roots are the anchors' common-depth ancestors. Walk each anchor up a
+    // fixed number of levels to the subtree the shell swaps, then total by root.
+    let anchors: Vec<&SemanticNode> = snapshot
+        .nodes
+        .iter()
+        .filter(|node| node.name.contains(ANCHOR))
+        .collect();
+
+    let mut roots: HashMap<u64, (bool, Option<[f64; 4]>)> = HashMap::new();
+    for anchor in &anchors {
+        let mut cursor = anchor.parent;
+        let mut root = anchor.id;
+        // Climb to the highest ancestor that is not shared by every pane: the
+        // shell container has many anchor descendants, a pane root has one.
+        for _ in 0..12 {
+            let Some(current) = cursor.and_then(|id| by_id.get(&id)) else {
+                break;
+            };
+            let descendants = anchors
+                .iter()
+                .filter(|other| {
+                    let mut walk = Some(other.id);
+                    for _ in 0..256 {
+                        let Some(step) = walk.and_then(|id| by_id.get(&id)) else {
+                            return false;
+                        };
+                        if step.id == current.id {
+                            return true;
+                        }
+                        walk = step.parent;
+                    }
+                    false
+                })
+                .count();
+            if descendants > 1 {
+                break;
+            }
+            root = current.id;
+            cursor = current.parent;
+        }
+        let node = by_id.get(&root).copied();
+        roots.insert(
+            root,
+            (
+                node.map(|n| n.visible).unwrap_or(false),
+                node.and_then(|n| n.bounds),
+            ),
+        );
+    }
+
+    let mut totals: HashMap<u64, usize> = HashMap::new();
+    let mut unattributed = 0usize;
+    for node in &snapshot.nodes {
+        let mut cursor = Some(node.id);
+        let mut found = None;
+        for _ in 0..256 {
+            let Some(current) = cursor.and_then(|id| by_id.get(&id)) else {
+                break;
+            };
+            if roots.contains_key(&current.id) {
+                found = Some(current.id);
+                break;
+            }
+            cursor = current.parent;
+        }
+        match found {
+            Some(root) => *totals.entry(root).or_default() += 1,
+            None => unattributed += 1,
+        }
+    }
+
+    let mut rows: Vec<(u64, usize)> = totals.into_iter().collect();
+    rows.sort_by_key(|row| std::cmp::Reverse(row.1));
+    println!(
+        "{} nodes total, {} panes found via {ANCHOR:?} (inspect {elapsed:.1}ms)\n",
+        snapshot.nodes.len(),
+        rows.len()
+    );
+    let mut hidden_cost = 0usize;
+    for (root, count) in &rows {
+        let (visible, bounds) = roots.get(root).copied().unwrap_or((false, None));
+        let box_text = bounds
+            .map(|b| format!("[{:.0},{:.0} {:.0}x{:.0}]", b[0], b[1], b[2], b[3]))
+            .unwrap_or_else(|| "[no box]".into());
+        println!(
+            "  {count:>6}  node {root:<14} {:<8} depth {:<3} {box_text}",
+            if visible { "VISIBLE" } else { "hidden" },
+            depth_of(*root)
+        );
+        if !visible {
+            hidden_cost += count;
+        }
+    }
+    println!("\n  {unattributed:>6}  outside any pane (chrome, tab strip, overlays)");
+    println!(
+        "  {hidden_cost:>6}  in hidden panes = {:.0}% of the tree",
+        100.0 * hidden_cost as f64 / snapshot.nodes.len().max(1) as f64
+    );
+    Ok(())
+}
+
 /// A fixed scroll burst, paced like a trackpad rather than a firehose.
 /// Put the pointer over a named node, so the next wheel event goes to the
 /// scroller under it.
@@ -1054,6 +1190,7 @@ async fn main() -> Result<()> {
         "nodes" => {
             nodes(&mut client).await?;
         }
+        "panes" => panes(&mut client).await?,
         "dom" => {
             let want = args.get(1).map(String::as_str).unwrap_or("");
             let depth: usize = args.get(2).and_then(|v| v.parse().ok()).unwrap_or(6);
