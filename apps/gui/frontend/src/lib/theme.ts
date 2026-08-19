@@ -464,11 +464,19 @@ export function writePanelAxes(tuning: GlassTuning, root?: HTMLElement): void {
 /**
  * Whether the native glass view should be attached at all.
  *
- * False while the window is opaque. Turning this on requires `transparent: true`
- * back in the window config *and* the transparent-composite path proven, or the
- * glass simply covers the app.
+ * Both of its conditions now hold. The window carries `transparent: true` with
+ * no `backgroundColor`, and `macOSPrivateApi` is on, without which Tauri
+ * accepts that flag and ignores it. The composite path is proven rather than
+ * assumed: with those set, the desktop is visible through the titlebar and the
+ * window edge.
+ *
+ * That matters for blur specifically. `backdrop-filter` can only read pixels
+ * the renderer has drawn, and behind a transparent window there are none: the
+ * desktop is composited by macOS, outside anything CSS can sample. The native
+ * glass view is what blurs it, so a transparent window without this reads as
+ * sharp desktop behind a tinted pane.
  */
-const WINDOW_GLASS_ENABLED = false;
+const WINDOW_GLASS_ENABLED = true;
 
 /**
  * The window chrome the native frame should wear, derived from the same values
