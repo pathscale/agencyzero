@@ -978,6 +978,31 @@
   }
 
   /*
+   * Cards inside a glass panel take the panel's alpha.
+   *
+   * `bg-base-300` is the card tier: item rows, chips, the section bodies in the
+   * project panel. It was fully opaque, so a translucent panel was a sheet of
+   * glass with 35 solid rectangles sitting on it, which reads as the glass not
+   * working rather than as cards. Audited from the screenshot rather than
+   * guessed: the Items rows and the Task log, Agent I/O and Running bodies were
+   * the visible offenders, and all of them are this one token.
+   *
+   * Done at the class rather than the token. `--color-base-300` is also a
+   * `@pathscale/ui` input and dropdown surface, and a translucent select menu
+   * over live content is unreadable, so only the utility this app puts on its
+   * own cards is changed.
+   *
+   * The alpha is a fraction of the panel's own: a card has to read as sitting
+   * *on* the panel, and matching it exactly makes the two indistinguishable.
+   */
+  .bg-base-300 {
+    background-color: rgb(
+      from var(--color-base-300) r g b /
+        calc(var(--glass-background-opacity, 55%) * 0.72)
+    );
+  }
+
+  /*
    * The composer and the new-project prompt sit inside a 1px gradient ring
    * that fades from primary to a plain hairline — a border-image would not
    * follow the radius, so this is a padded wrapper.

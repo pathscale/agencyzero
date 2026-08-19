@@ -346,13 +346,36 @@ describe("window chrome bridge", () => {
    * whole app and flattened every surface under it. The frame may only be
    * glass once the window itself is transparent.
    */
-  it("does not attach native glass to an opaque window", () => {
-    expect(applyTheme({ ...base, accent: "#3366cc" }).enabled).toBe(false);
-    expect(applyTheme({ ...base, accent: "#3366cc", glassBorder: 100 }).enabled).toBe(false);
+  /*
+   * The window is transparent now and the backdrop attaches as a sibling below
+   * the content, so the chrome is live. It was off while the window was opaque,
+   * because a tinted glass view over an opaque window washed the whole app out.
+   */
+  it("attaches native glass now that the window is transparent", () => {
+    expect(applyTheme({ ...base, accent: "#3366cc" }).enabled).toBe(true);
   });
 
-  /* And never sends a tint it is not entitled to apply. */
-  it("sends no tint while it is disabled", () => {
-    expect(applyTheme({ ...base, accent: "#3366cc" }).tint).toBeUndefined();
+  /*
+   * The tint follows the opacity axis, not the border axis.
+   *
+   * It used to take its alpha from `glassBorder`, the panel hairline: a number
+   * with nothing to do with how solid the window should look, and one that
+   * never reaches zero. So the backdrop stayed a tinted sheet at opacity 0,
+   * which is the exact setting where the app should be at its clearest.
+   */
+  it("sends no tint at all when the opacity axis is zero", () => {
+    expect(applyTheme({ ...base, accent: "#3366cc", glassOpacity: 0 }).tint).toBeUndefined();
+  });
+
+  it("scales the tint with the opacity axis", () => {
+    const dim = applyTheme({ ...base, accent: "#3366cc", glassOpacity: 20 }).tint;
+    const solid = applyTheme({ ...base, accent: "#3366cc", glassOpacity: 90 }).tint;
+    expect(dim?.[3]).toBeLessThan(solid?.[3] ?? 0);
+  });
+
+  it("ignores the border axis for the backdrop tint", () => {
+    const low = applyTheme({ ...base, accent: "#3366cc", glassBorder: 0 }).tint;
+    const high = applyTheme({ ...base, accent: "#3366cc", glassBorder: 100 }).tint;
+    expect(low?.[3]).toBe(high?.[3]);
   });
 });
