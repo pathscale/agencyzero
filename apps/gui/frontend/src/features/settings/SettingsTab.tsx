@@ -1123,6 +1123,7 @@ export function SettingsTab(): JSX.Element {
                     })
                   }
                   onAccent={(accent) => void actions.saveSettings({ theme: { accent } })}
+                  onAccentTwo={(accentTwo) => void actions.saveSettings({ theme: { accentTwo } })}
                   onSoftness={(softness) => void actions.saveSettings({ theme: { softness } })}
                   onWash={(wash) => void actions.saveSettings({ theme: { wash } })}
                   onBrightness={(textBrightness) =>

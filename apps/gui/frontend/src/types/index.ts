@@ -685,6 +685,21 @@ export interface ThemeSettings {
    */
   accent: string;
   /**
+   * The second accent, as `#rrggbb`. Empty follows the first.
+   *
+   * Chrome and illustration are different jobs. The first accent carries
+   * interactive state - a focused ring, a filled slider, a pressed control -
+   * and has to stay legible against the surfaces it sits on. The second is for
+   * the things that are *drawn* rather than operated: icon and SVG fills,
+   * where the colour is the content rather than a signal about it.
+   *
+   * Separate so an app can have a restrained accent on its controls and a
+   * livelier one in its artwork, which one axis cannot express. Empty rather
+   * than a literal, so a record that never chose one inherits the first accent
+   * and nothing has to know a default hex.
+   */
+  accentTwo?: string;
+  /**
    * Lightness added to every surface in oklch points, and taken off every text
    * rung. One number: lifting the desk without bringing the text down trades
    * one glare for another. 0 is the palette as designed.

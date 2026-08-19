@@ -1212,6 +1212,25 @@
    * reading as the same material as the surface under it. Its 100% fallback is
    * what this class used to hardcode, so a build without the token is unchanged.
    */
+  /*
+   * Artwork takes the second accent.
+   *
+   * Icons stroke with `currentColor`, so they inherit whatever text colour
+   * they sit in and follow the ladder by default, which is right for an icon
+   * that labels a control. It is not right for the ones that *are* the
+   * content - a logo, an illustration, a decorative mark - and those are the
+   * ones the second accent exists for.
+   *
+   * A class rather than a blanket `svg` rule, because recolouring every icon
+   * in the window would take the chrome with it, which is the thing the two
+   * accents were split apart to avoid. `--color-accent-2` falls back to the
+   * first accent, so this is a no-op until someone picks a second one.
+   */
+  .az-art,
+  .az-art svg {
+    color: var(--color-accent-2, var(--color-accent));
+  }
+
   .az-control-solid {
     background-color: rgb(from var(--color-az-inset) r g b / var(--glass-control-opacity, 100%));
   }

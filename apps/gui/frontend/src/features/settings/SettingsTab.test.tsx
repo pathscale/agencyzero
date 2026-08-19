@@ -510,7 +510,9 @@ describe("appearance settings", () => {
     expect(screen.container.querySelector('input[type="color"]')).toBeNull();
     expect(
       screen.container.querySelectorAll(
-        'button[aria-label^="Accent colour"], button[aria-label="Designed yellow accent"]',
+        // Scoped to the first row: the pane has a second accent row for
+        // artwork, and both offer the same seven harmonies.
+        'button[aria-label^="Accent colour"]',
       ),
     ).toHaveLength(7);
     fireEvent.click(
