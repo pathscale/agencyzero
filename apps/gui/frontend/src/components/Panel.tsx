@@ -102,7 +102,7 @@ export function SectionPanel(props: SectionPanelProps): JSX.Element {
             <span
               class={`rounded-full px-2 py-px font-semibold text-[11px] ${
                 props.countTone === "primary"
-                  ? "bg-primary/15 text-primary"
+                  ? "bg-az-chip text-primary"
                   : "bg-base-300 text-az-body"
               }`}
             >

@@ -199,7 +199,7 @@ export function TabStrip(): JSX.Element {
           onClick={() => actions.openDraft()}
           title={tx("New project")}
           aria-label={tx("New project")}
-          class="flex h-8 shrink-0 items-center justify-center rounded-full border border-primary/22 border-dashed px-3 text-az-muted transition-colors hover:border-primary hover:bg-primary/8 hover:text-primary"
+          class="flex h-8 shrink-0 items-center justify-center rounded-full border border-primary/22 border-dashed px-3 text-az-muted transition-colors hover:border-primary hover:bg-az-chip hover:text-primary"
         >
           <Icon name="plus" class="text-[15px]" />
         </Button>

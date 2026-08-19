@@ -179,7 +179,7 @@ export function QuestionReplyPill(props: {
       {(question) => (
         <span
           title={question().text}
-          class="flex w-fit max-w-full items-center gap-1.5 self-start rounded-full border border-primary/35 bg-primary/10 py-1 pr-1.5 pl-2.5 text-[11.5px]"
+          class="flex w-fit max-w-full items-center gap-1.5 self-start rounded-full border border-primary/35 bg-az-chip py-1 pr-1.5 pl-2.5 text-[11.5px]"
         >
           <Icon name="message-square-dashed" class="shrink-0 text-[11px] text-primary" />
           <span class="shrink-0 font-semibold text-primary">
@@ -1247,7 +1247,7 @@ export function Composer(props: ComposerProps): JSX.Element {
                 <For each={compiled()?.segments ?? []}>
                   {(segment) =>
                     segment.type === "directive" ? (
-                      <mark class="rounded border border-primary/30 bg-primary/15 px-0.5 text-primary">
+                      <mark class="rounded border border-primary/30 bg-az-chip px-0.5 text-primary">
                         {segment.source}
                       </mark>
                     ) : (
@@ -1305,7 +1305,7 @@ export function Composer(props: ComposerProps): JSX.Element {
                 title={tx("Parse Prompt Syntax controls before sending")}
                 class={`flex h-[24px] items-center rounded-full border px-2.5 font-medium text-[11px] transition-colors ${
                   advanced()
-                    ? "border-primary/35 bg-primary/15 text-primary"
+                    ? "border-primary/35 bg-az-chip text-primary"
                     : "border-az-hairline-strong text-az-muted hover:text-base-content"
                 }`}
               >
@@ -1345,7 +1345,7 @@ export function Composer(props: ComposerProps): JSX.Element {
                 title={tx(expanded() ? "Restore the prompt size" : "Expand the prompt")}
                 class={`flex size-[24px] items-center justify-center rounded-full border transition-colors ${
                   expanded()
-                    ? "border-primary/35 bg-primary/15 text-primary"
+                    ? "border-primary/35 bg-az-chip text-primary"
                     : "border-az-hairline-strong text-az-body hover:border-primary/30 hover:text-az-title"
                 }`}
               >
@@ -1396,7 +1396,7 @@ export function Composer(props: ComposerProps): JSX.Element {
                 }
                 class={`flex h-[24px] items-center gap-1.5 rounded-full border px-2.5 font-medium text-[11px] transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
                   props.agent === "claude" && props.extraThinking
-                    ? "border-primary/35 bg-primary/15 text-primary"
+                    ? "border-primary/35 bg-az-chip text-primary"
                     : "border-az-hairline-strong text-az-muted hover:text-base-content"
                 }`}
               >
