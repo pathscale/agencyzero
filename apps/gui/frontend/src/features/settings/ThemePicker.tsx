@@ -198,9 +198,20 @@ function SurfaceColorWheel(props: { value: string; onPick: (value: string) => vo
   );
 
   return (
+    /*
+     * The wheel takes the glass film rather than the solid control opt-out.
+     *
+     * `az-control-solid` is for chrome: a switch track or a segmented pill that
+     * reads as disabled once it goes translucent. This is the other kind of
+     * control, the kind that *displays* a value, and the comment at the top of
+     * this file already says as much - here the swatch is the value. Held solid
+     * it paints `az-inset` raw, which in the light palette is white, so a 190px
+     * white disc landed on a dark glass panel and the petals lost the surface
+     * they are meant to be read against.
+     */
     <fieldset
       aria-label={t("appearance.surfaceColour")}
-      class="az-control-solid relative m-0 size-[190px] rounded-full border border-az-hairline bg-az-inset p-0 shadow-inner"
+      class="relative m-0 size-[190px] rounded-full border border-az-hairline bg-az-inset p-0 shadow-inner"
     >
       <For each={colors()}>
         {(color, index) => {
