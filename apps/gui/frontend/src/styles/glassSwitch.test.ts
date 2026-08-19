@@ -261,3 +261,28 @@ describe("the second accent reaches the icons, not just the token", () => {
     wrapper.remove();
   });
 });
+
+describe("an icon that mounts after the pick", () => {
+  /*
+   * The reported symptom: the top-right icons kept the old colour until an
+   * unrelated setting was changed. `applyTheme` only runs when a theme value
+   * changes, so chrome that mounts later never got restroked and kept painting
+   * whatever it was first built with. Nothing but the artwork accent should
+   * decide this colour.
+   */
+  it("takes the accent without waiting for another theme change", async () => {
+    const element = root();
+    applyTheme(themeWith({ accent: "#3366cc", accentTwo: "#cc3366" }), element);
+
+    const late = element.ownerDocument.createElement("svg");
+    late.setAttribute("stroke", "currentColor");
+    element.ownerDocument.body.appendChild(late);
+
+    // MutationObserver callbacks are delivered as a microtask.
+    await Promise.resolve();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(late.getAttribute("stroke")).toBe("#cc3366");
+    late.remove();
+  });
+});
