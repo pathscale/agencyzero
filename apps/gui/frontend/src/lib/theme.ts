@@ -477,26 +477,24 @@ export function writePanelAxes(tuning: GlassTuning, root?: HTMLElement): void {
 /**
  * Whether the native glass view should be attached at all.
  *
- * False, and no longer for the reason first recorded here.
+ * True, now that the backdrop is attached correctly.
  *
- * The original note said this was waiting on `transparent: true` and a proven
- * composite path. Both hold now, so it was switched on, and the result was the
- * whole app blurred: text, sliders, colour swatches, every pixel the app draws.
+ * This was off because `window_vibrancy::apply_liquid_glass` inserts its glass
+ * view as a *subview of the renderer's own view*, so the glass landed on top of
+ * everything drawn and frosted the whole application, text included. That was
+ * not a reason to give up the effect, it was the wrong attachment.
  *
- * `window_vibrancy`'s `apply_liquid_glass` does not place a blurred layer
- * behind the window. It calls `content.removeFromSuperview()` and then
- * `target_view.addSubview(content)` (`macos/liquid_glass.rs:197`), moving the
- * renderer's content view *inside* the `NSGlassEffectView`, and that view
- * blurs its subviews. So it does not give the window a backdrop, it frosts the
- * application.
+ * `tauri-runtime-blitz` now attaches an `NSGlassEffectView` as a *sibling*
+ * below the renderer's view, in the window's content view, so it blurs what is
+ * behind the window and the content draws over it untouched.
  *
- * A real window backdrop needs the glass view as a sibling *below* the content
- * rather than its parent. Until that exists upstream, or is written here
- * against AppKit directly, this stays off: the blur that reaches the screen is
- * the `backdrop-filter` on panels, which reads pixels the renderer drew and
- * leaves text alone.
+ * This is the only thing that can blur the desktop. `backdrop-filter` samples
+ * pixels the renderer drew, and behind a transparent window there are none: the
+ * desktop is composited by macOS, out of reach of anything in CSS. So the two
+ * blurs do different jobs. This one frosts what is behind the window; the CSS
+ * one frosts what the app itself painted behind a panel.
  */
-const WINDOW_GLASS_ENABLED = false;
+const WINDOW_GLASS_ENABLED = true;
 
 /**
  * The window chrome the native frame should wear, derived from the same values
