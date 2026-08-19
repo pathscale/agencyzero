@@ -679,6 +679,27 @@
     }
   }
 
+  /*
+   * The chosen petal says so.
+   *
+   * The wheel had a hover state and a pressed state and nothing for
+   * *selected*, so the colour the workspace is actually using looked identical
+   * to the thirty around it. Asked for directly, alongside the same gap on the
+   * two accent rows.
+   *
+   * The ring takes the text ladder's top rung rather than the accent, for the
+   * reason the accent rows needed fixing too: marking a colour with the accent
+   * makes the selected swatch the one with no visible ring whenever the two
+   * are close. The inset second ring separates it from the petal beneath, so
+   * it reads on a pale petal and a dark one alike.
+   */
+  .az-petal[data-selected="true"] .radio__control,
+  .az-petal .radio__input:checked + .radio__control {
+    border-color: var(--color-az-title);
+    box-shadow: inset 0 0 0 2px var(--color-az-void);
+    transform: scale(1.08);
+  }
+
   /* Pressed reads as pressed, and must come after the lift to win. */
   .az-petal:active .radio__control {
     transform: scale(0.95);
@@ -1362,13 +1383,23 @@
    * the accent rather than reading it has to point somewhere else, or the
    * button, the ring and the panel edge all drift pale alongside the text.
    */
-  .bg-primary,
-  .hover\:bg-primary:hover {
-    background-color: var(--color-primary-fill, var(--color-primary));
-  }
-
-  .border-primary {
-    border-color: var(--color-primary-fill, var(--color-primary));
+  /*
+   * An accent chip tints the *surface*, not the accent.
+   *
+   * `text-primary` on `bg-primary/8` puts one colour on itself, so the label
+   * is its own background at a contrast ratio of exactly 1.00 - measured in
+   * the running window, 195 elements between 1.00 and 2.58. Lifting the text
+   * cannot fix it, because the same token feeds the fill: both move together
+   * and the ratio never changes. Tailwind generates both utilities into a
+   * later layer, so neither can be overridden by name either.
+   *
+   * So the chip stops being made of the accent. It takes a rung of the surface
+   * ladder at the same low alpha, which is what a chip is for - a panel of its
+   * own behind a coloured label - and the accent stays on the text, where it
+   * was the point.
+   */
+  [class*="bg-primary\\/"] {
+    background-color: rgb(from var(--color-az-badge) r g b / 22%);
   }
 
   .bg-primary-glass {
