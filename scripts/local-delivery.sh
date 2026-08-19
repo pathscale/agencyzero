@@ -16,10 +16,10 @@ if [ "${2:-}" = "--offline" ] || [ "${1:-}" = "--offline" ]; then
   [ "$mode" = "--offline" ] && mode=verify
 fi
 
-usage="usage: scripts/local-delivery.sh [verify|quick|stable|experimental|experimental-inspector] [--offline]"
+usage="usage: scripts/local-delivery.sh [verify|quick|stable|stable-hybrid|experimental|experimental-inspector] [--offline]"
 
 case "$mode" in
-  verify | quick | stable | experimental | experimental-inspector) ;;
+  verify | quick | stable | stable-hybrid | experimental | experimental-inspector) ;;
   -h | --help)
     echo "$usage"
     exit 0
@@ -256,6 +256,33 @@ case "$mode" in
       "$repo_root/target/release/bundle/macos/AgencyZero.app"
     pin_inspector_env "$repo_root/target/release/bundle/macos/AgencyZero.app"
     echo "$repo_root/target/release/bundle/macos/AgencyZero.app"
+    ;;
+  stable-hybrid)
+    # The same bundle as `stable`, rendered by the hybrid pipeline instead of
+    # Vello, so the two can be measured against each other.
+    #
+    # This exists because the renderer, not the application, dominates this
+    # app's memory. A stable instance measured 1673 MB of physical footprint, of
+    # which 1033 MB was "Owned physical footprint (unmapped) (graphics)" plus
+    # 105 MB of IOSurface and IOAccelerator, against 500 MB of heap. Comparing
+    # the two pipelines is therefore the first measurement worth taking, and it
+    # needs no code change at all.
+    #
+    # Published beside the Vello bundle rather than over it, because a
+    # comparison needs both halves present at once.
+    echo "==> AgencyZero Hybrid.app (Blitz inspector, hybrid renderer)"
+    (
+      cd "$repo_root/apps/gui"
+      run_tauri build \
+        --target "$rust_target" \
+        --features blitz-hybrid \
+        --config '{"bundle":{"createUpdaterArtifacts":false}}'
+    )
+    publish_bundle \
+      "$repo_root/target/$rust_target/release/bundle/macos/AgencyZero.app" \
+      "$repo_root/target/release/bundle/macos/AgencyZero Hybrid.app"
+    pin_inspector_env "$repo_root/target/release/bundle/macos/AgencyZero Hybrid.app"
+    echo "$repo_root/target/release/bundle/macos/AgencyZero Hybrid.app"
     ;;
   experimental)
     # Experimental is the field-debug channel. Keep its ordinary local build
