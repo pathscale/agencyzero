@@ -224,3 +224,40 @@ describe("the accent as text", () => {
     expect(read(element, "--color-primary-text")).not.toBe("#662d21");
   });
 });
+
+describe("the second accent reaches the icons, not just the token", () => {
+  /*
+   * The token resolving is not the feature. Inline SVG is serialised and handed
+   * to usvg with `currentColor` already substituted, and that tree is rebuilt
+   * only on construction damage - which writing a custom property on the root
+   * does not produce. So an icon keeps the stroke it was built with while
+   * `--color-accent-2` reads correctly, which is exactly how this shipped
+   * "working" twice.
+   */
+  it("writes the picked colour onto the icon's stroke attribute", () => {
+    const element = root();
+    const icon = element.ownerDocument.createElement("svg");
+    icon.setAttribute("stroke", "currentColor");
+    element.ownerDocument.body.appendChild(icon);
+
+    applyTheme(themeWith({ accent: "#3366cc", accentTwo: "#cc3366" }), element);
+
+    expect(icon.getAttribute("stroke")).toBe("#cc3366");
+    icon.remove();
+  });
+
+  it("leaves an icon that follows its label alone", () => {
+    const element = root();
+    const wrapper = element.ownerDocument.createElement("span");
+    wrapper.className = "az-icon-inherit";
+    const icon = element.ownerDocument.createElement("svg");
+    icon.setAttribute("stroke", "currentColor");
+    wrapper.appendChild(icon);
+    element.ownerDocument.body.appendChild(wrapper);
+
+    applyTheme(themeWith({ accent: "#3366cc", accentTwo: "#cc3366" }), element);
+
+    expect(icon.getAttribute("stroke")).toBe("currentColor");
+    wrapper.remove();
+  });
+});
