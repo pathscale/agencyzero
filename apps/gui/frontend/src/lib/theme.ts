@@ -174,33 +174,78 @@ export function isAccent(value: string): boolean {
  * `.az-icon-inherit` and icons on filled surfaces are skipped: those follow
  * their label's ink deliberately, and `theme.css` already says so.
  */
+/**
+ * The colour the icons are currently stroked with.
+ *
+ * An icon that mounts *after* a pick has to be stroked too. `applyTheme` only
+ * runs when a theme setting changes, so without this the chrome that mounts
+ * later keeps `currentColor` and paints black until some unrelated setting
+ * happens to re-run the theme: the reported symptom was the top-right icons
+ * refusing to follow accent 2 until the base colour was changed.
+ */
+let iconStroke: string | null = null;
+let iconObserver: MutationObserver | null = null;
+
+/**
+ * Stroke one icon, if it is one of the ones the artwork accent owns.
+ *
+ * Returns whether anything was written, so the observer can stay quiet.
+ */
+function strokeIcon(svg: Element, accentTwo: string): void {
+  if (
+    svg.closest(".az-icon-inherit, [class*='text-primary-content'], [class*='text-accent-content']")
+  ) {
+    return;
+  }
+  // Only the icons that stroke with the artwork accent. A sprite root, a
+  // decorative shape with its own fill, or anything that never asked for
+  // `currentColor` is left exactly as authored.
+  const current = svg.getAttribute("stroke");
+  if (current === null) return;
+  /*
+   * Idempotent, and that is load-bearing rather than tidy.
+   *
+   * `applyTheme` runs from a reactive effect, and this also runs from a
+   * `MutationObserver`. Writing an attribute mutates the DOM, which restyles,
+   * which runs the effect and notifies the observer: an unconditional write is
+   * an infinite loop that never yields to paint. Measured as exactly that, the
+   * window reported its refresh rate and then rendered zero frames.
+   */
+  if (current === accentTwo) return;
+  svg.setAttribute("stroke", accentTwo);
+}
+
+/**
+ * Keep icons stroked as they mount.
+ *
+ * Only the artwork accent decides this colour, so the observer reads the last
+ * picked value rather than anything about the node it is reacting to.
+ */
+function watchIcons(doc: Document): void {
+  if (iconObserver) return;
+  iconObserver = new MutationObserver((records) => {
+    const accentTwo = iconStroke;
+    if (accentTwo === null) return;
+    for (const record of records) {
+      for (const added of record.addedNodes) {
+        if (!(added instanceof Element)) continue;
+        if (added.tagName.toLowerCase() === "svg") strokeIcon(added, accentTwo);
+        for (const svg of added.querySelectorAll?.("svg") ?? []) {
+          strokeIcon(svg, accentTwo);
+        }
+      }
+    }
+  });
+  iconObserver.observe(doc.body, { childList: true, subtree: true });
+}
+
 function repaintIconStrokes(root: HTMLElement, accentTwo: string): void {
   const doc = root.ownerDocument;
   if (!doc) return;
+  iconStroke = accentTwo;
+  if (doc.body) watchIcons(doc);
   for (const svg of doc.querySelectorAll("svg")) {
-    if (
-      svg.closest(
-        ".az-icon-inherit, [class*='text-primary-content'], [class*='text-accent-content']",
-      )
-    ) {
-      continue;
-    }
-    // Only the icons that stroke with the artwork accent. A sprite root, a
-    // decorative shape with its own fill, or anything that never asked for
-    // `currentColor` is left exactly as authored.
-    const current = svg.getAttribute("stroke");
-    if (current === null) continue;
-    /*
-     * Idempotent, and that is load-bearing rather than tidy.
-     *
-     * `applyTheme` runs from a reactive effect. Writing an attribute mutates
-     * the DOM, which restyles, which runs the effect again: an unconditional
-     * write is an infinite loop that never yields to paint. Measured as
-     * exactly that - the window reported its refresh rate and then rendered
-     * zero frames, and the process had to be killed.
-     */
-    if (current === accentTwo) continue;
-    svg.setAttribute("stroke", accentTwo);
+    strokeIcon(svg, accentTwo);
   }
 }
 
