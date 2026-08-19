@@ -35,7 +35,14 @@ import { countdown, formatBytes, relativeTime } from "~/lib/format";
 import { AGENT_LABELS, agentStateLabel, envPolicyLabel, permissionLabel } from "~/lib/labels";
 import { describeError, log } from "~/lib/log";
 import { reset as perfReset, snapshot as perfSnapshot } from "~/lib/perf";
-import { DEFAULT_WASH, MAX_GLASS_BLUR, normalizeWash, writePanelAxes } from "~/lib/theme";
+import {
+  DEFAULT_GLASS_OPACITY,
+  DEFAULT_GLASS_SCRIM,
+  DEFAULT_WASH,
+  MAX_GLASS_BLUR,
+  normalizeWash,
+  writePanelAxes,
+} from "~/lib/theme";
 import { t, tx, type UiMessage } from "~/stores/i18n";
 import { prefs, setPrefs } from "~/stores/prefs";
 import { useNow, useWorkspace } from "~/stores/workspace";
@@ -1188,7 +1195,6 @@ export function SettingsTab(): JSX.Element {
                 <Row
                   label={tx("Glass depth")}
                   hint={tx("how far a glass surface sits off the page: glow, sheen and shadow")}
-                  isLast
                 >
                   <GlassTuningAxis
                     label={tx("Glass depth")}
@@ -1198,6 +1204,48 @@ export function SettingsTab(): JSX.Element {
                     value={current().theme.glassDepth}
                     format={(value) => `${Math.round((value / GLASS_LIMITS.depth.max) * 100)}%`}
                     onChange={(glassDepth) => actions.saveSettings({ theme: { glassDepth } })}
+                  />
+                </Row>
+
+                {/*
+                  Opacity and scrim are AgencyZero's, not the library's.
+
+                  The library derives `--glass-background-opacity` from
+                  refraction alone, and on a dark surface that curve is
+                  `7 * refraction`: at the shipped 0.31 it lands near 5%, a film
+                  nobody can see. The only way to get a surface that reads as
+                  material was to raise refraction, which also drives the
+                  border, the highlight, the rim and the inner glow, so "more
+                  solid" arrived as "every edge shouts".
+
+                  They pull in opposite directions, which is why they are two
+                  sliders rather than one: the film is the surface's own colour
+                  and lightens a dark desk, the scrim is a wash beneath it that
+                  holds text contrast when the backdrop is busy.
+                */}
+                <Row
+                  label={tx("Glass opacity")}
+                  hint={tx("how solid the surface's own film is over what it sits on")}
+                >
+                  <GlassPercentAxis
+                    label={tx("Glass opacity")}
+                    max={95}
+                    value={current().theme.glassOpacity ?? DEFAULT_GLASS_OPACITY}
+                    property="--glass-background-opacity"
+                    onChange={(glassOpacity) => actions.saveSettings({ theme: { glassOpacity } })}
+                  />
+                </Row>
+                <Row
+                  label={tx("Glass scrim")}
+                  hint={tx("how much a glass surface darkens what is behind it, for text contrast")}
+                  isLast
+                >
+                  <GlassPercentAxis
+                    label={tx("Glass scrim")}
+                    max={70}
+                    value={current().theme.glassScrim ?? DEFAULT_GLASS_SCRIM}
+                    property="--az-glass-scrim-opacity"
+                    onChange={(glassScrim) => actions.saveSettings({ theme: { glassScrim } })}
                   />
                 </Row>
               </Section>
@@ -2889,6 +2937,73 @@ function Row(props: {
 
 /** How long the knob must be still before its value is written to the store. */
 const SETTLE_MS = 180;
+
+/**
+ * One glass axis measured in plain percent, written straight to a custom
+ * property.
+ *
+ * Separate from `GlassTuningAxis` because these two are not the library's.
+ * Opacity overrides one token the library derives from refraction, and scrim is
+ * AgencyZero's own, so neither wants the twenty-five-token re-derivation that
+ * component performs on every frame of a drag.
+ *
+ * The `live` signal is the same lesson that component records: the persist
+ * waits for the drag to settle, so binding the thumb to the stored value alone
+ * left it snapping back under the pointer and made arrow keys do nothing. The
+ * audit test in this folder refuses to ship a slider that cannot move.
+ */
+function GlassPercentAxis(props: {
+  label: string;
+  max: number;
+  value: number;
+  property: string;
+  onChange: (value: number) => void | Promise<void>;
+}): JSX.Element {
+  const [live, setLive] = createSignal<number | undefined>();
+  const shown = (): number => live() ?? props.value;
+
+  // Once the store reports the value the drag ended on, the local hold has
+  // nothing left to say and steps aside. Solid 2 splits `createEffect` into a
+  // tracked read and an untracked write, so the release happens in the second
+  // argument rather than inside the tracking scope.
+  createEffect(
+    () => [live(), props.value] as const,
+    ([held, stored]) => {
+      if (held === stored) setLive(undefined);
+    },
+  );
+
+  return (
+    <div class="min-w-[260px]">
+      <Slider
+        label={props.label}
+        min={0}
+        max={props.max}
+        step={1}
+        value={shown()}
+        formatValue={(value) => `${Math.round(value)}%`}
+        // Paint immediately so the surface answers the drag, persist on
+        // release. One custom property, so unlike the library's axes there is
+        // nothing to re-derive.
+        onChange={(value) => {
+          setLive(value);
+          document.documentElement.style.setProperty(props.property, `${value}%`);
+        }}
+        // `live` is held, not cleared. The persist is a round trip through the
+        // store, so clearing on release showed the *old* number for the ~60ms
+        // it takes to land: the thumb visibly snapped back and then forward.
+        // Releasing it once the stored value agrees keeps the control steady
+        // and still lets an external change move the thumb afterwards.
+        onChangeEnd={(value) => {
+          setLive(value);
+          void props.onChange(value);
+        }}
+        size="sm"
+        class="w-full min-w-0 [&_[data-slot=label]]:sr-only"
+      />
+    </div>
+  );
+}
 
 /** Which settings field carries each of the library's three glass numbers. */
 const GLASS_SETTING_KEYS = {

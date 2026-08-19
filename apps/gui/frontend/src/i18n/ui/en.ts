@@ -966,6 +966,12 @@ const en = {
   "Glass depth": "Glass depth",
   "how far a glass surface sits off the page: glow, sheen and shadow":
     "how far a glass surface sits off the page: glow, sheen and shadow",
+  "Glass opacity": "Glass opacity",
+  "how solid the surface's own film is over what it sits on":
+    "how solid the surface's own film is over what it sits on",
+  "Glass scrim": "Glass scrim",
+  "how much a glass surface darkens what is behind it, for text contrast":
+    "how much a glass surface darkens what is behind it, for text contrast",
   Snapshot: "Snapshot",
   "a copy of the store as it stands, without closing the app":
     "a copy of the store as it stands, without closing the app",

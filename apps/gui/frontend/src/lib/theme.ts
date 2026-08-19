@@ -257,6 +257,41 @@ export function applyTheme(
 function writeGlassTuning(theme: ThemeSettings, root: HTMLElement): void {
   const mode: GlassMode = root.dataset.colorMode === "light" ? "light" : "dark";
   applyGlassTokens(glassTuning(theme, root), mode, root);
+
+  /*
+   * How opaque the surface's own film is, as its own axis.
+   *
+   * The library derives `--glass-background-opacity` from refraction alone,
+   * and on a dark surface that curve is `7 * refraction`: at the shipped 0.31
+   * it lands on about 5%, which is a film nobody can see. Raising it meant
+   * raising refraction, which also drives the border, the highlight, the rim
+   * and the inner glow, so "make the glass more solid" arrived as "make every
+   * edge shout".
+   *
+   * Written after `applyGlassTokens` so it overrides that one derived token
+   * and leaves the other twenty-four alone. Undefined means untouched, so a
+   * theme that never sets it keeps exactly the library's look.
+   */
+  const opacity = theme.glassOpacity ?? DEFAULT_GLASS_OPACITY;
+  if (Number.isFinite(opacity)) {
+    root.style.setProperty("--glass-background-opacity", `${Number(opacity)}%`);
+  } else {
+    root.style.removeProperty("--glass-background-opacity");
+  }
+
+  /*
+   * The scrim: how much the surface darkens what it sits over.
+   *
+   * Separate from the film because they pull in opposite directions. The film
+   * is the surface's own colour and lightens a dark desk; the scrim is a wash
+   * under it that holds contrast for text when the backdrop is busy.
+   */
+  const scrim = theme.glassScrim ?? DEFAULT_GLASS_SCRIM;
+  if (Number.isFinite(scrim)) {
+    root.style.setProperty("--az-glass-scrim-opacity", `${Number(scrim)}%`);
+  } else {
+    root.style.removeProperty("--az-glass-scrim-opacity");
+  }
 }
 
 /**
@@ -309,6 +344,25 @@ export function glassTuning(theme: ThemeSettings, root: HTMLElement): GlassTunin
  * the gaps past 3σ is the change that would let batching work at all, and it
  * belongs to the layout rather than here.
  */
+/**
+ * How solid a glass surface's own film is, as a percentage.
+ *
+ * The library derives this from refraction, and on a dark surface that curve
+ * is `7 * refraction`: at the shipped 0.31 it lands near 5%, which is a film
+ * nobody can see. 55% is the value the stylesheet already carried as its
+ * fallback for `--glass-background-opacity`, so an untouched theme now renders
+ * what that fallback always described.
+ */
+export const DEFAULT_GLASS_OPACITY = 55;
+
+/**
+ * How much a glass surface darkens what it sits over, as a percentage.
+ *
+ * Zero by default: the scrim exists for a busy backdrop, and adding one to a
+ * quiet desk only makes the panel muddier than the design asks for.
+ */
+export const DEFAULT_GLASS_SCRIM = 0;
+
 export const DEFAULT_GLASS_BLUR = 12;
 export const MAX_GLASS_BLUR = 24;
 
