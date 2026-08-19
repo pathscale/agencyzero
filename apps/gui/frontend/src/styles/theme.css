@@ -631,8 +631,21 @@
      * lift mixes toward `az-badge`, a lighter rung of the *same* hue ladder,
      * and the border carries the accent rather than white.
      */
-    outline: 1px solid rgb(from var(--color-primary) r g b / var(--az-glass-border, 16%));
-    outline-offset: -1px;
+    /*
+     * The border carries the edge, not an outline.
+     *
+     * This drew a 1px `outline` at `outline-offset: -1px`, and every element
+     * using the class also carries `border border-az-hairline` in its markup:
+     * six of them, including every `Panel`. So each panel had two rings a pixel
+     * apart, and an outline does not follow `border-radius` the way a border
+     * does, so they diverged at the corners and the edge read as doubled and
+     * misaligned. Worse once the surface went translucent, because the gap
+     * between them started showing what was behind.
+     *
+     * The accent tint moves onto `border-color`, so the edge is one ring that
+     * follows the radius and still answers the glass border axis.
+     */
+    border-color: rgb(from var(--color-primary) r g b / var(--az-glass-border, 16%));
     box-shadow: 0 8px 32px rgb(0 0 0 / var(--az-glass-shadow, 0));
   }
 
@@ -1037,6 +1050,41 @@
   }
 
   /*
+   * The rest of the app's large surfaces, on the same alpha.
+   *
+   * Audited from screenshots rather than guessed, and each of these was the
+   * only opaque thing left in its part of the window, which reads as the glass
+   * being broken rather than as a chosen surface:
+   *
+   *   az-tab     the active tab in the strip
+   *   az-badge   the menu pill at the top right
+   *   az-sunken  the body of the Settings and Analytics tabs, and the empty
+   *              states in `App.tsx`
+   *
+   * `az-sunken` is also a hover state on the section header in `Panel.tsx`.
+   * That is the same surface reading as the same material, so it wants the same
+   * alpha rather than an exception.
+   */
+  .bg-az-tab {
+    background-color: rgb(
+      from var(--color-az-tab) r g b / calc(var(--glass-background-opacity, 55%) * 0.72)
+    );
+  }
+
+  .bg-az-badge {
+    background-color: rgb(
+      from var(--color-az-badge) r g b / calc(var(--glass-background-opacity, 55%) * 0.72)
+    );
+  }
+
+  .bg-az-sunken,
+  .hover\:bg-az-sunken:hover {
+    background-color: rgb(
+      from var(--color-az-sunken) r g b / calc(var(--glass-background-opacity, 55%) * 0.72)
+    );
+  }
+
+  /*
    * The composer and the new-project prompt sit inside a 1px gradient ring
    * that fades from primary to a plain hairline — a border-image would not
    * follow the radius, so this is a padded wrapper.
@@ -1097,12 +1145,26 @@
    * legible against whatever passes behind them, and a translucent button reads
    * as a disabled one. So the alpha is applied through the composer's own ring
    * class rather than to the utility, which is the only large surface using it.
+   *
+   * The ring's own gradient is cleared where the fill sits. `az-ring-composer`
+   * paints an animated primary-tinted gradient as the 1px border, and a
+   * translucent child let that gradient show *through* the fill: it landed as a
+   * hard vertical seam down the middle of the composer, brightest where the
+   * gradient peaks. The ring is a border, so it belongs on the padding box and
+   * nowhere else.
    */
+  .az-ring-composer {
+    background-origin: border-box;
+    background-clip: border-box;
+  }
+
   .az-ring-composer > * {
     background-color: rgb(
       from var(--color-az-inset) r g b /
         calc(var(--glass-background-opacity, 55%) * 0.72)
     );
+    /* Its own stacking context, so the parent gradient cannot bleed into it. */
+    isolation: isolate;
   }
 
   .az-ring-drift {
