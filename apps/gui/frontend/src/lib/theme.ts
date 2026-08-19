@@ -355,6 +355,21 @@ function writeGlassTuning(theme: ThemeSettings, root: HTMLElement): void {
    */
   root.classList.toggle("glass", Number.isFinite(opacity));
 
+  /*
+   * Drop the backdrop pass entirely when no blur was asked for.
+   *
+   * A `backdrop-filter` cuts the frame: the renderer stops, rasterises what has
+   * been drawn, copies it into an atlas, blurs it and draws the full-frame
+   * result back, blocking the UI thread on the GPU while it does. At a blur of
+   * zero that whole pass changes no pixel, and the saturation and brightness
+   * legs both sit at identity, so it is pure cost.
+   *
+   * Read from the resolved tuning rather than the raw setting, so it follows
+   * whatever the axis actually clamped to.
+   */
+  const tuning = glassTuning(theme, root);
+  root.classList.toggle("az-no-blur", !(tuning.blur > 0));
+
   if (Number.isFinite(opacity)) {
     root.style.setProperty("--glass-background-opacity", `${Number(opacity)}%`);
 

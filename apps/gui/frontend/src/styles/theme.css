@@ -860,6 +860,29 @@
   }
 
   /*
+   * No blur asked for, no backdrop pass bought.
+   *
+   * A `backdrop-filter` is not a paint property: it cuts the frame in two, so
+   * the renderer stops, rasterises everything drawn so far to a texture, copies
+   * that into an atlas, blurs it and draws the full-frame result back. Per
+   * boundary, per frame - and it blocks the UI thread on GPU completion while
+   * it happens, which is what the beachball was.
+   *
+   * At `--glass-blur: 0` the filter does nothing anyone can see and still buys
+   * the whole pass. The saturation and brightness legs are the same story: both
+   * default to identity, so a surface with the blur axis at zero is paying a
+   * full-frame render for an operation that changes no pixel.
+   *
+   * Turning the blur axis down is therefore also how a user turns the cost off,
+   * which is worth having: it is the one glass control with a real performance
+   * meaning behind it.
+   */
+  :root.az-no-blur .az-glass {
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+
+  /*
    * Nested glass is one pane, not two.
    *
    * A blurred surface inside another blurred surface reads the already-blurred
