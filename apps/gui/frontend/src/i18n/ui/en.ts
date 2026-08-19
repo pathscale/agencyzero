@@ -968,6 +968,9 @@ const en = {
   "Glass depth": "Glass depth",
   "how far a glass surface sits off the page: glow, sheen and shadow":
     "how far a glass surface sits off the page: glow, sheen and shadow",
+  Glass: "Glass",
+  "turn every translucent surface solid, in one switch":
+    "turn every translucent surface solid, in one switch",
   "Glass opacity": "Glass opacity",
   "how solid the surface's own film is over what it sits on":
     "how solid the surface's own film is over what it sits on",

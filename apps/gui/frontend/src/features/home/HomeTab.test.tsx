@@ -196,6 +196,42 @@ describe("Home item rows", () => {
     expect(modal.getByRole("button", { name: "Start fork" })).toBeTruthy();
   });
 
+  /*
+   * A dialog you cannot leave is worse than one that never opens.
+   *
+   * Both exits set the same signal, so the handlers read correct, and the
+   * markup renders both controls, so a screenshot reads correct too. What
+   * decides it is whether the click reaches the handler at all: these are
+   * `@pathscale/ui` Buttons, and that component enumerates the props it puts
+   * on its root rather than spreading what it was given. An event handler that
+   * is not on its list is dropped in silence, which is invisible to every
+   * check short of firing the click.
+   *
+   * Asserted per control rather than once. They are separate call sites and a
+   * fix that reconnects one can easily miss the other.
+   */
+  for (const exit of ["Cancel", "close"] as const) {
+    it(`closes the fork dialog from ${exit}`, async () => {
+      const screen = await mountHome();
+
+      fireEvent.click(screen.getAllByRole("button", { name: /^Fork .* into a fresh chat$/ })[0]);
+      flush();
+
+      const dialog = await within(document.body).findByRole("dialog");
+      const modal = within(dialog);
+      // The X carries the same accessible name as Cancel, so pick by position.
+      const button =
+        exit === "Cancel"
+          ? modal.getAllByRole("button", { name: "Cancel" }).at(-1)
+          : modal.getAllByRole("button", { name: "Cancel" })[0];
+
+      fireEvent.click(button as HTMLElement);
+      flush();
+
+      expect(within(document.body).queryByRole("dialog")).toBeNull();
+    });
+  }
+
   it("keeps item forks nested instead of adding top-level project groups", async () => {
     const screen = await mountHome();
     const title = "Phase B — engine observability (API break)";
