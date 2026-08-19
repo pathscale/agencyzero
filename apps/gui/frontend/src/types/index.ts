@@ -719,6 +719,24 @@ export interface ThemeSettings {
   /** How far a glass surface sits off the page: glow, sheen, shadow. 0 to 30. */
   glassDepth?: number;
   /**
+   * How opaque the surface's own film is, as a percentage, 0 to 95.
+   *
+   * Its own axis rather than a derived one. The library computes
+   * `--glass-background-opacity` from refraction, and on a dark surface that
+   * curve lands near 5%, so the only way to get a surface you can see was to
+   * raise refraction and take a shouting border with it.
+   */
+  glassOpacity?: number;
+  /**
+   * How much a glass surface darkens what it sits over, as a percentage,
+   * 0 to 70.
+   *
+   * The opposite pull to the film: the film is the surface's own colour and
+   * lightens a dark desk, the scrim holds text contrast when the backdrop
+   * behind it is busy.
+   */
+  glassScrim?: number;
+  /**
    * How much of the surface colour is mixed into every surface, as a percentage.
    * Ignored while `surface` is empty.
    */

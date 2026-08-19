@@ -6,7 +6,7 @@
       "name": "az-gui-frontend",
       "dependencies": {
         "@iconify/tailwind4": "^1.0.6",
-        "@pathscale/ui": "2.6.5",
+        "@pathscale/ui": "2.6.6",
         "@tauri-apps/api": "^2.1.1",
         "clsx": "^2.1.1",
         "popmotion": "^11.0.5",
@@ -214,7 +214,7 @@
 
     "@oxc-project/types": ["@oxc-project/types@0.139.0", "", {}, "sha512-r9gHphtCs+1M7J0pw6Sn/hh/Wpa/iQrOOkrNAlVLF/gHq+/CJmHIWKKUUhdWjcD6CIa8idarspCsASiXCXvFUw=="],
 
-    "@pathscale/ui": ["@pathscale/ui@2.6.5", "", { "dependencies": { "@solidjs/web": "2.0.0-rc.0", "clsx": "^2.1.1", "tailwind-merge": "^3.6.0" }, "peerDependencies": { "@standard-schema/spec": "^1.0.0", "popmotion": "^11.0.5", "solid-js": ">=2.0.0-rc.0", "solid-layouts": "^0.2.0" }, "optionalPeers": ["@standard-schema/spec", "popmotion"] }, "sha512-jSztQMWEgirkJQRBj+R+dl2jrYu+ArVF0q9lHY/Cgyt/BtyS7wZwmZNTUUh08EUUCN/P2DI0g3NQtcfH800v+Q=="],
+    "@pathscale/ui": ["@pathscale/ui@2.6.6", "", { "dependencies": { "@solidjs/web": "2.0.0-rc.0", "clsx": "^2.1.1", "tailwind-merge": "^3.6.0" }, "peerDependencies": { "@standard-schema/spec": "^1.0.0", "popmotion": "^11.0.5", "solid-js": ">=2.0.0-rc.0", "solid-layouts": "^0.2.0" }, "optionalPeers": ["@standard-schema/spec", "popmotion"] }, "sha512-3JIyKxrIZPCjRSm6UqA6Egyw9RPGQqzA4zBIHxH6DVMalftMBQykW1OhCtTO/1Di9IQ39ABopt81YxkU8MLseA=="],
 
     "@rolldown/binding-android-arm64": ["@rolldown/binding-android-arm64@1.1.5", "", { "os": "android", "cpu": "arm64" }, "sha512-lZg8fqIv2v7FF237bwMgzGZEJvGL79/s5knJ/i6FmsGF4XXlzccZ4jb+TrFIxtSSxFtIpdsgrPZeMk1I9AFcyQ=="],
 
