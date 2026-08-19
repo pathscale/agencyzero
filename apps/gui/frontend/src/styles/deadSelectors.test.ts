@@ -187,3 +187,52 @@ describe("glass fallbacks are app decisions, not engine questions", () => {
     expect(standard).toBeGreaterThan(webkit);
   });
 });
+
+/*
+ * Every backdrop pass the library ships has to be cancelled by name.
+ *
+ * The count is what matters, not the look: a `backdrop-filter` cuts the frame
+ * in two and blocks the UI thread on the GPU while the result is rasterised,
+ * blurred and drawn back, once per boundary per frame. The shipped build was
+ * measured at nine of them - 8269 frames at `effect:9` in `blitz-frame.log`,
+ * with `active_fps` falling 76.2 to 23.2 and `max_interval_ms=93.48` across the
+ * transition - and that is the beachball, reported three times and twice
+ * misattributed to the renderer's poll.
+ *
+ * Two app-side rules could not reach them. `.az-glass .az-glass` matches on a
+ * class no library component carries, and `_shared/material.css` offers its own
+ * opt-out only under `:root:not(.glass)`, which this app never satisfies
+ * because `lib/theme.ts` sets `glass` whenever the opacity axis is finite.
+ *
+ * So the cancellation is enumerated in the stylesheet, and this test fails when
+ * the library ships a blurring component the stylesheet has not been taught
+ * about - which is how the regression arrived, silently, on a version bump.
+ */
+describe("the library's backdrop passes are all cancelled", () => {
+  const CSS_TEXT = code(join(SRC, "styles/theme.css"));
+
+  it("names every blurring selector the installed library ships", () => {
+    const uncancelled: string[] = [];
+
+    for (const path of walk(UI_DIST).filter((file) => file.endsWith(".css"))) {
+      const text = readFileSync(path, "utf8");
+      /*
+       * Only a blur that is actually applied costs a pass. `backdrop-filter:
+       * none` is the library cancelling its own, which needs nothing from here.
+       */
+      for (const rule of text.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+        if (!/[^-\w]backdrop-filter\s*:\s*(?!none)[^;]+/.test(`;${rule[2]}`)) continue;
+        for (const selector of rule[1].split(",")) {
+          const bare = selector.trim().replace(/::[a-z-]+$/, "");
+          if (!bare.startsWith(".")) continue;
+          // The leading class is what the app has to name to win the cascade.
+          const name = bare.slice(1).split(/[\s>+~:.[]/)[0];
+          if (!name || CSS_TEXT.includes(name)) continue;
+          uncancelled.push(`${relative(path)} → ${selector.trim()}`);
+        }
+      }
+    }
+
+    expect(uncancelled).toEqual([]);
+  });
+});

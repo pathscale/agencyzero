@@ -895,6 +895,69 @@
   }
 
   /*
+   * The library's own backdrop passes, which this app never asked for.
+   *
+   * `_shared/material.css` is careful: its glass flip is a tint and buys no
+   * filter, precisely because a filter per component is a beachball, and it
+   * says so. But eight components carry an unconditional `backdrop-filter` of
+   * their own - `Dialog`, `Drawer`, `Card`, `Dock`, `NoiseBackground`,
+   * `GlowCard`, `ImmersiveLanding` - and those are outside the flip. The
+   * library's escape hatch for them is `:root:not(.glass)`, which this app can
+   * never satisfy: `lib/theme.ts` sets `glass` whenever the opacity axis is
+   * finite, which is whenever glass is on at all. So the opt-out is switched
+   * off in exactly the configuration that needs it.
+   *
+   * `.az-glass .az-glass` cannot reach them either. It matches on the class,
+   * and a library component carries no `az-glass`, so a `Dialog` inside a
+   * glass panel was a second full-frame pass that nothing cancelled.
+   *
+   * Measured on the shipped build rather than reasoned about: the frame log
+   * spent 8269 frames at `effect:9` - nine backdrop boundaries, nine blocking
+   * GPU waits on the UI thread per frame - against `effect:3` before the
+   * library controls mounted, and `active_fps` fell 76.2 to 23.2 with
+   * `max_interval_ms=93.48` across the same transition. Nine passes is the
+   * beachball; the poll this used to be blamed on is downstream of it.
+   *
+   * The window itself is translucent, so the blur behind these surfaces comes
+   * from the compositor. Dropping the per-element filter costs no visible
+   * blur, which is the same argument `material.css` makes for the flip.
+   *
+   * An app-level rule rather than a library change, because the library is
+   * right to offer real glass to a consumer that asks for it by name. This app
+   * asks nowhere: there is no `material="glass"` in the tree.
+   */
+  /*
+   * Named by the modifier that carries the filter, not by the component.
+   * `.dialog__backdrop--blur` is the overlay behind a dialog, not the panel;
+   * `.card--material-solid` already declares `none` for itself, so only the
+   * explicitly-glassed card needs saying. Verified against the shipped CSS in
+   * `node_modules/@pathscale/ui/dist/components/`, because these are the
+   * library's internal class names and a guess at them is dead CSS that looks
+   * like a fix.
+   *
+   * The list is generated rather than eyeballed: `deadSelectors.test.ts` reads
+   * every applied `backdrop-filter` out of the installed `dist` and fails on
+   * any this rule does not name. Writing it by hand missed `.dock__bg` and
+   * `.dock__tooltip`, which is the failure mode the test exists for.
+   */
+  .dialog__backdrop--blur,
+  .drawer__backdrop--blur,
+  .card--material-glass,
+  .dock,
+  .dock__bg,
+  .dock__tooltip,
+  .noise-background,
+  .noise-background--backdrop-blur::after,
+  .glow-card,
+  .immersive-landing,
+  .immersive-landing-navigation__shell,
+  .immersive-landing-cookie,
+  .immersive-landing-cookie__modal-backdrop {
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+
+  /*
    * A stack of glass surfaces costs one full-frame pass each.
    *
    * The renderer can only let two backdrop-filtered elements share a snapshot
