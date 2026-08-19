@@ -178,7 +178,7 @@ export function HomeTab(): JSX.Element {
         <Button
           type="button"
           onClick={() => actions.openDraft()}
-          class="flex items-center justify-center gap-2.5 rounded-panel bg-primary py-3.5 font-semibold text-[13.5px] text-primary-content shadow-[0_6px_20px_rgb(from_var(--color-primary)_r_g_b/.12)] transition-colors hover:bg-az-primary-hover"
+          class="flex items-center justify-center gap-2.5 rounded-panel bg-primary-glass py-3.5 font-semibold text-[13.5px] text-primary-content shadow-[0_6px_20px_rgb(from_var(--color-primary)_r_g_b/.12)] transition-colors"
         >
           <Icon name="plus" class="text-[17px]" />
           {tx("New Project")}
