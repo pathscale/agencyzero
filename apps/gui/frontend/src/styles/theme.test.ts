@@ -344,11 +344,27 @@ describe("glass survives a renderer that under-reports itself", () => {
   it("keeps the translucent surface as the rule that normally wins", () => {
     const glass = CSS.indexOf(".az-glass {");
     expect(glass).toBeGreaterThanOrEqual(0);
-    // Mixed toward `transparent`, which is what makes it glass rather than a
-    // second opaque colour: `color-mix(… var(--color-base-100))` cannot ever
-    // produce transparency, however the opacity token is tuned.
+    /*
+     * The surface has to be able to produce transparency at all, which is what
+     * makes it glass rather than a second opaque colour.
+     *
+     * Asserted on the alpha rather than on the spelling. This used to require
+     * `color-mix(… transparent …)` literally, and that turned out to be the
+     * form that *loses* the alpha: Lightning CSS emits a `color-mix` as
+     * progressive enhancement and synthesised an opaque fallback, so every
+     * panel shipped solid while this test passed. `rgb(from … / alpha)` carries
+     * the same alpha in one declaration a minifier cannot split.
+     */
     const rule = CSS.slice(glass, CSS.indexOf("}", CSS.indexOf("backdrop-filter", glass)));
-    expect(rule).toContain("transparent calc(100% - var(--glass-background-opacity");
+    // Whitespace-agnostic: the declaration wraps across lines.
+    const background = rule.slice(rule.indexOf("background-color:"));
+    const flat = background.replace(/\s+/g, " ");
+    expect(flat).toContain("var(--glass-background-opacity");
+    expect(
+      /rgb\( from [^)]*\) r g b \/ var\(--glass-background-opacity/.test(flat) ||
+        flat.includes("transparent calc(100% - var(--glass-background-opacity"),
+      `the glass surface cannot produce transparency: ${flat.slice(0, 160)}`,
+    ).toBe(true);
     expect(rule).toContain("backdrop-filter: blur(var(--glass-blur");
   });
 
