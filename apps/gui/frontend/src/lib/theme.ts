@@ -464,19 +464,26 @@ export function writePanelAxes(tuning: GlassTuning, root?: HTMLElement): void {
 /**
  * Whether the native glass view should be attached at all.
  *
- * Both of its conditions now hold. The window carries `transparent: true` with
- * no `backgroundColor`, and `macOSPrivateApi` is on, without which Tauri
- * accepts that flag and ignores it. The composite path is proven rather than
- * assumed: with those set, the desktop is visible through the titlebar and the
- * window edge.
+ * False, and no longer for the reason first recorded here.
  *
- * That matters for blur specifically. `backdrop-filter` can only read pixels
- * the renderer has drawn, and behind a transparent window there are none: the
- * desktop is composited by macOS, outside anything CSS can sample. The native
- * glass view is what blurs it, so a transparent window without this reads as
- * sharp desktop behind a tinted pane.
+ * The original note said this was waiting on `transparent: true` and a proven
+ * composite path. Both hold now, so it was switched on, and the result was the
+ * whole app blurred: text, sliders, colour swatches, every pixel the app draws.
+ *
+ * `window_vibrancy`'s `apply_liquid_glass` does not place a blurred layer
+ * behind the window. It calls `content.removeFromSuperview()` and then
+ * `target_view.addSubview(content)` (`macos/liquid_glass.rs:197`), moving the
+ * renderer's content view *inside* the `NSGlassEffectView`, and that view
+ * blurs its subviews. So it does not give the window a backdrop, it frosts the
+ * application.
+ *
+ * A real window backdrop needs the glass view as a sibling *below* the content
+ * rather than its parent. Until that exists upstream, or is written here
+ * against AppKit directly, this stays off: the blur that reaches the screen is
+ * the `backdrop-filter` on panels, which reads pixels the renderer drew and
+ * leaves text alone.
  */
-const WINDOW_GLASS_ENABLED = true;
+const WINDOW_GLASS_ENABLED = false;
 
 /**
  * The window chrome the native frame should wear, derived from the same values
