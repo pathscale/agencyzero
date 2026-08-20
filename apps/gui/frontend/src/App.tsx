@@ -157,13 +157,27 @@ export function Workspace(): JSX.Element {
               <HomeTab />
             </div>
 
-            <div
-              data-retained-tab="settings"
-              aria-hidden={activeTab().kind !== "settings" ? "true" : "false"}
-              class={activeTab().kind === "settings" ? "flex min-h-0 min-w-0 flex-1" : "hidden"}
-            >
-              <SettingsTab />
-            </div>
+            {/*
+              Settings mounts on demand, unlike Home and the project panes.
+
+              It was retained the same way they are, rendered always and hidden
+              with a class, and it is the largest subtree in the application:
+              measured on the running app at 835x9308px, hidden, still holding
+              layout. `blitz-bench ghost` reported 1,942 hidden nodes against a
+              healthy 58, and this was most of them. Every tab switch then
+              walked it in `propagate_damage_flags`, which is where the lag came
+              from - `commit 0ms, frame 33-168ms`, a state change that lands
+              instantly followed by up to twenty dropped frames at 120Hz.
+
+              Retention earns its cost for tabs someone flips between. Settings
+              is a destination, so its rebuild is paid once on the way in rather
+              than on every switch between two projects.
+            */}
+            <Show when={activeTab().kind === "settings"}>
+              <div data-retained-tab="settings" class="flex min-h-0 min-w-0 flex-1">
+                <SettingsTab />
+              </div>
+            </Show>
 
             <For each={retainedProjects()}>
               {(projectId) => {

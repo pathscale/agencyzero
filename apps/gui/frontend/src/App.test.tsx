@@ -67,13 +67,22 @@ describe("startup", () => {
     // that eviction is the whole point of the limit.
     expect(retained).toEqual(["worktable", "cafe", "quux"].slice(-RETAINED_PROJECT_LIMIT));
     expect(screen.container.querySelector('[data-retained-tab="home"]')).not.toBeNull();
-    const settings = screen.container.querySelector<HTMLElement>('[data-retained-tab="settings"]');
-    expect(settings).not.toBeNull();
-    expect(settings?.getAttribute("aria-hidden")).toBe("true");
+    /*
+     * Settings is absent until it is opened, unlike Home and the project panes.
+     *
+     * It used to be retained the same way they are, and it is the largest
+     * subtree in the application: 835x9308px on the running app, hidden and
+     * still holding layout. `blitz-bench ghost` reported 1,942 hidden nodes
+     * against a healthy 58, most of them this, and every tab switch walked them
+     * in `propagate_damage_flags` - `commit 0ms, frame 33-168ms`.
+     */
+    expect(screen.container.querySelector('[data-retained-tab="settings"]')).toBeNull();
 
     workspace.actions.openSettings();
     await waitFor(() => expect(workspace.state.activeKey).toBe("settings"));
-    expect(settings?.getAttribute("aria-hidden")).toBe("false");
+    await waitFor(() =>
+      expect(screen.container.querySelector('[data-retained-tab="settings"]')).not.toBeNull(),
+    );
   });
 
   it("shows a branded workspace splash while hydration is in progress", () => {
