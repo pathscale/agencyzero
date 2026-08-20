@@ -770,12 +770,23 @@
     );
   }
 
+  /*
+   * A panel body *is* the base colour, opaque.
+   *
+   * This mixed toward `--color-az-badge`, the chip colour and the topmost
+   * offset, so the largest panel on the page - the settings body - painted a
+   * raised-chip tone and read as having missed the theme. Measured on the
+   * running app it came back `#1e2622b8` against a `#0d170a` desk: a different
+   * colour, and translucent on top of that.
+   *
+   * Opaque matters as much as the hue. A panel carrying alpha is a *mix* of
+   * itself and whatever it sits on, so it can never equal the colour the wheel
+   * promised. `.az-glass` still produces transparency for surfaces that
+   * genuinely float; this rule follows it in the stylesheet and wins for
+   * anything that is a body rather than a floating sheet.
+   */
   .az-panel {
-    background-color: color-mix(
-      in oklab,
-      var(--color-az-badge) var(--az-glass-lift, 0%),
-      var(--color-base-100)
-    );
+    background-color: var(--color-base-100);
   }
 
   .rounded-panel {
@@ -860,7 +871,7 @@
      * nothing for a minifier to split.
      */
     background-color: rgb(
-      from var(--az-glass-film, var(--color-az-badge)) r g b /
+      from var(--az-glass-film, var(--az-base)) r g b /
       var(--glass-background-opacity, 55%)
     );
     outline-color: rgb(from var(--color-primary) r g b / var(--glass-border-opacity, 12%));
