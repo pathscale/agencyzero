@@ -78,6 +78,11 @@ jobs:
         run: bun install --frozen-lockfile
         working-directory: apps/gui/frontend
 
+      # See the same step in release.yml: the crates.io build of the CLI the
+      # npm package shims, so the release path never needs Node.
+      - name: Install the Tauri CLI
+        run: cargo install tauri-cli --version "^2.11" --locked
+
       - name: Build the AgencyProxy sidecar
         run: scripts/stage-agency-proxy-sidecar.sh
 
@@ -99,7 +104,7 @@ jobs:
           # build from 61MB to 92MB, and this artifact ships through the updater.
           CARGO_PROFILE_RELEASE_STRIP: "false"
           CARGO_PROFILE_RELEASE_DEBUG: line-tables-only
-        run: bunx --yes @tauri-apps/cli@^2.11 build --features experimental,blitz-inspector --config tauri.experimental.conf.json
+        run: cargo tauri build --features experimental,blitz-inspector --config tauri.experimental.conf.json
         working-directory: apps/gui
 
       - name: Normalize updater artifact name
