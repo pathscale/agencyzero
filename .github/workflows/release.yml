@@ -128,6 +128,12 @@ jobs:
         run: bun install --frozen-lockfile
         working-directory: apps/gui/frontend
 
+      # The Rust build of the same CLI that `@tauri-apps/cli` wraps. The npm
+      # package is a thin Node shim around this binary, so taking it from
+      # crates.io is what keeps Node out of the release path entirely.
+      - name: Install the Tauri CLI
+        run: cargo install tauri-cli --version "^2.11" --locked
+
       - name: Build the AgencyProxy sidecar
         run: scripts/stage-agency-proxy-sidecar.sh
 
@@ -157,7 +163,7 @@ jobs:
           # of this week's defects were found only once one did.
           CARGO_PROFILE_RELEASE_STRIP: "false"
           CARGO_PROFILE_RELEASE_DEBUG: line-tables-only
-        run: bunx --yes @tauri-apps/cli@^2.11 build --features blitz-inspector
+        run: cargo tauri build --features blitz-inspector
         working-directory: apps/gui
 
       # Two failures worth catching here. The signature one was live in this
