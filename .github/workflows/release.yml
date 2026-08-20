@@ -71,11 +71,19 @@ jobs:
       - name: Compare the committed version against the published one
         id: decide
         run: |
-          VERSION=$(python3 -c "import tomllib;print(tomllib.load(open('Cargo.toml','rb'))['workspace']['package']['version'])")
+          # `cargo pkgid` prints `<source>#<name>@<version>`; the version is
+          # whatever follows the last `@`. Asking cargo beats pattern-matching
+          # Cargo.toml, and needs no JSON parser on the runner.
+          VERSION=$(cargo pkgid -p az-gui)
+          VERSION=${VERSION##*@}
+          test -n "$VERSION" || { echo "::error::could not read the workspace version"; exit 1; }
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
+          # latest.json is written by this workflow (see "Build latest.json"),
+          # so its shape is fixed and reading the version line back is not
+          # general JSON parsing. Empty means "not published yet", handled below.
           LIVE=$(curl -fsS --max-time 30 "$CDN_BASE/latest.json" 2>/dev/null \
-            | python3 -c 'import json,sys; print(json.load(sys.stdin)["version"])' 2>/dev/null || echo "")
+            | sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' || echo "")
 
           if [ "${{ inputs.force }}" = "true" ]; then
             echo "publish=true" >> "$GITHUB_OUTPUT"
@@ -206,32 +214,33 @@ jobs:
           TARBALL="$BUNDLE_DIR/AgencyZero.app.tar.gz"
           test -f "$TARBALL" || { echo "::error::missing $TARBALL"; exit 1; }
           test -f "$TARBALL.sig" || { echo "::error::missing $TARBALL.sig (was TAURI_SIGNING_PRIVATE_KEY set?)"; exit 1; }
-          python3 - "$VERSION" "$TARBALL.sig" "$CDN_BASE" <<'PY'
-          import json, sys, datetime
-          version, sig_path, base = sys.argv[1], sys.argv[2], sys.argv[3]
-          with open(sig_path) as f:
-              signature = f.read().strip()
-          manifest = {
-              "version": version,
-              "pub_date": datetime.datetime.now(datetime.timezone.utc)
-                  .strftime("%Y-%m-%dT%H:%M:%SZ"),
-              "platforms": {
-                  "darwin-aarch64": {
-                      "signature": signature,
-                      # The query string is a cache-buster, and it works because
-                      # this pull zone keys its cache on the full URL including
-                      # the query. Each release advertises a URL no edge has
-                      # ever cached, so the updater download cannot be served a
-                      # stale or spliced object even if every purge fails. Brew
-                      # still fetches the bare URL and relies on the purge.
-                      "url": f"{base}/AgencyZero.app.tar.gz?v={version}",
-                  }
-              },
+          # A minisign signature is base64 and the version is a semver string,
+          # so neither can contain a character JSON would need escaped, and
+          # writing this manifest is string interpolation rather than
+          # serialisation. Guard that assumption instead of taking on a parser.
+          SIGNATURE=$(cat "$TARBALL.sig")
+          case $SIGNATURE in *[!A-Za-z0-9+/=]*)
+            echo "::error::signature is not plain base64; refusing to interpolate"; exit 1;; esac
+          case $VERSION in *[!0-9A-Za-z.+-]*)
+            echo "::error::version has unexpected characters; refusing to interpolate"; exit 1;; esac
+
+          # The url query string is a cache-buster, and it works because this
+          # pull zone keys its cache on the full URL including the query. Each
+          # release advertises a URL no edge has ever cached, so the updater
+          # download cannot be served a stale or spliced object even if every
+          # purge fails. Brew still fetches the bare URL and relies on the purge.
+          cat > latest.json <<JSON
+          {
+            "version": "$VERSION",
+            "pub_date": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+            "platforms": {
+              "darwin-aarch64": {
+                "signature": "$SIGNATURE",
+                "url": "$CDN_BASE/AgencyZero.app.tar.gz?v=$VERSION"
+              }
+            }
           }
-          with open("latest.json", "w") as f:
-              json.dump(manifest, f, indent=2)
-              f.write("\n")
-          PY
+          JSON
           cat latest.json
 
       # Ordering matters and is the whole reason these are separate steps. The
@@ -334,7 +343,8 @@ jobs:
           # nobody sees the release. It is also what the next run compares
           # against, so a stale copy would republish this version forever.
           for attempt in 1 2 3 4 5 6; do
-            LIVE=$(curl -sS -L "$CDN_BASE/latest.json" | python3 -c 'import json,sys; print(json.load(sys.stdin)["version"])' 2>/dev/null || echo "")
+            LIVE=$(curl -sS -L "$CDN_BASE/latest.json" \
+              | sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' || echo "")
             if [ "$LIVE" = "$VERSION" ]; then
               echo "edge serves version $LIVE"
               exit 0

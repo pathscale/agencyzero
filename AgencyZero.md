@@ -20,3 +20,10 @@
 10. Persisted data goes in a WorkTable table. Not a JSON file beside the store,
    not a directory of your own. A column or table change bumps
    `SCHEMA_FINGERPRINT` in the same commit.
+11. No Python. Not a script, not `python3 -c`, not a heredoc. Reaching for it is
+   the tell that a step is being solved by parsing when the tool that owns the
+   answer could just be asked: `cargo pkgid` for a version, `gh --jq` for the
+   GitHub API, shell for the rest. Do not swap it for another parser either, and
+   do not assume `jq` is present. A fixed-shape field is one `sed -nE` line;
+   anything that needs real parsing is Rust, in a crate, where it can be tested.
+   If a task seems to need Python, the approach is wrong.
