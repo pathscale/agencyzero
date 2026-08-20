@@ -361,13 +361,20 @@ export function applyTheme(
   const surface = surfaceChosen ? theme.surface.trim() : DEFAULT_ACCENT;
   const softness = Math.min(Math.max(theme.softness || 0, 0), MAX_SOFTNESS);
   /*
-   * No accent means the designed palette, and the designed palette is not a
-   * yellow-washed one — so the wash applies only once something has actually
-   * been picked. Reset therefore returns the workspace to grey, rather than to
-   * grey plus whatever wash was last set.
+   * The wash applies whether or not a colour has been picked.
+   *
+   * This used to force it to 0 unless `theme.surface` was set, on the reasoning
+   * that no pick means the designed palette and the designed palette is not
+   * washed. That held while every surface was a mix into a grey anchor. It does
+   * not hold now: base *is* pick + strength + softness, so zeroing the wash
+   * makes the strength control inert - clicking a stop repaints nothing until a
+   * colour happens to be chosen, which is exactly how it presented.
+   *
+   * `surface` already falls back to `DEFAULT_ACCENT` on the line above, so the
+   * wash has something real to apply to either way.
    */
-  const configuredWash = normalizeWash(theme.wash ?? DEFAULT_WASH);
-  const wash = surfaceChosen ? configuredWash : 0;
+  const wash = normalizeWash(theme.wash ?? DEFAULT_WASH);
+  const configuredWash = wash;
   const accent = isAccent(theme.accent)
     ? theme.accent.trim()
     : defaultAccent(configuredWash, softness);
@@ -436,10 +443,28 @@ export function applyTheme(
    * anything from near-black to near-white, so a label sitting on it has to be
    * chosen against it rather than assumed.
    */
-  const accentTwo = isAccent(theme.accentTwo ?? "") ? theme.accentTwo!.trim() : accent;
-  repaintIconStrokes(root, accentTwo);
-  setToken(root, "--color-accent-2", accentTwo);
-  setToken(root, "--color-accent-2-content", readableInk(accentTwo));
+  const accentTwoChosen = isAccent(theme.accentTwo ?? "");
+  /*
+   * The artwork accent never derives from the control accent.
+   *
+   * It used to fall back to `accent`, and `svg:not(.az-icon-inherit)` colours
+   * every icon from `--color-accent-2`, so picking a control colour repainted
+   * every icon in the window including the gear in the title bar. That is the
+   * coupling the two accents exist to prevent, so there is no fallback: unset
+   * means the token is cleared and icons keep the colour the stylesheet gives
+   * them.
+   */
+  const accentTwo = accentTwoChosen ? theme.accentTwo!.trim() : "";
+  if (accentTwoChosen) {
+    repaintIconStrokes(root, accentTwo);
+    setToken(root, "--color-accent-2", accentTwo);
+    setToken(root, "--color-accent-2-content", readableInk(accentTwo));
+  } else {
+    // Cleared, not set to a substitute. The stylesheet's own fallback then
+    // decides what an icon looks like without a second accent.
+    root.style.removeProperty("--color-accent-2");
+    root.style.removeProperty("--color-accent-2-content");
+  }
 
   setToken(root, "--az-lift", `${softness}%`);
   /*
@@ -792,7 +817,8 @@ export function writeAccentPreview(
   setToken(target as HTMLElement, "--color-primary-content", readableInk(picked));
   setToken(target as HTMLElement, "--color-accent-content", readableInk(picked));
 
-  const two = isAccent(options.accentTwo ?? "") ? options.accentTwo!.trim() : picked;
+  const twoChosen = isAccent(options.accentTwo ?? "");
+  const two = twoChosen ? options.accentTwo!.trim() : picked;
   setToken(target as HTMLElement, "--color-accent-2", two);
   setToken(target as HTMLElement, "--color-accent-2-content", readableInk(two));
   /*
@@ -811,7 +837,10 @@ export function writeAccentPreview(
    * was still being built. It honours the argument now, so this pays only for
    * the subtree it was handed.
    */
-  repaintIconStrokes(target as HTMLElement, two);
+  // Only when a second accent was actually chosen. The fallback to the first
+  // accent above is for the token; feeding it to the walk let accent 1 restroke
+  // every icon, which is what "separate from the control accent" rules out.
+  if (twoChosen) repaintIconStrokes(target as HTMLElement, two);
 }
 
 /**

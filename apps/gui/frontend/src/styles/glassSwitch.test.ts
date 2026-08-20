@@ -137,14 +137,17 @@ describe("the second accent", () => {
    * Empty follows the first, so a record written before this axis existed
    * renders exactly as it did.
    */
-  it("follows the first accent when unset", () => {
+  it("is cleared when unset, rather than mirroring the first accent", () => {
     const element = root();
     applyTheme(themeWith({ accent: "#3366cc" }), element);
 
-    // `--color-accent` now carries the *lifted* accent, because Tailwind's
-    // text utilities read it and no app rule can outrank them; the picked
-    // colour lives on `--color-primary-fill`. Accent 2 follows the picked one.
-    expect(read(element, "--color-accent-2")).toBe(read(element, "--color-primary-fill"));
+    /*
+     * Cleared, so the stylesheet's own artwork fallback decides. Mirroring the
+     * control accent here is what let picking a control colour repaint every
+     * icon in the window, since `svg:not(.az-icon-inherit)` colours from this
+     * token.
+     */
+    expect(read(element, "--color-accent-2")).toBe("");
   });
 
   it("takes its own colour once chosen", () => {
@@ -169,10 +172,9 @@ describe("the second accent", () => {
     const element = root();
     applyTheme(themeWith({ accent: "#3366cc", accentTwo: "not a colour" }), element);
 
-    // `--color-accent` now carries the *lifted* accent, because Tailwind's
-    // text utilities read it and no app rule can outrank them; the picked
-    // colour lives on `--color-primary-fill`. Accent 2 follows the picked one.
-    expect(read(element, "--color-accent-2")).toBe(read(element, "--color-primary-fill"));
+    // A value that is not a colour is treated as unset, so the token is cleared
+    // rather than falling back to the control accent.
+    expect(read(element, "--color-accent-2")).toBe("");
   });
 });
 
@@ -282,14 +284,16 @@ describe("an icon that mounts after the pick", () => {
     expect(iconStrokeColor()).toBe("#cc3366");
   });
 
-  it("follows the first accent when no second one is picked", () => {
+  it("does not stroke with the first accent when no second one is picked", () => {
     const element = root();
     applyTheme(themeWith({ accent: "#3366cc" }), element);
 
-    // Mirrors the token this call wrote. Read from the same element rather than
-    // compared against a literal, so the fallback can change without this
-    // becoming a second place that has to be kept in step.
-    expect(iconStrokeColor()).toBe(read(element, "--color-accent-2"));
+    /*
+     * No second accent means no restroke at all, so an icon keeps whatever the
+     * stylesheet gives it. Stroking with the control accent here is what made
+     * the gear in the title bar flash accent 1 on a fresh load.
+     */
+    expect(iconStrokeColor()).not.toBe("#3366cc");
   });
 });
 
