@@ -325,5 +325,5 @@ curl -s "https://api.anthropic.com/v1/models?limit=100" \
   -H "anthropic-version: 2023-06-01"
 
 # Corroborating local caches (private Claude Code state, may change without notice)
-python3 -c "import json;print(json.load(open('$HOME/.claude.json'))['additionalModelOptionsCache'])"
+sed -nE 's/.*"additionalModelOptionsCache"[[:space:]]*:[[:space:]]*"([^"]*)".*/\1/p' "$HOME/.claude.json"
 ```

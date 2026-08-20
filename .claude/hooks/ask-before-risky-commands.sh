@@ -25,12 +25,14 @@ set -u
 RISKY_WORDS="aws|gcloud|az|kubectl|helm|terraform|terragrunt|flyctl|fly"
 # -----------------------------------------------------------------------------------
 
-# Pull the command out of the hook's stdin JSON (jq if available, else python3).
-if command -v jq >/dev/null 2>&1; then
-  cmd="$(jq -r '.tool_input.command // ""' 2>/dev/null)"
-else
-  cmd="$(python3 -c 'import sys, json; print(json.load(sys.stdin).get("tool_input", {}).get("command", ""))' 2>/dev/null)"
-fi
+# Pull the command out of the hook's stdin JSON. Every check below is a
+# substring match against a fixed list of ASCII tool names, so this needs the
+# command text and not a parsed document: sed reads it, and the hook keeps
+# guarding on a machine with no JSON parser installed. Backslash escapes are
+# left as-is deliberately -- they can only ever cost a match, never invent one.
+# -E because BSD sed has no alternation in a basic regex: without it this
+# matches nothing and the hook silently stops guarding.
+cmd="$(sed -nE 's/.*"command"[[:space:]]*:[[:space:]]*"(([^"\\]|\\.)*)".*/\1/p')"
 
 # Couldn't read the command → stay neutral, let normal permission rules decide.
 [ -z "$cmd" ] && exit 0
