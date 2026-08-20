@@ -11,6 +11,7 @@ import {
   normalizeWash,
   surfaceColors,
   WASH_STOPS,
+  writeAccentPreview,
 } from "~/lib/theme";
 import { t } from "~/stores/i18n";
 import { prefs } from "~/stores/prefs";
@@ -150,7 +151,19 @@ export function ThemePicker(props: {
           accent={props.theme.accent}
           wash={props.theme.wash}
           softness={props.theme.softness}
-          onPick={props.onAccent}
+          /*
+           * Paint first, persist after.
+           *
+           * `onPick` reaches the tokens only once a settings round trip has
+           * returned, so picking quickly queues one write per pick behind the
+           * event loop. Measured on the stall frames: `max_interval_ms` of 70
+           * to 92 while `paint_avg_ms` and `renderer_avg_ms` were both 0.00,
+           * which is the loop waiting rather than the renderer working.
+           */
+          onPick={(value) => {
+            writeAccentPreview(value, { accentTwo: props.theme.accentTwo });
+            props.onAccent(value);
+          }}
         />
 
         {/*
@@ -172,7 +185,11 @@ export function ThemePicker(props: {
           accent={props.theme.accentTwo ?? ""}
           wash={props.theme.wash}
           softness={props.theme.softness}
-          onPick={props.onAccentTwo}
+          // Same trade as the row above, for the accent that reaches the icons.
+          onPick={(value) => {
+            writeAccentPreview(props.theme.accent, { accentTwo: value });
+            props.onAccentTwo(value);
+          }}
         />
       </div>
     </div>
