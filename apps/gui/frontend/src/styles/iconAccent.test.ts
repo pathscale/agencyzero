@@ -92,14 +92,21 @@ describe("changing accent 2 repaints the icons already on screen", () => {
     expect(icon.getAttribute("stroke")).toBe("#22aa44");
   });
 
-  it("follows the first accent when the second is cleared", () => {
+  it("does not take the first accent when the second is cleared", () => {
     const element = root();
     const icon = mountIcon(element);
 
     writeAccentPreview("#3366cc", { accentTwo: "#cc3366", root: element });
     writeAccentPreview("#3366cc", { root: element });
 
-    expect(icon.getAttribute("stroke")).toBe("#3366cc");
+    /*
+     * Artwork is a separate axis from the control accent. `text-primary` marks
+     * every active tab, selected row and focused control, and icons stroke with
+     * `currentColor`, so letting the control accent reach a stroke repainted
+     * every icon in the window: the gear in the title bar turned accent 1
+     * simply because Settings was the open tab.
+     */
+    expect(icon.getAttribute("stroke")).not.toBe("#3366cc");
   });
 
   it("leaves an icon that follows its label alone", () => {

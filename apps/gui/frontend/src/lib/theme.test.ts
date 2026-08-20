@@ -147,9 +147,16 @@ describe("applyTheme", () => {
 
   /* The designed palette is grey, not grey washed with its own yellow, so an
    * empty accent means no wash whatever the stored strength says. */
-  it("ignores the wash while no colour has been picked", () => {
+  it("applies the wash even before a colour has been picked", () => {
     applyTheme({ surface: "", accent: "#3355ff", softness: 0, wash: 20, textBrightness: 0 }, root);
-    expect(root.style.getPropertyValue("--az-wash")).toBe("0%");
+    /*
+     * The wash used to be forced to 0 until a surface was chosen, which held
+     * while every surface was a mix into a grey anchor. Base is now the pick
+     * plus both axes, so zeroing it made the strength control inert: clicking a
+     * stop repainted nothing. `surface` falls back to the designed accent, so
+     * there is always something for the wash to apply to.
+     */
+    expect(root.style.getPropertyValue("--az-wash")).toBe("20%");
   });
 
   it("clamps the wash to what the surface ladder survives", () => {

@@ -178,7 +178,15 @@ export function HomeTab(): JSX.Element {
         <Button
           type="button"
           onClick={() => actions.openDraft()}
-          class="flex items-center justify-center gap-2.5 rounded-panel bg-primary-glass py-3.5 font-semibold text-[13.5px] text-primary-content shadow-[0_6px_20px_rgb(from_var(--color-primary)_r_g_b/.12)] transition-colors"
+          /*
+            Outlined, not a filled slab.
+            `bg-primary-glass` put the accent at full strength across the widest
+            control on the page, so it read as a warning banner rather than as
+            the primary action and fought every surface around it. The accent
+            now sits on the edge and the label, where it marks the action
+            without owning the area.
+          */
+          class="flex items-center justify-center gap-2.5 rounded-panel border border-primary/45 bg-primary/8 py-3.5 font-semibold text-[13.5px] text-primary transition-colors hover:border-primary/70 hover:bg-primary/14"
         >
           <Icon name="plus" class="text-[17px]" />
           {tx("New Project")}

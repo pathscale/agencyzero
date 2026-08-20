@@ -53,7 +53,22 @@ export function Icon(props: IconProps): JSX.Element {
         // string: only a string spelling of the opt-out can be read here.
         typeof props.class === "string" && props.class.includes("az-icon-inherit")
           ? "currentColor"
-          : (iconStrokeColor() ?? "currentColor")
+          : /*
+             * The artwork token, not `currentColor`, when no accent has been
+             * resolved yet.
+             *
+             * `currentColor` here is whatever the icon sits inside, and
+             * `text-primary` marks every active tab and selected row, so on a
+             * fresh load with no second accent picked the icon was *built* in
+             * accent 1 and then restyled by CSS a moment later: the flash. It
+             * stopped once a second accent existed only because there was then
+             * a real colour to bake in.
+             *
+             * usvg resolves this at construction and cannot read custom
+             * properties, so the fallback has to be a var() the DOM can compute
+             * before serialising, which `--color-az-artwork` is.
+             */
+            (iconStrokeColor() ?? "var(--color-az-artwork)")
       }
       stroke-width="2"
       stroke-linecap="round"
