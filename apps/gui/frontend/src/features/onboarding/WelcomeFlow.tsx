@@ -65,6 +65,19 @@ export function WelcomeFlow(): JSX.Element {
   };
 
   createEffect(
+    /*
+     * What to watch. The arguments were the wrong way round: the reads *and*
+     * the writes were in the compute, with `() => {}` as the effect.
+     *
+     * Solid 2 subscribes to the compute alone and forbids writing reactive
+     * state from inside it, so this threw `REACTIVE_WRITE_IN_OWNED_SCOPE` on
+     * every run. That error is not contained to the onboarding flow: it
+     * escapes as `REACTIVITY_HALTED`, after which the whole app stops
+     * processing updates. The same inversion is described at
+     * `stores/workspace.tsx:718`, where an empty compute meant the effect ran
+     * once and never again.
+     */
+    () => [visible(), isReplay()] as const,
     () => {
       if (!visible()) {
         setStep(0);
@@ -75,10 +88,11 @@ export function WelcomeFlow(): JSX.Element {
         setSecurityConfirmed(true);
       }
     },
-    () => {},
   );
 
   createEffect(
+    // Same inversion as above: `setImportsLoaded` ran inside the compute.
+    () => [visible(), step(), importsLoaded()] as const,
     () => {
       if (!visible() || step() !== 3 || importsLoaded()) return;
       setImportsLoaded(true);
@@ -88,7 +102,6 @@ export function WelcomeFlow(): JSX.Element {
         .then(setSources)
         .catch((cause) => setNote(describeError(cause)));
     },
-    () => {},
   );
 
   const chooseAgent = async (agent: Agent): Promise<void> => {
