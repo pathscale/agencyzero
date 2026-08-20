@@ -681,6 +681,46 @@ export function panelAxes(tuning: GlassTuning): Record<GlassAxisName, number> {
 }
 
 /**
+ * Paint a picked accent immediately, ahead of the store write.
+ *
+ * The same trade `writePanelAxes` makes for a dragging slider, for the colour
+ * wheel and the accent rows. `onPick` goes to `saveSettings`, so the colour only
+ * appears once a settings round trip has returned, and picking quickly queues
+ * one round trip per pick behind the event loop.
+ *
+ * Measured on the stall frames: `max_interval_ms` reached 70 to 92 while
+ * `paint_avg_ms` and `renderer_avg_ms` were both **0.00** for the same frames.
+ * The renderer did no work at all, so the delay was never drawing: it was the
+ * event loop waiting on the write. Reducing renderer work cannot reach that,
+ * which is why an earlier attempt at this through the icon walk did not move it.
+ *
+ * Writing the tokens costs one style invalidation, so the pick lands on the next
+ * frame and the persist settles behind it. `applyTheme` writes exactly these
+ * same properties when the round trip returns, so the two agree by construction
+ * rather than by being kept in step.
+ *
+ * Which accent is being picked matters: the artwork accent has to follow the
+ * first one when it is not set independently, which is the rule `applyTheme`
+ * applies, so it is repeated here rather than inferred.
+ */
+export function writeAccentPreview(
+  accent: string,
+  options: { accentTwo?: string; root?: HTMLElement } = {},
+): void {
+  const target = options.root ?? document.documentElement;
+  if (!isAccent(accent)) return;
+  const picked = accent.trim();
+  target.style.setProperty("--color-primary-fill", picked);
+  target.style.setProperty("--color-primary-content", readableInk(picked));
+  target.style.setProperty("--color-accent-content", readableInk(picked));
+
+  const two = isAccent(options.accentTwo ?? "") ? options.accentTwo!.trim() : picked;
+  target.style.setProperty("--color-accent-2", two);
+  target.style.setProperty("--color-accent-2-content", readableInk(two));
+  repaintIconStrokes(target as HTMLElement, two);
+}
+
+/**
  * Write the derived panel axes onto the root.
  *
  * Exported so a slider can paint while it is being dragged. `applyTheme` is

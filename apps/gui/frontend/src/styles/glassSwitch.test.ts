@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applyTheme, iconStrokeColor } from "~/lib/theme";
+import { applyTheme, iconStrokeColor, writeAccentPreview } from "~/lib/theme";
 import type { ThemeSettings } from "~/types";
 
 /**
@@ -288,5 +288,45 @@ describe("an icon that mounts after the pick", () => {
     // compared against a literal, so the fallback can change without this
     // becoming a second place that has to be kept in step.
     expect(iconStrokeColor()).toBe(read(element, "--color-accent-2"));
+  });
+});
+
+describe("a picked accent paints before the store write", () => {
+  /*
+   * `onPick` reaches the tokens only once a settings round trip has returned,
+   * so picking quickly queued one write per pick behind the event loop. On the
+   * stall frames `max_interval_ms` reached 70 to 92 while `paint_avg_ms` and
+   * `renderer_avg_ms` were both 0.00: the renderer did no work at all, so the
+   * delay was the loop waiting rather than anything being drawn. That is why
+   * reducing renderer work did not move it.
+   */
+  it("writes the accent tokens without waiting for a save", () => {
+    const element = root();
+    writeAccentPreview("#3366cc", { root: element });
+
+    expect(read(element, "--color-primary-fill")).toBe("#3366cc");
+    expect(read(element, "--color-accent-2")).toBe("#3366cc");
+  });
+
+  it("keeps an independently chosen artwork accent", () => {
+    const element = root();
+    writeAccentPreview("#3366cc", { accentTwo: "#cc3366", root: element });
+
+    expect(read(element, "--color-primary-fill")).toBe("#3366cc");
+    expect(read(element, "--color-accent-2")).toBe("#cc3366");
+  });
+
+  it("agrees with what applyTheme writes for the same pick", () => {
+    // The preview and the persisted path must not drift: a pick that painted
+    // one colour and settled to another would read as a flicker.
+    const previewed = root();
+    writeAccentPreview("#3366cc", { accentTwo: "#cc3366", root: previewed });
+
+    const applied = root();
+    applyTheme(themeWith({ accent: "#3366cc", accentTwo: "#cc3366" }), applied);
+
+    for (const token of ["--color-accent-2", "--color-accent-2-content", "--color-primary-fill"]) {
+      expect(read(previewed, token), token).toBe(read(applied, token));
+    }
   });
 });
