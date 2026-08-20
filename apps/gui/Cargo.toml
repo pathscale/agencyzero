@@ -66,6 +66,10 @@ wt-migrate = { path = "../../crates/wt-migrate" }
 agent-abstraction = "0.4.15"
 agency-proxy-client.workspace = true
 agency-proxy-protocol.workspace = true
+# The last git dependency in this workspace, and not one a default build
+# resolves: it is optional and `experimental` is off by default. Due to be
+# published under its own crates.io account, at which point this becomes a
+# version like everything else and the lockfile has no git sources at all.
 agent-experimental = { git = "https://gitlab.com/anonymous-28282828282/agent-experimental.git", branch = "master", default-features = false, optional = true }
 promptsyntax = "0.1.0"
 shlex = "1.3"

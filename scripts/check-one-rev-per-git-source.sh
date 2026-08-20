@@ -27,7 +27,8 @@ lock="${1:-Cargo.lock}"
 # goal, not a failure, and grep exits 1 when it matches nothing. Under
 # `pipefail` that fails the check on precisely the lockfile it most wants to
 # see. Only `agent-experimental` keeps that from happening here today, and it
-# is the one dependency this workspace cannot publish its way out of.
+# is due to be published under its own crates.io account, so the empty case is
+# where this workspace is heading rather than a hypothetical.
 duplicates=$(
     { grep -o 'source = "git+[^"]*"' "$lock" || true; } |
         sed 's/source = "git+//; s/"$//; s/#.*//' |
