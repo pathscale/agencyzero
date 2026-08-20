@@ -8,17 +8,17 @@
     "babel-preset-solid": "2.0.0-rc.0"
   },
   "scripts": {
-    "dev": "rsbuild dev",
-    "start": "rsbuild dev",
-    "build": "bun run typecheck && rsbuild build",
-    "preview": "rsbuild preview",
-    "typecheck": "tsc --noEmit",
-    "lint": "biome check .",
-    "format": "biome format . --write",
-    "test": "vitest",
-    "test:run": "NODE_ENV=production vitest run",
-    "test:coverage": "vitest run --coverage",
-    "bench": "vitest run --config vitest.bench.config.ts --reporter=verbose"
+    "dev": "bun --bun rsbuild dev",
+    "start": "bun --bun rsbuild dev",
+    "build": "bun run typecheck && bun --bun rsbuild build",
+    "preview": "bun --bun rsbuild preview",
+    "typecheck": "bun --bun tsc --noEmit",
+    "lint": "./scripts/biome.sh check .",
+    "format": "./scripts/biome.sh format . --write",
+    "test": "bun --bun vitest",
+    "test:run": "NODE_ENV=production bun --bun vitest run",
+    "test:coverage": "bun --bun vitest run --coverage",
+    "bench": "bun --bun vitest run --config vitest.bench.config.ts --reporter=verbose"
   },
   "license": "MIT",
   "dependencies": {
