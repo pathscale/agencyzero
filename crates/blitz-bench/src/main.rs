@@ -265,7 +265,12 @@ async fn paint(client: &mut Client, want: &str, min_area: f64) -> Result<()> {
                     };
                     Some((
                         id,
-                        (read("x", 0), read("y", 1), read("width", 2), read("height", 3)),
+                        (
+                            read("x", 0),
+                            read("y", 1),
+                            read("width", 2),
+                            read("height", 3),
+                        ),
                     ))
                 })
                 .collect()
