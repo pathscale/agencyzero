@@ -33,10 +33,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 const CSS = readFileSync(join(process.cwd(), "src/styles/theme.css"), "utf8");
-const PICKER = readFileSync(
-  join(process.cwd(), "src/features/settings/ThemePicker.tsx"),
-  "utf8",
-);
+const PICKER = readFileSync(join(process.cwd(), "src/features/settings/ThemePicker.tsx"), "utf8");
 
 /** The `--color-base-100` declaration for one colour mode. */
 function panelBlock(from: number): string {
@@ -58,7 +55,9 @@ describe("the preview swatches show the surface the ladder builds", () => {
   });
 
   it("previews the panel's own lightness and chroma", () => {
-    const anchor = dark.match(/oklch\(calc\((\d+(?:\.\d+)?)% \+ var\(--az-lift\)\)\s*calc\((0\.\d+)/);
+    const anchor = dark.match(
+      /oklch\(calc\((\d+(?:\.\d+)?)% \+ var\(--az-lift\)\)\s*calc\((0\.\d+)/,
+    );
     expect(anchor, `panel should anchor in oklch: ${dark}`).not.toBeNull();
     const [, lightness, chroma] = anchor!;
 
