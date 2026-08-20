@@ -38,8 +38,9 @@ usage: blitz-bench <mode> [args]
   blink [allowed-missed]      assert the owner's blinking-rectangle repro: no
                               missed refreshes and no frame interval past two
                               refresh periods. Exits 1 when the blink is present
-  ghost [min-area]            hidden nodes that still own a painted box, worst
-                              first. Exits 1 when any is found (default 64px2)
+  ghost [min-area] [max]      hidden nodes that still own a painted box, worst
+                              first. Retention keeps some on purpose, so this
+                              exits 1 only past a budget (default 64px2, 400)
   drift [seconds]             what the app does while nothing happens (default 20)
   frames                      one metrics read, laid out for reading
   metrics                     the raw metrics response
@@ -49,6 +50,9 @@ usage: blitz-bench <mode> [args]
                               ancestor chain, so a spill can be read against the
                               container that was meant to clip it (default 6)
   transcript                  transcript scroll state and lowest DOM descendants
+  paint [name-substr] [min-area]  the colours the renderer resolved per node,
+                              biggest box first, so a full-window wash names the
+                              element that asked for it (default 10000px2)
   spill [h|v] [tolerance]     boxes that stick out of their container, worst first
   watch [seconds]             stream metrics/console/runtimeErrors (default 20)
   scroll [ticks] [delta] [over]  wheel events over a named node (default 120 -80 Conversation)
@@ -198,6 +202,136 @@ async fn layout(client: &mut Client, want: &str) -> Result<()> {
             "no named node matched {want:?} ({} in the tree)",
             nodes.len()
         );
+    }
+    Ok(())
+}
+
+/// What the renderer resolved every visible node to actually paint.
+///
+/// The reason this exists: on 2026-08-20 a window painted one flat colour and
+/// took no clicks, and every other instrument said the app was healthy - 5,527
+/// DOM nodes, correct content laid out in the visible band, 50fps, no GPU wait.
+/// Four separate causes were proposed and eliminated, and the question "what
+/// colour did the renderer think these pixels were" could not be asked at all,
+/// because `include_computed_style` was in the protocol and nothing set it.
+///
+/// A screenshot shows the wrong colour; this says which node resolved to it,
+/// which is the difference between blaming the rasteriser and finding the
+/// element that asked for it. Colours arrive as `#rrggbbaa` straight from the
+/// same conversion `blitz-paint` hands the rasteriser, so what is printed is
+/// what was drawn, not what a stylesheet implies.
+///
+/// `min-area` skips the small stuff, because a full-window wash is a large box
+/// and listing 5,000 glyph nodes buries it.
+async fn paint(client: &mut Client, want: &str, min_area: f64) -> Result<()> {
+    let answer = client
+        .diagnostics(&DiagnosticsRequest::Snapshot(SnapshotRequest {
+            include_dom: true,
+            include_layout: true,
+            include_computed_style: true,
+        }))
+        .await?;
+    let DebugResponse::Snapshot(snapshot) = answer.response else {
+        bail!("asked for a paint snapshot, got {:?}", answer.response);
+    };
+
+    let styles: HashMap<u64, serde_json::Value> = snapshot
+        .computed_style
+        .as_ref()
+        .and_then(|value| value.as_array())
+        .map(|rows| {
+            rows.iter()
+                .filter_map(|row| Some((row.get("nodeId")?.as_u64()?, row.clone())))
+                .collect()
+        })
+        .unwrap_or_default();
+    if styles.is_empty() {
+        bail!("the snapshot carried no computed styles; is this build's diagnostics feature on?");
+    }
+
+    let bounds: HashMap<u64, (f64, f64, f64, f64)> = snapshot
+        .layout
+        .as_ref()
+        .and_then(|value| value.as_array())
+        .map(|rows| {
+            rows.iter()
+                .filter_map(|row| {
+                    let id = row.get("nodeId")?.as_u64()?;
+                    let read = |key: &str, index: usize| {
+                        row.get("bounds")
+                            .and_then(|b| b.get(key).or_else(|| b.get(index)))
+                            .and_then(|v| v.as_f64())
+                            .unwrap_or(0.0)
+                    };
+                    Some((
+                        id,
+                        (read("x", 0), read("y", 1), read("width", 2), read("height", 3)),
+                    ))
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+
+    let nodes = snapshot
+        .dom
+        .as_ref()
+        .and_then(|value| value.as_array())
+        .cloned()
+        .unwrap_or_default();
+
+    let mut rows: Vec<(f64, String)> = Vec::new();
+    for node in &nodes {
+        let Some(id) = node.get("id").and_then(|v| v.as_u64()) else {
+            continue;
+        };
+        let name = node.get("name").and_then(|v| v.as_str()).unwrap_or("");
+        let role = node.get("role").and_then(|v| v.as_str()).unwrap_or("");
+        if !want.is_empty() && !name.contains(want) && !role.contains(want) {
+            continue;
+        }
+        let (Some(style), Some(&(x, y, w, h))) = (styles.get(&id), bounds.get(&id)) else {
+            continue;
+        };
+        let area = w * h;
+        if area < min_area {
+            continue;
+        }
+        let field = |key: &str| {
+            style
+                .get(key)
+                .and_then(|v| v.as_str())
+                .unwrap_or("-")
+                .to_string()
+        };
+        let opacity = style
+            .get("opacity")
+            .and_then(|v| v.as_f64())
+            .unwrap_or(f64::NAN);
+        rows.push((
+            area,
+            format!(
+                "  {id:>11}  {role:<12} {w:>7.1}x{h:<7.1} at {x:.0},{y:.0}  bg={:<10} fg={:<10} \
+                 opacity={opacity:.2} {:<12} {name}",
+                field("backgroundColor"),
+                field("color"),
+                field("visibility"),
+            ),
+        ));
+    }
+
+    // Largest first: a wash covering the window is the thing being looked for,
+    // and it is by definition the biggest box that resolved to that colour.
+    rows.sort_by(|a, b| b.0.total_cmp(&a.0));
+    println!(
+        "{} nodes, {} with computed styles, showing boxes of {min_area}px2 or more",
+        nodes.len(),
+        styles.len()
+    );
+    for (_, row) in &rows {
+        println!("{row}");
+    }
+    if rows.is_empty() {
+        println!("nothing matched");
     }
     Ok(())
 }
@@ -1187,6 +1321,11 @@ async fn main() -> Result<()> {
             layout(&mut client, want).await?;
         }
         "transcript" => transcript(&mut client).await?,
+        "paint" => {
+            let want = args.get(1).map(String::as_str).unwrap_or("");
+            let min_area: f64 = args.get(2).and_then(|v| v.parse().ok()).unwrap_or(10_000.0);
+            paint(&mut client, want, min_area).await?;
+        }
         "nodes" => {
             nodes(&mut client).await?;
         }
