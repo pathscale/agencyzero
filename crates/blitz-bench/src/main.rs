@@ -1270,6 +1270,9 @@ async fn main() -> Result<()> {
          */
         "ghost" => {
             let min_area: f64 = args.get(1).and_then(|v| v.parse().ok()).unwrap_or(64.0);
+            // Second argument so `ghost 64 0` can still demand a perfectly clean
+            // tree when a caller wants that, without editing this default.
+            let max_ghosts: usize = args.get(2).and_then(|v| v.parse().ok()).unwrap_or(400);
             let answer = client
                 .diagnostics(&DiagnosticsRequest::Snapshot(SnapshotRequest {
                     include_dom: true,
@@ -1356,7 +1359,26 @@ async fn main() -> Result<()> {
                     "\nGHOSTS PRESENT: {} hidden node(s) still occupy layout",
                     ghosts.len()
                 );
-                std::process::exit(1);
+                // Retention is deliberate, so some ghosts are the design rather
+                // than a leak: `RETAINED_PROJECT_LIMIT` keeps Home, Settings and
+                // two project panes mounted-but-hidden on purpose. A healthy app
+                // measures 58. Failing on any ghost at all therefore fails on a
+                // correct build, which is why this reported and never guarded.
+                //
+                // What a leak looks like: the 2026-08-20 window that painted one
+                // flat colour and took no clicks measured 2,404 ghosts on a
+                // comparable tree (5,527 nodes vs 5,098), a 41x rise. The budget
+                // sits between the two, far enough above the healthy figure that
+                // ordinary drift in the retained panes does not trip it.
+                if ghosts.len() > max_ghosts {
+                    println!(
+                        "over budget: {} ghosts, limit {max_ghosts}. Hidden subtrees are not \
+                         being unmounted.",
+                        ghosts.len()
+                    );
+                    std::process::exit(1);
+                }
+                println!("within budget: limit {max_ghosts}");
             }
         }
         "blink" => {
