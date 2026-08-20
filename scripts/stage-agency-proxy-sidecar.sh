@@ -9,8 +9,10 @@ repo_root=$(git rev-parse --show-toplevel)
 # follows the last `@` -- no JSON, and no second parser to install.
 proxy_version=$(cargo pkgid -p agency-proxy-client 2>/dev/null)
 proxy_version=${proxy_version##*@}
-if [[ -z "$proxy_version" ]]; then
-  echo "could not read the agency-proxy version from Cargo.toml" >&2
+# Shape-check, not just non-empty: a pkgid form without an `@` would survive
+# the expansion whole and get passed to `cargo install --version`.
+if [[ ! $proxy_version =~ ^[0-9]+\.[0-9]+ ]]; then
+  echo "could not read the agency-proxy version (got '$proxy_version')" >&2
   exit 1
 fi
 host_target=$(rustc -vV | sed -n 's/^host: //p')
