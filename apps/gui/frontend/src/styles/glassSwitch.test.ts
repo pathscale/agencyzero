@@ -238,7 +238,9 @@ describe("the second accent reaches the icons, not just the token", () => {
     const element = root();
     const icon = element.ownerDocument.createElement("svg");
     icon.setAttribute("stroke", "currentColor");
-    element.ownerDocument.body.appendChild(icon);
+    // Inside the themed root: the repaint is scoped to the tree it is handed,
+    // so an icon parked on `body` is deliberately out of scope.
+    element.appendChild(icon);
 
     applyTheme(themeWith({ accent: "#3366cc", accentTwo: "#cc3366" }), element);
 
@@ -253,7 +255,7 @@ describe("the second accent reaches the icons, not just the token", () => {
     const icon = element.ownerDocument.createElement("svg");
     icon.setAttribute("stroke", "currentColor");
     wrapper.appendChild(icon);
-    element.ownerDocument.body.appendChild(wrapper);
+    element.appendChild(wrapper);
 
     applyTheme(themeWith({ accent: "#3366cc", accentTwo: "#cc3366" }), element);
 

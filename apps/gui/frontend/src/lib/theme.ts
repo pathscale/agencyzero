@@ -222,6 +222,9 @@ function setToken(root: HTMLElement, property: string, value: string): void {
  */
 let iconStroke: string | null = null;
 
+/** The tree the current {@link iconStroke} was actually painted onto. */
+let iconStrokeRoot: HTMLElement | null = null;
+
 /** The stroke an icon should paint with, or `null` before a theme is applied. */
 export function iconStrokeColor(): string | null {
   return iconStroke;
@@ -270,14 +273,42 @@ function repaintIconStrokes(root: HTMLElement, accentTwo: string): void {
    * what it already was. Comparing first turns those ticks into one string
    * comparison.
    */
-  if (accentTwo === iconStroke) return;
+  /*
+   * The published value and the tree that was actually painted, together.
+   *
+   * A bare `accentTwo === iconStroke` check is wrong once the walk is scoped:
+   * the value is module-global while the traversal is per-root, so painting one
+   * subtree marked the colour as done and every other root was skipped. The
+   * settings write then found nothing to do because the preview had already
+   * claimed the colour, and the icons outside the pane kept the old one.
+   *
+   * Remembering which root was painted keeps the cheap path for the case it
+   * exists for - the wheel writing `surface` and `accent` while the artwork
+   * accent does not move - without letting one subtree answer for another.
+   */
+  if (accentTwo === iconStroke && root === iconStrokeRoot) return;
   // Icons that mount from here on read this and stroke themselves correctly.
   iconStroke = accentTwo;
-  const doc = root.ownerDocument;
-  if (!doc) return;
-  // The ones already mounted are not re-rendered by that, so they are restroked
-  // directly. Only reached when the colour actually changed.
-  for (const svg of doc.querySelectorAll("svg")) {
+  iconStrokeRoot = root;
+  /*
+   * Scoped to the root it was handed, not to the whole document.
+   *
+   * This used to walk `root.ownerDocument`, which is what made calling it from
+   * the preview path unsafe: the accent rows reach that path through the rebase
+   * effect that keeps a harmony selected across a palette change, and that
+   * effect also runs while the tree is still being built, so a traversal of the
+   * entire application ran during startup and the window rendered zero frames.
+   *
+   * The repair at the time was to stop calling this from the preview, which
+   * fixed the hang and broke the feature: a pick updated the tokens and left
+   * every icon already on screen at its old colour. `iconAccent.test.ts` exists
+   * because both of those shipped with the suite green.
+   *
+   * Honouring the argument fixes both. `applyTheme` passes the document root,
+   * so a settings write still reaches every icon; a preview scoped to a subtree
+   * pays only for that subtree.
+   */
+  for (const svg of root.querySelectorAll("svg")) {
     strokeIcon(svg, accentTwo);
   }
 }
@@ -741,24 +772,22 @@ export function writeAccentPreview(
   setToken(target as HTMLElement, "--color-accent-2", two);
   setToken(target as HTMLElement, "--color-accent-2-content", readableInk(two));
   /*
-   * The tokens only. No icon walk from here, deliberately.
+   * The icons too, because the token alone does not reach them.
    *
-   * This used to call `repaintIconStrokes`, which walks every `<svg>` in the
-   * document. The accent rows reach this through the rebase effect that keeps a
-   * harmony selected across a palette change, and that effect also runs while
-   * the tree is still being built: the walk then ran during startup, and the
-   * window rendered zero frames and had to be killed. Bisected against the
-   * previous commit, which launched cleanly on the same bundle.
+   * This call was removed once, to fix a startup hang, on the reasoning that
+   * `applyTheme` would restroke the mounted icons a moment later anyway. That
+   * was wrong in the way that matters: picking a second accent updated the
+   * tokens and left every icon already on screen at its old colour, which is
+   * the whole feature. `iconAccent.test.ts` covers it now, by reading the
+   * attribute back off a mounted element rather than asking the token.
    *
-   * Nothing is lost by leaving it out. The persisted path calls `applyTheme` a
-   * moment later, which restrokes the mounted icons, and an icon that mounts
-   * after this reads `iconStrokeColor()` as it renders. The preview exists to
-   * put the colour on screen for the next frame, and the tokens do that.
-   *
-   * The published value is still updated, because that is a single assignment
-   * rather than a traversal, and it is what a later-mounting icon reads.
+   * The hang was the traversal being unscoped, not the call. `repaintIconStrokes`
+   * walked the entire document regardless of the root it was given, so a preview
+   * from the settings pane cost a walk of the whole application while the tree
+   * was still being built. It honours the argument now, so this pays only for
+   * the subtree it was handed.
    */
-  iconStroke = two;
+  repaintIconStrokes(target as HTMLElement, two);
 }
 
 /**
