@@ -104,7 +104,8 @@ dependencies = [
 [[package]]
 name = "agent-experimental"
 version = "0.1.3"
-source = "git+https://gitlab.com/anonymous-28282828282/agent-experimental.git?branch=master#afe3a70e02ef844a092385859ab8f5f3ab8a039e"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "97aea8b8172e409c8bd5529db18741715338e0c8df9e409b9cb253c44b837fbd"
 dependencies = [
  "anyhow",
  "reqwest",

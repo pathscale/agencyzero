@@ -26,9 +26,9 @@ lock="${1:-Cargo.lock}"
 # `|| true` on the grep because a lockfile with no git sources at all is the
 # goal, not a failure, and grep exits 1 when it matches nothing. Under
 # `pipefail` that fails the check on precisely the lockfile it most wants to
-# see. Only `agent-experimental` keeps that from happening here today, and it
-# is due to be published under its own crates.io account, so the empty case is
-# where this workspace is heading rather than a hypothetical.
+# see. That is this workspace today: every dependency comes from the registry,
+# so the empty case is the normal one and the duplicate-rev check below is
+# guarding against a regression rather than describing the status quo.
 duplicates=$(
     { grep -o 'source = "git+[^"]*"' "$lock" || true; } |
         sed 's/source = "git+//; s/"$//; s/#.*//' |
