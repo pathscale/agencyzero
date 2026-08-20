@@ -1,5 +1,6 @@
 import type { JSX } from "@solidjs/web";
 import { omit } from "solid-js";
+import { iconStrokeColor } from "~/lib/theme";
 import type { IconName } from "./IconSprite";
 
 export type IconProps = Omit<JSX.SvgSVGAttributes<SVGSVGElement>, "children"> & {
@@ -27,7 +28,31 @@ export function Icon(props: IconProps): JSX.Element {
       width="1em"
       height="1em"
       fill="none"
-      stroke="currentColor"
+      /*
+       * The artwork accent, resolved, rather than `currentColor`.
+       *
+       * usvg has no stylesheet: `blitz-dom` serialises this element and
+       * substitutes the computed `currentColor` at construction time, so the
+       * colour is baked into the parsed tree. Writing a custom property on the
+       * root restyles without producing construction damage, so the tree is
+       * never rebuilt and the icon keeps the colour it first had.
+       *
+       * Reading the signal here means an icon takes the current accent as it
+       * renders, which is what fixes the chrome that mounts after a pick.
+       * Before a theme is applied there is nothing to say, and `currentColor`
+       * is the right answer.
+       *
+       * `az-icon-inherit` opts back out, for the icons that are part of a label
+       * and have to match the text beside them. Those follow the cascade, which
+       * is what `currentColor` asks for. An icon inside a filled control is
+       * handled the same way by `theme.css`, and a caller that passes its own
+       * `stroke` still wins because `rest` spreads after this.
+       */
+      stroke={
+        props.class?.includes("az-icon-inherit")
+          ? "currentColor"
+          : (iconStrokeColor() ?? "currentColor")
+      }
       stroke-width="2"
       stroke-linecap="round"
       stroke-linejoin="round"
