@@ -311,7 +311,9 @@ describe("a picked accent paints before the store write", () => {
     writeAccentPreview("#3366cc", { root: element });
 
     expect(read(element, "--color-primary-fill")).toBe("#3366cc");
-    expect(read(element, "--color-accent-2")).toBe("#3366cc");
+    // The artwork token is left alone: picking a control accent must not
+    // repaint the icons, which is the whole reason the axes are separate.
+    expect(read(element, "--color-accent-2")).toBe("");
   });
 
   it("keeps an independently chosen artwork accent", () => {
