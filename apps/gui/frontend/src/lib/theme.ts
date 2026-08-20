@@ -616,10 +616,20 @@ function writeGlassTuning(theme: ThemeSettings, root: HTMLElement): void {
      * declaration and emit `rgb(0 0 0 / …)` as the fallback, which is a plain
      * black panel. One variable is a value no minifier rewrites.
      */
+    /*
+     * Filmed over the base colour, not over the chip.
+     *
+     * `--color-az-badge` is the topmost offset, so filming with it painted a
+     * raised-chip tone across whole panel bodies and pulled the largest
+     * surfaces in Settings out of the theme. Measured on the running app the
+     * settings body came back `#1e2622` against a `#0d170a` desk.
+     *
+     * Only the colour changes here: the scrim mix is untouched.
+     */
     setToken(
       root,
       "--az-glass-film",
-      `color-mix(in oklab, black ${Number(scrim)}%, var(--color-az-badge))`,
+      `color-mix(in oklab, black ${Number(scrim)}%, var(--az-base))`,
     );
   } else {
     root.style.removeProperty("--az-glass-scrim-opacity");
