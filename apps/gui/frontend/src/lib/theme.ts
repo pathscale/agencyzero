@@ -182,14 +182,35 @@ export function isAccent(value: string): boolean {
  * later keeps `currentColor` and paints black until some unrelated setting
  * happens to re-run the theme: the reported symptom was the top-right icons
  * refusing to follow accent 2 until the base colour was changed.
+ *
+ * Not a `MutationObserver`: this renderer has none, and constructing one threw
+ * during startup, which surfaced as the workspace failing to load rather than
+ * as anything about icons.
+ *
+ * Not a Solid signal either, though that was the obvious answer. `applyTheme`
+ * is called from an effect but also directly, and a `createSignal` setter
+ * called outside a reactive root does not update the value in this version:
+ * verified in isolation, where `set("a")` followed by a read returned `null`.
+ * A signal here reads as reactive and silently is not, which is worse than a
+ * plain variable that never pretended.
+ *
+ * So {@link Icon} reads this while rendering. An icon that mounts after a pick
+ * takes the current accent; the ones already mounted are restroked directly by
+ * {@link repaintIconStrokes}, because nothing re-renders them.
  */
 let iconStroke: string | null = null;
-let iconObserver: MutationObserver | null = null;
+
+/** The stroke an icon should paint with, or `null` before a theme is applied. */
+export function iconStrokeColor(): string | null {
+  return iconStroke;
+}
 
 /**
  * Stroke one icon, if it is one of the ones the artwork accent owns.
  *
- * Returns whether anything was written, so the observer can stay quiet.
+ * Still needed alongside the signal: icons already in the document when a pick
+ * happens are not re-rendered by it, because their `stroke` prop is read once
+ * per render and nothing about them changed.
  */
 function strokeIcon(svg: Element, accentTwo: string): void {
   if (
@@ -215,35 +236,13 @@ function strokeIcon(svg: Element, accentTwo: string): void {
   svg.setAttribute("stroke", accentTwo);
 }
 
-/**
- * Keep icons stroked as they mount.
- *
- * Only the artwork accent decides this colour, so the observer reads the last
- * picked value rather than anything about the node it is reacting to.
- */
-function watchIcons(doc: Document): void {
-  if (iconObserver) return;
-  iconObserver = new MutationObserver((records) => {
-    const accentTwo = iconStroke;
-    if (accentTwo === null) return;
-    for (const record of records) {
-      for (const added of record.addedNodes) {
-        if (!(added instanceof Element)) continue;
-        if (added.tagName.toLowerCase() === "svg") strokeIcon(added, accentTwo);
-        for (const svg of added.querySelectorAll?.("svg") ?? []) {
-          strokeIcon(svg, accentTwo);
-        }
-      }
-    }
-  });
-  iconObserver.observe(doc.body, { childList: true, subtree: true });
-}
-
 function repaintIconStrokes(root: HTMLElement, accentTwo: string): void {
+  // Icons that mount from here on read this and stroke themselves correctly.
+  iconStroke = accentTwo;
   const doc = root.ownerDocument;
   if (!doc) return;
-  iconStroke = accentTwo;
-  if (doc.body) watchIcons(doc);
+  // Icons already mounted are not re-rendered by the signal, so they are
+  // restroked directly.
   for (const svg of doc.querySelectorAll("svg")) {
     strokeIcon(svg, accentTwo);
   }
@@ -359,9 +358,9 @@ export function applyTheme(
    * chosen against it rather than assumed.
    */
   const accentTwo = isAccent(theme.accentTwo ?? "") ? theme.accentTwo!.trim() : accent;
+  repaintIconStrokes(root, accentTwo);
   root.style.setProperty("--color-accent-2", accentTwo);
   root.style.setProperty("--color-accent-2-content", readableInk(accentTwo));
-  repaintIconStrokes(root, accentTwo);
 
   root.style.setProperty("--az-lift", `${softness}%`);
   /*

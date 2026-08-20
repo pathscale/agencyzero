@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applyTheme } from "~/lib/theme";
+import { applyTheme, iconStrokeColor } from "~/lib/theme";
 import type { ThemeSettings } from "~/types";
 
 /**
@@ -266,23 +266,27 @@ describe("an icon that mounts after the pick", () => {
   /*
    * The reported symptom: the top-right icons kept the old colour until an
    * unrelated setting was changed. `applyTheme` only runs when a theme value
-   * changes, so chrome that mounts later never got restroked and kept painting
-   * whatever it was first built with. Nothing but the artwork accent should
-   * decide this colour.
+   * changes, so chrome that mounts later never got restroked.
+   *
+   * A `MutationObserver` was the obvious fix and is not available: this
+   * renderer has none, and constructing one threw during startup, which
+   * surfaced as the workspace failing to load. So the accent is published as a
+   * signal and `Icon` reads it while rendering.
    */
-  it("takes the accent without waiting for another theme change", async () => {
+  it("publishes the picked accent for icons that render later", () => {
     const element = root();
     applyTheme(themeWith({ accent: "#3366cc", accentTwo: "#cc3366" }), element);
 
-    const late = element.ownerDocument.createElement("svg");
-    late.setAttribute("stroke", "currentColor");
-    element.ownerDocument.body.appendChild(late);
+    expect(iconStrokeColor()).toBe("#cc3366");
+  });
 
-    // MutationObserver callbacks are delivered as a microtask.
-    await Promise.resolve();
-    await new Promise((resolve) => setTimeout(resolve, 0));
+  it("follows the first accent when no second one is picked", () => {
+    const element = root();
+    applyTheme(themeWith({ accent: "#3366cc" }), element);
 
-    expect(late.getAttribute("stroke")).toBe("#cc3366");
-    late.remove();
+    // Mirrors the token this call wrote. Read from the same element rather than
+    // compared against a literal, so the fallback can change without this
+    // becoming a second place that has to be kept in step.
+    expect(iconStrokeColor()).toBe(read(element, "--color-accent-2"));
   });
 });
