@@ -511,7 +511,8 @@ dependencies = [
 [[package]]
 name = "blitz-control-protocol"
 version = "0.1.0"
-source = "git+https://github.com/pathscale/tauri-runtime-blitz.git?branch=master#330cbb0963f93f5be85771cabad7fa73117535ab"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8eca443ea23955ca693e482cb00f2051b47c6ca18aad324340aff8c6127eacff"
 dependencies = [
  "endpoint-libs",
  "serde",
@@ -6848,7 +6849,8 @@ dependencies = [
 [[package]]
 name = "tauri-runtime-blitz"
 version = "0.1.0"
-source = "git+https://github.com/pathscale/tauri-runtime-blitz.git?branch=master#330cbb0963f93f5be85771cabad7fa73117535ab"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9faa026183d612fbd9fd0a869ab91932a41226158b4786274ca216c60ab805ad"
 dependencies = [
  "blitz-control-protocol",
  "endpoint-libs",
@@ -9002,7 +9004,8 @@ checksum = "1ebf944e87a7c253233ad6766e082e3cd714b5d03812acc24c318f549614536e"
 [[package]]
 name = "worktable"
 version = "1.0.0-beta.10"
-source = "git+https://github.com/pathscale/WorkTable.git?rev=7ab68d17c31e7dd3e56a364ffbb559dd0819b317#7ab68d17c31e7dd3e56a364ffbb559dd0819b317"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "424244aef8a2162ade170468ada2d4046379538bc42a21cbdf48f528a97f5e94"
 dependencies = [
  "WorkTablesIndex",
  "arctic-wt",
@@ -9033,7 +9036,8 @@ dependencies = [
 [[package]]
 name = "worktable_codegen"
 version = "1.0.0-beta.10"
-source = "git+https://github.com/pathscale/WorkTable.git?rev=7ab68d17c31e7dd3e56a364ffbb559dd0819b317#7ab68d17c31e7dd3e56a364ffbb559dd0819b317"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "47b741a448603e7a016bf8369b93883f58186554d25cbb70dbaa28b64047d5a5"
 dependencies = [
  "convert_case 0.6.0",
  "indexmap 2.14.0",
@@ -9380,8 +9384,3 @@ checksum = "27bc9d5b815bc103f142aa054f561d9187d191692ec7c2d1e2b4737f8dbd7296"
 dependencies = [
  "zune-core",
 ]
-
-[[patch.unused]]
-name = "usvg"
-version = "0.48.1"
-source = "git+https://github.com/DioxusLabs/resvg?branch=devin%2F1785858271-intrinsic-dimensions#0cca401b4b61f4d033952f903848deee6d5e79ca"

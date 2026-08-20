@@ -105,17 +105,11 @@ incremental = true
 # `blitz-inspector` stays in release builds regardless. It costs size, and it is
 # what made every diagnosis in this codebase's recent history possible.
 
-# `Tree::intrinsic_dimensions` lives on no released usvg and `blitz-dom` calls
-# it. Cargo honours `[patch]` only from the root workspace, so depending on the
-# renderer from here needs the same redirection it applies to itself.
-#
-# The patch is version 0.48.1, so it only covers a dependent asking for ^0.48.
-# One still on ^0.46 silently gets a *second* usvg rather than an error, which
-# surfaces much later as a type error naming two identically-spelled types.
-#
-# Here rather than in `.cargo/config.toml`, which is where it used to sit: it
-# shared a `[patch.crates-io]` table there with paths that existed on one
-# machine, and that coupling is why a file nobody could delete was also a file
-# nobody could safely commit. ps-blitz keeps the same patch in its own manifest.
-[patch.crates-io]
-usvg = { git = "https://github.com/DioxusLabs/resvg", branch = "devin/1785858271-intrinsic-dimensions" }
+# The `[patch.crates-io]` for `usvg` is gone. It redirected at a DioxusLabs
+# branch for `Tree::intrinsic_dimensions`, which lived on no released usvg at
+# the time. The published `ps-anyrender-svg` now depends on `ps-usvg` directly,
+# so nothing in the graph asks for plain `usvg` any more and cargo reported the
+# patch as "not used in the crate graph". A patch that matches nothing is not
+# inert: it is a git source in the manifest, which is what stops this workspace
+# from being publishable and what put a second usvg in the graph when a
+# dependent asked for a range it did not cover.
