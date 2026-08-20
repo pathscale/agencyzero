@@ -44,25 +44,27 @@ debug = 0
 incremental = true
 
 [profile.release]
-# Stripped for release, and profiling is an override rather than an edit.
+# Symbols kept, because a local build that cannot be profiled is the expensive
+# option.
 #
 # `sample` and Instruments attribute time to symbols, so a stripped binary
 # profiles as a single `???` frame: the 2026-08-10 profile took 1036 samples
-# inside az-gui without naming one function in it. That made it tempting to keep
-# symbols on permanently, which is how a debugging setting ends up shipping.
+# inside az-gui without naming one function in it. This was an opt-in override
+# on the theory that symbols are a debugging setting, and the theory did not
+# survive contact. Every intermittent stall on this app is diagnosed by
+# sampling a live process, and a wedge cannot be reproduced on demand: by the
+# time the missing symbols are noticed the process is gone, and getting them
+# back costs a full rebuild plus however many launches it takes to catch the
+# fault again. That happened twice in one session chasing a first-frame stall.
 #
-# Cargo reads profile settings from the environment, so a profiling build needs
-# no manifest change and cannot be committed by accident:
-#
-#   CARGO_PROFILE_RELEASE_STRIP=false CARGO_PROFILE_RELEASE_DEBUG=1 \
-#     scripts/local-delivery.sh stable
-#
-# That works through the tauri wrapper too, and there is no second profile to
-# drift out of step with this one.
-strip = true
-# Generating debug info that `strip` then discards costs build time and buys
-# nothing. The override above turns both back on together.
-debug = 0
+# This also stops the manifest disagreeing with what actually ships.
+# `release.yml` and `release-experimental.yml` both already build with
+# `CARGO_PROFILE_RELEASE_STRIP: "false"` and line tables, so released binaries
+# have carried symbols all along and only local builds were losing them.
+strip = false
+# Line tables, so a sample names a file and a line rather than only a symbol.
+# Full debug info would be much larger for information a profile does not use.
+debug = 1
 # Release runners retain `target` through rust-cache. Incremental artifacts make
 # the next standard or experimental bundle reuse unchanged Tauri dependencies.
 incremental = true
