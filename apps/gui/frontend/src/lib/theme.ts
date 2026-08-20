@@ -19,12 +19,50 @@ import type { ThemeSettings } from "~/types";
  * AgencyZero needs literal dark-oriented values feeding its own surface ladder.
  */
 
-/** The palette's own accent, for when the setting is empty. Matches `theme.css`. */
-export const DEFAULT_ACCENT = "#d2ad3f";
+/*
+ * Every default a theme starts from lives in `themeDefaults.ts`, so a generator
+ * can emit one file and get a complete theme. They are re-exported here because
+ * this module was where callers found them, and moving the values without
+ * moving the import surface would be a rename dressed up as a refactor.
+ */
+export {
+  BRIGHTNESS_STOPS,
+  DEFAULT_ACCENT,
+  DEFAULT_ACCENT_TWO,
+  DEFAULT_GLASS,
+  DEFAULT_GLASS_BLUR,
+  DEFAULT_GLASS_OPACITY,
+  DEFAULT_GLASS_SCRIM,
+  DEFAULT_SOFTNESS,
+  DEFAULT_SURFACE,
+  DEFAULT_TEXT_BRIGHTNESS,
+  DEFAULT_WASH,
+  MAX_GLASS_BLUR,
+  MAX_SOFTNESS,
+  WASH_STOPS,
+} from "~/lib/themeDefaults";
+
+import {
+  BRIGHTNESS_STOPS,
+  DEFAULT_ACCENT,
+  DEFAULT_GLASS_BLUR,
+  DEFAULT_GLASS_OPACITY,
+  DEFAULT_GLASS_SCRIM,
+  DEFAULT_WASH,
+  MAX_GLASS_BLUR,
+  MAX_SOFTNESS,
+  WASH_STOPS,
+} from "~/lib/themeDefaults";
 
 /** One curated control accent shown beside the surface controls. */
 export interface AccentOption {
-  /** Empty preserves the designed palette rather than storing its current hex. */
+  /**
+   * Always a hex colour, including the designed swatch.
+   *
+   * This was once empty for the designed entry, which collides with "nothing
+   * has been picked" - the state every guard in this file tests for - so
+   * selecting that swatch stored a value the next apply treated as absent.
+   */
   value: string;
   color: string;
 }
@@ -73,10 +111,24 @@ export function accentOptions(
     const color = hslToHex((base + offset) % 360, saturation, lightness);
     return { value: color, color };
   });
-  return [{ value: "", color: defaultAccent(wash, softness) }, ...harmonies];
+  /*
+   * The designed accent carries its own colour, like every other swatch.
+   *
+   * It used to store `""`, which collides with "nothing has been picked": every
+   * guard in this file reads an empty accent as unset, so selecting the
+   * left-hand swatch after picking a real one wrote a value that the next apply
+   * treated as absent. Selecting it appeared to do nothing, and it was worse
+   * after swapping quickly because the preview and the settings write disagreed
+   * about whether an accent existed at all.
+   *
+   * What is shown is what is stored, so the swatch and the persisted value
+   * cannot drift apart.
+   */
+  const designed = defaultAccent(wash, softness);
+  return [{ value: designed, color: designed }, ...harmonies];
 }
 
-/** The designed yellow follows softness too; empty is a semantic choice, not a frozen hex. */
+/** The designed yellow follows softness too, so it is derived rather than frozen. */
 export function defaultAccent(wash: number, softness: number): string {
   const hue = toColorValue(DEFAULT_ACCENT).hsl.h;
   const strength = normalizeWash(wash) / 50;
@@ -84,43 +136,8 @@ export function defaultAccent(wash: number, softness: number): string {
   return hslToHex(hue, 58 + strength * 10 - lift * 2, 52 + lift * 0.9);
 }
 
-/**
- * How far the softness axis may travel, in oklch percentage points.
- *
- * 12 lands the desk near 22% — dark still, but off the near-black floor that
- * makes bright text glare. Past that the surface ladder starts colliding with
- * the card tier above it and the depth cues the layout relies on flatten out.
- */
-export const MAX_SOFTNESS = 12;
-
 /** Text comes down more gently than surfaces go up; equal amounts wash it out. */
 const DAMP_RATIO = 0.45;
-
-/**
- * How much of the accent washes into the surfaces, in percent.
- *
- * The axis that makes a pick read as a *theme* rather than a highlight: without
- * it the wheel recolours buttons and rings while the workspace stays the same
- * grey, which is exactly how this first shipped and exactly what was wrong with
- * it. nofilter.io mixes roughly 8–11% into its base tiers; the first stop keeps
- * that restrained floor while the remaining four make the useful range visible.
- *
- * Every stop carries colour. The old zero stop always produced grey, while
- * values beyond fifty percent erased the neutral foundation. Five even steps
- * across the useful 10–50% interval make the whole control meaningful.
- */
-export const WASH_STOPS = [10, 20, 30, 40, 50] as const;
-
-/** What a freshly picked colour washes at, before anyone touches the strength. */
-export const DEFAULT_WASH = 30;
-
-/**
- * Where the glass slider starts when it is switched on.
- *
- * A visible amount rather than a token one: turning glass on and seeing almost
- * nothing reads as a broken switch. Tunable straight afterwards.
- */
-export const DEFAULT_GLASS = 45;
 
 /** Map records from earlier stop layouts onto the nearest current choice. */
 export function normalizeWash(value: number): number {
@@ -129,19 +146,6 @@ export function normalizeWash(value: number): number {
     Math.abs(stop - safe) < Math.abs(closest - safe) ? stop : closest,
   );
 }
-
-/**
- * How far the text ladder can be pushed back up, in oklch percentage points.
- *
- * Softness dims the text as it lifts the surfaces — right for glare, and the
- * reason prose can end up reading faded. This is the counterweight, so the two
- * wants stop being one number.
- *
- * The ceiling is 6: the design's top rung is 86% and its stated rule is that
- * nothing reaches pure white, so +6 puts the title at 92% and leaves the rule
- * intact. The floor is symmetric for anyone who wants prose quieter still.
- */
-export const BRIGHTNESS_STOPS = [-4, -2, 0, 3, 6] as const;
 
 /** `#rgb` and `#rrggbb`, the two forms the wheel emits. */
 const HEX = /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i;
@@ -751,7 +755,6 @@ export function glassTuning(theme: ThemeSettings, root: HTMLElement): GlassTunin
  * fallback for `--glass-background-opacity`, so an untouched theme now renders
  * what that fallback always described.
  */
-export const DEFAULT_GLASS_OPACITY = 55;
 
 /**
  * How much a glass surface darkens what it sits over, as a percentage.
@@ -759,10 +762,6 @@ export const DEFAULT_GLASS_OPACITY = 55;
  * Zero by default: the scrim exists for a busy backdrop, and adding one to a
  * quiet desk only makes the panel muddier than the design asks for.
  */
-export const DEFAULT_GLASS_SCRIM = 0;
-
-export const DEFAULT_GLASS_BLUR = 12;
-export const MAX_GLASS_BLUR = 24;
 
 /**
  * AgencyZero's own panel, expressed in the library's three numbers.

@@ -33,8 +33,18 @@ describe("accentOptions", () => {
     const soft = accentOptions("#3355ff", "dark", 100, MAX_SOFTNESS);
 
     expect(dark).toHaveLength(7);
-    expect(dark[0]).toEqual({ value: "", color: defaultAccent(10, 0) });
+    /*
+     * The designed swatch stores its own colour, not an empty string. `""`
+     * collides with "nothing has been picked", which every guard in theme.ts
+     * reads as unset, so selecting this swatch after a real one wrote a value
+     * the next apply treated as absent and the pick appeared to do nothing.
+     */
+    expect(dark[0]).toEqual({
+      value: defaultAccent(10, 0),
+      color: defaultAccent(10, 0),
+    });
     expect(new Set(dark.map((option) => option.color)).size).toBe(7);
+    expect(dark.every((option) => isAccent(option.value))).toBe(true);
     expect(dark.every((option) => isAccent(option.color))).toBe(true);
     expect(light.slice(1)).not.toEqual(dark.slice(1));
     expect(green.slice(1)).not.toEqual(dark.slice(1));
