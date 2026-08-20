@@ -42,7 +42,10 @@ jobs:
           # `cargo pkgid` prints `<source>#<name>@<version>`; see release.yml.
           VERSION=$(cargo pkgid -p az-gui)
           VERSION=${VERSION##*@}
-          test -n "$VERSION" || { echo "::error::could not read the workspace version"; exit 1; }
+          case $VERSION in
+            [0-9]*.[0-9]*) ;;
+            *) echo "::error::could not read the workspace version (got '$VERSION')"; exit 1;;
+          esac
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           LIVE=$(curl -fsS --max-time 30 "$CDN_BASE/latest.json" 2>/dev/null \
             | sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' || echo "")
