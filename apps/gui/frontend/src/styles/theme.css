@@ -105,11 +105,22 @@
      * `@pathscale/ui`): the accent alone changes buttons and rings, while the
      * wash is what makes the workspace itself lean warm or cool.
      *
-     * The per-tier multipliers below are deliberate rather than uniform. Deeper
-     * surfaces take slightly more because they have the least chroma to begin
-     * with and would otherwise stay stubbornly grey next to a washed panel; the
-     * transcript takes the least, because a wall of body text is the one place
-     * a colour cast is read as a fault rather than as a theme.
+     * The per-tier multipliers below are deliberate rather than uniform, and
+     * the panel is the tier that leads.
+     *
+     * It used to be the desk: `--color-base-200` took `--az-wash-110` while the
+     * panel took plain `--az-wash`, on the reasoning that deeper surfaces have
+     * the least chroma and would otherwise stay grey. Rendered, that inverts
+     * what the control appears to promise. The window interior carried more of
+     * the picked colour than the panels in front of it, so the body read as a
+     * washed-out offset of the background rather than as the colour that was
+     * chosen, and picking a saturated pink produced a muted mauve body over a
+     * darker surround.
+     *
+     * The panel is what the eye reads as "the app", so it takes the strongest
+     * mix and the desk sits just behind it. The transcript still takes the
+     * least, because a wall of body text is the one place a colour cast is read
+     * as a fault rather than as a theme.
      */
     --az-hue: 240;
     --az-tint: 1;
@@ -122,25 +133,29 @@
     --az-wash-105: min(100%, calc(var(--az-wash) * 1.05));
     --az-wash-110: min(100%, calc(var(--az-wash) * 1.1));
     --az-wash-120: min(100%, calc(var(--az-wash) * 1.2));
+    --az-wash-130: min(100%, calc(var(--az-wash) * 1.3));
     --az-surface: #ffee58;
     --az-sheen: 255 255 255;
 
-    /* Panels: the floating cards the workspace is built from. */
+    /* Panels: the floating cards the workspace is built from, and the tier the
+     * eye reads as the app itself, so this is where the pick lands hardest. */
     --color-base-100: color-mix(
       in oklab,
-      var(--az-surface) var(--az-wash),
+      var(--az-surface) var(--az-wash-120),
       oklch(calc(15% + var(--az-lift)) calc(0.005 * var(--az-tint)) var(--az-hue))
     );
-    /* Desk: the window interior, under the dot grid. */
+    /* Desk: the window interior, under the dot grid. Behind the panel, so it
+     * takes less of the pick rather than more. */
     --color-base-200: color-mix(
       in oklab,
-      var(--az-surface) var(--az-wash-110),
+      var(--az-surface) var(--az-wash),
       oklch(calc(10.5% + var(--az-lift)) calc(0.004 * var(--az-tint)) var(--az-hue))
     );
-    /* Cards: rows and chips sitting on a panel. */
+    /* Cards: rows and chips sitting on a panel, so a step further again, which
+     * keeps them legible against the tier they sit on. */
     --color-base-300: color-mix(
       in oklab,
-      var(--az-surface) var(--az-wash-120),
+      var(--az-surface) var(--az-wash-130),
       oklch(calc(20% + var(--az-lift)) calc(0.008 * var(--az-tint)) var(--az-hue))
     );
     /* Text takes a fraction of the wash — enough to belong to the surface it
@@ -212,19 +227,21 @@
     color-scheme: only light;
     --az-sheen: 17 24 39;
 
+    /* Same order as dark: the panel leads, the desk sits behind it, and cards
+     * take a step further again. See the dark block for why. */
     --color-base-100: color-mix(
       in oklab,
-      var(--az-surface) var(--az-wash),
+      var(--az-surface) var(--az-wash-120),
       oklch(calc(98% - var(--az-lift)) calc(0.005 * var(--az-tint)) var(--az-hue))
     );
     --color-base-200: color-mix(
       in oklab,
-      var(--az-surface) var(--az-wash-110),
+      var(--az-surface) var(--az-wash),
       oklch(calc(93% - var(--az-lift)) calc(0.004 * var(--az-tint)) var(--az-hue))
     );
     --color-base-300: color-mix(
       in oklab,
-      var(--az-surface) var(--az-wash-120),
+      var(--az-surface) var(--az-wash-130),
       oklch(calc(89% - var(--az-lift)) calc(0.008 * var(--az-tint)) var(--az-hue))
     );
     --color-base-content: color-mix(
