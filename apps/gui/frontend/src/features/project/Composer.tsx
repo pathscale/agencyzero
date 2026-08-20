@@ -6,7 +6,7 @@ import { Icon } from "~/components/Icon";
 import { PillMenu } from "~/components/PillMenu";
 import { chooseAttachmentPaths } from "~/lib/attachments";
 import { AGENT_LABELS, PERMISSION_ORDER, permissionLabel } from "~/lib/labels";
-import { describeError, log } from "~/lib/log";
+import { describeError } from "~/lib/log";
 import {
   assumedOutputTokensForEffort,
   compactEstimate,

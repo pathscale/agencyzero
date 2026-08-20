@@ -41,7 +41,7 @@ const PROJECT: Project = {
  */
 function mount() {
   setPrefs((d) => {
-    d.panelSections["notes"] = true;
+    d.panelSections.notes = true;
   });
   let workspace!: Workspace;
 
@@ -191,7 +191,7 @@ describe("the knowledge checkpoint switch", () => {
   // where the switch lives.
   const openSettings = () =>
     setPrefs((d) => {
-      d.panelSections["settings"] = true;
+      d.panelSections.settings = true;
     });
 
   it("is off until it is asked for", async () => {
@@ -233,7 +233,7 @@ describe("the knowledge checkpoint switch", () => {
 describe("project response verbosity", () => {
   it("starts at model default and keeps the project-local choice", async () => {
     setPrefs((d) => {
-      d.panelSections["settings"] = true;
+      d.panelSections.settings = true;
     });
     const { ready, screen } = mount();
     await ready();
