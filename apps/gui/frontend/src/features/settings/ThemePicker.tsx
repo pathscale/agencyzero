@@ -48,17 +48,27 @@ export function ThemePicker(props: {
    * The desk as currently configured — what every swatch sits on.
    *
    * Chroma and hue come from the live custom properties, not from literals.
-   * `theme.css` builds `--color-az-desk` as
+   * `theme.css` builds the panel, `--color-base-100`, as
    *
-   *     color-mix(in oklab, var(--az-surface) var(--az-wash-110),
-   *               oklch(calc(10.5% + var(--az-lift))
-   *                     calc(0.004 * var(--az-tint)) var(--az-hue)))
+   *     color-mix(in oklab, var(--az-surface) var(--az-wash-120),
+   *               oklch(calc(15% + var(--az-lift))
+   *                     calc(0.005 * var(--az-tint)) var(--az-hue)))
    *
    * and this used to hardcode `0.004` and `240`, dropping the tint multiplier
    * and pinning the hue to blue-grey. Every theme that moved its hue got
    * swatches previewing a colour the surface never becomes: the row said
    * blue-grey while the desk leaned toward the accent. The preview has to be
    * the same expression or it is decoration.
+   *
+   * It previews the *panel* rather than the desk, and that is the fix for two
+   * faults at once. The desk is the tier the eye reads least - it sits behind
+   * everything - and at 10.5% lightness it is close enough to black that mixing
+   * a colour into it at 10% or at 50% lands in almost the same place: the five
+   * strength swatches rendered as five near-identical dark circles, and the
+   * softness row was worse, because every stop it shows differs only in that
+   * same near-black anchor. Previewing the panel, at 15% and a step further up
+   * the wash, is both the surface the picked colour is meant to land on and the
+   * one where the difference between stops is visible.
    */
   const deskVar = (name: string, fallback: string): string => {
     if (typeof getComputedStyle === "undefined") return fallback;
@@ -66,13 +76,14 @@ export function ThemePicker(props: {
     return value || fallback;
   };
   const deskAnchor = (softness: number) => {
-    const chroma = `calc(0.004 * ${deskVar("--az-tint", "1")})`;
+    const chroma = `calc(0.005 * ${deskVar("--az-tint", "1")})`;
     const hue = deskVar("--az-hue", "240");
     return prefs.colorMode === "light"
-      ? `oklch(calc(93% - ${softness}%) ${chroma} ${hue})`
-      : `oklch(calc(10.5% + ${softness}%) ${chroma} ${hue})`;
+      ? `oklch(calc(98% - ${softness}%) ${chroma} ${hue})`
+      : `oklch(calc(15% + ${softness}%) ${chroma} ${hue})`;
   };
-  const deskStrength = (wash: number) => Math.min(wash * 1.1, 100);
+  // The panel's own multiplier, so a swatch is the surface it stands for.
+  const deskStrength = (wash: number) => Math.min(wash * 1.2, 100);
   const deskPreview = (theme: ThemeSettings) =>
     `color-mix(in oklab, ${theme.surface || DEFAULT_ACCENT} ${deskStrength(theme.wash)}%, ${deskAnchor(theme.softness)})`;
 
