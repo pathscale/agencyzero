@@ -475,6 +475,21 @@ export function Composer(props: ComposerProps): JSX.Element {
     driftTimer = undefined;
     setWriting(false);
   };
+  /*
+   * Cancel the timer on teardown, but do not touch the signal.
+   *
+   * `onCleanup(stopDrift)` wrote `setWriting(false)` while the component was
+   * being disposed, which Solid 2 counts as an owned scope: it threw
+   * `REACTIVE_WRITE_IN_OWNED_SCOPE`, and that escapes as `REACTIVITY_HALTED`,
+   * stopping every further update in the app. The write was pointless anyway,
+   * since the signal is going away with the component. Clearing the timer is
+   * the part that actually matters, because it is what stops the drift
+   * animation holding a core after the pane is gone.
+   */
+  const cancelDrift = (): void => {
+    if (driftTimer !== undefined) clearTimeout(driftTimer);
+    driftTimer = undefined;
+  };
   // Each keystroke re-arms the timer, so a burst of typing is one continuous
   // drift rather than a flicker, and it ends a few seconds after the last one.
   const keepDrifting = (): void => {
@@ -482,7 +497,7 @@ export function Composer(props: ComposerProps): JSX.Element {
     if (driftTimer !== undefined) clearTimeout(driftTimer);
     driftTimer = setTimeout(stopDrift, DRIFT_IDLE_MS);
   };
-  onCleanup(stopDrift);
+  onCleanup(cancelDrift);
 
   // Sending while a run is live is allowed again — the store queues it and
   // sends when the run lands, so Enter never starts a second run and never
