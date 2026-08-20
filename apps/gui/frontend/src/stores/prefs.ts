@@ -123,22 +123,31 @@ function normalize(stored: Partial<UiPrefs>): UiPrefs {
  */
 const [prefs, setPrefs] = createStore<UiPrefs>(DEFAULTS);
 
+/*
+ * The preference being watched has to be named in the compute.
+ *
+ * Both of these read `() => {}`, which tracks nothing, so Solid 2 ran them once
+ * at creation and never again: picking a different UI size or switching colour
+ * mode wrote the store and changed nothing on screen until the next launch.
+ * Solid 1 re-ran the body on any read inside it, which is why the shape used to
+ * work. Same inversion as `stores/workspace.tsx:718`.
+ */
 createEffect(
+  () => prefs.uiSize,
   () => {
     if (typeof document === "undefined") return;
     const scale = UI_SCALES[prefs.uiSize];
     document.documentElement.style.setProperty("--az-ui-scale", String(scale));
   },
-  () => {},
 );
 
 createEffect(
+  () => prefs.colorMode,
   () => {
     if (typeof document === "undefined") return;
     document.documentElement.dataset.colorMode = prefs.colorMode;
     document.documentElement.style.colorScheme = prefs.colorMode;
   },
-  () => {},
 );
 
 export { prefs, setPrefs };
