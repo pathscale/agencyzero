@@ -105,22 +105,35 @@
      * `@pathscale/ui`): the accent alone changes buttons and rings, while the
      * wash is what makes the workspace itself lean warm or cool.
      *
+     * AGENTS: do not reorder these multipliers. The order is the owner's,
+     * stated directly and more than once, and it has already been flipped once
+     * by an agent who thought a screenshot looked wrong. There is no test
+     * guarding it, because whether the app *looks* like the colour you picked
+     * is an eyeball judgement and a unit test comparing these numbers only
+     * freezes whoever's opinion wrote it. That is how the wrong order got
+     * locked in last time. If it looks wrong to you, ask; do not "fix" it.
+     *
      * The per-tier multipliers below are deliberate rather than uniform, and
-     * the panel is the tier that leads.
+     * the desk is the tier that leads.
      *
-     * It used to be the desk: `--color-base-200` took `--az-wash-110` while the
-     * panel took plain `--az-wash`, on the reasoning that deeper surfaces have
-     * the least chroma and would otherwise stay grey. Rendered, that inverts
-     * what the control appears to promise. The window interior carried more of
-     * the picked colour than the panels in front of it, so the body read as a
-     * washed-out offset of the background rather than as the colour that was
-     * chosen, and picking a saturated pink produced a muted mauve body over a
-     * darker surround.
+     * The desk is the window interior: the largest continuous area on screen,
+     * and the one the picked colour has to own for the control to mean what it
+     * says. Pick a colour and the app becomes that colour, because most of what
+     * is on screen is desk.
      *
-     * The panel is what the eye reads as "the app", so it takes the strongest
-     * mix and the desk sits just behind it. The transcript still takes the
-     * least, because a wall of body text is the one place a colour cast is read
-     * as a fault rather than as a theme.
+     * This was briefly inverted so the panel led, on the reasoning that the
+     * panel is what the eye reads as "the app". Rendered, that is backwards:
+     * panels and cards are small floating elements, so the pick showed up on a
+     * tiny fraction of the window while the large background stayed dark. The
+     * owner's words for it were "before, most of the app was the colour
+     * selected from the wheel; now it's a tiny portion", and that is the whole
+     * argument. A control that promises a workspace colour must not deliver a
+     * tinted card on a grey desk.
+     *
+     * The panel therefore sits just behind the desk, and cards a step behind
+     * again, so each tier stays legible against the one under it. The
+     * transcript still takes the least, because a wall of body text is the one
+     * place a colour cast is read as a fault rather than as a theme.
      */
     --az-hue: 240;
     --az-tint: 1;
@@ -137,25 +150,27 @@
     --az-surface: #ffee58;
     --az-sheen: 255 255 255;
 
-    /* Panels: the floating cards the workspace is built from, and the tier the
-     * eye reads as the app itself, so this is where the pick lands hardest. */
+    /* Panels: the floating cards the workspace is built from. Just behind the
+     * desk, so they read as sitting on the picked colour rather than as the
+     * only thing carrying it. */
     --color-base-100: color-mix(
       in oklab,
       var(--az-surface) var(--az-wash-120),
       oklch(calc(15% + var(--az-lift)) calc(0.005 * var(--az-tint)) var(--az-hue))
     );
-    /* Desk: the window interior, under the dot grid. Behind the panel, so it
-     * takes less of the pick rather than more. */
+    /* Desk: the window interior, under the dot grid, and the largest continuous
+     * area on screen. This is the tier that leads, because it is most of what
+     * the eye actually sees. */
     --color-base-200: color-mix(
       in oklab,
-      var(--az-surface) var(--az-wash),
+      var(--az-surface) var(--az-wash-130),
       oklch(calc(10.5% + var(--az-lift)) calc(0.004 * var(--az-tint)) var(--az-hue))
     );
-    /* Cards: rows and chips sitting on a panel, so a step further again, which
+    /* Cards: rows and chips sitting on a panel, a step behind again, which
      * keeps them legible against the tier they sit on. */
     --color-base-300: color-mix(
       in oklab,
-      var(--az-surface) var(--az-wash-130),
+      var(--az-surface) var(--az-wash),
       oklch(calc(20% + var(--az-lift)) calc(0.008 * var(--az-tint)) var(--az-hue))
     );
     /* Text takes a fraction of the wash — enough to belong to the surface it
@@ -227,8 +242,8 @@
     color-scheme: only light;
     --az-sheen: 17 24 39;
 
-    /* Same order as dark: the panel leads, the desk sits behind it, and cards
-     * take a step further again. See the dark block for why. */
+    /* Same order as dark: the desk leads, the panel sits just behind it, and
+     * cards take a step further again. See the dark block for why. */
     --color-base-100: color-mix(
       in oklab,
       var(--az-surface) var(--az-wash-120),
@@ -236,12 +251,12 @@
     );
     --color-base-200: color-mix(
       in oklab,
-      var(--az-surface) var(--az-wash),
+      var(--az-surface) var(--az-wash-130),
       oklch(calc(93% - var(--az-lift)) calc(0.004 * var(--az-tint)) var(--az-hue))
     );
     --color-base-300: color-mix(
       in oklab,
-      var(--az-surface) var(--az-wash-130),
+      var(--az-surface) var(--az-wash),
       oklch(calc(89% - var(--az-lift)) calc(0.008 * var(--az-tint)) var(--az-hue))
     );
     --color-base-content: color-mix(
