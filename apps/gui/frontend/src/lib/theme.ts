@@ -238,26 +238,35 @@ export function iconStrokeColor(): string | null {
  * per render and nothing about them changed.
  */
 function strokeIcon(svg: Element, accentTwo: string): void {
-  if (
-    svg.closest(".az-icon-inherit, [class*='text-primary-content'], [class*='text-accent-content']")
-  ) {
-    return;
-  }
   // Only the icons that stroke with the artwork accent. A sprite root, a
   // decorative shape with its own fill, or anything that never asked for
   // `currentColor` is left exactly as authored.
   const current = svg.getAttribute("stroke");
   if (current === null) return;
   /*
-   * Idempotent, and that is load-bearing rather than tidy.
+   * The two cheap string comparisons run before the ancestor walk.
    *
-   * `applyTheme` runs from a reactive effect, and this also runs from a
-   * `MutationObserver`. Writing an attribute mutates the DOM, which restyles,
-   * which runs the effect and notifies the observer: an unconditional write is
-   * an infinite loop that never yields to paint. Measured as exactly that, the
-   * window reported its refresh rate and then rendered zero frames.
+   * `closest()` against a three-selector list is by far the most expensive
+   * thing here and it used to run first, on every icon, on every tick - so the
+   * common case of "this icon is already the right colour" paid full price
+   * before being discarded. Ordering it after the equality check means a
+   * repeated apply costs one string compare per icon.
    */
   if (current === accentTwo) return;
+  if (
+    svg.closest(".az-icon-inherit, [class*='text-primary-content'], [class*='text-accent-content']")
+  ) {
+    return;
+  }
+  /*
+   * The equality check above is load-bearing rather than tidy, which is why it
+   * guards the write and not just the cost.
+   *
+   * `applyTheme` runs from a reactive effect, and writing an attribute mutates
+   * the DOM, which restyles, which runs the effect again: an unconditional
+   * write is a loop that never yields to paint. Measured as exactly that - the
+   * window reported its refresh rate and then rendered zero frames.
+   */
   svg.setAttribute("stroke", accentTwo);
 }
 
@@ -287,7 +296,17 @@ function repaintIconStrokes(root: HTMLElement, accentTwo: string): void {
    * accent does not move - without letting one subtree answer for another.
    */
   if (accentTwo === iconStroke && root === iconStrokeRoot) return;
-  // Icons that mount from here on read this and stroke themselves correctly.
+  /*
+   * Published before the walk on purpose: an icon that mounts *during* it reads
+   * this and strokes itself correctly, so the two paths cannot disagree.
+   *
+   * The guard above is what makes that safe. It compares the value *and* the
+   * root, and both are assigned together here, so a second call with a
+   * different colour never matches and always walks. Swapping accents quickly
+   * used to drop updates for a different reason - `strokeIcon` skipped any svg
+   * whose attribute already matched, while the attribute it compared against
+   * was the one the *previous* walk had written.
+   */
   iconStroke = accentTwo;
   iconStrokeRoot = root;
   /*
@@ -321,7 +340,18 @@ function repaintIconStrokes(root: HTMLElement, accentTwo: string): void {
    * the app has mounted walks normally without depending on how many times the
    * theme happened to be applied first.
    */
-  const icons = root.querySelectorAll("svg");
+  /*
+   * `svg[stroke]`, not `svg`.
+   *
+   * `strokeIcon` discards anything without a `stroke` attribute anyway, so
+   * selecting them was work the engine could do for free in the query instead.
+   * The document runs to ~5000 nodes and this reaches once per settings tick,
+   * and the discarded ones were the majority: sprite roots, decorative shapes,
+   * anything that never asked for `currentColor`. Each one still paid a
+   * `closest()` ancestor walk against a three-selector list before being
+   * dropped, which is what made a fast swap between accents stutter.
+   */
+  const icons = root.querySelectorAll("svg[stroke]");
   for (const svg of icons) {
     strokeIcon(svg, accentTwo);
   }
@@ -811,16 +841,34 @@ export function writeAccentPreview(
   options: { accentTwo?: string; root?: HTMLElement } = {},
 ): void {
   const target = options.root ?? document.documentElement;
-  if (!isAccent(accent)) return;
-  const picked = accent.trim();
-  setToken(target as HTMLElement, "--color-primary-fill", picked);
-  setToken(target as HTMLElement, "--color-primary-content", readableInk(picked));
-  setToken(target as HTMLElement, "--color-accent-content", readableInk(picked));
+  /*
+   * The two accents are written independently.
+   *
+   * This used to bail on the whole function when `accent` was not a hex colour,
+   * so picking a second accent while no control accent had been chosen - the
+   * picker passes `props.theme.accent`, which is empty until someone picks one
+   * - silently did nothing, and the icons kept their old colour. That is the
+   * "accent 2 sometimes gets dropped" report: it depended entirely on whether
+   * accent 1 happened to be set.
+   */
+  if (isAccent(accent)) {
+    const picked = accent.trim();
+    setToken(target as HTMLElement, "--color-primary-fill", picked);
+    setToken(target as HTMLElement, "--color-primary-content", readableInk(picked));
+    setToken(target as HTMLElement, "--color-accent-content", readableInk(picked));
+  }
 
   const twoChosen = isAccent(options.accentTwo ?? "");
-  const two = twoChosen ? options.accentTwo!.trim() : picked;
-  setToken(target as HTMLElement, "--color-accent-2", two);
-  setToken(target as HTMLElement, "--color-accent-2-content", readableInk(two));
+  // No fallback to the control accent: artwork is its own axis, and mirroring
+  // accent 1 here is what repainted every icon when a control colour was picked.
+  const two = twoChosen ? options.accentTwo!.trim() : "";
+  if (twoChosen) {
+    setToken(target as HTMLElement, "--color-accent-2", two);
+    setToken(target as HTMLElement, "--color-accent-2-content", readableInk(two));
+  } else {
+    (target as HTMLElement).style.removeProperty("--color-accent-2");
+    (target as HTMLElement).style.removeProperty("--color-accent-2-content");
+  }
   /*
    * The icons too, because the token alone does not reach them.
    *
