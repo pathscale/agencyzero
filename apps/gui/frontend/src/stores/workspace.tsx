@@ -966,14 +966,34 @@ function createWorkspace() {
         return value;
       });
     };
-    const [items, messagePage, running, taskLog, io, prs, questions] = await Promise.all([
-      timed("items", backend.listItems(projectId)),
-      timed("messages", backend.listMessages(projectId, MESSAGE_PAGE)),
+    /*
+     * Two waves, because the pane does not need all seven to show anything.
+     *
+     * All seven used to share one `Promise.all`, so the transcript waited on the
+     * slowest of them however unrelated it was. These calls do not queue behind
+     * each other by cost but behind whatever *write* is in flight: measured on
+     * 2026-08-20, a cold load reported `fetch 3752ms` with all seven at
+     * 3751ms — the same millisecond, because they were parked on the store
+     * together and released together. It had started 30ms after an agent run,
+     * and carried one message and three io rows. Nothing was slow; everything
+     * was queued.
+     *
+     * The transcript needs messages, and the header needs items. The other five
+     * fill panels that are either collapsed or below the fold, so they no longer
+     * hold the first frame: the window shows the conversation while they land.
+     * A stall still costs those panels their delay, but it stops costing a grey
+     * window.
+     */
+    const secondary = Promise.all([
       timed("running", backend.listRunningTasks(projectId)),
       timed("taskLog", backend.listTaskLog(projectId, TASK_LOG_PAGE)),
       timed("agentIo", backend.listAgentIo(projectId)),
       timed("prs", backend.listPullRequests(projectId)),
       timed("questions", backend.listQuestions(projectId)),
+    ]);
+    const [items, messagePage] = await Promise.all([
+      timed("items", backend.listItems(projectId)),
+      timed("messages", backend.listMessages(projectId, MESSAGE_PAGE)),
     ]);
     const fetched = performance.now();
     const messages = messagePage.messages;
@@ -993,6 +1013,9 @@ function createWorkspace() {
     setState((d) => {
       d.turnCounts[projectId] = usageTotals(messages).turns;
     });
+    // The transcript and header are in the store now, so the frame below is
+    // free to go out. Everything from here fills panels rather than the pane.
+    const [running, taskLog, io, prs, questions] = await secondary;
     setState((d) => {
       d.running[projectId] ??= [];
       reconcile(running)(d.running[projectId]);
