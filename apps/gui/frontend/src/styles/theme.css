@@ -147,7 +147,17 @@
     --az-wash-110: min(100%, calc(var(--az-wash) * 1.1));
     --az-wash-120: min(100%, calc(var(--az-wash) * 1.2));
     --az-wash-130: min(100%, calc(var(--az-wash) * 1.3));
-    --az-surface: #ffee58;
+    /*
+     * The floor the stylesheet renders against before any theme is applied,
+     * not the product default. `lib/themeDefaults.ts` owns that, and
+     * `applyTheme` overwrites this on the first paint.
+     *
+     * They disagreed - this said `#ffee58` while the defaults file said
+     * `#103860` - which is the kind of drift a second source of truth always
+     * produces. Kept deliberately neutral so a mismatch cannot masquerade as a
+     * theme.
+     */
+    --az-surface: #103860;
     --az-sheen: 255 255 255;
 
     /* Panels: the floating cards the workspace is built from. Just behind the

@@ -505,6 +505,8 @@ function createWorkspace() {
    * intermediate write would lose it.
    */
   let pendingThemePatch: ThemeSettings | undefined;
+  /** The last theme handed to the backend, held until the store catches up. */
+  let lastSentTheme: ThemeSettings | undefined;
   let themeWriteInFlight = false;
   /** The last chrome sent to the native frame, so an identical one is not resent. */
   let lastWindowChrome: string | undefined;
@@ -619,18 +621,54 @@ function createWorkspace() {
      */
     const themeOnly = Object.keys(patch).length === 1 && patch.theme !== undefined;
     if (themeOnly) {
-      pendingThemePatch = { ...pendingThemePatch, ...patch.theme } as ThemeSettings;
+      /*
+       * Seeded from the theme already in the store, not from nothing.
+       *
+       * The picker saves one field at a time - `{ accentTwo }` - and this
+       * accumulated onto `undefined`, so the request carried a theme whose only
+       * key was the one that just changed. `Theme` is `#[serde(default)]` on
+       * the Rust side, so every absent field deserialised to an empty string
+       * and the write erased the rest of the theme. Picking a second accent
+       * cleared the first, and neither survived a restart.
+       */
+      pendingThemePatch = {
+        ...(state.settings?.theme ?? {}),
+        ...lastSentTheme,
+        ...pendingThemePatch,
+        ...patch.theme,
+      } as ThemeSettings;
       if (themeWriteInFlight) return;
       themeWriteInFlight = true;
       try {
         while (pendingThemePatch) {
           const theme = pendingThemePatch;
           pendingThemePatch = undefined;
+          /*
+           * Remembered across the await, because the store does not learn about
+           * this theme until the request returns.
+           *
+           * A second pick arriving mid-flight seeds itself from
+           * `state.settings`, which is still the theme from *before* this
+           * write, so without this the in-flight field is dropped and the burst
+           * ends with only the last pick applied.
+           */
+          lastSentTheme = theme;
           const next = await client().setSettings({ theme });
+          /*
+           * The theme that was just applied stays authoritative; everything
+           * else in the response is taken as given.
+           *
+           * Persisting is a one-way write. Adopting the round-tripped theme
+           * made the backend's reconstruction the source of truth, and `Theme`
+           * is `#[serde(default)]`, so any field the request did not carry came
+           * back as an empty string and overwrote a real value in the store.
+           * Combined with a single-field patch that is how picking one accent
+           * cleared the other.
+           */
           setState((d) => {
-            d.settings = next;
+            d.settings = { ...next, theme };
           });
-          syncWindowChrome(next.theme);
+          syncWindowChrome(theme);
         }
       } finally {
         themeWriteInFlight = false;
