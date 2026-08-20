@@ -49,7 +49,9 @@ export function Icon(props: IconProps): JSX.Element {
        * `stroke` still wins because `rest` spreads after this.
        */
       stroke={
-        props.class?.includes("az-icon-inherit")
+        // `class` is typed as Solid's ClassValue, so it is not necessarily a
+        // string: only a string spelling of the opt-out can be read here.
+        typeof props.class === "string" && props.class.includes("az-icon-inherit")
           ? "currentColor"
           : (iconStrokeColor() ?? "currentColor")
       }
