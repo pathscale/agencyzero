@@ -237,12 +237,24 @@ function strokeIcon(svg: Element, accentTwo: string): void {
 }
 
 function repaintIconStrokes(root: HTMLElement, accentTwo: string): void {
+  /*
+   * Nothing to do when the artwork accent did not move, and that is the whole
+   * cost control here.
+   *
+   * `applyTheme` runs on every settings round trip, so dragging the colour
+   * wheel reaches this once per tick. Walking every `<svg>` in a document of
+   * ~5000 nodes per tick is work the wheel does not need: the wheel writes
+   * `surface` and `accent`, and the artwork accent usually resolves to exactly
+   * what it already was. Comparing first turns those ticks into one string
+   * comparison.
+   */
+  if (accentTwo === iconStroke) return;
   // Icons that mount from here on read this and stroke themselves correctly.
   iconStroke = accentTwo;
   const doc = root.ownerDocument;
   if (!doc) return;
-  // Icons already mounted are not re-rendered by the signal, so they are
-  // restroked directly.
+  // The ones already mounted are not re-rendered by that, so they are restroked
+  // directly. Only reached when the colour actually changed.
   for (const svg of doc.querySelectorAll("svg")) {
     strokeIcon(svg, accentTwo);
   }
