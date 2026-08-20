@@ -35,7 +35,22 @@ blitz-runtime = [
 # dormant until the user explicitly enables deep profiling.
 blitz-inspector = [
     "blitz-runtime",
-    "blitz-dom/log-phase-times",
+    # `blitz-dom/log-phase-times` is deliberately absent.
+    #
+    # It enables `debug_timer/enable` inside blitz-dom, and the graph resolves
+    # *two* crates called `debug_timer`: ps-blitz takes the fork
+    # (`ps-debug-timer`) while `ps-anyrender-vello` takes the upstream crate of
+    # the same name. Cargo unifies them by name, blitz-dom compiles against the
+    # upstream one, and it has neither `log_line` nor `RealDebugTimer::init_if`:
+    #
+    #     error[E0425]: cannot find function `log_line` in crate `debug_timer`
+    #     error[E0599]: no associated function named `init_if` found for `RealDebugTimer`
+    #
+    # chuzz builds because it never enables this feature. Nothing in this app
+    # reads its output either - it is engine-internal phase timing, and the
+    # numbers this app actually uses come from `tauri-runtime-blitz/diagnostics`
+    # below, which is untouched. ps-anyrender#17 makes both repos name the fork;
+    # this line can come back once that is published.
     "tauri-runtime-blitz/diagnostics",
 ]
 # The lighter render pipeline, for measuring against the default Vello one.
@@ -99,8 +114,8 @@ tauri-runtime-blitz = { git = "https://github.com/pathscale/tauri-runtime-blitz.
 # file. Working against a local checkout stays possible through the `[patch]`
 # entries in `.cargo/config.toml`, so the default exercises what a release
 # actually resolves.
-blitz-dom = { package = "ps-blitz-dom", version = "^0.3.0-beta.4", features = ["system-fonts", "parallel-construct"], optional = true }
-blitz-script = { package = "ps-blitz-script", version = "^0.3.0-beta.4", features = ["system-fonts"], optional = true }
+blitz-dom = { package = "ps-blitz-dom", version = "^0.3.0-beta.6", features = ["system-fonts", "parallel-construct"], optional = true }
+blitz-script = { package = "ps-blitz-script", version = "^0.3.0-beta.6", features = ["system-fonts"], optional = true }
 brotli = { version = "8.0.4", default-features = false, features = ["std"], optional = true }
 url = { version = "2.5.8", optional = true }
 tauri-plugin-updater = "2"
