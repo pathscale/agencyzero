@@ -249,7 +249,7 @@ describe("item reference routing", () => {
       d.projectPanelVisible = false;
     });
     setPrefs((d) => {
-      d.panelSections["items"] = false;
+      d.panelSections.items = false;
     });
 
     revealItemReference("cafe-0");
@@ -266,7 +266,7 @@ describe("item reference routing", () => {
       d.projectPanelVisible = false;
     });
     setPrefs((d) => {
-      d.panelSections["items"] = false;
+      d.panelSections.items = false;
     });
 
     expect(workspace.actions.revealItem("cafe-0")).toBe(true);

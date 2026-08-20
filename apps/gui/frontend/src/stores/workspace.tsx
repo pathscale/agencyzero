@@ -4,7 +4,6 @@ import {
   createContext,
   createEffect,
   createMemo,
-  createRoot,
   createSignal,
   createStore,
   flush,
@@ -2254,7 +2253,7 @@ function createWorkspace() {
       d.projectPanelVisible = true;
     });
     setPrefs((d) => {
-      d.panelSections["items"] = true;
+      d.panelSections.items = true;
     });
     openProject(item.projectId);
     setState((d) => {
