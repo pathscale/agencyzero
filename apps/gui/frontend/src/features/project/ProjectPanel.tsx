@@ -157,7 +157,7 @@ function ItemSortControls(): JSX.Element {
             d.itemSortBy = prefs.itemSortBy === "status" ? "time" : "status";
           })
         }
-        class="rounded-md border border-az-hairline bg-az-inset px-1.5 py-0.5 font-medium text-[10.5px] text-az-muted transition-colors hover:text-az-strong"
+        class="rounded-full border border-az-hairline bg-az-inset px-2 py-0.5 font-medium text-[10.5px] text-az-muted transition-colors hover:text-az-strong"
         title={tx("Toggle item sort between status and time")}
       >
         {tx(prefs.itemSortBy === "status" ? "Status" : "Time")}
@@ -169,7 +169,7 @@ function ItemSortControls(): JSX.Element {
             d.itemSortDirection = prefs.itemSortDirection === "asc" ? "desc" : "asc";
           })
         }
-        class="az-control-solid flex size-5 items-center justify-center rounded-md border border-az-hairline bg-az-inset text-az-muted transition-colors hover:text-az-strong"
+        class="az-control-solid flex size-5 items-center justify-center rounded-full border border-az-hairline bg-az-inset text-az-muted transition-colors hover:text-az-strong"
         aria-label={tx(prefs.itemSortDirection === "asc" ? "Sort descending" : "Sort ascending")}
         title={tx(prefs.itemSortDirection === "asc" ? "Ascending" : "Descending")}
       >
