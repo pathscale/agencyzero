@@ -488,6 +488,25 @@ function createWorkspace() {
 
   /** Settings writes are serialized so each full response can safely win. */
   let settingsWriteTail: Promise<void> = Promise.resolve();
+  /**
+   * A theme write waiting for the one in flight, collapsed to the newest.
+   *
+   * Every pick is a settings round trip, and the writes are serialized, so
+   * picking faster than one completes queues them: the tenth pick waits behind
+   * nine that are already superseded. Measured during rapid picks, about 32ms of
+   * each 39ms frame interval was spent outside the frame entirely, with restyle
+   * accounting for only 7ms of it.
+   *
+   * Only the newest value matters for a colour. Replacing the pending patch
+   * rather than appending one keeps the queue at a single write no matter how
+   * fast the wheel is driven, and the record that comes back is still the one
+   * source for the palette.
+   *
+   * Theme only. Every other setting is a discrete decision where dropping an
+   * intermediate write would lose it.
+   */
+  let pendingThemePatch: ThemeSettings | undefined;
+  let themeWriteInFlight = false;
   /** The last chrome sent to the native frame, so an identical one is not resent. */
   let lastWindowChrome: string | undefined;
 
@@ -589,6 +608,37 @@ function createWorkspace() {
    * save, which the UI-preference autosave made particularly easy to trigger.
    */
   async function saveSettings(patch: Parameters<AgencyZeroApi["setSettings"]>[0]): Promise<void> {
+    /*
+     * A theme-only patch collapses onto whatever is already waiting.
+     *
+     * `writeAccentPreview` has already painted the pick, so nothing on screen is
+     * waiting for this to return: it exists to persist the value and to hand
+     * back the record the palette is read from. A superseded one has no reader.
+     *
+     * Guarded on the patch carrying *only* a theme, because a mixed patch also
+     * carries a decision that must not be dropped.
+     */
+    const themeOnly = Object.keys(patch).length === 1 && patch.theme !== undefined;
+    if (themeOnly) {
+      pendingThemePatch = { ...pendingThemePatch, ...patch.theme } as ThemeSettings;
+      if (themeWriteInFlight) return;
+      themeWriteInFlight = true;
+      try {
+        while (pendingThemePatch) {
+          const theme = pendingThemePatch;
+          pendingThemePatch = undefined;
+          const next = await client().setSettings({ theme });
+          setState((d) => {
+            d.settings = next;
+          });
+          syncWindowChrome(next.theme);
+        }
+      } finally {
+        themeWriteInFlight = false;
+      }
+      return;
+    }
+
     const taskManagerTicket = patch.taskManager ? ++taskManagerWrite : taskManagerWrite;
     const request = settingsWriteTail.then(() => client().setSettings(patch));
     settingsWriteTail = request.then(
