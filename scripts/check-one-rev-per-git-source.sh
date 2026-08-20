@@ -22,8 +22,14 @@ set -euo pipefail
 lock="${1:-Cargo.lock}"
 
 # `source = "git+URL?rev=SHA#SHORTSHA"` — strip the fragment, split on `?rev=`.
+#
+# `|| true` on the grep because a lockfile with no git sources at all is the
+# goal, not a failure, and grep exits 1 when it matches nothing. Under
+# `pipefail` that fails the check on precisely the lockfile it most wants to
+# see. Only `agent-experimental` keeps that from happening here today, and it
+# is the one dependency this workspace cannot publish its way out of.
 duplicates=$(
-    grep -o 'source = "git+[^"]*"' "$lock" |
+    { grep -o 'source = "git+[^"]*"' "$lock" || true; } |
         sed 's/source = "git+//; s/"$//; s/#.*//' |
         sort -u |
         awk -F'\\?rev=' 'NF == 2 { count[$1]++; revs[$1] = revs[$1] "\n    " $2 }
@@ -39,4 +45,8 @@ if [[ -n $duplicates ]]; then
     exit 1
 fi
 
-echo "one rev per git source"
+if grep -q 'source = "git+' "$lock"; then
+    echo "one rev per git source"
+else
+    echo "no git sources"
+fi
