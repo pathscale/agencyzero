@@ -307,8 +307,22 @@ function repaintIconStrokes(root: HTMLElement, accentTwo: string): void {
    * Honouring the argument fixes both. `applyTheme` passes the document root,
    * so a settings write still reaches every icon; a preview scoped to a subtree
    * pays only for that subtree.
+   *
+   * The query is the guard, rather than a count of how many times this has run.
+   * Startup applies the theme before any icon has mounted, so the walk finds
+   * nothing and the only thing it can do is block the first frame: with it, the
+   * window reported its refresh rate and rendered zero frames, and A/B
+   * rebuilding with the document-root walk removed was what identified it.
+   * Nothing is missed, because an icon that mounts after this reads
+   * `iconStrokeColor()` as it renders.
+   *
+   * Asking the tree rather than counting calls keeps this honest in both
+   * directions: a startup with no icons costs one empty query, and a pick after
+   * the app has mounted walks normally without depending on how many times the
+   * theme happened to be applied first.
    */
-  for (const svg of root.querySelectorAll("svg")) {
+  const icons = root.querySelectorAll("svg");
+  for (const svg of icons) {
     strokeIcon(svg, accentTwo);
   }
 }

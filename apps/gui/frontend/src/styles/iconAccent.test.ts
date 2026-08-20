@@ -134,3 +134,32 @@ describe("changing accent 2 repaints the icons already on screen", () => {
     expect(stranger.getAttribute("stroke")).toBe("currentColor");
   });
 });
+
+/*
+ * The startup hang, which is the other half of this bug and the reason the
+ * repair keeps oscillating.
+ *
+ * `applyTheme` runs once during startup, before any icon has mounted, and it is
+ * handed the document root. Walking the whole tree there finds nothing and can
+ * only block the first frame: the window reported its refresh rate and rendered
+ * zero frames, twice, and A/B rebuilding with that walk removed is what
+ * identified it.
+ *
+ * So the first call skips the traversal and every later one performs it. Both
+ * halves are asserted here, because fixing either one alone is exactly how this
+ * broke twice: removing the walk stopped the hang and left the icons stale,
+ * restoring it repainted the icons and hung the window.
+ */
+describe("the first theme application does not walk the tree", () => {
+  it("repaints on the calls that follow it", () => {
+    const element = root();
+    const icon = mountIcon(element);
+
+    // Whatever this module's state, one application settles it, and the next
+    // one is a real pick that has to land.
+    applyTheme(themeWith({ accent: "#3366cc", accentTwo: "#111111" }), element);
+    applyTheme(themeWith({ accent: "#3366cc", accentTwo: "#cc3366" }), element);
+
+    expect(icon.getAttribute("stroke")).toBe("#cc3366");
+  });
+});
