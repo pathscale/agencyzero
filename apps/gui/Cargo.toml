@@ -80,8 +80,27 @@ tauri = { version = "2", default-features = false, features = ["macos-private-ap
 # runtime gates its implementation behind the same one, so enabling it on only
 # one side makes the trait demand a method the other side compiled out.
 tauri-runtime-blitz = { git = "https://github.com/pathscale/tauri-runtime-blitz.git", branch = "master", optional = true, features = ["macos-private-api"] }
-blitz-dom = { package = "ps-blitz-dom", version = "^0.3.0-beta.3", git = "https://github.com/pathscale/ps-blitz.git", branch = "master", features = ["system-fonts", "parallel-construct"], optional = true }
-blitz-script = { package = "ps-blitz-script", version = "^0.3.0-beta.3", git = "https://github.com/pathscale/ps-blitz.git", branch = "master", features = ["system-fonts"], optional = true }
+#
+# The engine by version, not by branch. Same move `chuzz` made, for the same
+# reasons its manifest records.
+#
+# These carried a caret *and* a git branch, which is two sources of truth that
+# nothing reconciles: the caret said `^0.3.0-beta.3` while the branch delivered
+# whatever master happened to be, so the declared range documented nothing and
+# the resolved crate depended on when anyone last fetched. It broke exactly as
+# that predicts - `ps-blitz` moved to `ps-anyrender ^0.13.0`, this tree still
+# resolved anyrender from crates.io at 0.12.0, and the build stopped at
+# "failed to select a version".
+#
+# A caret is what was meant. `cargo update` moves it, `Cargo.lock` records what
+# was resolved, and anything else asking for the same range gets the same crate
+# rather than a second copy of the engine - which is the failure that reads as
+# `expected ScriptDocument, found ScriptDocument` with both types naming one
+# file. Working against a local checkout stays possible through the `[patch]`
+# entries in `.cargo/config.toml`, so the default exercises what a release
+# actually resolves.
+blitz-dom = { package = "ps-blitz-dom", version = "^0.3.0-beta.4", features = ["system-fonts", "parallel-construct"], optional = true }
+blitz-script = { package = "ps-blitz-script", version = "^0.3.0-beta.4", features = ["system-fonts"], optional = true }
 brotli = { version = "8.0.4", default-features = false, features = ["std"], optional = true }
 url = { version = "2.5.8", optional = true }
 tauri-plugin-updater = "2"
