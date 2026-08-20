@@ -123,25 +123,29 @@ paraphrases were how the old checkbox contract created near-duplicates. Full con
   `pgrep` for the product name came back empty, the app was live on PID 3076 with the
   whole store open, and only the choice of target saved it: what got deleted were
   detached `db.superseded-*` copies nothing held.
-- **Stop the app with `scripts/az-stop.sh`, and never harder than TERM.** The store is
-  single-writer, so a hard kill takes it down mid-write with no chance to close its
-  handles. The script sends TERM to *this checkout's* bundle only, waits ten seconds, and
-  exits non-zero if the process is still there. It offers no `SIGKILL`: not as a flag, not
-  as a fallback, not after a timeout.
+- **Stop the app with `scripts/az-stop.sh`.** It sends TERM to *this checkout's* bundle
+  only, waits ten seconds, and escalates to KILL just for a process that is still there
+  afterwards. That order is the point: ten seconds is longer than a healthy quit including
+  the store's own flush, so anything still running is wedged rather than slow, and the risk
+  of killing it is smaller than leaving a process that owns the single-writer store lock
+  and can never release it. Use `--no-kill` when you want the diagnosis without the
+  escalation.
 
-  A process that ignores TERM is the finding. Say so, with `sample <pid> 5 -mayDie` to
-  show where it is parked, and stop there. Do not write the inline pattern this replaces:
+  Do not write the inline pattern this replaces:
 
   ```sh
   # Never this.
   pkill -TERM -f "...az-gui"; sleep 4; pkill -9 -f "...az-gui"
   ```
 
-  It reads as careful and is not. The `-9` fires on a schedule rather than on a decision,
-  so it lands exactly when the app is slowest to quit, which is when it is most likely to
-  be mid-write. Matching on the bare binary name also hits the owner's installed
-  Experimental build, which is not yours to stop. A one-time approval to `-9` one wedged
-  pid is not standing permission for the next one.
+  Four seconds is inside the range of a normal quit, so the `-9` fires on a schedule
+  rather than on a decision, landing exactly when the app is slowest to finish writing.
+  Matching the bare binary name also reaches the owner's installed Experimental build,
+  which is not this checkout's to stop.
+
+  The script samples a wedged process before killing it, because the process is the only
+  copy of that evidence. Report where it was parked; the kill unblocks the checkout, it
+  does not explain anything.
 - **Ask before installing anything**, including writes to `~/Library/Caches`, `~/.cargo`
   and Homebrew. A doc here recommending a tool is not permission to fetch it.
 
