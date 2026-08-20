@@ -39,10 +39,13 @@ jobs:
       - name: Compare the committed version against the experimental channel
         id: decide
         run: |
-          VERSION=$(python3 -c "import tomllib;print(tomllib.load(open('Cargo.toml','rb'))['workspace']['package']['version'])")
+          # `cargo pkgid` prints `<source>#<name>@<version>`; see release.yml.
+          VERSION=$(cargo pkgid -p az-gui)
+          VERSION=${VERSION##*@}
+          test -n "$VERSION" || { echo "::error::could not read the workspace version"; exit 1; }
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           LIVE=$(curl -fsS --max-time 30 "$CDN_BASE/latest.json" 2>/dev/null \
-            | python3 -c 'import json,sys; print(json.load(sys.stdin)["version"])' 2>/dev/null || echo "")
+            | sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' || echo "")
 
           if [ "${{ inputs.force }}" = "true" ] || [ "$LIVE" != "$VERSION" ]; then
             echo "publish=true" >> "$GITHUB_OUTPUT"
@@ -130,25 +133,26 @@ jobs:
         run: |
           test -f "$TARBALL"
           test -f "$TARBALL.sig"
-          python3 - "$VERSION" "$TARBALL.sig" "$CDN_BASE" <<'PY'
-          import datetime, json, sys
-          version, sig_path, base = sys.argv[1], sys.argv[2], sys.argv[3]
-          with open(sig_path) as f:
-              signature = f.read().strip()
-          manifest = {
-              "version": version,
-              "pub_date": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-              "platforms": {
-                  "darwin-aarch64": {
-                      "signature": signature,
-                      "url": f"{base}/AgencyZeroExperimental.app.tar.gz?v={version}",
-                  }
-              },
+          # Base64 signature, semver version: no JSON-escapable characters.
+          # Guarded, same as release.yml.
+          SIGNATURE=$(cat "$TARBALL.sig")
+          case $SIGNATURE in *[!A-Za-z0-9+/=]*)
+            echo "::error::signature is not plain base64; refusing to interpolate"; exit 1;; esac
+          case $VERSION in *[!0-9A-Za-z.+-]*)
+            echo "::error::version has unexpected characters; refusing to interpolate"; exit 1;; esac
+
+          cat > latest-experimental.json <<JSON
+          {
+            "version": "$VERSION",
+            "pub_date": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+            "platforms": {
+              "darwin-aarch64": {
+                "signature": "$SIGNATURE",
+                "url": "$CDN_BASE/AgencyZeroExperimental.app.tar.gz?v=$VERSION"
+              }
+            }
           }
-          with open("latest-experimental.json", "w") as f:
-              json.dump(manifest, f, indent=2)
-              f.write("\n")
-          PY
+          JSON
 
       - name: Upload experimental tarball
         env:
@@ -198,7 +202,8 @@ jobs:
             "https://bunnycdn.com/api/pullzone/$ZONE_ID/purgeCache"
 
           for attempt in 1 2 3 4 5 6; do
-            LIVE=$(curl -sS -L "$CDN_BASE/latest.json" | python3 -c 'import json,sys; print(json.load(sys.stdin)["version"])' 2>/dev/null || echo "")
+            LIVE=$(curl -sS -L "$CDN_BASE/latest.json" \
+              | sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' || echo "")
             if [ "$LIVE" = "$VERSION" ]; then
               exit 0
             fi

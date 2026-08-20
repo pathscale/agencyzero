@@ -2,22 +2,17 @@
 set -euo pipefail
 
 repo_root=$(git rev-parse --show-toplevel)
-manifest="$repo_root/apps/gui/Cargo.toml"
-proxy_version=$(python3 - "$manifest" <<'PY'
-import sys, tomllib
 
-with open(sys.argv[1], "rb") as manifest:
-    dependencies = tomllib.load(manifest)["dependencies"]
-
-client = dependencies["agency-proxy-client"]
-protocol = dependencies["agency-proxy-protocol"]
-client_version = client if isinstance(client, str) else client.get("version")
-protocol_version = protocol if isinstance(protocol, str) else protocol.get("version")
-if client_version != protocol_version:
-    raise SystemExit("AgencyProxy client and protocol versions must match")
-print(client_version)
-PY
-)
+# The client and the protocol inherit one workspace dependency version, so
+# there is no pair to cross-check here: ask cargo which version it resolved.
+# `cargo pkgid` prints `<source>#<name>@<version>`, so the version is whatever
+# follows the last `@` -- no JSON, and no second parser to install.
+proxy_version=$(cargo pkgid -p agency-proxy-client 2>/dev/null)
+proxy_version=${proxy_version##*@}
+if [[ -z "$proxy_version" ]]; then
+  echo "could not read the agency-proxy version from Cargo.toml" >&2
+  exit 1
+fi
 host_target=$(rustc -vV | sed -n 's/^host: //p')
 if [[ -z "$host_target" ]]; then
   echo "could not determine the Rust host target" >&2
