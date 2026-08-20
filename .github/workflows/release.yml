@@ -76,7 +76,13 @@ jobs:
           # Cargo.toml, and needs no JSON parser on the runner.
           VERSION=$(cargo pkgid -p az-gui)
           VERSION=${VERSION##*@}
-          test -n "$VERSION" || { echo "::error::could not read the workspace version"; exit 1; }
+          # Shape-check rather than just non-empty: if pkgid ever prints a form
+          # without an `@`, the expansion above returns it whole and an empty
+          # check would wave a non-version through into a release.
+          case $VERSION in
+            [0-9]*.[0-9]*) ;;
+            *) echo "::error::could not read the workspace version (got '$VERSION')"; exit 1;;
+          esac
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
           # latest.json is written by this workflow (see "Build latest.json"),
