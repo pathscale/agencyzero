@@ -55,7 +55,11 @@ describe("a glass drag looks the same as its release", () => {
    */
   it("does not write the glass colours from the persist path only", () => {
     for (const colour of GLASS_COLOURS) {
+      // Either call shape. The writes moved behind `setToken`, which skips a
+      // property whose value has not changed, and a check that only knew the
+      // old spelling would pass without reading anything.
       expect(THEME_TS).not.toContain(`setProperty("${colour}"`);
+      expect(THEME_TS).not.toContain(`setToken(root, "${colour}"`);
     }
   });
 
@@ -66,8 +70,11 @@ describe("a glass drag looks the same as its release", () => {
    * file having simply lost its writes.
    */
   it("still writes the axes that a drag is allowed to change", () => {
-    expect(THEME_TS).toContain('setProperty("--glass-background-opacity"');
-    expect(THEME_TS).toContain('setProperty("--az-glass-alpha"');
+    for (const axis of ["--glass-background-opacity", "--az-glass-alpha"]) {
+      const written =
+        THEME_TS.includes(`setProperty("${axis}"`) || THEME_TS.includes(`setToken(root, "${axis}"`);
+      expect(written, axis).toBe(true);
+    }
   });
 });
 describe("reset to default", () => {

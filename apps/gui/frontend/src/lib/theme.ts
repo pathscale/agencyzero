@@ -151,6 +151,28 @@ export function isAccent(value: string): boolean {
 }
 
 /**
+ * Set a custom property, but only when it would actually change.
+ *
+ * A custom property on the root invalidates every element that inherits it, and
+ * this file writes twenty-five of them on every `applyTheme`. Picking an accent
+ * changes two or three; the rest are rewritten with the value they already
+ * hold, and each of those still pays for a document-wide restyle.
+ *
+ * Measured on the running app during rapid picks, with the frame log cleared
+ * after startup so the numbers are the interaction rather than the launch:
+ * `resolve_avg_ms` reached 82.48 with sixteen restyles over 20ms, while
+ * `paint_avg_ms` and `renderer_avg_ms` were 0.00 for the same frames. The cost
+ * was never drawing and never the store: it was style resolution.
+ *
+ * Reading a property back before writing it is cheap next to that, because the
+ * value is already resolved on the declaration and needs no recomputation.
+ */
+function setToken(root: HTMLElement, property: string, value: string): void {
+  if (root.style.getPropertyValue(property) === value) return;
+  root.style.setProperty(property, value);
+}
+
+/**
  * Restroke the icons, because a custom property alone does not reach them.
  *
  * Inline SVG is not painted from the DOM on this renderer. `blitz-dom`
@@ -309,10 +331,10 @@ export function applyTheme(
     BRIGHTNESS_STOPS[BRIGHTNESS_STOPS.length - 1],
   );
 
-  root.style.setProperty("--az-surface", surface);
-  root.style.setProperty("--color-primary", accent);
-  root.style.setProperty("--color-accent", accent);
-  root.style.setProperty("--az-wash", `${wash}%`);
+  setToken(root, "--az-surface", surface);
+  setToken(root, "--color-primary", accent);
+  setToken(root, "--color-accent", accent);
+  setToken(root, "--az-wash", `${wash}%`);
   /*
    * What sits *on* the accent. A picked colour can be anything from near-black
    * to near-white, so the label has to be chosen against it rather than left at
@@ -320,8 +342,8 @@ export function applyTheme(
    * moment someone picks a dark blue.
    */
   const ink = readableInk(accent);
-  root.style.setProperty("--color-primary-content", ink);
-  root.style.setProperty("--color-accent-content", ink);
+  setToken(root, "--color-primary-content", ink);
+  setToken(root, "--color-accent-content", ink);
 
   /*
    * The accent as *text*, which is a different colour from the accent as fill.
@@ -337,7 +359,7 @@ export function applyTheme(
    */
   const mode = root.dataset.colorMode === "light" ? "light" : "dark";
   const accentText = legibleAccent(accent, mode);
-  root.style.setProperty("--color-primary-text", accentText);
+  setToken(root, "--color-primary-text", accentText);
 
   /*
    * The accent Tailwind's own utilities read, lifted at the source.
@@ -354,7 +376,7 @@ export function applyTheme(
    * which is what `bg-primary`, the borders and the rings are pointed at, so
    * this only changes the accent where it is being read.
    */
-  root.style.setProperty("--color-primary-fill", accent);
+  setToken(root, "--color-primary-fill", accent);
 
   /*
    * The second accent, for the things that are drawn rather than operated.
@@ -371,17 +393,17 @@ export function applyTheme(
    */
   const accentTwo = isAccent(theme.accentTwo ?? "") ? theme.accentTwo!.trim() : accent;
   repaintIconStrokes(root, accentTwo);
-  root.style.setProperty("--color-accent-2", accentTwo);
-  root.style.setProperty("--color-accent-2-content", readableInk(accentTwo));
+  setToken(root, "--color-accent-2", accentTwo);
+  setToken(root, "--color-accent-2-content", readableInk(accentTwo));
 
-  root.style.setProperty("--az-lift", `${softness}%`);
+  setToken(root, "--az-lift", `${softness}%`);
   /*
    * Damp is what softness takes off the text; brightness gives it back, and may
    * overshoot into negative damp — that is the point, since the complaint that
    * produced this axis was prose reading washed out at the *designed* palette,
    * before any softness was applied at all.
    */
-  root.style.setProperty("--az-damp", `${(softness * DAMP_RATIO - brightness).toFixed(2)}%`);
+  setToken(root, "--az-damp", `${(softness * DAMP_RATIO - brightness).toFixed(2)}%`);
 
   /*
    * The panel axes, derived from the same three numbers the library's glass
@@ -482,7 +504,7 @@ function writeGlassTuning(theme: ThemeSettings, root: HTMLElement): void {
   root.classList.toggle("az-no-blur", !(tuning.blur > 0));
 
   if (Number.isFinite(opacity)) {
-    root.style.setProperty("--glass-background-opacity", `${Number(opacity)}%`);
+    setToken(root, "--glass-background-opacity", `${Number(opacity)}%`);
 
     /*
      * Controls take part of the film rather than none of it.
@@ -500,7 +522,7 @@ function writeGlassTuning(theme: ThemeSettings, root: HTMLElement): void {
      * reading as a foreign material. At the default 55% panel that is 85%.
      */
     const film = Math.min(Math.max(Number(opacity), 0), 100);
-    root.style.setProperty("--glass-control-opacity", `${Math.round(100 - (100 - film) * 0.33)}%`);
+    setToken(root, "--glass-control-opacity", `${Math.round(100 - (100 - film) * 0.33)}%`);
 
     /*
      * The same axis, applied to the two surfaces that cover the whole window.
@@ -524,7 +546,7 @@ function writeGlassTuning(theme: ThemeSettings, root: HTMLElement): void {
      * the number on the slider is now the number on the surface.
      */
     const solid = Math.min(Math.max(Number(opacity), 0), 100);
-    root.style.setProperty("--az-glass-alpha", `${Math.round(solid)}%`);
+    setToken(root, "--az-glass-alpha", `${Math.round(solid)}%`);
   } else {
     root.style.removeProperty("--glass-background-opacity");
     root.style.removeProperty("--glass-control-opacity");
@@ -540,7 +562,7 @@ function writeGlassTuning(theme: ThemeSettings, root: HTMLElement): void {
    */
   const scrim = theme.glassScrim ?? DEFAULT_GLASS_SCRIM;
   if (Number.isFinite(scrim)) {
-    root.style.setProperty("--az-glass-scrim-opacity", `${Number(scrim)}%`);
+    setToken(root, "--az-glass-scrim-opacity", `${Number(scrim)}%`);
     /*
      * The film colour with the scrim already mixed in.
      *
@@ -549,7 +571,8 @@ function writeGlassTuning(theme: ThemeSettings, root: HTMLElement): void {
      * declaration and emit `rgb(0 0 0 / …)` as the fallback, which is a plain
      * black panel. One variable is a value no minifier rewrites.
      */
-    root.style.setProperty(
+    setToken(
+      root,
       "--az-glass-film",
       `color-mix(in oklab, black ${Number(scrim)}%, var(--color-az-badge))`,
     );
@@ -710,14 +733,32 @@ export function writeAccentPreview(
   const target = options.root ?? document.documentElement;
   if (!isAccent(accent)) return;
   const picked = accent.trim();
-  target.style.setProperty("--color-primary-fill", picked);
-  target.style.setProperty("--color-primary-content", readableInk(picked));
-  target.style.setProperty("--color-accent-content", readableInk(picked));
+  setToken(target as HTMLElement, "--color-primary-fill", picked);
+  setToken(target as HTMLElement, "--color-primary-content", readableInk(picked));
+  setToken(target as HTMLElement, "--color-accent-content", readableInk(picked));
 
   const two = isAccent(options.accentTwo ?? "") ? options.accentTwo!.trim() : picked;
-  target.style.setProperty("--color-accent-2", two);
-  target.style.setProperty("--color-accent-2-content", readableInk(two));
-  repaintIconStrokes(target as HTMLElement, two);
+  setToken(target as HTMLElement, "--color-accent-2", two);
+  setToken(target as HTMLElement, "--color-accent-2-content", readableInk(two));
+  /*
+   * The tokens only. No icon walk from here, deliberately.
+   *
+   * This used to call `repaintIconStrokes`, which walks every `<svg>` in the
+   * document. The accent rows reach this through the rebase effect that keeps a
+   * harmony selected across a palette change, and that effect also runs while
+   * the tree is still being built: the walk then ran during startup, and the
+   * window rendered zero frames and had to be killed. Bisected against the
+   * previous commit, which launched cleanly on the same bundle.
+   *
+   * Nothing is lost by leaving it out. The persisted path calls `applyTheme` a
+   * moment later, which restrokes the mounted icons, and an icon that mounts
+   * after this reads `iconStrokeColor()` as it renders. The preview exists to
+   * put the colour on screen for the next frame, and the tokens do that.
+   *
+   * The published value is still updated, because that is a single assignment
+   * rather than a traversal, and it is what a later-mounting icon reads.
+   */
+  iconStroke = two;
 }
 
 /**
@@ -736,9 +777,9 @@ export function writeAccentPreview(
 export function writePanelAxes(tuning: GlassTuning, root?: HTMLElement): void {
   const target = root ?? document.documentElement;
   const values = panelAxes(tuning);
-  target.style.setProperty(PANEL_AXES.lift, `${values.lift}%`);
-  target.style.setProperty(PANEL_AXES.border, `${values.border}%`);
-  target.style.setProperty(PANEL_AXES.shadow, `${values.shadow}`);
+  setToken(target as HTMLElement, PANEL_AXES.lift, `${values.lift}%`);
+  setToken(target as HTMLElement, PANEL_AXES.border, `${values.border}%`);
+  setToken(target as HTMLElement, PANEL_AXES.shadow, `${values.shadow}`);
 }
 
 /**
