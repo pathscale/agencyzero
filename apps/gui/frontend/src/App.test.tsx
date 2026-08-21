@@ -30,9 +30,18 @@ describe("startup", () => {
     expect(
       nextRetainedProjects(open.slice(0, RETAINED_PROJECT_LIMIT), open.at(-1) ?? null, open),
     ).toEqual(open.slice(1));
-    // Retention covers the pane in front of you and the one you came from.
-    // Raising this raises hidden DOM roughly linearly, about a thousand nodes
-    // per pane against the live app.
+    /*
+     * Two, and raising it is not the way to buy fewer pane rebuilds.
+     *
+     * It was tried at five and the live window went grey with the DOM intact
+     * and correctly laid out. `target/blitz-frame.log` named the cause:
+     * `layers_used_max=45` at `layer_depth_max=8`, 38 of them from `overflow`,
+     * one set of scroller layers per retained pane, with
+     * `renderer_avg_ms=1245.99`. The binding constraint is the compositor, not
+     * the ~1000 DOM nodes per pane, so a node-count argument for raising this
+     * is not evidence. Any change needs a `blitz-bench paint` reading and that
+     * log, taken in the bad state.
+     */
     expect(RETAINED_PROJECT_LIMIT).toBe(2);
   });
 

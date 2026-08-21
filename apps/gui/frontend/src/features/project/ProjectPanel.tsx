@@ -1318,19 +1318,30 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
         {(item, index) => (
           <Show
             when={editingId() !== item.id}
+            /*
+             * The editor is built when a row enters edit mode, not with the row.
+             *
+             * `fallback` is an ordinary prop, so this JSX used to be evaluated
+             * as each row was created: every visible row constructed an
+             * `Input.Field` that only one row can ever show. Wrapping it in a
+             * `<Show>` of its own makes the construction conditional, which is
+             * what the fallback reads as but is not.
+             */
             fallback={
-              <Input.Field
-                autofocus
-                value={editTitle()}
-                aria-label={tx("Edit {name}", { name: item.title })}
-                onInput={(event) => setEditTitle(event.currentTarget.value)}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter") void saveEdit(item);
-                  if (event.key === "Escape") setEditingId(null);
-                }}
-                onBlur={() => void saveEdit(item)}
-                class="rounded-[9px] border border-primary/40 bg-base-300 px-2.5 py-2 text-[12.5px] text-az-body focus:outline-none"
-              />
+              <Show when={editingId() === item.id}>
+                <Input.Field
+                  autofocus
+                  value={editTitle()}
+                  aria-label={tx("Edit {name}", { name: item.title })}
+                  onInput={(event) => setEditTitle(event.currentTarget.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") void saveEdit(item);
+                    if (event.key === "Escape") setEditingId(null);
+                  }}
+                  onBlur={() => void saveEdit(item)}
+                  class="rounded-[9px] border border-primary/40 bg-base-300 px-2.5 py-2 text-[12.5px] text-az-body focus:outline-none"
+                />
+              </Show>
             }
           >
             <div class="rounded-[9px]">
