@@ -5,6 +5,7 @@ import { Button } from "~/components/Button";
 import { Icon, type IconProps } from "~/components/Icon";
 import { LanguageSwitcher } from "~/components/LanguageSwitcher";
 import { AGENT_LABELS, agentStateLabel, permissionLabel } from "~/lib/labels";
+import { whileMounted } from "~/lib/live";
 import { describeError } from "~/lib/log";
 import { tx } from "~/stores/i18n";
 import { useWorkspace } from "~/stores/workspace";
@@ -38,6 +39,7 @@ export function WelcomeFlow(): JSX.Element {
   const [agentsSkipped, setAgentsSkipped] = createSignal(false);
   const [sources, setSources] = createSignal<ChatImportSource[]>([]);
   const [importsLoaded, setImportsLoaded] = createSignal(false);
+  const alive = whileMounted();
   const [restoreSelection, setRestoreSelection] = createSignal<StoreBackupSelection | null>(null);
 
   const visible = () =>
@@ -99,8 +101,8 @@ export function WelcomeFlow(): JSX.Element {
       if (!isLive("discoverChatImports")) return;
       void actions
         .discoverChatImports()
-        .then(setSources)
-        .catch((cause) => setNote(describeError(cause)));
+        .then(alive(setSources))
+        .catch(alive((cause) => setNote(describeError(cause))));
     },
   );
 

@@ -3,6 +3,7 @@ import { createMemo, createSignal, For, onSettled, Show } from "solid-js";
 import { Button } from "~/components/Button";
 import { Icon } from "~/components/Icon";
 import { duration } from "~/lib/format";
+import { whileMounted } from "~/lib/live";
 import { tx } from "~/stores/i18n";
 import { useWorkspace } from "~/stores/workspace";
 import type {
@@ -66,6 +67,7 @@ export function AnalyticsTab(): JSX.Element {
   const [data, setData] = createSignal<UsageAnalytics | null>(null);
   const [refreshing, setRefreshing] = createSignal(false);
   const [activeTab, setActiveTab] = createSignal<AnalyticsTabKey>("value");
+  const alive = whileMounted();
 
   const selectTabFromKeyboard = (
     event: KeyboardEvent & { currentTarget: HTMLButtonElement },
@@ -95,14 +97,15 @@ export function AnalyticsTab(): JSX.Element {
     if (refreshing()) return;
     setRefreshing(true);
     try {
-      setData(await actions.getUsageAnalytics());
+      const next = await actions.getUsageAnalytics();
+      alive(setData)(next);
     } finally {
-      setRefreshing(false);
+      alive(setRefreshing)(false);
     }
   };
 
   onSettled(() => {
-    void refresh().catch(() => setData(null));
+    void refresh().catch(alive(() => setData(null)));
   });
 
   return (
