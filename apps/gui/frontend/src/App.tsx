@@ -36,10 +36,26 @@ import { type BootState, useWorkspace, WorkspaceProvider } from "~/stores/worksp
  * one pane is about a thousand DOM nodes, and at eight the hidden panes held
  * 5,461 of 10,988 nodes, half the tree, for panes nobody was looking at.
  *
+ * Two was chosen for "the pane in front of you and the one you just came from",
+ * and that is not how the window is used. Working across three or four tabs,
+ * every switch evicts a pane that is about to be needed again: driving four
+ * tabs for three cycles rebuilt the same three panes twelve times, 251 to
+ * 461ms each, and the owner sees each of those as the side panel blanking and
+ * refilling. Retention that never survives one lap is not retention.
+ *
  * Two keeps what retention was for. The path retention exists to make cheap is
  * the back-and-forth between the pane in front of you and the one you just
  * came from, and two covers exactly that. Going further back rebuilds, which is
  * the cost retention was already paying on the ninth tab.
+ *
+ * **Do not raise this to buy fewer rebuilds.** It was tried at five, and the
+ * live window went grey while the DOM stayed intact and correctly laid out.
+ * `target/blitz-frame.log` named the cause: `layers_used_max=45` at
+ * `layer_depth_max=8`, 38 of them from `overflow` alone, one set per retained
+ * pane's scrollers, with `renderer_avg_ms=1245.99` and `paint_avg_ms=328.43`.
+ * The compositor, not the node count, is the binding constraint here, and the
+ * ceiling is far lower than "half the tree" suggests. Any change to this number
+ * needs a `blitz-bench paint` reading and that log, not a node count.
  */
 export const RETAINED_PROJECT_LIMIT = 2;
 
