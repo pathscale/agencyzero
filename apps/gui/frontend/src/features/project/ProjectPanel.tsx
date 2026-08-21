@@ -1,6 +1,6 @@
 import { Checkbox, Flex, Input, Slider, Switch, Textarea } from "@pathscale/ui";
 import type { JSX } from "@solidjs/web";
-import { createEffect, createMemo, createSignal, For, Show } from "solid-js";
+import { createEffect, createMemo, createSignal, For, onSettled, Show } from "solid-js";
 import { NOTES_BUDGET } from "~/api/client";
 import { AppModal, type ModalAnchor } from "~/components/AppModal";
 import { Button } from "~/components/Button";
@@ -15,12 +15,23 @@ import { sortItems } from "~/lib/itemSort";
 import { nextStatus, statusLabel, statusSuffix } from "~/lib/labels";
 import { whileMounted } from "~/lib/live";
 import { describeError, log } from "~/lib/log";
+import { record as recordPerf } from "~/lib/perf";
 import { tx } from "~/stores/i18n";
 import { prefs, setPrefs, togglePanelSection } from "~/stores/prefs";
 import { useNow, useWorkspace } from "~/stores/workspace";
 import type { Agent, Project, ProjectItem, Question, RunningTask } from "~/types";
 
 export const PROJECT_ITEM_PAGE_SIZE = 12;
+
+/**
+ * How many task-log rows are built up front.
+ *
+ * Twenty, which is more than the section shows at its 45vh cap, so the page
+ * covers what is reachable by scrolling before the control is needed.
+ * Hydration loads at most 40 entries however large the stored log is, so this
+ * is a render cap, not a data one.
+ */
+export const TASK_LOG_PAGE_SIZE = 20;
 
 export function itemPage<T>(items: readonly T[], limit: number): T[] {
   return items.slice(0, Math.max(0, limit));
@@ -37,8 +48,39 @@ export function itemPage<T>(items: readonly T[], limit: number): T[] {
 export function ProjectPanel(props: { project: Project; agent: Agent }): JSX.Element {
   const { state, itemsFor, openItemCount } = useWorkspace();
 
+  /*
+   * Per-section attribution, the same trick the pane uses.
+   *
+   * The panel measured 48ms on an empty project and 496ms on a busy one, and
+   * the pane's own table cannot see inside it. `sectionMark` renders nothing
+   * and evaluates in JSX order during construction, so the gap between two
+   * marks is what the section between them cost to build. Without this the only
+   * honest statement about the slowest subtree in the app is that it is slow.
+   */
+  const panelBuilt = performance.now();
+  const sectionMarks: [string, number][] = [];
+  const sectionMark = (label: string) => {
+    sectionMarks.push([label, performance.now()]);
+    return null;
+  };
+  onSettled(() => {
+    let previous = panelBuilt;
+    const parts = sectionMarks.map(([label, at]) => {
+      const cost = at - previous;
+      previous = at;
+      recordPerf(`panel section: ${label}`, cost);
+      return `${label} ${cost.toFixed(0)}ms`;
+    });
+    log.info(
+      `panel ${props.project.id} sections ${(performance.now() - panelBuilt).toFixed(0)}ms: ` +
+        `${parts.join(", ")}`,
+    );
+  });
+
   const running = () => state.running[props.project.id] ?? [];
-  const log = () => state.taskLog[props.project.id] ?? [];
+  // Named for what it holds, not `log`: the module-level logger is also in
+  // scope here and the shadow made `log.info` resolve to this accessor.
+  const taskLog = () => state.taskLog[props.project.id] ?? [];
   const io = () => state.agentIo[props.project.id] ?? [];
   const panelItems = createMemo(() => {
     const visible = itemsFor(props.project.id);
@@ -77,6 +119,7 @@ export function ProjectPanel(props: { project: Project; agent: Agent }): JSX.Ele
       >
         <ItemList projectId={props.project.id} items={panelItems()} />
       </SectionPanel>
+      {sectionMark("items")}
 
       <SectionPanel
         title={tx("Running")}
@@ -93,6 +136,7 @@ export function ProjectPanel(props: { project: Project; agent: Agent }): JSX.Ele
       >
         <RunningList projectId={props.project.id} />
       </SectionPanel>
+      {sectionMark("running")}
 
       {/*
         The min-height applies only while open: a collapsed section holding
@@ -101,7 +145,7 @@ export function ProjectPanel(props: { project: Project; agent: Agent }): JSX.Ele
       <SectionPanel
         icon="history"
         title={tx("Task log")}
-        count={state.logTotals[props.project.id] ?? log().length}
+        count={state.logTotals[props.project.id] ?? taskLog().length}
         lead={
           <>
             <CopyLogButton projectId={props.project.id} />
@@ -114,6 +158,7 @@ export function ProjectPanel(props: { project: Project; agent: Agent }): JSX.Ele
       >
         <TaskLogList projectId={props.project.id} />
       </SectionPanel>
+      {sectionMark("tasklog")}
 
       <SectionPanel
         icon="terminal"
@@ -125,6 +170,7 @@ export function ProjectPanel(props: { project: Project; agent: Agent }): JSX.Ele
       >
         <AgentIoList projectId={props.project.id} />
       </SectionPanel>
+      {sectionMark("agentio")}
 
       <SectionPanel
         icon="sparkles"
@@ -135,11 +181,13 @@ export function ProjectPanel(props: { project: Project; agent: Agent }): JSX.Ele
       >
         <NotesEditor projectId={props.project.id} />
       </SectionPanel>
+      {sectionMark("notes")}
 
       {/* Last, deliberately: directories and the moderator toggle are set once
           and revisited rarely, and they were costing the working sections the
           top of the column. */}
       <SettingsSection project={props.project} agent={props.agent} />
+      {sectionMark("settings")}
     </div>
   );
 }
@@ -1891,7 +1939,27 @@ export function RunningTaskCard(props: { task: RunningTask; now: number }): JSX.
 
 function TaskLogList(props: { projectId: string }): JSX.Element {
   const { state } = useWorkspace();
-  const entries = () => state.taskLog[props.projectId] ?? [];
+  const all = () => state.taskLog[props.projectId] ?? [];
+  /*
+   * Paged, for the same reason Items is.
+   *
+   * Every row builds an `Icon` (a parsed SVG) and two `@pathscale/ui` buttons,
+   * so the cost is per row and not in the data: hydration loads at most 40
+   * entries however long the log is, and rendering those 40 measured 122 to
+   * 178ms of a panel build that totalled 203 to 339ms. It is the single largest
+   * line in the panel and it is paid on every construction, including while the
+   * section is collapsed, because `SectionPanel` only hides its contents.
+   *
+   * The newest entries are the ones anyone looks at, so the page is taken from
+   * the end. `Show more` reveals the rest without another round trip, since the
+   * whole loaded array is already in the store.
+   */
+  const [logLimit, setLogLimit] = createSignal(TASK_LOG_PAGE_SIZE);
+  const entries = createMemo(() => {
+    const loaded = all();
+    const limit = logLimit();
+    return loaded.length > limit ? loaded.slice(loaded.length - limit) : loaded;
+  });
   /** The one entry showing its whole command, if any. */
   const [expanded, setExpanded] = createSignal<string | null>(null);
   /** The row whose copy action most recently succeeded. */
@@ -1914,6 +1982,19 @@ function TaskLogList(props: { projectId: string }): JSX.Element {
       data-selectable
       class="az-scroll flex max-h-[45vh] min-h-0 flex-1 flex-col gap-[7px] px-3 pt-2.5 pb-3"
     >
+      {/* Above the rows, because the page is taken from the end: what this
+          reveals is older than everything already on screen. */}
+      <Show when={all().length > entries().length}>
+        <Button
+          type="button"
+          onClick={() => setLogLimit((limit) => limit + TASK_LOG_PAGE_SIZE)}
+          class="flex-none rounded-[9px] border border-primary/24 bg-az-chip px-2.5 py-1.5 font-semibold text-[11px] text-primary transition-colors hover:bg-az-chip"
+        >
+          {tx("Show {count} earlier", {
+            count: Math.min(TASK_LOG_PAGE_SIZE, all().length - entries().length),
+          })}
+        </Button>
+      </Show>
       <For each={entries()}>
         {(entry) => (
           /*
