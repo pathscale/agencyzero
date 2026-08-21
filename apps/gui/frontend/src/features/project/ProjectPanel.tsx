@@ -1500,8 +1500,25 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
                     </span>
                   </div>
                 </div>
-                <Button
+                <button
                   type="button"
+                  /*
+                   * native-control: A native button, not the library's, and the
+                   * same finding as `EditableTitle`'s pencil.
+                   *
+                   * The library `Button` builds a `Dynamic` over a recipe, three
+                   * `Show` blocks for the spinner and two icon slots, a
+                   * `mergeProps` per slot and about eight memos, so that some
+                   * other call site can render an anchor or a spinner. This one
+                   * is an icon with a class on it and uses none of that. It is
+                   * also per *row*: the panel builds 43 library buttons, of
+                   * which exactly one passes `variant` and four touch an icon or
+                   * state prop, and the item list measured 108 to 185ms of a
+                   * single panel build.
+                   *
+                   * Every visual choice here already lives in the class below,
+                   * so nothing is lost by dropping the library's variants.
+                   */
                   onClick={(event) => {
                     const box = event.currentTarget.getBoundingClientRect();
                     setContextAnchor({
@@ -1530,9 +1547,15 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
                   }`}
                 >
                   <Icon name="list-checks" class="text-[13px]" />
-                </Button>
-                <Button
+                </button>
+                <button
                   type="button"
+                  /*
+                   * native-control: as above. `disabled` is the native
+                   * attribute here, which a plain button honours by itself; the
+                   * library's `state` machine is not involved and nothing reads
+                   * `aria-busy` on this control.
+                   */
                   onClick={(event) => {
                     const box = event.currentTarget.getBoundingClientRect();
                     setContextAnchor({
@@ -1561,7 +1584,7 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
                   } ${item.status === "questions" ? "" : "mr-1"}`}
                 >
                   <Icon name="git-fork" class="text-[13px]" />
-                </Button>
+                </button>
                 <Show when={item.status === "questions"}>
                   <Show
                     when={questionFor(item)}
@@ -2048,7 +2071,15 @@ function TaskLogList(props: { projectId: string }): JSX.Element {
                * over every row on the way past, which reads as the panel
                * flinching. The pointer already says the row is a control.
                */}
-              <Button
+              {/*
+               * native-control: the row's label, which is a click target and
+               * nothing more. Same reasoning as the item row's actions: the
+               * library `Button` builds a `Dynamic`, a recipe lookup and three
+               * `Show` blocks for slots this never fills, and the task log
+               * builds one of these per row. It was the largest line in the
+               * panel at 122 to 178ms before paging and 72 to 79ms after.
+               */}
+              <button
                 type="button"
                 onClick={() => setExpanded(expanded() === entry.id ? null : entry.id)}
                 aria-label={expanded() === entry.id ? tx("Collapse") : tx("Show the whole command")}
@@ -2057,11 +2088,12 @@ function TaskLogList(props: { projectId: string }): JSX.Element {
                 }`}
               >
                 <span data-selectable>{entry.label}</span>
-              </Button>
+              </button>
               <span class={`shrink-0 ${entry.ok === false ? "text-error" : "text-az-muted"}`}>
                 {taskMeta(entry)}
               </span>
-              <Button
+              {/* native-control: as above, one per row. An icon and a class. */}
+              <button
                 type="button"
                 onClick={() =>
                   void copyEntry(
@@ -2074,7 +2106,7 @@ function TaskLogList(props: { projectId: string }): JSX.Element {
                 class="shrink-0 rounded p-0.5 text-az-faint transition-colors hover:text-az-body"
               >
                 <Icon name={copied() === entry.id ? "check" : "copy"} class="text-[11px]" />
-              </Button>
+              </button>
             </div>
             <Show when={expanded() === entry.id && entry.output}>
               <pre class="az-scroll max-h-64 whitespace-pre-wrap break-words rounded-md border border-az-hairline bg-az-inset px-2 py-1.5 font-mono text-[10.5px] text-az-body">
