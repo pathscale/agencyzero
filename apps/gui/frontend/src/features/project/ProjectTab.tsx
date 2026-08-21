@@ -6,7 +6,6 @@ import { Icon } from "~/components/Icon";
 import { Panel } from "~/components/Panel";
 import { Composer } from "~/features/project/Composer";
 import { copyText } from "~/features/project/MessageBody";
-import { ProjectPanel } from "~/features/project/ProjectPanel";
 import { noteTranscriptChromeChanged, TranscriptPane } from "~/features/project/TranscriptPane";
 import { providerUsageLabel } from "~/features/shell/UsageReadout";
 import { AGENT_LABELS } from "~/lib/labels";
@@ -646,17 +645,22 @@ export function ProjectTab(props: { tab: Tab; project: Project }): JSX.Element {
        * conversation, and costs one frame of empty panel rather than a reflow
        * of everything beside it.
        */}
-      <div
-        aria-hidden={!prefs.projectPanelVisible || forkInfo() ? "true" : "false"}
-        class={`min-h-0 flex-none overflow-hidden ${forkInfo() ? "hidden" : ""} ${
-          prefs.projectPanelVisible
-            ? "ml-4 w-[332px] translate-x-0 opacity-100"
-            : "pointer-events-none ml-0 w-0 translate-x-3 opacity-0"
-        }`}
-      >
-        <ProjectPanel project={props.project} agent={props.tab.agent} />
-        {mark("projectPanel")}
-      </div>
+      {/*
+       * One panel, on the active pane only.
+       *
+       * Every retained pane used to build its own, so opening a project
+       * constructed a second complete 332px column - 24 component instances per
+       * item row, its own scrollers, its own layers - to show data the store
+       * already held. That duplication was the panel's whole first-build cost,
+       * the reason retention had to stop at two, and the reason five panes
+       * drowned the compositor with `overflow` layers.
+       *
+       * `ProjectPanel` already reads everything through `props.project.id`, so
+       * it does not care which project it is pointed at. Rendering it only for
+       * the pane in front means a tab switch re-points one panel at different
+       * data instead of revealing a second copy of the furniture.
+       */}
+      {mark("projectPanel")}
     </div>
   );
 }

@@ -18,6 +18,7 @@ import { AnalyticsTab } from "~/features/analytics/AnalyticsTab";
 import { DraftTab } from "~/features/draft/DraftTab";
 import { HomeTab } from "~/features/home/HomeTab";
 import { WelcomeFlow } from "~/features/onboarding/WelcomeFlow";
+import { ProjectPanel } from "~/features/project/ProjectPanel";
 import { ProjectTab } from "~/features/project/ProjectTab";
 import { SettingsTab } from "~/features/settings/SettingsTab";
 import { CloseConfirm } from "~/features/shell/CloseConfirm";
@@ -26,7 +27,63 @@ import { TabStrip } from "~/features/tabs/TabStrip";
 import { installSelectionCopy } from "~/lib/clipboard";
 import { log } from "~/lib/log";
 import { tx } from "~/stores/i18n";
+import { prefs } from "~/stores/prefs";
 import { type BootState, useWorkspace, WorkspaceProvider } from "~/stores/workspace";
+import type { Project, Tab } from "~/types";
+
+/**
+ * The one side panel, pointed at whichever project is in front.
+ *
+ * Built once for the life of the window and never gated on a `Show`: the
+ * project it reads changes, its DOM does not. `ProjectPanel` already reads
+ * everything through `props.project.id`, so re-pointing it is the whole
+ * mechanism.
+ *
+ * Hidden rather than removed when a fork is open or the sidebar is collapsed,
+ * for the same reason the panes are: removing it would reconstruct it, which is
+ * exactly what this exists to stop.
+ */
+function ActiveProjectPanel(): JSX.Element {
+  const { state } = useWorkspace();
+  /*
+   * The last project seen, not merely the active one.
+   *
+   * `activeKey` is Home or Settings as often as it is a project, and letting
+   * this go null there would dispose the panel and rebuild it on the way back,
+   * which is the reconstruction this whole arrangement exists to remove. Once a
+   * project has been opened the panel stays pointed at one; the container above
+   * hides it while a non-project tab is in front.
+   */
+  let lastSeen: { project: Project; tab: Tab } | null = null;
+  const active = createMemo(() => {
+    const project = state.projects.find((candidate) => candidate.id === state.activeKey);
+    const tab = state.tabs.find((candidate) => candidate.key === state.activeKey);
+    if (project && tab) lastSeen = { project, tab };
+    return lastSeen;
+  });
+  /*
+   * A fork's pane hides the panel: its column is the fork's parent context, and
+   * the fork has none of its own. Read here rather than passed down, so the
+   * panel does not need to know which pane is in front.
+   */
+  const forked = () => Boolean(active()?.project.forkedFrom?.itemId);
+  const shown = () => Boolean(active()) && prefs.projectPanelVisible && !forked();
+
+  return (
+    <div
+      aria-hidden={shown() ? "false" : "true"}
+      class={`min-h-0 flex-none overflow-hidden ${
+        shown()
+          ? "ml-4 w-[332px] translate-x-0 opacity-100"
+          : "pointer-events-none ml-0 w-0 translate-x-3 opacity-0"
+      }`}
+    >
+      <Show when={active()}>
+        {(current) => <ProjectPanel project={current().project} agent={current().tab.agent} />}
+      </Show>
+    </div>
+  );
+}
 
 /**
  * How many project panes keep their DOM while not on screen.
@@ -195,30 +252,52 @@ export function Workspace(): JSX.Element {
               </div>
             </Show>
 
-            <For each={retainedProjects()}>
-              {(projectId) => {
-                const view = createMemo(() => {
-                  const project = state.projects.find((candidate) => candidate.id === projectId);
-                  const tab = state.tabs.find((candidate) => candidate.key === projectId);
-                  return project && tab ? { project, tab } : null;
-                });
-                return (
-                  <Show when={view()}>
-                    {(retained) => (
-                      <div
-                        data-retained-project={projectId}
-                        aria-hidden={state.activeKey !== projectId ? "true" : "false"}
-                        class={
-                          state.activeKey === projectId ? "flex min-h-0 min-w-0 flex-1" : "hidden"
-                        }
-                      >
-                        <ProjectTab tab={retained().tab} project={retained().project} />
-                      </div>
-                    )}
-                  </Show>
-                );
-              }}
-            </For>
+            {/*
+              The panes and *one* side panel, in a row.
+
+              Each retained pane used to carry its own `ProjectPanel`, so opening
+              a project built a second complete 332px column - 24 component
+              instances per item row, its own scrollers, its own compositor
+              layers - to show data the store already held. That duplication was
+              the panel's whole first-build cost, the reason retention had to
+              stop at two, and the reason five panes greyed the window with
+              `overflow` layers.
+
+              `ProjectPanel` reads everything through `props.project.id`, so it
+              never cared which project it was pointed at; it simply was not
+              given the chance to be re-pointed. One instance lives here, beside
+              the panes rather than inside them, and a tab switch changes the
+              project it reads instead of revealing another copy of the
+              furniture. It is a plain child, never gated on a `Show`, so it is
+              built once for the life of the window.
+            */}
+            <div class={activeTab().kind === "project" ? "flex min-h-0 min-w-0 flex-1" : "hidden"}>
+              <For each={retainedProjects()}>
+                {(projectId) => {
+                  const view = createMemo(() => {
+                    const project = state.projects.find((candidate) => candidate.id === projectId);
+                    const tab = state.tabs.find((candidate) => candidate.key === projectId);
+                    return project && tab ? { project, tab } : null;
+                  });
+                  return (
+                    <Show when={view()}>
+                      {(retained) => (
+                        <div
+                          data-retained-project={projectId}
+                          aria-hidden={state.activeKey !== projectId ? "true" : "false"}
+                          class={
+                            state.activeKey === projectId ? "flex min-h-0 min-w-0 flex-1" : "hidden"
+                          }
+                        >
+                          <ProjectTab tab={retained().tab} project={retained().project} />
+                        </div>
+                      )}
+                    </Show>
+                  );
+                }}
+              </For>
+              <ActiveProjectPanel />
+            </div>
 
             <Show
               when={
