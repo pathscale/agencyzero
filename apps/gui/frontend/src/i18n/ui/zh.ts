@@ -14,6 +14,7 @@ const zh = {
   "Show {count} newer messages": "显示后 {count} 条消息",
   "Show {count} more projects": "再显示 {count} 个项目",
   "Show {count} more items": "再显示 {count} 个任务",
+  "Show {count} earlier": "再显示 {count} 条较早记录",
   "Update available: {version} — install from Settings": "有可用更新：{version} — 请从设置中安装",
   "Scroll tabs left": "向左滚动标签页",
   "Scroll tabs right": "向右滚动标签页",

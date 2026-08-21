@@ -36,6 +36,17 @@ function isCount(value: number | null): value is number {
   return typeof value === "number" && Number.isFinite(value);
 }
 
+/**
+ * Projects whose side panel has been built once already.
+ *
+ * Module-level on purpose: it has to outlive `ProjectTab`, because the whole
+ * point is to survive the pane being evicted from `retainedProjects` and
+ * reconstructed. Ids only, so a project that is deleted leaves nothing behind
+ * but a string, and re-opening one is correct either way: a stale entry costs
+ * a first frame with the panel in place, which is what a repeat visit wants.
+ */
+const PANEL_REVEALED = new Set<string>();
+
 export function ProjectTab(props: { tab: Tab; project: Project }): JSX.Element {
   const { state, actions, promptModels, effortsFor, permissionsFor, capabilitiesFor, isLive } =
     useWorkspace();
@@ -130,11 +141,50 @@ export function ProjectTab(props: { tab: Tab; project: Project }): JSX.Element {
    * takes it off that path without changing what is eventually on screen.
    *
    * Its box is not deferred with it. See where it is rendered below.
+   *
+   * Deferred on a project's *first* reveal only, not on every one.
+   *
+   * `panelReady` used to be a plain `createSignal(false)` in this scope, so
+   * every reconstruction of `ProjectTab` started with the panel absent and
+   * filled it a frame later. With `RETAINED_PROJECT_LIMIT = 2` a third tab
+   * evicts the oldest pane, so returning to it rebuilt the panel from nothing
+   * and the owner saw the column blank and then repopulate. That is the flash:
+   * not a slow build, a build that should not have happened at all.
+   *
+   * `PANEL_REVEALED` remembers which projects have already paid it. A project
+   * seen before starts `true`, so its panel is present in the same frame as the
+   * rest of the pane and the switch is a content swap. A project seen for the
+   * first time still defers, which is what keeps construction off the path
+   * between a keystroke and the conversation appearing.
    */
-  const [panelReady, setPanelReady] = createSignal(false);
+  const [panelReady, setPanelReady] = createSignal(PANEL_REVEALED.has(props.project.id));
+  /*
+   * The panel's own build cost, which the pane's `mark` table cannot see.
+   *
+   * `mark("projectPanel")` sits inside the deferred `<Show>`, so it evaluates a
+   * frame *after* `onSettled` has already logged the table. Its gap was
+   * therefore never printed, and the one subtree the owner actually sees
+   * flashing was the one part of the pane with no number against it. Timed from
+   * the frame that flips `panelReady` to the frame after the subtree exists.
+   */
+  const panelBuildStart = { at: 0 };
   onSettled(() => {
+    if (panelReady()) {
+      // Already present from the first frame: nothing to reveal, and no build
+      // to time. Only the transcript pin below still wants recomputing.
+      PANEL_REVEALED.add(props.project.id);
+      noteTranscriptChromeChanged();
+      return;
+    }
     requestAnimationFrame(() => {
+      panelBuildStart.at = performance.now();
       setPanelReady(true);
+      PANEL_REVEALED.add(props.project.id);
+      requestAnimationFrame(() => {
+        const cost = performance.now() - panelBuildStart.at;
+        recordPerf("panel build", cost);
+        log.info(`panel ${props.project.id} build ${cost.toFixed(0)}ms`);
+      });
       /*
        * The transcript measured itself before the panel filled in. It does not
        * change width any more, but the pin is still recomputed here, because
