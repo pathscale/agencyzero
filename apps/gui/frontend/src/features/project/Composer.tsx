@@ -6,6 +6,7 @@ import { Icon } from "~/components/Icon";
 import { PillMenu } from "~/components/PillMenu";
 import { chooseAttachmentPaths } from "~/lib/attachments";
 import { AGENT_LABELS, PERMISSION_ORDER, permissionLabel } from "~/lib/labels";
+import { whileMounted } from "~/lib/live";
 import { describeError } from "~/lib/log";
 import {
   assumedOutputTokensForEffort,
@@ -213,6 +214,7 @@ const EMPTY_ATTACHMENTS: string[] = [];
 
 export function Composer(props: ComposerProps): JSX.Element {
   const { state, actions, isLive } = useWorkspace();
+  const alive = whileMounted();
   /*
    * The draft is *derived* from the key, never copied into local state.
    *
@@ -388,7 +390,7 @@ export function Composer(props: ComposerProps): JSX.Element {
     const compact = props.onCompact;
     if (!compact) return;
     const key = bucket();
-    void compact().catch((cause: unknown) => setErrorFor(key, describeError(cause)));
+    void compact().catch(alive((cause: unknown) => setErrorFor(key, describeError(cause))));
   };
   const toggleAdvanced = () => {
     const key = bucket();

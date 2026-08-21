@@ -13,6 +13,7 @@ import { clockTime, elapsed, taskMeta } from "~/lib/format";
 import { defaultItemDescription } from "~/lib/itemDescription";
 import { sortItems } from "~/lib/itemSort";
 import { nextStatus, statusLabel, statusSuffix } from "~/lib/labels";
+import { whileMounted } from "~/lib/live";
 import { describeError, log } from "~/lib/log";
 import { tx } from "~/stores/i18n";
 import { prefs, setPrefs, togglePanelSection } from "~/stores/prefs";
@@ -205,6 +206,7 @@ function ItemSortControls(): JSX.Element {
 function IoPersistToggle(props: { projectId: string }): JSX.Element {
   const { actions, isLive } = useWorkspace();
   const [enabled, setEnabled] = createSignal(false);
+  const alive = whileMounted();
 
   // Read once per project; the flag only changes from this control.
   createEffect(
@@ -213,7 +215,7 @@ function IoPersistToggle(props: { projectId: string }): JSX.Element {
       const id = props.projectId;
       void actions
         .getIoPersist(id)
-        .then(setEnabled)
+        .then(alive(setEnabled))
         .catch((cause) =>
           log.warn(`could not read the I/O recording flag: ${describeError(cause)}`),
         );
@@ -575,6 +577,7 @@ function ConciseResponseToggle(props: { projectId: string }): JSX.Element {
     tx("Include more detail in responses"),
   ];
   const [level, setLevel] = createSignal<(typeof levels)[number]>("default");
+  const alive = whileMounted();
 
   createEffect(
     () => props.projectId,
@@ -582,11 +585,13 @@ function ConciseResponseToggle(props: { projectId: string }): JSX.Element {
       const id = props.projectId;
       void actions
         .getProjectConcise(id)
-        .then((value) =>
-          setLevel(
-            levels.includes(value as (typeof levels)[number])
-              ? (value as (typeof levels)[number])
-              : "default",
+        .then(
+          alive((value) =>
+            setLevel(
+              levels.includes(value as (typeof levels)[number])
+                ? (value as (typeof levels)[number])
+                : "default",
+            ),
           ),
         )
         .catch((cause) => log.warn(`could not read response verbosity: ${describeError(cause)}`));
@@ -656,6 +661,7 @@ function ConciseResponseToggle(props: { projectId: string }): JSX.Element {
 function ContextDetailSelect(props: { projectId: string }): JSX.Element {
   const { actions, isLive } = useWorkspace();
   const [level, setLevel] = createSignal("adaptive");
+  const alive = whileMounted();
 
   createEffect(
     () => props.projectId,
@@ -663,7 +669,7 @@ function ContextDetailSelect(props: { projectId: string }): JSX.Element {
       const id = props.projectId;
       void actions
         .getProjectVerbosity(id)
-        .then(setLevel)
+        .then(alive(setLevel))
         .catch((cause) => log.warn(`could not read context detail: ${describeError(cause)}`));
     },
   );
@@ -932,6 +938,7 @@ function ResumeSession(props: {
 function ApprovalRules(props: { projectId: string }): JSX.Element {
   const { state, actions } = useWorkspace();
   const [rules, setRules] = createSignal<string[]>([]);
+  const alive = whileMounted();
 
   // Re-asked when this project's pending approval appears or resolves — the
   // only moments a rule can be born; forgetting below updates the list itself.
@@ -941,15 +948,15 @@ function ApprovalRules(props: { projectId: string }): JSX.Element {
       void state.pendingApprovals[props.projectId];
       void actions
         .listApprovalRules(props.projectId)
-        .then(setRules)
-        .catch(() => setRules([]));
+        .then(alive(setRules))
+        .catch(alive(() => setRules([])));
     },
   );
 
   const forget = (): void => {
     void actions
       .clearApprovalRules(props.projectId)
-      .then(() => setRules([]))
+      .then(alive(() => setRules([])))
       .catch((cause) => log.error(`could not clear the rules: ${describeError(cause)}`));
   };
 
@@ -984,6 +991,7 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
   const [adding, setAdding] = createSignal(false);
   const [title, setTitle] = createSignal("");
   const [forkingId, setForkingId] = createSignal<string | null>(null);
+  const alive = whileMounted();
   // Where the control that opened the dialog was, so it lands beside the row
   // it is about rather than in the middle of the window.
   const [contextAnchor, setContextAnchor] = createSignal<ModalAnchor | null>(null);
@@ -1141,13 +1149,15 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
     setContextDraft({ item, context: fallback, startFork: true });
     void actions
       .getItemContext(item.id)
-      .then((context) => {
-        const current = contextDraft();
-        // A delayed load must not overwrite text the owner has already typed.
-        if (current?.item.id === item.id && current.context === fallback) {
-          setContextDraft({ item, context: context || fallback, startFork: true });
-        }
-      })
+      .then(
+        alive((context) => {
+          const current = contextDraft();
+          // A delayed load must not overwrite text the owner has already typed.
+          if (current?.item.id === item.id && current.context === fallback) {
+            setContextDraft({ item, context: context || fallback, startFork: true });
+          }
+        }),
+      )
       .catch((cause) => log.error(`could not load the item context: ${describeError(cause)}`));
   }
 
@@ -2031,6 +2041,7 @@ function CopyLogButton(props: { projectId: string }): JSX.Element {
 function CheckpointToggle(props: { projectId: string }): JSX.Element {
   const { actions, isLive } = useWorkspace();
   const [enabled, setEnabled] = createSignal(false);
+  const alive = whileMounted();
 
   createEffect(
     () => props.projectId,
@@ -2038,7 +2049,7 @@ function CheckpointToggle(props: { projectId: string }): JSX.Element {
       const id = props.projectId;
       void actions
         .getCheckpoints(id)
-        .then(setEnabled)
+        .then(alive(setEnabled))
         .catch((cause) =>
           log.warn(`could not read the checkpoint setting: ${describeError(cause)}`),
         );
@@ -2109,6 +2120,7 @@ function NotesEditor(props: { projectId: string }): JSX.Element {
   const [saved, setSaved] = createSignal("");
   const [status, setStatus] = createSignal<"idle" | "saving" | "error">("idle");
   const [message, setMessage] = createSignal("");
+  const alive = whileMounted();
 
   // Re-read when the tab changes under a reused instance, and after a
   // compaction has had a chance to write.
@@ -2118,10 +2130,12 @@ function NotesEditor(props: { projectId: string }): JSX.Element {
       const projectId = props.projectId;
       void actions
         .getProjectNotes(projectId)
-        .then((notes) => {
-          setDraft(notes);
-          setSaved(notes);
-        })
+        .then(
+          alive((notes) => {
+            setDraft(notes);
+            setSaved(notes);
+          }),
+        )
         .catch((cause) => log.warn(`could not read the notes: ${describeError(cause)}`));
     },
   );

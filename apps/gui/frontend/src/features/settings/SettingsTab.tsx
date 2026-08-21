@@ -33,6 +33,7 @@ import { PillMenu } from "~/components/PillMenu";
 import { AgentStateDot } from "~/components/StatusDot";
 import { countdown, formatBytes, relativeTime } from "~/lib/format";
 import { AGENT_LABELS, agentStateLabel, envPolicyLabel, permissionLabel } from "~/lib/labels";
+import { whileMounted } from "~/lib/live";
 import { describeError, log } from "~/lib/log";
 import { reset as perfReset, snapshot as perfSnapshot } from "~/lib/perf";
 import {
@@ -174,6 +175,7 @@ export function SettingsTab(): JSX.Element {
     "refresh" | "drain" | "terminate" | "stop" | null
   >(null);
   const [proxyNote, setProxyNote] = createSignal("");
+  const alive = whileMounted();
   const [terminateArmed, setTerminateArmed] = createSignal(false);
   const [blitzControlPending, setBlitzControlPending] = createSignal(false);
   const [blitzControlError, setBlitzControlError] = createSignal("");
@@ -199,8 +201,8 @@ export function SettingsTab(): JSX.Element {
     setProxyNote("");
     void actions
       .refreshAgentProxy()
-      .catch((cause) => setProxyNote(describeError(cause)))
-      .finally(() => setProxyAction(null));
+      .catch(alive((cause) => setProxyNote(describeError(cause))))
+      .finally(alive(() => setProxyAction(null)));
   };
 
   // Settings needs one current snapshot when it opens. Later changes arrive
@@ -224,11 +226,13 @@ export function SettingsTab(): JSX.Element {
     );
     void actions
       .restartAgentProxy(mode)
-      .then(() =>
-        setProxyNote(wasConnected ? tx("AgencyProxy restarted") : tx("AgencyProxy started")),
+      .then(
+        alive(() =>
+          setProxyNote(wasConnected ? tx("AgencyProxy restarted") : tx("AgencyProxy started")),
+        ),
       )
-      .catch((cause) => setProxyNote(describeError(cause)))
-      .finally(() => setProxyAction(null));
+      .catch(alive((cause) => setProxyNote(describeError(cause))))
+      .finally(alive(() => setProxyAction(null)));
   };
 
   const stopProxy = (): void => {
@@ -243,9 +247,9 @@ export function SettingsTab(): JSX.Element {
     );
     void actions
       .stopAgentProxy()
-      .then(() => setProxyNote(tx("AgencyProxy stopped")))
-      .catch((cause) => setProxyNote(describeError(cause)))
-      .finally(() => setProxyAction(null));
+      .then(alive(() => setProxyNote(tx("AgencyProxy stopped"))))
+      .catch(alive((cause) => setProxyNote(describeError(cause))))
+      .finally(alive(() => setProxyAction(null)));
   };
 
   const setBlitzControl = (enabled: boolean): void => {
@@ -261,11 +265,13 @@ export function SettingsTab(): JSX.Element {
     // on screen saying it had gone.
     void actions
       .saveSettings({ blitzControlEnabled: enabled })
-      .catch((cause) => setBlitzControlError(describeError(cause)))
-      .finally(() => {
-        setPendingBlitzControl(null);
-        setBlitzControlPending(false);
-      });
+      .catch(alive((cause) => setBlitzControlError(describeError(cause))))
+      .finally(
+        alive(() => {
+          setPendingBlitzControl(null);
+          setBlitzControlPending(false);
+        }),
+      );
   };
 
   const setBlitzDeepProfiling = (enabled: boolean): void => {
@@ -274,11 +280,13 @@ export function SettingsTab(): JSX.Element {
     setBlitzControlError("");
     void actions
       .saveSettings({ blitzDeepProfilingEnabled: enabled })
-      .catch((cause) => setBlitzControlError(describeError(cause)))
-      .finally(() => {
-        setPendingDeepProfiling(null);
-        setBlitzControlPending(false);
-      });
+      .catch(alive((cause) => setBlitzControlError(describeError(cause))))
+      .finally(
+        alive(() => {
+          setPendingDeepProfiling(null);
+          setBlitzControlPending(false);
+        }),
+      );
   };
 
   /**
@@ -1696,17 +1704,19 @@ function ChatImportSettings(): JSX.Element {
   const [selected, setSelected] = createSignal<Record<string, string>>({});
   const [busy, setBusy] = createSignal<string | null>(null);
   const [note, setNote] = createSignal<string | null>(null);
+  const alive = whileMounted();
   const available = () => isLive("discoverChatImports") && isLive("importChatSession");
   const importableSessions = (source: ChatImportSource) =>
     source.sessions.filter((session) => session.importable);
 
   const refresh = async (): Promise<void> => {
     if (!available()) return;
-    setSources(await actions.discoverChatImports());
+    const found = await actions.discoverChatImports();
+    alive(setSources)(found);
   };
 
   onSettled(() => {
-    void refresh().catch((cause) => setNote(describeError(cause)));
+    void refresh().catch(alive((cause) => setNote(describeError(cause))));
   });
 
   const importOne = async (source: string, sessionId: string): Promise<void> => {
@@ -2150,15 +2160,18 @@ function TableSizes(): JSX.Element {
   const { state, actions } = useWorkspace();
   const [sizes, setSizes] = createSignal<TableSize[] | null>(null);
   const [failed, setFailed] = createSignal(false);
+  const alive = whileMounted();
 
   onSettled(() => {
     void actions
       .listTableSizes()
-      .then(setSizes)
-      .catch((cause) => {
-        setFailed(true);
-        log.error(`could not measure the tables: ${describeError(cause)}`);
-      });
+      .then(alive(setSizes))
+      .catch(
+        alive((cause) => {
+          setFailed(true);
+          log.error(`could not measure the tables: ${describeError(cause)}`);
+        }),
+      );
   });
 
   const total = () => (sizes() ?? []).reduce((sum, table) => sum + table.bytes, 0);
@@ -2211,31 +2224,36 @@ function StoreBackupControls(): JSX.Element {
   const [status, setStatus] = createSignal<StoreBackupStatus | null>(null);
   const [error, setError] = createSignal("");
   const [selection, setSelection] = createSignal<StoreBackupSelection | null>(null);
+  const alive = whileMounted();
 
   onSettled(() => {
     void actions
       .getStoreBackupStatus()
-      .then(setStatus)
-      .catch((cause) => {
-        const message = describeError(cause);
-        setError(message);
-        log.error(`could not list store backups: ${message}`);
-      });
+      .then(alive(setStatus))
+      .catch(
+        alive((cause) => {
+          const message = describeError(cause);
+          setError(message);
+          log.error(`could not list store backups: ${message}`);
+        }),
+      );
   });
 
   const backup = (): void => {
     setError("");
-    void actions.createStoreBackup().catch((cause) => setError(describeError(cause)));
+    void actions.createStoreBackup().catch(alive((cause) => setError(describeError(cause))));
   };
 
   const selectBackup = (): void => {
     setError("");
     void actions
       .selectStoreBackup()
-      .then((picked) => {
-        if (picked) setSelection(picked);
-      })
-      .catch((cause) => setError(describeError(cause)));
+      .then(
+        alive((picked) => {
+          if (picked) setSelection(picked);
+        }),
+      )
+      .catch(alive((cause) => setError(describeError(cause))));
   };
 
   const restore = (): void => {
@@ -2419,14 +2437,15 @@ function ResetTaskManagerButton(): JSX.Element {
 function BuildStamp(): JSX.Element {
   const { actions } = useWorkspace();
   const [build, setBuild] = createSignal<BuildInfo | null>(null);
+  const alive = whileMounted();
 
   // Once per visit: the answer cannot change without the process being
   // replaced, and a replaced process remounts this anyway.
   onSettled(() => {
     void actions
       .getBuildInfo()
-      .then(setBuild)
-      .catch(() => setBuild(null));
+      .then(alive(setBuild))
+      .catch(alive(() => setBuild(null)));
   });
 
   return (
@@ -2477,15 +2496,16 @@ function UpdateControl(): JSX.Element {
   const { state, actions, isLive } = useWorkspace();
   const [busy, setBusy] = createSignal(false);
   const [note, setNote] = createSignal<string | null>(null);
+  const alive = whileMounted();
 
   const check = (): void => {
     setBusy(true);
     setNote(null);
     void actions
       .checkForUpdate()
-      .then((found) => setNote(found ? null : tx("up to date")))
-      .catch((cause) => setNote(describeError(cause)))
-      .finally(() => setBusy(false));
+      .then(alive((found) => setNote(found ? null : tx("up to date"))))
+      .catch(alive((cause) => setNote(describeError(cause))))
+      .finally(alive(() => setBusy(false)));
   };
 
   // Optimistic and stays that way on success: the process is replaced
@@ -2541,6 +2561,7 @@ function UpdateControl(): JSX.Element {
 function RelaunchButton(): JSX.Element {
   const { actions, isLive } = useWorkspace();
   const [busy, setBusy] = createSignal(false);
+  const alive = whileMounted();
 
   return (
     <Button
@@ -2548,7 +2569,7 @@ function RelaunchButton(): JSX.Element {
       disabled={busy() || !isLive("relaunchApp")}
       onClick={() => {
         setBusy(true);
-        void actions.relaunchApp().catch(() => setBusy(false));
+        void actions.relaunchApp().catch(alive(() => setBusy(false)));
       }}
       class="shrink-0 rounded-lg border border-az-hairline-strong px-3 py-[5px] text-[12px] text-az-body transition-colors hover:border-warning hover:text-warning disabled:opacity-40"
     >
@@ -2570,6 +2591,7 @@ function CostSection(): JSX.Element {
   const [summary, setSummary] = createSignal<CostSummary | null>(null);
   const [warningPreview, setWarningPreview] = createSignal<number | null>(null);
   const warningUsd = () => warningPreview() ?? state.settings?.costWarningUsd ?? 0.75;
+  const alive = whileMounted();
   let warningSaveRevision = 0;
 
   /*
@@ -2608,9 +2630,11 @@ function CostSection(): JSX.Element {
   const commitWarning = (costWarningUsd: number): void => {
     setWarningPreview(costWarningUsd);
     const revision = ++warningSaveRevision;
-    void actions.saveSettings({ costWarningUsd }).finally(() => {
-      if (revision === warningSaveRevision) setWarningPreview(null);
-    });
+    void actions.saveSettings({ costWarningUsd }).finally(
+      alive(() => {
+        if (revision === warningSaveRevision) setWarningPreview(null);
+      }),
+    );
   };
 
   // Asked once per visit: the ledger only grows when a run finishes, and
@@ -2618,8 +2642,8 @@ function CostSection(): JSX.Element {
   onSettled(() => {
     void actions
       .getCostSummary()
-      .then(setSummary)
-      .catch(() => setSummary(null));
+      .then(alive(setSummary))
+      .catch(alive(() => setSummary(null)));
   });
 
   const dollars = (value: number | undefined): string =>
@@ -3334,6 +3358,7 @@ function StoreSnapshotControl(): JSX.Element {
   const [busy, setBusy] = createSignal(false);
   const [note, setNote] = createSignal("");
   const [failed, setFailed] = createSignal(false);
+  const alive = whileMounted();
 
   const take = (): void => {
     setBusy(true);
@@ -3341,12 +3366,14 @@ function StoreSnapshotControl(): JSX.Element {
     setNote("");
     void actions
       .createStoreSnapshot()
-      .then((name) => setNote(tx("Written to {name}", { name })))
-      .catch((cause) => {
-        setFailed(true);
-        setNote(describeError(cause));
-      })
-      .finally(() => setBusy(false));
+      .then(alive((name) => setNote(tx("Written to {name}", { name }))))
+      .catch(
+        alive((cause) => {
+          setFailed(true);
+          setNote(describeError(cause));
+        }),
+      )
+      .finally(alive(() => setBusy(false)));
   };
 
   return (
