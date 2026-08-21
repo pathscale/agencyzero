@@ -1405,7 +1405,12 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
                    * deliberate act: it gets the smallest target that can carry it,
                    * and the title beside it goes back to being text.
                    */}
-                  <Button
+                  {/*
+                   * native-control: the status marker, built once per visible
+                   * row. Same reasoning as the row's other actions: a marker
+                   * and a class, with none of the library's slots or state.
+                   */}
+                  <button
                     type="button"
                     onClick={() => advance(item)}
                     aria-label={tx("Change the status of {name}", { name: item.title })}
@@ -1413,7 +1418,7 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
                     class="ml-1.5 flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-full transition-colors hover:bg-az-chip focus-visible:bg-az-chip"
                   >
                     <ItemMarker status={item.status} />
-                  </Button>
+                  </button>
                   <div class="flex min-w-0 flex-1 items-center gap-1.5 px-1.5 py-1 text-left">
                     <span
                       data-selectable
