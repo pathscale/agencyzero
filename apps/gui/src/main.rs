@@ -14,6 +14,7 @@ mod per_turn;
 mod pricing;
 mod projects;
 mod prs;
+mod qa_profile;
 mod questions;
 mod quota;
 mod retry;
@@ -2064,6 +2065,38 @@ fn migrate_forward(location: &mut location::DataLocation, found: &str) -> Result
 }
 
 fn main() {
+    /*
+     * Building the QA profile takes over the process, like the restart angel
+     * above: it needs this crate's private `db` module and its real schema, and
+     * a separate binary cannot reach either without turning the application
+     * into a library for one tool's sake.
+     */
+    if let Ok(spec) = std::env::var(qa_profile::ENV) {
+        let Some((source, destination)) = spec.rsplit_once(':') else {
+            eprintln!("{}: expected <source-db>:<destination>", qa_profile::ENV);
+            std::process::exit(2);
+        };
+        let source = std::path::PathBuf::from(source);
+        let destination = std::path::PathBuf::from(destination);
+        let runtime = match tokio::runtime::Runtime::new() {
+            Ok(runtime) => runtime,
+            Err(error) => {
+                eprintln!("could not start a runtime: {error}");
+                std::process::exit(1);
+            }
+        };
+        match runtime.block_on(qa_profile::build(&source, &destination)) {
+            Ok(rows) => {
+                println!("scrubbed {rows} rows into {}", destination.display());
+                return;
+            }
+            Err(error) => {
+                eprintln!("could not build the QA profile: {error}");
+                std::process::exit(1);
+            }
+        }
+    }
+
     if let Some(result) = angel::run_from_env() {
         if let Err(error) = result {
             eprintln!("AgencyZero restart angel failed: {error}");

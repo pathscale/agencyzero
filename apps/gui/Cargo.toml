@@ -139,3 +139,4 @@ tokio = { version = "1", features = ["macros", "rt"] }
 [[bin]]
 name = "az-gui"
 path = "src/main.rs"
+
