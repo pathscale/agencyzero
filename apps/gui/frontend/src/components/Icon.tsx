@@ -1,7 +1,7 @@
 import type { JSX } from "@solidjs/web";
 import { omit } from "solid-js";
 import { iconStrokeColor } from "~/lib/theme";
-import type { IconName } from "./IconSprite";
+import { ICON_ART, type IconName } from "./IconSprite";
 
 export type IconProps = Omit<JSX.SvgSVGAttributes<SVGSVGElement>, "children"> & {
   name: IconName;
@@ -10,7 +10,7 @@ export type IconProps = Omit<JSX.SvgSVGAttributes<SVGSVGElement>, "children"> & 
 };
 
 /**
- * References a symbol from {@link IconSprite}.
+ * One icon, with its artwork inlined from {@link ICON_ART}.
  *
  * Sized in `em` and stroked with `currentColor`, so it takes its size and
  * colour from the surrounding text: `<span class="text-primary text-[14px]">`
@@ -79,7 +79,16 @@ export function Icon(props: IconProps): JSX.Element {
       {...rest}
     >
       {props.label ? <title>{props.label}</title> : null}
-      <use href={`#i-${props.name}`} />
+      {/*
+        The artwork inline, not `<use href="#i-name">`.
+
+        `blitz-dom` parses each inline `<svg>` into its own `usvg::Tree` from
+        that element's `outer_html` alone, so a `<use>` pointing at a `<symbol>`
+        in the hidden sprite arrived at the rasteriser as a reference to
+        something outside its tree. usvg resolved it to nothing: every icon had
+        the right box and the right stroke and drew no artwork at all.
+      */}
+      {ICON_ART[props.name]}
     </svg>
   );
 }
