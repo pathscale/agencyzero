@@ -1193,23 +1193,6 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
       actions.openProject(existing.id);
       return;
     }
-    /*
-     * Centred, not hung off the Fork button.
-     *
-     * This is a full dialog - a description field, a character budget, two
-     * actions - and the control that opens it sits at the right edge of the
-     * side panel. `anchorPlacement` therefore pinned it into the narrow strip
-     * beside that button and the `max-width`/`max-height` it computes clipped
-     * the panel to 383x96 around 330x625 of content. Measured through the
-     * renderer: the header's × reported [294,215] under a parent at [-299,196],
-     * so the exits were laid out outside the box that was actually painted.
-     * Clicks were acknowledged and no handler ran, which is what trapped the
-     * owner in a dialog with two Cancels and an Escape that all looked correct.
-     *
-     * The anchored form is for popovers that belong to one row, like the
-     * description editor below. This one belongs to the window.
-     */
-    setContextAnchor(null);
     const fallback = defaultItemDescription(item);
     setContextDraft({ item, context: fallback, startFork: true });
     void actions
@@ -1893,29 +1876,14 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
                   </h2>
                   <p class="mt-0.5 truncate text-[12px] text-az-muted">{draft().item.title}</p>
                 </div>
-                <button
+                <Button
                   type="button"
-                  /*
-                   * native-control: A native button, not the library's.
-                   *
-                   * Driving a running build, the click on this one was
-                   * dispatched - `event:click` fires - and the handler never
-                   * ran: a `console.log` on its first line printed nothing. The
-                   * listener is not attached, so the fork dialog had two Cancel
-                   * controls, an Escape handler, and no way out at all; the
-                   * owner hit it in ordinary use and 68 controls sit unreachable
-                   * behind it in a sweep.
-                   *
-                   * `EditableTitle.tsx:104` carries the same note from the same
-                   * cause. The library `Button` renders through `Dynamic`, and
-                   * nothing here needs its variants.
-                   */
                   onClick={() => setContextDraft(null)}
                   aria-label={tx("Cancel")}
-                  class="flex items-center justify-center rounded-lg p-1.5 text-az-muted hover:bg-white/6 hover:text-base-content"
+                  class="rounded-lg p-1.5 text-az-muted hover:bg-white/6 hover:text-base-content"
                 >
                   <Icon name="x" class="text-[15px]" />
-                </button>
+                </Button>
               </header>
               <div class="flex min-h-0 flex-col gap-2 px-5 py-4">
                 <div class="flex items-center justify-between gap-3">
@@ -1951,25 +1919,21 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
                 </p>
               </div>
               <footer class="flex items-center justify-end gap-2 border-az-hairline-soft border-t px-5 py-3.5">
-                {/* native-control: see the header's × above. */}
-                <button
+                <Button
                   type="button"
                   onClick={() => setContextDraft(null)}
                   class="rounded-lg border border-az-hairline px-3 py-1.5 text-[12px] text-az-body hover:border-primary/35"
                 >
                   {tx("Cancel")}
-                </button>
-                {/* native-control: see the header's × above. `Start fork` was
-                    dead the same way, so the dialog could neither act nor
-                    close. */}
-                <button
+                </Button>
+                <Button
                   type="button"
                   disabled={forkingId() === draft().item.id}
                   onClick={() => void saveContext()}
                   class="rounded-lg border border-primary/45 bg-az-chip px-3 py-1.5 font-semibold text-[12px] text-primary hover:bg-az-chip-strong disabled:opacity-40"
                 >
                   {draft().startFork ? tx("Start fork") : tx("Save description")}
-                </button>
+                </Button>
               </footer>
             </section>
           </AppModal>
