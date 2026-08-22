@@ -5,9 +5,10 @@ what it depends on, and how to tell it worked. The reasoning behind each lives i
 linked document.
 
 **Engine paths here are `ps-blitz/packages/blitz-dom/src/...`**, the checkout this
-repository patches in. Chuzz builds against a *different* checkout (`blitz-rust`) whose
-line numbers differ, and has its own list at `chuzz/docs/TODO-dom-related-work.md`. **A fix
-in one tree does not reach the other.** Items marked ENGINE need landing in both, or the
+repository patches in. Chuzz now consumes the *published* `ps-blitz-*` crates rather
+than a second checkout, so a fix here reaches it only once it is released; it keeps its
+own list at `chuzz/docs/TODO-dom-related-work.md`. **A fix in this tree does not reach
+chuzz until it ships.** Items marked ENGINE need landing in both, or the
 two checkouts need converging first.
 
 Nothing below is measured unless it says so. Numbers cited come from
