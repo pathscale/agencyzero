@@ -21,6 +21,29 @@ export function Icon(props: IconProps): JSX.Element {
   // read is just `props`, already fine-grained.
   const rest = omit(props, "name", "label", "class");
 
+  /**
+   * The colour this icon draws with, as a literal usvg can read.
+   *
+   * Never a `var()`: `blitz-dom` serialises the element and hands the string to
+   * usvg, which has no stylesheet and no custom properties. Given
+   * `stroke="var(--anything)"` usvg does not fall back, it drops the paint, and
+   * a shape with neither stroke nor fill draws nothing at all. The fallback
+   * here named `--color-az-artwork`, a token defined nowhere in the app, so
+   * every icon that mounted before the theme resolved was blank.
+   *
+   * Not `currentColor` by default either: `text-primary` marks every active tab
+   * and selected row, so an icon would be *built* in accent 1 and restyled a
+   * moment later, which is the flash this exists to prevent. `az-icon-inherit`
+   * opts back into the cascade for icons that sit inside a label and have to
+   * match the text beside them.
+   */
+  const paint = (): string =>
+    // `class` is typed as Solid's ClassValue, so it is not necessarily a
+    // string: only a string spelling of the opt-out can be read here.
+    typeof props.class === "string" && props.class.includes("az-icon-inherit")
+      ? "currentColor"
+      : (iconStrokeColor() ?? ARTWORK_FALLBACK);
+
   return (
     // biome-ignore lint/a11y/noSvgWithoutTitle: a <title> is rendered when `label` is given and the icon is aria-hidden otherwise; the rule reads attributes statically and cannot see that these are two branches of one decision.
     <svg
@@ -48,33 +71,22 @@ export function Icon(props: IconProps): JSX.Element {
        * handled the same way by `theme.css`, and a caller that passes its own
        * `stroke` still wins because `rest` spreads after this.
        */
-      stroke={
-        // `class` is typed as Solid's ClassValue, so it is not necessarily a
-        // string: only a string spelling of the opt-out can be read here.
-        typeof props.class === "string" && props.class.includes("az-icon-inherit")
-          ? "currentColor"
-          : /*
-             * A literal colour, never a `var()`, when no accent has resolved yet.
-             *
-             * This has to be something usvg can read. `blitz-dom` serialises the
-             * element and hands the string to usvg, which has no stylesheet and
-             * no custom properties: given `stroke="var(--anything)"` it does not
-             * fall back, it drops the stroke, and a path with no stroke and no
-             * fill draws nothing at all. The fallback here named
-             * `--color-az-artwork`, which is defined nowhere in the app, so
-             * every icon that mounted before the theme resolved was blank. That
-             * is most of them, and it is why the window rendered with correct
-             * boxes, correct colours in the tree, and no artwork anywhere.
-             *
-             * Not `currentColor` either: `text-primary` marks every active tab
-             * and selected row, so on a fresh load an icon would be *built* in
-             * accent 1 and restyled a moment later, which is the flash this
-             * fallback exists to prevent. `ARTWORK_FALLBACK` is the artwork
-             * accent's own default, resolved, so the first paint is already
-             * right and the theme signal only confirms it.
-             */
-            (iconStrokeColor() ?? ARTWORK_FALLBACK)
-      }
+      stroke={paint()}
+      /*
+       * The same paint as `color`, for the shapes that fill rather than stroke.
+       *
+       * Seven of the icons draw with `fill="currentColor" stroke="none"` - the
+       * ellipsis dots, the pin's head, the vendor marks. `currentColor` inside
+       * the serialised SVG resolves against that document's own `color`
+       * property, not against `stroke`, and usvg's default `color` is **black**.
+       * With no `color` here those shapes filled black on a dark surface and
+       * were invisible, which is why some icons stayed blank after the stroke
+       * was fixed. Proven against usvg 0.48:
+       *
+       *     no color attr   -> fill=Color(0, 0, 0)
+       *     color="#8fb8e8" -> fill=Color(143, 184, 232)
+       */
+      color={paint()}
       stroke-width="2"
       stroke-linecap="round"
       stroke-linejoin="round"

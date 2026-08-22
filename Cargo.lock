@@ -504,6 +504,7 @@ dependencies = [
  "blitz-control-protocol",
  "endpoint-libs",
  "eyre",
+ "ps-usvg",
  "serde",
  "serde_json",
  "tokio",
