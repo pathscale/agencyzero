@@ -64,7 +64,7 @@ sample() {
         'BEGIN { printf "%-40s %6.2fs CPU over %ss wall  (%5.1f%% of a core, rss %dMB)\n", l, b - a, w, (b - a) * 100 / w, r / 1024 }'
 }
 
-bench() { (cd "$repo" && cargo run -q -p blitz-bench -- "$@" >/dev/null 2>&1); }
+bench() { (cd "$repo" && cargo run -q -p ps-qa -- "$@" >/dev/null 2>&1); }
 
 log=$(mktemp -t azidle)
 # The environment local-delivery.sh pins into the bundle's LSEnvironment, so a

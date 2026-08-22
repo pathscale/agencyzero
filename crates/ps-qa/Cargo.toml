@@ -1,6 +1,6 @@
 [package]
-name = "blitz-bench"
-description = "Drive and measure a running AgencyZero through its inspector socket"
+name = "ps-qa"
+description = "Drive a running Blitz app through its MCP control socket and assert what the renderer did"
 version.workspace = true
 edition.workspace = true
 publish.workspace = true
@@ -9,7 +9,7 @@ publish.workspace = true
 # from `blitz-control-protocol` precisely so this binary can speak the wire
 # without building the renderer that serves it; depending on
 # `tauri-runtime-blitz` for the same types would build a browser engine to send
-# a wheel event. `cargo tree -p blitz-bench` is the check.
+# a wheel event. `cargo tree -p ps-qa` is the check.
 [dependencies]
 blitz-control-protocol = "^0.1.0"
 # The same framing the server uses, from the same crate, for the same reason as
@@ -30,7 +30,7 @@ serde_json = { version = "1", features = ["preserve_order"] }
 tokio = { version = "1", features = ["io-util", "macros", "net", "rt", "time"] }
 
 [[bin]]
-name = "blitz-bench"
+name = "ps-qa"
 path = "src/main.rs"
 
 [dev-dependencies]

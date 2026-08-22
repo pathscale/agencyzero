@@ -140,7 +140,7 @@ pub fn expectation_for(name: &str) -> Expectation {
      * that it does not wreck the composer.
      *
      * Verify these by paint, not by tree:
-     *     blitz-bench paint "<name>" 1
+     *     ps-qa paint "<name>" 1
      */
     if lower.starts_with("extra thinking") {
         return Expectation::Inert;

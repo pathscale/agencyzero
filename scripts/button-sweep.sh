@@ -58,17 +58,17 @@ readonly APP=$!
 # flaky depending on which it is that day.
 export TAURI_BLITZ_CONTROL_DESCRIPTOR="$DESCRIPTOR"
 for _ in $(seq 1 40); do
-  if ./target/release/blitz-bench nodes >/dev/null 2>&1; then break; fi
+  if ./target/release/ps-qa nodes >/dev/null 2>&1; then break; fi
   sleep 1
 done
 
 echo "== baseline =="
-./target/release/blitz-bench idle 2>&1 | head -1
+./target/release/ps-qa idle 2>&1 | head -1
 
 echo
 echo "== cover =="
 status=0
-./target/release/blitz-bench cover ${surface:+"$surface"} || status=$?
+./target/release/ps-qa cover ${surface:+"$surface"} || status=$?
 
 if [[ "$keep" == 0 ]]; then
   kill -TERM "$APP" 2>/dev/null || true

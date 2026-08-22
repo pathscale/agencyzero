@@ -848,7 +848,7 @@ mod tests {
          * Its entry used to read "Agent proxy binary" - the row's label, not
          * the control's - so it matched nothing and the sweep raised a macOS
          * open panel it could not dismiss. The name here is what
-         * `blitz-bench layout` reports for that button in a running build.
+         * `ps-qa layout` reports for that button in a running build.
          */
         for name in ["Choose…", "Back up & close", "Restore", "Export JSONL"] {
             assert!(

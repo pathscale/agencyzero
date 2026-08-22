@@ -2,7 +2,7 @@
 resolver = "3"
 members = [
     "apps/gui",
-    "crates/blitz-bench",
+    "crates/ps-qa",
     "crates/core",
     "crates/mcp-proxy",
     "crates/wt-migrate",

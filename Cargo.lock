@@ -498,21 +498,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "blitz-bench"
-version = "0.8.30"
-dependencies = [
- "base64 0.22.1",
- "blitz-control-protocol",
- "endpoint-libs",
- "eyre",
- "ps-usvg",
- "serde",
- "serde_json",
- "tiny-skia",
- "tokio",
-]
-
-[[package]]
 name = "blitz-control-protocol"
 version = "0.1.0"
 dependencies = [
@@ -4867,6 +4852,21 @@ dependencies = [
  "ps-vello-common",
  "skrifa 0.44.0",
  "smallvec",
+]
+
+[[package]]
+name = "ps-qa"
+version = "0.8.30"
+dependencies = [
+ "base64 0.22.1",
+ "blitz-control-protocol",
+ "endpoint-libs",
+ "eyre",
+ "ps-usvg",
+ "serde",
+ "serde_json",
+ "tiny-skia",
+ "tokio",
 ]
 
 [[package]]
