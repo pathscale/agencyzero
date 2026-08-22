@@ -324,8 +324,23 @@ pub fn on_surface_subtree(nodes: &[SemanticNode], surface: &Surface) -> Vec<u64>
         out
     };
 
+    /*
+     * The ancestor holding the most on-screen controls, chosen over the whole
+     * climb rather than at the first one to clear a threshold.
+     *
+     * A majority test looks reasonable and fails exactly when it matters: after
+     * a full run the window holds several retained panes, no single ancestor
+     * reaches half the on-screen buttons, the loop exhausts, and it returns
+     * whatever the last ancestor happened to be. Home reported zero buttons
+     * that way while sweeping it alone found 145 - a coverage hole that only
+     * appeared in the run that was supposed to cover everything.
+     *
+     * Taking the maximum has no threshold to be wrong about. The climb stops
+     * short of the document root, whose subtree is every surface at once.
+     */
     let mut cursor = anchor.id;
     let mut best: Vec<u64> = Vec::new();
+    let mut best_covered = 0usize;
     for _ in 0..12 {
         let Some(parent) = by_id.get(&cursor).and_then(|n| n.parent) else {
             break;
@@ -340,11 +355,13 @@ pub fn on_surface_subtree(nodes: &[SemanticNode], surface: &Surface) -> Vec<u64>
                     .is_some_and(|n| n.role == "button" && onscreen(n))
             })
             .count();
-        best = kept;
-        // Enough of the window to be the pane, but not so much that it is the
-        // whole document with every retained surface in it.
-        if onscreen_total > 0 && covered * 2 >= onscreen_total {
+        // Everything on screen means this is the root, not a pane.
+        if onscreen_total > 0 && covered >= onscreen_total {
             break;
+        }
+        if covered > best_covered {
+            best_covered = covered;
+            best = kept;
         }
     }
     best
@@ -409,10 +426,17 @@ pub fn restarts_the_app(name: &str) -> bool {
 /// The tab is still exercised - `Close` on a project tab is swept - but the
 /// three permanent surfaces keep theirs.
 pub fn closes_a_surface(name: &str) -> bool {
-    matches!(
-        name,
-        "Close Settings" | "Close Analytics" | "Close Home" | "Close Untitled"
-    )
+    /*
+     * Every `Close` in the strip, not a fixed list of three.
+     *
+     * A project tab's close was left in the sweep on the grounds that it is an
+     * ordinary control - but closing a project tab falls the window back to
+     * Home, retires the pane later surfaces are reached through, and in a full
+     * run left Home reporting zero buttons where sweeping it alone finds 145.
+     * The close controls are worth pressing; they are not worth pressing in the
+     * middle of a plan that stands on what they remove.
+     */
+    name.starts_with("Close ")
 }
 
 /// The disclosure controls that must be opened before a sweep of this surface.

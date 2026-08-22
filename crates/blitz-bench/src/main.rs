@@ -1809,14 +1809,21 @@ async fn run_sweep(client: &mut Client, family: Option<&str>) -> Result<usize> {
 /// Repeated until nothing more opens, because expanding one section reveals
 /// disclosure controls inside it: `Items` holds a row per item and each row has
 /// its own. A single pass stops one level short of the controls that matter.
-async fn expand_everything(client: &mut Client) -> Result<usize> {
+async fn expand_everything(client: &mut Client, surface: &reach::Surface) -> Result<usize> {
     let mut opened = 0;
     // Bounded: a disclosure that reports "Expand" after being expanded would
     // otherwise spin here forever, and that is a bug worth finishing the run to
     // report rather than hanging on.
     for _ in 0..6 {
         let (tree, _) = inspect(client).await?;
-        let todo = reach::expanders(&tree.nodes);
+        // This surface's disclosures only: a retained pane keeps its own, and
+        // pressing one of those navigates out of the surface being planned.
+        let mine: std::collections::HashSet<u64> =
+            reach::on_surface_subtree(&tree.nodes, surface).into_iter().collect();
+        let todo: Vec<(u64, String)> = reach::expanders(&tree.nodes)
+            .into_iter()
+            .filter(|(id, _)| mine.contains(id))
+            .collect();
         if todo.is_empty() {
             break;
         }
@@ -2038,7 +2045,20 @@ async fn run_cover(client: &mut Client, only: Option<&str>) -> Result<usize> {
             continue;
         }
 
-        let opened = expand_everything(client).await?;
+        /*
+         * Expanded within this surface only, and the surface re-checked after.
+         *
+         * `expand_everything` pressed every `Expand *` in the window, including
+         * ones belonging to retained panes behind this one. Twelve such presses
+         * ran before Home's plan was built, the last of them navigated away,
+         * and Home then reported zero buttons in a full run while sweeping it
+         * alone found 145.
+         */
+        let opened = expand_everything(client, surface).await?;
+        if !open_surface(client, surface).await? {
+            println!("- {:<10} left during expansion, skipping\n", surface.name);
+            continue;
+        }
         let hovered = hover_all_rows(client).await?;
 
         /*
@@ -2099,6 +2119,7 @@ async fn run_cover(client: &mut Client, only: Option<&str>) -> Result<usize> {
          */
         let mut plan: Vec<(u64, String)> = Vec::new();
         let mut collapsers: Vec<(u64, String)> = Vec::new();
+        let mut closers: Vec<(u64, String)> = Vec::new();
         for node in &buttons {
             if !reach::onscreen(node) {
                 here.unreachable += 1;
@@ -2135,9 +2156,17 @@ async fn run_cover(client: &mut Client, only: Option<&str>) -> Result<usize> {
                 // the run; counted, never pressed.
                 here.native += 1;
             } else if reach::closes_a_surface(&node.name) {
-                // Closing Settings retires the tab the rest of the run stands
-                // on; counted as navigation because that is what it is.
-                here.navigation += 1;
+                /*
+                 * Swept, but after everything that stands on the tab it
+                 * removes.
+                 *
+                 * Closing any tab falls the window back to Home and retires a
+                 * pane later surfaces are reached through: in a full run this
+                 * left Home reporting zero buttons where sweeping it alone
+                 * finds 145. Deferred rather than skipped, so the control is
+                 * still pressed.
+                 */
+                closers.push((node.id, node.name.clone()));
             } else {
                 plan.push((node.id, node.name.clone()));
             }
@@ -2160,6 +2189,8 @@ async fn run_cover(client: &mut Client, only: Option<&str>) -> Result<usize> {
             )
         });
         plan.extend(collapsers);
+        // Last of all: these retire the pane everything above stands on.
+        plan.extend(closers);
 
         /*
          * Swept by name, and the surface is restored only when it has actually
