@@ -35,7 +35,10 @@ use std::collections::BTreeMap;
 /// markup the renderer really receives, and deriving it from the source would
 /// re-import whatever mistake the source is making.
 const ROOT_ATTRS: &str = concat!(
-    r##"xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="1em" height="1em" "##,
+    // No `width`/`height`: sizing is CSS, which usvg never sees. Carrying them
+    // here made every icon parse as a 12x12 tree against a 24x24 viewBox, which
+    // is the half-scale artwork that vanished on small controls.
+    r##"xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" "##,
     r##"fill="none" stroke="#8fb8e8" color="#8fb8e8" stroke-width="2" "##,
     r##"stroke-linecap="round" stroke-linejoin="round""##
 );
@@ -169,6 +172,39 @@ fn every_icon_draws_something_visible() {
         "{} of {} icons paint black, which is invisible on the app's surface: {black:?}",
         black.len(),
         icons.len()
+    );
+}
+
+/// `1em` on the element resolves to 12px, not to the viewBox.
+///
+/// usvg parses the serialised markup with no font context, so `width="1em"`
+/// becomes a flat 12px while the `viewBox` says 24x24. The artwork then arrives
+/// at half scale, and on a 13px control the strokes land below a pixel and
+/// vanish: every `Close` and `Collapse` button in the app measured 0 visible
+/// pixels through the capture API while a differently-styled control measured
+/// 4.35%. Sizing belongs in CSS, which usvg never sees.
+#[test]
+fn em_sizing_on_the_element_halves_the_artwork() {
+    // `ROOT_ATTRS` tracks `Icon.tsx`, which no longer carries em sizing, so the
+    // broken form is reconstructed here rather than duplicated into it.
+    const PATH: &str = r##"<path d="M18 6 6 18M6 6l12 12"/>"##;
+    let with_em = format!(
+        r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="#8fb8e8" stroke-width="2">{PATH}</svg>"##
+    );
+    let sized = usvg::Tree::from_data(with_em.as_bytes(), &usvg::Options::default())
+        .unwrap_or_else(|error| panic!("em-sized markup did not parse: {error}"));
+    assert_eq!(
+        sized.size().width(),
+        12.0,
+        "usvg no longer resolves 1em to 12px; the reason Icon.tsx sizes with CSS may have changed"
+    );
+
+    let without = format!("<svg {ROOT_ATTRS}>{PATH}</svg>");
+    let natural = usvg::Tree::from_data(without.as_bytes(), &usvg::Options::default()).unwrap();
+    assert_eq!(
+        natural.size().width(),
+        24.0,
+        "without em sizing the viewBox should decide, so the artwork is authored-scale"
     );
 }
 
