@@ -64,11 +64,19 @@ pub struct Case {
 pub fn expectation_for(name: &str) -> Expectation {
     let lower = name.to_lowercase();
 
-    // Disclosure pairs, which name their own inverse.
+    /*
+     * Disclosure pairs, which name their own inverse.
+     *
+     * Built from the *original* name, not the lowercased one: the comparison
+     * downstream is case-insensitive, but a subject taken from `lower` and
+     * pasted after a capitalised verb produces a string that matches nothing
+     * and reports every working toggle as broken.
+     */
     for (from, to) in [("collapse ", "Expand "), ("expand ", "Collapse ")] {
-        if let Some(rest) = lower.strip_prefix(from) {
+        if lower.starts_with(from) {
+            let subject = &name[from.len()..];
             return Expectation::Toggles {
-                into: format!("{to}{rest}"),
+                into: format!("{to}{subject}"),
             };
         }
     }

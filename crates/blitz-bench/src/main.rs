@@ -1357,6 +1357,17 @@ async fn run_qa(client: &mut Client, group: Option<&str>) -> Result<usize> {
     Ok(failed)
 }
 
+/// Click one node by id, with no name lookup in between.
+async fn click_by_id(client: &mut Client, node_id: u64) -> Result<()> {
+    let answer = client
+        .agent(&AgentControlRequest::Act(AgentAction::Click { node_id }))
+        .await?;
+    if let DebugResponse::Error(error) = answer.response {
+        bail!("{} ({})", error.message, error.code);
+    }
+    Ok(())
+}
+
 /// `click_named` without the metrics report, for the QA runner's inner loop.
 async fn click_named_quiet(client: &mut Client, want: &str) -> Result<()> {
     let (snapshot, _) = inspect(client).await?;
@@ -1668,6 +1679,18 @@ async fn painted_nodes(client: &mut Client) -> Result<HashSet<u64>> {
 /// re-render that a working button causes.
 async fn run_sweep(client: &mut Client, family: Option<&str>) -> Result<usize> {
     let (snapshot, _) = inspect(client).await?;
+    let viewport = snapshot
+        .nodes
+        .iter()
+        .filter(|node| node.role == "main")
+        .filter_map(|node| node.bounds)
+        .map(|b| (b[1], b[1] + b[3]))
+        .max_by(|a, b| {
+            (a.1 - a.0)
+                .partial_cmp(&(b.1 - b.0))
+                .unwrap_or(std::cmp::Ordering::Equal)
+        })
+        .unwrap_or((0.0, f64::MAX));
     let planned = sweep::cases(&snapshot.nodes, family, audit::family_of);
     if planned.is_empty() {
         bail!("no clickable buttons matched {family:?}");
@@ -1678,13 +1701,42 @@ async fn run_sweep(client: &mut Client, family: Option<&str>) -> Result<usize> {
     for case in planned {
         let (before, _) = inspect(client).await?;
 
-        // Gone since the plan was made, which a working button often causes:
-        // closing one tab removes the close buttons of the tabs it held.
-        if !sweep::has_button(&before.nodes, &case.name) {
+        /*
+         * Re-resolved by id, freshly, every time.
+         *
+         * Clicking by name cannot work here: fifteen task-log rows are all
+         * called "Show the whole command", so after the first click the lookup
+         * is ambiguous and every later one reports a failure that is the
+         * harness's, not the application's. That produced 24 false failures in
+         * the first run and buried whatever was real.
+         *
+         * The id is re-checked against the current tree rather than trusted
+         * from the plan, because a working button re-renders its own row and a
+         * stale id is a click on nothing.
+         */
+        let Some(node) = before.nodes.iter().find(|node| node.id == case.id) else {
+            // Gone since the plan was made, which a working button often
+            // causes: closing one tab removes the close buttons of its
+            // neighbours. Not a failure.
+            continue;
+        };
+        if !node.visible || !node.enabled {
+            continue;
+        }
+        /*
+         * Off the viewport is not clickable, and clicking it anyway tests the
+         * harness rather than the application. A transcript keeps hundreds of
+         * controls at negative coordinates and the panel's lower sections sit
+         * below the fold; both reported as failures until they were skipped.
+         */
+        if node
+            .bounds
+            .is_some_and(|b| b[1] + b[3] < viewport.0 || b[0] + b[2] < 0.0 || b[1] > viewport.1)
+        {
             continue;
         }
 
-        if let Err(error) = click_named_quiet(client, &case.name).await {
+        if let Err(error) = click_by_id(client, case.id).await {
             outcomes.push(sweep::Outcome {
                 case,
                 failure: Some(format!("could not be clicked: {error}")),
