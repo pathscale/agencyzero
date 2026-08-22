@@ -361,7 +361,10 @@ describe("the project side panel", () => {
     if (!reply) throw new Error("persistent reply action is missing");
     expect(reply.className).toContain("size-[22px]");
     expect(reply.className).toContain("border-warning/65");
-    expect(row?.querySelector('use[href="#i-circle-help"]')).not.toBeNull();
+    // The help mark draws its own geometry now: a `<use>` into the shared
+    // sprite resolved to nothing once the real renderer parsed each `<svg>`
+    // from its own `outer_html`.
+    expect(row?.querySelector("svg circle")).not.toBeNull();
     fireEvent.click(reply);
     flush();
 

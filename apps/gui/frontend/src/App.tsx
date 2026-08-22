@@ -13,7 +13,6 @@ import {
 } from "solid-js";
 import { Button } from "~/components/Button";
 import { Icon } from "~/components/Icon";
-import { IconSprite } from "~/components/IconSprite";
 import { AnalyticsTab } from "~/features/analytics/AnalyticsTab";
 import { DraftTab } from "~/features/draft/DraftTab";
 import { HomeTab } from "~/features/home/HomeTab";
@@ -464,7 +463,6 @@ export default function App(): JSX.Element {
 
   return (
     <>
-      <IconSprite />
       <WorkspaceProvider>
         <Workspace />
       </WorkspaceProvider>

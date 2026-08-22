@@ -26,7 +26,9 @@ describe("the project panel toggle", () => {
     expect(button.classList).not.toContain("rounded-r-full");
     expect(button.classList).not.toContain("shadow-[3px_0_8px_rgb(0_0_0_/_0.22)]");
     expect(button.className).not.toContain("-right-");
-    expect(button.querySelector("use")?.getAttribute("href")).toBe("#i-chevron-right");
+    // The chevron's own path, not a `<use>` naming it: the artwork is inline,
+    // because a cross-tree reference resolved to nothing in the real renderer.
+    expect(button.querySelector("svg path")).toBeInTheDocument();
 
     fireEvent.click(button);
     expect(onToggle).toHaveBeenCalledOnce();
