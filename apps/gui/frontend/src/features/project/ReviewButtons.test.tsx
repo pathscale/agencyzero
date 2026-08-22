@@ -39,15 +39,20 @@ async function mount() {
 
 describe("pull request review buttons", () => {
   it("uses each review provider's local SVG mark", async () => {
-    const { getByLabelText, container } = await mount();
-    const href = (label: string) =>
-      getByLabelText(label).querySelector("use")?.getAttribute("href");
+    const { getByLabelText } = await mount();
 
-    expect(href("Review with Claude")).toBe("#i-vendor-claude");
-    expect(href("Review with Codex")).toBe("#i-vendor-openai");
-    expect(href("Review with Copilot")).toBe("#i-vendor-copilot");
-    for (const id of ["i-vendor-claude", "i-vendor-openai", "i-vendor-copilot"]) {
-      const path = container.querySelector(`#${id} path`);
+    /*
+     * The mark's own geometry, not a `<use>` naming it in a shared sprite.
+     *
+     * `blitz-dom` parses every inline `<svg>` into its own `usvg::Tree` from
+     * that element's `outer_html`, so a reference to a `<symbol>` living in a
+     * different tree resolved to nothing: the button had a correct box and a
+     * correct stroke and no artwork in it. Asserting on the `href` passed
+     * throughout that outage, which is why it asserts on the drawing now.
+     */
+    for (const label of ["Review with Claude", "Review with Codex", "Review with Copilot"]) {
+      const path = getByLabelText(label).querySelector("svg path");
+      expect(path, `${label} has no mark`).toBeInTheDocument();
       expect(path).toHaveAttribute("fill", "currentColor");
       expect(path).toHaveAttribute("stroke", "none");
     }

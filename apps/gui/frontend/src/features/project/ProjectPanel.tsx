@@ -1,6 +1,6 @@
-import { Checkbox, Flex, Input, Slider, Switch, Textarea } from "@pathscale/ui";
+import { Checkbox, createFlexGrid, Flex, Input, Slider, Switch, Textarea } from "@pathscale/ui";
 import type { JSX } from "@solidjs/web";
-import { createEffect, createMemo, createSignal, For, Show } from "solid-js";
+import { createEffect, createMemo, createSignal, For, onSettled, Show } from "solid-js";
 import { NOTES_BUDGET } from "~/api/client";
 import { AppModal, type ModalAnchor } from "~/components/AppModal";
 import { Button } from "~/components/Button";
@@ -13,13 +13,25 @@ import { clockTime, elapsed, taskMeta } from "~/lib/format";
 import { defaultItemDescription } from "~/lib/itemDescription";
 import { sortItems } from "~/lib/itemSort";
 import { nextStatus, statusLabel, statusSuffix } from "~/lib/labels";
+import { whileMounted } from "~/lib/live";
 import { describeError, log } from "~/lib/log";
+import { record as recordPerf } from "~/lib/perf";
 import { tx } from "~/stores/i18n";
 import { prefs, setPrefs, togglePanelSection } from "~/stores/prefs";
 import { useNow, useWorkspace } from "~/stores/workspace";
 import type { Agent, Project, ProjectItem, Question, RunningTask } from "~/types";
 
 export const PROJECT_ITEM_PAGE_SIZE = 12;
+
+/**
+ * How many task-log rows are built up front.
+ *
+ * Twenty, which is more than the section shows at its 45vh cap, so the page
+ * covers what is reachable by scrolling before the control is needed.
+ * Hydration loads at most 40 entries however large the stored log is, so this
+ * is a render cap, not a data one.
+ */
+export const TASK_LOG_PAGE_SIZE = 20;
 
 export function itemPage<T>(items: readonly T[], limit: number): T[] {
   return items.slice(0, Math.max(0, limit));
@@ -36,8 +48,39 @@ export function itemPage<T>(items: readonly T[], limit: number): T[] {
 export function ProjectPanel(props: { project: Project; agent: Agent }): JSX.Element {
   const { state, itemsFor, openItemCount } = useWorkspace();
 
+  /*
+   * Per-section attribution, the same trick the pane uses.
+   *
+   * The panel measured 48ms on an empty project and 496ms on a busy one, and
+   * the pane's own table cannot see inside it. `sectionMark` renders nothing
+   * and evaluates in JSX order during construction, so the gap between two
+   * marks is what the section between them cost to build. Without this the only
+   * honest statement about the slowest subtree in the app is that it is slow.
+   */
+  const panelBuilt = performance.now();
+  const sectionMarks: [string, number][] = [];
+  const sectionMark = (label: string) => {
+    sectionMarks.push([label, performance.now()]);
+    return null;
+  };
+  onSettled(() => {
+    let previous = panelBuilt;
+    const parts = sectionMarks.map(([label, at]) => {
+      const cost = at - previous;
+      previous = at;
+      recordPerf(`panel section: ${label}`, cost);
+      return `${label} ${cost.toFixed(0)}ms`;
+    });
+    log.info(
+      `panel ${props.project.id} sections ${(performance.now() - panelBuilt).toFixed(0)}ms: ` +
+        `${parts.join(", ")}`,
+    );
+  });
+
   const running = () => state.running[props.project.id] ?? [];
-  const log = () => state.taskLog[props.project.id] ?? [];
+  // Named for what it holds, not `log`: the module-level logger is also in
+  // scope here and the shadow made `log.info` resolve to this accessor.
+  const taskLog = () => state.taskLog[props.project.id] ?? [];
   const io = () => state.agentIo[props.project.id] ?? [];
   const panelItems = createMemo(() => {
     const visible = itemsFor(props.project.id);
@@ -76,6 +119,7 @@ export function ProjectPanel(props: { project: Project; agent: Agent }): JSX.Ele
       >
         <ItemList projectId={props.project.id} items={panelItems()} />
       </SectionPanel>
+      {sectionMark("items")}
 
       <SectionPanel
         title={tx("Running")}
@@ -92,6 +136,7 @@ export function ProjectPanel(props: { project: Project; agent: Agent }): JSX.Ele
       >
         <RunningList projectId={props.project.id} />
       </SectionPanel>
+      {sectionMark("running")}
 
       {/*
         The min-height applies only while open: a collapsed section holding
@@ -100,7 +145,7 @@ export function ProjectPanel(props: { project: Project; agent: Agent }): JSX.Ele
       <SectionPanel
         icon="history"
         title={tx("Task log")}
-        count={state.logTotals[props.project.id] ?? log().length}
+        count={state.logTotals[props.project.id] ?? taskLog().length}
         lead={
           <>
             <CopyLogButton projectId={props.project.id} />
@@ -113,6 +158,7 @@ export function ProjectPanel(props: { project: Project; agent: Agent }): JSX.Ele
       >
         <TaskLogList projectId={props.project.id} />
       </SectionPanel>
+      {sectionMark("tasklog")}
 
       <SectionPanel
         icon="terminal"
@@ -124,6 +170,7 @@ export function ProjectPanel(props: { project: Project; agent: Agent }): JSX.Ele
       >
         <AgentIoList projectId={props.project.id} />
       </SectionPanel>
+      {sectionMark("agentio")}
 
       <SectionPanel
         icon="sparkles"
@@ -134,11 +181,13 @@ export function ProjectPanel(props: { project: Project; agent: Agent }): JSX.Ele
       >
         <NotesEditor projectId={props.project.id} />
       </SectionPanel>
+      {sectionMark("notes")}
 
       {/* Last, deliberately: directories and the moderator toggle are set once
           and revisited rarely, and they were costing the working sections the
           top of the column. */}
       <SettingsSection project={props.project} agent={props.agent} />
+      {sectionMark("settings")}
     </div>
   );
 }
@@ -205,6 +254,7 @@ function ItemSortControls(): JSX.Element {
 function IoPersistToggle(props: { projectId: string }): JSX.Element {
   const { actions, isLive } = useWorkspace();
   const [enabled, setEnabled] = createSignal(false);
+  const alive = whileMounted();
 
   // Read once per project; the flag only changes from this control.
   createEffect(
@@ -213,7 +263,7 @@ function IoPersistToggle(props: { projectId: string }): JSX.Element {
       const id = props.projectId;
       void actions
         .getIoPersist(id)
-        .then(setEnabled)
+        .then(alive(setEnabled))
         .catch((cause) =>
           log.warn(`could not read the I/O recording flag: ${describeError(cause)}`),
         );
@@ -575,6 +625,7 @@ function ConciseResponseToggle(props: { projectId: string }): JSX.Element {
     tx("Include more detail in responses"),
   ];
   const [level, setLevel] = createSignal<(typeof levels)[number]>("default");
+  const alive = whileMounted();
 
   createEffect(
     () => props.projectId,
@@ -582,11 +633,13 @@ function ConciseResponseToggle(props: { projectId: string }): JSX.Element {
       const id = props.projectId;
       void actions
         .getProjectConcise(id)
-        .then((value) =>
-          setLevel(
-            levels.includes(value as (typeof levels)[number])
-              ? (value as (typeof levels)[number])
-              : "default",
+        .then(
+          alive((value) =>
+            setLevel(
+              levels.includes(value as (typeof levels)[number])
+                ? (value as (typeof levels)[number])
+                : "default",
+            ),
           ),
         )
         .catch((cause) => log.warn(`could not read response verbosity: ${describeError(cause)}`));
@@ -656,6 +709,7 @@ function ConciseResponseToggle(props: { projectId: string }): JSX.Element {
 function ContextDetailSelect(props: { projectId: string }): JSX.Element {
   const { actions, isLive } = useWorkspace();
   const [level, setLevel] = createSignal("adaptive");
+  const alive = whileMounted();
 
   createEffect(
     () => props.projectId,
@@ -663,7 +717,7 @@ function ContextDetailSelect(props: { projectId: string }): JSX.Element {
       const id = props.projectId;
       void actions
         .getProjectVerbosity(id)
-        .then(setLevel)
+        .then(alive(setLevel))
         .catch((cause) => log.warn(`could not read context detail: ${describeError(cause)}`));
     },
   );
@@ -932,6 +986,7 @@ function ResumeSession(props: {
 function ApprovalRules(props: { projectId: string }): JSX.Element {
   const { state, actions } = useWorkspace();
   const [rules, setRules] = createSignal<string[]>([]);
+  const alive = whileMounted();
 
   // Re-asked when this project's pending approval appears or resolves — the
   // only moments a rule can be born; forgetting below updates the list itself.
@@ -941,15 +996,15 @@ function ApprovalRules(props: { projectId: string }): JSX.Element {
       void state.pendingApprovals[props.projectId];
       void actions
         .listApprovalRules(props.projectId)
-        .then(setRules)
-        .catch(() => setRules([]));
+        .then(alive(setRules))
+        .catch(alive(() => setRules([])));
     },
   );
 
   const forget = (): void => {
     void actions
       .clearApprovalRules(props.projectId)
-      .then(() => setRules([]))
+      .then(alive(() => setRules([])))
       .catch((cause) => log.error(`could not clear the rules: ${describeError(cause)}`));
   };
 
@@ -984,6 +1039,7 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
   const [adding, setAdding] = createSignal(false);
   const [title, setTitle] = createSignal("");
   const [forkingId, setForkingId] = createSignal<string | null>(null);
+  const alive = whileMounted();
   // Where the control that opened the dialog was, so it lands beside the row
   // it is about rather than in the middle of the window.
   const [contextAnchor, setContextAnchor] = createSignal<ModalAnchor | null>(null);
@@ -1141,13 +1197,15 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
     setContextDraft({ item, context: fallback, startFork: true });
     void actions
       .getItemContext(item.id)
-      .then((context) => {
-        const current = contextDraft();
-        // A delayed load must not overwrite text the owner has already typed.
-        if (current?.item.id === item.id && current.context === fallback) {
-          setContextDraft({ item, context: context || fallback, startFork: true });
-        }
-      })
+      .then(
+        alive((context) => {
+          const current = contextDraft();
+          // A delayed load must not overwrite text the owner has already typed.
+          if (current?.item.id === item.id && current.context === fallback) {
+            setContextDraft({ item, context: context || fallback, startFork: true });
+          }
+        }),
+      )
       .catch((cause) => log.error(`could not load the item context: ${describeError(cause)}`));
   }
 
@@ -1202,16 +1260,28 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
   }
 
   /**
-   * Swap the item with its neighbour and persist the whole order. The full
-   * id list goes over the wire because position is the index within it —
-   * sending one move would make the backend re-derive what the panel
-   * already knows.
+   * Swap a row with its neighbour and persist the whole order. The full id list
+   * goes over the wire because position is the index within it — sending one
+   * move would make the backend re-derive what the panel already knows.
+   *
+   * Identity, not index. The rows are rendered from `shown()`, which is sorted
+   * by the owner's choice and cut to a page, while the order being written is
+   * `props.items`. Those two agree only under the default sort on a short list,
+   * so taking the clicked index into `props.items` swapped a different pair
+   * than the one under the cursor, and off the end of the page it swapped
+   * against a row nobody could see. The neighbour is therefore resolved in the
+   * order the owner is looking at, and only then located in the order we store.
    */
-  function move(index: number, delta: number): void {
-    const ordered = props.items.map((item) => item.id);
-    const target = index + delta;
-    if (target < 0 || target >= ordered.length) return;
-    [ordered[index], ordered[target]] = [ordered[target], ordered[index]];
+  function move(item: ProjectItem, delta: number): void {
+    const rendered = shown();
+    const from = rendered.findIndex((row) => row.id === item.id);
+    const to = from + delta;
+    if (from < 0 || to < 0 || to >= rendered.length) return;
+    const ordered = props.items.map((row) => row.id);
+    const left = ordered.indexOf(item.id);
+    const right = ordered.indexOf(rendered[to].id);
+    if (left < 0 || right < 0) return;
+    [ordered[left], ordered[right]] = [ordered[right], ordered[left]];
     void actions
       .reorderItems(props.projectId, ordered)
       .catch((cause) => log.error(`could not reorder: ${describeError(cause)}`));
@@ -1260,19 +1330,30 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
         {(item, index) => (
           <Show
             when={editingId() !== item.id}
+            /*
+             * The editor is built when a row enters edit mode, not with the row.
+             *
+             * `fallback` is an ordinary prop, so this JSX used to be evaluated
+             * as each row was created: every visible row constructed an
+             * `Input.Field` that only one row can ever show. Wrapping it in a
+             * `<Show>` of its own makes the construction conditional, which is
+             * what the fallback reads as but is not.
+             */
             fallback={
-              <Input.Field
-                autofocus
-                value={editTitle()}
-                aria-label={tx("Edit {name}", { name: item.title })}
-                onInput={(event) => setEditTitle(event.currentTarget.value)}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter") void saveEdit(item);
-                  if (event.key === "Escape") setEditingId(null);
-                }}
-                onBlur={() => void saveEdit(item)}
-                class="rounded-[9px] border border-primary/40 bg-base-300 px-2.5 py-2 text-[12.5px] text-az-body focus:outline-none"
-              />
+              <Show when={editingId() === item.id}>
+                <Input.Field
+                  autofocus
+                  value={editTitle()}
+                  aria-label={tx("Edit {name}", { name: item.title })}
+                  onInput={(event) => setEditTitle(event.currentTarget.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") void saveEdit(item);
+                    if (event.key === "Escape") setEditingId(null);
+                  }}
+                  onBlur={() => void saveEdit(item)}
+                  class="rounded-[9px] border border-primary/40 bg-base-300 px-2.5 py-2 text-[12.5px] text-az-body focus:outline-none"
+                />
+              </Show>
             }
           >
             <div class="rounded-[9px]">
@@ -1336,7 +1417,12 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
                    * deliberate act: it gets the smallest target that can carry it,
                    * and the title beside it goes back to being text.
                    */}
-                  <Button
+                  {/*
+                   * native-control: the status marker, built once per visible
+                   * row. Same reasoning as the row's other actions: a marker
+                   * and a class, with none of the library's slots or state.
+                   */}
+                  <button
                     type="button"
                     onClick={() => advance(item)}
                     aria-label={tx("Change the status of {name}", { name: item.title })}
@@ -1344,7 +1430,7 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
                     class="ml-1.5 flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-full transition-colors hover:bg-az-chip focus-visible:bg-az-chip"
                   >
                     <ItemMarker status={item.status} />
-                  </Button>
+                  </button>
                   <div class="flex min-w-0 flex-1 items-center gap-1.5 px-1.5 py-1 text-left">
                     <span
                       data-selectable
@@ -1431,8 +1517,25 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
                     </span>
                   </div>
                 </div>
-                <Button
+                <button
                   type="button"
+                  /*
+                   * native-control: A native button, not the library's, and the
+                   * same finding as `EditableTitle`'s pencil.
+                   *
+                   * The library `Button` builds a `Dynamic` over a recipe, three
+                   * `Show` blocks for the spinner and two icon slots, a
+                   * `mergeProps` per slot and about eight memos, so that some
+                   * other call site can render an anchor or a spinner. This one
+                   * is an icon with a class on it and uses none of that. It is
+                   * also per *row*: the panel builds 43 library buttons, of
+                   * which exactly one passes `variant` and four touch an icon or
+                   * state prop, and the item list measured 108 to 185ms of a
+                   * single panel build.
+                   *
+                   * Every visual choice here already lives in the class below,
+                   * so nothing is lost by dropping the library's variants.
+                   */
                   onClick={(event) => {
                     const box = event.currentTarget.getBoundingClientRect();
                     setContextAnchor({
@@ -1461,9 +1564,15 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
                   }`}
                 >
                   <Icon name="list-checks" class="text-[13px]" />
-                </Button>
-                <Button
+                </button>
+                <button
                   type="button"
+                  /*
+                   * native-control: as above. `disabled` is the native
+                   * attribute here, which a plain button honours by itself; the
+                   * library's `state` machine is not involved and nothing reads
+                   * `aria-busy` on this control.
+                   */
                   onClick={(event) => {
                     const box = event.currentTarget.getBoundingClientRect();
                     setContextAnchor({
@@ -1492,7 +1601,7 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
                   } ${item.status === "questions" ? "" : "mr-1"}`}
                 >
                   <Icon name="git-fork" class="text-[13px]" />
-                </Button>
+                </button>
                 <Show when={item.status === "questions"}>
                   <Show
                     when={questionFor(item)}
@@ -1626,7 +1735,7 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
                     <div class="flex shrink-0 flex-col">
                       <Button
                         type="button"
-                        onClick={() => move(index(), -1)}
+                        onClick={() => move(item, -1)}
                         disabled={filtering() || index() === 0}
                         aria-label={tx("Move {name} up", { name: item.title })}
                         class="rounded-sm px-0.5 text-az-faint transition-colors hover:text-az-body disabled:opacity-25"
@@ -1635,8 +1744,8 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
                       </Button>
                       <Button
                         type="button"
-                        onClick={() => move(index(), 1)}
-                        disabled={filtering() || index() === props.items.length - 1}
+                        onClick={() => move(item, 1)}
+                        disabled={filtering() || index() === shown().length - 1}
                         aria-label={tx("Move {name} down", { name: item.title })}
                         class="rounded-sm px-0.5 text-az-faint transition-colors hover:text-az-body disabled:opacity-25"
                       >
@@ -1880,8 +1989,76 @@ export function RunningTaskCard(props: { task: RunningTask; now: number }): JSX.
 }
 
 function TaskLogList(props: { projectId: string }): JSX.Element {
-  const { state } = useWorkspace();
-  const entries = () => state.taskLog[props.projectId] ?? [];
+  const { state, actions } = useWorkspace();
+  const all = () => state.taskLog[props.projectId] ?? [];
+  /**
+   * More history on the server than the store is holding.
+   *
+   * Two ends have to run out before the list is really finished: the page the
+   * grid is showing, and the page hydration fetched. Only the first was ever
+   * checked, so the list stopped at 40 entries under a badge reporting the
+   * true total.
+   */
+  const moreOnServer = () => all().length < (state.logTotals[props.projectId] ?? all().length);
+  const fetchOlder = (): void => {
+    void actions
+      .loadOlderTaskLog(props.projectId)
+      .catch((cause) => log.warn(`could not load earlier task log: ${describeError(cause)}`));
+  };
+  /*
+   * Paged, for the same reason Items is.
+   *
+   * Every row builds an `Icon` (a parsed SVG) and two `@pathscale/ui` buttons,
+   * so the cost is per row and not in the data: hydration loads at most 40
+   * entries however long the log is, and rendering those 40 measured 122 to
+   * 178ms of a panel build that totalled 203 to 339ms. It is the single largest
+   * line in the panel and it is paid on every construction, including while the
+   * section is collapsed, because `SectionPanel` only hides its contents.
+   *
+   * `createFlexGrid` rather than a local limit signal and a slice. The rule is
+   * the same one this file had written by hand, and the same one six other
+   * lists here each wrote separately.
+   *
+   * From the *front*, rendered in the order it comes. `all()` is already
+   * newest-first: the backend sorts `finished_at` descending and the store
+   * keeps that page verbatim, while a live entry is prepended rather than
+   * appended. This paged from the tail and then reversed the page, on the
+   * strength of a comment claiming the store appends oldest-first, and the two
+   * together put the *oldest* rows on screen with the newest stranded behind
+   * "Show earlier" - the exact inverse of what this section is for.
+   * `taskLogOrder.test.tsx` pins the first row against the fixture.
+   *
+   * Named `grid`, not `log`: the module-level logger is also in scope in this
+   * function, and the shadow made `log.warn` resolve to the pager. The same
+   * trap is already noted on `taskLog` in `ProjectPanel`.
+   */
+  const grid = createFlexGrid({
+    rows: all,
+    pageSize: TASK_LOG_PAGE_SIZE,
+  });
+  /*
+   * Newest first, reading downward: the head of the page is already the newest
+   * entry, so "earlier" means further *down*. The reveal control therefore
+   * belongs below the rows, and scrolling toward it is what asks for more.
+   */
+  const entries = grid.visible;
+  /** More to show, from either end: the current page, or the server. */
+  const hasMore = () => grid.hasMore() || moreOnServer();
+  /**
+   * Reveal what is already held, and fetch when that runs out. Both, not one:
+   * the grid pages 20 at a time through a store holding 40, so the moment the
+   * grid is exhausted is exactly the moment the next server page is wanted.
+   */
+  const revealMore = (): void => {
+    if (grid.hasMore()) {
+      grid.revealMore();
+      // Prefetch across the boundary so the next reveal is instant rather than
+      // a dead click followed by a wait.
+      if (!grid.hasMore() && moreOnServer()) fetchOlder();
+      return;
+    }
+    if (moreOnServer()) fetchOlder();
+  };
   /** The one entry showing its whole command, if any. */
   const [expanded, setExpanded] = createSignal<string | null>(null);
   /** The row whose copy action most recently succeeded. */
@@ -1902,6 +2079,19 @@ function TaskLogList(props: { projectId: string }): JSX.Element {
      */
     <div
       data-selectable
+      /*
+       * Scrolling toward the older end reveals more, so the button is a
+       * fallback rather than the way in. `onScroll` reads the element it is
+       * attached to, which is why the handler lives on the scroller and not on
+       * the list inside it. The list reads newest-first, so "more" is *down*,
+       * and the threshold is checked here rather than by the pager, which
+       * watches its own end of the list.
+       */
+      onScroll={(event) => {
+        if (!hasMore()) return;
+        const el = event.currentTarget;
+        if (el.scrollHeight - el.scrollTop - el.clientHeight <= 120) revealMore();
+      }}
       class="az-scroll flex max-h-[45vh] min-h-0 flex-1 flex-col gap-[7px] px-3 pt-2.5 pb-3"
     >
       <For each={entries()}>
@@ -1946,7 +2136,15 @@ function TaskLogList(props: { projectId: string }): JSX.Element {
                * over every row on the way past, which reads as the panel
                * flinching. The pointer already says the row is a control.
                */}
-              <Button
+              {/*
+               * native-control: the row's label, which is a click target and
+               * nothing more. Same reasoning as the item row's actions: the
+               * library `Button` builds a `Dynamic`, a recipe lookup and three
+               * `Show` blocks for slots this never fills, and the task log
+               * builds one of these per row. It was the largest line in the
+               * panel at 122 to 178ms before paging and 72 to 79ms after.
+               */}
+              <button
                 type="button"
                 onClick={() => setExpanded(expanded() === entry.id ? null : entry.id)}
                 aria-label={expanded() === entry.id ? tx("Collapse") : tx("Show the whole command")}
@@ -1955,11 +2153,12 @@ function TaskLogList(props: { projectId: string }): JSX.Element {
                 }`}
               >
                 <span data-selectable>{entry.label}</span>
-              </Button>
+              </button>
               <span class={`shrink-0 ${entry.ok === false ? "text-error" : "text-az-muted"}`}>
                 {taskMeta(entry)}
               </span>
-              <Button
+              {/* native-control: as above, one per row. An icon and a class. */}
+              <button
                 type="button"
                 onClick={() =>
                   void copyEntry(
@@ -1972,7 +2171,7 @@ function TaskLogList(props: { projectId: string }): JSX.Element {
                 class="shrink-0 rounded p-0.5 text-az-faint transition-colors hover:text-az-body"
               >
                 <Icon name={copied() === entry.id ? "check" : "copy"} class="text-[11px]" />
-              </Button>
+              </button>
             </div>
             <Show when={expanded() === entry.id && entry.output}>
               <pre class="az-scroll max-h-64 whitespace-pre-wrap break-words rounded-md border border-az-hairline bg-az-inset px-2 py-1.5 font-mono text-[10.5px] text-az-body">
@@ -1982,6 +2181,33 @@ function TaskLogList(props: { projectId: string }): JSX.Element {
           </div>
         )}
       </For>
+
+      {/*
+        Below the rows, because the list reads newest-first: what this reveals
+        is older than everything above it. Scrolling here already reveals more,
+        so this is the affordance that says more exists, not the only way to it.
+      */}
+      <Show when={hasMore()}>
+        <Button
+          type="button"
+          onClick={revealMore}
+          class="flex-none rounded-[9px] border border-primary/24 bg-az-chip px-2.5 py-1.5 font-semibold text-[11px] text-primary transition-colors hover:bg-az-chip"
+        >
+          {/*
+            `nextCount()` is the grid's own next step and reads 0 once the held
+            page is spent, which is precisely when the button is fetching from
+            the server instead. Fall back to what is still unfetched.
+          */}
+          {tx("Show {count} earlier", {
+            count:
+              grid.nextCount() ||
+              Math.min(
+                TASK_LOG_PAGE_SIZE,
+                (state.logTotals[props.projectId] ?? all().length) - all().length,
+              ),
+          })}
+        </Button>
+      </Show>
 
       <Show when={entries().length === 0}>
         <p class="py-3 text-center text-[11.5px] text-az-muted">{tx("Nothing has run yet")}</p>
@@ -2031,6 +2257,7 @@ function CopyLogButton(props: { projectId: string }): JSX.Element {
 function CheckpointToggle(props: { projectId: string }): JSX.Element {
   const { actions, isLive } = useWorkspace();
   const [enabled, setEnabled] = createSignal(false);
+  const alive = whileMounted();
 
   createEffect(
     () => props.projectId,
@@ -2038,7 +2265,7 @@ function CheckpointToggle(props: { projectId: string }): JSX.Element {
       const id = props.projectId;
       void actions
         .getCheckpoints(id)
-        .then(setEnabled)
+        .then(alive(setEnabled))
         .catch((cause) =>
           log.warn(`could not read the checkpoint setting: ${describeError(cause)}`),
         );
@@ -2109,6 +2336,7 @@ function NotesEditor(props: { projectId: string }): JSX.Element {
   const [saved, setSaved] = createSignal("");
   const [status, setStatus] = createSignal<"idle" | "saving" | "error">("idle");
   const [message, setMessage] = createSignal("");
+  const alive = whileMounted();
 
   // Re-read when the tab changes under a reused instance, and after a
   // compaction has had a chance to write.
@@ -2118,10 +2346,12 @@ function NotesEditor(props: { projectId: string }): JSX.Element {
       const projectId = props.projectId;
       void actions
         .getProjectNotes(projectId)
-        .then((notes) => {
-          setDraft(notes);
-          setSaved(notes);
-        })
+        .then(
+          alive((notes) => {
+            setDraft(notes);
+            setSaved(notes);
+          }),
+        )
         .catch((cause) => log.warn(`could not read the notes: ${describeError(cause)}`));
     },
   );

@@ -35,22 +35,23 @@ blitz-runtime = [
 # dormant until the user explicitly enables deep profiling.
 blitz-inspector = [
     "blitz-runtime",
-    # `blitz-dom/log-phase-times` is deliberately absent.
+    # Back, and it took two published fixes to get here.
     #
-    # It enables `debug_timer/enable` inside blitz-dom, and the graph resolves
-    # *two* crates called `debug_timer`: ps-blitz takes the fork
-    # (`ps-debug-timer`) while `ps-anyrender-vello` takes the upstream crate of
-    # the same name. Cargo unifies them by name, blitz-dom compiles against the
-    # upstream one, and it has neither `log_line` nor `RealDebugTimer::init_if`:
+    # This enables `debug_timer/enable` inside blitz-dom. It used to fail twice
+    # over. First the graph resolved *two* crates called `debug_timer`: ps-blitz
+    # took the fork (`ps-debug-timer`) while `ps-anyrender-vello` took the
+    # upstream crate of the same name, cargo unified them by name, and blitz-dom
+    # compiled against the wrong one. Then, once both named the fork, the fork's
+    # published 0.1.3 turned out to predate the API blitz-dom calls, because it
+    # had gained `init_if`, `is_logging` and `log_line` without a version bump.
+    # Both spelled the same way:
     #
     #     error[E0425]: cannot find function `log_line` in crate `debug_timer`
     #     error[E0599]: no associated function named `init_if` found for `RealDebugTimer`
     #
-    # chuzz builds because it never enables this feature. Nothing in this app
-    # reads its output either - it is engine-internal phase timing, and the
-    # numbers this app actually uses come from `tauri-runtime-blitz/diagnostics`
-    # below, which is untouched. ps-anyrender#17 makes both repos name the fork;
-    # this line can come back once that is published.
+    # Fixed by `ps-anyrender-vello 0.14.1` and `ps-debug-timer 0.1.4`, both now
+    # on crates.io. chuzz never hit either, because it does not enable this.
+    "blitz-dom/log-phase-times",
     "tauri-runtime-blitz/diagnostics",
 ]
 # The lighter render pipeline, for measuring against the default Vello one.

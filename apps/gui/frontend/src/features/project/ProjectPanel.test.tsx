@@ -361,7 +361,10 @@ describe("the project side panel", () => {
     if (!reply) throw new Error("persistent reply action is missing");
     expect(reply.className).toContain("size-[22px]");
     expect(reply.className).toContain("border-warning/65");
-    expect(row?.querySelector('use[href="#i-circle-help"]')).not.toBeNull();
+    // The help mark draws its own geometry now: a `<use>` into the shared
+    // sprite resolved to nothing once the real renderer parsed each `<svg>`
+    // from its own `outer_html`.
+    expect(row?.querySelector("svg circle")).not.toBeNull();
     fireEvent.click(reply);
     flush();
 
@@ -432,5 +435,76 @@ describe("the project side panel", () => {
     if (!row) throw new Error("item row is missing");
     expect(within(row as HTMLElement).getByText("(Shipped)")).toBeInTheDocument();
     expect(within(row as HTMLElement).getByText("(issue #58)")).toBeInTheDocument();
+  });
+
+  /*
+   * The rows are rendered from the sorted, paged view; the order written back
+   * is the project's own. Those two agree only under a status sort on a list
+   * whose statuses already sit in ladder order, so an index taken from the
+   * screen and applied to the stored list swapped the wrong pair. The default
+   * sort is `status`/`asc`, which is exactly where this bit.
+   */
+  it("moves the row under the cursor, not the one at that index in the stored order", async () => {
+    let workspace!: Workspace;
+
+    function Gate() {
+      workspace = useWorkspace();
+      return (
+        <Show when={workspace.state.boot.status === "ready"}>
+          <ProjectPanel project={{ ...PROJECT, id: "worktable" }} agent="codex" />
+        </Show>
+      );
+    }
+
+    const screen = render(() => (
+      <WorkspaceProvider>
+        <Gate />
+      </WorkspaceProvider>
+    ));
+    await waitFor(() => expect(workspace.state.boot.status).toBe("ready"), { timeout: 5_000 });
+
+    /*
+     * The fixture's stored order is 0..4, but its statuses are not in ladder
+     * order: item 4 is `finished` and sinks, so the screen and the store
+     * disagree from the first frame under the default sort.
+     */
+    const rendered = () =>
+      [...screen.container.querySelectorAll("[data-item-id]")].map((row) =>
+        row.getAttribute("data-item-id"),
+      );
+    await waitFor(() => expect(rendered().length).toBeGreaterThan(2));
+    const onScreen = rendered();
+    const stored = (workspace.state.items.worktable ?? []).map((item) => item.id);
+    expect(onScreen).not.toEqual(stored.slice(0, onScreen.length));
+
+    // The second row on screen, moved up: it should trade places with the
+    // first row on screen, whatever its position in the stored order.
+    const mover = onScreen[1];
+    const displaced = onScreen[0];
+    if (!mover || !displaced) throw new Error("not enough rows to reorder");
+    const title = (id: string) =>
+      (workspace.state.items.worktable ?? []).find((item) => item.id === id)?.title ?? "";
+
+    const reorderItems = vi.spyOn(workspace.actions, "reorderItems");
+    // The row controls are revealed on hover, so the pointer has to be on the
+    // row before its arrows exist to click.
+    const row = screen.container.querySelector<HTMLElement>(`[data-item-id="${mover}"]`);
+    if (!row) throw new Error("the row to move is missing");
+    fireEvent.pointerEnter(row);
+    flush();
+
+    const up = screen.container.querySelector<HTMLElement>(
+      `[aria-label="Move ${title(mover)} up"]`,
+    );
+    if (!up) throw new Error("the move-up control is missing");
+    fireEvent.click(up);
+    flush();
+
+    await waitFor(() => expect(reorderItems).toHaveBeenCalled());
+    const written = reorderItems.mock.calls.at(-1)?.[1];
+    if (!written) throw new Error("no order was written");
+    expect(written.indexOf(mover)).toBeLessThan(written.indexOf(displaced));
+    // The move is a swap, so it must neither add nor drop a row.
+    expect(new Set(written)).toEqual(new Set(stored));
   });
 });
