@@ -70,6 +70,12 @@ usage: blitz-bench <mode> [args]
                               node. This is the only mode that can tell a drawn
                               control from a blank box: every other reading here
                               comes from the tree, where the two are identical
+  press <name-substring>      move, press and release a real pointer over the
+                              first match, which is the path a person's mouse
+                              takes. `click` synthesises an event at a node id
+                              instead, so when the owner reports a control
+                              working that the sweep calls dead, this is what
+                              tells the two apart
   click <name-substring>      click the first matching visible, enabled node
   audit [family]              every button in the running app, measured against
                               what the renderer drew for it. Reports the ones
@@ -2630,6 +2636,49 @@ async fn main() -> Result<()> {
             if failures > 0 {
                 std::process::exit(1);
             }
+        }
+        /*
+         * A real pointer press, as opposed to a synthesised click.
+         *
+         * `click` dispatches an `AgentAction::Click` at a node id, which is not
+         * the path a person's mouse takes. The owner reports controls working
+         * that the sweep calls dead, so the two have to be separable: if a
+         * control acts under `press` and not under `click`, the finding is the
+         * harness's, and every result that rests on `click` needs re-reading.
+         */
+        "press" => {
+            let want = args.get(1).map(String::as_str).unwrap_or_default();
+            let (snapshot, _) = inspect(&mut client).await?;
+            let wanted = want.to_lowercase();
+            let Some(node) = snapshot
+                .nodes
+                .iter()
+                .filter(|n| n.name.to_lowercase().contains(&wanted))
+                .filter(|n| n.visible && n.enabled)
+                .find(|n| n.bounds.is_some_and(|b| b[2] > 0.0 && b[3] > 0.0))
+            else {
+                bail!("no visible, enabled, sized node matching {want:?}");
+            };
+            let b = node.bounds.unwrap();
+            let (x, y) = (b[0] + b[2] / 2.0, b[1] + b[3] / 2.0);
+            println!("pressing {:?} at {x:.0},{y:.0}", node.name);
+            // Move first: a press at a point the document never saw hovered is
+            // not what a mouse does, and hover state gates some controls.
+            for phase in [PointerPhase::Move, PointerPhase::Down, PointerPhase::Up] {
+                client
+                    .agent(&AgentControlRequest::Act(AgentAction::Input(
+                        InputCommand::Pointer {
+                            phase,
+                            x,
+                            y,
+                            button: 0,
+                            modifiers: Modifiers::default(),
+                        },
+                    )))
+                    .await?;
+            }
+            tokio::time::sleep(Duration::from_millis(400)).await;
+            println!("pressed");
         }
         "cover" => {
             let surface = args.get(1).map(String::as_str);
