@@ -53,7 +53,10 @@ fn icon_artwork() -> BTreeMap<String, String> {
     let mut rest = source;
     // Entries read `  name: (` or `  "list-checks": (`, then a fragment. The
     // formatter unquotes keys that are valid identifiers, so both forms appear.
-    while let Some(at) = rest.find(": (\n") {
+    // `name: () => (`, since each entry is a factory: the map used to hold one
+    // shared element per icon, and a DOM node has a single parent, so the second
+    // insertion emptied the first.
+    while let Some(at) = rest.find(": () => (\n") {
         let (before, after) = rest.split_at(at);
         let name = before
             .rsplit('\n')
@@ -61,7 +64,7 @@ fn icon_artwork() -> BTreeMap<String, String> {
             .unwrap_or("")
             .trim()
             .trim_matches('"');
-        rest = &after[": (\n".len()..];
+        rest = &after[": () => (\n".len()..];
         let Some(open) = rest.find("<>") else {
             continue;
         };
