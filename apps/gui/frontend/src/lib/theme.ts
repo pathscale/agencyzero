@@ -45,6 +45,7 @@ export {
 import {
   BRIGHTNESS_STOPS,
   DEFAULT_ACCENT,
+  DEFAULT_ACCENT_TWO,
   DEFAULT_GLASS_BLUR,
   DEFAULT_GLASS_OPACITY,
   DEFAULT_GLASS_SCRIM,
@@ -228,6 +229,18 @@ let iconStroke: string | null = null;
 
 /** The tree the current {@link iconStroke} was actually painted onto. */
 let iconStrokeRoot: HTMLElement | null = null;
+
+/**
+ * The stroke to paint an icon with before any theme has resolved.
+ *
+ * A literal colour, because this string is handed to usvg by way of
+ * `blitz-dom`'s serialiser. usvg has no stylesheet and no custom properties:
+ * given a `var()` it does not fall back, it drops the stroke, and a path with
+ * neither stroke nor fill draws nothing. The previous fallback was
+ * `var(--color-az-artwork)`, a token defined nowhere in the app, so every icon
+ * that mounted before the theme resolved painted blank.
+ */
+export const ARTWORK_FALLBACK: string = DEFAULT_ACCENT_TWO;
 
 /** The stroke an icon should paint with, or `null` before a theme is applied. */
 export function iconStrokeColor(): string | null {

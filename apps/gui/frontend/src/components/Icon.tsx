@@ -1,6 +1,6 @@
 import type { JSX } from "@solidjs/web";
 import { omit } from "solid-js";
-import { iconStrokeColor } from "~/lib/theme";
+import { ARTWORK_FALLBACK, iconStrokeColor } from "~/lib/theme";
 import { ICON_ART, type IconName } from "./IconSprite";
 
 export type IconProps = Omit<JSX.SvgSVGAttributes<SVGSVGElement>, "children"> & {
@@ -54,21 +54,26 @@ export function Icon(props: IconProps): JSX.Element {
         typeof props.class === "string" && props.class.includes("az-icon-inherit")
           ? "currentColor"
           : /*
-             * The artwork token, not `currentColor`, when no accent has been
-             * resolved yet.
+             * A literal colour, never a `var()`, when no accent has resolved yet.
              *
-             * `currentColor` here is whatever the icon sits inside, and
-             * `text-primary` marks every active tab and selected row, so on a
-             * fresh load with no second accent picked the icon was *built* in
-             * accent 1 and then restyled by CSS a moment later: the flash. It
-             * stopped once a second accent existed only because there was then
-             * a real colour to bake in.
+             * This has to be something usvg can read. `blitz-dom` serialises the
+             * element and hands the string to usvg, which has no stylesheet and
+             * no custom properties: given `stroke="var(--anything)"` it does not
+             * fall back, it drops the stroke, and a path with no stroke and no
+             * fill draws nothing at all. The fallback here named
+             * `--color-az-artwork`, which is defined nowhere in the app, so
+             * every icon that mounted before the theme resolved was blank. That
+             * is most of them, and it is why the window rendered with correct
+             * boxes, correct colours in the tree, and no artwork anywhere.
              *
-             * usvg resolves this at construction and cannot read custom
-             * properties, so the fallback has to be a var() the DOM can compute
-             * before serialising, which `--color-az-artwork` is.
+             * Not `currentColor` either: `text-primary` marks every active tab
+             * and selected row, so on a fresh load an icon would be *built* in
+             * accent 1 and restyled a moment later, which is the flash this
+             * fallback exists to prevent. `ARTWORK_FALLBACK` is the artwork
+             * accent's own default, resolved, so the first paint is already
+             * right and the theme signal only confirms it.
              */
-            (iconStrokeColor() ?? "var(--color-az-artwork)")
+            (iconStrokeColor() ?? ARTWORK_FALLBACK)
       }
       stroke-width="2"
       stroke-linecap="round"
