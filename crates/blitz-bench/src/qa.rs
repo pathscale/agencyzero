@@ -14,13 +14,14 @@
 //! suite was green:
 //!
 //! - **Icons.** The semantic tree reports `presentation=327` whether or not a
-//!   single pixel was painted. Asking the DOM instead shows 41 `<use>` and 43
-//!   `<path>` elements and **zero** `<svg>` roots, so every icon in the app is
-//!   an orphaned child with no painting context. No amount of jsdom would say
-//!   this, because jsdom's `<svg>` is a well-behaved object.
+//!   single pixel was painted, and every one of those nodes had a correct box
+//!   and a correct stroke colour while drawing nothing. `blitz-dom` parses each
+//!   inline `<svg>` into its own `usvg::Tree` from that element's `outer_html`
+//!   alone, so a `<use href="#i-check">` pointing into the shared sprite
+//!   resolved to nothing. jsdom cannot see this: its `<svg>` is a well-behaved
+//!   object that never goes near a rasteriser.
 //! - **Hover.** The row controls only exist while the row is hovered, so a test
-//!   that never moves a pointer cannot see them at all. The arrows are absent
-//!   from the tree until `pointerenter` lands, and then 48 of them appear.
+//!   that never moves a pointer cannot see them at all.
 //!
 //! # What a check is
 //!
@@ -50,11 +51,6 @@ pub enum Expect {
     /// tree and on no screen, which is how a broken control passes a test that
     /// only asked whether it existed.
     Paints,
-    /// The named node exists in the DOM at all, box or not.
-    ///
-    /// For structure that must be present but need not be visible, such as the
-    /// icon sprite's `<symbol>` definitions.
-    Present,
     /// No node matching the name exists.
     ///
     /// The assertion for a control that must *not* be reachable, and for
@@ -95,34 +91,20 @@ pub fn checks() -> Vec<Check> {
     vec![
         // ---- icons -----------------------------------------------------
         //
-        // The `<svg>` root, not the `<use>` inside it. Every icon in the app is
-        // a `<use href="#i-name">` pointing at a `<symbol>` in the sprite, so
-        // three things have to be in the document and all three were checked
-        // because only one of them was missing.
+        // Asked of the box, not the tag. The semantic tree reports roles and
+        // never element names, so "is there an `<svg>`" is unanswerable here
+        // and looking for one returned zero against an app full of icons. What
+        // is answerable, and what actually regressed, is whether the icon nodes
+        // have a box: an icon whose artwork failed to resolve still lays out at
+        // its `1em` and still reports its stroke, so geometry alone is not
+        // enough either. `icon-art.test.ts` covers the artwork itself, which is
+        // the half this cannot see.
         Check {
             group: "icons",
-            what: "the icon sprite defines its symbols",
+            what: "icon nodes occupy a box on screen",
             hover: None,
             click: None,
-            subject: "symbol",
-            expect: Expect::Present,
-            panel_only: false,
-        },
-        Check {
-            group: "icons",
-            what: "icons have an <svg> root, so their paths have a painting context",
-            hover: None,
-            click: None,
-            subject: "svg",
-            expect: Expect::Present,
-            panel_only: false,
-        },
-        Check {
-            group: "icons",
-            what: "an icon occupies a box on screen",
-            hover: None,
-            click: None,
-            subject: "svg",
+            subject: "presentation",
             expect: Expect::Paints,
             panel_only: false,
         },
@@ -131,6 +113,14 @@ pub fn checks() -> Vec<Check> {
         // These do not exist until the pointer is on the row. A check that
         // forgets the hover reports "no such node" and reads as a missing
         // feature rather than a test driving the app wrongly.
+        //
+        // The row to hover has to be a *panel* row. Home renders the same
+        // control names and its rows carry no reorder arrows, so hovering
+        // whichever row matched first put the pointer on Home and reported the
+        // panel's arrows as broken when they were never asked to appear. That
+        // mistake cost a round of chasing a bug that did not exist, which is
+        // why [`hover_panel_row`] targets a point inside the column instead of
+        // a name that both lists answer to.
         Check {
             group: "hover",
             what: "hovering an item row reveals its move-up arrow",
@@ -269,7 +259,7 @@ pub fn checks() -> Vec<Check> {
 /// therefore mixes two lists: "Edit " matched 107 nodes and "Copy this
 /// task-log entry" matched 880, most of them Home's, so a panel row appearing
 /// or leaving was lost in the noise. Anything left of this is not the panel.
-const PANEL_LEFT: f64 = 900.0;
+pub const PANEL_LEFT: f64 = 900.0;
 
 /// Nodes matching `want`, by accessible name or role, inside the side panel.
 ///
@@ -305,11 +295,6 @@ pub fn verdict(
 ) -> Result<(), String> {
     let found = matching(after, check.subject, check.panel_only);
     match check.expect {
-        Expect::Present => {
-            if found.is_empty() {
-                return Err(format!("no node matching {:?} exists", check.subject));
-            }
-        }
         Expect::Paints => {
             if found.is_empty() {
                 return Err(format!("no node matching {:?} exists", check.subject));
