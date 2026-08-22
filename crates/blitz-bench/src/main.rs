@@ -2056,11 +2056,24 @@ async fn run_cover(client: &mut Client, only: Option<&str>) -> Result<usize> {
          * there.
          */
         let (tree, _) = inspect(client).await?;
+        /*
+         * Scoped by ancestry to the pane in front.
+         *
+         * A retained Home keeps real, `visible`, correctly-sized boxes behind an
+         * open project pane, in the same horizontal band as the panel, so
+         * neither position nor visibility separates them. Sweeping the union
+         * meant Home's ~160 row controls were pressed under the project
+         * surface's name while the panel's own controls were crowded out of the
+         * plan - and the side panels are where the owner reports most problems.
+         */
+        let mine: std::collections::HashSet<u64> =
+            reach::on_surface_subtree(&tree.nodes, surface).into_iter().collect();
         let buttons: Vec<&blitz_control_protocol::SemanticNode> = tree
             .nodes
             .iter()
             .filter(|n| n.role == "button" && !n.name.trim().is_empty())
             .filter(|n| n.visible)
+            .filter(|n| mine.contains(&n.id))
             .collect();
 
         // Retained from other surfaces, reported so the difference between the

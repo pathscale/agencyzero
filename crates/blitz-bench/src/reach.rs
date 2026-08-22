@@ -26,6 +26,8 @@
 //! The rule the whole module turns on: **never silently skip.** Every button in
 //! the tree ends in exactly one bucket, and the buckets are printed.
 
+use std::collections::HashMap;
+
 use blitz_control_protocol::SemanticNode;
 
 /// A surface the sweep must visit, named by the control that opens it.
@@ -132,10 +134,34 @@ pub fn project_opener(nodes: &[SemanticNode]) -> Option<String> {
      * working directory, an age, or an open/turn count - because the project
      * names themselves are scrubbed and differ per profile.
      */
-    nodes
-        .iter()
-        .filter(|n| n.role == "button" && onscreen(n))
-        .filter(|n| !n.name.starts_with("Close ") && !n.name.starts_with("Rename "))
+    /*
+     * Preferring a project that has items in it.
+     *
+     * The first row on Home has none, and an empty project renders `Items0`,
+     * `Running0`, `Task log 0` with every per-item control absent: the panel
+     * the owner cares about most was on screen as four empty headers. A row
+     * whose summary says "1 open" opens a panel with something in it, so
+     * `New item`, `Copy`, `Clear` and the item rows are there to be pressed.
+     */
+    let rows = || {
+        nodes
+            .iter()
+            .filter(|n| n.role == "button" && onscreen(n))
+            .filter(|n| !n.name.starts_with("Close ") && !n.name.starts_with("Rename "))
+    };
+    let populated = rows().find(|n| {
+        n.name
+            .split(" open · ")
+            .next()
+            .and_then(|head| head.rsplit(')').next())
+            .and_then(|count| count.trim().rsplit(' ').next())
+            .and_then(|count| count.parse::<u32>().ok())
+            .is_some_and(|open| open > 0)
+    });
+    if let Some(row) = populated {
+        return Some(row.name.clone());
+    }
+    rows()
         .find(|n| {
             n.name.contains(" open · ")
                 || n.name.contains("no working directory")
@@ -208,21 +234,131 @@ fn doubled(name: &str) -> Option<&str> {
 /// somewhere else" - without a route or a title to read, neither of which the
 /// semantic tree exposes.
 pub fn on_surface(nodes: &[SemanticNode], surface: &Surface) -> bool {
-    let marker = match surface.name {
-        // Home's own list controls; the nav button is present everywhere.
-        "home" => "Cycle Home sort",
-        "settings" => "Appearance",
-        // Measured against the running pane. "Spend" was a guess and matched
-        // nothing, so every analytics sweep silently ran on whatever surface it
-        // was already standing on.
-        "analytics" => "Outcome per dollar",
-        // A project pane is the one with a composer in it.
-        "project" => "Send",
-        _ => return true,
+    let Some(marker) = surface_marker(surface) else {
+        return true;
     };
     nodes
         .iter()
         .any(|n| onscreen(n) && n.name.contains(marker))
+}
+
+/// The controls that belong to the surface in front, by ancestry.
+///
+/// # Why not position, and not visibility
+///
+/// Both were tried against the running app and both are wrong. A retained Home
+/// sits *behind* an open project pane and its rows keep real boxes in the same
+/// horizontal band: `Items1` in the panel measured x=953 and Home's
+/// `Recent247` x=965, so a `PANEL_LEFT` cut cannot separate them. Worse, the
+/// retained rows still report `visible` with a non-zero box, so filtering on
+/// visibility keeps every one of them too.
+///
+/// The consequence was not a small error. Home's ~160 row controls were swept
+/// as though they were the project panel's, the panel's own controls were
+/// crowded out of the plan, and the owner - who reports the side panels as
+/// where most problems are - was reading coverage numbers for the wrong
+/// surface.
+///
+/// Ancestry is the one thing that does separate them: a pane is a subtree, and
+/// the marker control that identifies a surface lives inside it. Walking up
+/// from the marker to the pane root and then taking that root's descendants
+/// gives exactly the controls a person is looking at.
+pub fn on_surface_subtree(nodes: &[SemanticNode], surface: &Surface) -> Vec<u64> {
+    let Some(marker) = surface_marker(surface) else {
+        return nodes.iter().map(|n| n.id).collect();
+    };
+    let by_id: HashMap<u64, &SemanticNode> = nodes.iter().map(|n| (n.id, n)).collect();
+    let Some(anchor) = nodes
+        .iter()
+        .find(|n| onscreen(n) && n.name.contains(marker))
+    else {
+        return Vec::new();
+    };
+
+    /*
+     * Up a fixed number of levels, not to the document root.
+     *
+     * Walking all the way up lands on the window, whose subtree is every
+     * surface at once - which is the situation this exists to end. Eight is
+     * deep enough to clear a control's own chrome and reach the pane, and
+     * shallow enough not to swallow its neighbour; it is the same depth
+     * `EditableTitle`'s notes use for "an input that is merely hidden still
+     * walks eight levels to the window root".
+     */
+    /*
+     * The shallowest ancestor that holds most of what is on screen.
+     *
+     * A fixed climb cannot work for every surface: eight levels from Home's
+     * sort control landed above its list and returned nothing at all, while the
+     * same depth from a project's `Send` was right. So the depth is chosen by
+     * measurement - climb one level at a time and keep the first ancestor whose
+     * subtree covers a majority of the on-screen controls. That is the pane,
+     * whichever surface it belongs to, and it stops before the window root,
+     * whose subtree is every surface at once.
+     */
+    let onscreen_total = nodes.iter().filter(|n| n.role == "button" && onscreen(n)).count();
+    /*
+     * Descended from the root, not climbed from every node.
+     *
+     * The per-node climb needed a hop limit to stay bounded, and any limit is
+     * wrong: this tree runs to 8317 nodes and a project row sits deeper than
+     * thirty-two ancestors, so the cap silently dropped exactly the controls
+     * the sweep exists to press and Home reported zero buttons. Walking down
+     * from the root visits each node once and has no depth to guess at.
+     */
+    let mut children: HashMap<u64, Vec<u64>> = HashMap::new();
+    for node in nodes {
+        if let Some(parent) = node.parent {
+            children.entry(parent).or_default().push(node.id);
+        }
+    }
+    let subtree_of = |root: u64| -> Vec<u64> {
+        let mut out = Vec::new();
+        let mut stack = vec![root];
+        while let Some(id) = stack.pop() {
+            out.push(id);
+            if let Some(kids) = children.get(&id) {
+                stack.extend(kids.iter().copied());
+            }
+        }
+        out
+    };
+
+    let mut cursor = anchor.id;
+    let mut best: Vec<u64> = Vec::new();
+    for _ in 0..12 {
+        let Some(parent) = by_id.get(&cursor).and_then(|n| n.parent) else {
+            break;
+        };
+        cursor = parent;
+        let kept = subtree_of(cursor);
+        let covered = kept
+            .iter()
+            .filter(|id| {
+                by_id
+                    .get(id)
+                    .is_some_and(|n| n.role == "button" && onscreen(n))
+            })
+            .count();
+        best = kept;
+        // Enough of the window to be the pane, but not so much that it is the
+        // whole document with every retained surface in it.
+        if onscreen_total > 0 && covered * 2 >= onscreen_total {
+            break;
+        }
+    }
+    best
+}
+
+/// The control that only this surface renders.
+fn surface_marker(surface: &Surface) -> Option<&'static str> {
+    match surface.name {
+        "home" => Some("Cycle Home sort"),
+        "settings" => Some("Appearance"),
+        "analytics" => Some("Outcome per dollar"),
+        "project" => Some("Send"),
+        _ => None,
+    }
 }
 
 /// Whether pressing this hands control to the operating system.
