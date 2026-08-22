@@ -74,14 +74,11 @@ impl Verdict {
 /// One audited control.
 #[derive(Debug, Clone)]
 pub struct Audited {
-    pub id: u64,
     pub name: String,
     /// The family this belongs to, derived from its accessible name.
     pub family: &'static str,
     pub width: f64,
     pub height: f64,
-    pub visible_pixels: usize,
-    pub total_pixels: usize,
     pub verdict: Verdict,
 }
 
