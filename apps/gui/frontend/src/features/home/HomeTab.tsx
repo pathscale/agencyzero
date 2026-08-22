@@ -1,4 +1,4 @@
-import { Checkbox, Input, Textarea } from "@pathscale/ui";
+import { Checkbox, createFlexGrid, Input, Textarea } from "@pathscale/ui";
 import type { JSX } from "@solidjs/web";
 import { createMemo, createSignal, For, Show } from "solid-js";
 import { NOTES_BUDGET } from "~/api/client";
@@ -25,10 +25,6 @@ import type { Project, ProjectItem } from "~/types";
 
 export const HOME_PROJECT_PAGE_SIZE = 30;
 export const HOME_RECENT_PAGE_SIZE = 20;
-
-export function projectPage<T>(projects: readonly T[], limit: number): T[] {
-  return projects.slice(0, Math.max(0, limit));
-}
 
 const STATUS_TONE: Record<ProjectItem["status"], string> = {
   active: "font-semibold text-primary",
@@ -63,8 +59,6 @@ export function HomeTab(): JSX.Element {
   const { state, actions, itemsFor, tabStatus } = useWorkspace();
   const [query, setQuery] = createSignal("");
   const [descriptionItemId, setDescriptionItemId] = createSignal<string | null>(null);
-  const [projectLimit, setProjectLimit] = createSignal(HOME_PROJECT_PAGE_SIZE);
-  const [recentLimit, setRecentLimit] = createSignal(HOME_RECENT_PAGE_SIZE);
 
   // Item forks are dedicated child chats, reachable beneath their parent item.
   // Showing them here as peers would turn one project into a pile of apparent
@@ -98,8 +92,15 @@ export function HomeTab(): JSX.Element {
     [...ordered()].sort((a, b) => b.lastActivityAt.localeCompare(a.lastActivityAt)),
   );
 
-  const visibleMatches = createMemo(() => projectPage(matches(), projectLimit()));
-  const visibleRecent = createMemo(() => projectPage(recent(), recentLimit()));
+  /*
+   * `createFlexGrid` rather than a limit signal and a slice, twice over. The
+   * rule was written by hand here and again in the panel's task log, and this
+   * is the shared one.
+   */
+  const projectGrid = createFlexGrid({ rows: matches, pageSize: HOME_PROJECT_PAGE_SIZE });
+  const recentGrid = createFlexGrid({ rows: recent, pageSize: HOME_RECENT_PAGE_SIZE });
+  const visibleMatches = projectGrid.visible;
+  const visibleRecent = recentGrid.visible;
 
   return (
     <div class="flex min-w-0 flex-1 gap-3">
@@ -130,7 +131,7 @@ export function HomeTab(): JSX.Element {
                 value={query()}
                 onInput={(event) => {
                   setQuery(event.currentTarget.value);
-                  setProjectLimit(HOME_PROJECT_PAGE_SIZE);
+                  projectGrid.reset();
                 }}
                 placeholder={tx("Search projects and items…")}
                 aria-label={tx("Search projects and items")}
@@ -160,10 +161,10 @@ export function HomeTab(): JSX.Element {
               {tx("Nothing matches “{query}”", { query: query() })}
             </p>
           </Show>
-          <Show when={matches().length > visibleMatches().length}>
+          <Show when={projectGrid.hasMore()}>
             <Button
               type="button"
-              onClick={() => setProjectLimit((limit) => limit + HOME_PROJECT_PAGE_SIZE)}
+              onClick={projectGrid.revealMore}
               class="flex-none rounded-xl border border-primary/24 bg-az-chip px-3.5 py-2.5 font-semibold text-[12px] text-primary transition-colors hover:bg-az-chip"
             >
               {tx("Show {count} more projects", {
@@ -261,10 +262,10 @@ export function HomeTab(): JSX.Element {
                 </Button>
               )}
             </For>
-            <Show when={recent().length > visibleRecent().length}>
+            <Show when={recentGrid.hasMore()}>
               <Button
                 type="button"
-                onClick={() => setRecentLimit((limit) => limit + HOME_RECENT_PAGE_SIZE)}
+                onClick={recentGrid.revealMore}
                 class="rounded-[11px] border border-primary/24 bg-az-chip px-3 py-2 font-semibold text-[11.5px] text-primary transition-colors hover:bg-az-chip"
               >
                 {tx("Show {count} more projects", {

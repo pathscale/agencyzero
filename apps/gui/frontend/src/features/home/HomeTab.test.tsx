@@ -5,7 +5,6 @@ import {
   CleanupRowActions,
   HOME_PROJECT_PAGE_SIZE,
   HomeTab,
-  projectPage,
   TASK_CLEANUP_PROMPT,
 } from "~/features/home/HomeTab";
 import { setPrefs } from "~/stores/prefs";
@@ -31,13 +30,15 @@ async function mountHome() {
 }
 
 describe("Home item rows", () => {
-  it("bounds the initially mounted project list", () => {
-    const projects = Array.from({ length: HOME_PROJECT_PAGE_SIZE + 5 }, (_, index) => index);
-
-    expect(projectPage(projects, HOME_PROJECT_PAGE_SIZE)).toEqual(
-      projects.slice(0, HOME_PROJECT_PAGE_SIZE),
-    );
-    expect(projectPage(projects, HOME_PROJECT_PAGE_SIZE * 2)).toEqual(projects);
+  /*
+   * The arithmetic this used to assert now lives in `createFlexGrid`, which
+   * tests it in the library. What is worth checking here is the wiring: that
+   * Home asks for a bounded page at all, rather than mounting every project.
+   */
+  it("bounds the initially mounted project list", async () => {
+    const screen = await mountHome();
+    const groups = screen.container.querySelectorAll("[data-project-id]");
+    expect(groups.length).toBeLessThanOrEqual(HOME_PROJECT_PAGE_SIZE);
   });
 
   it("reserves one status column so the trailing item actions align", async () => {
