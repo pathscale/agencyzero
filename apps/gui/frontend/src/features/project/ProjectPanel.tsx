@@ -1989,8 +1989,22 @@ export function RunningTaskCard(props: { task: RunningTask; now: number }): JSX.
 }
 
 function TaskLogList(props: { projectId: string }): JSX.Element {
-  const { state } = useWorkspace();
+  const { state, actions } = useWorkspace();
   const all = () => state.taskLog[props.projectId] ?? [];
+  /**
+   * More history on the server than the store is holding.
+   *
+   * Two ends have to run out before the list is really finished: the page the
+   * grid is showing, and the page hydration fetched. Only the first was ever
+   * checked, so the list stopped at 40 entries under a badge reporting the
+   * true total.
+   */
+  const moreOnServer = () => all().length < (state.logTotals[props.projectId] ?? all().length);
+  const fetchOlder = (): void => {
+    void actions
+      .loadOlderTaskLog(props.projectId)
+      .catch((cause) => log.warn(`could not load earlier task log: ${describeError(cause)}`));
+  };
   /*
    * Paged, for the same reason Items is.
    *
@@ -2003,24 +2017,48 @@ function TaskLogList(props: { projectId: string }): JSX.Element {
    *
    * `createFlexGrid` rather than a local limit signal and a slice. The rule is
    * the same one this file had written by hand, and the same one six other
-   * lists here each wrote separately; `fromEnd` is what makes the first page
-   * the newest entries and "more" mean *earlier*.
+   * lists here each wrote separately.
+   *
+   * From the *front*, rendered in the order it comes. `all()` is already
+   * newest-first: the backend sorts `finished_at` descending and the store
+   * keeps that page verbatim, while a live entry is prepended rather than
+   * appended. This paged from the tail and then reversed the page, on the
+   * strength of a comment claiming the store appends oldest-first, and the two
+   * together put the *oldest* rows on screen with the newest stranded behind
+   * "Show earlier" - the exact inverse of what this section is for.
+   * `taskLogOrder.test.tsx` pins the first row against the fixture.
+   *
+   * Named `grid`, not `log`: the module-level logger is also in scope in this
+   * function, and the shadow made `log.warn` resolve to the pager. The same
+   * trap is already noted on `taskLog` in `ProjectPanel`.
    */
-  const log = createFlexGrid({
+  const grid = createFlexGrid({
     rows: all,
     pageSize: TASK_LOG_PAGE_SIZE,
-    fromEnd: true,
   });
   /*
-   * Newest first, reading downward.
-   *
-   * The store appends, so `all()` is oldest-first and `fromEnd` takes the most
-   * recent page from its tail. Reversing that page puts the newest entry at the
-   * top of the column, which is where the eye starts, and "earlier" then means
-   * further *down* - so the reveal control belongs at the bottom, and scrolling
-   * toward it is what asks for more.
+   * Newest first, reading downward: the head of the page is already the newest
+   * entry, so "earlier" means further *down*. The reveal control therefore
+   * belongs below the rows, and scrolling toward it is what asks for more.
    */
-  const entries = createMemo(() => [...log.visible()].reverse());
+  const entries = grid.visible;
+  /** More to show, from either end: the current page, or the server. */
+  const hasMore = () => grid.hasMore() || moreOnServer();
+  /**
+   * Reveal what is already held, and fetch when that runs out. Both, not one:
+   * the grid pages 20 at a time through a store holding 40, so the moment the
+   * grid is exhausted is exactly the moment the next server page is wanted.
+   */
+  const revealMore = (): void => {
+    if (grid.hasMore()) {
+      grid.revealMore();
+      // Prefetch across the boundary so the next reveal is instant rather than
+      // a dead click followed by a wait.
+      if (!grid.hasMore() && moreOnServer()) fetchOlder();
+      return;
+    }
+    if (moreOnServer()) fetchOlder();
+  };
   /** The one entry showing its whole command, if any. */
   const [expanded, setExpanded] = createSignal<string | null>(null);
   /** The row whose copy action most recently succeeded. */
@@ -2050,9 +2088,9 @@ function TaskLogList(props: { projectId: string }): JSX.Element {
        * threshold is checked here instead.
        */
       onScroll={(event) => {
-        if (!log.hasMore()) return;
+        if (!hasMore()) return;
         const el = event.currentTarget;
-        if (el.scrollHeight - el.scrollTop - el.clientHeight <= 120) log.revealMore();
+        if (el.scrollHeight - el.scrollTop - el.clientHeight <= 120) revealMore();
       }}
       class="az-scroll flex max-h-[45vh] min-h-0 flex-1 flex-col gap-[7px] px-3 pt-2.5 pb-3"
     >
@@ -2149,13 +2187,25 @@ function TaskLogList(props: { projectId: string }): JSX.Element {
         is older than everything above it. Scrolling here already reveals more,
         so this is the affordance that says more exists, not the only way to it.
       */}
-      <Show when={log.hasMore()}>
+      <Show when={hasMore()}>
         <Button
           type="button"
-          onClick={log.revealMore}
+          onClick={revealMore}
           class="flex-none rounded-[9px] border border-primary/24 bg-az-chip px-2.5 py-1.5 font-semibold text-[11px] text-primary transition-colors hover:bg-az-chip"
         >
-          {tx("Show {count} earlier", { count: log.nextCount() })}
+          {/*
+            `nextCount()` is the grid's own next step and reads 0 once the held
+            page is spent, which is precisely when the button is fetching from
+            the server instead. Fall back to what is still unfetched.
+          */}
+          {tx("Show {count} earlier", {
+            count:
+              grid.nextCount() ||
+              Math.min(
+                TASK_LOG_PAGE_SIZE,
+                (state.logTotals[props.projectId] ?? all().length) - all().length,
+              ),
+          })}
         </Button>
       </Show>
 
