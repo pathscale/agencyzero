@@ -1873,13 +1873,46 @@ async fn open_surface(client: &mut Client, surface: &reach::Surface) -> Result<b
     } else {
         surface.opener.to_owned()
     };
-    match click_named_quiet(client, &opener).await {
-        Ok(()) => {
-            tokio::time::sleep(Duration::from_millis(500)).await;
-            Ok(true)
-        }
-        Err(_) => Ok(false),
+    /*
+     * Confirmed by looking, not assumed from the click succeeding.
+     *
+     * A dispatched click is not a navigation: after sweeping Settings the run
+     * pressed `Analytics`, got an acknowledgement, stayed exactly where it was,
+     * and then swept Settings' controls a second time and filed them under
+     * "analytics". Three surfaces reported on one screen and the report looked
+     * completely ordinary.
+     */
+    if click_named_quiet(client, &opener).await.is_err() {
+        return Ok(false);
     }
+    if settle_on(client, surface).await? {
+        return Ok(true);
+    }
+    // One retry through Home, which every surface can be reached from even when
+    // a modal on the current one is swallowing the direct hop.
+    let _ = click_named_quiet(client, "Home").await;
+    tokio::time::sleep(Duration::from_millis(400)).await;
+    if click_named_quiet(client, &opener).await.is_err() {
+        return Ok(false);
+    }
+    settle_on(client, surface).await
+}
+
+/// Wait until the surface is actually showing, up to a few seconds.
+///
+/// Polled rather than slept: Analytics takes longer to build than the others
+/// and a fixed 500ms wait declared it unopened while it was still on its way,
+/// which sent the whole sweep down the retry path and then swept the wrong
+/// surface twice. Polling costs nothing when the pane is already up.
+async fn settle_on(client: &mut Client, surface: &reach::Surface) -> Result<bool> {
+    for _ in 0..12 {
+        tokio::time::sleep(Duration::from_millis(400)).await;
+        let (tree, _) = inspect(client).await?;
+        if reach::on_surface(&tree.nodes, surface) {
+            return Ok(true);
+        }
+    }
+    Ok(false)
 }
 
 /// Sweep every surface, and account for every button in the tree.
@@ -1987,6 +2020,14 @@ async fn run_cover(client: &mut Client, only: Option<&str>) -> Result<usize> {
                 // Never pressed unattended: a native chooser takes the owner's
                 // screen and cannot be dismissed from here.
                 here.native += 1;
+            } else if reach::restarts_the_app(&node.name) {
+                // Opens a setup flow that swallows navigation for the rest of
+                // the run; counted, never pressed.
+                here.native += 1;
+            } else if reach::closes_a_surface(&node.name) {
+                // Closing Settings retires the tab the rest of the run stands
+                // on; counted as navigation because that is what it is.
+                here.navigation += 1;
             } else {
                 plan.push((node.id, node.name.clone()));
             }

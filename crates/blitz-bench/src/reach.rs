@@ -173,7 +173,10 @@ pub fn on_surface(nodes: &[SemanticNode], surface: &Surface) -> bool {
         // Home's own list controls; the nav button is present everywhere.
         "home" => "Cycle Home sort",
         "settings" => "Appearance",
-        "analytics" => "Spend",
+        // Measured against the running pane. "Spend" was a guess and matched
+        // nothing, so every analytics sweep silently ran on whatever surface it
+        // was already standing on.
+        "analytics" => "Outcome per dollar",
         // A project pane is the one with a composer in it.
         "project" => "Send",
         _ => return true,
@@ -194,8 +197,47 @@ pub fn on_surface(nodes: &[SemanticNode], surface: &Surface) -> bool {
 /// These are skipped rather than judged, and counted in their own bucket so the
 /// report never implies they passed.
 pub fn opens_native_dialog(name: &str) -> bool {
-    const NATIVE: &[&str] = &["Attach files", "Add dir", "Choose", "Browse", "Open folder"];
+    const NATIVE: &[&str] = &[
+        "Attach files",
+        "Add dir",
+        "Choose",
+        "Browse",
+        "Open folder",
+        // Settings' restore control, which opens the same OS chooser.
+        "Select backup file",
+    ];
     NATIVE.iter().any(|entry| name.starts_with(entry))
+}
+
+/// Whether this restarts the app or reopens onboarding.
+///
+/// `Welcome Tutorial` and `Restart` put a setup flow in front of everything and
+/// open tabs of their own. After a Settings sweep pressed them the window was
+/// left with `Close setup` in the strip and Analytics could not be opened at
+/// all - three clicks, no navigation - while Home still worked. That is the
+/// sweep breaking its own run, not a defect in the button.
+///
+/// Left to a person, because "does the tutorial replay" is a question about a
+/// flow rather than about one control's promise.
+pub fn restarts_the_app(name: &str) -> bool {
+    const DISRUPTIVE: &[&str] = &["Welcome Tutorial", "Restart", "Reset all", "Sign out"];
+    DISRUPTIVE.iter().any(|entry| name.starts_with(entry))
+}
+
+/// Whether this closes a surface the sweep still has to stand on.
+///
+/// `Close Settings` retires the tab that every later surface is reached
+/// through, so pressing it early cost the run its own subject: Home planned 20
+/// controls against a window that had 196 on screen, because the sweep was no
+/// longer where it thought it was.
+///
+/// The tab is still exercised - `Close` on a project tab is swept - but the
+/// three permanent surfaces keep theirs.
+pub fn closes_a_surface(name: &str) -> bool {
+    matches!(
+        name,
+        "Close Settings" | "Close Analytics" | "Close Home" | "Close Untitled"
+    )
 }
 
 /// The disclosure controls that must be opened before a sweep of this surface.
@@ -371,6 +413,26 @@ mod tests {
         // Ordinary controls stay in the sweep.
         assert!(!opens_native_dialog("Add item"));
         assert!(!opens_native_dialog("Send"));
+    }
+
+    #[test]
+    fn onboarding_and_restart_are_left_alone() {
+        // These left the window with `Close setup` in the strip and Analytics
+        // unreachable for the rest of the run.
+        assert!(restarts_the_app("Welcome Tutorial"));
+        assert!(restarts_the_app("Restart"));
+        // Ordinary Settings controls are still swept.
+        assert!(!restarts_the_app("Re-check"));
+        assert!(!restarts_the_app("Refresh"));
+        assert!(!restarts_the_app("Default model"));
+    }
+
+    #[test]
+    fn surface_tabs_are_not_closed_out_from_under_the_sweep() {
+        assert!(closes_a_surface("Close Settings"));
+        assert!(closes_a_surface("Close Analytics"));
+        // A project tab's close is a control worth pressing.
+        assert!(!closes_a_surface("Close delta/east/cobalt"));
     }
 
     #[test]
