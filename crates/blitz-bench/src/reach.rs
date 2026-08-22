@@ -450,10 +450,27 @@ pub const NATIVE_CHOOSERS: &[Exception] = &[
     Exception { label: "Choose a working directory", command: "choose_project_directory" },
     Exception { label: "Choose the agencyzero data directory", command: "(startup data dir)" },
     Exception { label: "Select backup file", command: "select_store_backup" },
-    Exception { label: "Save AgencyZero backup", command: "create_store_backup" },
+    // `Back up & close`, not the panel's own title: same mismatch as `Choose…`.
+    Exception { label: "Back up & close", command: "create_store_backup" },
     Exception { label: "Export", command: "export_study_events" },
-    Exception { label: "Choose an AgencyZero backup", command: "select_store_backup" },
-    Exception { label: "Agent proxy binary", command: "choose_agent_proxy_binary" },
+    // `Restore` raises the restore picker; the old entry named the panel.
+    Exception { label: "Restore", command: "select_store_backup" },
+    /*
+     * The button reads `Choose…`, not anything about a proxy.
+     *
+     * This entry used to say "Agent proxy binary", which is what the row is
+     * called, and matched nothing: the exception is tested against the
+     * *button's* accessible name, and the button beside the AgencyProxy path
+     * is labelled `Choose…` alone. So the sweep pressed it, raised
+     * `Choose an AgencyProxy executable`, and stranded a macOS open panel on
+     * the owner's screen with no way back - `pgrep -lf openAndSavePanel`
+     * shows the residue.
+     *
+     * The lesson for the next entry: check that each label here matches the
+     * control's accessible name in a running build. Counting `.dialog()` call
+     * sites proves the list is the right length, not that any of it matches.
+     */
+    Exception { label: "Choose…", command: "choose_agent_proxy_binary" },
 ];
 
 /// Whether the window is showing a modal that has to be dismissed to continue.
@@ -824,6 +841,20 @@ mod tests {
          */
         for name in ["Attach files", "Add dir", "Select backup file…", "Export"] {
             assert!(opens_native_dialog(name), "{name} is a native panel");
+        }
+        /*
+         * The AgencyProxy chooser, by the name the *button* carries.
+         *
+         * Its entry used to read "Agent proxy binary" - the row's label, not
+         * the control's - so it matched nothing and the sweep raised a macOS
+         * open panel it could not dismiss. The name here is what
+         * `blitz-bench layout` reports for that button in a running build.
+         */
+        for name in ["Choose…", "Back up & close", "Restore", "Export JSONL"] {
+            assert!(
+                opens_native_dialog(name),
+                "{name} raises a panel the harness cannot dismiss"
+            );
         }
         for name in ["Add item", "Send", "Cancel", "Fork this item", "New item"] {
             assert!(!opens_native_dialog(name), "{name} must be swept");
