@@ -499,7 +499,7 @@ dependencies = [
 
 [[package]]
 name = "blitz-control-protocol"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "endpoint-libs",
  "serde",
@@ -852,7 +852,7 @@ checksum = "af491d569909a7e4dee0ad7db7f5341fef5c614d5b8ec8cf765732aba3cff681"
 dependencies = [
  "serde",
  "termcolor",
- "unicode-width 0.2.2",
+ "unicode-width 0.1.14",
 ]
 
 [[package]]
@@ -4855,21 +4855,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "ps-qa"
-version = "0.8.30"
-dependencies = [
- "base64 0.22.1",
- "blitz-control-protocol",
- "endpoint-libs",
- "eyre",
- "ps-usvg",
- "serde",
- "serde_json",
- "tiny-skia",
- "tokio",
-]
-
-[[package]]
 name = "ps-stylo-taffy"
 version = "0.3.0-beta.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5889,7 +5874,6 @@ version = "1.0.151"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c841b55ecdae098c80dcae9cf767f6f8a0c2cdb3416bbef72181df4d0fe73f14"
 dependencies = [
- "indexmap 2.14.0",
  "itoa",
  "memchr",
  "serde",
@@ -6850,7 +6834,7 @@ dependencies = [
 
 [[package]]
 name = "tauri-runtime-blitz"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "base64 0.22.1",
  "blitz-control-protocol",
@@ -7127,7 +7111,6 @@ dependencies = [
  "bytemuck",
  "cfg-if",
  "log",
- "png 0.18.1",
  "tiny-skia-path",
 ]
 
