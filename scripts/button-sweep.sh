@@ -57,18 +57,33 @@ readonly APP=$!
 # the app takes ~10s cold and ~4s warm, and a fixed sleep is either slow or
 # flaky depending on which it is that day.
 export TAURI_BLITZ_CONTROL_DESCRIPTOR="$DESCRIPTOR"
+
+# `ps-qa` lives in its own repo now, so it is found rather than built here.
+# `PS_QA` overrides for a checkout somewhere else.
+readonly PS_QA_REPO="${PS_QA_REPO:-$ROOT/../ps-qa}"
+if [[ -n "${PS_QA:-}" && -x "${PS_QA:-}" ]]; then
+  qa="$PS_QA"
+elif [[ -x "$PS_QA_REPO/target/release/ps-qa" ]]; then
+  qa="$PS_QA_REPO/target/release/ps-qa"
+else
+  echo "no ps-qa binary. build it:" >&2
+  echo "  (cd $PS_QA_REPO && cargo build --release)" >&2
+  echo "or point PS_QA at one." >&2
+  exit 1
+fi
+
 for _ in $(seq 1 40); do
-  if ./target/release/ps-qa nodes >/dev/null 2>&1; then break; fi
+  if "$qa" nodes >/dev/null 2>&1; then break; fi
   sleep 1
 done
 
 echo "== baseline =="
-./target/release/ps-qa idle 2>&1 | head -1
+"$qa" idle 2>&1 | head -1
 
 echo
 echo "== cover =="
 status=0
-./target/release/ps-qa cover ${surface:+"$surface"} || status=$?
+"$qa" cover ${surface:+"$surface"} || status=$?
 
 if [[ "$keep" == 0 ]]; then
   kill -TERM "$APP" 2>/dev/null || true
