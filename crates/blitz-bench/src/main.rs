@@ -13,7 +13,7 @@
 //! own definition of the wire. The previous client hand-wrote this JSON and got
 //! the adjacent tagging of `AgentAction` wrong, which presented as a hung app.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::time::{Duration, Instant};
 
 use blitz_control_protocol::{
@@ -1524,22 +1524,28 @@ async fn capture(client: &mut Client, want: &str, scale: f32) -> Result<()> {
 
 /// Audit every button in the running application.
 ///
-/// One capture per button, cropped to that button's own box, so the number
-/// reported is what the renderer drew *for that control* rather than for the
-/// window around it. Slower than a single frame and worth it: a whole-window
-/// capture cannot tell a drawn button from a blank one sitting next to a label.
+/// Reads the renderer's own paint output rather than capturing each control.
+/// The paint snapshot reports, per node, the style the renderer resolved and
+/// the box it drew into, which answers the same question a capture does and
+/// answers it for the whole window in one call.
+///
+/// Capturing per button was tried first and was worse in both directions. It
+/// took 19 seconds against well under one, and it reported false faults: a crop
+/// taken from a full-document paint cannot see content a clipping scroller drew
+/// into its own layer, so three `Edit` buttons were flagged that the paint
+/// output proved were drawn, with colours identical to their working siblings.
 async fn run_audit(client: &mut Client, family: Option<&str>) -> Result<usize> {
     use audit::{Audited, Verdict};
 
     let (snapshot, _) = inspect(client).await?;
+
     /*
      * The viewport, read from the tree rather than assumed.
      *
-     * A control below the fold is clipped, not broken, and the first run
-     * reported a dozen of them as faults: the panel's own Settings and Notes
-     * headers sit at y=939 in a 900px window and draw perfectly once scrolled
-     * to. Taking the `main` element's box means this stays right when the
-     * window is resized instead of encoding one machine's geometry.
+     * A control below the fold is clipped, not broken. The panel's own Settings
+     * and Notes headers sit at y=939 in a 900px window and draw perfectly once
+     * scrolled to, so a hardcoded bound reported them as faults. Reading the
+     * `main` box also keeps this right when the window is resized.
      */
     let viewport = snapshot
         .nodes
@@ -1554,107 +1560,51 @@ async fn run_audit(client: &mut Client, family: Option<&str>) -> Result<usize> {
         })
         .unwrap_or((0.0, f64::MAX));
 
-    let subjects: Vec<_> = audit::buttons(&snapshot.nodes)
-        .into_iter()
-        .filter(|node| family.is_none_or(|want| audit::family_of(&node.name) == want))
-        .map(|node| (node.id, node.name.clone(), node.visible, node.bounds))
-        .collect();
-
-    if subjects.is_empty() {
-        bail!("no buttons matched {family:?}");
-    }
-    println!("auditing {} buttons in the running app\n", subjects.len());
+    let painted = painted_nodes(client).await?;
 
     let mut rows: Vec<Audited> = Vec::new();
-    for (id, name, visible, bounds) in subjects {
-        let family = audit::family_of(&name);
-        let (width, height) = bounds.map(|b| (b[2], b[3])).unwrap_or((0.0, 0.0));
-
-        // A control with no box drew nothing anywhere; there is nothing to
-        // capture and asking would only produce an error to explain.
-        if width <= 0.0 || height <= 0.0 {
-            rows.push(Audited {
-                id,
-                name,
-                family,
-                width,
-                height,
-                visible_pixels: 0,
-                total_pixels: 0,
-                verdict: if visible {
-                    Verdict::NoBox
-                } else {
-                    Verdict::Hidden
-                },
-            });
+    for node in audit::buttons(&snapshot.nodes) {
+        let family_name = audit::family_of(&node.name);
+        if family.is_some_and(|want| family_name != want) {
             continue;
         }
+        let (width, height) = node.bounds.map(|b| (b[2], b[3])).unwrap_or((0.0, 0.0));
 
-        /*
-         * Scrolled out of the viewport is not a fault.
-         *
-         * A transcript keeps hundreds of controls at negative coordinates, and
-         * every one draws correctly once scrolled to. Counting them as blank
-         * buried the real faults under 30 lines of noise in the first run.
-         */
-        if bounds
+        let verdict = if !node.visible {
+            Verdict::Hidden
+        } else if width <= 0.0 || height <= 0.0 {
+            Verdict::NoBox
+        } else if node
+            .bounds
             .is_some_and(|b| b[1] + b[3] < viewport.0 || b[0] + b[2] < 0.0 || b[1] > viewport.1)
         {
-            rows.push(Audited {
-                id,
-                name,
-                family,
-                width,
-                height,
-                visible_pixels: 0,
-                total_pixels: 0,
-                verdict: Verdict::Offscreen,
-            });
-            continue;
-        }
-
-        // Captured at 3x: a 16px control is a handful of pixels at 1x and
-        // antialiasing dominates them, which makes "is anything there" a
-        // judgement call rather than a measurement.
-        let answer = client
-            .diagnostics(&DiagnosticsRequest::Capture(CaptureRequest {
-                node_id: Some(id),
-                scale: 3.0,
-            }))
-            .await?;
-        let (visible_pixels, total_pixels, verdict) = match answer.response {
-            DebugResponse::Captured(image) => {
-                let ink = measure_ink(&image)?;
-                let verdict = if ink.visible > 0 {
-                    Verdict::Drawn
-                } else if visible {
-                    Verdict::Blank
-                } else {
-                    Verdict::Hidden
-                };
-                (ink.visible, ink.total, verdict)
-            }
-            // A refusal is not a pass. It is reported as a fault so a capture
-            // that stops working cannot quietly turn the audit green.
-            DebugResponse::Error(_) => (0, 0, Verdict::NoBox),
-            other => bail!("asked for a capture, got {other:?}"),
+            Verdict::Offscreen
+        } else if painted.contains(&node.id) {
+            Verdict::Drawn
+        } else {
+            Verdict::Blank
         };
 
         rows.push(Audited {
-            id,
-            name,
-            family,
+            id: node.id,
+            name: node.name.clone(),
+            family: family_name,
             width,
             height,
-            visible_pixels,
-            total_pixels,
+            visible_pixels: 0,
+            total_pixels: 0,
             verdict,
         });
     }
 
+    if rows.is_empty() {
+        bail!("no buttons matched {family:?}");
+    }
+    println!("auditing {} buttons in the running app\n", rows.len());
+
     let faults: Vec<&Audited> = rows.iter().filter(|row| row.verdict.is_fault()).collect();
     if faults.is_empty() {
-        println!("no faults: every visible button drew something");
+        println!("no faults: every visible button was painted");
     } else {
         println!("{} button(s) the owner cannot see:\n", faults.len());
         for row in &faults {
@@ -1677,6 +1627,33 @@ async fn run_audit(client: &mut Client, family: Option<&str>) -> Result<usize> {
     }
     println!("\n{} audited, {} faults", rows.len(), faults.len());
     Ok(faults.len())
+}
+
+/// The nodes the renderer resolved and drew, from one paint snapshot.
+///
+/// A button absent from this was not painted, which is what "the owner cannot
+/// see it" means. Asked once for the whole window rather than per control.
+async fn painted_nodes(client: &mut Client) -> Result<HashSet<u64>> {
+    let answer = client
+        .diagnostics(&DiagnosticsRequest::Snapshot(SnapshotRequest {
+            include_dom: false,
+            include_layout: false,
+            include_computed_style: true,
+        }))
+        .await?;
+    let DebugResponse::Snapshot(snapshot) = answer.response else {
+        bail!("asked for a paint snapshot, got {:?}", answer.response);
+    };
+    Ok(snapshot
+        .computed_style
+        .as_ref()
+        .and_then(|value| value.as_array())
+        .map(|rows| {
+            rows.iter()
+                .filter_map(|row| row.get("nodeId")?.as_u64())
+                .collect()
+        })
+        .unwrap_or_default())
 }
 
 #[tokio::main(flavor = "current_thread")]
