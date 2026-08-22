@@ -27,6 +27,7 @@ mod audit;
 mod inspector;
 mod qa;
 mod report;
+mod sweep;
 
 use inspector::Client;
 
@@ -74,6 +75,12 @@ usage: blitz-bench <mode> [args]
                               the owner cannot see. Exits 1 on any fault.
                               Families: close delete add edit disclosure copy
                               reorder run status fork reply attach clear other
+  sweep [family]              CLICK every button and check it did what its name
+                              says: a Collapse becomes an Expand, a Delete
+                              removes its row, a Copy changes nothing. Point
+                              AZ_DATA_DIR at a throwaway profile first, because
+                              this presses destructive controls on purpose.
+                              Exits 1 on any button that did not act
   qa [group]                  drive every panel control and check what the
                               renderer did with it: icons paint, hover reveals
                               the row actions, a status click does not remove
@@ -1653,6 +1660,84 @@ async fn painted_nodes(client: &mut Client) -> Result<HashSet<u64>> {
         .unwrap_or_default())
 }
 
+/// Click every button and report the ones that did not act.
+///
+/// The tree is re-read after each click rather than once at the end, because a
+/// click changes what is on screen and a stale node id is a click on nothing.
+/// Buttons are addressed by name for the same reason: ids do not survive the
+/// re-render that a working button causes.
+async fn run_sweep(client: &mut Client, family: Option<&str>) -> Result<usize> {
+    let (snapshot, _) = inspect(client).await?;
+    let planned = sweep::cases(&snapshot.nodes, family, audit::family_of);
+    if planned.is_empty() {
+        bail!("no clickable buttons matched {family:?}");
+    }
+    println!("clicking {} buttons\n", planned.len());
+
+    let mut outcomes: Vec<sweep::Outcome> = Vec::new();
+    for case in planned {
+        let (before, _) = inspect(client).await?;
+
+        // Gone since the plan was made, which a working button often causes:
+        // closing one tab removes the close buttons of the tabs it held.
+        if !sweep::has_button(&before.nodes, &case.name) {
+            continue;
+        }
+
+        if let Err(error) = click_named_quiet(client, &case.name).await {
+            outcomes.push(sweep::Outcome {
+                case,
+                failure: Some(format!("could not be clicked: {error}")),
+            });
+            continue;
+        }
+        // Long enough for a synchronous handler and its re-render. A backend
+        // round trip is slower, and a button that only fails under that delay
+        // is reported rather than waited for: the owner sees the same thing.
+        tokio::time::sleep(Duration::from_millis(250)).await;
+
+        let (after, _) = inspect(client).await?;
+        let failure = sweep::judge(&case, &before.nodes, &after.nodes);
+        outcomes.push(sweep::Outcome { case, failure });
+    }
+
+    let failures: Vec<&sweep::Outcome> = outcomes.iter().filter(|o| o.failure.is_some()).collect();
+    if failures.is_empty() {
+        println!("every button acted");
+    } else {
+        println!("{} button(s) did not act:\n", failures.len());
+        for outcome in &failures {
+            println!(
+                "  {:<48} {}",
+                outcome.case.name.chars().take(48).collect::<String>(),
+                outcome.failure.as_deref().unwrap_or("")
+            );
+        }
+        println!();
+    }
+
+    let mut by_family: HashMap<&'static str, (usize, usize)> = HashMap::new();
+    for outcome in &outcomes {
+        let entry = by_family.entry(outcome.case.family).or_insert((0, 0));
+        entry.1 += 1;
+        if outcome.failure.is_none() {
+            entry.0 += 1;
+        }
+    }
+    let mut families: Vec<_> = by_family.into_iter().collect();
+    families.sort_by_key(|(name, _)| *name);
+    for (name, (passed, total)) in families {
+        let mark = if passed == total { " " } else { "!" };
+        println!("{mark} {name:<12} {passed}/{total}");
+    }
+    println!(
+        "\n{} clicked, {} did not act",
+        outcomes.len(),
+        failures.len()
+    );
+    Ok(failures.len())
+}
+
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<()> {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -1999,6 +2084,13 @@ async fn main() -> Result<()> {
             let family = args.get(1).map(String::as_str);
             let faults = run_audit(&mut client, family).await?;
             if faults > 0 {
+                std::process::exit(1);
+            }
+        }
+        "sweep" => {
+            let family = args.get(1).map(String::as_str);
+            let failures = run_sweep(&mut client, family).await?;
+            if failures > 0 {
                 std::process::exit(1);
             }
         }
