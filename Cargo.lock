@@ -507,6 +507,7 @@ dependencies = [
  "ps-usvg",
  "serde",
  "serde_json",
+ "tiny-skia",
  "tokio",
 ]
 
@@ -7126,6 +7127,7 @@ dependencies = [
  "bytemuck",
  "cfg-if",
  "log",
+ "png 0.18.1",
  "tiny-skia-path",
 ]
 
