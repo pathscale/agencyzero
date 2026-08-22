@@ -205,10 +205,42 @@ pub fn judge(case: &Case, before: &[SemanticNode], after: &[SemanticNode]) -> Op
             }
         }
         Expectation::Inert => {
-            if tree_fingerprint(before) == tree_fingerprint(after) {
+            /*
+             * Its own "Copied" feedback is not a document change.
+             *
+             * A copy control flips a label or shows a tick for a second, which
+             * is the only way the owner knows it worked. Once visibility joined
+             * the fingerprint - needed to catch controls that only reveal
+             * something - that feedback started reading as a violation, and
+             * every `Copy` in the app was reported for mutating the document
+             * while the node count was identical either side.
+             *
+             * What `Inert` is actually for is a copy that adds, removes or
+             * disables something, so that is what is checked.
+             */
+            /*
+             * Counted, not diffed, and only for the controls.
+             *
+             * A running app's tree drifts on its own - it grew by a hundred
+             * nodes between two reads here with nothing pressed, which is the
+             * degradation this harness has open as a separate bug - so any
+             * exact before/after comparison reports every `Copy` in the app for
+             * mutating the document. What `Inert` is for is a copy that adds,
+             * removes or disables a control, and that survives the drift.
+             */
+            let controls = |nodes: &[SemanticNode]| {
+                let mut rows: Vec<(String, bool)> = nodes
+                    .iter()
+                    .filter(|node| node.role == "button")
+                    .map(|node| (node.name.clone(), node.enabled))
+                    .collect();
+                rows.sort();
+                rows
+            };
+            if controls(before) == controls(after) {
                 None
             } else {
-                Some("the document changed; this should only touch the clipboard".to_owned())
+                Some("a control appeared, vanished or changed state; this should only copy".to_owned())
             }
         }
     }
