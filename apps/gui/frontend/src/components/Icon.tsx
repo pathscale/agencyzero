@@ -48,8 +48,21 @@ export function Icon(props: IconProps): JSX.Element {
     // biome-ignore lint/a11y/noSvgWithoutTitle: a <title> is rendered when `label` is given and the icon is aria-hidden otherwise; the rule reads attributes statically and cannot see that these are two branches of one decision.
     <svg
       viewBox="0 0 24 24"
-      width="1em"
-      height="1em"
+      /*
+       * Sized by CSS, never by `width="1em"` on the element.
+       *
+       * usvg parses this markup with no font context, so it resolves `1em` to a
+       * flat 12px and reports the tree as 12x12 against a 24x24 `viewBox`. The
+       * renderer then fits that half-scale tree into the element's real box,
+       * and on a 13px control the strokes land below a pixel and disappear
+       * entirely. Measured through the capture API: every `Close` and
+       * `Collapse` button rendered 0 visible pixels while `Sort descending`,
+       * which is styled differently, rendered 4.35%.
+       *
+       * Without the attributes usvg uses the `viewBox` and reports 24x24, so
+       * the artwork arrives at its authored scale and CSS decides the size, as
+       * `size-*` and `text-[13px]` on the callers already intend.
+       */
       fill="none"
       /*
        * The artwork accent, resolved, rather than `currentColor`.
@@ -90,7 +103,17 @@ export function Icon(props: IconProps): JSX.Element {
       stroke-width="2"
       stroke-linecap="round"
       stroke-linejoin="round"
-      class={props.class}
+      /*
+       * `size-[1em]` first, so a caller's own sizing still wins.
+       *
+       * The element used to carry `width="1em" height="1em"` as attributes,
+       * which is what broke the icons: usvg has no font context, resolves `1em`
+       * to a flat 12px, and reports a 12x12 tree against a 24x24 `viewBox`, so
+       * the artwork arrived at half scale and vanished on small controls.
+       * Expressed as a class it is CSS, which usvg never sees and the layout
+       * engine resolves properly against the inherited font size.
+       */
+      class={["size-[1em]", props.class]}
       role={props.label ? "img" : "presentation"}
       aria-hidden={props.label ? undefined : "true"}
       {...rest}
