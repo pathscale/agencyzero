@@ -194,6 +194,24 @@ export function ProjectPanel(props: { project: Project; agent: Agent }): JSX.Ele
 
 /** Two small toggles produce Status/Time × ascending/descending. */
 function ItemSortControls(): JSX.Element {
+  /*
+   * The store reads live in memos, not inside `tx(...)`.
+   *
+   * Written as `tx(prefs.itemSortBy === "status" ? ... : ...)`, the read is an
+   * argument to a function call, and Solid 2 subscribes to the compute it is
+   * given rather than to whatever a call happens to touch: the label was
+   * evaluated once and never again. Both controls wrote their preference and
+   * nothing on screen moved, so they read as dead - measured against a running
+   * build, pressing either left the button's own label and width unchanged.
+   *
+   * `stores/prefs.ts:126` and `stores/workspace.tsx:755` carry the same
+   * inversion for `createEffect`, and `Panel`'s `isOpen` avoids it by taking
+   * the value as a prop, which is why the collapse controls beside these two
+   * have always worked.
+   */
+  const sortBy = createMemo(() => prefs.itemSortBy);
+  const direction = createMemo(() => prefs.itemSortDirection);
+
   return (
     <fieldset
       class="m-0 flex min-w-0 shrink-0 items-center gap-1 border-0 p-0"
@@ -203,28 +221,28 @@ function ItemSortControls(): JSX.Element {
         type="button"
         onClick={() =>
           setPrefs((d) => {
-            d.itemSortBy = prefs.itemSortBy === "status" ? "time" : "status";
+            d.itemSortBy = sortBy() === "status" ? "time" : "status";
           })
         }
         class="rounded-full border border-az-hairline bg-az-inset px-2 py-0.5 font-medium text-[10.5px] text-az-muted transition-colors hover:text-az-strong"
         title={tx("Toggle item sort between status and time")}
       >
-        {tx(prefs.itemSortBy === "status" ? "Status" : "Time")}
+        {sortBy() === "status" ? tx("Status") : tx("Time")}
       </Button>
       <Button
         type="button"
         onClick={() =>
           setPrefs((d) => {
-            d.itemSortDirection = prefs.itemSortDirection === "asc" ? "desc" : "asc";
+            d.itemSortDirection = direction() === "asc" ? "desc" : "asc";
           })
         }
         class="az-control-solid flex size-5 items-center justify-center rounded-full border border-az-hairline bg-az-inset text-az-muted transition-colors hover:text-az-strong"
-        aria-label={tx(prefs.itemSortDirection === "asc" ? "Sort descending" : "Sort ascending")}
-        title={tx(prefs.itemSortDirection === "asc" ? "Ascending" : "Descending")}
+        aria-label={direction() === "asc" ? tx("Sort descending") : tx("Sort ascending")}
+        title={direction() === "asc" ? tx("Ascending") : tx("Descending")}
       >
         <Icon
           name="arrow-up"
-          class={`text-[11px] transition-transform ${prefs.itemSortDirection === "desc" ? "rotate-180" : ""}`}
+          class={`text-[11px] transition-transform ${direction() === "desc" ? "rotate-180" : ""}`}
         />
       </Button>
     </fieldset>

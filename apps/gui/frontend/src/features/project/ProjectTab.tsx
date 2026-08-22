@@ -673,7 +673,15 @@ export function ProjectTab(props: { tab: Tab; project: Project }): JSX.Element {
  * sidebar, left restores the hidden one.
  */
 export function ProjectPanelToggle(props: { visible: boolean; onToggle: () => void }): JSX.Element {
-  const label = () => tx(props.visible ? "Hide the project sidebar" : "Show the project sidebar");
+  /*
+   * `props.visible` read inside the compute, not handed to `tx` as an argument.
+   *
+   * Solid 2 subscribes to the compute it is given, so `tx(props.visible ? a :
+   * b)` tracked nothing: the label was resolved once and the arrow never
+   * turned, which is why pressing this wrote the preference and changed
+   * nothing on screen. Same inversion as `ItemSortControls`.
+   */
+  const label = () => (props.visible ? tx("Hide the project sidebar") : tx("Show the project sidebar"));
   return (
     <Button
       type="button"
