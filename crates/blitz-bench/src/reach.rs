@@ -897,14 +897,19 @@ mod tests {
 
     #[test]
     fn coverage_reports_an_unaccounted_gap() {
+        // Every bucket carries at least one control, so a bucket dropped from
+        // `bucketed()` shows up here as an unaccounted gap rather than passing
+        // on a zero that proves nothing. The fork dialog put real controls in
+        // `blocked`, which is why it counts.
         let full = Coverage {
             in_tree: 10,
             swept: 3,
-            unreachable: 3,
+            unreachable: 2,
             hidden: 1,
             vanished: 1,
             navigation: 1,
             native: 1,
+            blocked: 1,
         };
         assert!(full.accounted());
         assert!(!full.line().contains("UNACCOUNTED"));
@@ -917,6 +922,7 @@ mod tests {
             vanished: 0,
             navigation: 0,
             native: 0,
+            blocked: 0,
         };
         assert!(!leaky.accounted());
         assert!(leaky.line().contains("UNACCOUNTED 4"));
