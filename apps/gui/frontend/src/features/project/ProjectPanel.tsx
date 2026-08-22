@@ -2083,9 +2083,9 @@ function TaskLogList(props: { projectId: string }): JSX.Element {
        * Scrolling toward the older end reveals more, so the button is a
        * fallback rather than the way in. `onScroll` reads the element it is
        * attached to, which is why the handler lives on the scroller and not on
-       * the list inside it. The list reads newest-first, so "more" is *down*:
-       * `createFlexGrid` is in `fromEnd` mode and would watch the top, and the
-       * threshold is checked here instead.
+       * the list inside it. The list reads newest-first, so "more" is *down*,
+       * and the threshold is checked here rather than by the pager, which
+       * watches its own end of the list.
        */
       onScroll={(event) => {
         if (!hasMore()) return;
