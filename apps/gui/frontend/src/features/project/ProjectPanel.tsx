@@ -1,4 +1,4 @@
-import { Checkbox, Flex, Input, Slider, Switch, Textarea } from "@pathscale/ui";
+import { Checkbox, createFlexGrid, Flex, Input, Slider, Switch, Textarea } from "@pathscale/ui";
 import type { JSX } from "@solidjs/web";
 import { createEffect, createMemo, createSignal, For, onSettled, Show } from "solid-js";
 import { NOTES_BUDGET } from "~/api/client";
@@ -1989,16 +1989,17 @@ function TaskLogList(props: { projectId: string }): JSX.Element {
    * line in the panel and it is paid on every construction, including while the
    * section is collapsed, because `SectionPanel` only hides its contents.
    *
-   * The newest entries are the ones anyone looks at, so the page is taken from
-   * the end. `Show more` reveals the rest without another round trip, since the
-   * whole loaded array is already in the store.
+   * `createFlexGrid` rather than a local limit signal and a slice. The rule is
+   * the same one this file had written by hand, and the same one six other
+   * lists here each wrote separately; `fromEnd` is what makes the first page
+   * the newest entries and "more" mean *earlier*.
    */
-  const [logLimit, setLogLimit] = createSignal(TASK_LOG_PAGE_SIZE);
-  const entries = createMemo(() => {
-    const loaded = all();
-    const limit = logLimit();
-    return loaded.length > limit ? loaded.slice(loaded.length - limit) : loaded;
+  const log = createFlexGrid({
+    rows: all,
+    pageSize: TASK_LOG_PAGE_SIZE,
+    fromEnd: true,
   });
+  const entries = log.visible;
   /** The one entry showing its whole command, if any. */
   const [expanded, setExpanded] = createSignal<string | null>(null);
   /** The row whose copy action most recently succeeded. */
@@ -2023,15 +2024,13 @@ function TaskLogList(props: { projectId: string }): JSX.Element {
     >
       {/* Above the rows, because the page is taken from the end: what this
           reveals is older than everything already on screen. */}
-      <Show when={all().length > entries().length}>
+      <Show when={log.hasMore()}>
         <Button
           type="button"
-          onClick={() => setLogLimit((limit) => limit + TASK_LOG_PAGE_SIZE)}
+          onClick={log.revealMore}
           class="flex-none rounded-[9px] border border-primary/24 bg-az-chip px-2.5 py-1.5 font-semibold text-[11px] text-primary transition-colors hover:bg-az-chip"
         >
-          {tx("Show {count} earlier", {
-            count: Math.min(TASK_LOG_PAGE_SIZE, all().length - entries().length),
-          })}
+          {tx("Show {count} earlier", { count: log.nextCount() })}
         </Button>
       </Show>
       <For each={entries()}>
