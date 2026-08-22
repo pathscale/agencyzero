@@ -1356,7 +1356,18 @@ async fn run_qa(client: &mut Client, group: Option<&str>) -> Result<usize> {
                 let how = if check.press { "press" } else { "click" };
                 click_error = Some(format!("could not {how} {want:?}: {error}"));
             }
-            tokio::time::sleep(Duration::from_millis(600)).await;
+            /*
+             * Long enough for the *slowest* thing a control opens.
+             *
+             * 600ms was tuned on dialogs, which appear immediately. The rename
+             * editor does not: traced against a running build, the press
+             * landed and the editor was on screen at 300x21 a moment later,
+             * but the `after` snapshot had already been taken and the check
+             * reported the control dead. A settle time that varies by what is
+             * being driven is how a working control reads as broken, so this
+             * is the slow case for everything.
+             */
+            tokio::time::sleep(Duration::from_millis(1200)).await;
         }
 
         let (after, _) = inspect(client).await?;
@@ -1405,17 +1416,32 @@ async fn click_by_id(client: &mut Client, node_id: u64) -> Result<()> {
 async fn press_named(client: &mut Client, want: &str) -> Result<()> {
     let (snapshot, _) = inspect(client).await?;
     let wanted = want.to_lowercase();
+    /*
+     * Buttons only.
+     *
+     * A control and the thing it opens often share an accessible name -
+     * `EditableTitle` gives the pencil and its editor the same `label` - so a
+     * name-only match picks whichever comes first in the tree. Once the editor
+     * was open, `press "Rename "` landed *inside the text field*, opened
+     * nothing, and the check reported the control dead while a manual press of
+     * the same substring worked. Restricting to buttons makes the target the
+     * control rather than its output.
+     */
     let Some(node) = snapshot
         .nodes
         .iter()
+        .filter(|n| n.role == "button")
         .filter(|n| n.name.to_lowercase().contains(&wanted))
         .filter(|n| n.visible && n.enabled)
         .find(|n| n.bounds.is_some_and(|b| b[2] > 0.0 && b[3] > 0.0))
     else {
-        bail!("no visible, enabled, sized node matching it");
+        bail!("no visible, enabled, sized button matching it");
     };
     let b = node.bounds.unwrap();
     let (x, y) = (b[0] + b[2] / 2.0, b[1] + b[3] / 2.0);
+    if std::env::var_os("QA_TRACE").is_some() {
+        println!("        pressing {:?} (id {}) at {x:.0},{y:.0}", node.name, node.id);
+    }
     // Move first: hover state gates some controls, and a press at a point the
     // document never saw hovered is not what a mouse does.
     for phase in [PointerPhase::Move, PointerPhase::Down, PointerPhase::Up] {
