@@ -1865,6 +1865,21 @@ async fn open_surface(client: &mut Client, surface: &reach::Surface) -> Result<b
     // strip renders beside it) rather than by a string that would differ per
     // profile.
     let opener = if surface.opener == reach::PROJECT_TAB {
+        /*
+         * Via Home, because that is the only surface a project can be opened
+         * from on a fresh profile.
+         *
+         * The strip holds no project tab until one has been opened, and the
+         * sweep reaches `project` while standing on Analytics, where there is
+         * no row to press either. Looking from where we happen to be found
+         * nothing every time and the pane went unswept on exactly the runs that
+         * matter. Cheap when a tab already exists: the lookup prefers it.
+         */
+        let (here, _) = inspect(client).await?;
+        if reach::project_opener(&here.nodes).is_none() {
+            let _ = click_named_quiet(client, "Home").await;
+            tokio::time::sleep(Duration::from_millis(600)).await;
+        }
         let (tree, _) = inspect(client).await?;
         match reach::project_opener(&tree.nodes) {
             Some(name) => name,
@@ -1882,7 +1897,50 @@ async fn open_surface(client: &mut Client, surface: &reach::Surface) -> Result<b
      * "analytics". Three surfaces reported on one screen and the report looked
      * completely ordinary.
      */
-    if click_named_quiet(client, &opener).await.is_err() {
+    /*
+     * A project row opens on double click, not single.
+     *
+     * `HomeTab.tsx:1327` says it outright: "Single click folds, double click
+     * opens the tab". A tab already in the strip is an ordinary single click,
+     * so only the Home-row path needs the gesture.
+     */
+    if surface.opener == reach::PROJECT_TAB {
+        /*
+         * Scrolled into view before it is aimed at.
+         *
+         * A box is not a position on screen. The first row this picked sat at
+         * y=1152 in a 900px window - laid out, `visible`, and below the fold -
+         * so the gesture went to a point with nothing under it and the project
+         * surface stayed unreachable while the report said only "could not be
+         * opened".
+         */
+        let (tree, _) = inspect(client).await?;
+        let Some(id) = tree
+            .nodes
+            .iter()
+            .find(|n| n.name == opener && reach::onscreen(n))
+            .map(|n| n.id)
+        else {
+            return Ok(false);
+        };
+        client
+            .agent(&AgentControlRequest::Act(AgentAction::ScrollIntoView {
+                node_id: id,
+            }))
+            .await?;
+        tokio::time::sleep(Duration::from_millis(400)).await;
+
+        let (tree, _) = inspect(client).await?;
+        let target = tree
+            .nodes
+            .iter()
+            .find(|n| n.id == id && reach::onscreen(n))
+            .and_then(|n| n.bounds);
+        match target {
+            Some(b) => double_click_at(client, b[0] + b[2] / 2.0, b[1] + b[3] / 2.0).await?,
+            None => return Ok(false),
+        }
+    } else if click_named_quiet(client, &opener).await.is_err() {
         return Ok(false);
     }
     if settle_on(client, surface).await? {
@@ -1890,12 +1948,45 @@ async fn open_surface(client: &mut Client, surface: &reach::Surface) -> Result<b
     }
     // One retry through Home, which every surface can be reached from even when
     // a modal on the current one is swallowing the direct hop.
+    // Not for the project surface: its opener is a gesture, and repeating it as
+    // a single click would fold the row rather than open it.
+    if surface.opener == reach::PROJECT_TAB {
+        return Ok(false);
+    }
     let _ = click_named_quiet(client, "Home").await;
     tokio::time::sleep(Duration::from_millis(400)).await;
     if click_named_quiet(client, &opener).await.is_err() {
         return Ok(false);
     }
     settle_on(client, surface).await
+}
+
+/// Two press-release pairs at one point, with no tree read between them.
+///
+/// A project row opens on double click and folds on single, and two `Click`
+/// actions are not a double click: each round-trips through the inspector, so
+/// they land hundreds of milliseconds apart and the app sees two singles. The
+/// row folded there and back and the project surface went unswept.
+///
+/// Sent as raw pointer phases at the node's centre for the same reason - the
+/// gap has to be small enough to fall inside the platform's dblclick threshold.
+async fn double_click_at(client: &mut Client, x: f64, y: f64) -> Result<()> {
+    for _ in 0..2 {
+        for phase in [PointerPhase::Down, PointerPhase::Up] {
+            client
+                .agent(&AgentControlRequest::Act(AgentAction::Input(
+                    InputCommand::Pointer {
+                        phase,
+                        x,
+                        y,
+                        button: 0,
+                        modifiers: Modifiers::default(),
+                    },
+                )))
+                .await?;
+        }
+    }
+    Ok(())
 }
 
 /// Wait until the surface is actually showing, up to a few seconds.
