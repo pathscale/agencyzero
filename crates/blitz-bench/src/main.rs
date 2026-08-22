@@ -2002,6 +2002,123 @@ async fn double_click_at(client: &mut Client, x: f64, y: f64) -> Result<()> {
     Ok(())
 }
 
+/// Sweep the controls inside an open modal, then prove it can be dismissed.
+///
+/// Returns `true` when the dialog would not close by any means a person has:
+/// its own dismiss controls, then Escape. That is a trap rather than a failed
+/// button - every control behind it is unreachable while it is up - so the
+/// caller stops rather than reporting hundreds of downstream failures that are
+/// really one bug.
+///
+/// The dialog's own controls are pressed *before* the dismiss is tried, because
+/// a `Cancel` that works would take them all off screen and they would never be
+/// tested. Destructive-sounding ones are pressed last for the same reason.
+async fn sweep_modal(
+    client: &mut Client,
+    opener: &str,
+    here: &mut reach::Coverage,
+    failures: &mut Vec<(String, String, String)>,
+    surface: &str,
+) -> Result<bool> {
+    let (tree, _) = inspect(client).await?;
+    let dismiss_ids: Vec<u64> = reach::dismissers(&tree.nodes)
+        .into_iter()
+        .map(|(id, _)| id)
+        .collect();
+
+    /*
+     * The dialog's own controls, not the window's.
+     *
+     * A modal leaves the surface behind it in the tree, still `visible` and
+     * still sized, exactly as a retained pane does. Sweeping everything on
+     * screen meant the fork dialog's pass pressed `HomeHome`, `Settings`,
+     * `Attach files` and the whole composer - none of which are in the dialog,
+     * and one of which raises a macOS panel that then sits on the owner's
+     * screen. The subtree that holds the dismiss control is the dialog.
+     */
+    let scope = dismiss_ids
+        .first()
+        .map(|id| reach::enclosing_dialog(&tree.nodes, *id))
+        .unwrap_or_default();
+    let inner: Vec<(u64, String)> = tree
+        .nodes
+        .iter()
+        .filter(|n| n.role == "button" && reach::onscreen(n) && n.enabled)
+        .filter(|n| !n.name.trim().is_empty())
+        .filter(|n| !dismiss_ids.contains(&n.id))
+        .filter(|n| scope.contains(&n.id))
+        .filter(|n| !reach::opens_native_dialog(&n.name))
+        .map(|n| (n.id, n.name.clone()))
+        .collect();
+
+    for (id, name) in inner {
+        let (before, _) = inspect(client).await?;
+        if !before
+            .nodes
+            .iter()
+            .any(|n| n.id == id && reach::onscreen(n))
+        {
+            continue;
+        }
+        if click_by_id(client, id).await.is_err() {
+            continue;
+        }
+        here.swept += 1;
+        if std::env::var_os("SWEEP_TRACE").is_some() {
+            println!("      [modal] clicked: {name:?}");
+        }
+        tokio::time::sleep(Duration::from_millis(180)).await;
+        let (after, _) = inspect(client).await?;
+        let case = sweep::Case {
+            id,
+            name: name.clone(),
+            family: audit::family_of(&name),
+            expect: sweep::expectation_for(&name),
+        };
+        if let Some(why) = sweep::judge(&case, &before.nodes, &after.nodes) {
+            failures.push((surface.to_owned(), format!("{name} (in {opener} dialog)"), why));
+        }
+        // A control inside the dialog may itself have closed it.
+        let (now, _) = inspect(client).await?;
+        if !reach::modal_open(&now.nodes) {
+            return Ok(false);
+        }
+    }
+
+    // Every way out, in the order a person would reach for them.
+    let (tree, _) = inspect(client).await?;
+    for (id, name) in reach::dismissers(&tree.nodes) {
+        if click_by_id(client, id).await.is_err() {
+            continue;
+        }
+        here.swept += 1;
+        tokio::time::sleep(Duration::from_millis(250)).await;
+        let (after, _) = inspect(client).await?;
+        if !reach::modal_open(&after.nodes) {
+            return Ok(false);
+        }
+        failures.push((
+            surface.to_owned(),
+            format!("{name} (in {opener} dialog)"),
+            "the dialog is still open; it did not dismiss".to_owned(),
+        ));
+    }
+
+    // Escape, which `AppModal` binds and which is the last thing a person has.
+    let _ = press_key(client, "escape", 1, "").await;
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    let (after, _) = inspect(client).await?;
+    if !reach::modal_open(&after.nodes) {
+        return Ok(false);
+    }
+    failures.push((
+        surface.to_owned(),
+        format!("{opener} dialog"),
+        "TRAPPED: no dismiss control and no Escape closes it".to_owned(),
+    ));
+    Ok(true)
+}
+
 /// Wait until the surface is actually showing, up to a few seconds.
 ///
 /// Polled rather than slept: Analytics takes longer to build than the others
@@ -2035,6 +2152,8 @@ async fn settle_on(client: &mut Client, surface: &reach::Surface) -> Result<bool
 async fn run_cover(client: &mut Client, only: Option<&str>) -> Result<usize> {
     let mut total = reach::Coverage::default();
     let mut failures: Vec<(String, String, String)> = Vec::new();
+    // Named, so the manual worklist at the end is what this run actually met.
+    let mut skipped_native: Vec<String> = Vec::new();
 
     for surface in reach::SURFACES {
         if only.is_some_and(|want| want != surface.name) {
@@ -2125,6 +2244,8 @@ async fn run_cover(client: &mut Client, only: Option<&str>) -> Result<usize> {
                 here.unreachable += 1;
             } else if node.name.to_lowercase().starts_with("collapse ")
                 || node.name.eq_ignore_ascii_case("New project")
+                || node.name.starts_with("Hide ")
+                || reach::folds_a_section(&node.name)
             {
                 /*
                  * Swept, but last.
@@ -2140,6 +2261,13 @@ async fn run_cover(client: &mut Client, only: Option<&str>) -> Result<usize> {
                  * direction: it opens the project it creates, so pressing it
                  * early walks the sweep off Home. It is still pressed, once
                  * the rest of the surface is done.
+                 *
+                 * `Hide the project sidebar` hides the entire side panel, and
+                 * with it every per-item control: `Fork <item> into a fresh
+                 * chat`, `New item`, `Save`, `Forget`, `Add dir` all read as
+                 * vanished after it. That is how the fork dialog went untested
+                 * for the whole audit - the sweep hid the panel before it ever
+                 * reached the rows.
                  */
                 collapsers.push((node.id, node.name.clone()));
             } else if reach::navigates(&node.name) {
@@ -2151,6 +2279,7 @@ async fn run_cover(client: &mut Client, only: Option<&str>) -> Result<usize> {
                 // Never pressed unattended: a native chooser takes the owner's
                 // screen and cannot be dismissed from here.
                 here.native += 1;
+                skipped_native.push(node.name.clone());
             } else if reach::restarts_the_app(&node.name) {
                 // Opens a setup flow that swallows navigation for the rest of
                 // the run; counted, never pressed.
@@ -2202,7 +2331,10 @@ async fn run_cover(client: &mut Client, only: Option<&str>) -> Result<usize> {
          * read and leaves a working surface alone.
          */
         let mut done: HashMap<String, usize> = HashMap::new();
-        for (planned_id, name) in plan {
+        let planned_total = plan.len();
+        for (index, (planned_id, name)) in plan.into_iter().enumerate() {
+            // What would be left if this control traps the window.
+            let remaining = planned_total.saturating_sub(index + 1);
             let (mut before, _) = inspect(client).await?;
             if !reach::on_surface(&before.nodes, surface) {
                 if !open_surface(client, surface).await? {
@@ -2286,6 +2418,58 @@ async fn run_cover(client: &mut Client, only: Option<&str>) -> Result<usize> {
                 println!("    clicked: {name:?}");
             }
             tokio::time::sleep(Duration::from_millis(200)).await;
+
+            /*
+             * If that opened a modal, sweep it and then prove it closes.
+             *
+             * This is the check the harness did not have, and the gap the owner
+             * found by hand: the fork dialog renders two `Cancel` controls and
+             * an Escape handler, all three do nothing, and the app is trapped
+             * with every control behind the modal unreachable. Judging each
+             * button against its own name can never see that - the question is
+             * not "did Cancel act" but "can I still get out of here".
+             *
+             * A dialog that will not dismiss is reported and the run continues
+             * from a restart rather than grinding on against a window nobody
+             * can use.
+             */
+            /*
+             * A native chooser is invisible to the tree, so it is detected by
+             * the window going unresponsive and cleared with Escape.
+             *
+             * Pressing `Attach files` puts a macOS panel over the app that no
+             * click from here can reach and that the semantic tree cannot see -
+             * the owner watched one sit on their screen mid-run, twice. The
+             * exclusion list that used to prevent this is gone on purpose
+             * (everything gets tested), so the harness recovers instead: if the
+             * tree stops answering or stops changing after a press, send the
+             * key a person would.
+             */
+            if reach::may_open_native_chooser(&name) {
+                let _ = press_key(client, "escape", 1, "").await;
+                tokio::time::sleep(Duration::from_millis(300)).await;
+            }
+
+            let (after_click, _) = inspect(client).await?;
+            if reach::modal_open(&after_click.nodes) {
+                let trapped = sweep_modal(client, &name, &mut here, &mut failures, surface.name)
+                    .await?;
+                if trapped {
+                    /*
+                     * Everything still in the plan is unreachable behind the
+                     * trap, and saying so is the point: a bucket that silently
+                     * loses 64 controls is how this audit missed the fork
+                     * dialog in the first place.
+                     */
+                    println!(
+                        "  ! {:?} opened a dialog that will not dismiss - \
+                         the rest of this surface is unreachable behind it",
+                        name
+                    );
+                    here.blocked += remaining;
+                    break;
+                }
+            }
             let (after, _) = inspect(client).await?;
             if let Some(why) = sweep::judge(&case, &before.nodes, &after.nodes) {
                 failures.push((surface.name.to_owned(), name, why));
@@ -2314,6 +2498,34 @@ async fn run_cover(client: &mut Client, only: Option<&str>) -> Result<usize> {
     }
 
     println!("\n{}", total.line());
+    /*
+     * The exceptions, named, every run.
+     *
+     * A skipped control that is only a number in a bucket is a control nobody
+     * remembers to test. These are the seven macOS file panels the harness
+     * cannot drive - not in the webview, invisible to the tree, and no
+     * synthesised click or key reaches them - so they need a person, and the
+     * report says so rather than implying the run covered everything.
+     */
+    if total.native > 0 {
+        println!(
+            "\n{} control(s) need a manual pass - macOS file panels this harness cannot drive:",
+            total.native
+        );
+        // Only the ones this run actually met, so the list is a worklist rather
+        // than a catalogue of everything that could theoretically be skipped.
+        let mut seen: Vec<&str> = skipped_native.iter().map(String::as_str).collect();
+        seen.sort_unstable();
+        seen.dedup();
+        for label in seen {
+            let command = reach::NATIVE_CHOOSERS
+                .iter()
+                .find(|exception| label.starts_with(exception.label))
+                .map(|exception| exception.command)
+                .unwrap_or("(unmapped - add it to NATIVE_CHOOSERS)");
+            println!("  {label:<38} {command}");
+        }
+    }
     if failures.is_empty() {
         println!("every reached button acted");
     } else {

@@ -389,16 +389,105 @@ fn surface_marker(surface: &Surface) -> Option<&'static str> {
 /// These are skipped rather than judged, and counted in their own bucket so the
 /// report never implies they passed.
 pub fn opens_native_dialog(name: &str) -> bool {
-    const NATIVE: &[&str] = &[
-        "Attach files",
-        "Add dir",
-        "Choose",
-        "Browse",
-        "Open folder",
-        // Settings' restore control, which opens the same OS chooser.
-        "Select backup file",
-    ];
-    NATIVE.iter().any(|entry| name.starts_with(entry))
+    /*
+     * Only the controls that hand the screen to macOS.
+     *
+     * This list used to carry "Choose", "Browse" and "Open folder" as well,
+     * which is how it grew from "skip the OS file chooser" into a general
+     * posture of not opening things. That posture is what let the fork dialog
+     * ship with a dead Cancel: the sweep never opened an in-app modal, so it
+     * never asked whether it could get back out, and the owner found a trap the
+     * harness had reported as a clean run.
+     *
+     * An in-app dialog is a surface like any other and gets swept. Only a
+     * native chooser is exempt, because it is not in the webview at all: the
+     * tree cannot see it, no click can dismiss it, and it takes the owner's
+     * screen until a person closes it.
+     */
+    /*
+     * The only exception, and it is documented rather than silent.
+     *
+     * Everything else is pressed, including in-app modals: the old list had
+     * grown into a general posture of not opening things, which is how a fork
+     * dialog shipped with a Cancel that does nothing - no run ever opened it.
+     *
+     * A macOS file chooser is genuinely outside what this harness can drive.
+     * It is not in the webview, so the semantic tree cannot see it and no
+     * synthesised click can reach it; Escape through the control protocol goes
+     * to the window underneath, and driving it through System Events needs
+     * assistive access this process does not have. Pressing one leaves a panel
+     * on the owner's screen until a person closes it, which happened twice
+     * during this audit.
+     *
+     * These are counted in the `native` bucket and printed, so the report says
+     * how many controls were not exercised and why. They need a person:
+     * `scripts/button-sweep.sh` documents the manual pass.
+     */
+    NATIVE_CHOOSERS
+        .iter()
+        .any(|exception| name.starts_with(exception.label))
+}
+
+/// One control the sweep will not press, and why.
+pub struct Exception {
+    /// The accessible-name prefix that identifies it.
+    pub label: &'static str,
+    /// The Tauri command that raises the panel, so the list can be re-derived.
+    pub command: &'static str,
+}
+
+/// Every control this harness cannot exercise, enumerated.
+///
+/// Seven, all of them macOS file panels, each traced to the `app.dialog()` call
+/// that raises it. There are no other exceptions: in-app modals are opened and
+/// swept like any other surface.
+///
+/// Re-derive with `grep -n '\.dialog()' apps/gui/src/*.rs` - it is seven call
+/// sites, and if that number changes this list is stale.
+pub const NATIVE_CHOOSERS: &[Exception] = &[
+    Exception { label: "Attach files", command: "choose_attachments" },
+    Exception { label: "Add dir", command: "choose_project_directory" },
+    Exception { label: "Choose a working directory", command: "choose_project_directory" },
+    Exception { label: "Choose the agencyzero data directory", command: "(startup data dir)" },
+    Exception { label: "Select backup file", command: "select_store_backup" },
+    Exception { label: "Save AgencyZero backup", command: "create_store_backup" },
+    Exception { label: "Export", command: "export_study_events" },
+    Exception { label: "Choose an AgencyZero backup", command: "select_store_backup" },
+    Exception { label: "Agent proxy binary", command: "choose_agent_proxy_binary" },
+];
+
+/// Whether the window is showing a modal that has to be dismissed to continue.
+///
+/// A modal is the one thing a sweep cannot treat as ordinary: every control
+/// behind it is unreachable until it closes, so a dialog that will not dismiss
+/// does not fail one button, it ends the run. The check is therefore not "did
+/// this button act" but "can I still get out of here".
+pub fn modal_open(nodes: &[SemanticNode]) -> bool {
+    nodes.iter().any(|node| {
+        onscreen(node)
+            && node.role == "button"
+            && (node.name == "Cancel" || node.name == "Dismiss")
+    })
+}
+
+/// The controls that would dismiss the modal in front, best first.
+///
+/// `Cancel` before `Close`, because a fork dialog renders both an × in its
+/// header and a `Cancel` in its footer and either should work; trying the named
+/// one first keeps the report readable when neither does.
+pub fn dismissers(nodes: &[SemanticNode]) -> Vec<(u64, String)> {
+    let mut found: Vec<(u64, String)> = nodes
+        .iter()
+        .filter(|n| n.role == "button" && onscreen(n))
+        .filter(|n| matches!(n.name.as_str(), "Cancel" | "Dismiss" | "Close"))
+        .map(|n| (n.id, n.name.clone()))
+        .collect();
+    found.sort_by_key(|(_, name)| match name.as_str() {
+        "Cancel" => 0,
+        "Dismiss" => 1,
+        _ => 2,
+    });
+    found
 }
 
 /// Whether this restarts the app or reopens onboarding.
@@ -437,6 +526,115 @@ pub fn closes_a_surface(name: &str) -> bool {
      * middle of a plan that stands on what they remove.
      */
     name.starts_with("Close ")
+}
+
+/// The subtree of the dialog that owns this dismiss control.
+///
+/// A modal does not remove the surface behind it: that surface stays in the
+/// tree, `visible` and sized, the same way a retained pane does. So "everything
+/// on screen" is not "everything in the dialog", and sweeping the former made
+/// the fork dialog's pass press `HomeHome`, `Settings` and `Attach files` -
+/// controls that are not in the dialog at all, one of which raises a macOS
+/// panel onto the owner's screen.
+///
+/// Found by climbing from the dismiss control until the subtree stops growing
+/// quickly, which is the dialog's own container: a modal is a small, self
+/// contained box next to a large surface, so the first ancestor holding more
+/// than a handful of controls is already too big.
+pub fn enclosing_dialog(nodes: &[SemanticNode], dismiss_id: u64) -> Vec<u64> {
+    let by_id: HashMap<u64, &SemanticNode> = nodes.iter().map(|n| (n.id, n)).collect();
+    let mut children: HashMap<u64, Vec<u64>> = HashMap::new();
+    for node in nodes {
+        if let Some(parent) = node.parent {
+            children.entry(parent).or_default().push(node.id);
+        }
+    }
+    let subtree_of = |root: u64| -> Vec<u64> {
+        let mut out = Vec::new();
+        let mut stack = vec![root];
+        while let Some(id) = stack.pop() {
+            out.push(id);
+            if let Some(kids) = children.get(&id) {
+                stack.extend(kids.iter().copied());
+            }
+        }
+        out
+    };
+
+    let mut cursor = dismiss_id;
+    let mut best = vec![dismiss_id];
+    for _ in 0..8 {
+        let Some(parent) = by_id.get(&cursor).and_then(|n| n.parent) else {
+            break;
+        };
+        cursor = parent;
+        let kept = subtree_of(cursor);
+        let buttons = kept
+            .iter()
+            .filter(|id| by_id.get(id).is_some_and(|n| n.role == "button"))
+            .count();
+        /*
+         * A dialog holds a handful of controls. Past that this is the pane
+         * behind it, and taking that would sweep the whole surface again from
+         * inside the modal.
+         */
+        if buttons > 12 {
+            break;
+        }
+        best = kept;
+    }
+    best
+}
+
+/// Whether pressing this is likely to raise a macOS file chooser.
+///
+/// Not an exclusion - these are pressed like everything else - but a cue to
+/// send Escape straight afterwards. A native panel is not in the webview: the
+/// semantic tree cannot see it, no synthesised click can dismiss it, and it
+/// holds the owner's screen until a person closes it. Testing the control and
+/// then getting out of the way is what a person does, and it is the only shape
+/// that satisfies "test everything" without leaving the app wedged.
+pub fn may_open_native_chooser(name: &str) -> bool {
+    const NATIVE: &[&str] = &[
+        "Attach files",
+        "Add dir",
+        "Select backup file",
+        "Choose",
+        "Browse",
+        "Open folder",
+        "Import",
+        "Export",
+    ];
+    NATIVE.iter().any(|entry| name.starts_with(entry))
+}
+
+/// Whether this is a panel section header, which folds the rows beneath it.
+///
+/// The panel's headers are named for their contents and count - `Items1`,
+/// `Running0`, `Task log22`, `Agent I/O0` - not "Collapse Items", so a
+/// name-prefix rule for disclosures misses every one of them. Pressing `Items1`
+/// folds the section, and with it `Fork <item> into a fresh chat`, `Change the
+/// status of ...`, `Edit the description for ...` and `New item`.
+///
+/// That is precisely how the fork dialog escaped the audit: the sweep folded
+/// the Items section a dozen controls before it reached the rows, so every
+/// per-item control read as vanished and the dialog was never opened.
+pub fn folds_a_section(name: &str) -> bool {
+    const SECTIONS: &[&str] = &[
+        "Items",
+        "Running",
+        "Task log",
+        "Agent I/O",
+        "Kept across compaction",
+        "Recent",
+    ];
+    SECTIONS.iter().any(|section| {
+        name.strip_prefix(section)
+            // The header carries a count, so what follows must be a number or
+            // nothing at all; "Items" matches, "Items1" matches, and
+            // "Item sort between status and time" does not.
+            .is_some_and(|rest| rest.is_empty() || rest.chars().all(|c| c.is_ascii_digit()))
+    })
 }
 
 /// The disclosure controls that must be opened before a sweep of this surface.
@@ -500,6 +698,13 @@ pub struct Coverage {
     pub navigation: usize,
     /// Hands the screen to a native modal, so it is never pressed unattended.
     pub native: usize,
+    /// Left unreachable behind a dialog that would not dismiss.
+    ///
+    /// Its own bucket because it is neither a pass nor a skip: these controls
+    /// were planned, are on the surface, and could not be reached because one
+    /// bug upstream of them traps the window. Counting them as anything else
+    /// hides the blast radius of that bug.
+    pub blocked: usize,
 }
 
 impl Coverage {
@@ -515,11 +720,12 @@ impl Coverage {
             + self.vanished
             + self.navigation
             + self.native
+            + self.blocked
     }
 
     pub fn line(&self) -> String {
         format!(
-            "{} buttons: {} swept, {} unreachable, {} hidden, {} vanished, {} nav, {} native{}",
+            "{} buttons: {} swept, {} unreachable, {} hidden, {} vanished, {} nav, {} native, {} blocked{}",
             self.in_tree,
             self.swept,
             self.unreachable,
@@ -527,6 +733,7 @@ impl Coverage {
             self.vanished,
             self.navigation,
             self.native,
+            self.blocked,
             if self.accounted() {
                 String::new()
             } else {
@@ -604,14 +811,44 @@ mod tests {
     }
 
     #[test]
-    fn controls_that_open_a_native_chooser_are_never_pressed() {
-        // The owner watched a stuck file dialog take their screen mid-run.
-        assert!(opens_native_dialog("Attach files"));
-        assert!(opens_native_dialog("Attach files for the task manager"));
-        assert!(opens_native_dialog("Add dir"));
-        // Ordinary controls stay in the sweep.
-        assert!(!opens_native_dialog("Add item"));
-        assert!(!opens_native_dialog("Send"));
+    fn only_the_documented_file_panels_are_exempt() {
+        /*
+         * The exception list is exactly the macOS file panels, and every entry
+         * names the command that raises it.
+         *
+         * The old list had grown past that into a general posture of not
+         * opening things, which is how the fork dialog shipped with a Cancel
+         * that does nothing: no run ever opened it. In-app modals are swept
+         * now; only panels outside the webview are exempt, because no
+         * synthesised click or key can reach them.
+         */
+        for name in ["Attach files", "Add dir", "Select backup file…", "Export"] {
+            assert!(opens_native_dialog(name), "{name} is a native panel");
+        }
+        for name in ["Add item", "Send", "Cancel", "Fork this item", "New item"] {
+            assert!(!opens_native_dialog(name), "{name} must be swept");
+        }
+        // Every exception is traceable to the call site that raises it, so the
+        // list can be re-derived rather than trusted.
+        assert!(NATIVE_CHOOSERS.iter().all(|e| !e.command.is_empty()));
+    }
+
+    #[test]
+    fn a_modal_is_recognised_and_offers_its_dismissers() {
+        let dialog = vec![
+            node(1, "button", "Cancel", Some([0.0, 0.0, 20.0, 20.0])),
+            node(2, "button", "Fork", Some([0.0, 0.0, 20.0, 20.0])),
+            node(3, "button", "Close", Some([0.0, 0.0, 20.0, 20.0])),
+        ];
+        assert!(modal_open(&dialog));
+        // Cancel first: the fork dialog renders an x in its header and a
+        // Cancel in its footer, and the named one reads better in a report.
+        let ways_out = dismissers(&dialog);
+        assert_eq!(ways_out[0].1, "Cancel");
+        assert_eq!(ways_out.len(), 2);
+
+        let ordinary = vec![node(1, "button", "Send", Some([0.0, 0.0, 20.0, 20.0]))];
+        assert!(!modal_open(&ordinary));
     }
 
     #[test]
