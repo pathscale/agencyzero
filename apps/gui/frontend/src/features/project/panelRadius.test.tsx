@@ -50,7 +50,10 @@ describe("the item header is one shape", () => {
   });
 
   it("gives the sort direction button the same pill", () => {
-    const classes = classesNear(source, 'aria-label={tx(prefs.itemSortDirection === "asc"');
+    // The read moved out of `tx(...)` and into a memo: Solid 2 subscribes to
+    // the compute it is given, so a store read passed as an argument to a
+    // function call tracked nothing and the control never re-rendered.
+    const classes = classesNear(source, 'aria-label={direction() === "asc"');
     expect(classes).toContain("rounded-full");
     expect(classes).not.toContain("rounded-md");
   });
