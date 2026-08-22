@@ -630,8 +630,18 @@ mod tests {
     fn surface_tabs_are_not_closed_out_from_under_the_sweep() {
         assert!(closes_a_surface("Close Settings"));
         assert!(closes_a_surface("Close Analytics"));
-        // A project tab's close is a control worth pressing.
-        assert!(!closes_a_surface("Close delta/east/cobalt"));
+        /*
+         * A project tab's close counts too, which it did not used to.
+         *
+         * It is still pressed - the caller defers these to the end of the plan
+         * rather than skipping them - but closing any tab falls the window back
+         * to Home and retires a pane the rest of the plan stands on. Exempting
+         * project tabs is what left Home reporting zero buttons in a full run.
+         */
+        assert!(closes_a_surface("Close delta/east/cobalt"));
+        // Not a close at all.
+        assert!(!closes_a_surface("Collapse Recent"));
+        assert!(!closes_a_surface("Rename e"));
     }
 
     #[test]
