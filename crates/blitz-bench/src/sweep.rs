@@ -110,8 +110,8 @@ pub fn expectation_for(name: &str) -> Expectation {
 /// Only visible, enabled, named buttons with a box: a control the owner cannot
 /// reach is not one whose behaviour can be asserted, and pressing it would test
 /// the harness rather than the application.
-pub fn cases<'a>(
-    nodes: &'a [SemanticNode],
+pub fn cases(
+    nodes: &[SemanticNode],
     family: Option<&str>,
     family_of: impl Fn(&str) -> &'static str,
 ) -> Vec<Case> {
@@ -139,14 +139,6 @@ pub fn has_button(nodes: &[SemanticNode], name: &str) -> bool {
     nodes
         .iter()
         .any(|node| node.role == "button" && node.name.to_lowercase() == wanted)
-}
-
-/// Whether anything in the tree mentions this text.
-pub fn mentions(nodes: &[SemanticNode], text: &str) -> bool {
-    let wanted = text.to_lowercase();
-    nodes
-        .iter()
-        .any(|node| node.name.to_lowercase().contains(&wanted))
 }
 
 /// The result of pressing one button.
