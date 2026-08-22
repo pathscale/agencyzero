@@ -2600,6 +2600,14 @@ async fn main() -> Result<()> {
         print!("{USAGE}");
         return Ok(());
     }
+    // The inventory reads the check list, not the app, so it answers "what is
+    // covered" with nothing running. Before the descriptor lookup for that
+    // reason: requiring a live instance to list the tests is what kept the
+    // coverage question unanswerable.
+    if mode == "list" {
+        print!("{}", qa::manifest());
+        return Ok(());
+    }
 
     let descriptor = inspector::discover(None)?;
     descriptor.warn_if_stale();
