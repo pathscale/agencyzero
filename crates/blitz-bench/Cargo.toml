@@ -34,3 +34,6 @@ path = "src/main.rs"
 # The rasteriser the app really uses, so the icon test asks the thing that
 # decides rather than a DOM that never draws.
 usvg = { package = "ps-usvg", version = "0.48.1" }
+# The CPU rasteriser, so the icon test can count lit pixels rather than trust
+# the parsed tree. Parsing says the geometry survived; only pixels say it drew.
+tiny-skia = "0.12"
