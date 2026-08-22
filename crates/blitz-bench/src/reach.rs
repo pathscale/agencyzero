@@ -50,6 +50,22 @@ pub struct Surface {
 /// the first control that changed pane: the run pressed one button, navigated,
 /// and counted the remaining 169 as vanished.
 pub const SURFACES: &[Surface] = &[
+    /*
+     * Project first, because it is the only surface reached by a gesture on
+     * another one's content.
+     *
+     * Its opener is a double click on a Home row, and Home's rows are exactly
+     * what the other surfaces disturb: by the time the sweep had been through
+     * Settings and Analytics the row it wanted was folded, scrolled past, or
+     * below the fold, and the pane went unswept while the report said only
+     * "could not be opened".
+     */
+    Surface {
+        name: "project",
+        // Resolved at run time to the first project tab in the strip: the QA
+        // profile's names are scrubbed, so there is no fixed string to aim at.
+        opener: PROJECT_TAB,
+    },
     Surface {
         name: "settings",
         opener: "Settings",
@@ -57,12 +73,6 @@ pub const SURFACES: &[Surface] = &[
     Surface {
         name: "analytics",
         opener: "Analytics",
-    },
-    Surface {
-        name: "project",
-        // Resolved at run time to the first project tab in the strip: the QA
-        // profile's names are scrubbed, so there is no fixed string to aim at.
-        opener: PROJECT_TAB,
     },
     Surface {
         name: "home",
