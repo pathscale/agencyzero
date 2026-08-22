@@ -90,23 +90,52 @@ pub fn project_opener(nodes: &[SemanticNode]) -> Option<String> {
         .filter(|n| n.role == "button" && onscreen(n))
         .filter_map(|n| n.name.strip_prefix("Close ").map(str::to_owned))
         .collect();
+    /*
+     * A project tab, which is any doubled label that is not one of the three
+     * permanent surfaces.
+     *
+     * This used to filter on `!navigates(name)`, which was correct until
+     * `navigates` was taught that project tabs are navigation - after that it
+     * excluded every candidate and the project surface could never be opened.
+     * The two need different questions: `navigates` asks "does pressing this
+     * leave the surface I am sweeping", and this asks "is this the way in".
+     */
     let tab = nodes
         .iter()
-        .filter(|n| n.role == "button" && onscreen(n) && !navigates(&n.name))
+        .filter(|n| n.role == "button" && onscreen(n))
+        .filter(|n| !PERMANENT.contains(&n.name.as_str()))
         .find(|n| {
-            closes
-                .iter()
-                .any(|subject| n.name == format!("{subject}{subject}"))
+            doubled(&n.name).is_some_and(|label| !PERMANENT.contains(&label))
+                || closes
+                    .iter()
+                    .any(|subject| n.name == format!("{subject}{subject}"))
         });
     if let Some(tab) = tab {
         return Some(tab.name.clone());
     }
+    /*
+     * Otherwise a project row on Home, which is what the owner clicks to open
+     * one. A fresh profile has no project tabs in the strip at all, so without
+     * this the surface is unreachable on exactly the runs that matter.
+     *
+     * Rows are recognised by the summary the list renders into their name - a
+     * working directory, an age, or an open/turn count - because the project
+     * names themselves are scrubbed and differ per profile.
+     */
     nodes
         .iter()
         .filter(|n| n.role == "button" && onscreen(n))
-        .find(|n| n.name.contains(" open · ") && !n.name.starts_with("Close "))
+        .filter(|n| !n.name.starts_with("Close ") && !n.name.starts_with("Rename "))
+        .find(|n| {
+            n.name.contains(" open · ")
+                || n.name.contains("no working directory")
+                || n.name.contains(" ago")
+        })
         .map(|n| n.name.clone())
 }
+
+/// The surfaces that are always in the strip and are never "the project".
+const PERMANENT: &[&str] = &["Home", "Settings", "Analytics", "HomeHome"];
 
 /// Whether a node is on screen well enough to click.
 ///
