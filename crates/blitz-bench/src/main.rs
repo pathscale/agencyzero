@@ -24,6 +24,7 @@ use blitz_control_protocol::{
 use eyre::{Result, bail};
 
 mod inspector;
+mod qa;
 mod report;
 
 use inspector::Client;
@@ -62,6 +63,11 @@ usage: blitz-bench <mode> [args]
                               named scroller, or into a bare node id
   reveal <name-substr>        scroll a named node into view, reporting its y before/after
   click <name-substring>      click the first matching visible, enabled node
+  qa [group]                  drive every panel control and check what the
+                              renderer did with it: icons paint, hover reveals
+                              the row actions, a status click does not remove
+                              the row, revealing adds rows. Exits 1 on any
+                              failure. Groups: icons hover status sections tasklog
 
 env:
   TAURI_BLITZ_CONTROL_DESCRIPTOR  the descriptor to attach to
@@ -1250,6 +1256,107 @@ async fn click_named(client: &mut Client, want: &str) -> Result<()> {
     Ok(())
 }
 
+/// Drive every panel check and report what the renderer did.
+///
+/// Each check runs against the live tree, and the three steps are separated on
+/// purpose: hovering is what makes the row controls exist at all, and a check
+/// that skips it reports a missing feature rather than a test driving the app
+/// wrongly. That mistake is why the hover regression shipped.
+///
+/// Returns the number of failures, so the caller can set an exit code.
+async fn run_qa(client: &mut Client, group: Option<&str>) -> Result<usize> {
+    let all = qa::checks();
+    let selected: Vec<&qa::Check> = all
+        .iter()
+        .filter(|check| group.is_none_or(|want| check.group == want))
+        .collect();
+    if selected.is_empty() {
+        bail!("no checks in group {group:?}");
+    }
+
+    println!(
+        "panel QA: {} checks against the running app\n",
+        selected.len()
+    );
+    let mut results: Vec<(&qa::Check, std::result::Result<(), String>)> = Vec::new();
+
+    for check in selected {
+        let (before, _) = inspect(client).await?;
+
+        // Hover first: the row actions do not exist until `pointerenter`.
+        if let Some(want) = check.hover {
+            hover_over(client, want).await?;
+            tokio::time::sleep(Duration::from_millis(150)).await;
+        }
+
+        // Then the action, if this check is about one. A click that cannot be
+        // dispatched is itself a failure, not a skip.
+        let mut click_error = None;
+        if let Some(want) = check.click {
+            if let Err(error) = click_named_quiet(client, want).await {
+                click_error = Some(format!("could not click {want:?}: {error}"));
+            }
+            tokio::time::sleep(Duration::from_millis(600)).await;
+        }
+
+        let (after, _) = inspect(client).await?;
+        let outcome = match click_error {
+            Some(error) => Err(error),
+            None => qa::verdict(check, &before.nodes, &after.nodes),
+        };
+        let mark = if outcome.is_ok() { "PASS" } else { "FAIL" };
+        println!("  {mark}  [{}] {}", check.group, check.what);
+        if let Err(error) = &outcome {
+            println!("        {error}");
+        }
+        results.push((check, outcome));
+    }
+
+    let failed = results.iter().filter(|(_, out)| out.is_err()).count();
+    let tally = qa::tally(&results);
+    let mut groups: Vec<_> = tally.iter().collect();
+    groups.sort_by_key(|(name, _)| *name);
+    println!();
+    for (name, (passed, total)) in groups {
+        println!("  {name:<10} {passed}/{total}");
+    }
+    println!("\n{} passed, {failed} failed", results.len() - failed);
+    Ok(failed)
+}
+
+/// `click_named` without the metrics report, for the QA runner's inner loop.
+async fn click_named_quiet(client: &mut Client, want: &str) -> Result<()> {
+    let (snapshot, _) = inspect(client).await?;
+    let wanted = want.to_lowercase();
+    let Some(target) = snapshot
+        .nodes
+        .iter()
+        .find(|node| node.name.to_lowercase().contains(&wanted) && node.visible && node.enabled)
+    else {
+        bail!("no visible, enabled node matching it");
+    };
+    let target_id = target.id;
+    // Off-screen controls get scrolled to first: a click at a point nothing is
+    // at dispatches a `pointerdown` and no click, which reads as a dead button.
+    if target
+        .bounds
+        .is_some_and(|b| b[1] + b[3] < 0.0 || b[0] + b[2] < 0.0 || b[1] > 4000.0)
+    {
+        client
+            .agent(&AgentControlRequest::Act(AgentAction::ScrollIntoView {
+                node_id: target_id,
+            }))
+            .await?;
+        tokio::time::sleep(Duration::from_millis(300)).await;
+    }
+    client
+        .agent(&AgentControlRequest::Act(AgentAction::Click {
+            node_id: target_id,
+        }))
+        .await?;
+    Ok(())
+}
+
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<()> {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -1586,6 +1693,13 @@ async fn main() -> Result<()> {
             let want = args.get(1).map(String::as_str).unwrap_or("Settings");
             nodes(&mut client).await?;
             click_named(&mut client, want).await?;
+        }
+        "qa" => {
+            let group = args.get(1).map(String::as_str);
+            let failed = run_qa(&mut client, group).await?;
+            if failed > 0 {
+                std::process::exit(1);
+            }
         }
         "reveal" => {
             let want = args.get(1).map(String::as_str).unwrap_or("");
