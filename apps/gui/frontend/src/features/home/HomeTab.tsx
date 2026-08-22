@@ -349,9 +349,21 @@ export function CleanupRowActions(props: {
 
 /** Home sorts its project groups and each group's items with one durable preference. */
 function HomeItemSortControls(): JSX.Element {
+  /*
+   * The store reads live in memos, not inside `tx(...)`.
+   *
+   * Solid 2 subscribes to the compute it is handed, not to whatever a function
+   * call happens to touch, so `tx(prefs.homeSortDirection === "asc" ? a : b)`
+   * resolved once and froze. The panel's two sort controls had the same fault
+   * and read as dead buttons in the running app - they wrote the preference and
+   * nothing on screen moved.
+   */
+  const sortBy = createMemo(() => prefs.homeSortBy);
+  const direction = createMemo(() => prefs.homeSortDirection);
+
   const nextSort = () => {
     const order = ["status", "time", "turns"] as const;
-    const current = order.indexOf(prefs.homeSortBy);
+    const current = order.indexOf(sortBy());
     setPrefs((d) => {
       d.homeSortBy = order[(current + 1) % order.length];
     });
@@ -382,29 +394,23 @@ function HomeItemSortControls(): JSX.Element {
          * memo is built under the component's own owner.
          */}
         <span>
-          {tx(
-            prefs.homeSortBy === "status"
-              ? "Status"
-              : prefs.homeSortBy === "time"
-                ? "Time"
-                : "Turns",
-          )}
+          {sortBy() === "status" ? tx("Status") : sortBy() === "time" ? tx("Time") : tx("Turns")}
         </span>
       </Button>
       <Button
         type="button"
         onClick={() =>
           setPrefs((d) => {
-            d.homeSortDirection = prefs.homeSortDirection === "asc" ? "desc" : "asc";
+            d.homeSortDirection = direction() === "asc" ? "desc" : "asc";
           })
         }
         class="az-control-solid flex size-5 items-center justify-center rounded-md border border-az-hairline bg-az-inset text-az-muted transition-colors hover:text-az-strong"
-        aria-label={tx(prefs.homeSortDirection === "asc" ? "Sort descending" : "Sort ascending")}
-        title={tx(prefs.homeSortDirection === "asc" ? "Ascending" : "Descending")}
+        aria-label={direction() === "asc" ? tx("Sort descending") : tx("Sort ascending")}
+        title={direction() === "asc" ? tx("Ascending") : tx("Descending")}
       >
         <Icon
           name="arrow-up"
-          class={`text-[11px] transition-transform ${prefs.homeSortDirection === "desc" ? "rotate-180" : ""}`}
+          class={`text-[11px] transition-transform ${direction() === "desc" ? "rotate-180" : ""}`}
         />
       </Button>
     </fieldset>
