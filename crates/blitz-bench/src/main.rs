@@ -1586,13 +1586,10 @@ async fn run_audit(client: &mut Client, family: Option<&str>) -> Result<usize> {
         };
 
         rows.push(Audited {
-            id: node.id,
             name: node.name.clone(),
             family: family_name,
             width,
             height,
-            visible_pixels: 0,
-            total_pixels: 0,
             verdict,
         });
     }
