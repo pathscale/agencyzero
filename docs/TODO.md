@@ -198,8 +198,8 @@ Two other things the table surfaced and neither is the renderer:
    with are inside the baseline. See [allocations.md](allocations.md). Fix it, or compare
    before-and-after on the same build.
 3. **Engine changes land in a checkout AgencyZero does not currently share with chuzz.**
-   Chuzz path-depends on `~/code/blitz-rust`; this repository builds ps-blitz from a pinned
-   git rev. A fix in one does not reach the other.
+   Chuzz depends on the published `ps-blitz-*` crates; this repository builds ps-blitz from
+   a pinned git rev. A fix in one does not reach the other until it is released.
 
 ## Resume here
 
