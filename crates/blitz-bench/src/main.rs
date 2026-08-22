@@ -26,6 +26,7 @@ use eyre::{Result, bail};
 mod audit;
 mod inspector;
 mod qa;
+mod reach;
 mod report;
 mod sweep;
 
@@ -81,6 +82,13 @@ usage: blitz-bench <mode> [args]
                               AZ_DATA_DIR at a throwaway profile first, because
                               this presses destructive controls on purpose.
                               Exits 1 on any button that did not act
+  cover [surface]             sweep EVERY surface, not just the one the app
+                              opened on: navigates project/settings/analytics/
+                              home, expands what is collapsed and hovers every
+                              row first, then clicks what that reveals. Reports
+                              what it could not reach instead of skipping it, so
+                              coverage is a number rather than silence.
+                              Surfaces: project settings analytics home
   qa [group]                  drive every panel control and check what the
                               renderer did with it: icons paint, hover reveals
                               the row actions, a status click does not remove
@@ -1790,6 +1798,351 @@ async fn run_sweep(client: &mut Client, family: Option<&str>) -> Result<usize> {
     Ok(failures.len())
 }
 
+/// Open every collapsed section on the current surface.
+///
+/// Repeated until nothing more opens, because expanding one section reveals
+/// disclosure controls inside it: `Items` holds a row per item and each row has
+/// its own. A single pass stops one level short of the controls that matter.
+async fn expand_everything(client: &mut Client) -> Result<usize> {
+    let mut opened = 0;
+    // Bounded: a disclosure that reports "Expand" after being expanded would
+    // otherwise spin here forever, and that is a bug worth finishing the run to
+    // report rather than hanging on.
+    for _ in 0..6 {
+        let (tree, _) = inspect(client).await?;
+        let todo = reach::expanders(&tree.nodes);
+        if todo.is_empty() {
+            break;
+        }
+        for (id, _name) in todo {
+            if click_by_id(client, id).await.is_ok() {
+                opened += 1;
+                tokio::time::sleep(Duration::from_millis(80)).await;
+            }
+        }
+    }
+    Ok(opened)
+}
+
+/// Hover every row on the surface, so hover-revealed controls enter the tree.
+///
+/// The row controls the owner asked about - rename, delete, pin - do not exist
+/// until `pointerenter`. Hovering is what puts them in the tree at all, so this
+/// runs before the plan is made rather than per-click.
+async fn hover_all_rows(client: &mut Client) -> Result<usize> {
+    let (tree, _) = inspect(client).await?;
+    // The window band, taken from the largest `main`, so rows scrolled far off
+    // the top of a transcript are not hovered at negative coordinates.
+    let window = tree
+        .nodes
+        .iter()
+        .filter(|node| node.role == "main")
+        .filter_map(|node| node.bounds)
+        .map(|b| (b[1], b[1] + b[3]))
+        .max_by(|a, b| {
+            (a.1 - a.0)
+                .partial_cmp(&(b.1 - b.0))
+                .unwrap_or(std::cmp::Ordering::Equal)
+        })
+        .unwrap_or((0.0, 4000.0));
+    let mut revealed = 0;
+    for (_id, point) in reach::hover_points(&tree.nodes, "listitem", window) {
+        if hover_over(client, &point).await.is_ok() {
+            revealed += 1;
+            tokio::time::sleep(Duration::from_millis(40)).await;
+        }
+    }
+    Ok(revealed)
+}
+
+/// Navigate to a surface, and say whether it opened.
+async fn open_surface(client: &mut Client, surface: &reach::Surface) -> Result<bool> {
+    if surface.opener.is_empty() {
+        return Ok(true);
+    }
+    // The project surface has no fixed name to aim at: the profile is scrubbed,
+    // so the tab is found by shape (a tab is the button whose `Close` twin the
+    // strip renders beside it) rather than by a string that would differ per
+    // profile.
+    let opener = if surface.opener == reach::PROJECT_TAB {
+        let (tree, _) = inspect(client).await?;
+        match reach::project_opener(&tree.nodes) {
+            Some(name) => name,
+            None => return Ok(false),
+        }
+    } else {
+        surface.opener.to_owned()
+    };
+    match click_named_quiet(client, &opener).await {
+        Ok(()) => {
+            tokio::time::sleep(Duration::from_millis(500)).await;
+            Ok(true)
+        }
+        Err(_) => Ok(false),
+    }
+}
+
+/// Sweep every surface, and account for every button in the tree.
+///
+/// The difference from `sweep`: it visits more than the screen the app opened
+/// on, it opens what is closed and hovers what reveals on hover before planning,
+/// and it reports what it could not reach instead of dropping it. A run that
+/// covers a fifth of the window now says so.
+///
+/// `SWEEP_TRACE=1` names every control as it is pressed and every one that goes
+/// missing, with the surface state at that moment. Every coverage bug found so
+/// far looked identical from the summary - a large `vanished` count - and was
+/// only separable from this: a stale id after a re-sort, a tab click walking off
+/// the surface, and a collapse hiding its own neighbours all read the same until
+/// you can see which click preceded them.
+async fn run_cover(client: &mut Client, only: Option<&str>) -> Result<usize> {
+    let mut total = reach::Coverage::default();
+    let mut failures: Vec<(String, String, String)> = Vec::new();
+
+    for surface in reach::SURFACES {
+        if only.is_some_and(|want| want != surface.name) {
+            continue;
+        }
+        if !open_surface(client, surface).await? {
+            println!("- {:<10} could not be opened, skipping\n", surface.name);
+            continue;
+        }
+
+        let opened = expand_everything(client).await?;
+        let hovered = hover_all_rows(client).await?;
+
+        /*
+         * This surface's buttons, not the whole window's.
+         *
+         * A retained pane keeps its entire subtree alive and merely hidden, so
+         * standing on Settings the tree still holds every one of Home's 157
+         * buttons. Counting those here charged each surface for the ones it was
+         * not looking at: four surfaces reported 1106 buttons between them for
+         * a window that has nowhere near that many, with 900 of them "hidden"
+         * and the real coverage number buried.
+         *
+         * The subject is what is on screen now. A control retained from another
+         * surface is that surface's to sweep, and it is swept when we stand
+         * there.
+         */
+        let (tree, _) = inspect(client).await?;
+        let buttons: Vec<&blitz_control_protocol::SemanticNode> = tree
+            .nodes
+            .iter()
+            .filter(|n| n.role == "button" && !n.name.trim().is_empty())
+            .filter(|n| n.visible)
+            .collect();
+
+        // Retained from other surfaces, reported so the difference between the
+        // window's button count and this surface's is never silent.
+        let retained = tree
+            .nodes
+            .iter()
+            .filter(|n| n.role == "button" && !n.name.trim().is_empty() && !n.visible)
+            .count();
+        let mut here = reach::Coverage {
+            in_tree: buttons.len(),
+            hidden: 0,
+            ..Default::default()
+        };
+        /*
+         * Counted in a plain loop, not inside a `filter` closure.
+         *
+         * Written as a lazy filter that incremented the tallies, the counts were
+         * still zero when the surface line printed them and only filled in as
+         * the plan was consumed: the first run reported "0 swept, 0 unreachable,
+         * UNACCOUNTED 106" for a surface it went on to sweep. A report that
+         * undercounts itself is the exact failure this mode exists to remove.
+         */
+        let mut plan: Vec<(u64, String)> = Vec::new();
+        let mut collapsers: Vec<(u64, String)> = Vec::new();
+        for node in &buttons {
+            if !reach::onscreen(node) {
+                here.unreachable += 1;
+            } else if node.name.to_lowercase().starts_with("collapse ")
+                || node.name.eq_ignore_ascii_case("New project")
+            {
+                /*
+                 * Swept, but last.
+                 *
+                 * A collapse closes the section its neighbours live in, and
+                 * every control underneath goes to `visible=false` at the
+                 * section's own origin. Pressing `Collapse Recent` first took
+                 * 160 of Home's 173 controls off screen and the run charged
+                 * them all as vanished, which read as the app losing its
+                 * buttons rather than the sweep hiding them.
+                 *
+                 * `New project` is here for the same reason from the other
+                 * direction: it opens the project it creates, so pressing it
+                 * early walks the sweep off Home. It is still pressed, once
+                 * the rest of the surface is done.
+                 */
+                collapsers.push((node.id, node.name.clone()));
+            } else if reach::navigates(&node.name) {
+                // Swept as the opener of its own surface, not here: pressing it
+                // mid-plan navigates away and every later button on this
+                // surface reads as vanished.
+                here.navigation += 1;
+            } else if reach::opens_native_dialog(&node.name) {
+                // Never pressed unattended: a native chooser takes the owner's
+                // screen and cannot be dismissed from here.
+                here.native += 1;
+            } else {
+                plan.push((node.id, node.name.clone()));
+            }
+        }
+        /*
+         * Order within the plan: harmless first, then destructive, then the
+         * disclosures that would hide either.
+         *
+         * A `Delete` removes its own row and shifts every row under it, so
+         * running deletes early costs the sweep the controls it had not reached
+         * yet. Sorting is stable, so controls otherwise keep tree order.
+         */
+        plan.sort_by_key(|(_, name)| {
+            let lower = name.to_lowercase();
+            u8::from(
+                lower.starts_with("delete ")
+                    || lower.starts_with("close ")
+                    || lower.starts_with("remove ")
+                    || lower.starts_with("retire "),
+            )
+        });
+        plan.extend(collapsers);
+
+        /*
+         * Swept by name, and the surface is restored only when it has actually
+         * been left.
+         *
+         * Re-navigating before every click looked safer and was much worse: the
+         * re-render invalidated the very plan it was protecting, and the run
+         * reported 98 of 125 controls vanished. Checking first costs one tree
+         * read and leaves a working surface alone.
+         */
+        let mut done: HashMap<String, usize> = HashMap::new();
+        for (planned_id, name) in plan {
+            let (mut before, _) = inspect(client).await?;
+            if !reach::on_surface(&before.nodes, surface) {
+                if !open_surface(client, surface).await? {
+                    here.vanished += 1;
+                    if std::env::var_os("SWEEP_TRACE").is_some() {
+                        println!("    left surface, could not return: {name:?}");
+                    }
+                    continue;
+                }
+                let (fresh, _) = inspect(client).await?;
+                before = fresh;
+            }
+
+            /*
+             * By id while it is still on screen, otherwise by name.
+             *
+             * Ids do not survive a re-render, and re-renders are ordinary here:
+             * `Cycle Home sort` reorders the list and every row comes back with
+             * a fresh id, the old ones retained as hidden 0x0 nodes at the
+             * container's origin. Trusting the planned id after that pressed
+             * nothing and charged 160 of Home's 173 controls as "vanished"
+             * while all of them were on screen the whole time.
+             *
+             * Names are not unique - 161 on-screen buttons share 81 names, with
+             * `Pin project` alone appearing thirty times - so the name path
+             * takes the nth still-unpressed match rather than the first, which
+             * is what stops one row absorbing every click aimed at its
+             * neighbours.
+             */
+            let seen = done.entry(name.clone()).or_insert(0);
+            let found = before
+                .nodes
+                .iter()
+                .find(|n| n.id == planned_id && n.name == name && reach::onscreen(n))
+                .or_else(|| {
+                    before
+                        .nodes
+                        .iter()
+                        .filter(|n| n.role == "button" && n.name == name && reach::onscreen(n))
+                        .nth(*seen)
+                });
+            let Some(node) = found else {
+                here.vanished += 1;
+                if std::env::var_os("SWEEP_TRACE").is_some() {
+                    println!("    vanished: {name:?} (id {planned_id})");
+                }
+                continue;
+            };
+            *seen += 1;
+            let id = node.id;
+            if !reach::onscreen(node) || !node.enabled {
+                here.vanished += 1;
+                if std::env::var_os("SWEEP_TRACE").is_some() {
+                    let visible_buttons = before
+                        .nodes
+                        .iter()
+                        .filter(|n| n.role == "button" && reach::onscreen(n))
+                        .count();
+                    println!(
+                        "    offscreen/disabled: {name:?} visible={} bounds={:?} \
+                         [on_surface={}, {visible_buttons} buttons on screen]",
+                        node.visible,
+                        node.bounds,
+                        reach::on_surface(&before.nodes, surface),
+                    );
+                }
+                continue;
+            }
+            let case = sweep::Case {
+                id,
+                name: name.clone(),
+                family: audit::family_of(&name),
+                expect: sweep::expectation_for(&name),
+            };
+            if click_by_id(client, id).await.is_err() {
+                here.vanished += 1;
+                continue;
+            }
+            here.swept += 1;
+            if std::env::var_os("SWEEP_TRACE").is_some() {
+                println!("    clicked: {name:?}");
+            }
+            tokio::time::sleep(Duration::from_millis(200)).await;
+            let (after, _) = inspect(client).await?;
+            if let Some(why) = sweep::judge(&case, &before.nodes, &after.nodes) {
+                failures.push((surface.name.to_owned(), name, why));
+            }
+        }
+
+        // Printed after the sweep, because `swept` is not known until then and
+        // a coverage line that reports zero for work it is about to do is worse
+        // than no line at all.
+        println!(
+            "= {:<10} {} ({} sections opened, {} rows hovered, {} retained elsewhere)",
+            surface.name,
+            here.line(),
+            opened,
+            hovered,
+            retained
+        );
+
+        total.in_tree += here.in_tree;
+        total.swept += here.swept;
+        total.unreachable += here.unreachable;
+        total.hidden += here.hidden;
+        total.vanished += here.vanished;
+        total.navigation += here.navigation;
+        total.native += here.native;
+    }
+
+    println!("\n{}", total.line());
+    if failures.is_empty() {
+        println!("every reached button acted");
+    } else {
+        println!("\n{} did not act:\n", failures.len());
+        for (surface, name, why) in &failures {
+            println!("  [{surface}] {:<40} {why}", name.chars().take(40).collect::<String>());
+        }
+    }
+    Ok(failures.len())
+}
+
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<()> {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -2142,6 +2495,13 @@ async fn main() -> Result<()> {
         "sweep" => {
             let family = args.get(1).map(String::as_str);
             let failures = run_sweep(&mut client, family).await?;
+            if failures > 0 {
+                std::process::exit(1);
+            }
+        }
+        "cover" => {
+            let surface = args.get(1).map(String::as_str);
+            let failures = run_cover(&mut client, surface).await?;
             if failures > 0 {
                 std::process::exit(1);
             }

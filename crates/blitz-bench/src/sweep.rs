@@ -165,6 +165,19 @@ pub fn judge(case: &Case, before: &[SemanticNode], after: &[SemanticNode]) -> Op
             }
         }
         Expectation::Removes { subject } => {
+            /*
+             * A confirmation is the control working, not failing.
+             *
+             * `Delete` on a project row does not delete: it swaps the row for
+             * an inline "Delete? Delete Cancel", and the row is still there
+             * until the second press. Judging only on the row's absence called
+             * every one of those broken - six of them in one run - when the
+             * guard is the feature. What the first press promises is that it
+             * asks, and that is what is checked.
+             */
+            if confirmation_appeared(before, after) {
+                return None;
+            }
             // The subject may be named by more than one control, so what is
             // asserted is that *this* button is gone, not every mention of it.
             if has_button(after, &case.name) {
@@ -201,6 +214,25 @@ pub fn judge(case: &Case, before: &[SemanticNode], after: &[SemanticNode]) -> Op
     }
 }
 
+/// Whether the click put a confirmation in front of the user.
+///
+/// Recognised by a `Cancel` that was not there before: a guarded action offers
+/// a way out, and an ordinary re-render does not grow one. Deliberately narrow,
+/// because treating any new control as a confirmation would excuse a `Delete`
+/// that merely redrew its own row.
+fn confirmation_appeared(before: &[SemanticNode], after: &[SemanticNode]) -> bool {
+    let cancels = |nodes: &[SemanticNode]| {
+        nodes
+            .iter()
+            .filter(|node| {
+                let lower = node.name.to_lowercase();
+                lower == "cancel" || lower.ends_with("cancel") || lower.contains("delete?")
+            })
+            .count()
+    };
+    cancels(after) > cancels(before)
+}
+
 /// A cheap summary of the tree, for "did anything happen".
 ///
 /// Names and roles rather than geometry: a hover highlight or a scroll moves
@@ -211,4 +243,54 @@ fn tree_fingerprint(nodes: &[SemanticNode]) -> Vec<(String, String, bool)> {
         .iter()
         .map(|node| (node.role.clone(), node.name.clone(), node.enabled))
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn button(name: &str) -> SemanticNode {
+        SemanticNode {
+            id: 0,
+            parent: None,
+            role: "button".to_owned(),
+            name: name.to_owned(),
+            value: None,
+            enabled: true,
+            visible: true,
+            selected: false,
+            bounds: Some([0.0, 0.0, 10.0, 10.0]),
+        }
+    }
+
+    #[test]
+    fn a_delete_that_asks_first_has_done_its_job() {
+        // The real shape from a running Home: the row grows an inline
+        // "Delete? Delete Cancel" and the project stays until it is confirmed.
+        let case = Case {
+            id: 1,
+            name: "Delete e".to_owned(),
+            family: "delete",
+            expect: expectation_for("Delete e"),
+        };
+        let before = vec![button("Delete e"), button("Rename e")];
+        let after = vec![
+            button("Delete e"),
+            button("Rename e"),
+            button("Cancel"),
+        ];
+        assert_eq!(judge(&case, &before, &after), None);
+    }
+
+    #[test]
+    fn a_delete_that_does_nothing_at_all_still_fails() {
+        let case = Case {
+            id: 1,
+            name: "Delete e".to_owned(),
+            family: "delete",
+            expect: expectation_for("Delete e"),
+        };
+        let before = vec![button("Delete e"), button("Rename e")];
+        assert!(judge(&case, &before, &before).is_some());
+    }
 }
