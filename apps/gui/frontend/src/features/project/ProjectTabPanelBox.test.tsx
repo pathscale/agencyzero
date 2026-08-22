@@ -85,4 +85,43 @@ describe("the side panel", () => {
     // rebuilt column is what the owner saw as the panel blanking and refilling.
     expect(panelBox(screen.container), "the panel was rebuilt by the switch").toBe(first);
   });
+
+  /*
+   * The panel must follow the active project, not merely survive the switch.
+   *
+   * The first attempt at one shared panel held the current project in a plain
+   * `let` and returned it from a memo. The memo therefore handed back the same
+   * object reference every time, Solid saw no change, and the panel went on
+   * rendering the project it was first pointed at. Everything looked right -
+   * one column, no rebuild, correct DOM - while Items, Agent I/O and the task
+   * log all showed another project's data and every row action acted on it.
+   *
+   * Asserting identity alone is what let that through, so this asserts content.
+   */
+  it("re-points at the project in front", async () => {
+    const screen = render(() => (
+      <WorkspaceProvider>
+        <Probe />
+        <Workspace />
+      </WorkspaceProvider>
+    ));
+    await waitFor(() => expect(workspace.state.boot.status).toBe("ready"), { timeout: 5_000 });
+
+    workspace.actions.openProject("worktable");
+    await waitFor(() => expect(workspace.state.activeKey).toBe("worktable"));
+    const worktableItems = workspace.itemsFor("worktable").map((item) => item.title);
+    await waitFor(() =>
+      expect(panelBox(screen.container)?.textContent).toContain(worktableItems[0]),
+    );
+
+    workspace.actions.openProject("cafe");
+    await waitFor(() => expect(workspace.state.activeKey).toBe("cafe"));
+
+    const cafeItems = workspace.itemsFor("cafe").map((item) => item.title);
+    await waitFor(() => expect(panelBox(screen.container)?.textContent).toContain(cafeItems[0]));
+    expect(
+      panelBox(screen.container)?.textContent,
+      "the panel still shows the project it was first pointed at",
+    ).not.toContain(worktableItems[0]);
+  });
 });

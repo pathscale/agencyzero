@@ -54,13 +54,16 @@ function ActiveProjectPanel(): JSX.Element {
    * project has been opened the panel stays pointed at one; the container above
    * hides it while a non-project tab is in front.
    */
-  let lastSeen: { project: Project; tab: Tab } | null = null;
-  const active = createMemo(() => {
-    const project = state.projects.find((candidate) => candidate.id === state.activeKey);
-    const tab = state.tabs.find((candidate) => candidate.key === state.activeKey);
-    if (project && tab) lastSeen = { project, tab };
-    return lastSeen;
-  });
+  const [lastSeen, setLastSeen] = createSignal<{ project: Project; tab: Tab } | null>(null);
+  createEffect(
+    () => [state.activeKey, state.projects, state.tabs] as const,
+    () => {
+      const project = state.projects.find((candidate) => candidate.id === state.activeKey);
+      const tab = state.tabs.find((candidate) => candidate.key === state.activeKey);
+      if (project && tab) setLastSeen({ project, tab });
+    },
+  );
+  const active = lastSeen;
   /*
    * A fork's pane hides the panel: its column is the fork's parent context, and
    * the fork has none of its own. Read here rather than passed down, so the

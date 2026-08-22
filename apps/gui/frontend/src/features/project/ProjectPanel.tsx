@@ -1999,7 +1999,16 @@ function TaskLogList(props: { projectId: string }): JSX.Element {
     pageSize: TASK_LOG_PAGE_SIZE,
     fromEnd: true,
   });
-  const entries = log.visible;
+  /*
+   * Newest first, reading downward.
+   *
+   * The store appends, so `all()` is oldest-first and `fromEnd` takes the most
+   * recent page from its tail. Reversing that page puts the newest entry at the
+   * top of the column, which is where the eye starts, and "earlier" then means
+   * further *down* - so the reveal control belongs at the bottom, and scrolling
+   * toward it is what asks for more.
+   */
+  const entries = createMemo(() => [...log.visible()].reverse());
   /** The one entry showing its whole command, if any. */
   const [expanded, setExpanded] = createSignal<string | null>(null);
   /** The row whose copy action most recently succeeded. */
@@ -2020,19 +2029,21 @@ function TaskLogList(props: { projectId: string }): JSX.Element {
      */
     <div
       data-selectable
+      /*
+       * Scrolling toward the older end reveals more, so the button is a
+       * fallback rather than the way in. `onScroll` reads the element it is
+       * attached to, which is why the handler lives on the scroller and not on
+       * the list inside it. The list reads newest-first, so "more" is *down*:
+       * `createFlexGrid` is in `fromEnd` mode and would watch the top, and the
+       * threshold is checked here instead.
+       */
+      onScroll={(event) => {
+        if (!log.hasMore()) return;
+        const el = event.currentTarget;
+        if (el.scrollHeight - el.scrollTop - el.clientHeight <= 120) log.revealMore();
+      }}
       class="az-scroll flex max-h-[45vh] min-h-0 flex-1 flex-col gap-[7px] px-3 pt-2.5 pb-3"
     >
-      {/* Above the rows, because the page is taken from the end: what this
-          reveals is older than everything already on screen. */}
-      <Show when={log.hasMore()}>
-        <Button
-          type="button"
-          onClick={log.revealMore}
-          class="flex-none rounded-[9px] border border-primary/24 bg-az-chip px-2.5 py-1.5 font-semibold text-[11px] text-primary transition-colors hover:bg-az-chip"
-        >
-          {tx("Show {count} earlier", { count: log.nextCount() })}
-        </Button>
-      </Show>
       <For each={entries()}>
         {(entry) => (
           /*
@@ -2120,6 +2131,21 @@ function TaskLogList(props: { projectId: string }): JSX.Element {
           </div>
         )}
       </For>
+
+      {/*
+        Below the rows, because the list reads newest-first: what this reveals
+        is older than everything above it. Scrolling here already reveals more,
+        so this is the affordance that says more exists, not the only way to it.
+      */}
+      <Show when={log.hasMore()}>
+        <Button
+          type="button"
+          onClick={log.revealMore}
+          class="flex-none rounded-[9px] border border-primary/24 bg-az-chip px-2.5 py-1.5 font-semibold text-[11px] text-primary transition-colors hover:bg-az-chip"
+        >
+          {tx("Show {count} earlier", { count: log.nextCount() })}
+        </Button>
+      </Show>
 
       <Show when={entries().length === 0}>
         <p class="py-3 text-center text-[11.5px] text-az-muted">{tx("Nothing has run yet")}</p>
