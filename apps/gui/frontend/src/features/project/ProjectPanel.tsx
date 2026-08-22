@@ -1260,16 +1260,28 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
   }
 
   /**
-   * Swap the item with its neighbour and persist the whole order. The full
-   * id list goes over the wire because position is the index within it —
-   * sending one move would make the backend re-derive what the panel
-   * already knows.
+   * Swap a row with its neighbour and persist the whole order. The full id list
+   * goes over the wire because position is the index within it — sending one
+   * move would make the backend re-derive what the panel already knows.
+   *
+   * Identity, not index. The rows are rendered from `shown()`, which is sorted
+   * by the owner's choice and cut to a page, while the order being written is
+   * `props.items`. Those two agree only under the default sort on a short list,
+   * so taking the clicked index into `props.items` swapped a different pair
+   * than the one under the cursor, and off the end of the page it swapped
+   * against a row nobody could see. The neighbour is therefore resolved in the
+   * order the owner is looking at, and only then located in the order we store.
    */
-  function move(index: number, delta: number): void {
-    const ordered = props.items.map((item) => item.id);
-    const target = index + delta;
-    if (target < 0 || target >= ordered.length) return;
-    [ordered[index], ordered[target]] = [ordered[target], ordered[index]];
+  function move(item: ProjectItem, delta: number): void {
+    const rendered = shown();
+    const from = rendered.findIndex((row) => row.id === item.id);
+    const to = from + delta;
+    if (from < 0 || to < 0 || to >= rendered.length) return;
+    const ordered = props.items.map((row) => row.id);
+    const left = ordered.indexOf(item.id);
+    const right = ordered.indexOf(rendered[to].id);
+    if (left < 0 || right < 0) return;
+    [ordered[left], ordered[right]] = [ordered[right], ordered[left]];
     void actions
       .reorderItems(props.projectId, ordered)
       .catch((cause) => log.error(`could not reorder: ${describeError(cause)}`));
@@ -1723,7 +1735,7 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
                     <div class="flex shrink-0 flex-col">
                       <Button
                         type="button"
-                        onClick={() => move(index(), -1)}
+                        onClick={() => move(item, -1)}
                         disabled={filtering() || index() === 0}
                         aria-label={tx("Move {name} up", { name: item.title })}
                         class="rounded-sm px-0.5 text-az-faint transition-colors hover:text-az-body disabled:opacity-25"
@@ -1732,8 +1744,8 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
                       </Button>
                       <Button
                         type="button"
-                        onClick={() => move(index(), 1)}
-                        disabled={filtering() || index() === props.items.length - 1}
+                        onClick={() => move(item, 1)}
+                        disabled={filtering() || index() === shown().length - 1}
                         aria-label={tx("Move {name} down", { name: item.title })}
                         class="rounded-sm px-0.5 text-az-faint transition-colors hover:text-az-body disabled:opacity-25"
                       >
