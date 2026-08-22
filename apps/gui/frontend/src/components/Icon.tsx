@@ -120,15 +120,22 @@ export function Icon(props: IconProps): JSX.Element {
     >
       {props.label ? <title>{props.label}</title> : null}
       {/*
-        The artwork inline, not `<use href="#i-name">`.
+        Called, not read: `ICON_ART[name]()` builds fresh elements every time.
 
-        `blitz-dom` parses each inline `<svg>` into its own `usvg::Tree` from
-        that element's `outer_html` alone, so a `<use>` pointing at a `<symbol>`
-        in the hidden sprite arrived at the rasteriser as a reference to
-        something outside its tree. usvg resolved it to nothing: every icon had
-        the right box and the right stroke and drew no artwork at all.
+        The map used to hold pre-created JSX elements, one per icon name. A DOM
+        node has exactly one parent, so inserting the same element into a second
+        `<svg>` *moves* it out of the first: with fifteen status markers sharing
+        four icon names, only the last one mounted kept its artwork and every
+        earlier one was left an empty `<svg>`. That is why the window rendered
+        correct boxes, correct strokes and no drawing, and why a control that
+        happened to re-render picked its artwork back up.
+
+        The artwork is also inline rather than `<use href="#i-name">`, because
+        `blitz-dom` parses each `<svg>` into its own `usvg::Tree` from that
+        element's `outer_html` alone and a cross-tree reference resolves to
+        nothing.
       */}
-      {ICON_ART[props.name]}
+      {ICON_ART[props.name]()}
     </svg>
   );
 }

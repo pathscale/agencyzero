@@ -58,7 +58,7 @@ describe("icon artwork", () => {
   /** The keys `ICON_ART` actually provides. */
   // Quoted or bare: the formatter unquotes keys that are valid identifiers, so
   // `check:` and `"list-checks":` both appear and matching one form found half.
-  const entry = /^ {2}"?([a-z0-9-]+)"?: \(/gm;
+  const entry = /^ {2}"?([a-z0-9-]+)"?: \(\) => \(/gm;
   const provided = [...sprite.matchAll(entry)].map((match) => match[1]);
 
   it("declares a usable set of names", () => {
@@ -77,7 +77,9 @@ describe("icon artwork", () => {
   });
 
   it("gives every icon at least one drawable element", () => {
-    const blocks = [...sprite.matchAll(/^ {2}"?([a-z0-9-]+)"?: \(\n\s*<>\n([\s\S]*?)\n\s*<\/>/gm)];
+    const blocks = [
+      ...sprite.matchAll(/^ {2}"?([a-z0-9-]+)"?: \(\) => \(\n\s*<>\n([\s\S]*?)\n\s*<\/>/gm),
+    ];
     expect(blocks.length).toBe(names.length);
     for (const [, name, art] of blocks) {
       expect(art, `${name} has no drawable element`).toMatch(
