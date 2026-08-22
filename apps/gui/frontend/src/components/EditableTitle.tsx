@@ -7,6 +7,37 @@ import { describeError, log } from "~/lib/log";
 import { tx } from "~/stores/i18n";
 
 /**
+ * One half of the swap, hidden or shown from an accessor prop.
+ *
+ * The prop is `() => boolean` rather than `boolean` on purpose: passing
+ * `hidden={editing()}` would evaluate the signal at the call site, in the
+ * parent's JSX, which is the position the read is being moved out of. Passing
+ * the accessor means the subscription is established here, inside this
+ * component's own render, the way `Panel` takes `props.isOpen`.
+ *
+ * This alone does not make the pencil work - the editor stayed at 0x0 through
+ * a `class` swap, a `style` swap and this indirection, and only opened once
+ * the handler moved to `mousedown` (see below). It is kept because it is the
+ * shape that survives: the read has one clear owner instead of depending on
+ * which effect happens to touch it first.
+ */
+function Swapped(props: {
+  hidden: () => boolean;
+  class: string;
+  ariaHidden?: boolean;
+  children: JSX.Element;
+}): JSX.Element {
+  return (
+    <span
+      class={props.hidden() ? "hidden" : props.class}
+      aria-hidden={props.ariaHidden && props.hidden() ? "true" : undefined}
+    >
+      {props.children}
+    </span>
+  );
+}
+
+/**
  * A name you can correct in place.
  *
  * The project name is derived from the front of the first prompt, which is a
@@ -85,10 +116,7 @@ export function EditableTitle(props: {
      * does honour.
      */
     <span class={`flex min-w-0 items-center gap-1.5 ${props.class ?? ""}`}>
-      <span
-        class={editing() ? "hidden" : "flex min-w-0 flex-1 items-center gap-1.5"}
-        aria-hidden={editing() ? "true" : undefined}
-      >
+      <Swapped hidden={editing} class="flex min-w-0 flex-1 items-center gap-1.5" ariaHidden>
         <Show
           when={props.onActivate}
           fallback={<span class="min-w-0 truncate">{props.value}</span>}
@@ -109,11 +137,36 @@ export function EditableTitle(props: {
            * build acknowledged the hit in 1.5ms with no state change, against
            * 63ms and a 254-node change for a control button on the same
            * surface. Nothing here needs the library's variants.
+           *
+           * Editing starts on `mousedown`, not `click`.
+           *
+           * The row this sits in is a `role="button"` whose own `onClick`
+           * folds it. Solid 2 delegates `click`, so both handlers are read
+           * during one synthetic walk up from the target, and the pencil's
+           * `stopPropagation` lost that race: pressing it folded the row
+           * (+30 nodes, measured) and left the editor closed at 0x0.
+           *
+           * `mousedown` fires before `click` exists, so stopping it there
+           * keeps the row's gesture from ever starting. It also has to stay a
+           * JSX handler: the same logic moved to a hand-attached listener in a
+           * `ref` stopped the fold correctly but still never opened the
+           * editor, because a `ref` callback runs outside the reactive system
+           * and the write landed in a signal nothing was watching.
+           *
+           * Do not reach for `runWithOwner` to fix that: a reactive write from
+           * inside an owned scope raises `REACTIVE_WRITE_IN_OWNED_SCOPE`,
+           * which escapes as `REACTIVITY_HALTED` and freezes the whole app.
+           * `lib/live.ts` documents that trap.
+           *
+           * Measured after this change: the textbox goes from `0x0 HIDDEN` to
+           * `300x21` on one press.
            */
-          onClick={(event) => {
+          onMouseDown={(event) => {
             event.stopPropagation();
             start();
           }}
+          onClick={(event) => event.stopPropagation()}
+          onDblClick={(event) => event.stopPropagation()}
           disabled={busy()}
           aria-label={props.label ?? tx("Rename {name}", { name: props.value })}
           // Always visible. Hover-to-reveal hides the only clue that a name
@@ -122,7 +175,7 @@ export function EditableTitle(props: {
         >
           <Icon name="pencil" class="text-[11px]" />
         </button>
-      </span>
+      </Swapped>
       {/*
         Wrapped, and the *wrapper* is what hides.
 
@@ -132,7 +185,7 @@ export function EditableTitle(props: {
         name it sits next to down to a few characters. Hiding from the outside
         removes the box as well as its contents.
       */}
-      <span class={editing() ? "flex min-w-0 flex-1" : "hidden"}>
+      <Swapped hidden={() => !editing()} class="flex min-w-0 flex-1">
         <Input.Field
           /*
            * Focused when editing begins, not by `autofocus`.
@@ -177,7 +230,7 @@ export function EditableTitle(props: {
           }}
           class={`min-w-0 flex-1 rounded-md border border-az-hairline-strong bg-az-inset px-2 py-0.5 text-az-title outline-none focus:border-az-link ${props.inputClass ?? ""}`}
         />
-      </span>
+      </Swapped>
     </span>
   );
 }

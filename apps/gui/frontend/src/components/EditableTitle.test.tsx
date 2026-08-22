@@ -18,6 +18,14 @@ import { IconSprite } from "~/components/IconSprite";
  * These assert the swap itself rather than the styling around it: what matters
  * is that pressing the pencil puts an editable field in front of the user and
  * takes the read-only name away.
+ *
+ * They drive `mouseDown`, not `click`, because that is the event the pencil
+ * opens on: the Home row around it is a `role="button"` that folds on `click`,
+ * and Solid 2 delegates `click`, so a pencil handler on that event lost the
+ * race and folded the row instead. Note what this file cannot see - every one
+ * of these passed while the control was dead in the running app, because jsdom
+ * dispatches straight at the node it is handed and has no hit-testing, no
+ * layout and no renderer. `scripts/button-sweep.sh` is what catches that.
  */
 describe("the editable title", () => {
   const setup = (onRename = vi.fn().mockResolvedValue(undefined)) => {
@@ -39,7 +47,7 @@ describe("the editable title", () => {
     // a class on the wrapper rather than an absent node.
     expect(field.closest("span")?.className).toContain("hidden");
 
-    fireEvent.click(pencil);
+    fireEvent.mouseDown(pencil);
     flush();
 
     expect(field.closest("span")?.className).not.toContain("hidden");
@@ -50,7 +58,7 @@ describe("the editable title", () => {
   it("starts the draft from the current name", () => {
     const { screen } = setup();
 
-    fireEvent.click(screen.getByLabelText("Rename derived name"));
+    fireEvent.mouseDown(screen.getByLabelText("Rename derived name"));
     flush();
 
     const field = screen.getByLabelText("Project name") as HTMLInputElement;
@@ -59,7 +67,7 @@ describe("the editable title", () => {
 
   it("commits an edited name on Enter", async () => {
     const { screen, onRename } = setup();
-    fireEvent.click(screen.getByLabelText("Rename derived name"));
+    fireEvent.mouseDown(screen.getByLabelText("Rename derived name"));
     flush();
 
     const field = screen.getByLabelText("Project name") as HTMLInputElement;
@@ -73,7 +81,7 @@ describe("the editable title", () => {
 
   it("abandons the edit on Escape without writing", () => {
     const { screen, onRename } = setup();
-    fireEvent.click(screen.getByLabelText("Rename derived name"));
+    fireEvent.mouseDown(screen.getByLabelText("Rename derived name"));
     flush();
 
     const field = screen.getByLabelText("Project name") as HTMLInputElement;
@@ -88,7 +96,7 @@ describe("the editable title", () => {
 
   it("refuses to write an empty name", () => {
     const { screen, onRename } = setup();
-    fireEvent.click(screen.getByLabelText("Rename derived name"));
+    fireEvent.mouseDown(screen.getByLabelText("Rename derived name"));
     flush();
 
     const field = screen.getByLabelText("Project name") as HTMLInputElement;
