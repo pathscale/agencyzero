@@ -102,6 +102,25 @@ pub fn expectation_for(name: &str) -> Expectation {
         return Expectation::Inert;
     }
 
+    /*
+     * A re-fetch is allowed to find nothing new.
+     *
+     * `Refresh` and `Re-check` ask the backend for a status they already have.
+     * Both were reported dead for weeks on "nothing in the tree changed", and
+     * both are fine: driven against a running build, `Re-check` sends
+     * `list_agent_status` (417ms) and `Refresh` sends `get_agent_proxy_status`
+     * (2ms). Nothing moved because nothing had changed since the last fetch,
+     * which is the correct outcome, not a dead button.
+     *
+     * `Changes` cannot express that, so these are `Inert`: the weaker claim
+     * that pressing them does not corrupt the document. Catching a re-fetch
+     * that silently fails needs the backend call itself asserted, which this
+     * harness reads no channel for.
+     */
+    if lower == "refresh" || lower == "re-check" || lower == "recheck" {
+        return Expectation::Inert;
+    }
+
     Expectation::Changes
 }
 
@@ -364,5 +383,41 @@ mod tests {
         };
         let before = vec![button("Delete e"), button("Rename e")];
         assert!(judge(&case, &before, &before).is_some());
+    }
+
+    #[test]
+    fn a_refetch_that_finds_nothing_new_is_not_a_dead_button() {
+        // Both were reported dead for weeks on "nothing in the tree changed",
+        // and both are fine: driven against a running build, `Re-check` sends
+        // `list_agent_status` and `Refresh` sends `get_agent_proxy_status`.
+        // Nothing moved because nothing had changed since the last fetch.
+        for name in ["Refresh", "Re-check"] {
+            let case = Case {
+                id: 1,
+                name: name.to_owned(),
+                family: "other",
+                expect: expectation_for(name),
+            };
+            let tree = vec![button(name), button("Default agent")];
+            assert!(
+                judge(&case, &tree, &tree).is_none(),
+                "{name} should be allowed to leave the tree alone"
+            );
+        }
+    }
+
+    #[test]
+    fn a_refresh_that_wrecks_the_document_still_fails() {
+        // `Inert` is a weaker claim than `Changes`, not no claim at all: the
+        // re-fetch may find nothing, but it may not tear down the surface.
+        let case = Case {
+            id: 1,
+            name: "Refresh".to_owned(),
+            family: "other",
+            expect: expectation_for("Refresh"),
+        };
+        let before = vec![button("Refresh"), button("Default agent")];
+        let after = vec![button("Refresh")];
+        assert!(judge(&case, &before, &after).is_some());
     }
 }
