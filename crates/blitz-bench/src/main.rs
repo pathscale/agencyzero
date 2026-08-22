@@ -1284,8 +1284,23 @@ async fn run_qa(client: &mut Client, group: Option<&str>) -> Result<usize> {
         let (before, _) = inspect(client).await?;
 
         // Hover first: the row actions do not exist until `pointerenter`.
+        //
+        // Aimed at a node inside the panel column, not merely one whose name
+        // matches. Home renders the same control names, so hovering by name
+        // alone landed on Home's list and reported the panel's arrows missing.
         if let Some(want) = check.hover {
-            hover_over(client, want).await?;
+            let target = if check.panel_only {
+                let (tree, _) = inspect(client).await?;
+                tree.nodes
+                    .iter()
+                    .filter(|node| node.name.contains(want) && node.visible)
+                    .filter_map(|node| node.bounds.map(|b| (node, b)))
+                    .find(|(_, b)| b[0] >= qa::PANEL_LEFT && b[2] > 0.0)
+                    .map(|(_, b)| format!("{},{}", b[0] + b[2] / 2.0, b[1] + b[3] / 2.0))
+            } else {
+                None
+            };
+            hover_over(client, target.as_deref().unwrap_or(want)).await?;
             tokio::time::sleep(Duration::from_millis(150)).await;
         }
 
