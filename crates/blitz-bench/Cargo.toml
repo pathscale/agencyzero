@@ -19,6 +19,9 @@ endpoint-libs = { version = "2.1.5", default-features = false, features = [
     "agent-control",
 ] }
 eyre = "0.6"
+# Decoding captured frames: the protocol carries RGBA8 as base64 because the
+# transport is line-delimited JSON.
+base64 = "0.22"
 serde = { version = "1", features = ["derive"] }
 # `preserve_order` so the JSON dumps keep the server's field order rather than
 # sorting it. The dump modes exist to be diffed against previous runs, and
