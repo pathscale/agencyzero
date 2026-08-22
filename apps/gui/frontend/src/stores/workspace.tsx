@@ -1166,6 +1166,44 @@ function createWorkspace() {
     });
   }
 
+  /**
+   * Fetch the next page of task-log history, older than what is already held.
+   *
+   * Hydration takes `TASK_LOG_PAGE` rows and the badge reports the whole count,
+   * so a project with more history than that showed an honest total over a list
+   * that stopped dead at the end of the first page: revealing and scrolling both
+   * ran out with hundreds of entries left unreachable. The backend has taken a
+   * `before` cursor the whole time and nothing ever sent one.
+   *
+   * The cursor is the oldest `finishedAt` in hand, and the store keeps the log
+   * newest-first, so the page appends to the tail.
+   */
+  const taskLogPaging = new Set<string>();
+  async function loadOlderTaskLog(projectId: string): Promise<void> {
+    if (taskLogPaging.has(projectId)) return;
+    const held = state.taskLog[projectId] ?? [];
+    const total = state.logTotals[projectId] ?? held.length;
+    if (held.length >= total) return;
+    const before = held.at(-1)?.finishedAt;
+    if (!before) return;
+
+    taskLogPaging.add(projectId);
+    try {
+      const page = await client().listTaskLog(projectId, TASK_LOG_PAGE, before);
+      if (page.entries.length === 0) return;
+      setState((d) => {
+        const current = d.taskLog[projectId] ?? [];
+        const seen = new Set(current.map((entry) => entry.id));
+        d.taskLog[projectId] = [...current, ...page.entries.filter((entry) => !seen.has(entry.id))];
+      });
+      setState((d) => {
+        d.logTotals[projectId] = page.total;
+      });
+    } finally {
+      taskLogPaging.delete(projectId);
+    }
+  }
+
   /** One snapshot request per project, shared by boot and a simultaneous tab open. */
   function loadProject(projectId: string): Promise<void> {
     if (hydratedProjects.has(projectId)) return Promise.resolve();
@@ -3012,6 +3050,7 @@ function createWorkspace() {
     openProject,
     revealItem,
     loadOlderMessages,
+    loadOlderTaskLog,
     openSettings,
     openOnboarding,
     deferOnboarding,
