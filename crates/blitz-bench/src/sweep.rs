@@ -121,6 +121,31 @@ pub fn expectation_for(name: &str) -> Expectation {
         return Expectation::Inert;
     }
 
+    /*
+     * A toggle whose only output is `aria-pressed` and a colour.
+     *
+     * `Extra Thinking` was on the failure list for weeks and works: driven
+     * against a running build its button goes `bg=#353a3f38 fg=#dbac9fff` ->
+     * `bg=#00000000 fg=#aaafb3ff` and back, one press each way. Nothing in the
+     * tree moves because the state lives in `aria-pressed` and a class, and
+     * the fingerprint deliberately carries neither - it is role, name, enabled
+     * and visible, because geometry and styling move for reasons the
+     * application did not cause.
+     *
+     * `SemanticNode::selected` is the field this belongs in, but the runtime
+     * fills it from `aria-selected` only (`runtime.rs:722`), so a pressed
+     * toggle is genuinely invisible here. Until `aria-pressed` is mapped
+     * there, asserting a change would report a working control as dead, which
+     * is the failure this whole audit exists to stop. `Inert` at least pins
+     * that it does not wreck the composer.
+     *
+     * Verify these by paint, not by tree:
+     *     blitz-bench paint "<name>" 1
+     */
+    if lower.starts_with("extra thinking") {
+        return Expectation::Inert;
+    }
+
     Expectation::Changes
 }
 
@@ -404,6 +429,22 @@ mod tests {
                 "{name} should be allowed to leave the tree alone"
             );
         }
+    }
+
+    #[test]
+    fn a_toggle_that_only_moves_a_colour_is_not_a_dead_button() {
+        // `Extra Thinking` keeps its state in `aria-pressed` and a class, and
+        // the fingerprint carries neither. Measured working by paint:
+        // bg=#353a3f38 -> bg=#00000000 and back, one press each way.
+        let name = "Extra Thinking: let the model reason before it answers.";
+        let case = Case {
+            id: 1,
+            name: name.to_owned(),
+            family: "other",
+            expect: expectation_for(name),
+        };
+        let tree = vec![button(name), button("Model")];
+        assert!(judge(&case, &tree, &tree).is_none());
     }
 
     #[test]
