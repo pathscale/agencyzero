@@ -1,5 +1,3 @@
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 /**
@@ -27,7 +25,16 @@ import { describe, expect, it } from "vitest";
  * that is what this pins. Until the control protocol can report pixels, this is
  * the only thing standing between the app and a silent repeat.
  */
-const source = (name: string) => readFileSync(join(process.cwd(), "src/components", name), "utf8");
+/*
+ * Required lazily. Under `NODE_ENV=production bun --bun vitest`, a top-level
+ * `node:fs` import fails to resolve inside the module evaluator, so the build
+ * gate failed on a file that passed locally.
+ */
+const source = (name: string): string => {
+  const { readFileSync } = require("node:fs") as typeof import("node:fs");
+  const { join } = require("node:path") as typeof import("node:path");
+  return readFileSync(join(process.cwd(), "src/components", name), "utf8");
+};
 
 /** Comments necessarily name the thing they removed; strip them before matching. */
 const code = (text: string) =>
