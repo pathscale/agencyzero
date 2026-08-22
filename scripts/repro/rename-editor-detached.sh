@@ -19,18 +19,18 @@
 #   rm -f target/blitz-control.json
 #   TAURI_BLITZ_CONTROL_DESCRIPTOR="$PWD/target/blitz-control.json" \
 #     target/release/bundle/macos/AgencyZero.app/Contents/MacOS/az-gui --blitz-control &
-#   cargo build -p ps-qa
+#   cargo build --release (in the ps-qa repo)
 #   scripts/repro/rename-editor-detached.sh
 #
 # Open a project tab before running, so a "Rename project" pencil is visible.
 set -euo pipefail
 
 cd "$(dirname "$0")/../.."
-bench=./target/debug/ps-qa
+bench="${PS_QA:-$(dirname "$0")/../../../ps-qa/target/release/ps-qa}"
 : "${TAURI_BLITZ_CONTROL_DESCRIPTOR:=$PWD/target/blitz-control.json}"
 export TAURI_BLITZ_CONTROL_DESCRIPTOR
 
-[[ -x $bench ]] || { echo "build it first: cargo build -p ps-qa" >&2; exit 1; }
+[[ -x $bench ]] || { echo "build it first: cargo build --release (in the ps-qa repo)" >&2; exit 1; }
 [[ -e $TAURI_BLITZ_CONTROL_DESCRIPTOR ]] || {
     echo "no control descriptor at $TAURI_BLITZ_CONTROL_DESCRIPTOR" >&2
     exit 1
