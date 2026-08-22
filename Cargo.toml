@@ -113,3 +113,11 @@ incremental = true
 # inert: it is a git source in the manifest, which is what stops this workspace
 # from being publishable and what put a second usvg in the graph when a
 # dependent asked for a range it did not cover.
+
+# Local paths until the capture protocol publishes.
+#
+# `audit` and `capture` need `DiagnosticsRequest::Capture`, which lands in
+# tauri-runtime-blitz first. Removed on the merge that follows the release.
+[patch.crates-io]
+tauri-runtime-blitz = { path = "/Users/revenge/code/tauri-runtime-blitz/crates/tauri-runtime-blitz" }
+blitz-control-protocol = { path = "/Users/revenge/code/tauri-runtime-blitz/crates/blitz-control-protocol" }

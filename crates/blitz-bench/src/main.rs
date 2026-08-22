@@ -17,12 +17,13 @@ use std::collections::HashMap;
 use std::time::{Duration, Instant};
 
 use blitz_control_protocol::{
-    AgentAction, AgentControlRequest, AgentSnapshot, DebugResponse, DebugStream,
-    DiagnosticsRequest, InputCommand, KeyPhase, Modifiers, PointerPhase, RendererMetrics,
-    SemanticNode, SnapshotRequest, WheelPhase,
+    AgentAction, AgentControlRequest, AgentSnapshot, CaptureRequest, CapturedImage, DebugResponse,
+    DebugStream, DiagnosticsRequest, InputCommand, KeyPhase, Modifiers, PointerPhase,
+    RendererMetrics, SemanticNode, SnapshotRequest, WheelPhase,
 };
 use eyre::{Result, bail};
 
+mod audit;
 mod inspector;
 mod qa;
 mod report;
@@ -62,7 +63,17 @@ usage: blitz-bench <mode> [args]
   key <name> [count] [over]   pageup/pagedown/home/end/up/down/left/right/tab into a
                               named scroller, or into a bare node id
   reveal <name-substr>        scroll a named node into view, reporting its y before/after
+  capture [name-substr] [scale]  render what the app actually drew and report the
+                              visible ink in it. The whole window, or one named
+                              node. This is the only mode that can tell a drawn
+                              control from a blank box: every other reading here
+                              comes from the tree, where the two are identical
   click <name-substring>      click the first matching visible, enabled node
+  audit [family]              every button in the running app, measured against
+                              what the renderer drew for it. Reports the ones
+                              the owner cannot see. Exits 1 on any fault.
+                              Families: close delete add edit disclosure copy
+                              reorder run status fork reply attach clear other
   qa [group]                  drive every panel control and check what the
                               renderer did with it: icons paint, hover reveals
                               the row actions, a status click does not remove
@@ -1372,6 +1383,302 @@ async fn click_named_quiet(client: &mut Client, want: &str) -> Result<()> {
     Ok(())
 }
 
+/// What a captured frame contains, in the terms a person would use.
+///
+/// "Did it draw" is not answerable from a pixel count alone: an icon filled
+/// black on a near-black surface is fully opaque and completely invisible, and
+/// that exact failure shipped. What separates ink from background is contrast,
+/// so that is what this measures.
+struct Ink {
+    /// Pixels that differ enough from the most common colour to be seen.
+    visible: usize,
+    total: usize,
+    /// The colour occupying the most pixels, taken as the background.
+    background: (u8, u8, u8),
+}
+
+impl Ink {
+    fn fraction(&self) -> f64 {
+        if self.total == 0 {
+            0.0
+        } else {
+            self.visible as f64 / self.total as f64
+        }
+    }
+}
+
+/// Measure the visible ink in a captured frame.
+///
+/// The background is discovered rather than assumed, so this works against any
+/// app's surface colour without being told what it is. Contrast is relative
+/// luminance, because that is what decides whether a person can see the mark:
+/// raw channel distance calls black-on-near-black "different" while being the
+/// one case worth catching.
+fn measure_ink(image: &CapturedImage) -> Result<Ink> {
+    use base64::Engine as _;
+
+    let rgba = base64::engine::general_purpose::STANDARD
+        .decode(&image.rgba_base64)
+        .map_err(|error| eyre::eyre!("the capture was not valid base64: {error}"))?;
+    let expected = (image.width as usize) * (image.height as usize) * 4;
+    if rgba.len() != expected {
+        bail!(
+            "capture is {} bytes, expected {expected} for {}x{}",
+            rgba.len(),
+            image.width,
+            image.height
+        );
+    }
+
+    let mut histogram: HashMap<(u8, u8, u8), usize> = HashMap::new();
+    for pixel in rgba.chunks_exact(4) {
+        *histogram.entry((pixel[0], pixel[1], pixel[2])).or_default() += 1;
+    }
+    let background = histogram
+        .iter()
+        .max_by_key(|(_, count)| **count)
+        .map(|(colour, _)| *colour)
+        .unwrap_or((0, 0, 0));
+
+    let luminance = |(r, g, b): (u8, u8, u8)| {
+        0.299 * f64::from(r) + 0.587 * f64::from(g) + 0.114 * f64::from(b)
+    };
+    let background_luminance = luminance(background);
+
+    let visible = rgba
+        .chunks_exact(4)
+        .filter(|pixel| {
+            // Transparent pixels are not ink whatever their colour.
+            if pixel[3] < 32 {
+                return false;
+            }
+            (luminance((pixel[0], pixel[1], pixel[2])) - background_luminance).abs() > 24.0
+        })
+        .count();
+
+    Ok(Ink {
+        visible,
+        total: (image.width as usize) * (image.height as usize),
+        background,
+    })
+}
+
+/// Ask the app for a frame: the whole window, or one named node.
+async fn capture(client: &mut Client, want: &str, scale: f32) -> Result<()> {
+    let node_id = if want.is_empty() {
+        None
+    } else {
+        let (snapshot, _) = inspect(client).await?;
+        let node = snapshot
+            .nodes
+            .iter()
+            .filter(|node| node.name.contains(want) && node.visible)
+            .filter_map(|node| node.bounds.map(|bounds| (node, bounds)))
+            .filter(|(_, bounds)| bounds[2] > 0.0 && bounds[3] > 0.0)
+            .max_by(|a, b| {
+                (a.1[2] * a.1[3])
+                    .partial_cmp(&(b.1[2] * b.1[3]))
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            })
+            .map(|(node, _)| node);
+        let Some(node) = node else {
+            bail!("no visible node with a box whose name contains {want:?}");
+        };
+        println!(
+            "capturing {} role={} name={}",
+            node.id,
+            node.role,
+            report::py_repr(&node.name.chars().take(50).collect::<String>())
+        );
+        Some(node.id)
+    };
+
+    let answer = client
+        .diagnostics(&DiagnosticsRequest::Capture(CaptureRequest {
+            node_id,
+            scale,
+        }))
+        .await?;
+    let image = match answer.response {
+        DebugResponse::Captured(image) => image,
+        DebugResponse::Error(error) => bail!("capture refused: {} ({})", error.message, error.code),
+        other => bail!("asked for a capture, got {other:?}"),
+    };
+
+    let ink = measure_ink(&image)?;
+    println!(
+        "{}x{} at {scale}x, background #{:02x}{:02x}{:02x}",
+        image.width, image.height, ink.background.0, ink.background.1, ink.background.2
+    );
+    println!(
+        "visible ink: {} of {} pixels ({:.2}%)",
+        ink.visible,
+        ink.total,
+        ink.fraction() * 100.0
+    );
+    if ink.visible == 0 {
+        println!("nothing was drawn: every pixel is the background colour");
+    }
+    Ok(())
+}
+
+/// Audit every button in the running application.
+///
+/// One capture per button, cropped to that button's own box, so the number
+/// reported is what the renderer drew *for that control* rather than for the
+/// window around it. Slower than a single frame and worth it: a whole-window
+/// capture cannot tell a drawn button from a blank one sitting next to a label.
+async fn run_audit(client: &mut Client, family: Option<&str>) -> Result<usize> {
+    use audit::{Audited, Verdict};
+
+    let (snapshot, _) = inspect(client).await?;
+    /*
+     * The viewport, read from the tree rather than assumed.
+     *
+     * A control below the fold is clipped, not broken, and the first run
+     * reported a dozen of them as faults: the panel's own Settings and Notes
+     * headers sit at y=939 in a 900px window and draw perfectly once scrolled
+     * to. Taking the `main` element's box means this stays right when the
+     * window is resized instead of encoding one machine's geometry.
+     */
+    let viewport = snapshot
+        .nodes
+        .iter()
+        .filter(|node| node.role == "main")
+        .filter_map(|node| node.bounds)
+        .map(|b| (b[1], b[1] + b[3]))
+        .max_by(|a, b| {
+            (a.1 - a.0)
+                .partial_cmp(&(b.1 - b.0))
+                .unwrap_or(std::cmp::Ordering::Equal)
+        })
+        .unwrap_or((0.0, f64::MAX));
+
+    let subjects: Vec<_> = audit::buttons(&snapshot.nodes)
+        .into_iter()
+        .filter(|node| family.is_none_or(|want| audit::family_of(&node.name) == want))
+        .map(|node| (node.id, node.name.clone(), node.visible, node.bounds))
+        .collect();
+
+    if subjects.is_empty() {
+        bail!("no buttons matched {family:?}");
+    }
+    println!("auditing {} buttons in the running app\n", subjects.len());
+
+    let mut rows: Vec<Audited> = Vec::new();
+    for (id, name, visible, bounds) in subjects {
+        let family = audit::family_of(&name);
+        let (width, height) = bounds.map(|b| (b[2], b[3])).unwrap_or((0.0, 0.0));
+
+        // A control with no box drew nothing anywhere; there is nothing to
+        // capture and asking would only produce an error to explain.
+        if width <= 0.0 || height <= 0.0 {
+            rows.push(Audited {
+                id,
+                name,
+                family,
+                width,
+                height,
+                visible_pixels: 0,
+                total_pixels: 0,
+                verdict: if visible {
+                    Verdict::NoBox
+                } else {
+                    Verdict::Hidden
+                },
+            });
+            continue;
+        }
+
+        /*
+         * Scrolled out of the viewport is not a fault.
+         *
+         * A transcript keeps hundreds of controls at negative coordinates, and
+         * every one draws correctly once scrolled to. Counting them as blank
+         * buried the real faults under 30 lines of noise in the first run.
+         */
+        if bounds
+            .is_some_and(|b| b[1] + b[3] < viewport.0 || b[0] + b[2] < 0.0 || b[1] > viewport.1)
+        {
+            rows.push(Audited {
+                id,
+                name,
+                family,
+                width,
+                height,
+                visible_pixels: 0,
+                total_pixels: 0,
+                verdict: Verdict::Offscreen,
+            });
+            continue;
+        }
+
+        // Captured at 3x: a 16px control is a handful of pixels at 1x and
+        // antialiasing dominates them, which makes "is anything there" a
+        // judgement call rather than a measurement.
+        let answer = client
+            .diagnostics(&DiagnosticsRequest::Capture(CaptureRequest {
+                node_id: Some(id),
+                scale: 3.0,
+            }))
+            .await?;
+        let (visible_pixels, total_pixels, verdict) = match answer.response {
+            DebugResponse::Captured(image) => {
+                let ink = measure_ink(&image)?;
+                let verdict = if ink.visible > 0 {
+                    Verdict::Drawn
+                } else if visible {
+                    Verdict::Blank
+                } else {
+                    Verdict::Hidden
+                };
+                (ink.visible, ink.total, verdict)
+            }
+            // A refusal is not a pass. It is reported as a fault so a capture
+            // that stops working cannot quietly turn the audit green.
+            DebugResponse::Error(_) => (0, 0, Verdict::NoBox),
+            other => bail!("asked for a capture, got {other:?}"),
+        };
+
+        rows.push(Audited {
+            id,
+            name,
+            family,
+            width,
+            height,
+            visible_pixels,
+            total_pixels,
+            verdict,
+        });
+    }
+
+    let faults: Vec<&Audited> = rows.iter().filter(|row| row.verdict.is_fault()).collect();
+    if faults.is_empty() {
+        println!("no faults: every visible button drew something");
+    } else {
+        println!("{} button(s) the owner cannot see:\n", faults.len());
+        for row in &faults {
+            println!(
+                "  {:<8} {:<52} {:.0}x{:.0}",
+                row.verdict.label(),
+                row.name.chars().take(52).collect::<String>(),
+                row.width,
+                row.height
+            );
+        }
+        println!();
+    }
+
+    let mut families: Vec<_> = audit::by_family(&rows).into_iter().collect();
+    families.sort_by_key(|(name, _)| *name);
+    for (name, (passed, total)) in families {
+        let mark = if passed == total { " " } else { "!" };
+        println!("{mark} {name:<12} {passed}/{total}");
+    }
+    println!("\n{} audited, {} faults", rows.len(), faults.len());
+    Ok(faults.len())
+}
+
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<()> {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -1708,6 +2015,18 @@ async fn main() -> Result<()> {
             let want = args.get(1).map(String::as_str).unwrap_or("Settings");
             nodes(&mut client).await?;
             click_named(&mut client, want).await?;
+        }
+        "capture" => {
+            let want = args.get(1).map(String::as_str).unwrap_or("");
+            let scale: f32 = args.get(2).and_then(|v| v.parse().ok()).unwrap_or(1.0);
+            capture(&mut client, want, scale).await?;
+        }
+        "audit" => {
+            let family = args.get(1).map(String::as_str);
+            let faults = run_audit(&mut client, family).await?;
+            if faults > 0 {
+                std::process::exit(1);
+            }
         }
         "qa" => {
             let group = args.get(1).map(String::as_str);
