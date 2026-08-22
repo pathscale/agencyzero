@@ -238,10 +238,22 @@ fn confirmation_appeared(before: &[SemanticNode], after: &[SemanticNode]) -> boo
 /// Names and roles rather than geometry: a hover highlight or a scroll moves
 /// boxes without the application having done anything, and counting that as a
 /// change would make every button appear to work.
-fn tree_fingerprint(nodes: &[SemanticNode]) -> Vec<(String, String, bool)> {
+///
+/// Visibility is in the summary because plenty of controls do nothing else. The
+/// rename pencil swaps a `hidden` class on two already-mounted spans, and with
+/// visibility left out this said "nothing in the tree changed" whether the
+/// editor opened or not - it could not have caught the bug it was pointed at.
+fn tree_fingerprint(nodes: &[SemanticNode]) -> Vec<(String, String, bool, bool)> {
     nodes
         .iter()
-        .map(|node| (node.role.clone(), node.name.clone(), node.enabled))
+        .map(|node| {
+            (
+                node.role.clone(),
+                node.name.clone(),
+                node.enabled,
+                node.visible,
+            )
+        })
         .collect()
 }
 
@@ -280,6 +292,34 @@ mod tests {
             button("Cancel"),
         ];
         assert_eq!(judge(&case, &before, &after), None);
+    }
+
+    #[test]
+    fn a_control_that_only_reveals_something_counts_as_acting() {
+        /*
+         * The rename pencil's whole effect. Nothing is added, removed, renamed
+         * or disabled: one already-mounted span stops being hidden and another
+         * starts. With visibility out of the fingerprint this read as "nothing
+         * in the tree changed" whether the editor opened or not.
+         */
+        let case = Case {
+            id: 1,
+            name: "Rename e".to_owned(),
+            family: "edit",
+            expect: expectation_for("Rename e"),
+        };
+        let mut field = button("Project name");
+        field.role = "textbox".to_owned();
+        field.visible = false;
+        let before = vec![button("Rename e"), field.clone()];
+
+        let mut revealed = field;
+        revealed.visible = true;
+        let after = vec![button("Rename e"), revealed];
+
+        assert_eq!(judge(&case, &before, &after), None);
+        // And the failing case the app actually shows: nothing moves at all.
+        assert!(judge(&case, &before, &before).is_some());
     }
 
     #[test]
