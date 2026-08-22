@@ -23,8 +23,8 @@
 //! Behaviour under click belongs in `qa`, against a throwaway profile.
 //!
 //! ```sh
-//! cargo run -q -p blitz-bench -- audit          # every button
-//! cargo run -q -p blitz-bench -- audit close    # one family
+//! cargo run -q -p ps-qa -- audit          # every button
+//! cargo run -q -p ps-qa -- audit close    # one family
 //! ```
 
 use std::collections::BTreeMap;

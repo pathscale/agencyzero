@@ -29,7 +29,7 @@ sampler=$!
 
 sleep 2
 TAURI_BLITZ_CONTROL_DESCRIPTOR="$repo_root/target/blitz-control.json" \
-  cargo run -q -p blitz-bench -- frames 2>&1 | tee "$out/$label-frames.txt"
+  cargo run -q -p ps-qa -- frames 2>&1 | tee "$out/$label-frames.txt"
 
 wait "$sampler"
 echo "wrote $out/$label-frames.txt and $out/$label-sample.txt"

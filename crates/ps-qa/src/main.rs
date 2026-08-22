@@ -33,7 +33,7 @@ mod sweep;
 use inspector::Client;
 
 const USAGE: &str = "\
-usage: blitz-bench <mode> [args]
+usage: ps-qa <mode> [args]
 
   nodes                       tree size and a role histogram
   panes                       node count per retained pane, and what
@@ -1298,12 +1298,19 @@ async fn click_named(client: &mut Client, want: &str) -> Result<()> {
 /// Returns the number of failures, so the caller can set an exit code.
 async fn run_qa(client: &mut Client, group: Option<&str>) -> Result<usize> {
     let all = qa::checks();
+    // A group *or* one check's id, so chasing a single failure does not mean
+    // re-running its neighbours against the real app every time.
     let selected: Vec<&qa::Check> = all
         .iter()
-        .filter(|check| group.is_none_or(|want| check.group == want))
+        .filter(|check| group.is_none_or(|want| check.group == want || check.id == want))
         .collect();
     if selected.is_empty() {
-        bail!("no checks in group {group:?}");
+        let mut names: Vec<String> = all
+            .iter()
+            .map(|check| format!("{} ({})", check.id, check.group))
+            .collect();
+        names.sort();
+        bail!("no check or group matching {group:?}. known:\n  {}", names.join("\n  "));
     }
 
     println!(
@@ -1340,8 +1347,14 @@ async fn run_qa(client: &mut Client, group: Option<&str>) -> Result<usize> {
         // dispatched is itself a failure, not a skip.
         let mut click_error = None;
         if let Some(want) = check.click {
-            if let Err(error) = click_named_quiet(client, want).await {
-                click_error = Some(format!("could not click {want:?}: {error}"));
+            let driven = if check.press {
+                press_named(client, want).await
+            } else {
+                click_named_quiet(client, want).await
+            };
+            if let Err(error) = driven {
+                let how = if check.press { "press" } else { "click" };
+                click_error = Some(format!("could not {how} {want:?}: {error}"));
             }
             tokio::time::sleep(Duration::from_millis(600)).await;
         }
@@ -1378,6 +1391,48 @@ async fn click_by_id(client: &mut Client, node_id: u64) -> Result<()> {
         .await?;
     if let DebugResponse::Error(error) = answer.response {
         bail!("{} ({})", error.message, error.code);
+    }
+    Ok(())
+}
+
+/// Move, press and release over the first visible match, for the QA runner.
+///
+/// `AgentAction::Click` dispatches a `click` and nothing else, so a control
+/// that acts on `mousedown` is invisible to it. The rename pencil is exactly
+/// that - it opens the editor on `mousedown` so the `role="button"` row it sits
+/// inside cannot swallow the press - and a check driven by `click` would assert
+/// the harness rather than the app.
+async fn press_named(client: &mut Client, want: &str) -> Result<()> {
+    let (snapshot, _) = inspect(client).await?;
+    let wanted = want.to_lowercase();
+    let Some(node) = snapshot
+        .nodes
+        .iter()
+        .filter(|n| n.name.to_lowercase().contains(&wanted))
+        .filter(|n| n.visible && n.enabled)
+        .find(|n| n.bounds.is_some_and(|b| b[2] > 0.0 && b[3] > 0.0))
+    else {
+        bail!("no visible, enabled, sized node matching it");
+    };
+    let b = node.bounds.unwrap();
+    let (x, y) = (b[0] + b[2] / 2.0, b[1] + b[3] / 2.0);
+    // Move first: hover state gates some controls, and a press at a point the
+    // document never saw hovered is not what a mouse does.
+    for phase in [PointerPhase::Move, PointerPhase::Down, PointerPhase::Up] {
+        let answer = client
+            .agent(&AgentControlRequest::Act(AgentAction::Input(
+                InputCommand::Pointer {
+                    phase,
+                    x,
+                    y,
+                    button: 0,
+                    modifiers: Modifiers::default(),
+                },
+            )))
+            .await?;
+        if let DebugResponse::Error(error) = answer.response {
+            bail!("{} ({})", error.message, error.code);
+        }
     }
     Ok(())
 }

@@ -25,7 +25,7 @@
 //! tree, where a blank icon and a drawn one are indistinguishable. usvg is the
 //! thing that decides, so usvg is what this asks.
 //!
-//! Run with `cargo test -p blitz-bench`.
+//! Run with `cargo test -p ps-qa`.
 
 use std::collections::BTreeMap;
 
