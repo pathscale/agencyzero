@@ -558,6 +558,42 @@ pub fn verdict(
     Ok(())
 }
 
+/// Every check, grouped, with what it drives and what it asserts.
+///
+/// Printed by `ps-qa list`, and generated from [`checks`] rather than written
+/// down, so it cannot drift from what actually runs. This is the inventory: it
+/// answers "what is covered" without launching the app, which is the question
+/// that had no answer while the audit was a list of button names in a handover.
+pub fn manifest() -> String {
+    let all = checks();
+    let mut out = String::new();
+    let mut current = "";
+    for check in &all {
+        if check.group != current {
+            current = check.group;
+            out.push_str(&format!("\n{current}\n"));
+        }
+        let action = match (check.hover, check.click, check.press) {
+            (Some(h), Some(c), true) => format!("hover {h:?}, press {c:?}"),
+            (Some(h), Some(c), false) => format!("hover {h:?}, click {c:?}"),
+            (Some(h), None, _) => format!("hover {h:?}"),
+            (None, Some(c), true) => format!("press {c:?}"),
+            (None, Some(c), false) => format!("click {c:?}"),
+            (None, None, _) => "observe only".to_owned(),
+        };
+        out.push_str(&format!(
+            "  {:<26} {}\n{:<29}{} -> {:?} {:?}\n",
+            check.id, check.what, "", action, check.expect, check.subject
+        ));
+    }
+    out.push_str(&format!("\n{} checks in {} groups\n", all.len(), {
+        let mut groups: Vec<&str> = all.iter().map(|c| c.group).collect();
+        groups.dedup();
+        groups.len()
+    }));
+    out
+}
+
 /// Count matching nodes per group, for the summary line.
 pub fn tally(results: &[(&Check, Result<(), String>)]) -> HashMap<&'static str, (usize, usize)> {
     let mut by_group: HashMap<&'static str, (usize, usize)> = HashMap::new();
