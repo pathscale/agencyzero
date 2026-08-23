@@ -29,7 +29,7 @@ cd ../../..
 
 # Cargo does not track the embedded frontend output. Force the binary relink.
 touch apps/gui/src/main.rs
-cargo build --release --features blitz-inspector --bin az-gui
+cargo build --release --bin az-gui
 
 scripts/qa-profile-restore.sh /tmp/qa-profile-db
 AZ_DATA_DIR=/tmp/qa-profile-db \
@@ -37,9 +37,13 @@ AZ_DATA_DIR=/tmp/qa-profile-db \
   ./target/release/az-gui &
 ```
 
-Use `blitz-inspector`, never plain `blitz-runtime`: diagnostics are absent from
-the latter. Never run against the System instance or its data directory. Stop
-the exact QA PID with TERM; never use a broad name match or `-9`.
+The default build includes `blitz-inspector`; the AgencyZero Settings toggle is
+the normal control enablement source. The committed QA profile stores that
+toggle as enabled. `--blitz-control` is an enable-only recovery path so turning
+the setting off cannot lock automation out of the control needed to turn it
+back on. The descriptor environment variable only pins the socket location.
+Never run against the System instance or its data directory. Stop the exact QA
+PID with TERM; never use a broad name match or `-9`.
 
 Pin every command to the descriptor and run from the repository root, where
 `ps-qa.ron` and `tests/ps-qa/` live:
