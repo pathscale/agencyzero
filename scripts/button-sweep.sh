@@ -17,7 +17,6 @@
 #
 #   scripts/button-sweep.sh              # every surface
 #   scripts/button-sweep.sh home         # one surface
-#   scripts/button-sweep.sh --keep       # leave the instance up to inspect
 #
 set -euo pipefail
 
@@ -26,14 +25,11 @@ readonly ROOT="$PWD"
 readonly LIVE=/tmp/qa-profile-db
 readonly DESCRIPTOR="$ROOT/target/blitz-control.json"
 
-keep=0
-surface=""
-for arg in "$@"; do
-  case "$arg" in
-    --keep) keep=1 ;;
-    *) surface="$arg" ;;
-  esac
-done
+surface=${1:-}
+if [[ $# -gt 1 ]]; then
+  echo "usage: scripts/button-sweep.sh [surface]" >&2
+  exit 2
+fi
 
 # Never kill by executable name: another build or the owner's stable instance
 # may use the same name. A pre-existing lock means this disposable profile is
@@ -55,7 +51,7 @@ readonly APP=$!
 # the store can close; KILL is the last resort for a wedged shutdown, and is
 # still scoped to the exact pid captured above.
 cleanup() {
-  if [[ "$keep" != 0 ]] || ! kill -0 "$APP" 2>/dev/null; then return; fi
+  if ! kill -0 "$APP" 2>/dev/null; then return; fi
   kill -TERM "$APP" 2>/dev/null || true
   for _ in $(seq 1 50); do
     if ! kill -0 "$APP" 2>/dev/null; then break; fi
@@ -119,8 +115,4 @@ echo "== cover =="
 status=0
 "$qa" cover ${surface:+"$surface"} --descriptor "$DESCRIPTOR" || status=$?
 
-if [[ "$keep" != 0 ]]; then
-  echo
-  echo "instance left up (pid $APP) against $LIVE"
-fi
 exit "$status"
