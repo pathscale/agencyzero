@@ -28,7 +28,7 @@ on:
         description: 'ps-qa version requirement (caret, so patches come for free)'
         required: false
         type: string
-        default: '^0.2' 
+        default: '^0.1'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
