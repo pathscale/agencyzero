@@ -95,11 +95,12 @@ remained red. ps-qa 0.3.2 reported
 the decisive distinction: each hidden 0x0 textbox still had a painted rename
 button of the same name after node-id activation. The handler therefore did not
 enter edit state; this is an application action regression, not a layout-only
-failure. AgencyZero 0.8.30 entered edit state on the button's semantic
-`mousedown`; the current component had dropped that working activation phase.
-`EditableTitle` now retains `mousedown` for pointer activation and `click` for
-keyboard activation, both through the UI button itself and without coordinates.
-Its live rerun is pending.
+failure. Restoring AgencyZero 0.8.30's `mousedown` phase did not change the
+live result, which excludes gesture choice. Earlier live measurements in this
+component identified the boundary: UI Button's Dynamic element painted but
+dropped the nested consumer handler under Blitz. UI PR 262 fixes that once in
+the library; Agency keeps the ordinary `onClick={start}` contract. Its live
+rerun against UI 2.9.2 is pending.
 
 ## Manual release worklist
 
