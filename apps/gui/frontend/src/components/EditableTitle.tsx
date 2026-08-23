@@ -71,6 +71,7 @@ export function EditableTitle(props: {
             </Show>
             <Button
               type="button"
+              onMouseDown={() => start()}
               onClick={() => start()}
               disabled={busy()}
               aria-label={props.label ?? tx("Rename {name}", { name: props.value })}

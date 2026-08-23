@@ -93,9 +93,11 @@ remained red. ps-qa 0.3.2 reported
 the decisive distinction: each hidden 0x0 textbox still had a painted rename
 button of the same name after node-id activation. The handler therefore did not
 enter edit state; this is an application action regression, not a layout-only
-failure. `EditableTitle` now uses one explicit `Show` state transition and the
-inline `onClick={() => start()}` boundary previously proven by the live
-renderer for both call sites. Its live rerun is pending.
+failure. AgencyZero 0.8.30 entered edit state on the button's semantic
+`mousedown`; the current component had dropped that working activation phase.
+`EditableTitle` now retains `mousedown` for pointer activation and `click` for
+keyboard activation, both through the UI button itself and without coordinates.
+Its live rerun is pending.
 
 ## Manual release worklist
 
