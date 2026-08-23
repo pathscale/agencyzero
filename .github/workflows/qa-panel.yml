@@ -71,9 +71,9 @@ jobs:
         run: |
           trb_config=(
             --config 'patch.crates-io.tauri-runtime-blitz.git="https://github.com/pathscale/tauri-runtime-blitz.git"'
-            --config 'patch.crates-io.tauri-runtime-blitz.rev="7b44cd6"'
+            --config 'patch.crates-io.tauri-runtime-blitz.rev="0702e76"'
             --config 'patch.crates-io.blitz-control-protocol.git="https://github.com/pathscale/tauri-runtime-blitz.git"'
-            --config 'patch.crates-io.blitz-control-protocol.rev="7b44cd6"'
+            --config 'patch.crates-io.blitz-control-protocol.rev="0702e76"'
           )
           # A patch at 0.1.4 does not replace the 0.1.2 selection already in
           # Cargo.lock until resolution is advanced explicitly.
@@ -87,15 +87,15 @@ jobs:
         run: >-
           cargo install ps-qa
           --git https://github.com/pathscale/ps-qa.git
-          --rev cf013126fcb65432806f8efb530f6b1a9db2475c
+          --rev d1b9df50c63d51085ec319fc66b033c476dc9472
 
       - name: Scrubber unit tests
         run: >-
           cargo
           --config 'patch.crates-io.tauri-runtime-blitz.git="https://github.com/pathscale/tauri-runtime-blitz.git"'
-          --config 'patch.crates-io.tauri-runtime-blitz.rev="7b44cd6"'
+            --config 'patch.crates-io.tauri-runtime-blitz.rev="0702e76"'
           --config 'patch.crates-io.blitz-control-protocol.git="https://github.com/pathscale/tauri-runtime-blitz.git"'
-          --config 'patch.crates-io.blitz-control-protocol.rev="7b44cd6"'
+            --config 'patch.crates-io.blitz-control-protocol.rev="0702e76"'
           test --bin az-gui --features blitz-inspector qa_profile
 
       # From the committed archive, so a run measures what is in the tree. The
