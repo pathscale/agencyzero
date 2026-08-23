@@ -5,8 +5,8 @@
 // framework delegates `click`, and the pencil's stopPropagation lost that race.
 // jsdom has no competing handler, so it never saw the conflict.
 //
-// `press: true` matters: the editor opens on mousedown, so a synthesised click
-// does nothing at all.
+// Activation is node-addressed and includes mousedown, so an overflowed tab and
+// the editor it opens cannot redirect the action through coordinates.
 //
 // The subject is `textbox:<name>` rather than the name alone, because
 // EditableTitle gives the pencil and its editor the same accessible name: a
@@ -19,7 +19,6 @@
         open: Some("Home"),
         hover: None,
         click: Some("Rename e756"),
-        press: true,
         subject: "textbox:Rename e756",
         expect: PaintsNamed,
         panel_only: false,
@@ -31,7 +30,6 @@
         open: Some("theta theta north indi"),
         hover: None,
         click: Some("Rename project"),
-        press: true,
         subject: "textbox:Rename project",
         expect: PaintsNamed,
         panel_only: false,
