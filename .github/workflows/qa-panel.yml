@@ -1,0 +1,160 @@
+name: QA panel
+
+# Manual only, never on push or pull_request.
+#
+# This job drives a real window: it launches the app, moves a real pointer and
+# reads back the boxes the renderer computed. That needs macOS, which the rest
+# of CI deliberately avoids (see the note in ci.yml, where the only macOS is the
+# release bundle), and it takes minutes rather than seconds. Running it on every
+# push would make the expensive half of CI the common case.
+#
+# It is also not yet a gate. 18 of 345 controls have a real assertion and two
+# checks fail for reasons that are not application bugs, so a red run here means
+# "look at this", not "the branch is broken". `continue-on-error` keeps it
+# advisory until the inventory in ps-qa's tests/issues.md says otherwise.
+on:
+  workflow_dispatch:
+    inputs:
+      group:
+        description: 'Check group to run (blank = all 18). One of: icons hover status sections tasklog rename dialog delete'
+        required: false
+        type: string
+      cover:
+        description: 'Also sweep every surface and report coverage buckets'
+        required: false
+        type: boolean
+        default: false
+      ps_qa_ref:
+        description: 'ps-qa ref to check out'
+        required: false
+        type: string
+        default: master
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  panel:
+    name: Panel checks
+    # macOS because the harness needs a window server. There is no headless
+    # path: the whole point is to ask the compositor what it actually drew.
+    runs-on: macos-14
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check out ps-qa
+        uses: actions/checkout@v4
+        with:
+          repository: pathscale/ps-qa
+          ref: ${{ inputs.ps_qa_ref }}
+          path: ps-qa
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: '. -> target
+                       ps-qa -> target'
+
+      # blitz-inspector, NOT blitz-runtime: a blitz-runtime build answers every
+      # inspector call with diagnosticsUnavailable, so the run would fail with
+      # every check unable to see anything rather than with a real verdict.
+      - name: Build az-gui with the inspector
+        run: cargo build --release --features blitz-inspector --bin az-gui
+
+      - name: Build ps-qa
+        working-directory: ps-qa
+        run: cargo build --release
+
+      - name: Scrubber unit tests
+        run: cargo test --bin az-gui --features blitz-inspector qa_profile
+
+      - name: ps-qa unit tests
+        working-directory: ps-qa
+        run: cargo test --release
+
+      # From the committed archive, so a run measures what is in the tree. The
+      # profile is single-writer and every check mutates it, so this restores a
+      # throwaway copy rather than working on the archive.
+      - name: Restore the QA profile
+        run: scripts/qa-profile-restore.sh /tmp/qa-profile-db
+
+      - name: Launch the app
+        run: |
+          export TAURI_BLITZ_CONTROL_DESCRIPTOR="$PWD/target/blitz-control.json"
+          AZ_DATA_DIR=/tmp/qa-profile-db \
+            ./target/release/az-gui > /tmp/az-qa.log 2>&1 &
+          # The window has to exist before anything can be pressed. Poll for the
+          # descriptor rather than sleeping a fixed time, which is the
+          # difference between a slow runner passing and a slow runner
+          # reporting every control as missing.
+          for _ in $(seq 1 60); do
+            [ -f "$PWD/target/blitz-control.json" ] && break
+            sleep 2
+          done
+          if [ ! -f "$PWD/target/blitz-control.json" ]; then
+            echo "the app never wrote its control descriptor" >&2
+            tail -40 /tmp/az-qa.log >&2
+            exit 1
+          fi
+          sleep 10
+
+      - name: Run the checks
+        id: checks
+        continue-on-error: true
+        run: |
+          export TAURI_BLITZ_CONTROL_DESCRIPTOR="$PWD/target/blitz-control.json"
+          ./ps-qa/target/release/ps-qa qa ${{ inputs.group }} 2>&1 | tee /tmp/qa.txt
+
+      - name: Coverage
+        if: ${{ inputs.cover }}
+        continue-on-error: true
+        run: |
+          export TAURI_BLITZ_CONTROL_DESCRIPTOR="$PWD/target/blitz-control.json"
+          for surface in home project settings analytics; do
+            ./ps-qa/target/release/ps-qa cover "$surface" 2>&1 | grep -E '^= ' || true
+          done | tee /tmp/cover.txt
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo '## Panel checks'
+            echo
+            echo '```'
+            tail -20 /tmp/qa.txt 2>/dev/null || echo 'the run produced no output'
+            echo '```'
+            if [ -f /tmp/cover.txt ]; then
+              echo
+              echo '## Coverage'
+              echo
+              echo '```'
+              cat /tmp/cover.txt
+              echo '```'
+              echo
+              echo 'A negative `UNACCOUNTED` means the buckets overran the total and the'
+              echo 'number cannot be trusted. `swept` means a control was pressed and'
+              echo 'something changed, not that the right thing changed.'
+            fi
+            echo
+            echo 'Full inventory: `tests/issues.md` in ps-qa.'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # Never -9: the store is single-writer and a hard kill can tear its index,
+      # which the next run then reports as a corrupt profile.
+      - name: Stop the app
+        if: always()
+        run: pkill -TERM -f 'release/az-gui' || true
+
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: qa-panel-logs
+          path: |
+            /tmp/az-qa.log
+            /tmp/qa.txt
+            /tmp/cover.txt
+          if-no-files-found: ignore
