@@ -1,12 +1,8 @@
 // The in-place rename editor opens when its pencil is pressed.
 //
-// This shipped dead on 31 surfaces with a green unit suite either side of it.
-// The row around the pencil is a role="button" that folds on `click`, the
-// framework delegates `click`, and the pencil's stopPropagation lost that race.
-// jsdom has no competing handler, so it never saw the conflict.
-//
-// Activation is node-addressed and includes mousedown, so an overflowed tab and
-// the editor it opens cannot redirect the action through coordinates.
+// Both call sites use the same ordinary controlled-input pattern: semantic
+// button click, mounted field wrapper, explicit input ref, and queued
+// focus/select after the field exists. No pointer-only event path is involved.
 //
 // The subject is `textbox:<name>` rather than the name alone, because
 // EditableTitle gives the pencil and its editor the same accessible name: a

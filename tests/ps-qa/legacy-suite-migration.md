@@ -1,6 +1,6 @@
 # Legacy frontend suite migration
 
-The legacy suite currently spans 81 `*.test.ts(x)` files and 683 direct
+The legacy suite currently spans 80 `*.test.ts(x)` files and 692 direct
 `it`/`test` declarations; parameterized cases account for the higher executed
 total. This is an inventory, not a promise to create the same number of ps-qa
 checks.
@@ -43,13 +43,13 @@ the legacy Vitest suite or pretending a source scan verifies rendered behavior.
 
 | area | direct cases | files | likely treatment |
 | --- | ---: | ---: | --- |
-| `features` | 275 | 37 | replace rendered outcomes, delete mock-only cases |
+| `features` | 278 | 37 | replace rendered outcomes, delete mock-only cases |
 | `lib` | 145 | 11 | retain genuinely pure logic |
-| `stores` | 120 | 9 | retain state-machine logic; replace UI claims |
-| `styles` | 71 | 8 | replace source-text claims with live paint checks |
+| `stores` | 121 | 9 | retain state-machine logic; replace UI claims |
+| `styles` | 76 | 8 | replace source-text claims with live paint checks |
 | `api` | 36 | 3 | retain protocol transforms, delete mock choreography |
-| `components` | 31 | 10 | replace renderer behavior with live checks |
-| `i18n` | 3 | 2 | retain static catalogue validation |
+| `components` | 30 | 9 | replace renderer behavior with live checks |
+| `i18n` | 4 | 2 | retain static catalogue validation |
 | root app test | 2 | 1 | replace boot/render claims |
 
 Migration order follows measured UI failures first, then uncovered reachable
