@@ -23,7 +23,6 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 readonly ROOT="$PWD"
-readonly PRISTINE=/tmp/qa-profile-pristine
 readonly LIVE=/tmp/qa-profile-db
 readonly DESCRIPTOR="$ROOT/target/blitz-control.json"
 
@@ -36,18 +35,14 @@ for arg in "$@"; do
   esac
 done
 
-if [[ ! -d "$PRISTINE" ]]; then
-  echo "no pristine profile at $PRISTINE" >&2
-  echo "build one first, then: cp -c -R $LIVE $PRISTINE" >&2
-  exit 1
-fi
-
 # Never -9: the store is single-writer and a hard kill can tear its index.
 pkill -TERM -f "release/az-gui" 2>/dev/null || true
 sleep 2
 
-rm -rf "$LIVE" "$LIVE.lock"
-cp -c -R "$PRISTINE" "$LIVE" 2>/dev/null || cp -R "$PRISTINE" "$LIVE"
+# From the committed archive, not from whatever is left in /tmp. The sweep used
+# to depend on a directory nobody could reproduce: if it was missing the run
+# failed, and if it was stale the run measured a profile no longer in the tree.
+"$ROOT/scripts/qa-profile-restore.sh" "$LIVE"
 
 AZ_DATA_DIR="$LIVE" TAURI_BLITZ_CONTROL_DESCRIPTOR="$DESCRIPTOR" \
   ./target/release/az-gui > /tmp/az-sweep.log 2>&1 &
