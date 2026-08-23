@@ -114,6 +114,16 @@ started preserving ps-qa's pipeline exit status. The job finished red at
 audit PID cleanly. A failing targeted group can no longer appear green because
 `tee` consumed the harness exit code.
 
+Run 32673498486 measured the expanded source at 475 components: 465 reachable,
+0 unreachable, 0 anonymous, 4 state-disabled, 4 manual and 2 isolated. That
+resolves the previously anonymous verbosity slider. It is not an outcome
+verdict: released ps-qa 0.3.2 rejected the new `Enabled` expectation before
+running any of the declared checks. The broad sweep then reached the UI 2.9.1
+event-forwarding failure: Settings controls reported no semantic change and
+the retained Settings surface prevented Analytics and Home from opening. UI PR
+262 and ps-qa PR 10 are green and must be released before the 112-check rerun.
+Until then the only defensible failure count is "measurement blocked", not zero.
+
 ## Manual release worklist
 
 The automated audit excludes the exact `manual_controls` in `ps-qa.ron`:
