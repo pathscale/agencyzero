@@ -854,6 +854,9 @@ const zh = {
   "{agent} is not ready. Install or sign in from Settings, then run the agent checks again.":
     "{agent} 尚未就绪。请从设置中安装或登录，然后再次运行智能体检查。",
   "Agent setup required": "需要设置智能体",
+  "Model not available": "模型不可用",
+  "{model} is not available for {agent}. It was turned off in Settings, or the agent no longer offers it. Pick another model to send.":
+    "{agent} 无法使用 {model}。该模型已在设置中关闭，或智能体不再提供。请另选一个模型后发送。",
   "Open Settings": "打开设置",
   "Install or sign in to {agent} before sending prompts": "发送提示前，请安装或登录 {agent}",
   "The task manager cannot send prompts until its selected agent is installed, compatible, and signed in.":

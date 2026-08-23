@@ -422,6 +422,31 @@ export function Composer(props: ComposerProps): JSX.Element {
       agent: AGENT_LABELS[props.agent],
     });
 
+  /**
+   * Whether this tab's model is one Settings still offers.
+   *
+   * A pick is binding. The app used to substitute instead: a model that had
+   * been withdrawn was quietly swapped for the agent's default, so the prompt
+   * went out under a model nobody chose and nothing said so. Sending to the
+   * wrong model is not a smaller failure than not sending, it is a worse one,
+   * because the owner reads the answer believing they know what produced it.
+   *
+   * Empty is not a withdrawal: a tab whose catalogue has not loaded yet has no
+   * model string, and blocking there would be a spinner nobody can clear.
+   */
+  const modelReady = () => {
+    if (state.boot.status !== "ready") return true;
+    if (!props.model) return true;
+    const selection = state.settings?.models[props.agent];
+    if (!selection) return true;
+    return selection.enabled.includes(props.model);
+  };
+  const modelBlockedReason = () =>
+    tx(
+      "{model} is not available for {agent}. It was turned off in Settings, or the agent no longer offers it. Pick another model to send.",
+      { model: props.model, agent: AGENT_LABELS[props.agent] },
+    );
+
   /*
    * Written against a captured key, never `bucket()`, so a result that lands
    * after the user switched tabs reports under the conversation it belongs to
@@ -506,7 +531,10 @@ export function Composer(props: ComposerProps): JSX.Element {
   // bounces the words back either. Attachments alone are a sendable message:
   // "eat this file" needs no caption.
   const canSend = () =>
-    agentReady() && (draft().trim().length > 0 || attachments().length > 0) && !isSending();
+    agentReady() &&
+    modelReady() &&
+    (draft().trim().length > 0 || attachments().length > 0) &&
+    !isSending();
 
   /**
    * The Attach button: the OS picker, and the chosen files held as pills
@@ -921,6 +949,26 @@ export function Composer(props: ComposerProps): JSX.Element {
 
   return (
     <div class="flex flex-col gap-1.5">
+      <Show when={agentReady() && !modelReady()}>
+        <div
+          role="alert"
+          class="flex items-start gap-3 rounded-xl border border-error/38 bg-error/8 px-3 py-2.5"
+        >
+          <Icon name="shield" class="relative top-0.5 shrink-0 text-[14px] text-error" />
+          <div class="min-w-0 flex-1">
+            <p class="font-semibold text-[11.5px] text-error">{tx("Model not available")}</p>
+            <p class="mt-0.5 text-[11px] text-az-body leading-[1.45]">{modelBlockedReason()}</p>
+          </div>
+          <Button
+            type="button"
+            onClick={() => actions.openSettings()}
+            class="shrink-0 rounded-lg border border-error/30 px-2.5 py-1 text-[10.5px] text-az-body hover:border-error hover:text-error"
+          >
+            {tx("Settings")}
+          </Button>
+        </div>
+      </Show>
+
       <Show when={!agentReady()}>
         <div
           role="alert"
@@ -1477,13 +1525,15 @@ export function Composer(props: ComposerProps): JSX.Element {
                   title={
                     !agentReady()
                       ? agentBlockedReason()
-                      : props.isRunning
-                        ? props.canFollowUp
-                          ? tx(
-                              "Delivered into the running turn; the agent takes it at its next step",
-                            )
-                          : tx("Queued until the running turn finishes")
-                        : undefined
+                      : !modelReady()
+                        ? modelBlockedReason()
+                        : props.isRunning
+                          ? props.canFollowUp
+                            ? tx(
+                                "Delivered into the running turn; the agent takes it at its next step",
+                              )
+                            : tx("Queued until the running turn finishes")
+                          : undefined
                   }
                   class="flex size-[24px] items-center justify-center rounded-full bg-primary text-primary-content transition-colors hover:bg-az-primary-hover disabled:cursor-not-allowed disabled:opacity-40"
                 >
