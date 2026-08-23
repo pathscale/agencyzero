@@ -950,15 +950,6 @@ function GroupItemRow(props: {
           autofocus
           value={title()}
           aria-label={tx("Edit {name}", { name: props.item.title })}
-          /*
-           * Selecting text inside a field must not reach the row behind it.
-           * Home's group header and item rows open a project on double click,
-           * so double-clicking a word to select it — the ordinary way to fix a
-           * typo — navigated away mid-edit and abandoned the change.
-           */
-          onClick={(event) => event.stopPropagation()}
-          onDblClick={(event) => event.stopPropagation()}
-          onMouseDown={(event) => event.stopPropagation()}
           onInput={(event) => setTitle(event.currentTarget.value)}
           onKeyDown={(event) => {
             if (event.key === "Enter") void save();

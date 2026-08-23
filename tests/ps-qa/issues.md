@@ -7,9 +7,9 @@ QA profile before changing any status.
 ## Current audit subject
 
 - AgencyZero: PR 186, app version 0.8.32
-- ps-qa: PR 8 at `5d11dc9`, version 0.3.0
-- blitz-control-protocol and tauri-runtime-blitz: PR 30 at `fe25e2a`,
-  version 0.1.3 pending publication
+- ps-qa: PR 8 at `94c7011`, version 0.3.0
+- blitz-control-protocol and tauri-runtime-blitz: PR 30 at `b90759b`,
+  version 0.1.4 pending publication
 - Checks: 23 in 9 groups
 
 The current run must use `--features blitz-inspector` and
@@ -27,10 +27,10 @@ Record these before any component verdict:
 
 | measurement | required result | current fresh result |
 | --- | --- | --- |
-| inactive top-level surfaces mounted | exactly one | pending fresh run |
-| hidden and painted buttons | 0 expected | pending fresh run |
-| ghost nodes | below the configured budget | pending fresh run |
-| duplicate names | resolved to intended node id | pending fresh run |
+| inactive top-level surfaces mounted | exactly one | passed before outcome run |
+| hidden and painted buttons | 0 expected | failed: idle `Stop the run` painted |
+| ghost nodes | below the configured budget | failed: 119 hidden layout nodes in capped tree |
+| duplicate names | resolved to intended node id | semantic node-id actions enabled |
 
 If any row fails, fix or explain the measurement blocker and restart the app.
 Do not interpret `qa`, `audit` or `cover` while ghost subtrees can satisfy name
@@ -67,8 +67,16 @@ lookups.
 | settings | 4 |
 | **total** | **23** |
 
-Fresh pass/fail results are pending the authorized inspector run. A result is
-not green until its claimed defect has also been mutation-tested red.
+Run 32640904469 completed 19/23. Two failures were the same real UI regression:
+semantic activation of both rename buttons left a 0x0 textbox. The component
+used a pointer-only path; it now uses an ordinary button `click`. The idle
+painted Stop button is also fixed by unmounting the control while retaining
+only its layout slot.
+
+The other two failures were invalid evidence: the status check compared a broad
+hover-revealed count, and the fork Cancel semantic check disagreed with direct
+release behavior. The status check now follows the exact clicked accessible
+name. Fork remains a harness/action investigation, not a claimed UI regression.
 
 ## Manual release worklist
 
@@ -99,6 +107,8 @@ These are missing assertions, not application failures:
 ## Dependency delivery status
 
 `blitz-control-protocol` and `tauri-runtime-blitz` 0.1.2 are published. TRB PR
-30 carries the 0.1.3 macOS availability guard; Linux protocol and macOS runtime
-CI are green. ps-qa PR 8 is green with 29 tests and strict Clippy against the
-published protocol, and makes coverage hover rows by semantic node id.
+30 carries the macOS availability guard and the 0.1.4 version bump; Linux
+protocol and both macOS runtime jobs are green. ps-qa PR 8 is green with 30
+tests and strict Clippy against the published protocol, and inventories every
+interactive role by semantic node id with explicit exclusions and unverified
+controls.

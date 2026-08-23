@@ -3,11 +3,9 @@
 // Reported as "one click appears to delete items". The cycle deliberately avoids
 // the terminal states, so what this pins is that a click does not remove the row.
 //
-// status-1 is known wrong and kept for the record: it counts `Edit ` nodes and
-// requires the count to hold, but hovering to reach the marker reveals two more
-// row controls, so it reports 19 -> 21 and calls a working marker broken. Fix the
-// subject (count the row, or assert the specific item survives) before believing
-// either outcome.
+// The row controls are hover-revealed, so a broad family count is invalid here.
+// TargetPaints records the exact accessible name selected for the semantic click
+// and verifies that exact row still paints afterward.
 [
     (
         id: "status-1",
@@ -16,8 +14,8 @@
         open: Some("theta theta north indi"),
         hover: Some("Change the status of"),
         click: Some("Change the status of"),
-        subject: "Edit ",
-        expect: Holds,
+        subject: "unused: resolved from the exact click target",
+        expect: TargetPaints,
     ),
     (
         id: "status-2",

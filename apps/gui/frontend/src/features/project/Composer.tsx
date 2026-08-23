@@ -1540,26 +1540,23 @@ export function Composer(props: ComposerProps): JSX.Element {
                   <Icon name="arrow-up" class="text-[17px]" />
                 </Button>
                 {/*
-                Always rendered, only hidden when idle: mounting the Stop button
-                on run-start (and unmounting on stop) reflowed this wrap row and
-                slid the send button left-right every turn. Reserving its slot
-                keeps the send button fixed; `invisible` also drops it from the
-                tab order so an idle composer has no dead control.
+                The slot stays mounted so the send button does not move, while
+                the Stop button itself only exists during a run. An idle
+                composer therefore has no hidden painted or accessible control.
               */}
-                <Button
-                  type="button"
-                  onClick={() => props.onStop?.()}
-                  // No handler means the backend cannot stop this run; a Stop
-                  // that only pretended would be worse than a disabled one.
-                  disabled={!props.onStop}
-                  aria-label={tx("Stop the run")}
-                  tabindex={props.isRunning ? undefined : -1}
-                  class={`flex size-[24px] items-center justify-center rounded-full border border-primary/40 bg-base-300 transition-colors hover:border-primary disabled:cursor-not-allowed disabled:opacity-40 ${
-                    props.isRunning ? "" : "invisible"
-                  }`}
-                >
-                  <span class="size-[11px] rounded-[3px] bg-primary" />
-                </Button>
+                <span class="flex size-[24px] items-center justify-center">
+                  <Show when={props.isRunning}>
+                    <Button
+                      type="button"
+                      onClick={() => props.onStop?.()}
+                      disabled={!props.onStop}
+                      aria-label={tx("Stop the run")}
+                      class="flex size-[24px] items-center justify-center rounded-full border border-primary/40 bg-base-300 transition-colors hover:border-primary disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      <span class="size-[11px] rounded-[3px] bg-primary" />
+                    </Button>
+                  </Show>
+                </span>
               </div>
             </div>
           </div>
