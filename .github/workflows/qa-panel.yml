@@ -85,7 +85,7 @@ jobs:
         run: >-
           cargo install ps-qa
           --git https://github.com/pathscale/ps-qa.git
-          --rev 5fbc4ac
+          --rev 290b70b
 
       - name: Scrubber unit tests
         run: >-
