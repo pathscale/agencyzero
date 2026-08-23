@@ -16,7 +16,12 @@ import {
 import { Button } from "~/components/Button";
 import { Icon } from "~/components/Icon";
 import { ApprovalCard } from "~/features/project/ApprovalCard";
-import { CopyMessageButton, InlineText, MessageBody } from "~/features/project/MessageBody";
+import {
+  CopyMessageButton,
+  InlineText,
+  isPromptSyntaxDirectiveLine,
+  MessageBody,
+} from "~/features/project/MessageBody";
 import {
   isCybersecurityRefusal,
   isRetryableStop,
@@ -41,16 +46,17 @@ const STARTERS = () => [
 ];
 
 /**
- * Hold back a directive that is still streaming, so a `<ps @agency:...>` span
- * does not flash on screen and then vanish when the backend strips it from the
- * settled message.
+ * Hold back a directive while it is the live tail, so a `<ps @agency:...>` span
+ * never flashes on screen before the settled-message parser removes it.
  *
  * Applied to the LIVE stream only. If the tail of the text so far contains a
  * `<ps` that has not yet reached its closing `>`, everything from that `<ps`
- * onward is withheld until the delta that completes the tag arrives (at which
- * point the backend has the whole directive and the settled message will carry
- * whatever it left behind). A `<ps` that never closes just stays hidden, which
- * is the right outcome for a directive: the user never authored it to read.
+ * onward is withheld. Once it closes, a valid standalone AgencyZero directive
+ * remains withheld until another line arrives; then `MessageBody` removes it.
+ * This two-stage rule matters because provider adapters split text differently:
+ * Codex can deliver the closing `>` as its own delta, while Claude commonly
+ * delivers the whole line. Releasing the completed tail made only the first
+ * shape flash the control syntax to the owner.
  */
 export function holdBackPartialDirective(text: string): string {
   /*
@@ -79,11 +85,13 @@ export function holdBackPartialDirective(text: string): string {
   const openInLine = line.lastIndexOf("<ps");
   if (openInLine === -1) return text;
 
-  // A closing `>` after the last `<ps` means the directive is complete; nothing
-  // to withhold. Only an unterminated trailing `<ps...` is held.
+  // An unfinished control is never visible. A finished, valid authoring line
+  // stays hidden too; the full message parser takes over once it is no longer
+  // the live tail. Misframed prose and malformed controls remain visible.
   const open = lineStart + openInLine;
   const closed = text.indexOf(">", open);
-  return closed === -1 ? text.slice(0, open) : text;
+  if (closed === -1) return text.slice(0, open);
+  return isPromptSyntaxDirectiveLine(line) ? text.slice(0, lineStart) : text;
 }
 
 const TRANSCRIPT_PAGE_SIZE = 12;
