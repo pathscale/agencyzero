@@ -20,7 +20,7 @@ on:
         required: false
         type: string
       cover:
-        description: 'Also sweep every surface and report coverage buckets'
+        description: 'Also inventory semantic reachability on every surface'
         required: false
         type: boolean
         default: false
@@ -85,7 +85,7 @@ jobs:
         run: >-
           cargo install ps-qa
           --git https://github.com/pathscale/ps-qa.git
-          --rev 5d11dc9
+          --rev 56d5415
 
       - name: Scrubber unit tests
         run: >-
@@ -144,13 +144,11 @@ jobs:
           # tests/ps-qa/ relative to the working directory.
           ps-qa qa ${{ inputs.group }} 2>&1 | tee /tmp/qa.txt
 
-      - name: Coverage
+      - name: Reachability inventory
         if: ${{ inputs.cover }}
         continue-on-error: true
         run: |
-          for surface in home project settings analytics; do
-            ps-qa cover "$surface" 2>&1 || true
-          done | tee /tmp/cover.txt
+          ps-qa inventory 2>&1 | tee /tmp/cover.txt
 
       # Collection continues past integrity faults so one macOS launch yields
       # all evidence, but a ghost tree can never receive a green verdict.
@@ -175,9 +173,8 @@ jobs:
               cat /tmp/cover.txt
               echo '```'
               echo
-              echo 'A negative `UNACCOUNTED` means the buckets overran the total and the'
-              echo 'number cannot be trusted. `swept` means a control was pressed and'
-              echo 'something changed, not that the right thing changed.'
+              echo '`manual` controls are excluded native dialogs and external destinations.'
+              echo '`anonymous` controls lack an accessible name and fail semantic reachability.'
             fi
             echo
             echo 'Full inventory: `tests/ps-qa/issues.md`.'

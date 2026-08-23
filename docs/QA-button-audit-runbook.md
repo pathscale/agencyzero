@@ -99,7 +99,7 @@ renderer resolved. `dom` names the ancestor that made a control hidden or 0x0.
 
 ## Remove hidden-tree noise before coverage
 
-Run these before `cover` or any count-based assertion:
+Run these before `inventory`, `cover` or any count-based assertion:
 
 ```sh
 ps-qa find '*' --role button --hidden --painted --count
@@ -143,9 +143,9 @@ Never activate these unattended:
 - a native dialog the harness cannot close;
 - a control that opens a browser, URL or another application.
 
-List each one in `ps-qa.ron` under `manual_controls`. `cover` reports them as a
-named manual worklist and excludes them from automated pass/fail totals. Verify
-that list manually for every release.
+List each one in `ps-qa.ron` under `manual_controls`. `inventory` counts them
+without activating them; `cover` also prints the named manual worklist. They
+stay outside automated pass/fail totals and are verified manually per release.
 
 ## Legacy frontend unit suite
 
