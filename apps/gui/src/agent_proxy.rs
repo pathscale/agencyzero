@@ -161,6 +161,48 @@ impl AgencyProxy {
         }
     }
 
+    /// Interrupt a provider-owned turn by its native session id.
+    ///
+    /// This is deliberately independent of the proxy run journal. A crashed
+    /// GUI or daemon can lose the AgencyProxy run id while Codex still owns an
+    /// active turn, which is exactly the state Project Reset must repair.
+    pub async fn interrupt_session(
+        &self,
+        provider: &str,
+        session_id: &str,
+    ) -> Result<bool, String> {
+        let mut client = self.connect().await?;
+        if client.version().minor < 4 {
+            // A daemon may outlive the GUI that launched it. Protocol 0.3 has
+            // no InterruptSession variant, so sending one closes the socket
+            // instead of repairing the conversation. Reset is already an
+            // explicit force operation: replace that legacy daemon with the
+            // configured/bundled binary, then issue the new request.
+            drop(client);
+            let configured_binary = self
+                .configured_binary
+                .read()
+                .map_err(|_| "AgencyProxy configuration is unavailable".to_string())?
+                .clone();
+            self.restart(configured_binary, ShutdownMode::Terminate)
+                .await?;
+            client = self.connect().await?;
+        }
+        match client
+            .request(ClientMessage::InterruptSession {
+                provider: provider.into(),
+                session_id: session_id.into(),
+                binary: None,
+                idempotency_key: format!("{provider}:{session_id}:interrupt"),
+            })
+            .await
+            .map_err(|error| error.to_string())?
+        {
+            ServerResponse::SessionInterrupted { interrupted } => Ok(interrupted),
+            response => Err(response_error(response)),
+        }
+    }
+
     /// Cancel every live daemon run owned by one AgencyZero project and wait
     /// until the daemon confirms that none remains active.
     ///
