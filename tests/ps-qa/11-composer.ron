@@ -71,4 +71,16 @@
         subject: "menuitem:medium",
         expect: PaintsNamed,
     ),
+    (
+        id: "composer-draft-enables-send",
+        group: "composer",
+        what: "entering a prompt enables Send",
+        open: Some("theta theta north indi"),
+        hover: None,
+        click: None,
+        type_into: Some("Ask, or type / for commands…"),
+        text: Some("qa draft only"),
+        subject: "Send",
+        expect: Enabled,
+    ),
 ]

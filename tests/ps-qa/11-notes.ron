@@ -1,0 +1,16 @@
+// Notes are kept across compaction. A changed draft must unlock the explicit
+// Save action; geometry alone cannot distinguish the disabled control.
+[
+    (
+        id: "notes-draft-enables-save",
+        group: "notes",
+        what: "editing durable project notes enables Save",
+        open: Some("theta theta north indi"),
+        hover: None,
+        click: None,
+        type_into: Some("Notes kept across compaction"),
+        text: Some("qa audit note"),
+        subject: "Save",
+        expect: Enabled,
+    ),
+]
