@@ -90,6 +90,7 @@ AppProfile(
     manual_controls: [
         (label: "Attach files",                        command: "choose_attachments"),
         (label: "Add dir",                             command: "choose_project_directory"),
+        (label: "Choose folder",                       command: "choose_project_directory (Welcome)"),
         (label: "Select backup file",                  command: "select_store_backup"),
         (label: "Back up & close",                     command: "create_store_backup"),
         (label: "Export",                              command: "export_study_events"),
