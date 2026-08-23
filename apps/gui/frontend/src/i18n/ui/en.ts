@@ -416,6 +416,7 @@ const en = {
   "Outcome not reported": "Outcome not reported",
   Collapse: "Collapse",
   "Show the whole command": "Show the whole command",
+  "Hide the whole command": "Hide the whole command",
   Copy: "Copy",
   "Knowledge checkpoints": "Knowledge checkpoints",
   "this project · off by default": "this project · off by default",

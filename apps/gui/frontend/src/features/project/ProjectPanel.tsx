@@ -2127,7 +2127,11 @@ function TaskLogList(props: { projectId: string }): JSX.Element {
               <Button
                 type="button"
                 onClick={() => setExpanded(expanded() === entry.id ? null : entry.id)}
-                aria-label={expanded() === entry.id ? tx("Collapse") : tx("Show the whole command")}
+                aria-label={
+                  expanded() === entry.id
+                    ? tx("Hide the whole command")
+                    : tx("Show the whole command")
+                }
                 class={`min-w-0 flex-1 cursor-pointer text-left text-az-body ${
                   expanded() === entry.id ? "whitespace-pre-wrap break-all" : "truncate"
                 }`}

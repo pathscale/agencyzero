@@ -398,6 +398,7 @@ const zh = {
   "Outcome not reported": "未报告结果",
   Collapse: "折叠",
   "Show the whole command": "显示完整命令",
+  "Hide the whole command": "收起完整命令",
   Copy: "复制",
   "Knowledge checkpoints": "知识检查点",
   "this project · off by default": "此项目 · 默认关闭",

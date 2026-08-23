@@ -12,6 +12,26 @@
         subject: "Copy this task-log entry",
         expect: Paints,
     ),
+    (
+        id: "tasklog-expand-command",
+        group: "tasklog",
+        what: "a truncated task-log command can be expanded",
+        open: Some("theta theta north indi"),
+        hover: None,
+        click: Some("Show the whole command"),
+        subject: "Hide the whole command",
+        expect: Paints,
+    ),
+    (
+        id: "tasklog-collapse-command",
+        group: "tasklog",
+        what: "an expanded task-log command can be collapsed",
+        open: Some("theta theta north indi"),
+        hover: None,
+        click: Some("Hide the whole command"),
+        subject: "Show the whole command",
+        expect: Paints,
+    ),
     // `PaintsMore`, not `Grows`. `Grows` counts tree membership, so a page of
     // rows that mounted and then laid out at 0x0 satisfies it: the log would
     // look paged and show the owner nothing. Measured both ways on a working
