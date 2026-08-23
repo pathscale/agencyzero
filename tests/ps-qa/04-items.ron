@@ -1,0 +1,19 @@
+// Creating an item is a rendered-order outcome, not merely a successful IPC.
+// The title is entered through the textbox's semantic node id and Enter; the
+// resulting status control must paint above every older item status control.
+[
+    (
+        id: "items-newest-first",
+        group: "items",
+        what: "a newly created item appears at the top of the item list",
+        open: Some("theta theta north indi"),
+        hover: None,
+        click: Some("New item"),
+        type_into: Some("New item"),
+        text: Some("qa audit newest"),
+        key: Some("Enter"),
+        compare: Some("Change the status of"),
+        subject: "Change the status of qa audit newest",
+        expect: Above,
+    ),
+]

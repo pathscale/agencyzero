@@ -7,10 +7,10 @@ QA profile before changing any status.
 ## Current audit subject
 
 - AgencyZero: PR 186, app version 0.8.32
-- ps-qa: PR 8 at `94c7011`, version 0.3.0
+- ps-qa: PR 8 at `682b202`, version 0.3.0
 - blitz-control-protocol and tauri-runtime-blitz: PR 30 at `b90759b`,
   version 0.1.4 pending publication
-- Checks: 23 in 9 groups
+- Checks: 24 in 10 groups
 
 The current run must use `--features blitz-inspector` and
 `/tmp/qa-profile-db`. ps-qa discovers the live descriptor through its normal
@@ -58,6 +58,7 @@ lookups.
 | --- | ---: |
 | icons | 1 |
 | hover | 4 |
+| items | 1 |
 | status | 2 |
 | sections | 5 |
 | tasklog | 2 |
@@ -65,7 +66,7 @@ lookups.
 | dialog | 2 |
 | delete | 1 |
 | settings | 4 |
-| **total** | **23** |
+| **total** | **24** |
 
 Run 32640904469 completed 19/23. Two failures were the same real UI regression:
 semantic activation of both rename buttons left a 0x0 textbox. The component
