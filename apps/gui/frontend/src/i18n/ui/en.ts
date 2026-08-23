@@ -376,6 +376,11 @@ const en = {
   "Filter items": "Filter items",
   "Sort items": "Sort items",
   "Sort projects and items": "Sort projects and items",
+  "Sort items by status; choose time": "Sort items by status; choose time",
+  "Sort items by time; choose status": "Sort items by time; choose status",
+  "Sort Home by status; choose time": "Sort Home by status; choose time",
+  "Sort Home by time; choose turns": "Sort Home by time; choose turns",
+  "Sort Home by turns; choose status": "Sort Home by turns; choose status",
   "Toggle item sort between status and time": "Toggle item sort between status and time",
   "Cycle Home sort between status, time, and turns":
     "Cycle Home sort between status, time, and turns",
