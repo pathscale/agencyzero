@@ -288,11 +288,13 @@ was wrong. nofilter.io mixes the picked colour into its base tiers at 8–11%
 slightly more, the transcript least, because a colour cast across a wall of body text reads
 as a fault rather than as a theme.
 
-The wheel itself is `@pathscale/ui`'s `ColorWheelFlower`. Its `ThemeColorPicker` wrapper is
-**not** used: that writes `--color-base-*` against nofilter's own anchors and resolves
-light/dark by reading `data-theme` for the literal `"light"`/`"dark"` — ours says
-`agencyzero`, so it would fall through to the OS preference and paint 98%-white surfaces
-over a dark workspace on any Mac set to Light.
+The appearance control is `@pathscale/ui`'s `ComplexColorWheel`. UI owns the
+wheel, adjustment rows, stop controls, semantics and layout; AgencyZero passes
+its dark/light palettes and maps strength, softness and text brightness to its
+persisted theme fields. The generic `ThemeColorPicker` remains unsuitable here
+because it writes `--color-base-*` against nofilter's anchors and resolves mode
+from literal `data-theme="light"`/`"dark"`, while this app's root theme name is
+`agencyzero`.
 
 Icons are inlined SVG symbols in [`src/components/IconSprite.tsx`](src/components/IconSprite.tsx),
 transcribed from the mockup's own sprite. The design's rule is no network at runtime, so
