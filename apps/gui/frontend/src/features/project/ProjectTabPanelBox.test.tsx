@@ -31,13 +31,13 @@ function panelBox(container: HTMLElement): HTMLElement | null {
  * the subtree, so every switch that flipped the gate disposed the whole column.
  *
  * Then it asserted the contents were present from the first frame, gate
- * removed. That stopped the flashing but left the real cost: every retained
- * pane built its *own* panel, so opening a project constructed a second
+ * removed. That stopped the flashing but left the real cost: each retained
+ * project tree built its *own* panel, so opening a project constructed a second
  * complete 332px column to show data the store already held.
  *
- * Now there is one panel, outside the per-project `For`, and a tab switch
- * re-points it. These tests are about that: exactly one column exists no matter
- * how many projects are open, and it survives switching between them.
+ * Now there is one active project tree and one panel, and a project switch
+ * re-points both. These tests are about that: exactly one column exists no
+ * matter how many projects are open, and it survives switching between them.
  */
 describe("the side panel", () => {
   it("is one column, no matter how many projects are open", async () => {
@@ -61,7 +61,7 @@ describe("the side panel", () => {
     await waitFor(() => expect(workspace.state.activeKey).toBe("cafe"));
     expect(
       screen.container.querySelectorAll(".flex-none.overflow-hidden.min-h-0").length,
-      "a retained pane built a panel of its own",
+      "another project built a panel of its own",
     ).toBe(1);
   });
 
