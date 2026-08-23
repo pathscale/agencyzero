@@ -14,6 +14,7 @@
     "preview": "bun --bun rsbuild preview",
     "typecheck": "bun --bun tsc --noEmit",
     "lint": "./scripts/biome.sh check .",
+    "lint:ui-controls": "bun scripts/check-ui-controls.ts",
     "format": "./scripts/biome.sh format . --write",
     "test": "bun --bun vitest",
     "test:run": "NODE_ENV=production bun --bun vitest run",

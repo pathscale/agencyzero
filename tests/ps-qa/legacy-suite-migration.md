@@ -19,6 +19,11 @@ structure, CSS source text, or a behavior already covered by a stronger live
 outcome. Retain isolated logic tests for pure formatting, ordering, parsing,
 pricing, and other functions whose result does not depend on rendering.
 
+Static policy checks are not renderer tests. The former
+`components/uiControlAudit.test.ts` is now the dependency-free
+`scripts/check-ui-controls.ts` lint gate, so it stays automatic without running
+the legacy Vitest suite or pretending a source scan verifies rendered behavior.
+
 ## Largest migration hotspots
 
 | file | direct cases |

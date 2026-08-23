@@ -9,17 +9,18 @@ Updated 2026-08-23. The repeatable procedure is
 - AgencyZero PR 186 unmounts every inactive top-level surface. It also keeps
   the legacy frontend unit suite manual and preserves typecheck, lint and the
   production frontend build as automatic CI.
-- tauri-runtime-blitz PR 28 adds node-addressed click, double-click and hover.
-  Click activation targets the selected semantic node directly; coordinates
-  do not select or retarget a control.
-- ps-qa PR 7 adds node-addressed actions without deleting the generic
-  coordinate `press` command or per-check option. AgencyZero's checks omit
-  `press`, so this application uses semantic activation only.
+- tauri-runtime-blitz PR 30 carries the node-addressed control protocol,
+  reusable glass support and the macOS availability fallback. Click activation
+  targets the selected semantic node directly; coordinates do not select or
+  retarget a control.
+- ps-qa PR 8 provides node-addressed actions, role inventory, modal dismissal,
+  nested-scroll reveal and isolated-control classification. AgencyZero's checks
+  omit coordinate `press`, so this application uses semantic activation only.
 
-The runtime and harness changes are versioned as 0.1.2 and 0.3.0. The runtime
-and protocol 0.1.2 crates are published. ps-qa PR 7 is pinned by commit in the
-manual audit workflow until 0.3.0 is published; its 29 local tests and strict
-Clippy gate are green against the published protocol.
+The runtime and protocol changes are versioned as 0.1.4 but are not yet
+published. The manual workflow pins TRB PR 30 at `7b44cd6` and ps-qa PR 8 at
+`dcdc866`; ps-qa has 32 passing tests and a green strict-Clippy gate. Remove
+those Git pins only after the matching crates are published and locked.
 
 ## Evidence contract
 
@@ -47,7 +48,7 @@ Always remove measurement blockers before interpreting component failures:
 2. Run `find --hidden --painted` and `ghost`.
 3. If inactive surfaces still own painted boxes, fix the application and start
    again. Do not compensate with selector heuristics.
-4. Run all 23 outcome checks.
+4. Run all 26 outcome checks.
 5. Run `audit` and `cover` only after the tree is trustworthy.
 6. Record every failure, unreachable surface and manual-only control in
    `tests/ps-qa/issues.md`.
