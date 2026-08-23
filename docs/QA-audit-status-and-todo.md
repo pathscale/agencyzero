@@ -40,7 +40,7 @@ A second application pointed at the same harness writes its own pair.
 ```sh
 # The harness is a published crate. A caret, so patches arrive without a commit
 # here: the checks and the profile are what pin behaviour, and they live here.
-cargo install ps-qa --version '^0.2' --locked
+cargo install ps-qa --version '^0.1' --locked
 
 # blitz-inspector, NOT blitz-runtime: a blitz-runtime build answers every
 # inspector call with diagnosticsUnavailable.
@@ -59,6 +59,10 @@ export TAURI_BLITZ_CONTROL_DESCRIPTOR="$PWD/target/blitz-control.json"
 # to the working directory.
 ps-qa list                        # every check, no app needed
 ps-qa qa                          # all of them
+ps-qa qa --toon                   # the same run as TOON, for a reader that is
+                                  # a program. The column format loses any field
+                                  # containing a space, which `what` and every
+                                  # failure message have.
 ps-qa qa dialog                   # one group
 ps-qa qa dialog-cancel-dismisses  # one check, by id
 QA_TRACE=1 ps-qa qa <id>          # print the node each step pressed
@@ -217,6 +221,24 @@ the marker misbehaving. The check has never measured what its name claims.
 against. Unresolved: either it navigates to the wrong place or the control is
 genuinely absent. It is the only check whose failure could still be an
 application bug.
+
+Three harness faults were ruled out underneath it (ps-qa#5), and they are worth
+knowing about because each one made a working control look dead:
+
+- `open_named` and `press_named` never tested whether a box was **on screen**.
+  An overflowing tab strip parks project tabs at negative x, so navigation
+  pressed at points like `-742,32`, outside the window, and nothing happened.
+- The first name match in tree order won, before any visibility test. A project
+  name matches in the tab strip, in the Home list and in its own header, so the
+  press often went to a copy the owner could not see.
+- The viewport came from `main`, which starts below the title bar at y=58, so
+  the whole tab strip counted as scrolled away.
+
+`rename-opens-editor` was red for the second and third of those and passes now.
+`rename-project-header` survives all three, so whatever remains is on the
+surface itself. Do not restart from the `mousedown`/`stopPropagation` theory:
+the press was never landing, so no evidence was ever collected about the
+handler.
 
 A third, `rename-opens-editor`, went red during the profile rebuild and is worth
 recording because it looked exactly like a regression. The rebuilt profile

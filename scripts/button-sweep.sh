@@ -65,7 +65,7 @@ elif command -v ps-qa >/dev/null 2>&1; then
   qa="$(command -v ps-qa)"
 else
   echo "no ps-qa binary. install it:" >&2
-  echo "  cargo install ps-qa --version '^0.2' --locked" >&2
+  echo "  cargo install ps-qa --version '^0.1' --locked" >&2
   echo "or point PS_QA at one." >&2
   exit 1
 fi
