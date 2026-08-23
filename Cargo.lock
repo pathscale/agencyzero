@@ -499,9 +499,9 @@ dependencies = [
 
 [[package]]
 name = "blitz-control-protocol"
-version = "0.1.2"
+version = "0.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "facac75310468a95afbf77726d9baef4c6076163d86729f9550820d78d29fec0"
+checksum = "7d507e04382ebf282dc226cb646965c3ff900a010d5778d92429cd742a53e4cc"
 dependencies = [
  "endpoint-libs",
  "serde",
@@ -854,7 +854,7 @@ checksum = "af491d569909a7e4dee0ad7db7f5341fef5c614d5b8ec8cf765732aba3cff681"
 dependencies = [
  "serde",
  "termcolor",
- "unicode-width 0.2.2",
+ "unicode-width 0.1.14",
 ]
 
 [[package]]
@@ -6837,15 +6837,16 @@ dependencies = [
 
 [[package]]
 name = "tauri-runtime-blitz"
-version = "0.1.2"
+version = "0.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f92c42ef4cff8e58f29c7b506d2e286566c585726025b247ee142cd4c166da1b"
+checksum = "01a6bac5383d02c3cb92589c7b43895bc98a8091dd0900ba1104776eaac86607"
 dependencies = [
  "base64 0.22.1",
  "blitz-control-protocol",
  "endpoint-libs",
  "http",
  "keyboard-types 0.7.0",
+ "libc",
  "objc2",
  "objc2-app-kit",
  "objc2-foundation",
