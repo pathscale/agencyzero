@@ -70,7 +70,9 @@ describe("analytics refresh", () => {
     await waitFor(() => expect(screen.getByRole("tablist")).toBeInTheDocument());
     expect(screen.getByRole("tablist")).toHaveClass("shrink-0");
 
-    expect(screen.getAllByRole("tab")).toHaveLength(6);
+    const tabs = screen.getAllByRole("tab");
+    expect(tabs).toHaveLength(6);
+    for (const tab of tabs) expect(tab).toHaveAttribute("aria-label");
     expect(screen.getByRole("tab", { name: "Value" })).toHaveAttribute("aria-selected", "true");
     expect(screen.queryByRole("tab", { name: "Efficiency" })).not.toBeInTheDocument();
     expect(screen.queryByRole("tab", { name: "Largest turn" })).not.toBeInTheDocument();
