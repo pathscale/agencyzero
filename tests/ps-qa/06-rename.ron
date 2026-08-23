@@ -1,8 +1,8 @@
 // The in-place rename editor opens when its pencil is pressed.
 //
-// Both call sites use the same controlled input. The semantic node-addressed
-// activation delivers the ordinary mouse-down/click sequence to that button;
-// coordinates are never used to select or retarget it.
+// Both call sites use the same ordinary pattern: Button onClick toggles a
+// controlled Input. Semantic node ids select and activate the button;
+// coordinates and propagation workarounds are not involved.
 //
 // The subject is `textbox:<name>` rather than the name alone, because
 // EditableTitle gives the pencil and its editor the same accessible name: a
