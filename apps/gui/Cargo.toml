@@ -6,12 +6,11 @@ edition.workspace = true
 publish.workspace = true
 
 [features]
-# No runtime by default, on purpose. This crate can host either, they are
-# mutually exclusive, and a default meant that naming one still compiled the
-# other: cargo features are additive, so `--features blitz-inspector` never
-# removed the webview. Picking neither is now a compile error naming both,
-# which is the failure a wrong build should have.
-default = []
+# The shipped/default renderer is Blitz with diagnostics compiled in. Runtime
+# control is cheap while idle and can be disabled with `--no-blitz-control`.
+# Webview-only builds must use `--no-default-features --features webview-runtime`
+# because Cargo features are additive and the two runtimes are exclusive.
+default = ["blitz-inspector"]
 experimental = ["dep:agent-experimental"]
 # Tauri's own runtime: a WKWebView on macOS.
 #
@@ -139,4 +138,3 @@ tokio = { version = "1", features = ["macros", "rt"] }
 [[bin]]
 name = "az-gui"
 path = "src/main.rs"
-

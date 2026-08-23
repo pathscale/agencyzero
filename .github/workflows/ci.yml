@@ -102,5 +102,5 @@ jobs:
       # Blitz is currently a macOS preview runtime. Enabling every feature on
       # this Linux runner asks it to implement Tauri's GTK-only runtime traits,
       # which is separate portability work rather than Linux CI for AgencyZero.
-      - run: cargo clippy --workspace --all-targets --features experimental,webview-runtime -- -D warnings
-      - run: cargo test --workspace --features experimental,webview-runtime
+      - run: cargo clippy --workspace --all-targets --no-default-features --features experimental,webview-runtime -- -D warnings
+      - run: cargo test --workspace --no-default-features --features experimental,webview-runtime
