@@ -67,8 +67,8 @@ agent-abstraction = "0.4.19"
 agency-proxy-client.workspace = true
 agency-proxy-protocol.workspace = true
 agent-experimental = { version = "^0.1.3", default-features = false, optional = true }
-# Incremental authoring-stream parser landed upstream in PromptSyntax 0.1.1.
-promptsyntax = "0.1.1"
+# Incremental authoring parsing and strict inertness diagnostics ship upstream.
+promptsyntax = "0.2.0"
 shlex = "1.3"
 az-core.workspace = true
 # Exact rather than a caret, unlike the engine deps above, and from the
