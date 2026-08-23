@@ -8,15 +8,15 @@ name: QA panel
 # release bundle), and it takes minutes rather than seconds. Running it on every
 # push would make the expensive half of CI the common case.
 #
-# It is also not yet a gate. The 26 outcome checks do not cover every control,
-# so a red run here means "look at this", not "the branch is broken".
-# `continue-on-error` keeps it advisory until the inventory in
-# tests/ps-qa/issues.md says otherwise.
+# The 39 declared outcomes and the tree-integrity checks are gates. Their steps
+# continue long enough to collect and upload every diagnostic, then the final
+# enforcement steps turn the job red. Broad coverage still inventories control
+# instances that do not yet have a dedicated outcome.
 on:
   workflow_dispatch:
     inputs:
       group:
-        description: 'Check group to run (blank = all 26). One of: icons hover status items sections tasklog rename verbosity dialog delete settings'
+        description: 'Check group to run (blank = all 39). One of: icons hover status items sections chrome tasklog rename toggles verbosity dialog delete settings'
         required: false
         type: string
       cover:
