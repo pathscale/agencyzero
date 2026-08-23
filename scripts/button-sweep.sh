@@ -35,18 +35,39 @@ for arg in "$@"; do
   esac
 done
 
-# Never -9: the store is single-writer and a hard kill can tear its index.
-pkill -TERM -f "release/az-gui" 2>/dev/null || true
-sleep 2
+# Never kill by executable name: another build or the owner's stable instance
+# may use the same name. A pre-existing lock means this disposable profile is
+# already owned, so stop before deleting anything under that process.
+if [[ -e "$LIVE.lock" ]]; then
+  echo "$LIVE.lock already exists; stop its exact owner before running the sweep" >&2
+  exit 1
+fi
 
 # From the committed archive, not from whatever is left in /tmp. The sweep used
 # to depend on a directory nobody could reproduce: if it was missing the run
 # failed, and if it was stale the run measured a profile no longer in the tree.
 "$ROOT/scripts/qa-profile-restore.sh" "$LIVE"
 
-AZ_DATA_DIR="$LIVE" TAURI_BLITZ_CONTROL_DESCRIPTOR="$DESCRIPTOR" \
-  ./target/release/az-gui > /tmp/az-sweep.log 2>&1 &
+AZ_DATA_DIR="$LIVE" ./target/release/az-gui --blitz-control > /tmp/az-sweep.log 2>&1 &
 readonly APP=$!
+
+# Only this child belongs to the sweep. TERM gets a bounded grace period so
+# the store can close; KILL is the last resort for a wedged shutdown, and is
+# still scoped to the exact pid captured above.
+cleanup() {
+  if [[ "$keep" != 0 ]] || ! kill -0 "$APP" 2>/dev/null; then return; fi
+  kill -TERM "$APP" 2>/dev/null || true
+  for _ in $(seq 1 50); do
+    if ! kill -0 "$APP" 2>/dev/null; then break; fi
+    sleep 0.1
+  done
+  if kill -0 "$APP" 2>/dev/null; then
+    echo "az-gui pid $APP did not exit after TERM; sending KILL" >&2
+    kill -KILL "$APP" 2>/dev/null || true
+  fi
+  wait "$APP" 2>/dev/null || true
+}
+trap cleanup EXIT INT TERM
 
 # Wait for the descriptor to be answered rather than sleeping a fixed guess:
 # the app takes ~10s cold and ~4s warm, and a fixed sleep is either slow or
@@ -68,7 +89,7 @@ elif command -v ps-qa >/dev/null 2>&1; then
   qa="$(command -v ps-qa)"
 else
   echo "no ps-qa binary. install it:" >&2
-  echo "  cargo install ps-qa --version '^0.2' --locked" >&2
+  echo "  cargo install ps-qa --version '^0.3' --locked" >&2
   echo "or point PS_QA at one." >&2
   exit 1
 fi
@@ -77,10 +98,18 @@ fi
 # directory, so every invocation below runs from the repository root.
 cd "$ROOT"
 
+attached=0
 for _ in $(seq 1 40); do
-  if "$qa" nodes --descriptor "$DESCRIPTOR" >/dev/null 2>&1; then break; fi
+  if "$qa" nodes --descriptor "$DESCRIPTOR" >/dev/null 2>&1; then
+    attached=1
+    break
+  fi
   sleep 1
 done
+if [[ "$attached" == 0 ]]; then
+  echo "ps-qa could not attach to az-gui pid $APP" >&2
+  exit 1
+fi
 
 echo "== baseline =="
 "$qa" idle --descriptor "$DESCRIPTOR" 2>&1 | head -1
@@ -90,10 +119,7 @@ echo "== cover =="
 status=0
 "$qa" cover ${surface:+"$surface"} --descriptor "$DESCRIPTOR" || status=$?
 
-if [[ "$keep" == 0 ]]; then
-  kill -TERM "$APP" 2>/dev/null || true
-  wait "$APP" 2>/dev/null || true
-else
+if [[ "$keep" != 0 ]]; then
   echo
   echo "instance left up (pid $APP) against $LIVE"
 fi

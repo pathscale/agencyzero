@@ -44,14 +44,10 @@ run_tauri() {
   fi
 }
 
-pin_inspector_env() {
-  # The inspector is only reachable if the app knows where to put its control
-  # socket, and passing that with `open --env` does not survive the two launches
-  # that actually happen: a Finder launch, and the restart angel re-executing
-  # the binary after a rebuild (see docs/angel-restart.md). Both start the
-  # process without the shell environment, so the socket lands in $TMPDIR under
-  # an instance-specific name and every tool then attaches to whichever stale
-  # descriptor sorts last.
+pin_diagnostics_env() {
+  # Inspector control is owned by the AgencyZero Settings toggle. A QA or
+  # rescue launch may override it with `--blitz-control`; no descriptor
+  # environment variable is injected into a bundle.
   #
   # LSEnvironment is read by launchd from the bundle itself, so it holds for
   # every way the app can start. Applied here rather than in tauri.conf.json
@@ -68,7 +64,6 @@ pin_inspector_env() {
   plutil -insert LSEnvironment -xml \
     "<dict>
        <key>BLITZ_INCREMENTAL</key><string>1</string>
-       <key>TAURI_BLITZ_CONTROL_DESCRIPTOR</key><string>$repo_root/target/blitz-control.json</string>
        <key>BLITZ_FRAME_STATS</key><string>1</string>
        <key>BLITZ_FRAME_STATS_FILE</key><string>$repo_root/target/blitz-frame.log</string>
      </dict>" "$plist"
@@ -78,10 +73,10 @@ pin_inspector_env() {
   # without needing an identity.
   codesign --force --sign - --options runtime "$bundle" >/dev/null 2>&1
   codesign --verify --strict "$bundle" || {
-    echo "bundle signature is invalid after pinning the inspector env" >&2
+    echo "bundle signature is invalid after pinning diagnostics env" >&2
     exit 1
   }
-  echo "==> pinned inspector env in $(basename "$bundle")"
+  echo "==> pinned diagnostics env in $(basename "$bundle")"
 }
 
 # Ask a running copy of the bundle to quit, and wait for it to go.
@@ -283,7 +278,7 @@ case "$mode" in
     publish_bundle \
       "$repo_root/target/$rust_target/release/bundle/macos/AgencyZero.app" \
       "$repo_root/target/release/bundle/macos/AgencyZero.app"
-    pin_inspector_env "$repo_root/target/release/bundle/macos/AgencyZero.app"
+    pin_diagnostics_env "$repo_root/target/release/bundle/macos/AgencyZero.app"
     echo "$repo_root/target/release/bundle/macos/AgencyZero.app"
     ;;
   stable-hybrid)
@@ -310,7 +305,7 @@ case "$mode" in
     publish_bundle \
       "$repo_root/target/$rust_target/release/bundle/macos/AgencyZero.app" \
       "$repo_root/target/release/bundle/macos/AgencyZero Hybrid.app"
-    pin_inspector_env "$repo_root/target/release/bundle/macos/AgencyZero Hybrid.app"
+    pin_diagnostics_env "$repo_root/target/release/bundle/macos/AgencyZero Hybrid.app"
     echo "$repo_root/target/release/bundle/macos/AgencyZero Hybrid.app"
     ;;
   experimental)
@@ -329,7 +324,7 @@ case "$mode" in
     publish_bundle \
       "$repo_root/target/$rust_target/release/bundle/macos/AgencyZero Experimental.app" \
       "$repo_root/target/release/bundle/macos/AgencyZero Experimental.app"
-    pin_inspector_env "$repo_root/target/release/bundle/macos/AgencyZero Experimental.app"
+    pin_diagnostics_env "$repo_root/target/release/bundle/macos/AgencyZero Experimental.app"
     echo "$repo_root/target/release/bundle/macos/AgencyZero Experimental.app"
     ;;
   experimental-inspector)

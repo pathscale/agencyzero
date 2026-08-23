@@ -28,8 +28,8 @@ sample "$pid" "$seconds" 1 -f "$out/$label-sample.txt" >/dev/null 2>&1 &
 sampler=$!
 
 sleep 2
-TAURI_BLITZ_CONTROL_DESCRIPTOR="$repo_root/target/blitz-control.json" \
-  "${PS_QA:-$(dirname "$0")/../../ps-qa/target/release/ps-qa}" frames 2>&1 | tee "$out/$label-frames.txt"
+"${PS_QA:-$(dirname "$0")/../../ps-qa/target/release/ps-qa}" \
+  --descriptor "$repo_root/target/blitz-control.json" frames 2>&1 | tee "$out/$label-frames.txt"
 
 wait "$sampler"
 echo "wrote $out/$label-frames.txt and $out/$label-sample.txt"

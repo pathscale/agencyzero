@@ -220,9 +220,10 @@ words:
 `present_mode_from_env` at `:498` reads `BLITZ_PRESENT_MODE` and defaults to `AutoVsync`.
 The identical code and comment exist in
 `crates/anyrender_vello_hybrid/src/window_renderer.rs:556`. **Nothing in agencyzero sets
-that variable**: `scripts/local-delivery.sh:68` pins `BLITZ_INCREMENTAL`,
-`TAURI_BLITZ_CONTROL_DESCRIPTOR`, `BLITZ_FRAME_STATS` and `BLITZ_FRAME_STATS_FILE` into
-`LSEnvironment`, and not this one.
+that variable**: `scripts/local-delivery.sh` pins `BLITZ_INCREMENTAL`,
+`BLITZ_FRAME_STATS` and `BLITZ_FRAME_STATS_FILE` into `LSEnvironment`, and not
+this one. Inspector control is deliberately separate: Settings owns it, with
+`--blitz-control` as the rescue override.
 
 The root `Cargo.toml` already complains about it in a comment ("FIFO blocks the main thread
 in `present`, which stalls event handling for a whole refresh interval per frame") and

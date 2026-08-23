@@ -133,27 +133,26 @@ scripts/local-delivery.sh stable        # full gate, builds with blitz-inspector
 open -n /Users/revenge/code/agencyzero/target/release/bundle/macos/AgencyZero.app
 ```
 
-**No `--env` is needed any more.** `local-delivery.sh stable` writes
-`BLITZ_INCREMENTAL` and `TAURI_BLITZ_CONTROL_DESCRIPTOR` into the bundle's
-`Info.plist` under `LSEnvironment`, which launchd applies to every way the app
-can start, then re-signs the bundle.
+**No control environment is needed.** Enable inspection in Settings for the
+stable profile. `local-delivery.sh stable` writes only renderer diagnostics
+(`BLITZ_INCREMENTAL` and frame-stat settings) into the bundle's `Info.plist`,
+then re-signs the bundle.
 
-That replaces `open --env`, which reached neither launch that matters: a Finder
-launch, and the restart angel re-executing the binary after a rebuild (see
-[angel-restart.md](angel-restart.md)). Both start the process without the shell
-environment, the descriptor then lands in
-`$TMPDIR/tauri-blitz-agent/<instance>.json`, and tooling attaches to whichever
-stale file sorts last, which is how a probe ends up reading a dead pid.
+The Settings value survives both launches that matter: a Finder launch and the
+restart angel re-executing the binary after a rebuild (see
+[angel-restart.md](angel-restart.md)). The descriptor lands in
+`$TMPDIR/tauri-blitz-agent/<instance>.json`; ps-qa validates its PID during
+discovery and can pin a known instance with `--descriptor`.
 
-If you launch some other way, set the two variables yourself and check the `pid`
-in the descriptor against `pgrep` before trusting any number. Running the binary
-directly is also useful, because it is the only way to see `log-phase-times`
-output, which goes to stdout and is discarded by a Finder launch:
+For a disposable QA or rescue process, pass `--blitz-control`. Running the
+binary directly is also useful because it is the only way to see
+`log-phase-times` output, which goes to stdout and is discarded by a Finder
+launch:
 
 ```sh
 BLITZ_INCREMENTAL=1 \
-TAURI_BLITZ_CONTROL_DESCRIPTOR=/Users/revenge/code/agencyzero/target/blitz-control.json \
-  target/release/bundle/macos/AgencyZero.app/Contents/MacOS/az-gui > phases.log 2>&1 &
+  target/release/bundle/macos/AgencyZero.app/Contents/MacOS/az-gui \
+  --blitz-control > phases.log 2>&1 &
 ```
 
 Those lines are what attributed the typing cost to taffy:
