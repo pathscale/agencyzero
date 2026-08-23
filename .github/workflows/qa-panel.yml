@@ -142,7 +142,7 @@ jobs:
         run: |
           # Run from the repository root: the harness discovers ps-qa.ron and
           # tests/ps-qa/ relative to the working directory.
-          ps-qa qa ${{ inputs.group }} 2>&1 | tee /tmp/qa.txt
+          ps-qa --trace qa ${{ inputs.group }} 2>&1 | tee /tmp/qa.txt
 
       - name: Reachability inventory
         if: ${{ inputs.cover }}
