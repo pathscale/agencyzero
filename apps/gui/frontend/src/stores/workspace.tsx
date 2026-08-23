@@ -401,6 +401,8 @@ const HOME_TAB: Tab = {
   projectId: null,
   label: "Home",
   agent: "claude",
+  // Home sends no prompts; the field is inert here.
+  agentPinned: false,
   model: "sonnet",
   effort: FALLBACK_EFFORT,
   extraThinking: true,
@@ -1654,6 +1656,9 @@ function createWorkspace() {
       projectId: project.id,
       label: project.name,
       agent: selection.agent,
+      // A project's agent comes from its history or its parent, never from the
+      // current default, so it is never up for reconciliation.
+      agentPinned: true,
       model: selection.model,
       effort: "effort" in selection ? selection.effort : defaultEffort(),
       extraThinking:
@@ -2424,6 +2429,8 @@ function createWorkspace() {
           projectId: null,
           label: "Untitled",
           agent,
+          // Born following the default: nobody has picked yet.
+          agentPinned: false,
           model: defaultModel(),
           effort: defaultEffort(),
           extraThinking: prefs.lastExtraThinking,
@@ -2538,15 +2545,29 @@ function createWorkspace() {
        * having been ignored, which is what it looked like.
        */
       if (tab.kind === "draft") {
+        /*
+         * Except the agent, once it has been picked. Tracking the defaults is
+         * right for a draft that is still on them, but it used to move the
+         * agent too, so choosing Codex and then touching any setting sent the
+         * prompt to Claude.
+         */
+        const draftAgent = tab.agentPinned ? tab.agent : defaultAgent;
+        const draftSelection = settings.models[draftAgent] ?? selection;
         setState((d) => {
           Object.assign(d.tabs[index], {
-            agent: defaultAgent,
-            model: selection.default,
-            permission: compatiblePermission(
-              state.agents,
-              defaultAgent,
-              settings.defaultPermission,
-            ),
+            agent: draftAgent,
+            /*
+             * An unpinned draft takes the new default outright, which is what
+             * this branch exists for: choosing a default model with an Untitled
+             * tab open and finding it unchanged reads as the setting being
+             * ignored. A pinned one keeps the model that was picked alongside
+             * the agent, unless it has since been withdrawn.
+             */
+            model:
+              tab.agentPinned && draftSelection.enabled.includes(tab.model)
+                ? tab.model
+                : draftSelection.default,
+            permission: compatiblePermission(state.agents, draftAgent, settings.defaultPermission),
             effort: settings.defaultEffort,
           });
         });
@@ -2593,9 +2614,11 @@ function createWorkspace() {
       setState((d) => {
         Object.assign(
           d.tabs[index],
+          // Picked, so it stops following the default. Only a draft reads this;
+          // a project tab infers the same thing from its history.
           effort === undefined
-            ? { agent, model, permission: nextPermission }
-            : { agent, model, permission: nextPermission, effort },
+            ? { agent, agentPinned: true, model, permission: nextPermission }
+            : { agent, agentPinned: true, model, permission: nextPermission, effort },
         );
       });
     });

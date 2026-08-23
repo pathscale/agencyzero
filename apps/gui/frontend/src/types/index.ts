@@ -988,6 +988,22 @@ export interface Tab {
   label: string;
   /** Which CLI receives this tab's prompts. */
   agent: Agent;
+  /**
+   * Whether `agent` was picked in the composer rather than inherited from the
+   * default.
+   *
+   * A draft has no history, so it tracks the global defaults: change the
+   * default model and an Untitled tab follows it. That swept the agent along
+   * with the model, and any unrelated settings write, a theme change, a
+   * task-manager update, any backend `settings:updated`, reset a draft on Codex
+   * back to Claude. The pill re-rendered as Claude and the prompt went to
+   * Claude, which reads as the agent picker having been ignored.
+   *
+   * Project tabs already draw this distinction; they had a session's history to
+   * draw it from. A draft has nothing to infer from, so the choice is recorded
+   * when it is made.
+   */
+  agentPinned: boolean;
   /** The tab's model. Swapping it in the composer sticks until changed again. */
   model: string;
   /**
