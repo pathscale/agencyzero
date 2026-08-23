@@ -7,7 +7,7 @@ QA profile before changing any status.
 ## Current audit subject
 
 - AgencyZero: PR 186, app version 0.8.32
-- ps-qa: PR 7, version 0.3.0
+- ps-qa: PR 7 at `d70a93f`, version 0.3.0
 - blitz-control-protocol and tauri-runtime-blitz: PR 28, version 0.1.2
 - Checks: 23 in 9 groups
 
@@ -82,8 +82,7 @@ These are missing assertions, not application failures:
 
 ## Dependency delivery status
 
-ps-qa PR 7 is locally green with 28 tests and strict Clippy when patched to the
-checked-out protocol crate. Its hosted CI cannot resolve
-`blitz-control-protocol ^0.1.2` until tauri-runtime-blitz PR 28 is reviewed,
-merged and published. This packaging dependency does not block the local
-renderer audit.
+`blitz-control-protocol` and `tauri-runtime-blitz` 0.1.2 are published. ps-qa
+PR 7 is locally green with 29 tests and strict Clippy against the published
+protocol. TRB PR 29 adds Linux protocol and macOS runtime CI plus ordered crate
+publishing; both CI jobs are green.
