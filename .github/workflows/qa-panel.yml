@@ -49,6 +49,16 @@ jobs:
         with:
           bun-version: latest
 
+      # Application names and expectations remain in this repository; the
+      # harness supplies only generic node-addressed behavior. Parse them before
+      # spending minutes building or launching an app with an incompatible
+      # harness release.
+      - name: Install ps-qa
+        run: cargo install ps-qa --version 0.3.2
+
+      - name: Validate the QA profile and outcome manifest
+        run: ps-qa --app ps-qa.ron list --checks tests/ps-qa
+
       # The Rust binary embeds apps/gui/dist, which cargo does not build or
       # track. Build it explicitly so the audit never runs against a stale or
       # absent frontend.
@@ -66,11 +76,6 @@ jobs:
       # every check unable to see anything rather than with a real verdict.
       - name: Build az-gui with the inspector
         run: cargo build --features blitz-inspector --bin az-gui
-
-      # Application names and expectations remain in this repository; the
-      # harness supplies only generic node-addressed behavior.
-      - name: Install ps-qa
-        run: cargo install ps-qa --version 0.3.2
 
       - name: Scrubber unit tests
         run: cargo test --bin az-gui --features blitz-inspector qa_profile
