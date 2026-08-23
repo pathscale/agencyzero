@@ -87,13 +87,15 @@ release behavior. The status check now follows the exact clicked accessible
 name. The fork checks now pass on the released node-id action path; it is not a
 claimed UI regression.
 
-Run 32670085123 verified the corrected released harness/runtime path and clean
-process shutdown, but both rename outcomes remained red. ps-qa 0.3.2 reported
+Runs 32670085123 and 32670673970 verified the corrected released
+harness/runtime path and clean process shutdown, but both rename outcomes
+remained red. ps-qa 0.3.2 reported
 the decisive distinction: each hidden 0x0 textbox still had a painted rename
 button of the same name after node-id activation. The handler therefore did not
 enter edit state; this is an application action regression, not a layout-only
-failure. `EditableTitle` now uses one explicit `Show` state transition and a
-direct `onClick={start}` handler for both call sites. Its live rerun is pending.
+failure. `EditableTitle` now uses one explicit `Show` state transition and the
+inline `onClick={() => start()}` boundary previously proven by the live
+renderer for both call sites. Its live rerun is pending.
 
 ## Manual release worklist
 
