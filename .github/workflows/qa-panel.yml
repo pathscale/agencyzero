@@ -8,15 +8,15 @@ name: QA panel
 # release bundle), and it takes minutes rather than seconds. Running it on every
 # push would make the expensive half of CI the common case.
 #
-# It is also not yet a gate. 18 of 345 controls have a real assertion and two
-# checks fail for reasons that are not application bugs, so a red run here means
-# "look at this", not "the branch is broken". `continue-on-error` keeps it
-# advisory until the inventory in tests/ps-qa/issues.md says otherwise.
+# It is also not yet a gate. The 23 outcome checks do not cover every control,
+# so a red run here means "look at this", not "the branch is broken".
+# `continue-on-error` keeps it advisory until the inventory in
+# tests/ps-qa/issues.md says otherwise.
 on:
   workflow_dispatch:
     inputs:
       group:
-        description: 'Check group to run (blank = all 18). One of: icons hover status sections tasklog rename dialog delete'
+        description: 'Check group to run (blank = all 23). One of: icons hover status sections tasklog rename dialog delete settings'
         required: false
         type: string
       cover:
