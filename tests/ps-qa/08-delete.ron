@@ -12,4 +12,14 @@
         subject: "Confirm delete: e756",
         expect: Paints,
     ),
+    (
+        id: "delete-cancel-restores-row",
+        group: "delete",
+        what: "Cancel exits project deletion without removing the row",
+        open: Some("Delete e756"),
+        hover: None,
+        click: Some("Cancel"),
+        subject: "Confirm delete: e756",
+        expect: Vanishes,
+    ),
 ]
