@@ -840,16 +840,11 @@ function TaskManagerStatus(): JSX.Element {
 /**
  * One item row inside a Home project group.
  *
- * The row keeps the header's contract — single click folds, double click
- * opens the tab — and status still cannot be changed here. But the *title* is
- * editable in place, by owner request: the harvested lists are read and
- * corrected on Home, and "go open the project tab to fix a typo" was a rule
- * serving the doctrine rather than the person. The pencil reveals on hover
- * and is its own sibling control, so editing never triggers fold or open.
+ * The item title opens its project with an ordinary click, while the pencil
+ * edits in place and the marker changes status. Each action has one control.
  */
 function GroupItemRow(props: {
   item: ProjectItem;
-  onFold: () => void;
   onOpen: () => void;
   /** Cycles through every owner-visible status, from the marker. */
   onAdvance: () => void;
@@ -988,8 +983,7 @@ function GroupItemRow(props: {
           </Button>
           <Button
             type="button"
-            onClick={props.onFold}
-            onDblClick={props.onOpen}
+            onClick={props.onOpen}
             class="flex min-w-0 flex-1 items-baseline gap-2.5 text-left"
           >
             <span
@@ -1284,22 +1278,6 @@ function ProjectGroup(props: {
 
   const collapsed = () => prefs.collapsedGroups.includes(props.project.id);
 
-  /*
-   * Single click folds, double click opens — distinguished by a short timer,
-   * not by luck. Folding immediately on the first click would hide an item
-   * row before the second click of a double could land on it, so the fold
-   * waits long enough for a double-click to claim the gesture.
-   */
-  let clickTimer: number | undefined;
-  const foldSoon = (): void => {
-    window.clearTimeout(clickTimer);
-    clickTimer = window.setTimeout(toggleCollapsed, 230);
-  };
-  const openNow = (): void => {
-    window.clearTimeout(clickTimer);
-    actions.openProject(props.project.id);
-  };
-
   const toggleCollapsed = (): void => {
     setPrefs((d) => {
       d.collapsedGroups = collapsed()
@@ -1320,47 +1298,16 @@ function ProjectGroup(props: {
       data-project-id={props.project.id}
       class="flex-none overflow-hidden rounded-xl border border-az-hairline-soft bg-base-300"
     >
-      {/*
-        Single click folds, double click opens the tab. The two coexist
-        without timers: a double-click fires two clicks first, which toggle
-        the fold there and back, and then the open lands. The row controls
-        (pencil, pin, delete, chevron) stop propagation to stay themselves.
-      */}
-      {/* biome-ignore lint/a11y/useSemanticElements: the header carries its own buttons (pencil, pin, delete), and nesting those in a native button is invalid HTML — the same split SectionPanel makes. */}
-      {/* biome-ignore lint/a11y/useFocusableInteractive: `tabindex` is here and is a string, which is how Solid 2 types DOM attributes; the rule only recognises the numeric form. */}
-      <div
-        role="button"
-        tabindex="0"
-        aria-expanded={!collapsed() ? "true" : "false"}
-        onClick={foldSoon}
-        onDblClick={openNow}
-        onKeyDown={(event) => {
-          if (event.key === "Enter" || event.key === " ") {
-            event.preventDefault();
-            toggleCollapsed();
-          }
-        }}
-        class="flex cursor-pointer items-center gap-2.5 px-3.5 py-2.5 transition-colors hover:bg-white/4"
-      >
-        {/*
-          The name is its own control now, not part of the open-project button:
-          a pencil nested inside a button would open the project on the way to
-          editing it.
-        */}
+      <div class="flex items-center gap-2.5 px-3.5 py-2.5 transition-colors hover:bg-white/4">
         <Icon name="folder-git-2" class="shrink-0 text-[15px] text-primary" />
         <EditableTitle
           value={props.project.name}
           onRename={(name) => actions.renameProject(props.project.id, name)}
+          onActivate={() => actions.openProject(props.project.id)}
           label={`Rename ${props.project.name}`}
           class="min-w-0 font-semibold text-[13px] text-base-content"
           inputClass="font-semibold text-[13px]"
         />
-        {/*
-          A plain stretch, deliberately. This used to be an "Open" button, and
-          because it fills the header between name and pin, a single click
-          almost anywhere on the row kept opening the project after the
-          fold/double-click contract landed. The header owns the gesture now.
-        */}
         <span class="flex min-w-0 flex-1 items-center gap-2.5">
           <span class={`shrink-0 text-[11.5px] ${STATUS_TONE[props.project.status]}`}>
             {statusSuffix(props.project.status)}
@@ -1370,10 +1317,7 @@ function ProjectGroup(props: {
 
         <Button
           type="button"
-          onClick={(event) => {
-            event.stopPropagation();
-            void actions.setProjectPinned(props.project.id, !props.project.pinned);
-          }}
+          onClick={() => void actions.setProjectPinned(props.project.id, !props.project.pinned)}
           aria-pressed={props.project.pinned ? "true" : "false"}
           aria-label={props.project.pinned ? tx("Unpin project") : tx("Pin project")}
           class={`shrink-0 transition-colors ${props.project.pinned ? "text-primary" : "text-az-ghost hover:text-az-strong"}`}
@@ -1393,10 +1337,7 @@ function ProjectGroup(props: {
           fallback={
             <Button
               type="button"
-              onClick={(event) => {
-                event.stopPropagation();
-                setConfirming(true);
-              }}
+              onClick={() => setConfirming(true)}
               aria-label={tx("Delete {name}", { name: props.project.name })}
               class="shrink-0 text-az-ghost transition-colors hover:text-error"
             >
@@ -1431,10 +1372,17 @@ function ProjectGroup(props: {
           </div>
         </Show>
 
-        <Icon
-          name={collapsed() ? "chevron-right" : "chevron-down"}
-          class="shrink-0 text-[14px] text-az-dim"
-        />
+        <Button
+          type="button"
+          onClick={toggleCollapsed}
+          aria-expanded={!collapsed() ? "true" : "false"}
+          aria-label={tx(collapsed() ? "Expand {name}" : "Collapse {name}", {
+            name: props.project.name,
+          })}
+          class="shrink-0 text-az-dim transition-colors hover:text-az-body"
+        >
+          <Icon name={collapsed() ? "chevron-right" : "chevron-down"} class="text-[14px]" />
+        </Button>
       </div>
 
       {/*
@@ -1453,8 +1401,7 @@ function ProjectGroup(props: {
                 item={item}
                 descriptionOpen={props.descriptionItemId === item.id}
                 onDescriptionItemChange={props.onDescriptionItemChange}
-                onFold={foldSoon}
-                onOpen={openNow}
+                onOpen={() => actions.openProject(props.project.id)}
                 onAdvance={() => {
                   /*
                    * The same ladder the project panel walks. Home had its own,
