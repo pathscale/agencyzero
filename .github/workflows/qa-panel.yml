@@ -106,6 +106,17 @@ jobs:
           fi
           sleep 10
 
+      - name: Verify tree integrity
+        run: |
+          ps-qa find '*' --role button --hidden --painted --count \
+            --descriptor "$PWD/target/blitz-control.json" 2>&1 | tee /tmp/hidden-painted.txt
+          if ! grep -Eq '^matched:[[:space:]]*0$' /tmp/hidden-painted.txt; then
+            echo "hidden painted buttons make semantic audit results ambiguous" >&2
+            exit 1
+          fi
+          ps-qa ghost \
+            --descriptor "$PWD/target/blitz-control.json" 2>&1 | tee /tmp/ghost.txt
+
       - name: Run the checks
         id: checks
         continue-on-error: true
@@ -165,6 +176,8 @@ jobs:
           name: qa-panel-logs
           path: |
             /tmp/az-qa.log
+            /tmp/hidden-painted.txt
+            /tmp/ghost.txt
             /tmp/qa.txt
             /tmp/cover.txt
           if-no-files-found: ignore
