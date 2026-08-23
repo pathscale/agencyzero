@@ -1,0 +1,21 @@
+// Response verbosity is a value-bearing slider: when it works its geometry is
+// unchanged, but its semantic value advances. The key is focused and delivered
+// through the slider's node id. Backend coverage separately proves that the
+// selected level is appended to resumed provider turns.
+[
+    (
+        id: "verbosity-slider-changes",
+        group: "verbosity",
+        what: "project response verbosity changes through its rendered slider",
+        open: Some("theta theta north indi"),
+        hover: None,
+        click: None,
+        type_into: None,
+        text: None,
+        key: Some("Right"),
+        key_on: Some("Response verbosity for this project"),
+        compare: None,
+        subject: "Response verbosity for this project",
+        expect: ValueChanges,
+    ),
+]
