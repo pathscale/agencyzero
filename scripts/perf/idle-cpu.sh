@@ -67,13 +67,12 @@ sample() {
 bench() { (cd "$repo" && "${PS_QA:-$(dirname "$0")/../../ps-qa/target/release/ps-qa}" "$@" >/dev/null 2>&1); }
 
 log=$(mktemp -t azidle)
-# The environment local-delivery.sh pins into the bundle's LSEnvironment, so a
-# bare binary is measured under the same settings the owner's app runs with.
+# Performance instrumentation remains environment-driven; inspector control
+# does not. The explicit rescue flag makes this disposable process attachable.
 BLITZ_INCREMENTAL=1 \
-    TAURI_BLITZ_CONTROL_DESCRIPTOR="$repo/target/blitz-control.json" \
     BLITZ_FRAME_STATS=1 \
     BLITZ_FRAME_STATS_FILE="$repo/target/blitz-frame.log" \
-    "$bin" >"$log" 2>&1 &
+    "$bin" --blitz-control >"$log" 2>&1 &
 pid=$!
 trap 'kill -TERM "$pid" 2>/dev/null' EXIT
 sleep 25

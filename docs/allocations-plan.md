@@ -51,11 +51,14 @@ returns the first whose pid is actually running. Only when none is live does it
 fall back to the most recent, which is the case `warn_if_stale` already
 described at the call site.
 
-The override still works and still wins, for a build launched by hand:
+The rescue override still works and still wins, for a build launched by hand:
 
 ```bash
-TAURI_BLITZ_CONTROL_DESCRIPTOR=/Users/revenge/code/agencyzero/target/blitz-control.json
+target/release/az-gui --blitz-control
 ```
+
+The stable app uses Settings → Enable inspection and agent control. Tools may
+pin a discovered instance with their own `--descriptor` CLI option.
 
 **Result:** the failure was real and immediate — the first `blitz-bench layout`
 run of the day picked a descriptor naming pid 19991, printed a warning that it

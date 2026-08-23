@@ -77,16 +77,16 @@ Each of these produced a confident, wrong conclusion before it was caught.
    and everything done before it. `blitz-bench type` reports the delta across
    the run; without a delta the first reading said typing cost 198 ms, and the
    truth was 22 ms with the rest belonging to earlier shortcuts.
-8. **The probe attaches to whichever descriptor sorts last.** Unpinned, the
-   descriptor lands in `$TMPDIR/tauri-blitz-agent/<instance>.json`, and after a
-   few runs the newest file can belong to a dead pid. Inspector bundles now pin
-   `TAURI_BLITZ_CONTROL_DESCRIPTOR` via `LSEnvironment` so this cannot happen;
-   if you launch some other way, set it explicitly and check the `pid` in the
-   descriptor against `pgrep` before believing any number.
+8. **The probe must validate the discovered descriptor.** Descriptors land in
+   `$TMPDIR/tauri-blitz-agent/<instance>.json`, and after a few runs a file can
+   belong to a dead pid. ps-qa validates the PID during discovery; a benchmark
+   that needs one exact process passes its descriptor through the tool's
+   `--descriptor` CLI option. Agency control itself comes from Settings or the
+   explicit `--blitz-control` rescue flag, never an environment variable.
 9. **Editing `Info.plist` after bundling breaks the app.** It invalidates the
    ad-hoc signature and macOS then refuses to launch it at all: `open` fails
    with `-54` and nothing starts. `local-delivery.sh` re-signs and verifies
-   after pinning the env, and anything else that touches a built bundle must do
+   after pinning diagnostics, and anything else that touches a built bundle must do
    the same.
 10. **A build only reaches the app if the `[patch]` paths point at the checkout
     you edited.** The engine is consumed by path from the root `Cargo.toml`. Two

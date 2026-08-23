@@ -140,22 +140,21 @@ target/release/bundle/macos/AgencyZero Experimental.app
 
 Quit the existing process for that profile first. Both old and new local builds
 may report the same app version, so always restart the canonical bundle path,
-not an `/Applications` copy or the target-triple intermediate. To make the
-descriptor location deterministic, launch through LaunchServices with:
+not an `/Applications` copy or the target-triple intermediate. For a rescue or
+QA session, launch through LaunchServices with the explicit override:
 
 ```sh
 open -n \
-  --env TAURI_BLITZ_CONTROL_DESCRIPTOR="$PWD/target/blitz-control.json" \
   "$PWD/target/release/bundle/macos/AgencyZero.app" \
   --args --blitz-control
 ```
 
 Do not execute `Contents/MacOS/az-gui` directly. On current macOS that process
 can abort inside AppKit application registration; LaunchServices may then open
-a replacement process without the environment, which looks healthy but never
-publishes the descriptor.
+a replacement process, which looks healthy but may not carry the CLI override.
 
-Enable Settings → Local Blitz control after launch. The descriptor is mode
+For ordinary stable-profile use, enable Settings → Local Blitz control instead
+of passing the flag. The descriptor is mode
 `0600` and contains the PID, `unix://` socket address, protocol version,
 instance id, and renderer revision. The server accepts multiple local clients.
 
