@@ -43,6 +43,7 @@ jobs:
 
       - run: bun run typecheck
       - run: bun run lint
+      - run: bun run lint:ui-controls
       - run: bun run build
 
   rust:
