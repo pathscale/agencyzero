@@ -35,6 +35,16 @@ If any row fails, fix or explain the measurement blocker and restart the app.
 Do not interpret `qa`, `audit` or `cover` while ghost subtrees can satisfy name
 lookups.
 
+## Resolved launch blockers
+
+- Run 32636554882 could not build because the configured `agency-proxy`
+  sidecar had not been staged. The workflow now calls the repository's staging
+  script before compiling the GUI.
+- Run 32637260189 built and launched, then TRB 0.1.2 tried to allocate the
+  macOS-26-only `NSGlassEffectView` on a macOS 14 runner and panicked before
+  ps-qa attached. TRB PR 30 guards class availability and falls back to
+  vibrancy. That run produced no tree or component verdict.
+
 ## Outcome checks
 
 `ps-qa list` currently loads:
