@@ -7,9 +7,9 @@
         open: Some("Home"),
         hover: None,
         click: Some("Delete e756"),
-        // The confirmation appears *in* the row, so the row's own name grows the
-        // prompt. Absence of that is a delete that fired.
-        subject: "Delete?",
+        // Assert the unique semantic confirmation control, not nearby prose.
+        // Plain text is not guaranteed to become an accessibility node.
+        subject: "Confirm delete: e756",
         expect: Paints,
     ),
 ]

@@ -1351,6 +1351,7 @@ function ProjectGroup(props: {
               type="button"
               onClick={() => void remove()}
               disabled={isDeleting()}
+              aria-label={`${tx("Confirm delete")}: ${props.project.name}`}
               // Spells out that this cleans up rather than orphans: the backend
               // deletes the project's messages, items, PRs, agent I/O, message
               // overflow and session keys. Only the usage ledger is kept on
