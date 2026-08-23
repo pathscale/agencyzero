@@ -1,12 +1,11 @@
 // Settings: the surface that had fourteen controls and no checks at all.
 //
-// # Why these count menu entries instead of naming one
+// # Menu entry names
 //
-// Every control here opens a dropdown, and **not one menu entry has an
-// accessible name**: every menuitem row ends at `content=` with nothing after
-// it. `PaintsNamed` cannot be written for any of them, because there is no name
-// to match. A menu a screen reader cannot announce is a menu nobody can use
-// without sight, and it is the same defect that leaves 70 buttons unreachable.
+// Every control here opens a dropdown. Agency's PillMenu supplies an explicit
+// accessible name for each entry, so those checks name a concrete option rather
+// than accepting any anonymous `menuitem`. The shared language switcher is kept
+// as a painted-count assertion until its library entries expose the same name.
 //
 // # Why PaintsMore and not a count of the tree
 //
@@ -15,16 +14,6 @@
 // laid out at 0x0 rather than removed. A tree count therefore rises whether or
 // not the control did anything. Painted entries are stable: 0 with every menu
 // closed, 6 with one open.
-//
-// # settings-agent-menu fails, and the control is fine
-//
-// It reports `6 -> 2`: fewer entries painting after the press than before, which
-// is what pressing a control looks like while another menu is already open. It
-// fails identically run alone on a freshly restored profile, so the open menu
-// comes from its own arrival step. Driven by hand from a clean surface the
-// control is correct, 0 painting before and 2 after. Left failing on purpose:
-// deleting it hides the arrival bug, and a `Holds` would let a genuinely broken
-// dropdown pass.
 //
 // # Not covered
 //
@@ -49,8 +38,8 @@
         open: Some("Settings"),
         hover: None,
         click: Some("Default agent"),
-        subject: "menuitem",
-        expect: PaintsMore,
+        subject: "menuitem:Claude",
+        expect: PaintsNamed,
     ),
     (
         id: "settings-effort-menu",
@@ -59,8 +48,8 @@
         open: Some("Settings"),
         hover: None,
         click: Some("Default effort"),
-        subject: "menuitem",
-        expect: PaintsMore,
+        subject: "menuitem:medium",
+        expect: PaintsNamed,
     ),
     (
         id: "settings-permission-menu",
@@ -69,7 +58,7 @@
         open: Some("Settings"),
         hover: None,
         click: Some("Default permission"),
-        subject: "menuitem",
-        expect: PaintsMore,
+        subject: "menuitem:Read-only",
+        expect: PaintsNamed,
     ),
 ]

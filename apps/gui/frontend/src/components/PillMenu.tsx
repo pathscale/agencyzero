@@ -72,6 +72,7 @@ export function PillMenu<T extends string>(props: PillMenuProps<T>): JSX.Element
         <For each={props.options}>
           {(option) => (
             <Dropdown.Item
+              aria-label={option.label}
               onClick={() => props.onChange(option.value)}
               class={`flex w-full flex-col items-start gap-0.5 rounded-lg px-3 py-2 text-left transition-colors hover:bg-white/5 ${
                 option.value === props.value ? "text-primary" : "text-az-body"
