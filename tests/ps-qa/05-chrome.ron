@@ -1,0 +1,45 @@
+// Shell and list chrome must expose the inverse control after each toggle.
+// These assertions use the accessible name, so a preference write without a
+// rendered response stays red.
+[
+    (
+        id: "chrome-hide-project-sidebar",
+        group: "chrome",
+        what: "the project sidebar can be hidden",
+        open: Some("theta theta north indi"),
+        hover: None,
+        click: Some("Hide the project sidebar"),
+        subject: "Show the project sidebar",
+        expect: Paints,
+    ),
+    (
+        id: "chrome-show-project-sidebar",
+        group: "chrome",
+        what: "the project sidebar can be restored",
+        open: Some("theta theta north indi"),
+        hover: None,
+        click: Some("Show the project sidebar"),
+        subject: "Hide the project sidebar",
+        expect: Paints,
+    ),
+    (
+        id: "chrome-home-sort-direction",
+        group: "chrome",
+        what: "Home reverses its project sort direction",
+        open: Some("Home"),
+        hover: None,
+        click: Some("Sort ascending"),
+        subject: "Sort descending",
+        expect: Paints,
+    ),
+    (
+        id: "chrome-home-sort-restores",
+        group: "chrome",
+        what: "Home can restore its project sort direction",
+        open: Some("Home"),
+        hover: None,
+        click: Some("Sort descending"),
+        subject: "Sort ascending",
+        expect: Paints,
+    ),
+]

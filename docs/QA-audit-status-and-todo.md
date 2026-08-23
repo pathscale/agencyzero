@@ -9,18 +9,17 @@ Updated 2026-08-23. The repeatable procedure is
 - AgencyZero PR 186 unmounts every inactive top-level surface. It also keeps
   the legacy frontend unit suite manual and preserves typecheck, lint and the
   production frontend build as automatic CI.
-- tauri-runtime-blitz PR 30 carries the node-addressed control protocol,
+- tauri-runtime-blitz 0.1.5 carries the node-addressed control protocol,
   reusable glass support and the macOS availability fallback. Click activation
   targets the selected semantic node directly; coordinates do not select or
   retarget a control.
-- ps-qa PR 8 provides node-addressed actions, role inventory, modal dismissal,
+- ps-qa 0.3.2 provides node-addressed actions, role inventory, modal dismissal,
   nested-scroll reveal and isolated-control classification. AgencyZero's checks
   omit coordinate `press`, so this application uses semantic activation only.
 
-The runtime and protocol changes are versioned as 0.1.4 but are not yet
-published. The manual workflow pins TRB PR 30 at `e0086bf` and ps-qa PR 8 at
-`3c6bec3`; ps-qa has 35 passing tests and a green strict-Clippy gate. Remove
-those Git pins only after the matching crates are published and locked.
+The workflow consumes published crates only: `tauri-runtime-blitz` and
+`blitz-control-protocol` 0.1.5, ps-qa 0.3.2, PromptSyntax 0.2.0 and PathScale
+UI 2.9.1. There are no audit-only Git dependency patches.
 
 ## Evidence contract
 
