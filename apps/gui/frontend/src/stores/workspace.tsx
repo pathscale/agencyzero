@@ -1947,10 +1947,9 @@ function createWorkspace() {
     });
 
     await bind("run:ready", ({ projectId }) => {
-      // A send in the narrow startup window is queued because the run owns its
-      // slot before its interactive channel exists. This event is the missing
-      // release cue: preserve order and inject as soon as the backend says the
-      // channel is ready, without waiting for the whole turn to stop.
+      // Drain anything retained from an older build or a transient refusal as
+      // soon as the live channel is ready. New Codex messages are accepted by
+      // the backend during startup and wait on its ordered steer channel.
       if ((state.queued[projectId] ?? []).length > 0) {
         void flushQueue(projectId, 0, true);
       }
@@ -2910,7 +2909,10 @@ function createWorkspace() {
         runningAgent !== undefined &&
         capabilitiesFor(runningAgent)?.liveFollowUp
       ) {
-        void flushQueue(projectId, 0, true);
+        // Let the enqueue write land before the drain snapshots the queue.
+        // Starting immediately let `flushQueue` overwrite a concurrently
+        // appended second correction with its older one-row snapshot.
+        window.setTimeout(() => void flushQueue(projectId, 0, true), 0);
       }
       return;
     }
@@ -3008,6 +3010,12 @@ function createWorkspace() {
         next.replyQuestionId,
         next.itemId,
       );
+      // A live interactive turn can take every waiting correction in order.
+      // Previously only the first was flushed; later messages remained under
+      // a queue badge until another lifecycle event happened to wake them.
+      if (allowLiveFollowUp && (state.queued[projectId] ?? []).length > 0) {
+        window.setTimeout(() => void flushQueue(projectId, 0, true), 0);
+      }
     } catch (cause) {
       setState((d) => {
         d.queued[projectId] = ((rest = []) => [next, ...rest])(d.queued[projectId]);

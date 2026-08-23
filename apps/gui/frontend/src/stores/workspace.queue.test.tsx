@@ -85,6 +85,28 @@ describe("queued live follow-ups", () => {
     expect(workspace.state.queued.quux).toHaveLength(0);
   });
 
+  it("drains every ordered Codex steer instead of leaving later messages queued", async () => {
+    const workspace = await mountWorkspace();
+    queueHarness.handlers.get("run:accepted")?.({
+      projectId: "quux",
+      agent: "codex",
+      model: "gpt-5.6-sol",
+      permission: "auto",
+    });
+
+    await workspace.actions.send("quux", "first correction");
+    await workspace.actions.send("quux", "second correction");
+
+    await waitFor(() => expect(queueHarness.send).toHaveBeenCalledTimes(3));
+    expect(workspace.state.queued.quux).toHaveLength(0);
+    expect(queueHarness.send.mock.calls[1]?.[0]).toEqual(
+      expect.objectContaining({ body: "first correction" }),
+    );
+    expect(queueHarness.send.mock.calls[2]?.[0]).toEqual(
+      expect.objectContaining({ body: "second correction" }),
+    );
+  });
+
   it("retries the persisted user row instead of appending the prompt again", async () => {
     const workspace = await mountWorkspace();
 
