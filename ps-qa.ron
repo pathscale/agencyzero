@@ -21,6 +21,10 @@ AppProfile(
     // because a tab's accessible name repeats its label (`HomeHome`).
     permanent_surfaces: ["Home", "Settings", "Analytics"],
 
+    // Alternate navigation entry points. They are exercised when opening the
+    // destination surface, never halfway through a source-surface plan.
+    navigation_controls: ["Open Settings"],
+
     // Collapsible headers, by label without the count.
     //
     // Getting this list wrong is expensive rather than cosmetic: a collapse
