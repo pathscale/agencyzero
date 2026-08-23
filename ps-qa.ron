@@ -47,6 +47,7 @@ AppProfile(
     fold_prefixes: ["Collapse ", "Hide "],
     deferred_controls: [
         "New project",
+        "Start fork",
         "Welcome Tutorial",
         "Restart",
         "Reset all",

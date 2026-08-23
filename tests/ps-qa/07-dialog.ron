@@ -30,4 +30,14 @@
         subject: "Start fork",
         expect: Vanishes,
     ),
+    (
+        id: "dialog-starts-fork",
+        group: "dialog",
+        what: "starting a fork closes the dialog and opens a new project tab",
+        open: Some("Fork "),
+        hover: None,
+        click: Some("Start fork"),
+        subject: "Close ",
+        expect: Grows,
+    ),
 ]
