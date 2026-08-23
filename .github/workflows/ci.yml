@@ -25,6 +25,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Keep AgencyZero QA actions semantic
+        working-directory: .
+        run: |
+          if grep -nE 'press:[[:space:]]*true' tests/ps-qa/*.ron; then
+            echo 'AgencyZero ps-qa checks must use semantic node activation.' >&2
+            exit 1
+          fi
+
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest

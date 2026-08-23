@@ -12,8 +12,9 @@ Updated 2026-08-23. The repeatable procedure is
 - tauri-runtime-blitz PR 28 adds node-addressed click, double-click and hover.
   Click activation targets the selected semantic node directly; coordinates
   do not select or retarget a control.
-- ps-qa PR 7 uses those node-addressed actions throughout. `press` and the
-  per-check `press` flag no longer exist.
+- ps-qa PR 7 adds node-addressed actions without deleting the generic
+  coordinate `press` command or per-check option. AgencyZero's checks omit
+  `press`, so this application uses semantic activation only.
 
 The runtime and harness changes are versioned as 0.1.2 and 0.3.0. ps-qa CI
 cannot resolve `blitz-control-protocol ^0.1.2` from crates.io until PR 28 is
@@ -33,6 +34,10 @@ An automated UI result is evidence only when it:
 For repeated row controls, use `ps-qa find` to list every matching semantic id,
 then `ps-qa click --id <id>` for the intended row. A name alone is not a unique
 selector in a table.
+
+This is an AgencyZero suite invariant, not a restriction on the generic
+harness. ps-qa retains coordinate-pointer activation for applications and
+diagnostics that explicitly opt into that path.
 
 ## Audit order
 
