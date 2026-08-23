@@ -26,4 +26,14 @@
         subject: "Copy this task-log entry",
         expect: PaintsMore,
     ),
+    (
+        id: "tasklog-clear",
+        group: "tasklog",
+        what: "clearing the task log removes its rendered rows",
+        open: Some("theta theta north indi"),
+        hover: None,
+        click: Some("Clear"),
+        subject: "Copy this task-log entry",
+        expect: Vanishes,
+    ),
 ]
