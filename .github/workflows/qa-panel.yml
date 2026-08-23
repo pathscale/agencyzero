@@ -35,7 +35,9 @@ jobs:
     # macOS because the harness needs a window server. There is no headless
     # path: the whole point is to ask the compositor what it actually drew.
     runs-on: macos-14
-    timeout-minutes: 45
+    # A full instance-level sweep drives roughly 475 controls after a 10-minute
+    # build. Keep enough room for every Home row and guaranteed process cleanup.
+    timeout-minutes: 75
     steps:
       - uses: actions/checkout@v4
 
