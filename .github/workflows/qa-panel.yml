@@ -105,9 +105,10 @@ jobs:
         id: integrity
         continue-on-error: true
         run: |
+          set -o pipefail
           integrity=0
           ps-qa find '*' --role button --hidden --painted \
-            2>&1 | tee /tmp/hidden-painted.txt
+            2>&1 | tee /tmp/hidden-painted.txt || integrity=1
           if ! grep -Eq '^matched:[[:space:]]*0$' /tmp/hidden-painted.txt; then
             echo "hidden painted buttons make semantic audit results ambiguous" >&2
             integrity=1
