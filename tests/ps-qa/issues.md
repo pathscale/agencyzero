@@ -16,6 +16,10 @@ The current run must use `--features blitz-inspector`, the explicit
 addressed by semantic node id. Coordinate pointer activation is not valid audit
 evidence.
 
+ps-qa still provides generic coordinate `press` diagnostics. AgencyZero's RON
+checks intentionally omit `press`; this application must use semantic actions
+and explicit accessible names, resolving repeated rows to an exact node id.
+
 ## Required blocker checks
 
 Record these before any component verdict:

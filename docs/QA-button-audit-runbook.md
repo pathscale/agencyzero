@@ -126,8 +126,10 @@ Checks live in `tests/ps-qa/*.ron`:
 )
 ```
 
-There is no `press` flag. Activation always includes the full mouse-compatible
-event sequence at the selected node id.
+AgencyZero checks omit `press` and always use semantic node activation. The
+generic ps-qa `press` command and `press: true` check option remain available
+for other applications and pointer-path diagnostics; they are deliberately not
+used by this suite.
 
 Mutation-test every check: reintroduce the defect, confirm red, restore it, and
 confirm green. A check that has only passed has not proved that it can detect
