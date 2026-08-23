@@ -4420,7 +4420,8 @@ checksum = "3d595e54a326bc53c1c197b32d295e14b169e3cfeaa8dc82b529f947fba6bcf5"
 [[package]]
 name = "promptsyntax"
 version = "0.1.1"
-source = "git+https://github.com/pathscale/PromptSyntax-rs.git?rev=02be3b1#02be3b17135a4106e4744ea798e60523dfa1f5b4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1f2fae148ba0c5151e920b16716d3caccc25013cf700980e9e6fea267e356427"
 dependencies = [
  "serde",
  "unicode-ident",
