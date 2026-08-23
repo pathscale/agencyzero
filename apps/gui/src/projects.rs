@@ -3681,7 +3681,7 @@ fn state_snapshot(
          <ps @agency:items.retire(id: \"<id>\")>\n\
          <ps @agency:settings.update(key: \"theme.accent\", value: \"#2196F3\")>\n\
          <ps @agency:ask(text: \"<your question>\", urgency: \"blocking\")>\n\
-         <ps @agency:pr.link(url: \"https://github.com/owner/repo/pull/66\", item: \"<id>\")>\n\
+         <ps @agency:pr.link(url: \"https://github.com/owner/repo/pull/66\")> (add item: \"<id>\" only to attach; omit it instead of sending an empty value)\n\
          <ps @agency:pr.retire(id: \"<pr association id>\")>\n\
          <ps @agency:issue.link(url: \"https://github.com/owner/repo/issues/42\", item: \"<id>\")>\n\
          <ps @agency:app.restart(mode: \"disk\")>",

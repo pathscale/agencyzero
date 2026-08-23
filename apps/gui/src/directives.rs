@@ -371,7 +371,9 @@ fn from_reference(reference: &Reference) -> Option<Directive> {
         let number = arg(args, "number")
             .map(|number| number.trim_start_matches('#').to_string())
             .filter(|number| !number.is_empty());
-        let item = arg(args, "item").filter(|item| !item.is_empty());
+        let item = arg(args, "item")
+            .map(|item| item.trim().to_string())
+            .filter(|item| !item.is_empty());
         return (url.is_some() || (number.is_some() && item.is_some()))
             .then_some(Directive::PrLink { url, number, item });
     }
@@ -627,6 +629,16 @@ mod tests {
             })
         );
         assert!(parse(r#"<ps @agency:pr.link(number: 76)>"#).is_none());
+        assert_eq!(
+            parse(&format!(
+                r#"<ps @agency:pr.link(url: "{url}", item: "   ")>"#
+            )),
+            Some(Directive::PrLink {
+                url: Some(url.into()),
+                number: None,
+                item: None,
+            })
+        );
     }
 
     #[test]
