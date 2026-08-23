@@ -1,8 +1,8 @@
 // The in-place rename editor opens when its pencil is pressed.
 //
-// Both call sites use the same ordinary controlled-input pattern: semantic
-// button click, mounted field wrapper, explicit input ref, and queued
-// focus/select after the field exists. No pointer-only event path is involved.
+// Both call sites use the same controlled input. The semantic node-addressed
+// activation delivers the ordinary mouse-down/click sequence to that button;
+// coordinates are never used to select or retarget it.
 //
 // The subject is `textbox:<name>` rather than the name alone, because
 // EditableTitle gives the pencil and its editor the same accessible name: a

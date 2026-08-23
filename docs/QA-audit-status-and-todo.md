@@ -19,7 +19,7 @@ Updated 2026-08-23. The repeatable procedure is
 
 The runtime and protocol changes are versioned as 0.1.4 but are not yet
 published. The manual workflow pins TRB PR 30 at `7b44cd6` and ps-qa PR 8 at
-`df86288`; ps-qa has 33 passing tests and a green strict-Clippy gate. Remove
+`cf01312`; ps-qa has 34 passing tests and a green strict-Clippy gate. Remove
 those Git pins only after the matching crates are published and locked.
 
 ## Evidence contract

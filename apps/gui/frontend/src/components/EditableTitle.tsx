@@ -71,10 +71,11 @@ export function EditableTitle(props: {
             </Show>
             <Button
               type="button"
-              onClick={(event) => {
+              onMouseDown={(event) => {
                 event.stopPropagation();
                 start();
               }}
+              onClick={(event) => event.stopPropagation()}
               onDblClick={(event) => event.stopPropagation()}
               disabled={busy()}
               aria-label={props.label ?? tx("Rename {name}", { name: props.value })}
@@ -94,6 +95,7 @@ export function EditableTitle(props: {
             aria-label={props.label ?? tx("Project name")}
             onClick={(event) => event.stopPropagation()}
             onDblClick={(event) => event.stopPropagation()}
+            onMouseDown={(event) => event.stopPropagation()}
             onInput={(event) => setDraft(event.currentTarget.value)}
             onBlur={() => void commit()}
             onKeyDown={(event) => {
