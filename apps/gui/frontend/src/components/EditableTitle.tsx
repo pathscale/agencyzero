@@ -71,7 +71,7 @@ export function EditableTitle(props: {
             </Show>
             <Button
               type="button"
-              onClick={start}
+              onClick={() => start()}
               disabled={busy()}
               aria-label={props.label ?? tx("Rename {name}", { name: props.value })}
               class="flex size-[18px] shrink-0 items-center justify-center rounded p-0 text-az-faint transition-colors hover:bg-white/8 hover:text-az-body"
