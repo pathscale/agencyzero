@@ -87,7 +87,7 @@ jobs:
         run: >-
           cargo install ps-qa
           --git https://github.com/pathscale/ps-qa.git
-          --rev a4c8896e23eff9999487846a1a9fed9ed6db2e97
+          --rev f2f59e34409db06aa50e933cbfce0a3aa674e885
 
       - name: Scrubber unit tests
         run: >-
@@ -107,7 +107,7 @@ jobs:
       - name: Launch the app
         run: |
           AZ_DATA_DIR=/tmp/qa-profile-db \
-            ./target/debug/az-gui > /tmp/az-qa.log 2>&1 &
+            ./target/debug/az-gui --blitz-control > /tmp/az-qa.log 2>&1 &
           echo $! > /tmp/az-qa.pid
           # The window has to exist before anything can be addressed. Poll the
           # CLI's normal descriptor discovery rather than creating an Agency
@@ -172,7 +172,7 @@ jobs:
 
           scripts/qa-profile-restore.sh /tmp/qa-profile-db
           AZ_DATA_DIR=/tmp/qa-profile-db \
-            ./target/debug/az-gui >> /tmp/az-qa.log 2>&1 &
+            ./target/debug/az-gui --blitz-control >> /tmp/az-qa.log 2>&1 &
           echo $! > /tmp/az-qa.pid
           for _ in $(seq 1 60); do
             ps-qa nodes > /tmp/reattach.txt 2>&1 && break
