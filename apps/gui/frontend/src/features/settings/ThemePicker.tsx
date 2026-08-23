@@ -1,6 +1,6 @@
-import { Flex, Radio } from "@pathscale/ui";
+import { ComplexColorWheel, Flex } from "@pathscale/ui";
 import type { JSX } from "@solidjs/web";
-import { createEffect, For, Show } from "solid-js";
+import { createEffect, For } from "solid-js";
 import { Button } from "~/components/Button";
 import {
   accentOptions,
@@ -43,6 +43,26 @@ export function ThemePicker(props: {
 }): JSX.Element {
   /** Five stops across the comfort range, matching the strength row beside it. */
   const softnessStops = () => Array.from({ length: 5 }, (_, i) => (i * MAX_SOFTNESS) / 4);
+  const colors = () => surfaceColors(prefs.colorMode);
+  let previousSurfacePalette = colors();
+
+  // A palette choice is semantic. Preserve its petal across light/dark mode
+  // changes and migrate literal colours written by older builds to the
+  // nearest standard petal.
+  createEffect(
+    () => prefs.colorMode,
+    () => {
+      const next = colors();
+      const value = props.theme.surface.trim().toLowerCase();
+      if (value) {
+        let selected = previousSurfacePalette.findIndex((color) => color.toLowerCase() === value);
+        if (selected < 0) selected = closestColorIndex(value, previousSurfacePalette);
+        const rebased = next[selected];
+        if (rebased && rebased.toLowerCase() !== value) props.onSurface(rebased);
+      }
+      previousSurfacePalette = next;
+    },
+  );
 
   /**
    * The desk as currently configured — what every swatch sits on.
@@ -88,75 +108,68 @@ export function ThemePicker(props: {
     `color-mix(in oklab, ${theme.surface || DEFAULT_ACCENT} ${deskStrength(theme.wash)}%, ${deskAnchor(theme.softness)})`;
 
   return (
-    <div class="flex items-start gap-4 px-3.5 py-3">
-      <div class="shrink-0">
-        <SurfaceColorWheel value={props.theme.surface} onPick={props.onSurface} />
-      </div>
+    <div class="flex flex-col gap-3">
+      <ComplexColorWheel
+        value={props.theme.surface || DEFAULT_ACCENT}
+        onChange={props.onSurface}
+        mode={prefs.colorMode}
+        palette={colors()}
+        aria-label={t("appearance.surfaceColour")}
+        adjustments={[
+          {
+            id: "strength",
+            label: t("appearance.colourStrength"),
+            hint: t("appearance.colourStrengthHint"),
+            stops: WASH_STOPS,
+            value: normalizeWash(props.theme.wash),
+            onChange: props.onWash,
+            preview: (stop) =>
+              `color-mix(in oklab, ${props.theme.surface || DEFAULT_ACCENT} ${deskStrength(stop)}%, ${deskAnchor(props.theme.softness)})`,
+            formatValue: (stop) => `${stop}%`,
+          },
+          {
+            id: "softness",
+            label: t("appearance.softness"),
+            hint: t("appearance.softnessHint"),
+            stops: softnessStops(),
+            value: props.theme.softness,
+            onChange: props.onSoftness,
+            preview: (stop) =>
+              `color-mix(in oklab, ${props.theme.surface || DEFAULT_ACCENT} ${deskStrength(props.theme.wash)}%, ${deskAnchor(stop)})`,
+            formatValue: (stop) => `${Math.round((stop / MAX_SOFTNESS) * 100)}%`,
+          },
+          {
+            id: "text-brightness",
+            label: t("appearance.textBrightness"),
+            hint: t("appearance.textBrightnessHint"),
+            stops: BRIGHTNESS_STOPS,
+            value: props.theme.textBrightness,
+            onChange: props.onBrightness,
+            preview: () => deskPreview(props.theme),
+            ink: (stop) =>
+              prefs.colorMode === "light"
+                ? `oklch(calc(28% + ${props.theme.softness * 0.45 - stop}%) 0.009 245)`
+                : `oklch(calc(75% - ${props.theme.softness * 0.45 - stop}%) 0.009 245)`,
+            formatValue: (stop) => {
+              const index = (BRIGHTNESS_STOPS as readonly number[]).indexOf(stop);
+              return `${Math.round((index / (BRIGHTNESS_STOPS.length - 1)) * 100)}%`;
+            },
+          },
+        ]}
+        action={
+          <Button
+            type="button"
+            aria-label={t("appearance.resetButton")}
+            disabled={props.isDefault}
+            onClick={props.onReset}
+            class="rounded-lg border border-az-hairline-strong px-2.5 py-1 text-[11px] text-az-muted transition-colors hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            {t("appearance.resetButton")}
+          </Button>
+        }
+      />
 
-      <div class="flex flex-1 flex-col gap-3">
-        {/*
-         * Strength before softness: it is the one that decides whether the
-         * wheel did anything at all, and each swatch previews the desk it
-         * produces so the row reads as its own effect rather than as five
-         * circles. At 0 the workspace stays the designed grey and only the
-         * accent moves — which is a legitimate choice, just not the default.
-         */}
-        <Axis
-          label={t("appearance.colourStrength")}
-          hint={t("appearance.colourStrengthHint")}
-          stops={[...WASH_STOPS]}
-          value={normalizeWash(props.theme.wash)}
-          onPick={props.onWash}
-          preview={(stop) =>
-            `color-mix(in oklab, ${props.theme.surface || DEFAULT_ACCENT} ${deskStrength(stop)}%, ${deskAnchor(props.theme.softness)})`
-          }
-          format={(stop) => `${stop}%`}
-          action={
-            <Button
-              type="button"
-              aria-label={t("appearance.resetButton")}
-              disabled={props.isDefault}
-              onClick={props.onReset}
-              class="ml-auto rounded-lg border border-az-hairline-strong px-2.5 py-1 text-[11px] text-az-muted transition-colors hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              {t("appearance.resetButton")}
-            </Button>
-          }
-        />
-
-        <Axis
-          label={t("appearance.softness")}
-          hint={t("appearance.softnessHint")}
-          stops={softnessStops()}
-          value={props.theme.softness}
-          onPick={props.onSoftness}
-          preview={(stop) =>
-            `color-mix(in oklab, ${props.theme.surface || DEFAULT_ACCENT} ${deskStrength(props.theme.wash)}%, ${deskAnchor(stop)})`
-          }
-          format={(stop) => `${Math.round((stop / MAX_SOFTNESS) * 100)}%`}
-        />
-
-        {/*
-         * The rungs are the point here, so these swatches carry a letter in
-         * the text colour they produce rather than showing the colour as a
-         * fill. A row of five near-identical pale circles says nothing; five
-         * letters at different weights is the actual question being asked.
-         */}
-        <Axis
-          label={t("appearance.textBrightness")}
-          hint={t("appearance.textBrightnessHint")}
-          stops={[...BRIGHTNESS_STOPS]}
-          value={props.theme.textBrightness}
-          onPick={props.onBrightness}
-          preview={() => deskPreview(props.theme)}
-          ink={(stop) =>
-            prefs.colorMode === "light"
-              ? `oklch(calc(28% + ${props.theme.softness * 0.45 - stop}%) 0.009 245)`
-              : `oklch(calc(75% - ${props.theme.softness * 0.45 - stop}%) 0.009 245)`
-          }
-          format={(_stop, index) => `${Math.round((index / (BRIGHTNESS_STOPS.length - 1)) * 100)}%`}
-        />
-
+      <div class="flex flex-col gap-3 px-3.5 pb-3">
         <AccentSelector
           surface={props.theme.surface || DEFAULT_ACCENT}
           accent={props.theme.accent}
@@ -207,127 +220,6 @@ export function ThemePicker(props: {
   );
 }
 
-/** Concentric literal swatches: what is shown is exactly what gets persisted. */
-function SurfaceColorWheel(props: { value: string; onPick: (value: string) => void }): JSX.Element {
-  const layout = [
-    ...Array.from({ length: 12 }, (_, index) => ({ count: 12, index, radius: 56, phase: -30 })),
-    ...Array.from({ length: 12 }, (_, index) => ({ count: 12, index, radius: 40, phase: -30 })),
-    ...Array.from({ length: 6 }, (_, index) => ({ count: 6, index, radius: 21, phase: -60 })),
-    { count: 1, index: 0, radius: 0, phase: 0 },
-  ];
-  const colors = () => surfaceColors(prefs.colorMode);
-  let previous = colors();
-
-  // Preserve the same petal across a mode change, and migrate the upstream
-  // palette values written by earlier builds to the nearest literal petal.
-  /*
-   * Track the palette; rebase in the effect argument, never the compute one.
-   *
-   * `onPick` writes the value this reads, so running it in the tracked phase
-   * made the write a dependency of its own computation: the effect re-ran on
-   * every pick and the suite died on an out-of-memory abort rather than a
-   * recognisable loop. Solid 2 draws the line for exactly this - the first
-   * argument is what to watch, the second is what to do about it - and a
-   * one-argument `createEffect` is typed `never` to stop the older shape
-   * compiling at all.
-   *
-   * Only the mode is tracked. `props.value` is read untracked inside the
-   * effect because a pick must not retrigger the rebase that produced it.
-   */
-  createEffect(
-    () => prefs.colorMode,
-    () => {
-      const next = colors();
-      const value = props.value.trim().toLowerCase();
-      if (value) {
-        let selected = previous.findIndex((color) => color.toLowerCase() === value);
-        if (selected < 0) selected = closestColorIndex(value, previous);
-        const rebased = next[selected];
-        if (rebased && rebased.toLowerCase() !== value) props.onPick(rebased);
-      }
-      previous = next;
-    },
-  );
-
-  return (
-    /*
-     * The wheel takes the glass film rather than the solid control opt-out.
-     *
-     * `az-control-solid` is for chrome: a switch track or a segmented pill that
-     * reads as disabled once it goes translucent. This is the other kind of
-     * control, the kind that *displays* a value, and the comment at the top of
-     * this file already says as much - here the swatch is the value. Held solid
-     * it paints `az-inset` raw, which in the light palette is white, so a 190px
-     * white disc landed on a dark glass panel and the petals lost the surface
-     * they are meant to be read against.
-     */
-    <fieldset
-      aria-label={t("appearance.surfaceColour")}
-      class="relative m-0 size-[190px] rounded-full border border-az-hairline bg-az-inset p-0 shadow-inner"
-    >
-      <For each={colors()}>
-        {(color, index) => {
-          const point = layout[index()];
-          const angle = ((point.index / point.count) * 360 + point.phase) * (Math.PI / 180);
-          const x = Math.cos(angle) * point.radius;
-          const y = Math.sin(angle) * point.radius;
-          const selected = () => props.value.trim().toLowerCase() === color.toLowerCase();
-          return (
-            <span
-              data-surface-petal={index()}
-              class="absolute size-7"
-              style={{
-                left: `calc(50% + ${x.toFixed(2)}px)`,
-                top: `calc(50% + ${y.toFixed(2)}px)`,
-                transform: "translate(-50%, -50%)",
-              }}
-            >
-              <Radio
-                title={color}
-                name="surface-colour"
-                value={color}
-                aria-label={`${t("appearance.surfaceColour")} ${color}`}
-                checked={selected()}
-                onChange={() => props.onPick(color)}
-                indicator={
-                  <span
-                    aria-hidden="true"
-                    class="block size-full rounded-full"
-                    style={{ "background-color": color }}
-                  />
-                }
-                /*
-                 * Addressed by the class the library renders, not by a slot.
-                 *
-                 * These overrides used to target `[data-slot=radio-control]`
-                 * and `[data-slot=radio-indicator]`. `@pathscale/ui` emits
-                 * neither — its radio is `.radio__control` and
-                 * `.radio__indicator`, with no `data-slot` attribute anywhere —
-                 * so every one of them matched nothing. The live app shows it
-                 * as a 32px petal where `size-7` asks for 28.
-                 *
-                 * Hover is the library's, not a local override. Its rule tints
-                 * `.radio__indicator:empty::before`, which a petal cannot match
-                 * because the indicator holds the swatch, and moves
-                 * `border-color` on the control, which the border below would
-                 * cancel. It now lifts the control too, so the feedback
-                 * survives being restyled from out here.
-                 *
-                 * `bg-transparent` is load-bearing rather than tidying: the
-                 * petal's colour is the indicator and the control is the box
-                 * drawn around it, and the control carries its own
-                 * `background-color: var(--color-base-100)` over the top.
-                 */
-                class="az-petal size-7 cursor-pointer rounded-full"
-              />
-            </span>
-          );
-        }}
-      </For>
-    </fieldset>
-  );
-}
-
 /** An independent high-contrast colour for controls, rings and active states. */
 function AccentSelector(props: {
   /** Overrides the row's heading, for the second accent. */
@@ -349,9 +241,8 @@ function AccentSelector(props: {
    * Track the palette; rebase in the effect argument, never the compute one.
    *
    * `onPick` writes the value this reads, so running it in the tracked phase
-   * makes the write a dependency of its own computation - the same loop
-   * `SurfaceColorWheel` above was rewritten to avoid, which ended the settings
-   * suites in an out-of-memory abort rather than a recognisable error.
+   * makes the write a dependency of its own computation - the same loop the
+   * surface palette rebase avoids above.
    *
    * Both the mode and the accent are tracked, because a rebase has to follow
    * either. What matters is that `onPick` runs in the *effect* argument: the
@@ -454,88 +345,6 @@ function AccentSelector(props: {
               </Button>
             );
           }}
-        </For>
-      </Flex>
-    </div>
-  );
-}
-
-/**
- * One row of preview swatches.
- *
- * Horizontal rather than the vertical column nofilter uses: theirs picks one of
- * six greyscale *themes*, ours moves a continuum, and a row reads as a slider
- * where a column reads as a menu.
- */
-function Axis(props: {
-  label: string;
-  hint: string;
-  stops: number[];
-  value: number;
-  onPick: (value: number) => void;
-  preview: (stop: number) => string;
-  /** When present, the swatch shows a letter in this colour instead of a fill alone. */
-  ink?: (stop: number) => string;
-  format: (stop: number, index: number) => string;
-  action?: JSX.Element;
-}): JSX.Element {
-  const selected = (stop: number) => Math.abs(props.value - stop) < 0.01;
-  return (
-    <div class="flex flex-col gap-1.5">
-      <div class="flex items-baseline gap-2">
-        <span class="font-semibold text-[11px] text-az-muted uppercase tracking-[.04em]">
-          {props.label}
-        </span>
-        <span class="text-[11px] text-az-faint">{props.hint}</span>
-        {props.action}
-      </div>
-      <Flex align="center" gap="sm">
-        <For each={props.stops}>
-          {(stop, index) => (
-            <Button
-              type="button"
-              aria-label={`${props.label} ${props.format(stop, index())}`}
-              aria-pressed={selected(stop) ? "true" : "false"}
-              onClick={() => props.onPick(stop)}
-              class={`size-7 overflow-hidden rounded-full border-2 p-0 transition-[border-color,transform] hover:scale-110 ${
-                selected(stop)
-                  ? "border-primary"
-                  : "border-az-hairline-strong hover:border-az-hairline-strong/60"
-              }`}
-            >
-              {/*
-                The fill is a child, not a `style` on the Button.
-
-                `@pathscale/ui`'s Button never reads `style`: the prop appears
-                nowhere in the component and it spreads only onto its spinner
-                and icon slots, so an inline `background-color` handed to it is
-                dropped on the floor. Every swatch in this pane rendered as an
-                empty ring because of it, which is a control whose entire job
-                is to show a colour showing none.
-
-                A child element the library does not own carries the colour
-                instead. `p-0` and `overflow-hidden` on the button keep it
-                filling the circle rather than sitting inside the default
-                padding.
-              */}
-              <span
-                aria-hidden="true"
-                class="flex size-full items-center justify-center rounded-full"
-                style={{ "background-color": props.preview(stop) }}
-              >
-                <Show when={props.ink}>
-                  {(ink) => (
-                    <span
-                      class="font-semibold text-[12px] leading-none"
-                      style={{ color: ink()(stop) }}
-                    >
-                      A
-                    </span>
-                  )}
-                </Show>
-              </span>
-            </Button>
-          )}
         </For>
       </Flex>
     </div>

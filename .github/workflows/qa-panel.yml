@@ -80,14 +80,10 @@ jobs:
           cargo "${trb_config[@]}" update -p tauri-runtime-blitz --precise 0.1.4
           cargo "${trb_config[@]}" build --features blitz-inspector --bin az-gui
 
-      # Pin the post-0.3.1 diagnostic until its follow-up release is published.
       # Application names and expectations remain in this repository; the
-      # harness commit supplies only generic node-addressed behavior.
+      # harness supplies only generic node-addressed behavior.
       - name: Install ps-qa
-        run: >-
-          cargo install ps-qa
-          --git https://github.com/pathscale/ps-qa.git
-          --rev f2f59e34409db06aa50e933cbfce0a3aa674e885
+        run: cargo install ps-qa --version 0.3.2
 
       - name: Scrubber unit tests
         run: >-

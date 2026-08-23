@@ -33,16 +33,17 @@ cargo build --release --bin az-gui
 
 scripts/qa-profile-restore.sh /tmp/qa-profile-db
 AZ_DATA_DIR=/tmp/qa-profile-db \
-  ./target/release/az-gui &
+  ./target/release/az-gui --blitz-control &
 ```
 
 The default build includes `blitz-inspector`; the AgencyZero Settings toggle is
-the normal control enablement source. The committed QA profile stores that
-toggle as enabled. `--blitz-control` is an enable-only recovery path so turning
-the setting off cannot lock automation out of the control needed to turn it
-back on. Never run against the System instance or its data directory. Stop the
-exact QA PID with TERM and allow ten seconds for its store flush. Escalate only
-that PID to KILL if it is still alive; never use a broad name match.
+the normal control enablement source. `--blitz-control` is the enable-only QA
+and recovery path, so a disabled stored toggle cannot lock automation out of
+the control needed to turn it back on. It creates the descriptor through the
+normal runtime contract; no descriptor environment variable is used. Never run
+against the System instance or its data directory. Stop the exact QA PID with
+TERM and allow ten seconds for its store flush. Escalate only that PID to KILL
+if it is still alive; never use a broad name match.
 
 Run from the repository root, where `ps-qa.ron` and `tests/ps-qa/` live. ps-qa
 discovers the newest live descriptor; use its `--descriptor` CLI option only to
@@ -56,8 +57,8 @@ ps-qa qa rename-project-header --trace
 ```
 
 The manual GitHub workflow is `.github/workflows/qa-panel.yml`. It builds the
-frontend before Rust, restores the committed profile, and installs
-the pinned ps-qa PR 8 revision. With `cover` enabled it runs outcome checks,
+frontend before Rust, restores the committed profile, launches with
+`--blitz-control`, and installs the pinned ps-qa revision. With `cover` enabled it runs outcome checks,
 restarts from the pristine profile, inventories every interactive semantic
 role, then activates every eligible control. It remains advisory until the
 inventory says coverage is a release gate.

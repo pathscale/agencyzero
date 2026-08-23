@@ -854,7 +854,7 @@ checksum = "af491d569909a7e4dee0ad7db7f5341fef5c614d5b8ec8cf765732aba3cff681"
 dependencies = [
  "serde",
  "termcolor",
- "unicode-width 0.1.14",
+ "unicode-width 0.2.2",
 ]
 
 [[package]]
@@ -4419,11 +4419,12 @@ checksum = "3d595e54a326bc53c1c197b32d295e14b169e3cfeaa8dc82b529f947fba6bcf5"
 
 [[package]]
 name = "promptsyntax"
-version = "0.1.1"
+version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1f2fae148ba0c5151e920b16716d3caccc25013cf700980e9e6fea267e356427"
+checksum = "43a26c2bb922b46a63fe88e020de72d9b922860c27ef938e14bce2677d78d6eb"
 dependencies = [
  "serde",
+ "serde_json",
  "unicode-ident",
  "unicode-normalization",
 ]
