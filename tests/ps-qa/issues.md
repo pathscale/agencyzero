@@ -7,10 +7,10 @@ QA profile before changing any status.
 ## Current audit subject
 
 - AgencyZero: PR 186, app version 0.8.32
-- ps-qa: PR 8 at `682b202`, version 0.3.0
+- ps-qa: PR 8 at `8fa4869`, version 0.3.0
 - blitz-control-protocol and tauri-runtime-blitz: PR 30 at `7b44cd6`,
   version 0.1.4 pending publication
-- Checks: 24 in 10 groups
+- Checks: 25 in 11 groups
 
 The current run must use `--features blitz-inspector` and
 `/tmp/qa-profile-db`. ps-qa discovers the live descriptor through its normal
@@ -63,10 +63,11 @@ lookups.
 | sections | 5 |
 | tasklog | 2 |
 | rename | 2 |
+| verbosity | 1 |
 | dialog | 2 |
 | delete | 1 |
 | settings | 4 |
-| **total** | **24** |
+| **total** | **25** |
 
 Run 32640904469 completed 19/23. Two failures were the same real UI regression:
 semantic activation of both rename buttons left a 0x0 textbox. The component
@@ -97,13 +98,18 @@ These are missing assertions, not application failures:
 
 1. Rename and fork checks do not yet assert the durable store result.
 2. Editors open, but no outcome check types and persists a value.
-3. Sort and reorder controls lack ordered-sequence assertions.
+3. Reorder controls lack ordered-sequence assertions; newest-item order now has a rendered check.
 4. The icon check does not yet mutation-test captured ink.
 5. Most controls have not been promoted from broad coverage into a specific
    outcome check.
 6. The 713-test legacy frontend suite is renderer-blind and manual-only. Delete
    each obsolete test after its real outcome check exists, or immediately when
    it never asserted a user-visible outcome.
+
+Response verbosity now has paired coverage: `verbosity-slider-changes` proves
+the live rendered slider changes its semantic value through node-id keyboard
+input, while the Rust run-builder test proves a stored non-default level is
+appended to resumed provider turns rather than only the first system prompt.
 
 ## Dependency delivery status
 

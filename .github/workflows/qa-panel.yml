@@ -8,7 +8,7 @@ name: QA panel
 # release bundle), and it takes minutes rather than seconds. Running it on every
 # push would make the expensive half of CI the common case.
 #
-# It is also not yet a gate. The 24 outcome checks do not cover every control,
+# It is also not yet a gate. The 25 outcome checks do not cover every control,
 # so a red run here means "look at this", not "the branch is broken".
 # `continue-on-error` keeps it advisory until the inventory in
 # tests/ps-qa/issues.md says otherwise.
@@ -16,7 +16,7 @@ on:
   workflow_dispatch:
     inputs:
       group:
-        description: 'Check group to run (blank = all 24). One of: icons hover status items sections tasklog rename dialog delete settings'
+        description: 'Check group to run (blank = all 25). One of: icons hover status items sections tasklog rename verbosity dialog delete settings'
         required: false
         type: string
       cover:
@@ -85,7 +85,7 @@ jobs:
         run: >-
           cargo install ps-qa
           --git https://github.com/pathscale/ps-qa.git
-          --rev 682b202
+          --rev 8fa4869
 
       - name: Scrubber unit tests
         run: >-
