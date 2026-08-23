@@ -11,7 +11,6 @@
         hover: None, click: None,
         subject: "Copy this task-log entry",
         expect: Paints,
-        panel_only: true,
     ),
     // `PaintsMore`, not `Grows`. `Grows` counts tree membership, so a page of
     // rows that mounted and then laid out at 0x0 satisfies it: the log would
@@ -26,6 +25,5 @@
         click: Some("Show 20 earlier"),
         subject: "Copy this task-log entry",
         expect: PaintsMore,
-        panel_only: true,
     ),
 ]

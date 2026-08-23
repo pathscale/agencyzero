@@ -15,6 +15,5 @@
         click: None,
         subject: "presentation",
         expect: Paints,
-        panel_only: false,
     ),
 ]

@@ -21,7 +21,6 @@
         click: Some("Rename e756"),
         subject: "textbox:Rename e756",
         expect: PaintsNamed,
-        panel_only: false,
     ),
     (
         id: "rename-project-header",
@@ -32,6 +31,5 @@
         click: Some("Rename project"),
         subject: "textbox:Rename project",
         expect: PaintsNamed,
-        panel_only: false,
     ),
 ]

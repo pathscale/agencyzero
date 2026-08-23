@@ -18,7 +18,6 @@
         click: Some("Change the status of"),
         subject: "Edit ",
         expect: Holds,
-        panel_only: true,
     ),
     (
         id: "status-2",
@@ -29,6 +28,5 @@
         click: Some("Change the status of"),
         subject: "(Finished)",
         expect: Absent,
-        panel_only: true,
     ),
 ]
