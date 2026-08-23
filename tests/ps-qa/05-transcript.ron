@@ -1,0 +1,14 @@
+// Transcript pagination must add rendered message actions, not only grow a
+// hidden retained tree.
+[
+    (
+        id: "transcript-show-earlier",
+        group: "transcript",
+        what: "revealing earlier transcript messages adds rendered rows",
+        open: Some("theta theta north indi"),
+        hover: None,
+        click: Some("Show 12 earlier messages"),
+        subject: "Copy this message",
+        expect: PaintsMore,
+    ),
+]
