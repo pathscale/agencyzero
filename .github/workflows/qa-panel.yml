@@ -11,7 +11,7 @@ name: QA panel
 # It is also not yet a gate. 18 of 345 controls have a real assertion and two
 # checks fail for reasons that are not application bugs, so a red run here means
 # "look at this", not "the branch is broken". `continue-on-error` keeps it
-# advisory until the inventory in ps-qa's tests/issues.md says otherwise.
+# advisory until the inventory in ps-qa's tests/ps-qa/issues.md says otherwise.
 on:
   workflow_dispatch:
     inputs:
@@ -139,7 +139,7 @@ jobs:
               echo 'something changed, not that the right thing changed.'
             fi
             echo
-            echo 'Full inventory: `tests/issues.md` in ps-qa.'
+            echo 'Full inventory: `tests/ps-qa/issues.md` in ps-qa.'
           } >> "$GITHUB_STEP_SUMMARY"
 
       # Never -9: the store is single-writer and a hard kill can tear its index,

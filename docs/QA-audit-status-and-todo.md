@@ -22,10 +22,10 @@ handover, `blitz-bench qa` is `ps-qa qa`.
 
 ```
 src/      engine: Expect, Check, verdict, the MCP client, the sweep
-tests/    the checks, one file per group - what THIS app promises
+tests/ps-qa/  the checks, one file per group - what THIS app promises
 ```
 
-A second app pointed at this harness gets a different `tests/`, not a fork.
+A second app pointed at this harness gets a different `tests/ps-qa/`, not a fork.
 
 ---
 
@@ -113,7 +113,7 @@ counted. Restore the pristine profile before a run.
 ```rust
 Check {
     id: "dialog-cancel-dismisses",   // stable handle: ps-qa qa <id>
-    group: "dialog",                 // file in tests/
+    group: "dialog",                 // file in tests/ps-qa/
     what: "the fork dialog's Cancel actually dismisses it",
     open: Some("Home"),              // navigate first, if not on this surface
     hover: None,                     // hover first, for hover-revealed controls
@@ -166,7 +166,7 @@ rename     1/2     sections   5/5     status     1/2     tasklog    2/2
 ```
 
 The full inventory - every check, the coverage buckets per surface, the
-unknowns, and the ten open issues - is `tests/issues.md` in the `ps-qa` repo.
+unknowns, and the ten open issues - is `tests/ps-qa/issues.md` in the `ps-qa` repo.
 That file is the one to update after a run; this section is a summary of it.
 
 The four that went green were never application bugs. They failed because the
@@ -302,7 +302,7 @@ Useful fixtures in it today:
 **These names are generated.** A rebuild that changes how names are scrubbed
 changes them, and every check that opens one by name has to change with it: that
 happened on 2026-08-23 and broke 15 references across 6 files. Tracked as issue
-9 in `ps-qa`'s `tests/issues.md`.
+9 in `ps-qa`'s `tests/ps-qa/issues.md`.
 
 Rebuild with `AZ_BUILD_QA_PROFILE`; see `tests/data/README.md` for the full
 command and for what the builder does and does not scrub.
