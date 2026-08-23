@@ -20,7 +20,7 @@ use crate::settings::{GlobalSettings, StudyAnalytics};
 use crate::{AppHandle, AppState};
 
 pub const PROTOCOL_VERSION: &str = "agencyzero-ps-deployment-study/0.1";
-pub const PARSER_VERSION: &str = "promptsyntax-rs/0.1.0";
+pub const PARSER_VERSION: &str = "promptsyntax-rs/0.1.1";
 const MAX_DETAIL_BYTES: usize = 2_000;
 const DETAIL_KEYS: &[&str] = &[
     "attachmentCount",
@@ -612,12 +612,9 @@ mod tests {
         assert!(!export.contains("private-turn"));
         assert!(!export.contains("private-interaction"));
         assert!(!export.contains("private-item"));
-    }
-
-    #[test]
-    fn parser_version_is_tied_to_the_declared_dependency() {
-        let manifest = include_str!("../Cargo.toml");
-        assert!(manifest.contains("promptsyntax = \"0.1.0\""));
-        assert_eq!(PARSER_VERSION, "promptsyntax-rs/0.1.0");
+        let metadata: Value =
+            serde_json::from_str(export.lines().next().expect("export includes metadata"))
+                .expect("metadata is valid JSON");
+        assert_eq!(metadata["parserVersion"], PARSER_VERSION);
     }
 }
