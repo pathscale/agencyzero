@@ -27,3 +27,7 @@
    do not assume `jq` is present. A fixed-shape field is one `sed -nE` line;
    anything that needs real parsing is Rust, in a crate, where it can be tested.
    If a task seems to need Python, the approach is wrong.
+12. The default local build location is this repository's `target/` directory,
+    meaning `agencyzero/target`. Never install, replace, remove, or otherwise
+    touch an app under `/Applications` unless the owner explicitly names
+    `/Applications` as the destination. "Default location" never means install.
