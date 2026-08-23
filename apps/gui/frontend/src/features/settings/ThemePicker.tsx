@@ -18,16 +18,16 @@ import { prefs } from "~/stores/prefs";
 import type { ThemeSettings } from "~/types";
 
 /**
- * The colour wheel and the softness strip, side by side.
+ * The standard UI colour composition, configured for AgencyZero's theme.
  *
  * The wheel owns literal AgencyZero colours rather than borrowing the
  * upstream contrast palette. That palette makes dark-mode swatches pastel so
  * they stand out from a black ring; here the swatch is the value, so dark mode
  * must offer dark-oriented colours and a pressed dot must equal the stored hex.
  *
- * The strip beside it is ours. nofilter's greyscale column switches between two
- * themes; there is one theme here, so the column drives the axis that actually
- * helps — how far the surfaces lift off the near-black floor.
+ * `ComplexColorWheel` owns the reusable wheel, adjustment rows and accessible
+ * stop controls. This adapter supplies the product palette and maps strength,
+ * softness and text brightness to persisted AgencyZero theme fields.
  */
 export function ThemePicker(props: {
   theme: ThemeSettings;
