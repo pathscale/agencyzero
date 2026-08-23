@@ -53,19 +53,26 @@ readonly APP=$!
 # flaky depending on which it is that day.
 export TAURI_BLITZ_CONTROL_DESCRIPTOR="$DESCRIPTOR"
 
-# `ps-qa` lives in its own repo now, so it is found rather than built here.
-# `PS_QA` overrides for a checkout somewhere else.
+# `ps-qa` is a published crate. `PS_QA` wins, then a sibling checkout, then an
+# installed one: a working copy should beat the released binary while you are
+# changing the harness itself, which is most of why you would be reading this.
 readonly PS_QA_REPO="${PS_QA_REPO:-$ROOT/../ps-qa}"
 if [[ -n "${PS_QA:-}" && -x "${PS_QA:-}" ]]; then
   qa="$PS_QA"
 elif [[ -x "$PS_QA_REPO/target/release/ps-qa" ]]; then
   qa="$PS_QA_REPO/target/release/ps-qa"
+elif command -v ps-qa >/dev/null 2>&1; then
+  qa="$(command -v ps-qa)"
 else
-  echo "no ps-qa binary. build it:" >&2
-  echo "  (cd $PS_QA_REPO && cargo build --release)" >&2
+  echo "no ps-qa binary. install it:" >&2
+  echo "  cargo install ps-qa --version '^0.2' --locked" >&2
   echo "or point PS_QA at one." >&2
   exit 1
 fi
+
+# The harness reads ps-qa.ron and tests/ps-qa/ relative to the working
+# directory, so every invocation below runs from the repository root.
+cd "$ROOT"
 
 for _ in $(seq 1 40); do
   if "$qa" nodes >/dev/null 2>&1; then break; fi
