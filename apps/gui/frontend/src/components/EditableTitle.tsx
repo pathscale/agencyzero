@@ -87,7 +87,7 @@ export function EditableTitle(props: {
         }
       >
         <span class="flex min-w-0 flex-1">
-          <Input.Field
+          <Input
             ref={(element: HTMLInputElement) => {
               field = element;
             }}
