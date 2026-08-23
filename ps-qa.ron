@@ -90,14 +90,13 @@ AppProfile(
     manual_controls: [
         (label: "Attach files",                        command: "choose_attachments"),
         (label: "Add dir",                             command: "choose_project_directory"),
-        (label: "Choose a working directory",          command: "choose_project_directory"),
-        (label: "Choose the agencyzero data directory", command: "(startup data dir)"),
         (label: "Select backup file",                  command: "select_store_backup"),
         (label: "Back up & close",                     command: "create_store_backup"),
         (label: "Export",                              command: "export_study_events"),
-        // The agency proxy binary picker. Its panel cannot open headless, so a
-        // press hangs the run behind a window that never appears.
-        (label: "Choose\u{2026}",                       command: "choose_agent_proxy_binary"),
+        // Both visible Settings rows use this standard label: the data
+        // directory picker and the AgencyProxy executable picker. Their native
+        // panels cannot be closed headlessly.
+        (label: "Choose\u{2026}",                       command: "choose_data_directory / choose_agent_proxy_binary"),
 
         // Controls that hand the screen to the *browser*. Same problem as a
         // native panel and worse manners: a sweep that presses these opens a
