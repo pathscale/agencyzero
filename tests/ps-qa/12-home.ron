@@ -3,6 +3,26 @@
 // Search runs last because it intentionally filters every fixture row away.
 [
     (
+        id: "home-new-project",
+        group: "home",
+        what: "New Project opens an editable draft",
+        open: Some("Home"),
+        hover: None,
+        click: Some("New Project"),
+        subject: "textbox:Type to start your new project…",
+        expect: PaintsNamed,
+    ),
+    (
+        id: "home-close-draft",
+        group: "home",
+        what: "closing the Untitled draft removes its composer",
+        open: Some("New project"),
+        hover: None,
+        click: Some("Close Untitled"),
+        subject: "Type to start your new project…",
+        expect: Vanishes,
+    ),
+    (
         id: "home-pin-project",
         group: "home",
         what: "pinning a project changes the exact row control",
