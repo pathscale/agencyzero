@@ -119,6 +119,7 @@ jobs:
         id: checks
         continue-on-error: true
         run: |
+          set -o pipefail
           # Run from the repository root: the harness discovers ps-qa.ron and
           # tests/ps-qa/ relative to the working directory.
           ps-qa --trace qa ${{ inputs.group }} 2>&1 | tee /tmp/qa.txt
@@ -164,15 +165,19 @@ jobs:
           sleep 10
 
       - name: Reachability inventory
+        id: inventory
         if: ${{ inputs.cover }}
         continue-on-error: true
         run: |
+          set -o pipefail
           ps-qa inventory 2>&1 | tee /tmp/cover.txt
 
       - name: Exercise every eligible control
+        id: sweep
         if: ${{ inputs.cover }}
         continue-on-error: true
         run: |
+          set -o pipefail
           ps-qa --trace cover 2>&1 | tee /tmp/sweep.txt
 
       # Collection continues past integrity faults so one macOS launch yields
@@ -186,6 +191,14 @@ jobs:
       # truth: a failed outcome check is a red audit.
       - name: Enforce outcome checks
         if: ${{ steps.checks.outcome == 'failure' }}
+        run: exit 1
+
+      - name: Enforce reachability inventory
+        if: ${{ steps.inventory.outcome == 'failure' }}
+        run: exit 1
+
+      - name: Enforce semantic sweep
+        if: ${{ steps.sweep.outcome == 'failure' }}
         run: exit 1
 
       - name: Summary
