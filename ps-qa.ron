@@ -43,6 +43,15 @@ AppProfile(
     // Verbs this application's controls start with. Swept last, or excluded
     // from the search for a control that opens a document.
     close_prefixes: ["Close "],
+    // Preferred ways out of any in-app dialog. Native panels and external
+    // destinations remain manual; these are ordinary semantic controls.
+    dismiss_controls: [
+        "Cancel",
+        "Dismiss",
+        "Close setup",
+        "Finish setup later",
+        "Close",
+    ],
     row_action_prefixes: ["Rename "],
     fold_prefixes: ["Collapse ", "Hide "],
     deferred_controls: [
