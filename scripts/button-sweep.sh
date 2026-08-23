@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 #
-# Every button in the app, clicked, from a profile that starts identical each
-# time.
+# Every eligible interactive control in the app, activated by semantic node
+# id from a profile that starts identical each time.
 #
 # # Why this is a script
 #
-# The sweep presses destructive controls on purpose, so it leaves the store
+# The sweep activates destructive controls on purpose, so it leaves the store
 # different from how it found it: the first run closed eight tabs, and the
 # second run could not have found them to test. A sweep whose subject changes
 # underneath it is not repeatable, and a QA harness that is not repeatable
