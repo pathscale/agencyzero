@@ -110,35 +110,14 @@ export function ProjectTab(props: { tab: Tab; project: Project }): JSX.Element {
   /*
    * First-reveal attribution.
    *
-   * A pane is added to `retainedProjects` only when its tab first becomes
-   * active, so the first switch to a tab constructs this whole subtree. Measured
-   * on the owner's profile that is 305ms for a 68-message project and 397ms for
-   * a 473-message one, against 46 to 71ms for every later switch: nearly all of
-   * it fixed cost, not per-message.
+   * The first project opened constructs this subtree. Later project switches
+   * re-point the same `Match` branch at another project's store keys instead of
+   * keeping hidden copies. Measured on the owner's profile, construction was
+   * 305ms for a 68-message project and 397ms for a 473-message one: nearly all
+   * of it fixed cost, not per-message.
    *
    * `mark` renders nothing and evaluates in JSX order during construction, so
    * the gaps between marks are what each child cost to build.
-   */
-  /*
-   * The side panel is built with the pane and hidden with a class, exactly like
-   * the transcript and the composer.
-   *
-   * It used to be gated on `<Show when={panelReady()}>`, deferred a frame so its
-   * construction stayed off the path between a keystroke and the conversation
-   * appearing. That is a real cost to want to move, but `<Show>` does not move
-   * work, it *destroys and rebuilds* the subtree: every time the gate went false
-   * the whole 2000-line column was disposed, and every time it went true it was
-   * built again from nothing. A second `<Show when={!forkInfo()}>` around the
-   * box did the same on entering or leaving a fork.
-   *
-   * Two attempts to keep the deferral and skip the rebuild (a `PANEL_REVEALED`
-   * set, then raising the retention limit) each fixed one path and left another,
-   * because the gate itself was the problem. Nothing else in the pane is built
-   * this way and nothing else flashes.
-   *
-   * So the panel is now a plain child, present from the first frame and hidden
-   * by the same class ternary the retained panes use. A tab switch swaps
-   * content; it does not reconstruct a column.
    */
   onSettled(() => {
     /*
@@ -634,32 +613,7 @@ export function ProjectTab(props: { tab: Tab; project: Project }): JSX.Element {
       </div>
 
       {mark("composer+chrome")}
-      {/*
-       * The box is here from the first frame; only what goes in it waits.
-       *
-       * Deferring the whole thing deferred its width too, so the pane laid out
-       * once without the panel and again with it, and the transcript visibly
-       * sprang wide and back inside a frame or two. Holding the geometry and
-       * filling it a frame later keeps the deferral's whole point, which was to
-       * take the panel's construction off the path between a keystroke and the
-       * conversation, and costs one frame of empty panel rather than a reflow
-       * of everything beside it.
-       */}
-      {/*
-       * One panel, on the active pane only.
-       *
-       * Every retained pane used to build its own, so opening a project
-       * constructed a second complete 332px column - 24 component instances per
-       * item row, its own scrollers, its own layers - to show data the store
-       * already held. That duplication was the panel's whole first-build cost,
-       * the reason retention had to stop at two, and the reason five panes
-       * drowned the compositor with `overflow` layers.
-       *
-       * `ProjectPanel` already reads everything through `props.project.id`, so
-       * it does not care which project it is pointed at. Rendering it only for
-       * the pane in front means a tab switch re-points one panel at different
-       * data instead of revealing a second copy of the furniture.
-       */}
+      {/* `Workspace` builds the one active side panel after this component. */}
       {mark("projectPanel")}
     </div>
   );

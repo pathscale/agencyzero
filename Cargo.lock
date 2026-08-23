@@ -369,7 +369,7 @@ version = "0.8.31"
 
 [[package]]
 name = "az-gui"
-version = "0.8.31"
+version = "0.8.32"
 dependencies = [
  "agency-proxy-client",
  "agency-proxy-protocol",

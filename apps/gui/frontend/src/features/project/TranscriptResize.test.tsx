@@ -328,7 +328,7 @@ describe("transcript resize anchoring", () => {
     expect(scroller.scrollTop).toBe(750);
   });
 
-  it("realigns a bottom-following project when its retained tab becomes visible again", async () => {
+  it("realigns a bottom-following project when it becomes active again", async () => {
     const frames: FrameRequestCallback[] = [];
     vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => {
       frames.push(callback);
@@ -354,8 +354,8 @@ describe("transcript resize anchoring", () => {
     expect(scroller.scrollTop).toBe(600);
 
     workspace.actions.openProject("worktable");
-    // Reproduce the renderer presentation shift that occurs while a retained
-    // pane is hidden. It is not owner intent and must not become the new anchor.
+    // Reproduce a renderer presentation shift while another project is active.
+    // It is not owner intent and must not become the new anchor.
     scroller.scrollTop = 180;
     fireEvent.scroll(scroller);
     workspace.actions.openProject("cafe");
@@ -366,7 +366,7 @@ describe("transcript resize anchoring", () => {
     expect(scroller.scrollTop).toBe(600);
   });
 
-  it("does not reposition a retained tab after its reader pages up", async () => {
+  it("does not reposition an inactive project after its reader pages up", async () => {
     const frames: FrameRequestCallback[] = [];
     vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => {
       frames.push(callback);
@@ -398,9 +398,9 @@ describe("transcript resize anchoring", () => {
     await waitFor(() =>
       expect(workspace.state.settings?.workspaceTabs?.scrollPositions.cafe).toBe(201),
     );
-    // Blitz may clamp or re-present a retained `display:none` scroller while
-    // another tab is visible. This is renderer layout, not owner navigation,
-    // and must not replace the reader's last deliberate position.
+    // A stale scroll event from the previously active project is renderer
+    // presentation, not owner navigation, and must not replace the reader's
+    // last deliberate position.
     scroller.scrollTop = 0;
     fireEvent.scroll(scroller);
     flush();

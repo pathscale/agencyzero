@@ -1,16 +1,6 @@
 import { Flex } from "@pathscale/ui";
 import type { JSX } from "@solidjs/web";
-import {
-  createEffect,
-  createMemo,
-  createSignal,
-  For,
-  Match,
-  onCleanup,
-  onSettled,
-  Show,
-  Switch,
-} from "solid-js";
+import { createEffect, createSignal, Match, onCleanup, onSettled, Show, Switch } from "solid-js";
 import { Button } from "~/components/Button";
 import { Icon } from "~/components/Icon";
 import { AnalyticsTab } from "~/features/analytics/AnalyticsTab";
@@ -33,25 +23,18 @@ import type { Project, Tab } from "~/types";
 /**
  * The one side panel, pointed at whichever project is in front.
  *
- * Built once for the life of the window and never gated on a `Show`: the
- * project it reads changes, its DOM does not. `ProjectPanel` already reads
- * everything through `props.project.id`, so re-pointing it is the whole
- * mechanism.
+ * Built once while project tabs remain active: the project it reads changes,
+ * its DOM does not. Leaving the project surface unmounts the branch.
  *
- * Hidden rather than removed when a fork is open or the sidebar is collapsed,
- * for the same reason the panes are: removing it would reconstruct it, which is
- * exactly what this exists to stop.
+ * Its contents are absent when a fork is open or the sidebar is collapsed, so
+ * controls nobody can reach do not remain in the semantic or layout tree.
  */
 function ActiveProjectPanel(): JSX.Element {
   const { state } = useWorkspace();
   /*
-   * The last project seen, not merely the active one.
-   *
-   * `activeKey` is Home or Settings as often as it is a project, and letting
-   * this go null there would dispose the panel and rebuild it on the way back,
-   * which is the reconstruction this whole arrangement exists to remove. Once a
-   * project has been opened the panel stays pointed at one; the container above
-   * hides it while a non-project tab is in front.
+   * A signal makes the active project and tab one reactive value. The enclosing
+   * project `Match` disposes this component before `activeKey` can represent a
+   * non-project surface.
    */
   const [lastSeen, setLastSeen] = createSignal<{ project: Project; tab: Tab } | null>(null);
   createEffect(
@@ -80,7 +63,7 @@ function ActiveProjectPanel(): JSX.Element {
           : "pointer-events-none ml-0 w-0 translate-x-3 opacity-0"
       }`}
     >
-      <Show when={active()}>
+      <Show when={shown() ? active() : null}>
         {(current) => <ProjectPanel project={current().project} agent={current().tab.agent} />}
       </Show>
     </div>
@@ -88,76 +71,18 @@ function ActiveProjectPanel(): JSX.Element {
 }
 
 /**
- * How many project panes keep their DOM while not on screen.
- *
- * A retained pane is hidden, not absent: it holds its whole subtree, its style
- * and layout nodes and its Solid reactive graph. Measured against the live app,
- * one pane is about a thousand DOM nodes, and at eight the hidden panes held
- * 5,461 of 10,988 nodes, half the tree, for panes nobody was looking at.
- *
- * Two was chosen for "the pane in front of you and the one you just came from",
- * and that is not how the window is used. Working across three or four tabs,
- * every switch evicts a pane that is about to be needed again: driving four
- * tabs for three cycles rebuilt the same three panes twelve times, 251 to
- * 461ms each, and the owner sees each of those as the side panel blanking and
- * refilling. Retention that never survives one lap is not retention.
- *
- * Two keeps what retention was for. The path retention exists to make cheap is
- * the back-and-forth between the pane in front of you and the one you just
- * came from, and two covers exactly that. Going further back rebuilds, which is
- * the cost retention was already paying on the ninth tab.
- *
- * **Do not raise this to buy fewer rebuilds.** It was tried at five, and the
- * live window went grey while the DOM stayed intact and correctly laid out.
- * `target/blitz-frame.log` named the cause: `layers_used_max=45` at
- * `layer_depth_max=8`, 38 of them from `overflow` alone, one set per retained
- * pane's scrollers, with `renderer_avg_ms=1245.99` and `paint_avg_ms=328.43`.
- * The compositor, not the node count, is the binding constraint here, and the
- * ceiling is far lower than "half the tree" suggests. Any change to this number
- * needs a `blitz-bench paint` reading and that log, not a node count.
- */
-export const RETAINED_PROJECT_LIMIT = 2;
-
-export function nextRetainedProjects(
-  current: readonly string[],
-  active: string | null,
-  open: readonly string[],
-): string[] {
-  const openSet = new Set(open);
-  const next = current.filter((key) => openSet.has(key) && key !== active);
-  if (active && openSet.has(active)) next.push(active);
-  return next.slice(-RETAINED_PROJECT_LIMIT);
-}
-
-/**
  * The window: a tab strip over one screen at a time.
  *
- * Home and the eight most recently visited project tabs retain their DOM. That
- * makes the common back-and-forth path a visibility toggle instead of a full
- * Solid/Boa reconstruction, while the hard limit prevents a long-lived tab
- * strip from rebuilding the old unbounded background DOM.
+ * Exactly one surface is mounted. Project tabs share one `Match` branch, so a
+ * project-to-project switch re-points one component tree at the new store keys
+ * instead of keeping an invisible tree for every recently visited project.
+ * This matters in Blitz: a `display:none` ancestor does not reliably release
+ * its descendants' layout boxes, so retained controls remain addressable to
+ * automation and keep the renderer walking work nobody can see.
  */
 export function Workspace(): JSX.Element {
   const { state, actions, activeTab, activeProject } = useWorkspace();
   const shell = useAppShell();
-  const [retainedProjects, setRetainedProjects] = createSignal<string[]>([]);
-
-  createEffect(
-    () => [state.tabs, state.activeKey] as const,
-    () => {
-      const active = activeTab();
-      const activeProjectId = active.kind === "project" ? active.projectId : null;
-      const openProjectIds = state.tabs.flatMap((tab) =>
-        tab.kind === "project" && tab.projectId ? [tab.projectId] : [],
-      );
-      setRetainedProjects((current) => {
-        const next = nextRetainedProjects(current, activeProjectId, openProjectIds);
-        return next.length === current.length && next.every((key, index) => key === current[index])
-          ? current
-          : next;
-      });
-    },
-  );
 
   return (
     <div class="az-desk relative flex h-full flex-col overflow-hidden">
@@ -224,118 +149,54 @@ export function Workspace(): JSX.Element {
               (activeTab().kind === "settings" && state.settings !== null)
             }
           >
-            <div
-              data-retained-tab="home"
-              aria-hidden={activeTab().kind !== "home" ? "true" : "false"}
-              class={activeTab().kind === "home" ? "flex min-h-0 min-w-0 flex-1" : "hidden"}
-            >
-              <HomeTab />
-            </div>
-
-            {/*
-              Settings mounts on demand, unlike Home and the project panes.
-
-              It was retained the same way they are, rendered always and hidden
-              with a class, and it is the largest subtree in the application:
-              measured on the running app at 835x9308px, hidden, still holding
-              layout. `blitz-bench ghost` reported 1,942 hidden nodes against a
-              healthy 58, and this was most of them. Every tab switch then
-              walked it in `propagate_damage_flags`, which is where the lag came
-              from - `commit 0ms, frame 33-168ms`, a state change that lands
-              instantly followed by up to twenty dropped frames at 120Hz.
-
-              Retention earns its cost for tabs someone flips between. Settings
-              is a destination, so its rebuild is paid once on the way in rather
-              than on every switch between two projects.
-            */}
-            <Show when={activeTab().kind === "settings"}>
-              <div data-retained-tab="settings" class="flex min-h-0 min-w-0 flex-1">
-                <SettingsTab />
-              </div>
-            </Show>
-
-            {/*
-              The panes and *one* side panel, in a row.
-
-              Each retained pane used to carry its own `ProjectPanel`, so opening
-              a project built a second complete 332px column - 24 component
-              instances per item row, its own scrollers, its own compositor
-              layers - to show data the store already held. That duplication was
-              the panel's whole first-build cost, the reason retention had to
-              stop at two, and the reason five panes greyed the window with
-              `overflow` layers.
-
-              `ProjectPanel` reads everything through `props.project.id`, so it
-              never cared which project it was pointed at; it simply was not
-              given the chance to be re-pointed. One instance lives here, beside
-              the panes rather than inside them, and a tab switch changes the
-              project it reads instead of revealing another copy of the
-              furniture. It is a plain child, never gated on a `Show`, so it is
-              built once for the life of the window.
-            */}
-            <div class={activeTab().kind === "project" ? "flex min-h-0 min-w-0 flex-1" : "hidden"}>
-              <For each={retainedProjects()}>
-                {(projectId) => {
-                  const view = createMemo(() => {
-                    const project = state.projects.find((candidate) => candidate.id === projectId);
-                    const tab = state.tabs.find((candidate) => candidate.key === projectId);
-                    return project && tab ? { project, tab } : null;
-                  });
-                  return (
-                    <Show when={view()}>
-                      {(retained) => (
-                        <div
-                          data-retained-project={projectId}
-                          aria-hidden={state.activeKey !== projectId ? "true" : "false"}
-                          class={
-                            state.activeKey === projectId ? "flex min-h-0 min-w-0 flex-1" : "hidden"
-                          }
-                        >
-                          <ProjectTab tab={retained().tab} project={retained().project} />
-                        </div>
-                      )}
-                    </Show>
-                  );
-                }}
-              </For>
-              <ActiveProjectPanel />
-            </div>
-
-            <Show
-              when={
-                activeTab().kind !== "home" &&
-                activeTab().kind !== "project" &&
-                activeTab().kind !== "settings"
-              }
-            >
-              <div class="flex min-h-0 min-w-0 flex-1">
-                <Switch>
-                  <Match when={activeTab().kind === "analytics"}>
-                    <AnalyticsTab />
-                  </Match>
-                  <Match when={activeTab().kind === "draft"}>
-                    <DraftTab tab={activeTab()} />
-                  </Match>
-                </Switch>
-              </div>
-            </Show>
-
-            <Show when={activeTab().kind === "project" && !activeProject()}>
-              {/*
-              A project tab whose record is not in state. Previously this matched
-              nothing and the window rendered an unexplained black void, which is
-              the worst possible failure: no content, no error, no way to tell a
-              missing record from a broken render.
-            */}
-              <div class="flex min-w-0 flex-1 flex-col items-center justify-center gap-2 rounded-panel border border-az-hairline bg-az-sunken">
-                <p class="text-[13.5px] text-az-title">{tx("This project could not be loaded")}</p>
-                <p class="max-w-[420px] text-center text-[11.5px] text-az-muted">
-                  {tx(
-                    "The tab is open but its record is missing from the workspace. Reopening the window will re-read it from the database.",
-                  )}
-                </p>
-              </div>
-            </Show>
+            <Switch>
+              <Match when={activeTab().kind === "home"}>
+                <div data-active-tab="home" class="flex min-h-0 min-w-0 flex-1">
+                  <HomeTab />
+                </div>
+              </Match>
+              <Match when={activeTab().kind === "settings"}>
+                <div data-active-tab="settings" class="flex min-h-0 min-w-0 flex-1">
+                  <SettingsTab />
+                </div>
+              </Match>
+              <Match when={activeTab().kind === "analytics"}>
+                <div data-active-tab="analytics" class="flex min-h-0 min-w-0 flex-1">
+                  <AnalyticsTab />
+                </div>
+              </Match>
+              <Match when={activeTab().kind === "draft"}>
+                <div data-active-tab="draft" class="flex min-h-0 min-w-0 flex-1">
+                  <DraftTab tab={activeTab()} />
+                </div>
+              </Match>
+              <Match when={activeTab().kind === "project" && activeProject()}>
+                {(project) => (
+                  <div data-active-project={project().id} class="flex min-h-0 min-w-0 flex-1">
+                    <ProjectTab tab={activeTab()} project={project()} />
+                    <ActiveProjectPanel />
+                  </div>
+                )}
+              </Match>
+              <Match when={activeTab().kind === "project"}>
+                {/*
+                  A project tab whose record is not in state. Previously this matched
+                  nothing and the window rendered an unexplained black void, which is
+                  the worst possible failure: no content, no error, no way to tell a
+                  missing record from a broken render.
+                */}
+                <div class="flex min-w-0 flex-1 flex-col items-center justify-center gap-2 rounded-panel border border-az-hairline bg-az-sunken">
+                  <p class="text-[13.5px] text-az-title">
+                    {tx("This project could not be loaded")}
+                  </p>
+                  <p class="max-w-[420px] text-center text-[11.5px] text-az-muted">
+                    {tx(
+                      "The tab is open but its record is missing from the workspace. Reopening the window will re-read it from the database.",
+                    )}
+                  </p>
+                </div>
+              </Match>
+            </Switch>
           </Match>
         </Switch>
       </main>
@@ -462,10 +323,8 @@ export default function App(): JSX.Element {
   });
 
   return (
-    <>
-      <WorkspaceProvider>
-        <Workspace />
-      </WorkspaceProvider>
-    </>
+    <WorkspaceProvider>
+      <Workspace />
+    </WorkspaceProvider>
   );
 }
