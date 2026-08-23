@@ -42,6 +42,16 @@
         expect: ValueChanges,
     ),
     (
+        id: "toggles-update-checks",
+        group: "toggles",
+        what: "automatic update checks change",
+        open: Some("Settings"),
+        hover: None,
+        click: Some("Check for updates at launch"),
+        subject: "Check for updates at launch",
+        expect: ValueChanges,
+    ),
+    (
         id: "toggles-prompt-syntax",
         group: "toggles",
         what: "per-turn AgencyZero and Prompt Syntax injection changes",
