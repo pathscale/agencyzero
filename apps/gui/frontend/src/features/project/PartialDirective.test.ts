@@ -2,19 +2,22 @@ import { describe, expect, it } from "vitest";
 import { holdBackPartialDirective } from "~/features/project/TranscriptPane";
 
 /**
- * The unbounded original, kept here as the oracle.
+ * A direct last-line implementation, kept here as the oracle.
  *
- * `holdBackPartialDirective` now searches only the last line, because scanning
- * the whole body was O(body) on every streaming token and a miss — no directive
- * at all, which is most replies — was the case that had to reach the start of
- * the string before it could answer. The bound is only safe if it cannot change
- * an answer, so the two are compared at every prefix rather than at the end.
+ * The production implementation must remain bounded to the last line, because
+ * it runs on every streaming token. This independently spells the intended
+ * result at every prefix: an unfinished tail is hidden, as is a finished valid
+ * authoring line until the next line starts.
  */
 function unbounded(text: string): string {
-  const open = text.lastIndexOf("<ps");
-  if (open === -1) return text;
+  const lineStart = text.lastIndexOf("\n") + 1;
+  const line = text.slice(lineStart);
+  const inLine = line.lastIndexOf("<ps");
+  if (inLine === -1) return text;
+  const open = lineStart + inLine;
   const closed = text.indexOf(">", open);
-  return closed === -1 ? text.slice(0, open) : text;
+  if (closed === -1) return text.slice(0, open);
+  return /^\s*<ps @agency:[^\n]+>\s*$/.test(line) ? text.slice(0, lineStart) : text;
 }
 
 describe("holdBackPartialDirective", () => {
@@ -48,11 +51,21 @@ describe("holdBackPartialDirective", () => {
     }
   });
 
-  it("holds back a directive that is still arriving, and releases it when it closes", () => {
+  it("holds back both an arriving directive and its completed live tail", () => {
     const partial = 'Done.\n<ps @agency:items.state(id: "item-a3f9"';
     expect(holdBackPartialDirective(partial)).toBe("Done.\n");
 
     const complete = `${partial}, status: "active")>`;
-    expect(holdBackPartialDirective(complete)).toBe(complete);
+    expect(holdBackPartialDirective(complete)).toBe("Done.\n");
+    expect(holdBackPartialDirective(`${complete}\nContinuing.`)).toBe(`${complete}\nContinuing.`);
+  });
+
+  it("never exposes a complete Codex directive or private pong as the live tail", () => {
+    expect(
+      holdBackPartialDirective(
+        '<ps @agency:items.add(ref: "t6", title: "Add wheel", priority: "high")>',
+      ),
+    ).toBe("");
+    expect(holdBackPartialDirective("<ps @agency:pong()>")).toBe("");
   });
 });
