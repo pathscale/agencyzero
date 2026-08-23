@@ -1391,6 +1391,19 @@ fn take_incomplete_prompt_syntax_tail(body: &mut String) -> Option<String> {
     }
 }
 
+/// Whether a complete provider text delta is the watchdog's private pong.
+///
+/// The run loop still scans it for liveness state, but the transcript must not
+/// receive a control line the application itself requested.
+fn is_liveness_pong(text: &str) -> bool {
+    matches!(
+        crate::directives::parse_authored(text.trim()),
+        Some(crate::directives::Authored::Directive(
+            crate::directives::Directive::Pong
+        ))
+    )
+}
+
 /// Whether this run needs an approval callback as well as its sandbox posture.
 ///
 /// Ask is explicitly human-gated for every capable provider. Auto deliberately
@@ -11764,11 +11777,14 @@ async fn drive_run(
                 streamed_any = true;
                 streamed_text.push_str(&delta);
                 streamed_chunk.push_str(&delta);
-                note_io(&app, &io, &project_id, "received", "text", &delta);
-                let _ = app.emit(
-                    "run:text",
-                    serde_json::json!({ "projectId": project_id, "delta": delta }),
-                );
+                let private_pong = ping_outstanding && is_liveness_pong(&delta);
+                if !private_pong {
+                    note_io(&app, &io, &project_id, "received", "text", &delta);
+                    let _ = app.emit(
+                        "run:text",
+                        serde_json::json!({ "projectId": project_id, "delta": delta }),
+                    );
+                }
                 /*
                  * Directives take effect as their complete line arrives.
                  *
@@ -15743,6 +15759,16 @@ mod tests {
             assert_eq!(take_incomplete_prompt_syntax_tail(&mut chunk), None);
             assert_eq!(chunk, source);
         }
+    }
+
+    #[test]
+    fn watchdog_pong_is_private_control_text() {
+        assert!(is_liveness_pong("<ps @agency:pong()>"));
+        assert!(is_liveness_pong("\n\n<ps @agency:ping()>\n"));
+        assert!(!is_liveness_pong(
+            "<ps @agency:items.state(id: \"item-a\", status: \"active\")>"
+        ));
+        assert!(!is_liveness_pong("still working"));
     }
 
     #[tokio::test]
