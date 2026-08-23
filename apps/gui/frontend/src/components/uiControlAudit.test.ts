@@ -26,13 +26,16 @@ function tsxFiles(directory: string): string[] {
  * A native control is allowed only where the file says why, on the line above
  * it: `{/* native-control: <reason> *\/}` or a `// native-control:` comment.
  *
- * `EditableTitle` is the case this exists for. Its pencil is a real `<button>`
- * because the library's renders through `Dynamic` and the click never reached
- * the handler: measured against a running build, the hit acknowledged in 1.5ms
- * with no state change, against 63ms and a 254-node change for a control
- * button on the same surface. That is a finding worth keeping, not worth
- * silently reverting, and an audit with no way to record it would have been
- * deleted the first time it got in the way.
+ * The exemption exists so a real finding can be recorded rather than silently
+ * reverted, and so an audit that got in the way once was not simply deleted.
+ *
+ * It is deliberately empty now. `EditableTitle` was the case this was written
+ * for: its pencil was a native `<button>` because the library's was believed to
+ * drop clicks through `Dynamic`. Re-measured against a current build that is no
+ * longer true, and the pencil is a library `Button` again. Before adding an
+ * exemption, check the claim against a running app rather than inheriting it:
+ * the last one outlived the defect it described by several releases and pulled
+ * a second component out of the design system with it.
  */
 const EXEMPTION = /native-control:/;
 

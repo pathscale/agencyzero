@@ -38,21 +38,23 @@ describe("the editable title", () => {
     return { screen, onRename };
   };
 
+  // Asserts the field is there or not, rather than which classes it carries.
+  // These used to check for a "hidden" class, because both branches were
+  // mounted for the life of the component to work around a renderer that would
+  // not attach a `<Show>` branch. It attaches them now, so the swap is an
+  // ordinary mount and a class assertion would only describe the styling.
   it("shows the field and hides the name when the pencil is pressed", () => {
     const { screen } = setup();
     const pencil = screen.getByLabelText("Rename derived name");
-    const field = screen.getByLabelText("Project name") as HTMLInputElement;
 
-    // Both branches are mounted for the life of the component, so "hidden" is
-    // a class on the wrapper rather than an absent node.
-    expect(field.closest("span")?.className).toContain("hidden");
+    expect(screen.queryByLabelText("Project name")).toBeNull();
 
     fireEvent.mouseDown(pencil);
     flush();
 
-    expect(field.closest("span")?.className).not.toContain("hidden");
-    // The name it is about to replace steps out of the way.
-    expect(pencil.closest("span")?.className).toContain("hidden");
+    expect(screen.getByLabelText("Project name")).toBeTruthy();
+    // The name it replaces steps out of the way.
+    expect(screen.queryByLabelText("Rename derived name")).toBeNull();
   });
 
   it("starts the draft from the current name", () => {
@@ -91,7 +93,7 @@ describe("the editable title", () => {
     flush();
 
     expect(onRename).not.toHaveBeenCalled();
-    expect(field.closest("span")?.className).toContain("hidden");
+    expect(screen.queryByLabelText("Project name")).toBeNull();
   });
 
   it("refuses to write an empty name", () => {
