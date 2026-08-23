@@ -104,20 +104,19 @@ jobs:
 
       - name: Launch the app
         run: |
-          export TAURI_BLITZ_CONTROL_DESCRIPTOR="$PWD/target/blitz-control.json"
           AZ_DATA_DIR=/tmp/qa-profile-db \
             ./target/debug/az-gui > /tmp/az-qa.log 2>&1 &
           echo $! > /tmp/az-qa.pid
-          # The window has to exist before anything can be pressed. Poll for the
-          # descriptor rather than sleeping a fixed time, which is the
-          # difference between a slow runner passing and a slow runner
-          # reporting every control as missing.
+          # The window has to exist before anything can be addressed. Poll the
+          # CLI's normal descriptor discovery rather than creating an Agency
+          # environment contract for the socket path.
           for _ in $(seq 1 60); do
-            [ -f "$PWD/target/blitz-control.json" ] && break
+            ps-qa nodes > /tmp/attach.txt 2>&1 && break
             sleep 2
           done
-          if [ ! -f "$PWD/target/blitz-control.json" ]; then
-            echo "the app never wrote its control descriptor" >&2
+          if ! ps-qa nodes > /tmp/attach.txt 2>&1; then
+            echo "ps-qa could not discover the app control descriptor" >&2
+            cat /tmp/attach.txt >&2
             tail -40 /tmp/az-qa.log >&2
             exit 1
           fi
@@ -129,13 +128,12 @@ jobs:
         run: |
           integrity=0
           ps-qa find '*' --role button --hidden --painted \
-            --descriptor "$PWD/target/blitz-control.json" 2>&1 | tee /tmp/hidden-painted.txt
+            2>&1 | tee /tmp/hidden-painted.txt
           if ! grep -Eq '^matched:[[:space:]]*0$' /tmp/hidden-painted.txt; then
             echo "hidden painted buttons make semantic audit results ambiguous" >&2
             integrity=1
           fi
-          ps-qa ghost \
-            --descriptor "$PWD/target/blitz-control.json" 2>&1 | tee /tmp/ghost.txt || integrity=1
+          ps-qa ghost 2>&1 | tee /tmp/ghost.txt || integrity=1
           exit "$integrity"
 
       - name: Run the checks
@@ -144,16 +142,14 @@ jobs:
         run: |
           # Run from the repository root: the harness discovers ps-qa.ron and
           # tests/ps-qa/ relative to the working directory.
-          ps-qa qa ${{ inputs.group }} \
-            --descriptor "$PWD/target/blitz-control.json" 2>&1 | tee /tmp/qa.txt
+          ps-qa qa ${{ inputs.group }} 2>&1 | tee /tmp/qa.txt
 
       - name: Coverage
         if: ${{ inputs.cover }}
         continue-on-error: true
         run: |
           for surface in home project settings analytics; do
-            ps-qa cover "$surface" \
-              --descriptor "$PWD/target/blitz-control.json" 2>&1 || true
+            ps-qa cover "$surface" 2>&1 || true
           done | tee /tmp/cover.txt
 
       # Collection continues past integrity faults so one macOS launch yields

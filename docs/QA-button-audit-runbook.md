@@ -33,7 +33,6 @@ cargo build --release --bin az-gui
 
 scripts/qa-profile-restore.sh /tmp/qa-profile-db
 AZ_DATA_DIR=/tmp/qa-profile-db \
-  TAURI_BLITZ_CONTROL_DESCRIPTOR="$PWD/target/blitz-control.json" \
   ./target/release/az-gui &
 ```
 
@@ -41,19 +40,18 @@ The default build includes `blitz-inspector`; the AgencyZero Settings toggle is
 the normal control enablement source. The committed QA profile stores that
 toggle as enabled. `--blitz-control` is an enable-only recovery path so turning
 the setting off cannot lock automation out of the control needed to turn it
-back on. The descriptor environment variable only pins the socket location.
-Never run against the System instance or its data directory. Stop the exact QA
-PID with TERM; never use a broad name match or `-9`.
+back on. Never run against the System instance or its data directory. Stop the
+exact QA PID with TERM; never use a broad name match or `-9`.
 
-Pin every command to the descriptor and run from the repository root, where
-`ps-qa.ron` and `tests/ps-qa/` live:
+Run from the repository root, where `ps-qa.ron` and `tests/ps-qa/` live. ps-qa
+discovers the newest live descriptor; use its `--descriptor` CLI option only to
+disambiguate deliberately concurrent diagnostics instances:
 
 ```sh
-D=--descriptor="$PWD/target/blitz-control.json"
 ps-qa list
-ps-qa qa $D
-ps-qa qa rename $D
-ps-qa qa rename-project-header $D --trace
+ps-qa qa
+ps-qa qa rename
+ps-qa qa rename-project-header --trace
 ```
 
 The manual GitHub workflow is `.github/workflows/qa-panel.yml`. It builds the
@@ -66,16 +64,16 @@ release gate.
 Start every investigation with `find`:
 
 ```sh
-ps-qa find '*' --role button $D
-ps-qa find 'Edit *' --role button --visible $D
-ps-qa find '*' --role button --hidden --painted $D
+ps-qa find '*' --role button
+ps-qa find 'Edit *' --role button --visible
+ps-qa find '*' --role button --hidden --painted
 ```
 
 `find` returns the semantic id. When a table has the same button name on every
 row, activate the exact returned id:
 
 ```sh
-ps-qa click --id 1842 $D
+ps-qa click --id 1842
 ```
 
 Names select candidates; coordinates never select or activate controls. The
@@ -86,14 +84,14 @@ so the two clicks cannot drift outside the platform interval.
 Useful diagnostics:
 
 ```sh
-ps-qa dom '<name>' 8 $D
-ps-qa paint '<name>' $D
-ps-qa capture '<name>' 4 $D
-ps-qa nodes $D
-ps-qa panes $D
-ps-qa audit $D
-ps-qa ghost $D
-ps-qa spill $D
+ps-qa dom '<name>' 8
+ps-qa paint '<name>'
+ps-qa capture '<name>' 4
+ps-qa nodes
+ps-qa panes
+ps-qa audit
+ps-qa ghost
+ps-qa spill
 ```
 
 `capture` answers whether ink was drawn. `paint` answers which styles the
@@ -104,8 +102,8 @@ renderer resolved. `dom` names the ancestor that made a control hidden or 0x0.
 Run these before `cover` or any count-based assertion:
 
 ```sh
-ps-qa find '*' --role button --hidden --painted --count $D
-ps-qa ghost $D
+ps-qa find '*' --role button --hidden --painted --count
+ps-qa ghost
 ```
 
 A hidden subtree with layout boxes is an application defect. Do not teach the
