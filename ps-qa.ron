@@ -47,6 +47,32 @@ AppProfile(
     fold_prefixes: ["Collapse ", "Hide "],
     deferred_controls: ["New project"],
 
+    // Controls that hand the screen to a macOS file panel. The harness cannot
+    // drive one - it is not in the tree and no synthesised event reaches it -
+    // so these are counted, named in the report, and left for a person.
+    //
+    // Re-derive with: grep -n '\.dialog()' apps/gui/src/*.rs
+    // If that count changes, this list is stale.
+    native_choosers: [
+        (label: "Attach files",                        command: "choose_attachments"),
+        (label: "Add dir",                             command: "choose_project_directory"),
+        (label: "Choose a working directory",          command: "choose_project_directory"),
+        (label: "Choose the agencyzero data directory", command: "(startup data dir)"),
+        (label: "Select backup file",                  command: "select_store_backup"),
+        (label: "Back up & close",                     command: "create_store_backup"),
+        (label: "Export",                              command: "export_study_events"),
+        // The agency proxy binary picker. Its panel cannot open headless, so a
+        // press hangs the run behind a window that never appears.
+        (label: "Choose\u{2026}",                       command: "choose_agent_proxy_binary"),
+
+        // Controls that hand the screen to the *browser*. Same problem as a
+        // native panel and worse manners: a sweep that presses these opens a
+        // tab on the owner's desktop for every PR and issue on screen.
+        (label: "Open http",                           command: "openExternal (link)"),
+        (label: "View source",                         command: "openExternal (repository)"),
+        (label: "Star on GitHub",                      command: "openExternal (repository)"),
+    ],
+
     transcript_region: Some("Conversation"),
     home_opener: Some("Home"),
 )
