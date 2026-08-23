@@ -63,7 +63,7 @@ tauri-build = { version = "2", features = [] }
 [dependencies]
 # Carries the store forward when a column changes; see crates/wt-migrate.
 wt-migrate = { path = "../../crates/wt-migrate" }
-agent-abstraction = "0.4.15"
+agent-abstraction = "0.4.19"
 agency-proxy-client.workspace = true
 agency-proxy-protocol.workspace = true
 agent-experimental = { version = "^0.1.3", default-features = false, optional = true }

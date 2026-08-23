@@ -8288,6 +8288,10 @@ pub async fn reset_project_session(
 ) -> Result<(), String> {
     let agent = parse_agent(agent.as_deref())?;
     let force = force.unwrap_or(false);
+    let provider_session = state
+        .tables
+        .kv_get(&agent_session_key(&project_id, agent))
+        .filter(|session| !session.is_empty());
 
     // Signal the ordinary driver first, but do not trust this registry as the
     // source of truth. A wedged driver can stop receiving while AgencyProxy
@@ -8319,6 +8323,19 @@ pub async fn reset_project_session(
     } else {
         0
     };
+    let interrupted_provider_turn = if force && agent == Agent::Codex {
+        match provider_session.as_deref() {
+            Some(session_id) => {
+                state
+                    .proxy
+                    .interrupt_session(agent_wire_name(agent), session_id)
+                    .await?
+            }
+            None => false,
+        }
+    } else {
+        false
+    };
     if force {
         let mut active = state
             .active
@@ -8333,7 +8350,7 @@ pub async fn reset_project_session(
             active.remove(&project_id);
         }
     }
-    if stopped_agent.is_some() || canceled_proxy_runs > 0 {
+    if stopped_agent.is_some() || canceled_proxy_runs > 0 || interrupted_provider_turn {
         emit_run_stopped(
             &app,
             &project_id,
@@ -8359,9 +8376,11 @@ pub async fn reset_project_session(
     crate::log!(
         crate::log::Level::Info,
         "projects",
-        "{}: {} stuck run reset; the next prompt resumes the same session",
+        "{}: {} stuck run reset; canceled {} proxy run(s), provider turn interrupted: {}; the next prompt resumes the same session",
         project_id,
-        agent_wire_name(agent)
+        agent_wire_name(agent),
+        canceled_proxy_runs,
+        interrupted_provider_turn
     );
     note_gui(
         &app,
