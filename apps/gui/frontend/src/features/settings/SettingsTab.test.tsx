@@ -460,9 +460,9 @@ describe("appearance settings", () => {
     flush();
     await waitFor(() => expect(screen.workspace.state.settings?.theme.surface).not.toBe(darkHex));
     expect(
-      Array.from(
-        screen.container.querySelectorAll<HTMLButtonElement>('button[role="radio"]'),
-      ).some((swatch) => swatch.getAttribute("aria-checked") === "true"),
+      Array.from(screen.container.querySelectorAll<HTMLButtonElement>('button[role="radio"]')).some(
+        (swatch) => swatch.getAttribute("aria-checked") === "true",
+      ),
     ).toBe(true);
 
     fireEvent.click(screen.getByRole("button", { name: "Dark" }));
