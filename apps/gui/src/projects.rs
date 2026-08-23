@@ -1357,6 +1357,21 @@ fn needs_text_break(streamed_any: bool, last_was_text: bool) -> bool {
     streamed_any && !last_was_text
 }
 
+/// Whether a provider text delta needs a line boundary before authored PS.
+///
+/// The full prefix normally arrives in one delta. The `after_message_boundary`
+/// input exists for the fragmented case where a new assistant segment starts
+/// with only `<` and completes `<ps @agency:` in later deltas.
+fn needs_directive_line_boundary(
+    streamed_text: &str,
+    delta: &str,
+    after_message_boundary: bool,
+) -> bool {
+    let starts_authored_control = delta.starts_with("<ps @agency:")
+        || (after_message_boundary && !delta.is_empty() && "<ps @agency:".starts_with(delta));
+    starts_authored_control && !streamed_text.ends_with('\n')
+}
+
 /// Whether an event actually separates two visible assistant prose blocks.
 ///
 /// Provider bookkeeping can arrive between arbitrary text deltas. Treating a
@@ -11290,6 +11305,11 @@ async fn drive_run(
      * fallback for a run that never streamed.
      */
     let mut streamed_text = recovered_body.clone();
+    // Codex emits this after each completed assistant segment. It is not a
+    // paragraph break by itself, but it proves that a fragmented `<ps` prefix
+    // beginning in the next text delta is authored as a new standalone span
+    // rather than an inline mention continuing the previous prose.
+    let mut after_message_boundary = false;
     // The not-yet-persisted slice of `streamed_text`. A live owner message
     // closes this slice so it can render before that message instead of the
     // whole agent turn landing as one final blob below it.
@@ -11828,6 +11848,9 @@ async fn drive_run(
                     }),
                 );
             }
+            Event::MessageBoundary => {
+                after_message_boundary = true;
+            }
             Event::Text(delta) => {
                 /*
                  * Interactive providers may emit one visible message as many
@@ -11837,7 +11860,8 @@ async fn drive_run(
                  * own block without inserting whitespace between tokens.
                  */
                 let directive_boundary =
-                    delta.starts_with("<ps @agency:") && !streamed_text.ends_with('\n');
+                    needs_directive_line_boundary(&streamed_text, &delta, after_message_boundary);
+                after_message_boundary = false;
                 let delta = if needs_text_break(streamed_any, last_was_text) || directive_boundary {
                     format!("\n\n{delta}")
                 } else {
@@ -15826,6 +15850,44 @@ mod tests {
             name: "shell".into(),
             input: serde_json::json!({"command": "true"}),
         }));
+    }
+
+    #[test]
+    fn a_fragmented_directive_keeps_the_completed_assistant_segment_boundary() {
+        let id = "item-b0046c47-edd0-42b5-9159-2b50691a7362";
+        let mut streamed = "Correcting the stale rows now.".to_string();
+        for (delta, after_message_boundary) in [
+            ("<", true),
+            (
+                "ps @agency:items.state(id: \"item-b0046c47-edd0-42b5-9159-2b50691a7362\", status: \"finished\")>",
+                false,
+            ),
+        ] {
+            if needs_directive_line_boundary(&streamed, delta, after_message_boundary) {
+                streamed.push_str("\n\n");
+            }
+            streamed.push_str(delta);
+        }
+
+        let directive = streamed
+            .lines()
+            .last()
+            .expect("the directive remains its own line");
+        assert_eq!(
+            directive,
+            format!(r#"<ps @agency:items.state(id: "{id}", status: "finished")>"#)
+        );
+        assert!(matches!(
+            crate::directives::parse_authored(directive),
+            Some(crate::directives::Authored::Directive(
+                crate::directives::Directive::ItemState { id: parsed, status, .. }
+            )) if parsed == id && status == "finished"
+        ));
+        assert!(!needs_directive_line_boundary(
+            "Correcting the stale rows now.",
+            "<",
+            false,
+        ));
     }
 
     #[test]
