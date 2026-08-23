@@ -1538,8 +1538,12 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
                 <button
                   type="button"
                   /*
-                   * native-control: A native button, not the library's, and the
-                   * same finding as `EditableTitle`'s pencil.
+                   * native-control: A native button, not the library's.
+                   *
+                   * This is a cost argument, not a correctness one. `Dynamic`
+                   * delivers clicks correctly; the claim that it did not was
+                   * `EditableTitle`'s, it was stale, and that component uses
+                   * the library `Button` again.
                    *
                    * The library `Button` builds a `Dynamic` over a recipe, three
                    * `Show` blocks for the spinner and two icon slots, a
