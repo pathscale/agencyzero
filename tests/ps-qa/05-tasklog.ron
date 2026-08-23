@@ -1,0 +1,32 @@
+// The task log renders its per-row controls and can page backwards.
+//
+// Both regressed once with the unit suite green: the log rendered upside down,
+// and it could not page past its first fetch.
+[
+    (
+        id: "tasklog-1",
+        group: "tasklog",
+        what: "task log rows render their per-row copy control",
+        open: Some("theta theta north indi"),
+        hover: None, click: None, press: false,
+        subject: "Copy this task-log entry",
+        expect: Paints,
+        panel_only: true,
+    ),
+    // `PaintsMore`, not `Grows`. `Grows` counts tree membership, so a page of
+    // rows that mounted and then laid out at 0x0 satisfies it: the log would
+    // look paged and show the owner nothing. Measured both ways on a working
+    // build; this is the stronger one that still passes.
+    (
+        id: "tasklog-2",
+        group: "tasklog",
+        what: "revealing earlier entries adds rows",
+        open: Some("theta theta north indi"),
+        hover: None,
+        click: Some("Show 20 earlier"),
+        press: false,
+        subject: "Copy this task-log entry",
+        expect: PaintsMore,
+        panel_only: true,
+    ),
+]

@@ -1,0 +1,41 @@
+// What ps-qa has to be told about this application.
+//
+// The harness is a harness: it knows how to drive a Blitz app through its
+// control socket and judge what the renderer did. It does not know that this
+// product has a surface called Analytics or a section called `Agent I/O`, and
+// it should not. Those facts live here, next to the application that owns them.
+//
+// Data rather than code, so correcting a name is an edit and a re-run rather
+// than an edit, a recompile and a re-run.
+AppProfile(
+    // Home last: it owns the destructive project-row controls, so visiting it
+    // before the others would delete the rows those others are reached through.
+    surfaces: [
+        (name: "project",   opener: "\u{0}project-tab"),
+        (name: "settings",  opener: "Settings"),
+        (name: "analytics", opener: "Analytics"),
+        (name: "home",      opener: "Home"),
+    ],
+
+    // Always in the strip, never a document. The doubled form is accepted too,
+    // because a tab's accessible name repeats its label (`HomeHome`).
+    permanent_surfaces: ["Home", "Settings", "Analytics"],
+
+    // Collapsible headers, by label without the count.
+    //
+    // Getting this list wrong is expensive rather than cosmetic: a collapse
+    // takes everything under it off screen, so folding a section a dozen
+    // controls before the sweep reaches its rows makes every one of them read
+    // as vanished. That is exactly how the fork dialog escaped the audit.
+    sections: [
+        "Items",
+        "Running",
+        "Task log",
+        "Agent I/O",
+        "Kept across compaction",
+        "Recent",
+    ],
+
+    transcript_region: Some("Conversation"),
+    home_opener: Some("Home"),
+)

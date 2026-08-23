@@ -1,0 +1,21 @@
+// Artwork resolves to a box on screen.
+//
+// The regression that started this audit: 327 `presentation` nodes with correct
+// boxes and correct stroke colours, drawing nothing. `blitz-dom` parses each
+// inline <svg> into its own usvg::Tree from that element's outer_html alone, so
+// a <use href="#i-check"> into the shared sprite resolved to nothing. A DOM-only
+// environment cannot see this, because its <svg> never goes near a rasteriser.
+[
+    (
+        id: "icons-paint",
+        group: "icons",
+        what: "icon nodes occupy a box on screen",
+        open: Some("theta theta north indi"),
+        hover: None,
+        click: None,
+        press: false,
+        subject: "presentation",
+        expect: Paints,
+        panel_only: false,
+    ),
+]

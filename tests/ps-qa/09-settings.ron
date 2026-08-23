@@ -1,0 +1,83 @@
+// Settings: the surface that had fourteen controls and no checks at all.
+//
+// # Why these count menu entries instead of naming one
+//
+// Every control here opens a dropdown, and **not one menu entry has an
+// accessible name**: every menuitem row ends at `content=` with nothing after
+// it. `PaintsNamed` cannot be written for any of them, because there is no name
+// to match. A menu a screen reader cannot announce is a menu nobody can use
+// without sight, and it is the same defect that leaves 70 buttons unreachable.
+//
+// # Why PaintsMore and not a count of the tree
+//
+// The menus are retained. Across four consecutive opens the tree grew
+// 32 -> 34 -> 38 -> 43 -> 49 menuitems and never shrank, because a closed menu is
+// laid out at 0x0 rather than removed. A tree count therefore rises whether or
+// not the control did anything. Painted entries are stable: 0 with every menu
+// closed, 6 with one open.
+//
+// # settings-agent-menu fails, and the control is fine
+//
+// It reports `6 -> 2`: fewer entries painting after the press than before, which
+// is what pressing a control looks like while another menu is already open. It
+// fails identically run alone on a freshly restored profile, so the open menu
+// comes from its own arrival step. Driven by hand from a clean surface the
+// control is correct, 0 painting before and 2 after. Left failing on purpose:
+// deleting it hides the arrival bug, and a `Holds` would let a genuinely broken
+// dropdown pass.
+//
+// # Not covered
+//
+// `Refresh`, `Stop` and `Re-check` act on the update channel, so their outcome is
+// a network round trip needing a store assertion rather than a geometry one.
+// Three further controls open native macOS file panels, which cannot be driven.
+[
+    (
+        id: "settings-language-menu",
+        group: "settings",
+        what: "the language control opens a menu",
+        open: Some("Settings"),
+        hover: None,
+        click: Some("Current language: English"),
+        press: true,
+        subject: "menuitem",
+        expect: PaintsMore,
+        panel_only: false,
+    ),
+    (
+        id: "settings-agent-menu",
+        group: "settings",
+        what: "the default agent control opens a menu",
+        open: Some("Settings"),
+        hover: None,
+        click: Some("Default agent"),
+        press: true,
+        subject: "menuitem",
+        expect: PaintsMore,
+        panel_only: false,
+    ),
+    (
+        id: "settings-effort-menu",
+        group: "settings",
+        what: "the default effort control opens a menu",
+        open: Some("Settings"),
+        hover: None,
+        click: Some("Default effort"),
+        press: true,
+        subject: "menuitem",
+        expect: PaintsMore,
+        panel_only: false,
+    ),
+    (
+        id: "settings-permission-menu",
+        group: "settings",
+        what: "the default permission control opens a menu",
+        open: Some("Settings"),
+        hover: None,
+        click: Some("Default permission"),
+        press: true,
+        subject: "menuitem",
+        expect: PaintsMore,
+        panel_only: false,
+    ),
+]

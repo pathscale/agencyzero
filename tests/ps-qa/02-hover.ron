@@ -1,0 +1,60 @@
+// Row controls, and whether hovering has anything to do with them.
+//
+// hover-1..3 assert presence, which is weaker than it looks: measured on a live
+// instance, 13 of the 19 `Edit ` controls already paint with the pointer parked
+// away from every row. They would pass with hover removed from the application.
+// `hover-does-not-gate-row-controls` states that out loud, so the group stops
+// reading as coverage of a reveal that is not happening.
+[
+    (
+        id: "hover-1",
+        group: "hover",
+        what: "hovering an item row reveals its move-up arrow",
+        open: Some("theta theta north indi"),
+        hover: Some("Change the status of"),
+        click: None,
+        press: false,
+        subject: "Move ",
+        expect: Paints,
+        panel_only: true,
+    ),
+    (
+        id: "hover-2",
+        group: "hover",
+        what: "hovering an item row reveals its edit control",
+        open: Some("theta theta north indi"),
+        hover: Some("Change the status of"),
+        click: None,
+        press: false,
+        subject: "Edit ",
+        expect: Paints,
+        panel_only: true,
+    ),
+    (
+        id: "hover-3",
+        group: "hover",
+        what: "hovering an item row reveals its delete control",
+        open: Some("theta theta north indi"),
+        hover: Some("Change the status of"),
+        click: None,
+        press: false,
+        subject: "Delete ",
+        expect: Paints,
+        panel_only: true,
+    ),
+    // `Holds` is what is true today. If the panel ever moves to hover-gated
+    // controls this goes red, which is the correct direction to fail: it means
+    // the three above have started testing something.
+    (
+        id: "hover-does-not-gate-row-controls",
+        group: "hover",
+        what: "row controls paint whether or not the row is hovered",
+        open: Some("theta theta north indi"),
+        hover: Some("Change the status of"),
+        click: None,
+        press: false,
+        subject: "Edit ",
+        expect: Holds,
+        panel_only: true,
+    ),
+]

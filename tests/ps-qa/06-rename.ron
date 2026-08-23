@@ -1,0 +1,39 @@
+// The in-place rename editor opens when its pencil is pressed.
+//
+// This shipped dead on 31 surfaces with a green unit suite either side of it.
+// The row around the pencil is a role="button" that folds on `click`, the
+// framework delegates `click`, and the pencil's stopPropagation lost that race.
+// jsdom has no competing handler, so it never saw the conflict.
+//
+// `press: true` matters: the editor opens on mousedown, so a synthesised click
+// does nothing at all.
+//
+// The subject is `textbox:<name>` rather than the name alone, because
+// EditableTitle gives the pencil and its editor the same accessible name: a
+// name-only assertion is satisfied by the pencil whether or not the editor opens.
+[
+    (
+        id: "rename-opens-editor",
+        group: "rename",
+        what: "pressing the pencil opens an editor the owner can type into",
+        open: Some("Home"),
+        hover: None,
+        click: Some("Rename e756"),
+        press: true,
+        subject: "textbox:Rename e756",
+        expect: PaintsNamed,
+        panel_only: false,
+    ),
+    (
+        id: "rename-project-header",
+        group: "rename",
+        what: "the project header's pencil opens its editor",
+        open: Some("theta theta north indi"),
+        hover: None,
+        click: Some("Rename project"),
+        press: true,
+        subject: "textbox:Rename project",
+        expect: PaintsNamed,
+        panel_only: false,
+    ),
+]
