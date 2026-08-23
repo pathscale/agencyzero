@@ -225,6 +225,11 @@ function ItemSortControls(): JSX.Element {
           })
         }
         class="rounded-full border border-az-hairline bg-az-inset px-2 py-0.5 font-medium text-[10.5px] text-az-muted transition-colors hover:text-az-strong"
+        aria-label={
+          sortBy() === "status"
+            ? tx("Sort items by status; choose time")
+            : tx("Sort items by time; choose status")
+        }
         title={tx("Toggle item sort between status and time")}
       >
         {sortBy() === "status" ? tx("Status") : tx("Time")}

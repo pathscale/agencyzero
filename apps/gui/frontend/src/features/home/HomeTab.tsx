@@ -378,6 +378,13 @@ function HomeItemSortControls(): JSX.Element {
         type="button"
         onClick={nextSort}
         class="rounded-md border border-az-hairline bg-az-inset px-1.5 py-0.5 font-medium text-[10.5px] text-az-muted transition-colors hover:text-az-strong"
+        aria-label={
+          sortBy() === "status"
+            ? tx("Sort Home by status; choose time")
+            : sortBy() === "time"
+              ? tx("Sort Home by time; choose turns")
+              : tx("Sort Home by turns; choose status")
+        }
         title={tx("Cycle Home sort between status, time, and turns")}
       >
         {/*
