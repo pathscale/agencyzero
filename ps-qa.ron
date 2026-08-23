@@ -45,7 +45,21 @@ AppProfile(
     close_prefixes: ["Close "],
     row_action_prefixes: ["Rename "],
     fold_prefixes: ["Collapse ", "Hide "],
-    deferred_controls: ["New project"],
+    deferred_controls: [
+        "New project",
+        "Welcome Tutorial",
+        "Restart",
+        "Reset all",
+        "Sign out",
+    ],
+
+    // These effects are intentionally outside the semantic tree. They remain
+    // activated by node id, but an unchanged tree is not itself a failure.
+    inert_controls: [
+        "Refresh",
+        "Re-check",
+        "Extra Thinking",
+    ],
 
     // Controls reserved for the manual release pass: native dialogs the
     // harness cannot close and external destinations that leave this app.
