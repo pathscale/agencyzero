@@ -124,15 +124,19 @@ jobs:
           sleep 10
 
       - name: Verify tree integrity
+        id: integrity
+        continue-on-error: true
         run: |
-          ps-qa find '*' --role button --hidden --painted --count \
+          integrity=0
+          ps-qa find '*' --role button --hidden --painted \
             --descriptor "$PWD/target/blitz-control.json" 2>&1 | tee /tmp/hidden-painted.txt
           if ! grep -Eq '^matched:[[:space:]]*0$' /tmp/hidden-painted.txt; then
             echo "hidden painted buttons make semantic audit results ambiguous" >&2
-            exit 1
+            integrity=1
           fi
           ps-qa ghost \
-            --descriptor "$PWD/target/blitz-control.json" 2>&1 | tee /tmp/ghost.txt
+            --descriptor "$PWD/target/blitz-control.json" 2>&1 | tee /tmp/ghost.txt || integrity=1
+          exit "$integrity"
 
       - name: Run the checks
         id: checks
@@ -151,6 +155,12 @@ jobs:
             ps-qa cover "$surface" \
               --descriptor "$PWD/target/blitz-control.json" 2>&1 || true
           done | tee /tmp/cover.txt
+
+      # Collection continues past integrity faults so one macOS launch yields
+      # all evidence, but a ghost tree can never receive a green verdict.
+      - name: Enforce tree integrity
+        if: ${{ steps.integrity.outcome == 'failure' }}
+        run: exit 1
 
       - name: Summary
         if: always()
