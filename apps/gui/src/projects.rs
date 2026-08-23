@@ -4774,6 +4774,15 @@ fn response_verbosity_instruction(level: &str) -> Option<&'static str> {
     }
 }
 
+fn append_response_verbosity(prompt: String, level: &str, stateless: bool) -> String {
+    if stateless {
+        return prompt;
+    }
+    response_verbosity_instruction(level).map_or(prompt.clone(), |instruction| {
+        format!("{prompt}\n\n{instruction}")
+    })
+}
+
 /// The old KV key, read only so upgrades can consume one last checkpoint.
 pub(crate) fn partial_reply_key(project_id: &str) -> String {
     format!("partial-reply:{project_id}")
@@ -10814,6 +10823,15 @@ async fn drive_run(
         };
         format!("{handoff}{prompt}\n\n{snapshot}{receipts_line}{usage_line}")
     };
+    // Response style rides the user turn so a changed setting reaches an
+    // already-running provider session. Claude's resume path reuses the
+    // original system prompt; putting this there made a mid-project change
+    // persist in the store while the resumed agent never saw it.
+    let prompt = append_response_verbosity(
+        prompt,
+        &project_response_verbosity(&tables, &project_id),
+        stateless,
+    );
 
     // Kept for the I/O panel before the builder consumes them, so the "sent"
     // line shows what actually went out rather than what was asked for.
@@ -10918,16 +10936,6 @@ async fn drive_run(
             system.push_str("\n\n");
         }
         system.push_str(instructions.trim());
-    }
-
-    if !stateless
-        && let Some(instruction) =
-            response_verbosity_instruction(&project_response_verbosity(&tables, &project_id))
-    {
-        if !system.is_empty() {
-            system.push_str("\n\n");
-        }
-        system.push_str(instruction);
     }
 
     if !notes.trim().is_empty() {
@@ -16311,6 +16319,18 @@ mod tests {
                 .starts_with("Keep responses concise")
         );
         assert!(response_verbosity_instruction("default").is_none());
+        assert_eq!(
+            append_response_verbosity("Do the work".into(), "low", false),
+            "Do the work\n\nKeep responses concise for this project. Lead with the answer, skip preambles and postambles, and prefer compact bullets when a list helps."
+        );
+        assert_eq!(
+            append_response_verbosity("Do the work".into(), "default", false),
+            "Do the work"
+        );
+        assert_eq!(
+            append_response_verbosity("Do the work".into(), "low", true),
+            "Do the work"
+        );
 
         tables.shutdown().await.expect("concise store drains");
         let _ = std::fs::remove_dir_all(dir);
