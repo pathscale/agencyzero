@@ -126,7 +126,6 @@ Checks live in `tests/ps-qa/*.ron`:
     click: Some("Cancel"),
     subject: "Start fork",
     expect: Vanishes,
-    panel_only: false,
 )
 ```
 

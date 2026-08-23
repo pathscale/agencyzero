@@ -8,7 +8,6 @@
         hover: None, click: None,
         subject: "Items",
         expect: Paints,
-        panel_only: true,
     ),
     (
         id: "sections-2",
@@ -18,7 +17,6 @@
         hover: None, click: None,
         subject: "Task log",
         expect: Paints,
-        panel_only: true,
     ),
     (
         id: "sections-3",
@@ -28,7 +26,6 @@
         hover: None, click: None,
         subject: "Agent I/O",
         expect: Paints,
-        panel_only: true,
     ),
     (
         id: "sections-4",
@@ -39,7 +36,6 @@
         click: Some("Collapse Task log"),
         subject: "Expand Task log",
         expect: Paints,
-        panel_only: true,
     ),
     (
         id: "sections-5",
@@ -50,6 +46,5 @@
         click: Some("Expand Task log"),
         subject: "Collapse Task log",
         expect: Paints,
-        panel_only: true,
     ),
 ]

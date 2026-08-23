@@ -19,7 +19,6 @@
         click: Some("Fork "),
         subject: "Start fork",
         expect: Paints,
-        panel_only: false,
     ),
     (
         id: "dialog-cancel-dismisses",
@@ -30,6 +29,5 @@
         click: Some("Cancel"),
         subject: "Start fork",
         expect: Vanishes,
-        panel_only: false,
     ),
 ]

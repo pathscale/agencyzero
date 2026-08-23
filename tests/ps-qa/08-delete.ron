@@ -11,6 +11,5 @@
         // prompt. Absence of that is a delete that fired.
         subject: "Delete?",
         expect: Paints,
-        panel_only: false,
     ),
 ]

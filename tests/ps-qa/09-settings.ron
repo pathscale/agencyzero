@@ -41,7 +41,6 @@
         click: Some("Current language: English"),
         subject: "menuitem",
         expect: PaintsMore,
-        panel_only: false,
     ),
     (
         id: "settings-agent-menu",
@@ -52,7 +51,6 @@
         click: Some("Default agent"),
         subject: "menuitem",
         expect: PaintsMore,
-        panel_only: false,
     ),
     (
         id: "settings-effort-menu",
@@ -63,7 +61,6 @@
         click: Some("Default effort"),
         subject: "menuitem",
         expect: PaintsMore,
-        panel_only: false,
     ),
     (
         id: "settings-permission-menu",
@@ -74,6 +71,5 @@
         click: Some("Default permission"),
         subject: "menuitem",
         expect: PaintsMore,
-        panel_only: false,
     ),
 ]

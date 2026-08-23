@@ -24,11 +24,6 @@ on:
         required: false
         type: boolean
         default: false
-      ps_qa_version:
-        description: 'ps-qa version requirement (caret, so patches come for free)'
-        required: false
-        type: string
-        default: '^0.3'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -61,20 +56,23 @@ jobs:
           bun install --frozen-lockfile
           bun run build
 
+      - name: Stage the agency-proxy sidecar
+        run: scripts/stage-agency-proxy-sidecar.sh
+
       # blitz-inspector, NOT blitz-runtime: a blitz-runtime build answers every
       # inspector call with diagnosticsUnavailable, so the run would fail with
       # every check unable to see anything rather than with a real verdict.
       - name: Build az-gui with the inspector
         run: cargo build --release --features blitz-inspector --bin az-gui
 
-      # From crates.io, by caret. The harness is a dependency now: the checks and
-      # the app profile that make it mean anything live in this repository, so
-      # there is nothing to build from source here, and nothing of its own to
-      # unit test from this workflow. A caret rather than an exact version, so a
-      # harness patch reaches this job without a commit here; the checks and the
-      # profile are what pin behaviour, and they are versioned with the app.
+      # Pin the semantic-action implementation until ps-qa 0.3 is published.
+      # Application names and expectations remain in this repository; the
+      # harness commit supplies only generic node-addressed behavior.
       - name: Install ps-qa
-        run: cargo install ps-qa --version ${{ inputs.ps_qa_version }} --locked
+        run: >-
+          cargo install ps-qa
+          --git https://github.com/pathscale/ps-qa.git
+          --rev 5de7ce0
 
       - name: Scrubber unit tests
         run: cargo test --bin az-gui --features blitz-inspector qa_profile

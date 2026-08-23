@@ -15,7 +15,6 @@
         click: None,
         subject: "Move ",
         expect: Paints,
-        panel_only: true,
     ),
     (
         id: "hover-2",
@@ -26,7 +25,6 @@
         click: None,
         subject: "Edit ",
         expect: Paints,
-        panel_only: true,
     ),
     (
         id: "hover-3",
@@ -37,7 +35,6 @@
         click: None,
         subject: "Delete ",
         expect: Paints,
-        panel_only: true,
     ),
     // `Holds` is what is true today. If the panel ever moves to hover-gated
     // controls this goes red, which is the correct direction to fail: it means
@@ -51,6 +48,5 @@
         click: None,
         subject: "Edit ",
         expect: Holds,
-        panel_only: true,
     ),
 ]
