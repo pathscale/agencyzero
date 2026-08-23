@@ -47,8 +47,13 @@ AppProfile(
     fold_prefixes: ["Collapse ", "Hide "],
     deferred_controls: [
         "New project",
+    ],
+
+    // These actions need a disposable application process. A successful
+    // restart closes the control socket; reset and sign-out invalidate the QA
+    // fixture. They stay automated work, but never run in the shared sweep.
+    isolated_controls: [
         "Start fork",
-        "Welcome Tutorial",
         "Restart",
         "Reset all",
         "Sign out",
