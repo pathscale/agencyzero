@@ -70,6 +70,7 @@ AppProfile(
         "Restart",
         "Reset all",
         "Sign out",
+        "Enable inspection and agent control",
     ],
 
     // These effects are intentionally outside the semantic tree. They remain
