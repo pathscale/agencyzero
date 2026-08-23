@@ -11,7 +11,7 @@ name: QA panel
 # It is also not yet a gate. 18 of 345 controls have a real assertion and two
 # checks fail for reasons that are not application bugs, so a red run here means
 # "look at this", not "the branch is broken". `continue-on-error` keeps it
-# advisory until the inventory in ps-qa's tests/ps-qa/issues.md says otherwise.
+# advisory until the inventory in tests/ps-qa/issues.md says otherwise.
 on:
   workflow_dispatch:
     inputs:
@@ -24,11 +24,11 @@ on:
         required: false
         type: boolean
         default: false
-      ps_qa_ref:
-        description: 'ps-qa ref to check out'
+      ps_qa_version:
+        description: 'ps-qa version requirement (caret, so patches come for free)'
         required: false
         type: string
-        default: master
+        default: '^0.2' 
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -44,19 +44,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Check out ps-qa
-        uses: actions/checkout@v4
-        with:
-          repository: pathscale/ps-qa
-          ref: ${{ inputs.ps_qa_ref }}
-          path: ps-qa
-
       - uses: dtolnay/rust-toolchain@stable
 
       - uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: '. -> target
-                       ps-qa -> target'
 
       # blitz-inspector, NOT blitz-runtime: a blitz-runtime build answers every
       # inspector call with diagnosticsUnavailable, so the run would fail with
@@ -64,16 +54,17 @@ jobs:
       - name: Build az-gui with the inspector
         run: cargo build --release --features blitz-inspector --bin az-gui
 
-      - name: Build ps-qa
-        working-directory: ps-qa
-        run: cargo build --release
+      # From crates.io, by caret. The harness is a dependency now: the checks and
+      # the app profile that make it mean anything live in this repository, so
+      # there is nothing to build from source here, and nothing of its own to
+      # unit test from this workflow. A caret rather than an exact version, so a
+      # harness patch reaches this job without a commit here; the checks and the
+      # profile are what pin behaviour, and they are versioned with the app.
+      - name: Install ps-qa
+        run: cargo install ps-qa --version ${{ inputs.ps_qa_version }} --locked
 
       - name: Scrubber unit tests
         run: cargo test --bin az-gui --features blitz-inspector qa_profile
-
-      - name: ps-qa unit tests
-        working-directory: ps-qa
-        run: cargo test --release
 
       # From the committed archive, so a run measures what is in the tree. The
       # profile is single-writer and every check mutates it, so this restores a
@@ -106,7 +97,9 @@ jobs:
         continue-on-error: true
         run: |
           export TAURI_BLITZ_CONTROL_DESCRIPTOR="$PWD/target/blitz-control.json"
-          ./ps-qa/target/release/ps-qa qa ${{ inputs.group }} 2>&1 | tee /tmp/qa.txt
+          # Run from the repository root: the harness discovers ps-qa.ron and
+          # tests/ps-qa/ relative to the working directory.
+          ps-qa qa ${{ inputs.group }} 2>&1 | tee /tmp/qa.txt
 
       - name: Coverage
         if: ${{ inputs.cover }}
@@ -114,7 +107,7 @@ jobs:
         run: |
           export TAURI_BLITZ_CONTROL_DESCRIPTOR="$PWD/target/blitz-control.json"
           for surface in home project settings analytics; do
-            ./ps-qa/target/release/ps-qa cover "$surface" 2>&1 | grep -E '^= ' || true
+            ps-qa cover "$surface" 2>&1 | grep -E '^= ' || true
           done | tee /tmp/cover.txt
 
       - name: Summary
@@ -139,7 +132,7 @@ jobs:
               echo 'something changed, not that the right thing changed.'
             fi
             echo
-            echo 'Full inventory: `tests/ps-qa/issues.md` in ps-qa.'
+            echo 'Full inventory: `tests/ps-qa/issues.md`.'
           } >> "$GITHUB_STEP_SUMMARY"
 
       # Never -9: the store is single-writer and a hard kill can tear its index,

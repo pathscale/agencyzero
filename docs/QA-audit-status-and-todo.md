@@ -20,22 +20,31 @@ read as a benchmarker, so two agents in a row worked from one-off presses and
 never found the `qa` mode that asserts outcomes. If you are reading an older
 handover, `blitz-bench qa` is `ps-qa qa`.
 
+`ps-qa` is a harness and knows nothing about this application. Two files here
+tell it everything it needs, and both are data:
+
 ```
-src/      engine: Expect, Check, verdict, the MCP client, the sweep
-tests/ps-qa/  the checks, one file per group - what THIS app promises
+ps-qa.ron            surfaces, sections, tab names, the controls not to press
+tests/ps-qa/*.ron    the checks, one file per group - what THIS app promises
+tests/ps-qa/issues.md  the inventory: what is covered, what is not
 ```
 
-A second app pointed at this harness gets a different `tests/ps-qa/`, not a fork.
+Neither needs a recompile. Correcting a selector is an edit and a re-run.
+
+A second application pointed at the same harness writes its own pair.
 
 ---
 
 ## 2. Running it
 
 ```sh
-# Build both. blitz-inspector, NOT blitz-runtime: a blitz-runtime build answers
-# every inspector call with diagnosticsUnavailable.
+# The harness is a published crate. A caret, so patches arrive without a commit
+# here: the checks and the profile are what pin behaviour, and they live here.
+cargo install ps-qa --version '^0.2' --locked
+
+# blitz-inspector, NOT blitz-runtime: a blitz-runtime build answers every
+# inspector call with diagnosticsUnavailable.
 cargo build --release --features blitz-inspector --bin az-gui
-(cd ../ps-qa && cargo build --release)
 
 # Launch against a throwaway copy of the QA profile, expanded from the tree.
 scripts/qa-profile-restore.sh
@@ -45,13 +54,14 @@ AZ_DATA_DIR=/tmp/qa-profile-db \
 sleep 18
 
 export TAURI_BLITZ_CONTROL_DESCRIPTOR="$PWD/target/blitz-control.json"
-Q=../ps-qa/target/release/ps-qa
 
-$Q list                        # every check, no app needed
-$Q qa                          # all 18
-$Q qa dialog                   # one group
-$Q qa dialog-cancel-dismisses  # one check, by id
-QA_TRACE=1 $Q qa <id>          # print the node each step pressed
+# Run from the repository root: ps-qa.ron and tests/ps-qa/ are found relative
+# to the working directory.
+ps-qa list                        # every check, no app needed
+ps-qa qa                          # all of them
+ps-qa qa dialog                   # one group
+ps-qa qa dialog-cancel-dismisses  # one check, by id
+QA_TRACE=1 ps-qa qa <id>          # print the node each step pressed
 ```
 
 Exit code is 1 if any check fails.
@@ -59,12 +69,13 @@ Exit code is 1 if any check fails.
 ### Diagnosing without writing a check
 
 ```sh
-$Q layout "<name>"   # live boxes: x, y, w, h
-$Q dom "<name>" 6    # attributes plus the ancestor chain
-$Q paint "<name>"    # the colours the renderer resolved
-$Q press "<name>"    # a real pointer: move, down, up
-$Q click "<name>"    # a synthesised click at a node id
-$Q nodes             # tree size and a role histogram
+ps-qa layout "<name>"   # live boxes: x, y, w, h
+ps-qa dom "<name>" 6    # attributes plus the ancestor chain
+ps-qa paint "<name>"    # the colours the renderer resolved
+ps-qa press "<name>"    # a real pointer: move, down, up
+ps-qa click "<name>"    # a synthesised click at a node id
+ps-qa nodes             # tree size and a role histogram
+ps-qa spill             # boxes that stick out of their container
 ```
 
 `dom` is usually fastest: a control that writes its state but never appears is
@@ -110,20 +121,24 @@ counted. Restore the pristine profile before a run.
 
 ## 4. Writing a check
 
-```rust
-Check {
+A check is data, in `tests/ps-qa/*.ron`. No recompile: edit and re-run.
+
+```ron
+(
     id: "dialog-cancel-dismisses",   // stable handle: ps-qa qa <id>
-    group: "dialog",                 // file in tests/ps-qa/
+    group: "dialog",                 // and the file it lives in
     what: "the fork dialog's Cancel actually dismisses it",
     open: Some("Home"),              // navigate first, if not on this surface
     hover: None,                     // hover first, for hover-revealed controls
     click: Some("Cancel"),           // what to drive
     press: true,                     // real pointer, not a synthesised click
     subject: "Start fork",           // what the assertion is about
-    expect: Expect::Vanishes,
+    expect: Vanishes,
     panel_only: false,               // count only inside the side panel
-}
+)
 ```
+
+Files are read in name order, so the numeric prefixes decide the run order.
 
 | Expectation | Passes when |
 | --- | --- |
@@ -166,7 +181,7 @@ rename     1/2     sections   5/5     status     1/2     tasklog    2/2
 ```
 
 The full inventory - every check, the coverage buckets per surface, the
-unknowns, and the ten open issues - is `tests/ps-qa/issues.md` in the `ps-qa` repo.
+unknowns, and the ten open issues - is `tests/ps-qa/issues.md`.
 That file is the one to update after a run; this section is a summary of it.
 
 The four that went green were never application bugs. They failed because the
@@ -302,7 +317,7 @@ Useful fixtures in it today:
 **These names are generated.** A rebuild that changes how names are scrubbed
 changes them, and every check that opens one by name has to change with it: that
 happened on 2026-08-23 and broke 15 references across 6 files. Tracked as issue
-9 in `ps-qa`'s `tests/ps-qa/issues.md`.
+9 in `tests/ps-qa/issues.md`.
 
 Rebuild with `AZ_BUILD_QA_PROFILE`; see `tests/data/README.md` for the full
 command and for what the builder does and does not scrub.
