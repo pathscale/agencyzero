@@ -18,10 +18,15 @@ export function EditableTitle(props: {
   const [editing, setEditing] = createSignal(false);
   const [draft, setDraft] = createSignal("");
   const [busy, setBusy] = createSignal(false);
+  let field: HTMLInputElement | undefined;
 
   const start = () => {
     setDraft(props.value);
     setEditing(true);
+    queueMicrotask(() => {
+      field?.focus();
+      field?.select();
+    });
   };
 
   const cancel = () => {
@@ -66,7 +71,11 @@ export function EditableTitle(props: {
             </Show>
             <Button
               type="button"
-              onClick={start}
+              onClick={(event) => {
+                event.stopPropagation();
+                start();
+              }}
+              onDblClick={(event) => event.stopPropagation()}
               disabled={busy()}
               aria-label={props.label ?? tx("Rename {name}", { name: props.value })}
               class="flex size-[18px] shrink-0 items-center justify-center rounded p-0 text-az-faint transition-colors hover:bg-white/8 hover:text-az-body"
@@ -76,23 +85,29 @@ export function EditableTitle(props: {
           </span>
         }
       >
-        <Input.Field
-          autofocus
-          value={draft()}
-          aria-label={props.label ?? tx("Project name")}
-          onInput={(event) => setDraft(event.currentTarget.value)}
-          onBlur={() => void commit()}
-          onKeyDown={(event) => {
-            if (event.key === "Enter") {
-              event.preventDefault();
-              void commit();
-            } else if (event.key === "Escape") {
-              event.preventDefault();
-              cancel();
-            }
-          }}
-          class={`min-w-0 flex-1 rounded-md border border-az-hairline-strong bg-az-inset px-2 py-0.5 text-az-title outline-none focus:border-az-link ${props.inputClass ?? ""}`}
-        />
+        <span class="flex min-w-0 flex-1">
+          <Input.Field
+            ref={(element: HTMLInputElement) => {
+              field = element;
+            }}
+            value={draft()}
+            aria-label={props.label ?? tx("Project name")}
+            onClick={(event) => event.stopPropagation()}
+            onDblClick={(event) => event.stopPropagation()}
+            onInput={(event) => setDraft(event.currentTarget.value)}
+            onBlur={() => void commit()}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                event.preventDefault();
+                void commit();
+              } else if (event.key === "Escape") {
+                event.preventDefault();
+                cancel();
+              }
+            }}
+            class={`min-w-0 flex-1 rounded-md border border-az-hairline-strong bg-az-inset px-2 py-0.5 text-az-title outline-none focus:border-az-link ${props.inputClass ?? ""}`}
+          />
+        </span>
       </Show>
     </span>
   );
