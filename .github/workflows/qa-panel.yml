@@ -181,6 +181,13 @@ jobs:
         if: ${{ steps.integrity.outcome == 'failure' }}
         run: exit 1
 
+      # Collection continues through red outcomes so one expensive launch still
+      # yields the full inventory, but the completed workflow must tell the
+      # truth: a failed outcome check is a red audit.
+      - name: Enforce outcome checks
+        if: ${{ steps.checks.outcome == 'failure' }}
+        run: exit 1
+
       - name: Summary
         if: always()
         run: |
