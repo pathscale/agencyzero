@@ -37,8 +37,8 @@ A second app pointed at this harness gets a different `tests/`, not a fork.
 cargo build --release --features blitz-inspector --bin az-gui
 (cd ../ps-qa && cargo build --release)
 
-# Launch against a throwaway copy of the QA profile.
-rm -rf /tmp/qa-profile-db && cp -c -R /tmp/qa-profile-pristine /tmp/qa-profile-db
+# Launch against a throwaway copy of the QA profile, expanded from the tree.
+scripts/qa-profile-restore.sh
 AZ_DATA_DIR=/tmp/qa-profile-db \
   TAURI_BLITZ_CONTROL_DESCRIPTOR="$PWD/target/blitz-control.json" \
   ./target/release/az-gui &
@@ -156,12 +156,23 @@ Neither would have been caught by running the check.
 
 ---
 
-## 5. Current state: 12 of 18 pass
+## 5. Current state: 16 of 18 pass
+
+Measured 2026-08-23 on the committed profile, fresh instance.
 
 ```
-delete     0/1     dialog     2/2     hover      3/3     icons      1/1
-rename     0/2     sections   5/5     status     1/2     tasklog    0/2
+delete     1/1     dialog     2/2     hover      3/3     icons      1/1
+rename     1/2     sections   5/5     status     1/2     tasklog    2/2
 ```
+
+The full inventory - every check, the coverage buckets per surface, the
+unknowns, and the ten open issues - is `tests/issues.md` in the `ps-qa` repo.
+That file is the one to update after a run; this section is a summary of it.
+
+The four that went green were never application bugs. They failed because the
+checks share one instance and an earlier one left the app on a surface the next
+did not expect, which the rebuilt profile no longer triggers. The reset-between-
+checks work below is still worth doing: nothing guarantees it stays that way.
 
 **No confirmed application bugs remain.** Every control driven individually
 works, verified by before/after measurement rather than by the press being
@@ -181,16 +192,22 @@ acknowledged:
 The sweep's 21 candidates resolved to **20 false positives and 1 real bug**
 (the pencil, fixed in `801d26a` - it needed four presses, now one).
 
-### Why the 6 failures are not app bugs
+### Why the 2 failures are not app bugs
 
-`rename`, `delete`, and `tasklog` **pass in isolation and fail in a full run**.
-`ps-qa qa rename-opens-editor` alone: PASS. In `ps-qa qa`: FAIL. The checks
-share one instance, and an earlier check leaves the app on a surface where the
-next one's `arrived` test sees a *retained* Home behind the live pane.
+`status-1` fails on `"Edit " went 19 -> 21, expected no change` - hovering to
+reach the marker reveals two more row controls, which the assertion counts as
+the marker misbehaving. The check has never measured what its name claims.
 
-`status` fails on `"Edit " went 20 -> 22, expected no change` - hovering
-revealed two more row controls, which the assertion counts as the marker
-misbehaving.
+`rename-project-header` cannot find `Rename project` on the surface it runs
+against. Unresolved: either it navigates to the wrong place or the control is
+genuinely absent. It is the only check whose failure could still be an
+application bug.
+
+A third, `rename-opens-editor`, went red during the profile rebuild and is worth
+recording because it looked exactly like a regression. The rebuilt profile
+briefly had *two* projects named `e`, so pressing by name was ambiguous and hit
+the wrong one. Pressing the pencil by hand opened the editor every time,
+`0x0 -> 300x21.1`. Fixed in the scrubber; the app was never involved.
 
 ---
 
@@ -199,12 +216,17 @@ misbehaving.
 ### P0 - makes the numbers trustworthy
 
 - [ ] **Reset state between checks.** Each check should start from a known
-      surface, or the runner should restore the pristine profile per group.
-      This is the single highest-value fix: it is why 6 checks fail in a full
-      run and pass alone, and until it lands no total from `ps-qa qa` means
-      anything.
+      surface, or the runner should restore the profile per group. Still worth
+      doing: the four checks this used to break now pass on the rebuilt profile,
+      but nothing *guarantees* that, and a check that passes by luck of ordering
+      is a check that will go red for the wrong reason later.
 - [ ] **Fix `status-1`'s subject.** Counting `"Edit "` catches hover-revealed
       controls. Count the *row*, or assert the specific item is still present.
+- [x] **A reproducible profile.** Was a 114M directory in `/tmp`, unversioned
+      and full of the owner's real transcripts. Now `tests/data/qa-profile.tar.zst`.
+- [x] **`cover`'s bucket accounting.** Reported `UNACCOUNTED -47`, a surplus,
+      which read as better-than-covered. Dialog controls now extend the total
+      rather than inflating `swept`.
 
 ### P1 - the actual goal: outcomes, not appearances
 
@@ -254,23 +276,33 @@ Everything below is missing coverage, not a bug.
 
 ## 7. The QA profile
 
-`/tmp/qa-profile-pristine`, 114M, restored before every run by
-`scripts/button-sweep.sh`.
+`tests/data/qa-profile.tar.zst`, 2.9M in the tree, 31M expanded. Restored before
+every run by `scripts/button-sweep.sh`, or by hand with
+`scripts/qa-profile-restore.sh`. See `tests/data/README.md`.
 
-It is **not** short of data - `project_item` carries 52KB of rows, and there
-are projects with 12 and 23 open items. A previous conclusion that "every
-project reports Items0" was wrong twice over: four projects were sampled that
-happened to have none, and the readings themselves came from a stale surface
-that had never navigated.
+It replaced a 114M directory in `/tmp` that nobody could reproduce and that
+carried the owner's real work: 33,792 occurrences of their home directory, two
+collaborators' email addresses, and the verbatim shell history of every command
+an agent had run. Do not resurrect that workflow. If a profile is not in the
+tree it does not exist, and if it came from a live store unscrubbed it cannot go
+in the tree.
+
+It is **not** short of data - two projects keep 2,600 task-log rows and 1,200
+messages each so timings stay meaningful, and the other 292 are capped at 20 and
+12.
 
 Useful fixtures in it today:
 
 | Project | Why |
 | --- | --- |
-| `alpha sigma omega west` | 23 open items, 99 turns - the panel row controls |
-| `theta sigma beta amber alpha beta ea` | 12 open items |
-| `e` | first Home row, for row-level controls |
+| `theta theta north indi` | the panel row controls, opened by name in 14 checks |
+| `theta cobalt sigma north iota kappa` | the second heavy transcript |
+| `e756` | first Home row, for row-level controls |
 
-If the profile is ever lost, rebuild it by launching against a fresh
-`AZ_DATA_DIR`, creating a project with a dozen items and some task-log
-activity, quitting, and `cp -c -R` to the pristine path.
+**These names are generated.** A rebuild that changes how names are scrubbed
+changes them, and every check that opens one by name has to change with it: that
+happened on 2026-08-23 and broke 15 references across 6 files. Tracked as issue
+9 in `ps-qa`'s `tests/issues.md`.
+
+Rebuild with `AZ_BUILD_QA_PROFILE`; see `tests/data/README.md` for the full
+command and for what the builder does and does not scrub.
