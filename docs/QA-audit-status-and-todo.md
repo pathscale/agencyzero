@@ -40,7 +40,7 @@ A second application pointed at the same harness writes its own pair.
 ```sh
 # The harness is a published crate. A caret, so patches arrive without a commit
 # here: the checks and the profile are what pin behaviour, and they live here.
-cargo install ps-qa --version '^0.1' --locked
+cargo install ps-qa --version '^0.2' --locked
 
 # blitz-inspector, NOT blitz-runtime: a blitz-runtime build answers every
 # inspector call with diagnosticsUnavailable.
@@ -53,20 +53,21 @@ AZ_DATA_DIR=/tmp/qa-profile-db \
   ./target/release/az-gui &
 sleep 18
 
-export TAURI_BLITZ_CONTROL_DESCRIPTOR="$PWD/target/blitz-control.json"
-
 # Run from the repository root: ps-qa.ron and tests/ps-qa/ are found relative
-# to the working directory.
+# to the working directory, and the harness refuses to start without them
+# rather than guessing at an application it has not been told about.
+D=--descriptor="$PWD/target/blitz-control.json"
+
 ps-qa list                        # every check, no app needed
-ps-qa qa                          # all of them
-ps-qa qa --toon                   # the same run as TOON, for a reader that is
-                                  # a program. The column format loses any field
-                                  # containing a space, which `what` and every
-                                  # failure message have.
-ps-qa qa dialog                   # one group
-ps-qa qa dialog-cancel-dismisses  # one check, by id
-QA_TRACE=1 ps-qa qa <id>          # print the node each step pressed
+ps-qa qa $D                       # all of them
+ps-qa qa dialog $D                # one group
+ps-qa qa dialog-cancel-dismisses $D   # one check, by id
+ps-qa qa $D --trace               # name the node each step pressed
 ```
+
+Output is TOON, which is the only format: a uniform array declares its fields
+once and spends a line per row, so a reader that is a program does not have to
+split on whitespace and lose every field containing a space.
 
 Exit code is 1 if any check fails.
 

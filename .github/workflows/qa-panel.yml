@@ -28,7 +28,7 @@ on:
         description: 'ps-qa version requirement (caret, so patches come for free)'
         required: false
         type: string
-        default: '^0.1'
+        default: '^0.2'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -96,18 +96,18 @@ jobs:
         id: checks
         continue-on-error: true
         run: |
-          export TAURI_BLITZ_CONTROL_DESCRIPTOR="$PWD/target/blitz-control.json"
           # Run from the repository root: the harness discovers ps-qa.ron and
           # tests/ps-qa/ relative to the working directory.
-          ps-qa qa ${{ inputs.group }} 2>&1 | tee /tmp/qa.txt
+          ps-qa qa ${{ inputs.group }} \
+            --descriptor "$PWD/target/blitz-control.json" 2>&1 | tee /tmp/qa.txt
 
       - name: Coverage
         if: ${{ inputs.cover }}
         continue-on-error: true
         run: |
-          export TAURI_BLITZ_CONTROL_DESCRIPTOR="$PWD/target/blitz-control.json"
           for surface in home project settings analytics; do
-            ps-qa cover "$surface" 2>&1 | grep -E '^= ' || true
+            ps-qa cover "$surface" \
+              --descriptor "$PWD/target/blitz-control.json" 2>&1 | grep -E '^= ' || true
           done | tee /tmp/cover.txt
 
       - name: Summary
