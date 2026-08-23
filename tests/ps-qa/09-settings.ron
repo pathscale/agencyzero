@@ -101,4 +101,14 @@
         subject: "menuitem:Auto",
         expect: PaintsNamed,
     ),
+    (
+        id: "settings-restart-authority-menu",
+        group: "settings",
+        what: "the agent restart authority opens its choices",
+        open: Some("Settings"),
+        hover: None,
+        click: Some("Agent restart authority"),
+        subject: "menuitem:Disabled",
+        expect: PaintsNamed,
+    ),
 ]

@@ -47,7 +47,7 @@ Always remove measurement blockers before interpreting component failures:
 2. Run `find --hidden --painted` and `ghost`.
 3. If inactive surfaces still own painted boxes, fix the application and start
    again. Do not compensate with selector heuristics.
-4. Run all 72 outcome checks.
+4. Run all 74 outcome checks.
 5. Run `audit` and `cover` only after the tree is trustworthy.
 6. Record every failure, unreachable surface and manual-only control in
    `tests/ps-qa/issues.md`.
