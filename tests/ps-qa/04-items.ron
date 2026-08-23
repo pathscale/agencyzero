@@ -16,4 +16,16 @@
         subject: "Change the status of qa audit newest",
         expect: Above,
     ),
+    (
+        id: "items-description-enables-save",
+        group: "items",
+        what: "editing an item description enables its Save action",
+        open: Some("theta theta north indi"),
+        hover: None,
+        click: Some("Edit the description for"),
+        type_into: Some("Description / sub-items"),
+        text: Some("qa audit description"),
+        subject: "Save description",
+        expect: Enabled,
+    ),
 ]
