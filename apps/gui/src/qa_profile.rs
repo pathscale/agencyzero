@@ -114,13 +114,14 @@ pub fn scrub_text(original: &str) -> String {
 /// Mixing the row's id into the seed restores what the real data had and the
 /// filler threw away. Still deterministic: the same id and name always give the
 /// same output, so a rebuild is a readable diff rather than a wall of churn.
-/// A short name cannot be made unique by reseeding alone: a five-character
-/// slot holds one word from a twenty-word list, so sixty-four of them collapse
-/// into nineteen however the seed is chosen. Past this length there is room for
-/// several words and collisions stop mattering; below it the discriminator
-/// below does the work.
+/// A short name cannot be made unique by reseeding alone: a five-character slot
+/// holds one word from a twenty-word list, so sixty-four of them collapse into
+/// nineteen however the seed is chosen. Past this length there is room for
+/// several words and collisions stop mattering; below it the discriminator does
+/// the work.
 const NAME_NEEDS_A_DISCRIMINATOR: usize = 12;
 
+/// Scrub a name, keeping it distinct from every other scrubbed name.
 pub fn scrub_name(original: &str, id: &str) -> String {
     if original.trim().is_empty() {
         return String::new();
@@ -629,7 +630,12 @@ async fn copy_scrubbed(
      * way the PR and issue connectivity paths get exercised against something
      * that actually resolves.
      */
-    for row in source.pull_request.select_all().execute().unwrap_or_default() {
+    for row in source
+        .pull_request
+        .select_all()
+        .execute()
+        .unwrap_or_default()
+    {
         tables
             .pull_request
             .insert(row)
@@ -637,7 +643,12 @@ async fn copy_scrubbed(
         scrubbed += 1;
     }
 
-    for row in source.approval_rule.select_all().execute().unwrap_or_default() {
+    for row in source
+        .approval_rule
+        .select_all()
+        .execute()
+        .unwrap_or_default()
+    {
         let mut scrubbed_row = row.clone();
         scrubbed_row.signature = scrub_value(&row.signature);
         tables
@@ -647,7 +658,12 @@ async fn copy_scrubbed(
         scrubbed += 1;
     }
 
-    for row in source.study_event.select_all().execute().unwrap_or_default() {
+    for row in source
+        .study_event
+        .select_all()
+        .execute()
+        .unwrap_or_default()
+    {
         let mut scrubbed_row = row.clone();
         scrubbed_row.detail = scrub_value(&row.detail);
         tables
@@ -683,7 +699,12 @@ async fn copy_scrubbed(
         scrubbed += 1;
     }
 
-    for row in source.usage_ledger.select_all().execute().unwrap_or_default() {
+    for row in source
+        .usage_ledger
+        .select_all()
+        .execute()
+        .unwrap_or_default()
+    {
         tables
             .usage_ledger
             .insert(row)
@@ -691,7 +712,12 @@ async fn copy_scrubbed(
         scrubbed += 1;
     }
 
-    for row in source.usage_cache.select_all().execute().unwrap_or_default() {
+    for row in source
+        .usage_cache
+        .select_all()
+        .execute()
+        .unwrap_or_default()
+    {
         tables
             .usage_cache
             .insert(row)
@@ -699,7 +725,12 @@ async fn copy_scrubbed(
         scrubbed += 1;
     }
 
-    for row in source.usage_session.select_all().execute().unwrap_or_default() {
+    for row in source
+        .usage_session
+        .select_all()
+        .execute()
+        .unwrap_or_default()
+    {
         tables
             .usage_session
             .insert(row)
@@ -809,9 +840,9 @@ mod tests {
         let entries = parsed.as_array().expect("still an array");
         assert_eq!(entries.len(), 2, "a project keeps its directory count");
         assert!(
-            entries.iter().all(|entry| entry
-                .as_str()
-                .is_some_and(|path| path.starts_with('/'))),
+            entries
+                .iter()
+                .all(|entry| entry.as_str().is_some_and(|path| path.starts_with('/'))),
             "each entry is still an absolute path: {scrubbed}"
         );
     }

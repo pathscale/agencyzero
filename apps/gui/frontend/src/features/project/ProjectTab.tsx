@@ -681,7 +681,8 @@ export function ProjectPanelToggle(props: { visible: boolean; onToggle: () => vo
    * turned, which is why pressing this wrote the preference and changed
    * nothing on screen. Same inversion as `ItemSortControls`.
    */
-  const label = () => (props.visible ? tx("Hide the project sidebar") : tx("Show the project sidebar"));
+  const label = () =>
+    props.visible ? tx("Hide the project sidebar") : tx("Show the project sidebar");
   return (
     <Button
       type="button"
