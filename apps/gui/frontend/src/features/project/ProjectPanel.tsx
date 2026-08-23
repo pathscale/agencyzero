@@ -1435,12 +1435,7 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
                    * deliberate act: it gets the smallest target that can carry it,
                    * and the title beside it goes back to being text.
                    */}
-                  {/*
-                   * native-control: the status marker, built once per visible
-                   * row. Same reasoning as the row's other actions: a marker
-                   * and a class, with none of the library's slots or state.
-                   */}
-                  <button
+                  <Button
                     type="button"
                     onClick={() => advance(item)}
                     aria-label={tx("Change the status of {name}", { name: item.title })}
@@ -1448,7 +1443,7 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
                     class="ml-1.5 flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-full transition-colors hover:bg-az-chip focus-visible:bg-az-chip"
                   >
                     <ItemMarker status={item.status} />
-                  </button>
+                  </Button>
                   <div class="flex min-w-0 flex-1 items-center gap-1.5 px-1.5 py-1 text-left">
                     <span
                       data-selectable
@@ -1535,29 +1530,8 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
                     </span>
                   </div>
                 </div>
-                <button
+                <Button
                   type="button"
-                  /*
-                   * native-control: A native button, not the library's.
-                   *
-                   * This is a cost argument, not a correctness one. `Dynamic`
-                   * delivers clicks correctly; the claim that it did not was
-                   * `EditableTitle`'s, it was stale, and that component uses
-                   * the library `Button` again.
-                   *
-                   * The library `Button` builds a `Dynamic` over a recipe, three
-                   * `Show` blocks for the spinner and two icon slots, a
-                   * `mergeProps` per slot and about eight memos, so that some
-                   * other call site can render an anchor or a spinner. This one
-                   * is an icon with a class on it and uses none of that. It is
-                   * also per *row*: the panel builds 43 library buttons, of
-                   * which exactly one passes `variant` and four touch an icon or
-                   * state prop, and the item list measured 108 to 185ms of a
-                   * single panel build.
-                   *
-                   * Every visual choice here already lives in the class below,
-                   * so nothing is lost by dropping the library's variants.
-                   */
                   onClick={(event) => {
                     const box = event.currentTarget.getBoundingClientRect();
                     setContextAnchor({
@@ -1586,15 +1560,9 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
                   }`}
                 >
                   <Icon name="list-checks" class="text-[13px]" />
-                </button>
-                <button
+                </Button>
+                <Button
                   type="button"
-                  /*
-                   * native-control: as above. `disabled` is the native
-                   * attribute here, which a plain button honours by itself; the
-                   * library's `state` machine is not involved and nothing reads
-                   * `aria-busy` on this control.
-                   */
                   onClick={(event) => {
                     const box = event.currentTarget.getBoundingClientRect();
                     setContextAnchor({
@@ -1623,7 +1591,7 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
                   } ${item.status === "questions" ? "" : "mr-1"}`}
                 >
                   <Icon name="git-fork" class="text-[13px]" />
-                </button>
+                </Button>
                 <Show when={item.status === "questions"}>
                   <Show
                     when={questionFor(item)}
@@ -2158,15 +2126,7 @@ function TaskLogList(props: { projectId: string }): JSX.Element {
                * over every row on the way past, which reads as the panel
                * flinching. The pointer already says the row is a control.
                */}
-              {/*
-               * native-control: the row's label, which is a click target and
-               * nothing more. Same reasoning as the item row's actions: the
-               * library `Button` builds a `Dynamic`, a recipe lookup and three
-               * `Show` blocks for slots this never fills, and the task log
-               * builds one of these per row. It was the largest line in the
-               * panel at 122 to 178ms before paging and 72 to 79ms after.
-               */}
-              <button
+              <Button
                 type="button"
                 onClick={() => setExpanded(expanded() === entry.id ? null : entry.id)}
                 aria-label={expanded() === entry.id ? tx("Collapse") : tx("Show the whole command")}
@@ -2175,12 +2135,11 @@ function TaskLogList(props: { projectId: string }): JSX.Element {
                 }`}
               >
                 <span data-selectable>{entry.label}</span>
-              </button>
+              </Button>
               <span class={`shrink-0 ${entry.ok === false ? "text-error" : "text-az-muted"}`}>
                 {taskMeta(entry)}
               </span>
-              {/* native-control: as above, one per row. An icon and a class. */}
-              <button
+              <Button
                 type="button"
                 onClick={() =>
                   void copyEntry(
@@ -2193,7 +2152,7 @@ function TaskLogList(props: { projectId: string }): JSX.Element {
                 class="shrink-0 rounded p-0.5 text-az-faint transition-colors hover:text-az-body"
               >
                 <Icon name={copied() === entry.id ? "check" : "copy"} class="text-[11px]" />
-              </button>
+              </Button>
             </div>
             <Show when={expanded() === entry.id && entry.output}>
               <pre class="az-scroll max-h-64 whitespace-pre-wrap break-words rounded-md border border-az-hairline bg-az-inset px-2 py-1.5 font-mono text-[10.5px] text-az-body">
