@@ -2154,12 +2154,21 @@ fn main() {
     #[cfg(feature = "blitz-runtime")]
     tauri_runtime_blitz::set_document_factory(create_blitz_document);
 
+    // The CLI switch is the rescue path for QA when the Settings toggle is
+    // off. Read it before the app is built so control can start before the
+    // native event loop; setup may never run when macOS rejects activation.
+    #[cfg(feature = "blitz-runtime")]
+    let cli_blitz_control_enabled = std::env::args().any(|arg| arg == "--blitz-control");
+    #[cfg(feature = "blitz-runtime")]
+    let cli_blitz_deep_profiling_enabled =
+        std::env::args().any(|arg| arg == "--blitz-deep-profiling");
+
     #[cfg(feature = "blitz-runtime")]
     let builder = tauri_runtime_blitz::builder();
     #[cfg(not(feature = "blitz-runtime"))]
     let builder = tauri::Builder::default();
 
-    builder
+    let app = builder
         .plugin(tauri_plugin_updater::Builder::new().build())
         // Called from Rust only, so no capability entry: the permissions in
         // `capabilities/default.json` gate the plugin's *JavaScript* commands,
@@ -2506,13 +2515,12 @@ fn main() {
                 .filter(|path| !path.is_empty())
                 .map(PathBuf::from);
             #[cfg(feature = "blitz-runtime")]
-            let blitz_control_enabled = std::env::args().any(|arg| arg == "--blitz-control")
+            let blitz_control_enabled = cli_blitz_control_enabled
                 || persisted_settings
                     .as_ref()
                     .is_some_and(|settings| settings.blitz_control_enabled);
             #[cfg(feature = "blitz-runtime")]
-            let blitz_deep_profiling_enabled = std::env::args()
-                .any(|arg| arg == "--blitz-deep-profiling")
+            let blitz_deep_profiling_enabled = cli_blitz_deep_profiling_enabled
                 || persisted_settings
                     .as_ref()
                     .is_some_and(|settings| settings.blitz_deep_profiling_enabled);
@@ -2717,21 +2725,36 @@ fn main() {
         // page, so the tables are drained explicitly instead of being left to
         // process teardown.
         .build(tauri::generate_context!())
-        .expect("failed to build AgencyZero GUI")
-        .run(|app, event| {
-            // Ordinary GUI close, restart, update, and Unix signals drain
-            // asynchronously before reaching this callback. Keep a fallback
-            // for an exit path that bypasses all of them, but `Tables` bounds
-            // its concurrent per-table drains and names any table that fails.
-            if matches!(event, tauri::RunEvent::Exit)
-                && let Some(state) = app.try_state::<AppState>()
-                && let Err(error) = tauri::async_runtime::block_on(state.drain_tables_once())
-            {
-                crate::log!(
-                    log::Level::Error,
-                    "boot",
-                    "the fallback exit drain failed: {error}"
-                );
-            }
-        });
+        .expect("failed to build AgencyZero GUI");
+
+    // The runtime exists after `build`, while Tauri's setup callback does not
+    // execute until `run`. Start the explicit CLI rescue path in that gap so
+    // ps-qa gets a discovery descriptor even if native app activation stalls.
+    #[cfg(feature = "blitz-runtime")]
+    if cli_blitz_control_enabled || cli_blitz_deep_profiling_enabled {
+        tauri_runtime_blitz::apply_runtime_debug_options(
+            tauri_runtime_blitz::RuntimeDebugOptions {
+                inspection_and_agent_control: cli_blitz_control_enabled,
+                deep_intrusive_profiling: cli_blitz_deep_profiling_enabled,
+            },
+        )
+        .expect("could not apply CLI Blitz debugging");
+    }
+
+    app.run(|app, event| {
+        // Ordinary GUI close, restart, update, and Unix signals drain
+        // asynchronously before reaching this callback. Keep a fallback
+        // for an exit path that bypasses all of them, but `Tables` bounds
+        // its concurrent per-table drains and names any table that fails.
+        if matches!(event, tauri::RunEvent::Exit)
+            && let Some(state) = app.try_state::<AppState>()
+            && let Err(error) = tauri::async_runtime::block_on(state.drain_tables_once())
+        {
+            crate::log!(
+                log::Level::Error,
+                "boot",
+                "the fallback exit drain failed: {error}"
+            );
+        }
+    });
 }
