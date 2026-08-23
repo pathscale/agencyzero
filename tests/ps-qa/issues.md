@@ -7,7 +7,7 @@ QA profile before changing any status.
 ## Current audit subject
 
 - AgencyZero: PR 186, app version 0.8.32
-- ps-qa: PR 8 at `8fa4869`, version 0.3.0
+- ps-qa: PR 8 at `9e183db`, version 0.3.0
 - blitz-control-protocol and tauri-runtime-blitz: PR 30 at `7b44cd6`,
   version 0.1.4 pending publication
 - Checks: 25 in 11 groups
@@ -20,6 +20,11 @@ activation is not valid audit evidence.
 ps-qa still provides generic coordinate `press` diagnostics. AgencyZero's RON
 checks intentionally omit `press`; this application must use semantic actions
 and explicit accessible names, resolving repeated rows to an exact node id.
+
+Inventory categories are mutually exclusive. A named, painted control disabled
+by current state is `state-disabled`, not an unreachable UI failure; manual
+exclusions and anonymous controls likewise cannot occupy two buckets. Inventory
+exits red only for anonymous or genuinely hidden/zero-box controls.
 
 ## Required blocker checks
 
