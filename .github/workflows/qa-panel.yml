@@ -65,17 +65,17 @@ jobs:
       - name: Build az-gui with the inspector
         # Pin the unreleased macOS glass availability fix from TRB PR 30. Both
         # packages share one workspace revision; remove these two overrides
-        # after 0.1.3 is published and recorded in Cargo.lock.
+        # after 0.1.4 is published and recorded in Cargo.lock.
         run: |
           trb_config=(
             --config 'patch.crates-io.tauri-runtime-blitz.git="https://github.com/pathscale/tauri-runtime-blitz.git"'
-            --config 'patch.crates-io.tauri-runtime-blitz.rev="fe25e2a"'
+            --config 'patch.crates-io.tauri-runtime-blitz.rev="7b44cd6"'
             --config 'patch.crates-io.blitz-control-protocol.git="https://github.com/pathscale/tauri-runtime-blitz.git"'
-            --config 'patch.crates-io.blitz-control-protocol.rev="fe25e2a"'
+            --config 'patch.crates-io.blitz-control-protocol.rev="7b44cd6"'
           )
-          # A patch at 0.1.3 does not replace the 0.1.2 selection already in
+          # A patch at 0.1.4 does not replace the 0.1.2 selection already in
           # Cargo.lock until resolution is advanced explicitly.
-          cargo "${trb_config[@]}" update -p tauri-runtime-blitz --precise 0.1.3
+          cargo "${trb_config[@]}" update -p tauri-runtime-blitz --precise 0.1.4
           cargo "${trb_config[@]}" build --features blitz-inspector --bin az-gui
 
       # Pin the semantic-action implementation until ps-qa 0.3 is published.
@@ -91,9 +91,9 @@ jobs:
         run: >-
           cargo
           --config 'patch.crates-io.tauri-runtime-blitz.git="https://github.com/pathscale/tauri-runtime-blitz.git"'
-          --config 'patch.crates-io.tauri-runtime-blitz.rev="fe25e2a"'
+          --config 'patch.crates-io.tauri-runtime-blitz.rev="7b44cd6"'
           --config 'patch.crates-io.blitz-control-protocol.git="https://github.com/pathscale/tauri-runtime-blitz.git"'
-          --config 'patch.crates-io.blitz-control-protocol.rev="fe25e2a"'
+          --config 'patch.crates-io.blitz-control-protocol.rev="7b44cd6"'
           test --bin az-gui --features blitz-inspector qa_profile
 
       # From the committed archive, so a run measures what is in the tree. The
