@@ -441,65 +441,31 @@ describe("appearance settings", () => {
   it("stores the literal dark wheel value and rebases the same petal in light mode", async () => {
     const screen = await mountSettings();
     const darkSwatches = Array.from(
-      screen.container.querySelectorAll<HTMLInputElement>('input[name="surface-colour"]'),
+      screen.container.querySelectorAll<HTMLButtonElement>(
+        'button[role="radio"][aria-label^="Theme color"], button[role="radio"][aria-label="Reset to neutral"]',
+      ),
     );
     expect(darkSwatches).toHaveLength(31);
-    const petals = Array.from(
-      screen.container.querySelectorAll<HTMLElement>("[data-surface-petal]"),
-    );
-    expect(petals).toHaveLength(31);
-    expect(new Set(petals.map((petal) => `${petal.style.left}|${petal.style.top}`)).size).toBe(31);
-    expect(darkSwatches.every((input) => input.style.left === "" && input.style.top === "")).toBe(
-      true,
-    );
-    expect(
-      petals.every((petal) => petal.querySelector('[data-slot="radio-control"]') !== null),
-    ).toBe(true);
 
-    const darkHex = darkSwatches[0].value;
+    // Consume only the public ColorSwatch contract. Petal geometry and private
+    // markup belong to @pathscale/ui and are verified in that package.
+    const darkHex = darkSwatches[0].dataset.colorValue;
+    expect(darkHex).toBeTruthy();
     fireEvent.click(darkSwatches[0]);
     flush();
     await waitFor(() => expect(screen.workspace.state.settings?.theme.surface).toBe(darkHex));
-    expect(darkSwatches[0].checked).toBe(true);
+    expect(darkSwatches[0]).toHaveAttribute("aria-checked", "true");
 
     fireEvent.click(screen.getByRole("button", { name: "Light" }));
     flush();
     await waitFor(() => expect(screen.workspace.state.settings?.theme.surface).not.toBe(darkHex));
     expect(
       Array.from(
-        screen.container.querySelectorAll<HTMLInputElement>('input[name="surface-colour"]'),
-      ).some((input) => input.checked),
+        screen.container.querySelectorAll<HTMLButtonElement>('button[role="radio"]'),
+      ).some((swatch) => swatch.getAttribute("aria-checked") === "true"),
     ).toBe(true);
 
     fireEvent.click(screen.getByRole("button", { name: "Dark" }));
-  });
-
-  /*
-   * The petal is styled through the class the library renders.
-   *
-   * This used to reach for `[data-slot="radio-control"]` and assert that the
-   * *class string* carried `border-az-hairline-strong`. Both halves were empty:
-   * `@pathscale/ui` emits no `data-slot` attribute anywhere in its radio, and a
-   * utility sitting in a string is not a utility that applies to anything. The
-   * live app showed the cost — 31 petals kept the library's own 1rem control
-   * where `size-7` asks for 28, and no hover feedback at all.
-   *
-   * So what is asserted now is the hook the stylesheet actually uses. The
-   * geometry and the hover lift belong to `theme.css` and are guarded there;
-   * jsdom applies no stylesheet, so asserting them here would only re-test a
-   * string.
-   */
-  it("hooks colour petals up to the class the library renders", async () => {
-    const screen = await mountSettings();
-    const petal = screen.container.querySelector<HTMLElement>("[data-surface-petal]");
-    const radio = petal?.querySelector<HTMLElement>(".radio");
-    if (!petal || !radio) throw new Error("surface colour petal was not rendered");
-
-    expect(radio.className).toContain("az-petal");
-    expect(radio.querySelector(".radio__control")).not.toBeNull();
-    // The swatch lives in the indicator, which is why the library's own
-    // `:empty::before` hover tint can never reach a petal.
-    expect(radio.querySelector(".radio__indicator")?.children.length).toBeGreaterThan(0);
   });
 
   it("offers curated accents without opening a colour input", async () => {
