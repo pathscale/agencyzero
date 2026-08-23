@@ -51,7 +51,10 @@ readonly APP=$!
 # Wait for the descriptor to be answered rather than sleeping a fixed guess:
 # the app takes ~10s cold and ~4s warm, and a fixed sleep is either slow or
 # flaky depending on which it is that day.
-export TAURI_BLITZ_CONTROL_DESCRIPTOR="$DESCRIPTOR"
+#
+# The harness takes the descriptor as an argument rather than from the
+# environment, so an exported path left over from an earlier run cannot quietly
+# attach this one to a different process.
 
 # `ps-qa` is a published crate. `PS_QA` wins, then a sibling checkout, then an
 # installed one: a working copy should beat the released binary while you are
@@ -65,7 +68,7 @@ elif command -v ps-qa >/dev/null 2>&1; then
   qa="$(command -v ps-qa)"
 else
   echo "no ps-qa binary. install it:" >&2
-  echo "  cargo install ps-qa --version '^0.1' --locked" >&2
+  echo "  cargo install ps-qa --version '^0.2' --locked" >&2
   echo "or point PS_QA at one." >&2
   exit 1
 fi
@@ -75,17 +78,17 @@ fi
 cd "$ROOT"
 
 for _ in $(seq 1 40); do
-  if "$qa" nodes >/dev/null 2>&1; then break; fi
+  if "$qa" nodes --descriptor "$DESCRIPTOR" >/dev/null 2>&1; then break; fi
   sleep 1
 done
 
 echo "== baseline =="
-"$qa" idle 2>&1 | head -1
+"$qa" idle --descriptor "$DESCRIPTOR" 2>&1 | head -1
 
 echo
 echo "== cover =="
 status=0
-"$qa" cover ${surface:+"$surface"} || status=$?
+"$qa" cover ${surface:+"$surface"} --descriptor "$DESCRIPTOR" || status=$?
 
 if [[ "$keep" == 0 ]]; then
   kill -TERM "$APP" 2>/dev/null || true
