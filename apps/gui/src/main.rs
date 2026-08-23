@@ -2516,6 +2516,14 @@ fn main() {
                 || persisted_settings
                     .as_ref()
                     .is_some_and(|settings| settings.blitz_deep_profiling_enabled);
+            #[cfg(feature = "blitz-runtime")]
+            tauri_runtime_blitz::apply_runtime_debug_options(
+                tauri_runtime_blitz::RuntimeDebugOptions {
+                    inspection_and_agent_control: blitz_control_enabled,
+                    deep_intrusive_profiling: blitz_deep_profiling_enabled,
+                },
+            )
+            .map_err(|error| format!("could not apply local Blitz debugging: {error}"))?;
             let proxy = Arc::new(agent_proxy::AgencyProxy::new(&config_dir, configured_proxy));
             // A checkpoint backed by a still-live proxy run remains a live
             // draft. Only orphaned checkpoints become `interrupted` rows.
@@ -2555,13 +2563,6 @@ fn main() {
 
             #[cfg(feature = "blitz-runtime")]
             {
-                tauri_runtime_blitz::apply_runtime_debug_options(
-                    tauri_runtime_blitz::RuntimeDebugOptions {
-                        inspection_and_agent_control: blitz_control_enabled,
-                        deep_intrusive_profiling: blitz_deep_profiling_enabled,
-                    },
-                )
-                .map_err(|error| format!("could not apply local Blitz debugging: {error}"))?;
                 let relaunch_handle = app.handle().clone();
                 tauri_runtime_blitz::set_agent_control_handler(move |request| match request {
                     tauri_runtime_blitz::control_protocol::AgentControlRequest::Relaunch => {
