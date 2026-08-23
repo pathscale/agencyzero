@@ -4983,7 +4983,10 @@ async fn deliver_injection(
             original_body,
             reply_question_id,
             message_id,
-        } => match control.send(&mid_turn_owner_context(&body)).await {
+        } => match control
+            .send(&mid_turn_owner_context(&body), &message_id)
+            .await
+        {
             Ok(()) => {
                 emit_message_receipt(app, project_id, &message_id, "read");
                 note_io(
@@ -5018,7 +5021,7 @@ async fn deliver_injection(
             reviewer,
             url,
         } => {
-            match control.send(&body).await {
+            match control.send(&body, &message_id).await {
                 Ok(()) => {
                     if let Err(error) = tables
                         .kv_put(
@@ -6139,6 +6142,9 @@ const LIVENESS_PING: &str = "<ps @agency:ping()>\n\nLiveness check, not owner in
 /// and the model takes it at its next step boundary. That is what makes a
 /// mid-run correction an interruption rather than a queued afterthought.
 pub struct ActiveRun {
+    /// Identifies this reservation, so an older driver finishing late cannot
+    /// remove a newer run that has already claimed the same project slot.
+    pub reservation_id: String,
     pub cancel: tokio::sync::watch::Sender<bool>,
     /// Provider owning the live session. A tab may switch providers while it
     /// runs, but its next message must not be injected into the old provider.
@@ -6149,10 +6155,9 @@ pub struct ActiveRun {
     /// `send_message` compares this snapshot with the durable project row and
     /// queues the next message for a fresh resumed invocation when they differ.
     pub workspace_roots: Vec<String>,
-    /// Set by the first provider event, when a live control channel has a turn
-    /// to steer. A follow-up arriving during process/session startup queues for
-    /// the fresh turn instead of starting the transport's 15-second receipt
-    /// watchdog before `turn/steer` can even be written.
+    /// Set by the first provider event. Owner messages may enter the ordered
+    /// injection channel during startup and wait there for `turn/steer`; this
+    /// readiness bit gates optional side-channel reviews and the UI cue only.
     pub ready_for_followup: std::sync::Arc<std::sync::atomic::AtomicBool>,
     /// `None` when the run has no conversation to interrupt.
     ///
@@ -6289,12 +6294,18 @@ const BUSY_WITH_RUN_ALREADY: &str = "a run is already active in this project —
 pub struct RunReservation {
     active: std::sync::Arc<ActiveRuns>,
     project_id: String,
+    reservation_id: String,
 }
 
 impl Drop for RunReservation {
     fn drop(&mut self) {
         if let Ok(mut active) = self.active.lock() {
-            active.remove(&self.project_id);
+            let still_ours = active
+                .get(&self.project_id)
+                .is_some_and(|run| run.reservation_id == self.reservation_id);
+            if still_ours {
+                active.remove(&self.project_id);
+            }
         }
     }
 }
@@ -7471,35 +7482,47 @@ pub async fn clear_approval_rules(
 
 /// Stop the run in this project, if one is live.
 ///
-/// The signal reaches the run's own event loop, which asks the crate to tear
-/// the agent's process group down cooperatively and waits until it is really
-/// gone — the `run:stopped` that follows comes from the backend after the
-/// processes have exited, not from optimism. Before this existed, Stop was
-/// served by the frontend mock: the UI showed "canceled" while the real agent
-/// kept executing tools.
+/// AgencyProxy is the process owner, so cancellation is sent there and this
+/// command waits until the daemon reports no live run for the project. The
+/// local signal remains a fallback for a stale registry entry with no daemon
+/// run behind it.
 ///
 /// # Errors
 /// Returns a message when nothing is running in the project.
 #[tauri::command]
 pub async fn cancel_run(project_id: String, state: State<'_, AppState>) -> Result<(), String> {
-    let signalled = state
+    let registered = state
         .active
         .lock()
-        .map(|active| {
-            active
-                .get(&project_id)
-                .map(|run| {
-                    let _ = run.cancel.send(true);
-                })
-                .is_some()
-        })
-        .unwrap_or(false);
+        .map_err(|_| "the run registry is unavailable".to_string())?
+        .get(&project_id)
+        .map(|run| (run.reservation_id.clone(), run.cancel.clone()));
 
-    if signalled {
+    let canceled_proxy_runs = state.proxy.cancel_project_runs(&project_id).await?;
+    if canceled_proxy_runs == 0
+        && let Some((_, cancel)) = &registered
+    {
+        let _ = cancel.send(true);
+    }
+
+    if let Some((reservation_id, _)) = &registered {
+        let mut active = state
+            .active
+            .lock()
+            .map_err(|_| "the run registry is unavailable".to_string())?;
+        let still_same_run = active
+            .get(&project_id)
+            .is_some_and(|run| &run.reservation_id == reservation_id);
+        if still_same_run {
+            active.remove(&project_id);
+        }
+    }
+
+    if registered.is_some() || canceled_proxy_runs > 0 {
         crate::log!(
             crate::log::Level::Info,
             "run",
-            "{project_id}: stop requested"
+            "{project_id}: stop confirmed by AgencyProxy ({canceled_proxy_runs} daemon run(s))"
         );
         Ok(())
     } else {
@@ -7548,7 +7571,7 @@ async fn learn_before_compacting(
         .kv_get(&crate::notes::notes_key(project_id))
         .unwrap_or_default();
 
-    let request = read_only_proxy_request(
+    let mut request = read_only_proxy_request(
         agent,
         crate::notes::merge_prompt(&existing),
         cwd,
@@ -7556,6 +7579,9 @@ async fn learn_before_compacting(
         "",
         session,
     );
+    request
+        .metadata
+        .insert("projectId".into(), project_id.into());
 
     note_io(
         app,
@@ -7747,9 +7773,11 @@ pub async fn compact_project(
             return Err(BUSY_WITH_RUN_ALREADY.into());
         }
         let (cancel_tx, cancel_rx) = tokio::sync::watch::channel(false);
+        let reservation_id = id("reservation");
         active.insert(
             project_id.clone(),
             ActiveRun {
+                reservation_id: reservation_id.clone(),
                 cancel: cancel_tx,
                 agent,
                 workspace_roots: Vec::new(),
@@ -7762,6 +7790,7 @@ pub async fn compact_project(
             RunReservation {
                 active: state.active.clone(),
                 project_id: project_id.clone(),
+                reservation_id,
             },
             cancel_rx,
         )
@@ -7963,6 +7992,9 @@ pub async fn compact_project(
     let mut request =
         read_only_proxy_request(agent, "/compact".into(), &cwd, &[], "", session.as_deref());
     request.is_command = true;
+    request
+        .metadata
+        .insert("projectId".into(), project_id.clone().into());
 
     let resumed = session.as_deref().unwrap_or("<new session>");
     note_io(
@@ -8235,20 +8267,14 @@ pub async fn reset_task_manager(app: AppHandle, state: State<'_, AppState>) -> R
     Ok(())
 }
 
-/// Forget a project's stored session for one agent, so the next message starts
-/// a fresh conversation instead of resuming.
+/// Tear down a project's stuck turn while retaining its provider session.
 ///
-/// The recovery path for a wedged session. When a run is killed for going idle
-/// (see [`RUN_IDLE_TIMEOUT`]) the session id survives so the next turn resumes —
-/// which is right when the stall was transient, but wrong when the session
-/// itself is the problem: a Codex thread whose last act was a command the CLI
-/// killed can re-enter the same wait on resume and wedge again. This is the way
-/// out that is not "delete the project": the transcript and everything collected
-/// stay; only the resume pointer is cleared, so the next prompt is a clean start
-/// on the same project.
+/// Reset cancels the daemon-side run, clears only the torn reply tail, and keeps
+/// the resume pointer. The next prompt continues the same conversation after
+/// the stuck turn has been terminated.
 ///
-/// Refuses while a run is live — a reset mid-run would clear the id the running
-/// turn still owns. Cancel first, then reset.
+/// Refuses a live run unless `force` is explicit. A force reset terminates the
+/// daemon run before clearing its torn reply state.
 ///
 /// # Errors
 /// When a run is active, the agent name does not parse, or the store write fails.
@@ -8263,18 +8289,13 @@ pub async fn reset_project_session(
     let agent = parse_agent(agent.as_deref())?;
     let force = force.unwrap_or(false);
 
-    // A live run owns the session id it is resuming; clearing it underneath a
-    // healthy run would strand the turn, so normally the owner cancels first.
-    //
-    // But a *wedged* run is exactly when reset is needed, and such a run holds
-    // this slot forever with no live process to cancel — the ordinary Cancel
-    // does nothing because there is nothing listening. `force` is the way out of
-    // that deadlock: it signals cancel to whatever may still be attached and
-    // evicts the registry entry, so the reset below can proceed. Without it, the
-    // greyed-out Reset button and a stuck slot made "reset does not work" a
-    // dead end with no visible cause.
-    {
-        let mut active = state
+    // Signal the ordinary driver first, but do not trust this registry as the
+    // source of truth. A wedged driver can stop receiving while AgencyProxy
+    // still owns the provider process. Reset must cancel that daemon run before
+    // releasing the slot, or the next send resumes the same session while its
+    // prior turn is still alive.
+    let stopped_agent = {
+        let active = state
             .active
             .lock()
             .map_err(|_| "the run registry is unavailable".to_string())?;
@@ -8284,39 +8305,48 @@ pub async fn reset_project_session(
                     "a run is active on this project — cancel it first, or force-reset to clear a wedged run".into(),
                 );
             }
-            if let Some(run) = active.remove(&project_id) {
-                let stopped_agent = run.agent;
-                // Best-effort: tell anything still attached to stop, then drop
-                // the slot. A wedged run has no live receiver, so this is a
-                // no-op there, but a merely-slow run gets a clean cancel.
+            active.get(&project_id).map(|run| {
                 let _ = run.cancel.send(true);
-                // Tell the UI the run is over, so its running state (and the
-                // greyed-out Reset button) clears instead of hanging on a run
-                // that will never emit its own stop.
-                emit_run_stopped(
-                    &app,
-                    &project_id,
-                    stopped_agent,
-                    "",
-                    "",
-                    "force-reset",
-                    None,
-                );
-            }
+                (run.reservation_id.clone(), run.agent)
+            })
+        } else {
+            None
+        }
+    };
+
+    let canceled_proxy_runs = if force {
+        state.proxy.cancel_project_runs(&project_id).await?
+    } else {
+        0
+    };
+    if force {
+        let mut active = state
+            .active
+            .lock()
+            .map_err(|_| "the run registry is unavailable".to_string())?;
+        let still_same_run = stopped_agent.as_ref().is_some_and(|(reservation_id, _)| {
+            active
+                .get(&project_id)
+                .is_some_and(|run| &run.reservation_id == reservation_id)
+        });
+        if still_same_run {
+            active.remove(&project_id);
         }
     }
+    if stopped_agent.is_some() || canceled_proxy_runs > 0 {
+        emit_run_stopped(
+            &app,
+            &project_id,
+            stopped_agent.map_or(agent, |(_, stopped_agent)| stopped_agent),
+            "",
+            "",
+            "force-reset",
+            None,
+        );
+    }
 
-    // The session pointer is deliberately untouched.
-    //
-    // This button unwedges a stuck turn: it tears down the run that stopped
-    // responding so the next prompt can resume the same conversation. It is
-    // not "start over". Clearing the pointer here abandoned the conversation
-    // outright, and the transcript stayed on disk with nothing left pointing
-    // at it, so recovering meant reading the id out of the provider's own
-    // storage and typing it back in.
-    //
-    // The partial-reply checkpoint does go: it is the torn tail of the turn
-    // just killed, and replaying it would splice half an answer onto the
+    // The provider session pointer is deliberately retained. Only the partial
+    // tail of the canceled turn is discarded so it cannot be spliced onto the
     // resumed conversation.
     clear_partial_reply(&state.tables, &project_id).await;
     state
@@ -8329,7 +8359,7 @@ pub async fn reset_project_session(
     crate::log!(
         crate::log::Level::Info,
         "projects",
-        "{}: {} run cleared; the next prompt resumes the same session",
+        "{}: {} stuck run reset; the next prompt resumes the same session",
         project_id,
         agent_wire_name(agent)
     );
@@ -8338,7 +8368,7 @@ pub async fn reset_project_session(
         &state,
         &project_id,
         format!(
-            "{} run cleared; the next prompt resumes this conversation where it stopped",
+            "{} stuck run reset; the next prompt resumes this conversation",
             agent_wire_name(agent)
         ),
     );
@@ -9592,7 +9622,9 @@ fn invocation_scope(
         }
     }
 
-    let resume = tables.kv_get(&agent_session_key(project_id, agent));
+    let resume = tables
+        .kv_get(&agent_session_key(project_id, agent))
+        .filter(|session| !session.is_empty());
 
     // Resume where the session actually lives.
     //
@@ -9734,10 +9766,6 @@ pub async fn send_message(
                 drop(active);
                 return Err(BUSY_WITH_RUN.into());
             }
-            if !run_ready_for_followup(running) {
-                drop(active);
-                return Err(BUSY_WITH_RUN.into());
-            }
             /*
              * A command turn takes no passengers. Refused *before* the row is
              * written, unlike the injection below: the words were not said to
@@ -9754,9 +9782,11 @@ pub async fn send_message(
             let (cancel_tx, cancel_rx) = tokio::sync::watch::channel(false);
             let (inject_tx, inject_rx) = tokio::sync::mpsc::unbounded_channel();
             let ready_for_followup = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+            let reservation_id = id("reservation");
             active.insert(
                 input.project_id.clone(),
                 ActiveRun {
+                    reservation_id: reservation_id.clone(),
                     cancel: cancel_tx,
                     agent,
                     workspace_roots,
@@ -9770,6 +9800,7 @@ pub async fn send_message(
                 reservation: RunReservation {
                     active: state.active.clone(),
                     project_id: input.project_id.clone(),
+                    reservation_id,
                 },
                 cancel: cancel_rx,
                 inject_rx,
@@ -10157,9 +10188,11 @@ pub async fn sync_project(
             let ready = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(
                 recovered_run_ready_for_followup(&snapshot.state),
             ));
+            let reservation_id = id("reservation");
             active.insert(
                 project_id.clone(),
                 ActiveRun {
+                    reservation_id: reservation_id.clone(),
                     cancel: cancel_tx,
                     agent,
                     workspace_roots: snapshot.workspace_roots.clone(),
@@ -10171,6 +10204,7 @@ pub async fn sync_project(
                 RunReservation {
                     active: state.active.clone(),
                     project_id: project_id.clone(),
+                    reservation_id,
                 },
                 cancel_rx,
                 inject_rx,
@@ -11195,9 +11229,16 @@ async fn drive_run(
     let (ping_request_tx, mut ping_request_rx) = tokio::sync::mpsc::unbounded_channel::<()>();
     let (ping_failed_tx, mut ping_failed_rx) = tokio::sync::mpsc::unbounded_channel::<()>();
     let ping_control = run.control();
+    let ping_turn_id = turn_id.clone();
     let ping_delivery = tokio::spawn(async move {
+        let mut attempt = 0u32;
         while ping_request_rx.recv().await.is_some() {
-            if ping_control.send(LIVENESS_PING).await.is_err() {
+            attempt = attempt.saturating_add(1);
+            if ping_control
+                .send(LIVENESS_PING, &format!("{ping_turn_id}:ping:{attempt}"))
+                .await
+                .is_err()
+            {
                 let _ = ping_failed_tx.send(());
             }
         }
@@ -14151,14 +14192,22 @@ mod tests {
             .await
             .expect("session pointer writes");
 
-        // Reset clears a stuck turn. It must leave the conversation attached,
-        // because the next prompt is meant to resume it: this button existed
-        // to unwedge a run, and turning it into "start over" is what silently
-        // abandoned conversations whose transcripts were still on disk.
+        tables
+            .kv_put(&partial_reply_key("proj-reset"), "torn reply".into())
+            .await
+            .expect("partial reply writes");
+        clear_partial_reply(&tables, "proj-reset").await;
+        tables
+            .kv_put(&partial_reply_key("proj-reset"), String::new())
+            .await
+            .expect("legacy partial reply clears");
+
+        // Reset terminates the stuck turn around the session. It must not
+        // detach the conversation it was asked to repair.
         assert_eq!(
             tables.kv_get(&agent_session_key("proj-reset", Agent::Claude)),
             Some("sess-1".into()),
-            "a reset must not disturb the session pointer"
+            "a reset keeps the session pointer"
         );
         assert_eq!(
             invocation_scope(
@@ -14171,7 +14220,7 @@ mod tests {
             .resume
             .as_deref(),
             Some("sess-1"),
-            "the next run resumes the same conversation"
+            "the next run resumes the repaired conversation"
         );
         assert_eq!(
             with_session(
@@ -14181,7 +14230,7 @@ mod tests {
             .session_id
             .as_deref(),
             Some("sess-1"),
-            "and the owner can still see it"
+            "the project still advertises the current conversation"
         );
 
         let _ = std::fs::remove_dir_all(&store);
@@ -14546,10 +14595,44 @@ mod tests {
     }
 
     #[test]
-    fn live_follow_up_waits_for_the_first_turn_event() {
+    fn an_old_driver_cannot_release_a_newer_run_slot() {
+        let (cancel, _) = tokio::sync::watch::channel(false);
+        let active =
+            std::sync::Arc::new(std::sync::Mutex::new(std::collections::HashMap::from([(
+                "project-race".to_string(),
+                ActiveRun {
+                    reservation_id: "reservation-new".into(),
+                    cancel,
+                    agent: Agent::Codex,
+                    workspace_roots: vec!["/repo".into()],
+                    ready_for_followup: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(
+                        true,
+                    )),
+                    inject: None,
+                },
+            )])));
+
+        drop(RunReservation {
+            active: active.clone(),
+            project_id: "project-race".into(),
+            reservation_id: "reservation-old".into(),
+        });
+
+        assert!(
+            active
+                .lock()
+                .expect("registry locks")
+                .contains_key("project-race"),
+            "finishing the old run must not remove its replacement"
+        );
+    }
+
+    #[test]
+    fn optional_side_channel_delivery_waits_for_the_first_turn_event() {
         let (cancel, _) = tokio::sync::watch::channel(false);
         let ready = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
         let run = ActiveRun {
+            reservation_id: "reservation-ready".into(),
             cancel,
             agent: Agent::Codex,
             workspace_roots: vec!["/repo".into()],
@@ -14581,6 +14664,7 @@ mod tests {
         let active = std::sync::Mutex::new(std::collections::HashMap::from([(
             "project-review".to_string(),
             ActiveRun {
+                reservation_id: "reservation-review".into(),
                 cancel,
                 agent: Agent::Codex,
                 workspace_roots: vec!["/repo".into()],

@@ -610,8 +610,8 @@ const en = {
   "session id, e.g. 019fc95e-…": "session id, e.g. 019fc95e-…",
   Attach: "Attach",
   "Reset session": "Reset session",
-  "Start the next message fresh — the recovery path for a wedged conversation":
-    "Start the next message fresh — the recovery path for a wedged conversation",
+  "Clear stuck run state and continue this conversation":
+    "Clear stuck run state and continue this conversation",
   "Confirm reset": "Confirm reset",
   "Force reset": "Force reset",
   "Confirm force reset": "Confirm force reset",
@@ -661,10 +661,8 @@ const en = {
     "Lower output verbosity in Settings — fewer reply tokens, every turn.",
   "Compact this session (~{cost} once) to shrink the resent context.":
     "Compact this session (~{cost} once) to shrink the resent context.",
-  "Or start a fresh session (Reset in the panel) if the history no longer helps the next task.":
-    "Or start a fresh session (Reset in the panel) if the history no longer helps the next task.",
-  "A run is stuck — force-reset clears the slot and starts the next message fresh":
-    "A run is stuck — force-reset clears the slot and starts the next message fresh",
+  "A run is stuck; force-reset stops it and keeps this conversation":
+    "A run is stuck; force-reset stops it and keeps this conversation",
   "Cancel the active run first": "Cancel the active run first",
   "Icon sprite": "Icon sprite",
   Analytics: "Analytics",

@@ -794,15 +794,13 @@ function ContextDetailSelect(props: { projectId: string }): JSX.Element {
 }
 
 /**
- * The recovery path for a wedged conversation: forget the resume pointer so the
- * next message starts fresh, keeping the transcript.
+ * The recovery path for a wedged conversation: terminate the stuck provider
+ * turn and keep the resume pointer so the next message continues this session.
  *
  * When a run is killed for going idle the session id survives so the next turn
- * resumes — right for a transient stall, wrong when the session itself is the
- * problem (a Codex thread that re-enters the same dead wait on resume). This is
- * the way out that is not "delete the project". Two-step, because it breaks
- * conversation continuity; hidden until there is a session to reset; disabled
- * while a run is live (the backend refuses then too).
+ * resumes. Reset repairs the runtime around that conversation; it does not
+ * detach or discard the conversation itself. Two-step because it terminates a
+ * provider turn that may still be working.
  */
 function ResetSession(props: { project: Project; running: boolean }): JSX.Element {
   const { actions } = useWorkspace();
@@ -831,7 +829,7 @@ function ResetSession(props: { project: Project; running: boolean }): JSX.Elemen
        * Confirmation is authoritative even when the window's running signal is
        * stale. That stale split is the recovery case: Rust still owns a slot,
        * while the webview no longer shows a run. Always allow the confirmed
-       * reset to evict such a slot, and clear provider sessions in sequence so
+       * reset to evict such a slot, and reset providers in sequence so
        * only one call can own the eviction.
        */
       for (const agent of agents()) {
@@ -856,10 +854,8 @@ function ResetSession(props: { project: Project; running: boolean }): JSX.Elemen
             {tx("Reset session")}
             <span class="mt-px block text-[11px] text-az-muted">
               {props.running
-                ? tx(
-                    "A run is stuck — force-reset clears the slot and starts the next message fresh",
-                  )
-                : tx("Start the next message fresh — the recovery path for a wedged conversation")}
+                ? tx("A run is stuck; force-reset stops it and keeps this conversation")
+                : tx("Clear stuck run state and continue this conversation")}
             </span>
           </span>
           {/*
