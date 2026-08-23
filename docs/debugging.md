@@ -103,8 +103,8 @@ no HTTP server, WebDriver session, bearer token, or authentication handshake.
 There are two layers:
 
 - **Agent control** is compiled into normal Blitz builds but starts disabled.
-  Settings → Local Blitz control is the owner authority. Off means no socket
-  and no discovery descriptor. It exposes semantic inspection, click,
+  Settings → Enable inspection and agent control is the owner authority. Off
+  means no socket and no discovery descriptor. It exposes semantic inspection, click,
   set-value, scroll, physical input, quit, and relaunch. AgencyZero delegates
   relaunch to its existing Angel restart supervisor.
 - **Diagnostics** is additionally compiled by `blitz-inspector`. It exposes
@@ -153,8 +153,8 @@ Do not execute `Contents/MacOS/az-gui` directly. On current macOS that process
 can abort inside AppKit application registration; LaunchServices may then open
 a replacement process, which looks healthy but may not carry the CLI override.
 
-For ordinary stable-profile use, enable Settings → Local Blitz control instead
-of passing the flag. The descriptor is mode
+For ordinary stable-profile use, enable Settings → Enable inspection and agent
+control instead of passing the flag. The descriptor is mode
 `0600` and contains the PID, `unix://` socket address, protocol version,
 instance id, and renderer revision. The server accepts multiple local clients.
 
