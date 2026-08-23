@@ -6,10 +6,11 @@ QA profile before changing any status.
 
 ## Current audit subject
 
-- AgencyZero: PR 186, app version 0.8.32
-- ps-qa: PR 8 at `b74baf4`, version 0.3.0
-- blitz-control-protocol and tauri-runtime-blitz: PR 30 at `7b44cd6`,
-  version 0.1.4 pending publication
+- AgencyZero: PR 186, app version 0.8.36
+- ps-qa: version 0.3.2, published from merged PR 9
+- blitz-control-protocol and tauri-runtime-blitz: version 0.1.5, published
+- PromptSyntax-rs: version 0.2.0, published
+- PathScale UI: version 2.9.1, published
 - Checks: 26 in 11 groups
 
 The current run must use `--features blitz-inspector` and
@@ -32,10 +33,10 @@ Record these before any component verdict:
 
 | measurement | required result | current fresh result |
 | --- | --- | --- |
-| inactive top-level surfaces mounted | exactly one | passed before outcome run |
-| hidden and painted buttons | 0 expected | failed: idle `Stop the run` painted |
-| ghost nodes | below the configured budget | failed: 119 hidden layout nodes in capped tree |
-| duplicate names | resolved to intended node id | semantic node-id actions enabled |
+| inactive top-level surfaces mounted | exactly one | passed in run 32670085123 |
+| hidden and painted buttons | 0 expected | passed: 0 of 1,582 nodes |
+| ghost nodes | below the configured budget | passed with warning: 117 of limit 400 |
+| duplicate names | resolved to intended node id | visible painted node-id resolution; hidden matches reported |
 
 If any row fails, fix or explain the measurement blocker and restart the app.
 Do not interpret `qa`, `audit` or `cover` while ghost subtrees can satisfy name
@@ -83,7 +84,16 @@ only its layout slot.
 The other two failures were invalid evidence: the status check compared a broad
 hover-revealed count, and the fork Cancel semantic check disagreed with direct
 release behavior. The status check now follows the exact clicked accessible
-name. Fork remains a harness/action investigation, not a claimed UI regression.
+name. The fork checks now pass on the released node-id action path; it is not a
+claimed UI regression.
+
+Run 32670085123 verified the corrected released harness/runtime path and clean
+process shutdown, but both rename outcomes remained red. ps-qa 0.3.2 reported
+the decisive distinction: each hidden 0x0 textbox still had a painted rename
+button of the same name after node-id activation. The handler therefore did not
+enter edit state; this is an application action regression, not a layout-only
+failure. `EditableTitle` now uses one explicit `Show` state transition and a
+direct `onClick={start}` handler for both call sites. Its live rerun is pending.
 
 ## Manual release worklist
 
@@ -118,9 +128,9 @@ appended to resumed provider turns rather than only the first system prompt.
 
 ## Dependency delivery status
 
-`blitz-control-protocol` and `tauri-runtime-blitz` 0.1.2 are published. TRB PR
-30 carries the macOS availability guard and the 0.1.4 version bump; Linux
-protocol and both macOS runtime jobs are green. ps-qa PR 8 is green with 30
-tests and strict Clippy against the published protocol, and inventories every
-interactive role by semantic node id with explicit exclusions and unverified
-controls.
+`blitz-control-protocol` and `tauri-runtime-blitz` 0.1.5 are published after
+green Linux protocol and macOS 14/26 runtime jobs. ps-qa 0.3.2 is published from
+merged PR 9 with strict Clippy and generic post-action diagnostics. PromptSyntax
+0.2.0 and PathScale UI 2.9.1 are also published. Agency's workflow now consumes
+released versions rather than git patches and inventories every interactive
+role by semantic node id with explicit manual, isolated and unverified classes.
