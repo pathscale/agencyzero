@@ -16,10 +16,10 @@ Updated 2026-08-23. The repeatable procedure is
   coordinate `press` command or per-check option. AgencyZero's checks omit
   `press`, so this application uses semantic activation only.
 
-The runtime and harness changes are versioned as 0.1.2 and 0.3.0. ps-qa CI
-cannot resolve `blitz-control-protocol ^0.1.2` from crates.io until PR 28 is
-reviewed, merged and published. Local validation patches the checked-out
-protocol crate and is green.
+The runtime and harness changes are versioned as 0.1.2 and 0.3.0. The runtime
+and protocol 0.1.2 crates are published. ps-qa PR 7 is pinned by commit in the
+manual audit workflow until 0.3.0 is published; its 29 local tests and strict
+Clippy gate are green against the published protocol.
 
 ## Evidence contract
 

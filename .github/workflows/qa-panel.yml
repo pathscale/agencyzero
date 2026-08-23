@@ -72,7 +72,7 @@ jobs:
         run: >-
           cargo install ps-qa
           --git https://github.com/pathscale/ps-qa.git
-          --rev 5de7ce0
+          --rev 476220a
 
       - name: Scrubber unit tests
         run: cargo test --bin az-gui --features blitz-inspector qa_profile
