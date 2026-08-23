@@ -8,7 +8,7 @@ QA profile before changing any status.
 
 - AgencyZero: PR 186, app version 0.8.32
 - ps-qa: PR 8 at `682b202`, version 0.3.0
-- blitz-control-protocol and tauri-runtime-blitz: PR 30 at `b90759b`,
+- blitz-control-protocol and tauri-runtime-blitz: PR 30 at `7b44cd6`,
   version 0.1.4 pending publication
 - Checks: 24 in 10 groups
 
