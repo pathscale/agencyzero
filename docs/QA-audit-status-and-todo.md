@@ -18,7 +18,7 @@ Updated 2026-08-23. The repeatable procedure is
   omit coordinate `press`, so this application uses semantic activation only.
 
 The runtime and protocol changes are versioned as 0.1.4 but are not yet
-published. The manual workflow pins TRB PR 30 at `0702e76` and ps-qa PR 8 at
+published. The manual workflow pins TRB PR 30 at `e0086bf` and ps-qa PR 8 at
 `3c6bec3`; ps-qa has 35 passing tests and a green strict-Clippy gate. Remove
 those Git pins only after the matching crates are published and locked.
 
