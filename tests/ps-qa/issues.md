@@ -33,9 +33,9 @@ Record these before any component verdict:
 
 | measurement | required result | current fresh result |
 | --- | --- | --- |
-| inactive top-level surfaces mounted | exactly one | passed in run 32670085123 |
-| hidden and painted buttons | 0 expected | passed: 0 of 1,582 nodes |
-| ghost nodes | below the configured budget | passed with warning: 117 of limit 400 |
+| inactive top-level surfaces mounted | exactly one | passed in run 32672023708 |
+| hidden and painted buttons | 0 expected | passed in run 32672023708 |
+| ghost nodes | below the configured budget | passed in run 32672023708 |
 | duplicate names | resolved to intended node id | visible painted node-id resolution; hidden matches reported |
 
 If any row fails, fix or explain the measurement blocker and restart the app.
@@ -101,6 +101,12 @@ component identified the boundary: UI Button's Dynamic element painted but
 dropped the nested consumer handler under Blitz. UI PR 262 fixes that once in
 the library; Agency keeps the ordinary `onClick={start}` contract. Its live
 rerun against UI 2.9.2 is pending.
+
+Run 32672023708 deliberately remeasured that known failure after the workflow
+started preserving ps-qa's pipeline exit status. The job finished red at
+`Enforce outcome checks`, still uploaded the artifact, and stopped the exact
+audit PID cleanly. A failing targeted group can no longer appear green because
+`tee` consumed the harness exit code.
 
 ## Manual release worklist
 
