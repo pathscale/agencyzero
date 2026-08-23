@@ -41,7 +41,8 @@ the normal control enablement source. The committed QA profile stores that
 toggle as enabled. `--blitz-control` is an enable-only recovery path so turning
 the setting off cannot lock automation out of the control needed to turn it
 back on. Never run against the System instance or its data directory. Stop the
-exact QA PID with TERM; never use a broad name match or `-9`.
+exact QA PID with TERM and allow ten seconds for its store flush. Escalate only
+that PID to KILL if it is still alive; never use a broad name match.
 
 Run from the repository root, where `ps-qa.ron` and `tests/ps-qa/` live. ps-qa
 discovers the newest live descriptor; use its `--descriptor` CLI option only to
@@ -56,8 +57,10 @@ ps-qa qa rename-project-header --trace
 
 The manual GitHub workflow is `.github/workflows/qa-panel.yml`. It builds the
 frontend before Rust, restores the committed profile, and installs
-`ps-qa ^0.3`. It remains advisory until the inventory says coverage is a
-release gate.
+the pinned ps-qa PR 8 revision. With `cover` enabled it runs outcome checks,
+restarts from the pristine profile, inventories every interactive semantic
+role, then activates every eligible control. It remains advisory until the
+inventory says coverage is a release gate.
 
 ## Select by name, act by node id
 
