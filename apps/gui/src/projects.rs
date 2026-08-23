@@ -1391,19 +1391,6 @@ fn take_incomplete_prompt_syntax_tail(body: &mut String) -> Option<String> {
     }
 }
 
-/// Whether a complete provider text delta is the watchdog's private pong.
-///
-/// The run loop still scans it for liveness state, but the transcript must not
-/// receive a control line the application itself requested.
-fn is_liveness_pong(text: &str) -> bool {
-    matches!(
-        crate::directives::parse_authored(text.trim()),
-        Some(crate::directives::Authored::Directive(
-            crate::directives::Directive::Pong
-        ))
-    )
-}
-
 /// Whether this run needs an approval callback as well as its sandbox posture.
 ///
 /// Ask is explicitly human-gated for every capable provider. Auto deliberately
@@ -11330,6 +11317,7 @@ async fn drive_run(
         .rfind('\n')
         .map_or(0, |index| index.saturating_add(1));
     let mut directives_fenced = FenceState::default();
+    let mut visible_agent_text = crate::directives::authoring_stream();
 
     /*
      * The checkpoint clock. The reply is flushed to `kv` on the first delta
@@ -11340,10 +11328,13 @@ async fn drive_run(
     let mut partial_flushed_at = std::time::Instant::now();
 
     if !recovered_body.is_empty() {
-        let _ = app.emit(
-            "run:text",
-            serde_json::json!({ "projectId": project_id, "delta": recovered_body }),
-        );
+        let visible = visible_agent_text.push(&recovered_body).data_plane;
+        if !visible.is_empty() {
+            let _ = app.emit(
+                "run:text",
+                serde_json::json!({ "projectId": project_id, "delta": visible }),
+            );
+        }
     }
 
     /*
@@ -11858,12 +11849,12 @@ async fn drive_run(
                 streamed_any = true;
                 streamed_text.push_str(&delta);
                 streamed_chunk.push_str(&delta);
-                let private_pong = ping_outstanding && is_liveness_pong(&delta);
-                if !private_pong {
-                    note_io(&app, &io, &project_id, "received", "text", &delta);
+                let visible_delta = visible_agent_text.push(&delta).data_plane;
+                if !visible_delta.is_empty() {
+                    note_io(&app, &io, &project_id, "received", "text", &visible_delta);
                     let _ = app.emit(
                         "run:text",
-                        serde_json::json!({ "projectId": project_id, "delta": delta }),
+                        serde_json::json!({ "projectId": project_id, "delta": visible_delta }),
                     );
                 }
                 /*
@@ -12411,6 +12402,18 @@ async fn drive_run(
     // Closes the ping worker's queue so it can finish; a ping still in flight
     // is answered into a run that is already ending, which is harmless.
     drop(ping_request_tx);
+
+    // A final ordinary line has no newline to make it classifiable during the
+    // stream. Release it now; an authored PS tail stays private and is applied
+    // by the terminal directive pass below.
+    let final_visible = visible_agent_text.finish().data_plane;
+    if !final_visible.is_empty() {
+        note_io(&app, &io, &project_id, "received", "text", &final_visible);
+        let _ = app.emit(
+            "run:text",
+            serde_json::json!({ "projectId": project_id, "delta": final_visible }),
+        );
+    }
 
     // One write, now that there is something final to write.
     let result = if cancelled {
@@ -15886,13 +15889,57 @@ mod tests {
     }
 
     #[test]
-    fn watchdog_pong_is_private_control_text() {
-        assert!(is_liveness_pong("<ps @agency:pong()>"));
-        assert!(is_liveness_pong("\n\n<ps @agency:ping()>\n"));
-        assert!(!is_liveness_pong(
-            "<ps @agency:items.state(id: \"item-a\", status: \"active\")>"
-        ));
-        assert!(!is_liveness_pong("still working"));
+    fn live_prompt_syntax_never_reaches_the_transcript_at_any_chunk_boundary() {
+        let directive = r#"<ps @agency:items.add(ref: "t7", title: "Design Rust-native semantic code workspace", status: "active", priority: "high")>"#;
+
+        for split in 0..=directive.len() {
+            let mut visible = crate::directives::authoring_stream();
+            let shown = format!(
+                "{}{}{}",
+                visible.push(&directive[..split]).data_plane,
+                visible.push(&directive[split..]).data_plane,
+                visible.finish().data_plane
+            );
+            assert_eq!(shown, "", "directive leaked at byte split {split}");
+        }
+    }
+
+    #[test]
+    fn live_prompt_syntax_is_removed_without_gluing_surrounding_prose() {
+        let directive = r#"<ps @agency:items.state(id: "item-a", status: "active")>"#;
+        let mut visible = crate::directives::authoring_stream();
+        let shown = format!(
+            "{}{}{}{}",
+            visible.push("Working.\n").data_plane,
+            visible.push(directive).data_plane,
+            visible.push("\nContinuing.").data_plane,
+            visible.finish().data_plane
+        );
+        assert_eq!(shown, "Working.\nContinuing.");
+    }
+
+    #[test]
+    fn quoted_indented_fenced_and_inline_ps_remain_visible() {
+        let directive = r#"<ps @agency:items.state(id: "item-a", status: "active")>"#;
+        let source = format!(
+            "> {directive}\n    {directive}\n```text\n{directive}\n```\nLiteral {directive}"
+        );
+        let mut visible = crate::directives::authoring_stream();
+        let shown = format!(
+            "{}{}",
+            visible.push(&source).data_plane,
+            visible.finish().data_plane
+        );
+        assert_eq!(shown, source);
+    }
+
+    #[test]
+    fn watchdog_pong_is_consumed_even_when_fragmented() {
+        let mut visible = crate::directives::authoring_stream();
+        assert_eq!(visible.push("<ps @agency:").data_plane, "");
+        assert_eq!(visible.push("pong()").data_plane, "");
+        assert_eq!(visible.push(">").data_plane, "");
+        assert_eq!(visible.finish().data_plane, "");
     }
 
     #[tokio::test]
