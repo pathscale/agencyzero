@@ -2120,6 +2120,24 @@ fn next_item_position<'a>(rows: impl Iterator<Item = &'a ProjectItemRow>) -> u32
         .map_or(0, |position| position.saturating_add(1))
 }
 
+/// Persist an exact item order starting at `first`.
+async fn write_item_positions(tables: &Tables, ids: &[String], first: u32) -> Result<(), String> {
+    for (index, item_id) in ids.iter().enumerate() {
+        let offset = u32::try_from(index).unwrap_or(u32::MAX);
+        tables
+            .project_item
+            .update_position_by_id(
+                ItemPositionByIdQuery {
+                    position: first.saturating_add(offset),
+                },
+                item_id.clone(),
+            )
+            .await
+            .map_err(|error| error.to_string())?;
+    }
+    Ok(())
+}
+
 fn next_project_position(rows: &[ProjectRow]) -> u32 {
     rows.iter()
         .map(|row| row.position)
@@ -2127,7 +2145,7 @@ fn next_project_position(rows: &[ProjectRow]) -> u32 {
         .map_or(0, |position| position.saturating_add(1))
 }
 
-/// Add one item at the end of a project's list.
+/// Add one item at the front of a project's manual order.
 ///
 /// These four item commands land together: the panel's controls existed for
 /// weeks served by the frontend mock, which meant a created or reordered item
@@ -2158,18 +2176,25 @@ pub async fn create_item(
             return Err("an item fork cannot own sub-items; update its parent item instead".into());
         }
     }
-    let siblings = state
+    let mut siblings = state
         .tables
         .project_item
         .select_by_project_id(project_id.clone())
         .execute()
         .unwrap_or_default();
+    siblings.sort_by(|left, right| {
+        left.position
+            .cmp(&right.position)
+            .then_with(|| left.id.cmp(&right.id))
+    });
+    let sibling_ids: Vec<_> = siblings.iter().map(|item| item.id.clone()).collect();
+    write_item_positions(&state.tables, &sibling_ids, 1).await?;
     let row = ProjectItemRow {
         id: id("item"),
         project_id,
         title,
         status: "pending".into(),
-        position: next_item_position(siblings.iter()),
+        position: 0,
         // Nothing has shipped for a row that was only just proposed.
         reference: String::new(),
         priority: NORMAL_PRIORITY,
@@ -2892,19 +2917,7 @@ pub async fn reorder_items(
 ) -> Result<Vec<ProjectItemDto>, String> {
     let started = std::time::Instant::now();
     let moved = ids.len();
-    for (index, item_id) in ids.iter().enumerate() {
-        state
-            .tables
-            .project_item
-            .update_position_by_id(
-                ItemPositionByIdQuery {
-                    position: u32::try_from(index).unwrap_or(u32::MAX),
-                },
-                item_id.clone(),
-            )
-            .await
-            .map_err(|error| error.to_string())?;
-    }
+    write_item_positions(&state.tables, &ids, 0).await?;
     let items = list_items(project_id.clone(), state.clone()).await?;
     for item in &items {
         let _ = app.emit("item:updated", item.clone());

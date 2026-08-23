@@ -519,8 +519,7 @@ export function SettingsTab(): JSX.Element {
           updates in place afterwards like every other reactive read here.
         */}
         <Show when={hasSettings()}>
-          <>
-            {/*
+          {/*
                 `flex-none` for the same reason every Section carries it. This
                 is a flex item in the settings column, and `overflow-hidden`
                 zeroes an item's automatic minimum size, so this was the one
@@ -530,26 +529,26 @@ export function SettingsTab(): JSX.Element {
                 the toggle clipped away. Reachable by search, which does not
                 depend on the box, and by nothing else.
               */}
-            {/*
+          {/*
                 `az-glass` beside `az-panel`, as every other panel in the app
                 has. Without it this one kept `az-panel`'s opaque fill and was
                 the only container in Settings that was not glass, which read as
                 the effect being broken rather than as a deliberate surface.
               */}
-            <div class="az-panel az-glass flex-none overflow-hidden rounded-panel border border-az-hairline">
-              <div class="flex flex-wrap items-baseline gap-x-2.5 gap-y-1 px-3.5 pt-3 pb-2.5">
-                <Icon name="gauge" class="relative top-0.5 text-[14px] text-primary" />
-                <h2 class="font-semibold text-[13px] text-az-title">{tx("Diagnostics")}</h2>
-                <span class="text-[11.5px] text-az-muted">
-                  {tx("local inspection and bounded performance traces")}
-                </span>
-              </div>
-              <Row
-                label={tx("Inspection and agent control")}
-                hint={tx("off by default; off removes the MCP socket and discovery descriptor")}
-              >
-                <div class="flex flex-col items-end gap-1">
-                  {/*
+          <div class="az-panel az-glass flex-none overflow-hidden rounded-panel border border-az-hairline">
+            <div class="flex flex-wrap items-baseline gap-x-2.5 gap-y-1 px-3.5 pt-3 pb-2.5">
+              <Icon name="gauge" class="relative top-0.5 text-[14px] text-primary" />
+              <h2 class="font-semibold text-[13px] text-az-title">{tx("Diagnostics")}</h2>
+              <span class="text-[11.5px] text-az-muted">
+                {tx("local inspection and bounded performance traces")}
+              </span>
+            </div>
+            <Row
+              label={tx("Inspection and agent control")}
+              hint={tx("off by default; off removes the MCP socket and discovery descriptor")}
+            >
+              <div class="flex flex-col items-end gap-1">
+                {/*
                       Not disabled while the write is in flight.
 
                       `displayedBlitzControl` already shows the requested state
@@ -561,46 +560,46 @@ export function SettingsTab(): JSX.Element {
                       always behaved. The deep profiling switch below had the
                       same flag and lost it for the same reason.
                     */}
-                  <SettingToggle
-                    label={tx("Enable inspection and agent control")}
-                    checked={displayedBlitzControl()}
-                    onChange={setBlitzControl}
-                  />
-                  <span
-                    role={blitzControlError() ? "alert" : "status"}
-                    class={`max-w-[260px] text-right text-[10.5px] ${
-                      blitzControlError()
-                        ? "text-error"
-                        : displayedBlitzControl()
-                          ? "text-success"
-                          : "text-az-muted"
-                    }`}
-                  >
-                    {blitzControlError() ||
-                      (blitzControlPending()
-                        ? tx("Applying local control…")
-                        : current().blitzControlEnabled
-                          ? tx("Listening on local MCP socket")
-                          : tx("Inspection and control disabled"))}
-                  </span>
-                </div>
-              </Row>
-              <Row
-                label={tx("Deep intrusive profiling")}
-                hint={tx(
-                  "performance-affecting engine timings and counters; enable only while capturing a trace",
-                )}
-                isLast
-              >
-                <div class="flex flex-col items-end gap-1">
-                  {/*
+                <SettingToggle
+                  label={tx("Enable inspection and agent control")}
+                  checked={displayedBlitzControl()}
+                  onChange={setBlitzControl}
+                />
+                <span
+                  role={blitzControlError() ? "alert" : "status"}
+                  class={`max-w-[260px] text-right text-[10.5px] ${
+                    blitzControlError()
+                      ? "text-error"
+                      : displayedBlitzControl()
+                        ? "text-success"
+                        : "text-az-muted"
+                  }`}
+                >
+                  {blitzControlError() ||
+                    (blitzControlPending()
+                      ? tx("Applying local control…")
+                      : current().blitzControlEnabled
+                        ? tx("Listening on local MCP socket")
+                        : tx("Inspection and control disabled"))}
+                </span>
+              </div>
+            </Row>
+            <Row
+              label={tx("Deep intrusive profiling")}
+              hint={tx(
+                "performance-affecting engine timings and counters; enable only while capturing a trace",
+              )}
+              isLast
+            >
+              <div class="flex flex-col items-end gap-1">
+                {/*
                       Not gated on inspection. This is a runtime switch of its
                       own: the collectors feed the frame log and phase timings,
                       which need no socket, and gating it here left a control
                       that looked available, did nothing, and then lost its
                       value when inspection was toggled.
                     */}
-                  {/*
+                {/*
                       Permission, not activation, and the wording has to say so.
                       The switch used to start collection outright, so a profile
                       enabled once sampled from boot for a reader that was not
@@ -609,568 +608,563 @@ export function SettingsTab(): JSX.Element {
                       while one of them is attached, and "active" would claim
                       something this control no longer does on its own.
                     */}
-                  <SettingToggle
-                    label={tx("Allow deep intrusive profiling")}
-                    checked={displayedDeepProfiling()}
-                    onChange={setBlitzDeepProfiling}
-                  />
-                  <span class="max-w-[260px] text-right text-[10.5px] text-az-muted">
-                    {displayedDeepProfiling()
-                      ? tx("Allowed. Samples only while a profiler is attached")
-                      : tx("No deep samples collected")}
-                  </span>
-                </div>
-              </Row>
-            </div>
+                <SettingToggle
+                  label={tx("Allow deep intrusive profiling")}
+                  checked={displayedDeepProfiling()}
+                  onChange={setBlitzDeepProfiling}
+                />
+                <span class="max-w-[260px] text-right text-[10.5px] text-az-muted">
+                  {displayedDeepProfiling()
+                    ? tx("Allowed. Samples only while a profiler is attached")
+                    : tx("No deep samples collected")}
+                </span>
+              </div>
+            </Row>
+          </div>
 
-            <Section
-              icon="gauge"
-              title={tx("AgencyProxy")}
-              hint={tx("owns live agent sessions across AgencyZero restarts")}
+          <Section
+            icon="gauge"
+            title={tx("AgencyProxy")}
+            hint={tx("owns live agent sessions across AgencyZero restarts")}
+          >
+            <Row
+              label={tx("Sidecar status")}
+              hint={
+                state.agencyProxy?.detail ??
+                state.agencyProxy?.socket ??
+                tx("checking the local endpoint")
+              }
+              stack
             >
-              <Row
-                label={tx("Sidecar status")}
-                hint={
-                  state.agencyProxy?.detail ??
-                  state.agencyProxy?.socket ??
-                  tx("checking the local endpoint")
-                }
-                stack
-              >
-                <div class="flex flex-wrap items-center justify-end gap-2">
-                  <span
-                    class={`size-2 rounded-full ${state.agencyProxy?.connected ? "bg-success" : "bg-error"}`}
-                  />
-                  <span class="text-[11.5px] text-az-body">
-                    {state.agencyProxy?.connected ? tx("Connected") : tx("Unavailable")}
-                  </span>
-                  <span class="text-[11px] text-az-muted">
-                    {state.agencyProxy
-                      ? `${state.agencyProxy.activeRuns} ${tx(
-                          state.agencyProxy.activeRuns === 1 ? "live run" : "live runs",
-                        )}`
-                      : tx("loading")}
-                  </span>
-                </div>
-              </Row>
-              <Row
-                label={tx("Executable")}
-                hint={tx("a selection takes effect when you restart the idle sidecar")}
-                stack
-              >
-                <div class="flex min-w-0 items-center gap-2">
-                  <span class="min-w-0 flex-1 truncate font-mono text-[11.5px] text-az-muted">
-                    {current().agentProxyBinary || tx("Bundled AgencyProxy")}
-                  </span>
-                  <Button
-                    type="button"
-                    disabled={!isLive("chooseAgentProxyBinary")}
-                    onClick={() => void actions.chooseAgentProxyBinary()}
-                    class="rounded-lg border border-az-hairline-strong px-3 py-[5px] text-[12px] text-az-body transition-colors hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-40"
-                  >
-                    {tx("Choose…")}
-                  </Button>
-                  <Button
-                    type="button"
-                    disabled={!current().agentProxyBinary}
-                    onClick={() => void actions.saveSettings({ agentProxyBinary: "" })}
-                    class="rounded-lg border border-az-hairline-strong px-3 py-[5px] text-[12px] text-az-muted transition-colors hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-40"
-                  >
-                    {tx("Use bundled")}
-                  </Button>
-                </div>
-              </Row>
-              <div class="flex flex-wrap items-center justify-end gap-2 px-3.5 py-2.5">
-                <Show when={proxyNote()}>
-                  <span class="mr-auto text-[11px] text-az-muted">{proxyNote()}</span>
-                </Show>
+              <div class="flex flex-wrap items-center justify-end gap-2">
+                <span
+                  class={`size-2 rounded-full ${state.agencyProxy?.connected ? "bg-success" : "bg-error"}`}
+                />
+                <span class="text-[11.5px] text-az-body">
+                  {state.agencyProxy?.connected ? tx("Connected") : tx("Unavailable")}
+                </span>
+                <span class="text-[11px] text-az-muted">
+                  {state.agencyProxy
+                    ? `${state.agencyProxy.activeRuns} ${tx(
+                        state.agencyProxy.activeRuns === 1 ? "live run" : "live runs",
+                      )}`
+                    : tx("loading")}
+                </span>
+              </div>
+            </Row>
+            <Row
+              label={tx("Executable")}
+              hint={tx("a selection takes effect when you restart the idle sidecar")}
+              stack
+            >
+              <div class="flex min-w-0 items-center gap-2">
+                <span class="min-w-0 flex-1 truncate font-mono text-[11.5px] text-az-muted">
+                  {current().agentProxyBinary || tx("Bundled AgencyProxy")}
+                </span>
                 <Button
                   type="button"
-                  title={tx("Refresh")}
-                  aria-label={tx("Refresh")}
-                  disabled={proxyAction() !== null || !isLive("getAgentProxyStatus")}
-                  onClick={refreshProxy}
-                  class="flex size-8 items-center justify-center rounded-lg border border-az-hairline-strong text-az-muted transition-colors hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-40"
+                  disabled={!isLive("chooseAgentProxyBinary")}
+                  onClick={() => void actions.chooseAgentProxyBinary()}
+                  class="rounded-lg border border-az-hairline-strong px-3 py-[5px] text-[12px] text-az-body transition-colors hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-40"
                 >
-                  <Icon
-                    name="refresh-cw"
-                    class={`text-[13px] ${proxyAction() === "refresh" ? "animate-spin" : ""}`}
-                  />
+                  {tx("Choose…")}
                 </Button>
+                <Button
+                  type="button"
+                  disabled={!current().agentProxyBinary}
+                  onClick={() => void actions.saveSettings({ agentProxyBinary: "" })}
+                  class="rounded-lg border border-az-hairline-strong px-3 py-[5px] text-[12px] text-az-muted transition-colors hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  {tx("Use bundled")}
+                </Button>
+              </div>
+            </Row>
+            <div class="flex flex-wrap items-center justify-end gap-2 px-3.5 py-2.5">
+              <Show when={proxyNote()}>
+                <span class="mr-auto text-[11px] text-az-muted">{proxyNote()}</span>
+              </Show>
+              <Button
+                type="button"
+                title={tx("Refresh")}
+                aria-label={tx("Refresh")}
+                disabled={proxyAction() !== null || !isLive("getAgentProxyStatus")}
+                onClick={refreshProxy}
+                class="flex size-8 items-center justify-center rounded-lg border border-az-hairline-strong text-az-muted transition-colors hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                <Icon
+                  name="refresh-cw"
+                  class={`text-[13px] ${proxyAction() === "refresh" ? "animate-spin" : ""}`}
+                />
+              </Button>
+              <Button
+                type="button"
+                disabled={proxyAction() !== null || !isLive("restartAgentProxy")}
+                onClick={() => restartProxy("drain")}
+                class="rounded-lg border border-warning/40 px-3 py-[5px] text-[12px] text-warning transition-colors hover:border-warning hover:bg-warning/8 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                {/*
+                 * The spans on these three captions are load-bearing, not
+                 * markup for its own sake.
+                 *
+                 * A reactive expression placed directly inside a Layout
+                 * component updates once and then freezes: the compiler's
+                 * `children` is a memo built on first read and owned by
+                 * whichever effect reads it first, and that effect disposes
+                 * it when it re-runs. These captions each have three
+                 * states, so the second change is the one that silently
+                 * does not happen and the button then lies about what it
+                 * will do. A plain element in between keeps the memo from
+                 * tracking the signal at all, so the text updates through
+                 * the span's own effect. Section 8 of
+                 * SOLID-LAYOUTS-ISSUES.md; remove once the memo is built
+                 * under the component's own owner.
+                 */}
+                <span>
+                  {proxyAction() === "drain"
+                    ? tx("Waiting…")
+                    : state.agencyProxy?.connected === false
+                      ? tx("Start")
+                      : (state.agencyProxy?.activeRuns ?? 0) > 0
+                        ? tx("Wait & restart")
+                        : tx("Restart")}
+                </span>
+              </Button>
+              <Show when={state.agencyProxy?.connected && isLive("stopAgentProxy")}>
+                <Button
+                  type="button"
+                  disabled={proxyAction() !== null}
+                  onClick={stopProxy}
+                  class="rounded-lg border border-az-hairline-strong px-3 py-[5px] text-[12px] text-az-muted transition-colors hover:border-error hover:text-error disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  <span>
+                    {proxyAction() === "stop" && (state.agencyProxy?.activeRuns ?? 0) > 0
+                      ? tx("Waiting…")
+                      : proxyAction() === "stop"
+                        ? tx("Stopping…")
+                        : tx("Stop")}
+                  </span>
+                </Button>
+              </Show>
+              <Show when={(state.agencyProxy?.activeRuns ?? 0) > 0}>
                 <Button
                   type="button"
                   disabled={proxyAction() !== null || !isLive("restartAgentProxy")}
-                  onClick={() => restartProxy("drain")}
-                  class="rounded-lg border border-warning/40 px-3 py-[5px] text-[12px] text-warning transition-colors hover:border-warning hover:bg-warning/8 disabled:cursor-not-allowed disabled:opacity-40"
+                  onClick={() =>
+                    terminateArmed() ? restartProxy("terminate") : setTerminateArmed(true)
+                  }
+                  class="rounded-lg border border-error/40 px-3 py-[5px] text-[12px] text-error transition-colors hover:border-error hover:bg-error/8 disabled:cursor-not-allowed disabled:opacity-40"
                 >
-                  {/*
-                   * The spans on these three captions are load-bearing, not
-                   * markup for its own sake.
-                   *
-                   * A reactive expression placed directly inside a Layout
-                   * component updates once and then freezes: the compiler's
-                   * `children` is a memo built on first read and owned by
-                   * whichever effect reads it first, and that effect disposes
-                   * it when it re-runs. These captions each have three
-                   * states, so the second change is the one that silently
-                   * does not happen and the button then lies about what it
-                   * will do. A plain element in between keeps the memo from
-                   * tracking the signal at all, so the text updates through
-                   * the span's own effect. Section 8 of
-                   * SOLID-LAYOUTS-ISSUES.md; remove once the memo is built
-                   * under the component's own owner.
-                   */}
                   <span>
-                    {proxyAction() === "drain"
-                      ? tx("Waiting…")
-                      : state.agencyProxy?.connected === false
-                        ? tx("Start")
-                        : (state.agencyProxy?.activeRuns ?? 0) > 0
-                          ? tx("Wait & restart")
-                          : tx("Restart")}
+                    {proxyAction() === "terminate"
+                      ? tx("Terminating…")
+                      : terminateArmed()
+                        ? tx("Confirm terminate & restart")
+                        : tx("Terminate & restart")}
                   </span>
                 </Button>
-                <Show when={state.agencyProxy?.connected && isLive("stopAgentProxy")}>
-                  <Button
-                    type="button"
-                    disabled={proxyAction() !== null}
-                    onClick={stopProxy}
-                    class="rounded-lg border border-az-hairline-strong px-3 py-[5px] text-[12px] text-az-muted transition-colors hover:border-error hover:text-error disabled:cursor-not-allowed disabled:opacity-40"
-                  >
-                    <span>
-                      {proxyAction() === "stop" && (state.agencyProxy?.activeRuns ?? 0) > 0
-                        ? tx("Waiting…")
-                        : proxyAction() === "stop"
-                          ? tx("Stopping…")
-                          : tx("Stop")}
-                    </span>
-                  </Button>
-                </Show>
-                <Show when={(state.agencyProxy?.activeRuns ?? 0) > 0}>
-                  <Button
-                    type="button"
-                    disabled={proxyAction() !== null || !isLive("restartAgentProxy")}
-                    onClick={() =>
-                      terminateArmed() ? restartProxy("terminate") : setTerminateArmed(true)
-                    }
-                    class="rounded-lg border border-error/40 px-3 py-[5px] text-[12px] text-error transition-colors hover:border-error hover:bg-error/8 disabled:cursor-not-allowed disabled:opacity-40"
-                  >
-                    <span>
-                      {proxyAction() === "terminate"
-                        ? tx("Terminating…")
-                        : terminateArmed()
-                          ? tx("Confirm terminate & restart")
-                          : tx("Terminate & restart")}
-                    </span>
-                  </Button>
-                </Show>
-              </div>
-            </Section>
+              </Show>
+            </div>
+          </Section>
 
-            <Section
-              icon="shield"
-              title={tx("Agents")}
-              hint={tx("detected from the installed CLIs, not from configuration")}
-            >
-              <For each={state.agents}>{(agent) => <AgentRow status={agent} />}</For>
-              <div class="flex items-center gap-2.5 px-3.5 pt-0 pb-3">
-                <Button
-                  type="button"
-                  onClick={() => void actions.recheckAgents()}
-                  class="rounded-lg border border-az-hairline-strong px-3 py-[5px] text-[12px] text-az-body transition-colors hover:border-primary hover:text-primary"
-                >
-                  {tx("Re-check")}
-                </Button>
-                <Show when={state.agents[0]}>
-                  {(first) => (
-                    <span class="text-[11.5px] text-az-muted">
-                      {tx("last checked")} {relativeTime(first().checkedAt)}
-                    </span>
-                  )}
-                </Show>
-              </div>
-            </Section>
+          <Section
+            icon="shield"
+            title={tx("Agents")}
+            hint={tx("detected from the installed CLIs, not from configuration")}
+          >
+            <For each={state.agents}>{(agent) => <AgentRow status={agent} />}</For>
+            <div class="flex items-center gap-2.5 px-3.5 pt-0 pb-3">
+              <Button
+                type="button"
+                onClick={() => void actions.recheckAgents()}
+                class="rounded-lg border border-az-hairline-strong px-3 py-[5px] text-[12px] text-az-body transition-colors hover:border-primary hover:text-primary"
+              >
+                {tx("Re-check")}
+              </Button>
+              <Show when={state.agents[0]}>
+                {(first) => (
+                  <span class="text-[11.5px] text-az-muted">
+                    {tx("last checked")} {relativeTime(first().checkedAt)}
+                  </span>
+                )}
+              </Show>
+            </div>
+          </Section>
 
-            <Section
-              icon="sparkles"
-              title={tx("Agent defaults")}
-              hint={tx("what a new tab starts with")}
-            >
-              <Row label={tx("Agent")}>
-                <PillMenu<Agent>
-                  label={tx("Default agent")}
-                  icon="sparkles"
-                  value={current().defaultAgent}
-                  options={state.agents
-                    .filter((agent) => agent.agent === "claude" || agent.agent === "codex")
-                    .map((agent) => ({ value: agent.agent, label: AGENT_LABELS[agent.agent] }))}
-                  onChange={selectDefaultAgent}
-                />
-              </Row>
-              <Row label={tx("Model")} hint={tx("chosen from what Models below has enabled")}>
-                <PillMenu
-                  label={tx("Default model")}
-                  value={current().models[current().defaultAgent].default}
-                  options={enabledModels(current().defaultAgent).map((model) => ({
-                    value: model.id,
-                    label: model.name,
-                  }))}
-                  onChange={(id) => void actions.setDefaultModel(current().defaultAgent, id)}
-                />
-              </Row>
-              <Row label={tx("Effort")} hint={tx("reasoning level a new tab starts on")}>
-                <PillMenu
-                  label={tx("Default effort")}
-                  value={current().defaultEffort}
-                  options={effortOptions().map((effort) => ({ value: effort, label: effort }))}
-                  onChange={(defaultEffort) => void actions.saveSettings({ defaultEffort })}
-                />
-              </Row>
-              <Row
+          <Section
+            icon="sparkles"
+            title={tx("Agent defaults")}
+            hint={tx("what a new tab starts with")}
+          >
+            <Row label={tx("Agent")}>
+              <PillMenu<Agent>
+                label={tx("Default agent")}
+                icon="sparkles"
+                value={current().defaultAgent}
+                options={state.agents
+                  .filter((agent) => agent.agent === "claude" || agent.agent === "codex")
+                  .map((agent) => ({ value: agent.agent, label: AGENT_LABELS[agent.agent] }))}
+                onChange={selectDefaultAgent}
+              />
+            </Row>
+            <Row label={tx("Model")} hint={tx("chosen from what Models below has enabled")}>
+              <PillMenu
+                label={tx("Default model")}
+                value={current().models[current().defaultAgent].default}
+                options={enabledModels(current().defaultAgent).map((model) => ({
+                  value: model.id,
+                  label: model.name,
+                }))}
+                onChange={(id) => void actions.setDefaultModel(current().defaultAgent, id)}
+              />
+            </Row>
+            <Row label={tx("Effort")} hint={tx("reasoning level a new tab starts on")}>
+              <PillMenu
+                label={tx("Default effort")}
+                value={current().defaultEffort}
+                options={effortOptions().map((effort) => ({ value: effort, label: effort }))}
+                onChange={(defaultEffort) => void actions.saveSettings({ defaultEffort })}
+              />
+            </Row>
+            <Row label={tx("Completed items")} hint={tx("what manual completion does to the row")}>
+              <PillMenu
                 label={tx("Completed items")}
-                hint={tx("what manual completion does to the row")}
-              >
-                <PillMenu
-                  label={tx("Completed items")}
-                  value={current().completedItems}
-                  options={[
-                    { value: "resolve", label: tx("Mark resolved") },
-                    { value: "delete", label: tx("Delete") },
-                  ]}
-                  onChange={(completedItems) =>
-                    void actions.saveSettings({
-                      completedItems: completedItems as "resolve" | "delete",
-                    })
-                  }
-                />
-              </Row>
-              <Row
-                label={tx("Agent-finished retention")}
-                hint={tx("user turns kept before automatic retirement")}
-              >
-                <PillMenu<"1" | "2" | "3">
-                  label={tx("Agent-finished retention")}
-                  value={String(current().agentFinishedRetentionTurns) as "1" | "2" | "3"}
-                  options={[
-                    { value: "1", label: tx("1 turn") },
-                    { value: "2", label: tx("2 turns") },
-                    { value: "3", label: tx("3 turns") },
-                  ]}
-                  onChange={(turns) =>
-                    void actions.saveSettings({ agentFinishedRetentionTurns: Number(turns) })
-                  }
-                />
-              </Row>
-              <Row
-                label={tx("Inject AgencyZero and Prompt Syntax per turn")}
-                hint={tx(
-                  "extended features (items, questions, PR tracking); override with AgencyZeroPerTurn.md",
-                )}
-              >
-                <SettingToggle
-                  label={tx("Inject AgencyZero and Prompt Syntax per turn")}
-                  checked={current().perTurnInjection}
-                  onChange={(perTurnInjection) => void actions.saveSettings({ perTurnInjection })}
-                />
-              </Row>
-              <Row
-                label={tx("PR review prompt")}
-                hint={tx("what a PR review asks; empty uses the built-in prompt")}
-                stack
-              >
-                <Textarea
-                  rows={3}
-                  value={current().review?.prompt ?? ""}
-                  placeholder={tx(
-                    "Review this pull request for correctness bugs, security issues, and anything that would block merge. Be concrete: name the file and line, say what is wrong and why, and rank findings most severe first. If it is solid, say so briefly.",
-                  )}
-                  onChange={(event) =>
-                    void actions.saveSettings({ review: { prompt: event.currentTarget.value } })
-                  }
-                  class="az-scroll w-full resize-none rounded-lg border border-az-hairline bg-base-300 px-2.5 py-2 text-[12px] text-az-body leading-[1.5] placeholder:text-az-faint focus:outline-none"
-                />
-              </Row>
-              <Row
-                label={tx("Permission posture")}
-                hint={tx("read_only is the crate default; widen deliberately")}
-                isLast
-              >
-                <PillMenu<Permission>
-                  label={tx("Default permission")}
-                  icon="lock"
-                  value={current().defaultPermission}
-                  options={permissionsFor(current().defaultAgent).map((permission) => ({
-                    value: permission,
-                    label: permissionLabel(permission),
-                  }))}
-                  onChange={(defaultPermission) => void actions.saveSettings({ defaultPermission })}
-                />
-              </Row>
-            </Section>
-
-            <Section
-              icon="sliders-horizontal"
-              title={tx("Models")}
-              hint={tx("what each picker offers")}
-            >
-              <For each={state.models}>
-                {(catalogue) => (
-                  <AgentModelList
-                    catalogue={catalogue}
-                    selection={current().models[catalogue.agent]}
-                  />
-                )}
-              </For>
-              <div class="flex flex-wrap items-center gap-2.5 px-3.5 pt-0 pb-3">
-                <Button
-                  type="button"
-                  onClick={() => void actions.refreshModels()}
-                  class="rounded-lg border border-az-hairline-strong px-3 py-[5px] text-[12px] text-az-body transition-colors hover:border-primary hover:text-primary"
-                >
-                  {tx("Re-read from the CLIs")}
-                </Button>
-                <span class="text-[11.5px] text-az-muted">
-                  {tx("only Codex can enumerate; the other two stay on the compiled list")}
-                </span>
-              </div>
-            </Section>
-
-            <Section
-              icon="list-checks"
-              title={tx("Task Manager")}
-              hint={tx("the Home conversation that keeps the lists in order")}
-            >
-              <Row label={tx("Agent")}>
-                <PillMenu<Agent>
-                  label={tx("Task manager agent")}
-                  icon="sparkles"
-                  value={current().taskManager.agent}
-                  options={state.agents
-                    .filter((status) => status.agent === "claude" || status.agent === "codex")
-                    .map((status) => ({
-                      value: status.agent,
-                      label: AGENT_LABELS[status.agent],
-                    }))}
-                  onChange={selectTaskManagerAgent}
-                />
-              </Row>
-              <Row
-                label={tx("Model")}
-                hint={tx(
-                  "its own, deliberately — a list keeper running unattended should not bill at the prompt's rates",
-                )}
-              >
-                <PillMenu
-                  label={tx("Task manager model")}
-                  value={current().taskManager.model}
-                  options={enabledModels(current().taskManager.agent).map((model) => ({
-                    value: model.id,
-                    label: model.name,
-                  }))}
-                  onChange={selectTaskManagerModel}
-                />
-              </Row>
-              <Row label={tx("Effort")}>
-                <PillMenu
-                  label={tx("Task manager effort")}
-                  value={current().taskManager.effort}
-                  options={taskManagerEfforts().map((effort) => ({
-                    value: effort,
-                    label: effort,
-                  }))}
-                  onChange={(effort) =>
-                    void actions.saveSettings({
-                      taskManager: { ...current().taskManager, effort },
-                    })
-                  }
-                />
-              </Row>
-              <Row label={tx("Permission posture")}>
-                <PillMenu<Permission>
-                  label={tx("Task manager permission")}
-                  icon="lock"
-                  value={current().taskManager.permission}
-                  options={permissionsFor(current().taskManager.agent).map((permission) => ({
-                    value: permission,
-                    label: permissionLabel(permission),
-                  }))}
-                  onChange={(permission) =>
-                    void actions.saveSettings({
-                      taskManager: { ...current().taskManager, permission },
-                    })
-                  }
-                />
-              </Row>
-              <Row
-                label={tx("Working directories")}
-                hint={tx("the first is the working directory; empty means the workspace root")}
-              >
-                <TaskManagerDirs taskManager={current().taskManager} />
-              </Row>
-              <Row
-                label={tx("Conversation")}
-                hint={tx(
-                  "reset starts the next prompt fresh; the transcript and collected tasks stay",
-                )}
-                isLast
-              >
-                <ResetTaskManagerButton />
-              </Row>
-            </Section>
-
-            <CostSection />
-
-            <Section icon="settings" title={tx("Application")} hint={tx("the running instance")}>
-              <Row
-                label={tx("Build")}
-                hint={tx(
-                  "version · commit · compiled — a * after the commit means uncommitted edits",
-                )}
-              >
-                <BuildStamp />
-              </Row>
-              <Row
-                label={tx("Update")}
-                hint={tx("signed manifest; installing refuses while runs are active")}
-              >
-                <UpdateControl />
-              </Row>
-              <Row
-                label={tx("Check for updates at launch")}
-                hint={tx("checks only; an update is never installed automatically")}
-              >
-                <SettingToggle
-                  label={tx("Check for updates at launch")}
-                  checked={current().automaticUpdateChecks}
-                  onChange={(automaticUpdateChecks) =>
-                    void actions.saveSettings({ automaticUpdateChecks })
-                  }
-                />
-              </Row>
-              <Row
-                label={tx("Agent restart authority")}
-                hint={tx("disabled by default; applies only after the agent's turn finishes")}
-              >
-                <PillMenu<"disabled" | "restart" | "restart_and_update">
-                  label={tx("Agent restart authority")}
-                  value={current().agentRestartPolicy}
-                  options={[
-                    { value: "disabled", label: tx("Disabled") },
-                    { value: "restart", label: tx("Restart only") },
-                    { value: "restart_and_update", label: tx("Restart & update") },
-                  ]}
-                  onChange={(agentRestartPolicy) =>
-                    void actions.saveSettings({ agentRestartPolicy })
-                  }
-                />
-              </Row>
-              <Row
-                label={tx("Open source")}
-                hint={tx("If AgencyZero is useful, a GitHub star helps more people find it.")}
-              >
-                <SourceActions />
-              </Row>
-              <Row
-                label={tx("Restart")}
-                hint={tx(
-                  "drains the store, then reopens into the build currently on disk — the second half of a rebuild",
-                )}
-                isLast
-              >
-                <RelaunchButton />
-              </Row>
-            </Section>
-
-            <Section icon="sparkles" title={t("appearance.title")} hint={t("appearance.hint")}>
-              <Row label={t("appearance.mode")} hint={t("appearance.modeHint")}>
-                <div class="az-control-solid flex items-center gap-1 rounded-full border border-az-hairline bg-az-inset p-1">
-                  <For
-                    each={[
-                      { value: "dark" as const, label: t("appearance.dark") },
-                      { value: "light" as const, label: t("appearance.light") },
-                    ]}
-                  >
-                    {(option) => (
-                      <Button
-                        type="button"
-                        aria-pressed={prefs.colorMode === option.value ? "true" : "false"}
-                        onClick={() =>
-                          setPrefs((d) => {
-                            d.colorMode = option.value;
-                          })
-                        }
-                        class={`rounded-full px-3 py-1 font-semibold text-[11px] transition-colors ${
-                          prefs.colorMode === option.value
-                            ? "bg-primary text-primary-content"
-                            : "text-az-muted hover:bg-az-hover hover:text-az-title"
-                        }`}
-                      >
-                        {option.label}
-                      </Button>
-                    )}
-                  </For>
-                </div>
-              </Row>
-              <Row label={t("appearance.size")} hint={t("appearance.sizeHint")}>
-                <div class="az-control-solid flex items-center gap-1 rounded-full border border-az-hairline bg-az-inset p-1">
-                  <For
-                    each={[
-                      { value: "normal" as const, label: "N", name: t("appearance.normal") },
-                      { value: "large" as const, label: "L", name: t("appearance.large") },
-                      {
-                        value: "extra-large" as const,
-                        label: "XL",
-                        name: t("appearance.extraLarge"),
-                      },
-                    ]}
-                  >
-                    {(option) => (
-                      <Button
-                        type="button"
-                        aria-label={`${option.name} ${t("appearance.size")}`}
-                        aria-pressed={prefs.uiSize === option.value ? "true" : "false"}
-                        onClick={() =>
-                          setPrefs((d) => {
-                            d.uiSize = option.value;
-                          })
-                        }
-                        class={`flex size-7 items-center justify-center rounded-full font-semibold text-[10.5px] transition-colors ${
-                          prefs.uiSize === option.value
-                            ? "bg-primary text-primary-content"
-                            : "text-az-muted hover:bg-az-hover hover:text-az-title"
-                        }`}
-                      >
-                        {option.label}
-                      </Button>
-                    )}
-                  </For>
-                </div>
-              </Row>
-              <ThemePicker
-                theme={current().theme}
-                onSurface={(surface) =>
+                value={current().completedItems}
+                options={[
+                  { value: "resolve", label: tx("Mark resolved") },
+                  { value: "delete", label: tx("Delete") },
+                ]}
+                onChange={(completedItems) =>
                   void actions.saveSettings({
-                    theme: {
-                      surface,
-                      wash: normalizeWash(current().theme.wash),
-                    },
+                    completedItems: completedItems as "resolve" | "delete",
                   })
                 }
-                onAccent={(accent) => void actions.saveSettings({ theme: { accent } })}
-                onAccentTwo={(accentTwo) => void actions.saveSettings({ theme: { accentTwo } })}
-                onSoftness={(softness) => void actions.saveSettings({ theme: { softness } })}
-                onWash={(wash) => void actions.saveSettings({ theme: { wash } })}
-                onBrightness={(textBrightness) =>
-                  void actions.saveSettings({ theme: { textBrightness } })
+              />
+            </Row>
+            <Row
+              label={tx("Agent-finished retention")}
+              hint={tx("user turns kept before automatic retirement")}
+            >
+              <PillMenu<"1" | "2" | "3">
+                label={tx("Agent-finished retention")}
+                value={String(current().agentFinishedRetentionTurns) as "1" | "2" | "3"}
+                options={[
+                  { value: "1", label: tx("1 turn") },
+                  { value: "2", label: tx("2 turns") },
+                  { value: "3", label: tx("3 turns") },
+                ]}
+                onChange={(turns) =>
+                  void actions.saveSettings({ agentFinishedRetentionTurns: Number(turns) })
                 }
-                isDefault={
-                  current().theme.surface === "" &&
-                  current().theme.accent === "" &&
-                  current().theme.softness === 0 &&
-                  normalizeWash(current().theme.wash) === DEFAULT_WASH &&
-                  current().theme.textBrightness === 0
+              />
+            </Row>
+            <Row
+              label={tx("Inject AgencyZero and Prompt Syntax per turn")}
+              hint={tx(
+                "extended features (items, questions, PR tracking); override with AgencyZeroPerTurn.md",
+              )}
+            >
+              <SettingToggle
+                label={tx("Inject AgencyZero and Prompt Syntax per turn")}
+                checked={current().perTurnInjection}
+                onChange={(perTurnInjection) => void actions.saveSettings({ perTurnInjection })}
+              />
+            </Row>
+            <Row
+              label={tx("PR review prompt")}
+              hint={tx("what a PR review asks; empty uses the built-in prompt")}
+              stack
+            >
+              <Textarea
+                rows={3}
+                value={current().review?.prompt ?? ""}
+                placeholder={tx(
+                  "Review this pull request for correctness bugs, security issues, and anything that would block merge. Be concrete: name the file and line, say what is wrong and why, and rank findings most severe first. If it is solid, say so briefly.",
+                )}
+                onChange={(event) =>
+                  void actions.saveSettings({ review: { prompt: event.currentTarget.value } })
                 }
-                /*
+                class="az-scroll w-full resize-none rounded-lg border border-az-hairline bg-base-300 px-2.5 py-2 text-[12px] text-az-body leading-[1.5] placeholder:text-az-faint focus:outline-none"
+              />
+            </Row>
+            <Row
+              label={tx("Permission posture")}
+              hint={tx("read_only is the crate default; widen deliberately")}
+              isLast
+            >
+              <PillMenu<Permission>
+                label={tx("Default permission")}
+                icon="lock"
+                value={current().defaultPermission}
+                options={permissionsFor(current().defaultAgent).map((permission) => ({
+                  value: permission,
+                  label: permissionLabel(permission),
+                }))}
+                onChange={(defaultPermission) => void actions.saveSettings({ defaultPermission })}
+              />
+            </Row>
+          </Section>
+
+          <Section
+            icon="sliders-horizontal"
+            title={tx("Models")}
+            hint={tx("what each picker offers")}
+          >
+            <For each={state.models}>
+              {(catalogue) => (
+                <AgentModelList
+                  catalogue={catalogue}
+                  selection={current().models[catalogue.agent]}
+                />
+              )}
+            </For>
+            <div class="flex flex-wrap items-center gap-2.5 px-3.5 pt-0 pb-3">
+              <Button
+                type="button"
+                onClick={() => void actions.refreshModels()}
+                class="rounded-lg border border-az-hairline-strong px-3 py-[5px] text-[12px] text-az-body transition-colors hover:border-primary hover:text-primary"
+              >
+                {tx("Re-read from the CLIs")}
+              </Button>
+              <span class="text-[11.5px] text-az-muted">
+                {tx("only Codex can enumerate; the other two stay on the compiled list")}
+              </span>
+            </div>
+          </Section>
+
+          <Section
+            icon="list-checks"
+            title={tx("Task Manager")}
+            hint={tx("the Home conversation that keeps the lists in order")}
+          >
+            <Row label={tx("Agent")}>
+              <PillMenu<Agent>
+                label={tx("Task manager agent")}
+                icon="sparkles"
+                value={current().taskManager.agent}
+                options={state.agents
+                  .filter((status) => status.agent === "claude" || status.agent === "codex")
+                  .map((status) => ({
+                    value: status.agent,
+                    label: AGENT_LABELS[status.agent],
+                  }))}
+                onChange={selectTaskManagerAgent}
+              />
+            </Row>
+            <Row
+              label={tx("Model")}
+              hint={tx(
+                "its own, deliberately — a list keeper running unattended should not bill at the prompt's rates",
+              )}
+            >
+              <PillMenu
+                label={tx("Task manager model")}
+                value={current().taskManager.model}
+                options={enabledModels(current().taskManager.agent).map((model) => ({
+                  value: model.id,
+                  label: model.name,
+                }))}
+                onChange={selectTaskManagerModel}
+              />
+            </Row>
+            <Row label={tx("Effort")}>
+              <PillMenu
+                label={tx("Task manager effort")}
+                value={current().taskManager.effort}
+                options={taskManagerEfforts().map((effort) => ({
+                  value: effort,
+                  label: effort,
+                }))}
+                onChange={(effort) =>
+                  void actions.saveSettings({
+                    taskManager: { ...current().taskManager, effort },
+                  })
+                }
+              />
+            </Row>
+            <Row label={tx("Permission posture")}>
+              <PillMenu<Permission>
+                label={tx("Task manager permission")}
+                icon="lock"
+                value={current().taskManager.permission}
+                options={permissionsFor(current().taskManager.agent).map((permission) => ({
+                  value: permission,
+                  label: permissionLabel(permission),
+                }))}
+                onChange={(permission) =>
+                  void actions.saveSettings({
+                    taskManager: { ...current().taskManager, permission },
+                  })
+                }
+              />
+            </Row>
+            <Row
+              label={tx("Working directories")}
+              hint={tx("the first is the working directory; empty means the workspace root")}
+            >
+              <TaskManagerDirs taskManager={current().taskManager} />
+            </Row>
+            <Row
+              label={tx("Conversation")}
+              hint={tx(
+                "reset starts the next prompt fresh; the transcript and collected tasks stay",
+              )}
+              isLast
+            >
+              <ResetTaskManagerButton />
+            </Row>
+          </Section>
+
+          <CostSection />
+
+          <Section icon="settings" title={tx("Application")} hint={tx("the running instance")}>
+            <Row
+              label={tx("Build")}
+              hint={tx(
+                "version · commit · compiled — a * after the commit means uncommitted edits",
+              )}
+            >
+              <BuildStamp />
+            </Row>
+            <Row
+              label={tx("Update")}
+              hint={tx("signed manifest; installing refuses while runs are active")}
+            >
+              <UpdateControl />
+            </Row>
+            <Row
+              label={tx("Check for updates at launch")}
+              hint={tx("checks only; an update is never installed automatically")}
+            >
+              <SettingToggle
+                label={tx("Check for updates at launch")}
+                checked={current().automaticUpdateChecks}
+                onChange={(automaticUpdateChecks) =>
+                  void actions.saveSettings({ automaticUpdateChecks })
+                }
+              />
+            </Row>
+            <Row
+              label={tx("Agent restart authority")}
+              hint={tx("disabled by default; applies only after the agent's turn finishes")}
+            >
+              <PillMenu<"disabled" | "restart" | "restart_and_update">
+                label={tx("Agent restart authority")}
+                value={current().agentRestartPolicy}
+                options={[
+                  { value: "disabled", label: tx("Disabled") },
+                  { value: "restart", label: tx("Restart only") },
+                  { value: "restart_and_update", label: tx("Restart & update") },
+                ]}
+                onChange={(agentRestartPolicy) => void actions.saveSettings({ agentRestartPolicy })}
+              />
+            </Row>
+            <Row
+              label={tx("Open source")}
+              hint={tx("If AgencyZero is useful, a GitHub star helps more people find it.")}
+            >
+              <SourceActions />
+            </Row>
+            <Row
+              label={tx("Restart")}
+              hint={tx(
+                "drains the store, then reopens into the build currently on disk — the second half of a rebuild",
+              )}
+              isLast
+            >
+              <RelaunchButton />
+            </Row>
+          </Section>
+
+          <Section icon="sparkles" title={t("appearance.title")} hint={t("appearance.hint")}>
+            <Row label={t("appearance.mode")} hint={t("appearance.modeHint")}>
+              <div class="az-control-solid flex items-center gap-1 rounded-full border border-az-hairline bg-az-inset p-1">
+                <For
+                  each={[
+                    { value: "dark" as const, label: t("appearance.dark") },
+                    { value: "light" as const, label: t("appearance.light") },
+                  ]}
+                >
+                  {(option) => (
+                    <Button
+                      type="button"
+                      aria-pressed={prefs.colorMode === option.value ? "true" : "false"}
+                      onClick={() =>
+                        setPrefs((d) => {
+                          d.colorMode = option.value;
+                        })
+                      }
+                      class={`rounded-full px-3 py-1 font-semibold text-[11px] transition-colors ${
+                        prefs.colorMode === option.value
+                          ? "bg-primary text-primary-content"
+                          : "text-az-muted hover:bg-az-hover hover:text-az-title"
+                      }`}
+                    >
+                      {option.label}
+                    </Button>
+                  )}
+                </For>
+              </div>
+            </Row>
+            <Row label={t("appearance.size")} hint={t("appearance.sizeHint")}>
+              <div class="az-control-solid flex items-center gap-1 rounded-full border border-az-hairline bg-az-inset p-1">
+                <For
+                  each={[
+                    { value: "normal" as const, label: "N", name: t("appearance.normal") },
+                    { value: "large" as const, label: "L", name: t("appearance.large") },
+                    {
+                      value: "extra-large" as const,
+                      label: "XL",
+                      name: t("appearance.extraLarge"),
+                    },
+                  ]}
+                >
+                  {(option) => (
+                    <Button
+                      type="button"
+                      aria-label={`${option.name} ${t("appearance.size")}`}
+                      aria-pressed={prefs.uiSize === option.value ? "true" : "false"}
+                      onClick={() =>
+                        setPrefs((d) => {
+                          d.uiSize = option.value;
+                        })
+                      }
+                      class={`flex size-7 items-center justify-center rounded-full font-semibold text-[10.5px] transition-colors ${
+                        prefs.uiSize === option.value
+                          ? "bg-primary text-primary-content"
+                          : "text-az-muted hover:bg-az-hover hover:text-az-title"
+                      }`}
+                    >
+                      {option.label}
+                    </Button>
+                  )}
+                </For>
+              </div>
+            </Row>
+            <ThemePicker
+              theme={current().theme}
+              onSurface={(surface) =>
+                void actions.saveSettings({
+                  theme: {
+                    surface,
+                    wash: normalizeWash(current().theme.wash),
+                  },
+                })
+              }
+              onAccent={(accent) => void actions.saveSettings({ theme: { accent } })}
+              onAccentTwo={(accentTwo) => void actions.saveSettings({ theme: { accentTwo } })}
+              onSoftness={(softness) => void actions.saveSettings({ theme: { softness } })}
+              onWash={(wash) => void actions.saveSettings({ theme: { wash } })}
+              onBrightness={(textBrightness) =>
+                void actions.saveSettings({ theme: { textBrightness } })
+              }
+              isDefault={
+                current().theme.surface === "" &&
+                current().theme.accent === "" &&
+                current().theme.softness === 0 &&
+                normalizeWash(current().theme.wash) === DEFAULT_WASH &&
+                current().theme.textBrightness === 0
+              }
+              /*
                     Reset means every axis on this pane, glass included.
 
                     It used to write five fields and leave the six glass ones
@@ -1185,26 +1179,26 @@ export function SettingsTab(): JSX.Element {
                     default", so clearing them restores whatever this build
                     ships rather than pinning today's numbers into the record.
                   */
-                onReset={() =>
-                  void actions.saveSettings({
-                    theme: {
-                      surface: "",
-                      accent: "",
-                      softness: 0,
-                      wash: DEFAULT_WASH,
-                      textBrightness: 0,
-                      glassEnabled: undefined,
-                      glassBlur: undefined,
-                      glassRefraction: undefined,
-                      glassDepth: undefined,
-                      glassOpacity: undefined,
-                      glassScrim: undefined,
-                    },
-                  })
-                }
-              />
+              onReset={() =>
+                void actions.saveSettings({
+                  theme: {
+                    surface: "",
+                    accent: "",
+                    softness: 0,
+                    wash: DEFAULT_WASH,
+                    textBrightness: 0,
+                    glassEnabled: undefined,
+                    glassBlur: undefined,
+                    glassRefraction: undefined,
+                    glassDepth: undefined,
+                    glassOpacity: undefined,
+                    glassScrim: undefined,
+                  },
+                })
+              }
+            />
 
-              {/*
+            {/*
                   Glass is three numbers, and these are they.
 
                   `@pathscale/ui` derives twenty-five `--glass-*` tokens from
@@ -1219,7 +1213,7 @@ export function SettingsTab(): JSX.Element {
                   which is the same split the library already makes: three
                   physical properties, one place to set them.
                 */}
-              {/*
+            {/*
                   The switch that turns the whole effect off.
 
                   Glass is a taste, and on a busy backdrop it is a legibility
@@ -1236,24 +1230,24 @@ export function SettingsTab(): JSX.Element {
                   goes solid together, and back on restores the numbers that
                   were already stored.
                 */}
-              <Row
-                label={tx("Glass")}
-                hint={tx("turn every translucent surface solid, in one switch")}
-              >
-                <Switch
-                  aria-label={tx("Glass")}
-                  checked={current().theme.glassEnabled !== false}
-                  flavor="accent"
-                  class="shrink-0"
-                  onChange={(event) =>
-                    actions.saveSettings({
-                      theme: { glassEnabled: event.currentTarget.checked },
-                    })
-                  }
-                />
-              </Row>
+            <Row
+              label={tx("Glass")}
+              hint={tx("turn every translucent surface solid, in one switch")}
+            >
+              <Switch
+                aria-label={tx("Glass")}
+                checked={current().theme.glassEnabled !== false}
+                flavor="accent"
+                class="shrink-0"
+                onChange={(event) =>
+                  actions.saveSettings({
+                    theme: { glassEnabled: event.currentTarget.checked },
+                  })
+                }
+              />
+            </Row>
 
-              {/*
+            {/*
                   Blur only reaches what *this app* painted behind a panel.
 
                   `backdrop-filter` samples pixels the renderer drew. Behind a
@@ -1267,55 +1261,53 @@ export function SettingsTab(): JSX.Element {
                   a busy transcript needs, and because 0 is a legitimate setting
                   that costs nothing. The hint no longer promises the desktop.
                 */}
-              <Row
+            <Row
+              label={tx("Glass blur")}
+              hint={tx("how far a panel smears the app's own content behind it")}
+            >
+              <GlassTuningAxis
                 label={tx("Glass blur")}
-                hint={tx("how far a panel smears the app's own content behind it")}
-              >
-                <GlassTuningAxis
-                  label={tx("Glass blur")}
-                  axis="blur"
-                  theme={current().theme}
-                  step={1}
-                  value={current().theme.glassBlur}
-                  format={(value) => `${Math.round(value)}px`}
-                  onChange={(glassBlur) => actions.saveSettings({ theme: { glassBlur } })}
-                />
-              </Row>
-              <Row
+                axis="blur"
+                theme={current().theme}
+                step={1}
+                value={current().theme.glassBlur}
+                format={(value) => `${Math.round(value)}px`}
+                onChange={(glassBlur) => actions.saveSettings({ theme: { glassBlur } })}
+              />
+            </Row>
+            <Row
+              label={tx("Glass refraction")}
+              hint={tx("how much a glass surface asserts its own tint, border and highlight")}
+            >
+              <GlassTuningAxis
                 label={tx("Glass refraction")}
-                hint={tx("how much a glass surface asserts its own tint, border and highlight")}
-              >
-                <GlassTuningAxis
-                  label={tx("Glass refraction")}
-                  axis="refraction"
-                  theme={current().theme}
-                  // The axis runs 0 to 0.4, so a whole-number step would be
-                  // three usable positions. Shown as a percentage of its own
-                  // range, which is what the number means.
-                  step={0.01}
-                  value={current().theme.glassRefraction}
-                  format={(value) => `${Math.round((value / GLASS_LIMITS.refraction.max) * 100)}%`}
-                  onChange={(glassRefraction) =>
-                    actions.saveSettings({ theme: { glassRefraction } })
-                  }
-                />
-              </Row>
-              <Row
+                axis="refraction"
+                theme={current().theme}
+                // The axis runs 0 to 0.4, so a whole-number step would be
+                // three usable positions. Shown as a percentage of its own
+                // range, which is what the number means.
+                step={0.01}
+                value={current().theme.glassRefraction}
+                format={(value) => `${Math.round((value / GLASS_LIMITS.refraction.max) * 100)}%`}
+                onChange={(glassRefraction) => actions.saveSettings({ theme: { glassRefraction } })}
+              />
+            </Row>
+            <Row
+              label={tx("Glass depth")}
+              hint={tx("how far a glass surface sits off the page: glow, sheen and shadow")}
+            >
+              <GlassTuningAxis
                 label={tx("Glass depth")}
-                hint={tx("how far a glass surface sits off the page: glow, sheen and shadow")}
-              >
-                <GlassTuningAxis
-                  label={tx("Glass depth")}
-                  axis="depth"
-                  theme={current().theme}
-                  step={1}
-                  value={current().theme.glassDepth}
-                  format={(value) => `${Math.round((value / GLASS_LIMITS.depth.max) * 100)}%`}
-                  onChange={(glassDepth) => actions.saveSettings({ theme: { glassDepth } })}
-                />
-              </Row>
+                axis="depth"
+                theme={current().theme}
+                step={1}
+                value={current().theme.glassDepth}
+                format={(value) => `${Math.round((value / GLASS_LIMITS.depth.max) * 100)}%`}
+                onChange={(glassDepth) => actions.saveSettings({ theme: { glassDepth } })}
+              />
+            </Row>
 
-              {/*
+            {/*
                   Opacity and scrim are AgencyZero's, not the library's.
 
                   The library derives `--glass-background-opacity` from
@@ -1331,11 +1323,11 @@ export function SettingsTab(): JSX.Element {
                   and lightens a dark desk, the scrim is a wash beneath it that
                   holds text contrast when the backdrop is busy.
                 */}
-              <Row
-                label={tx("Glass opacity")}
-                hint={tx("how solid the surface's own film is over what it sits on")}
-              >
-                {/*
+            <Row
+              label={tx("Glass opacity")}
+              hint={tx("how solid the surface's own film is over what it sits on")}
+            >
+              {/*
                     100, not 95.
 
                     The ceiling was five points short of solid, so the one
@@ -1345,352 +1337,351 @@ export function SettingsTab(): JSX.Element {
                     control named for solidity has to be able to say fully
                     solid.
                   */}
-                <GlassPercentAxis
-                  label={tx("Glass opacity")}
-                  max={100}
-                  value={current().theme.glassOpacity ?? DEFAULT_GLASS_OPACITY}
-                  property="--glass-background-opacity"
-                  /*
+              <GlassPercentAxis
+                label={tx("Glass opacity")}
+                max={100}
+                value={current().theme.glassOpacity ?? DEFAULT_GLASS_OPACITY}
+                property="--glass-background-opacity"
+                /*
                       The same two tokens `writeGlassTuning` derives from this
                       number: the desk alpha that `body` and `.az-desk` take,
                       and the control tint. Without them the drag moved only
                       the panels and the release moved the rest.
                     */
-                  sideEffects={{
-                    "--az-glass-alpha": (value) =>
-                      `${Math.round(Math.min(Math.max(value, 0), 100))}%`,
-                    "--glass-control-opacity": (value) =>
-                      `${Math.round(100 - (100 - Math.min(Math.max(value, 0), 100)) * 0.33)}%`,
-                  }}
-                  onChange={(glassOpacity) => actions.saveSettings({ theme: { glassOpacity } })}
-                />
-              </Row>
-              <Row
-                label={tx("Glass scrim")}
-                hint={tx("how much a glass surface darkens what is behind it, for text contrast")}
-                isLast
-              >
-                <GlassPercentAxis
-                  label={tx("Glass scrim")}
-                  max={70}
-                  value={current().theme.glassScrim ?? DEFAULT_GLASS_SCRIM}
-                  property="--az-glass-scrim-opacity"
-                  onChange={(glassScrim) => actions.saveSettings({ theme: { glassScrim } })}
-                />
-              </Row>
-            </Section>
-
-            <Section
-              icon="folder"
-              title={tx("Data")}
-              hint={tx("where projects, items and messages are stored")}
+                sideEffects={{
+                  "--az-glass-alpha": (value) =>
+                    `${Math.round(Math.min(Math.max(value, 0), 100))}%`,
+                  "--glass-control-opacity": (value) =>
+                    `${Math.round(100 - (100 - Math.min(Math.max(value, 0), 100)) * 0.33)}%`,
+                }}
+                onChange={(glassOpacity) => actions.saveSettings({ theme: { glassOpacity } })}
+              />
+            </Row>
+            <Row
+              label={tx("Glass scrim")}
+              hint={tx("how much a glass surface darkens what is behind it, for text contrast")}
+              isLast
             >
-              <Show when={state.workspaceRoot}>
-                {(root) => (
+              <GlassPercentAxis
+                label={tx("Glass scrim")}
+                max={70}
+                value={current().theme.glassScrim ?? DEFAULT_GLASS_SCRIM}
+                property="--az-glass-scrim-opacity"
+                onChange={(glassScrim) => actions.saveSettings({ theme: { glassScrim } })}
+              />
+            </Row>
+          </Section>
+
+          <Section
+            icon="folder"
+            title={tx("Data")}
+            hint={tx("where projects, items and messages are stored")}
+          >
+            <Show when={state.workspaceRoot}>
+              {(root) => (
+                <Row
+                  label={tx("Workspace")}
+                  hint={
+                    root().exists
+                      ? tx("new projects run here")
+                      : tx("recommended, and not created yet")
+                  }
+                >
+                  <Flex align="center" gap="sm">
+                    <span class="max-w-[280px] truncate font-mono text-[11.5px] text-az-body">
+                      {root().path}
+                    </span>
+                    <Show when={!root().exists}>
+                      <Button
+                        type="button"
+                        onClick={() => void actions.createWorkspaceRoot()}
+                        class="shrink-0 rounded-lg border border-primary/50 px-2.5 py-[4px] text-[11.5px] text-primary transition-colors hover:border-primary"
+                      >
+                        {tx("Create it")}
+                      </Button>
+                    </Show>
+                  </Flex>
+                </Row>
+              )}
+            </Show>
+
+            <Show when={state.dataLocation}>
+              {(location) => (
+                <>
                   <Row
-                    label={tx("Workspace")}
+                    label={tx("Location")}
                     hint={
-                      root().exists
-                        ? tx("new projects run here")
-                        : tx("recommended, and not created yet")
+                      location().source === "env"
+                        ? tx("set by AZ_DATA_DIR, which a saved path cannot override")
+                        : tx("a change takes effect on the next launch; nothing is moved")
                     }
                   >
+                    <span class="max-w-[340px] truncate font-mono text-[11.5px] text-az-body">
+                      {location().path}
+                    </span>
+                  </Row>
+                  {/*
+                   * The pending row is what makes a change visible at all.
+                   * Nothing moves until the next launch, so without it a
+                   * directory that was chosen and written looks exactly
+                   * like a chooser that did nothing.
+                   */}
+                  <Show when={location().pending}>
+                    {(pending) => (
+                      <Row label={tx("Next launch")} hint={tx("relaunch to open here")}>
+                        <span class="max-w-[340px] truncate font-mono text-[11.5px] text-primary">
+                          {pending().path}
+                        </span>
+                      </Row>
+                    )}
+                  </Show>
+                  <Row
+                    label={tx("Tables")}
+                    hint={tx("how much disk each one holds — the logs outgrow the transcript")}
+                  >
+                    <TableSizes />
+                  </Row>
+                  <Row label={tx("Change it")}>
                     <Flex align="center" gap="sm">
-                      <span class="max-w-[280px] truncate font-mono text-[11.5px] text-az-body">
-                        {root().path}
-                      </span>
-                      <Show when={!root().exists}>
-                        <Button
-                          type="button"
-                          onClick={() => void actions.createWorkspaceRoot()}
-                          class="shrink-0 rounded-lg border border-primary/50 px-2.5 py-[4px] text-[11.5px] text-primary transition-colors hover:border-primary"
-                        >
-                          {tx("Create it")}
-                        </Button>
-                      </Show>
+                      <Button
+                        type="button"
+                        disabled={!location().isEditable || !isLive("chooseDataDirectory")}
+                        onClick={() => void actions.chooseDataLocation()}
+                        class="rounded-lg border border-az-hairline-strong px-3 py-[5px] text-[12px] text-az-body transition-colors hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-40"
+                      >
+                        {tx("Choose…")}
+                      </Button>
+                      <Button
+                        type="button"
+                        disabled={
+                          !location().isEditable ||
+                          // Whether there is a pointer left to clear, which
+                          // after a change this session is what the pending
+                          // half says — `source` describes how *this* launch
+                          // resolved and no longer moves.
+                          (location().pending ?? location()).source === "default"
+                        }
+                        onClick={() => void actions.setDataLocation(null)}
+                        class="rounded-lg border border-az-hairline-strong px-3 py-[5px] text-[12px] text-az-muted transition-colors hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-40"
+                      >
+                        {tx("Use the default")}
+                      </Button>
                     </Flex>
                   </Row>
-                )}
-              </Show>
-
-              <Show when={state.dataLocation}>
-                {(location) => (
-                  <>
-                    <Row
-                      label={tx("Location")}
-                      hint={
-                        location().source === "env"
-                          ? tx("set by AZ_DATA_DIR, which a saved path cannot override")
-                          : tx("a change takes effect on the next launch; nothing is moved")
-                      }
-                    >
-                      <span class="max-w-[340px] truncate font-mono text-[11.5px] text-az-body">
-                        {location().path}
-                      </span>
-                    </Row>
-                    {/*
-                     * The pending row is what makes a change visible at all.
-                     * Nothing moves until the next launch, so without it a
-                     * directory that was chosen and written looks exactly
-                     * like a chooser that did nothing.
-                     */}
-                    <Show when={location().pending}>
-                      {(pending) => (
-                        <Row label={tx("Next launch")} hint={tx("relaunch to open here")}>
-                          <span class="max-w-[340px] truncate font-mono text-[11.5px] text-primary">
-                            {pending().path}
-                          </span>
-                        </Row>
-                      )}
-                    </Show>
-                    <Row
-                      label={tx("Tables")}
-                      hint={tx("how much disk each one holds — the logs outgrow the transcript")}
-                    >
-                      <TableSizes />
-                    </Row>
-                    <Row label={tx("Change it")}>
-                      <Flex align="center" gap="sm">
-                        <Button
-                          type="button"
-                          disabled={!location().isEditable || !isLive("chooseDataDirectory")}
-                          onClick={() => void actions.chooseDataLocation()}
-                          class="rounded-lg border border-az-hairline-strong px-3 py-[5px] text-[12px] text-az-body transition-colors hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-40"
-                        >
-                          {tx("Choose…")}
-                        </Button>
-                        <Button
-                          type="button"
-                          disabled={
-                            !location().isEditable ||
-                            // Whether there is a pointer left to clear, which
-                            // after a change this session is what the pending
-                            // half says — `source` describes how *this* launch
-                            // resolved and no longer moves.
-                            (location().pending ?? location()).source === "default"
-                          }
-                          onClick={() => void actions.setDataLocation(null)}
-                          class="rounded-lg border border-az-hairline-strong px-3 py-[5px] text-[12px] text-az-muted transition-colors hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-40"
-                        >
-                          {tx("Use the default")}
-                        </Button>
-                      </Flex>
-                    </Row>
-                    <Row
-                      label={tx("Backups")}
-                      hint={tx("closed-store copies verified byte for byte")}
-                    >
-                      <StoreBackupControls />
-                    </Row>
-                    {/*
+                  <Row
+                    label={tx("Backups")}
+                    hint={tx("closed-store copies verified byte for byte")}
+                  >
+                    <StoreBackupControls />
+                  </Row>
+                  {/*
                         Manual, and only manual. This ran on every launch, which
                         cost a full copy of the store per boot and left ten of
                         them in one profile — while the corruption that did
                         happen was copied faithfully into the rolling snapshots,
                         so neither could restore past it.
                       */}
-                    <Row
-                      label={tx("Snapshot")}
-                      hint={tx("a copy of the store as it stands, without closing the app")}
-                      isLast
-                    >
-                      <StoreSnapshotControl />
-                    </Row>
-                  </>
-                )}
-              </Show>
-            </Section>
-
-            <ChatImportSettings />
-
-            <StudySettings />
-
-            <Section
-              icon="lock"
-              title={tx("Agent authority")}
-              hint={tx("explicit capabilities delegated to Prompt Syntax")}
-            >
-              <Row
-                label={tx("Update app settings")}
-                hint={tx("off by default; allows only the settings keys this build declares")}
-                isLast
-              >
-                <SettingToggle
-                  label={tx("Allow agents to update app settings")}
-                  checked={current().agentSettingsUpdates}
-                  onChange={(agentSettingsUpdates) =>
-                    void actions.saveSettings({ agentSettingsUpdates })
-                  }
-                />
-              </Row>
-            </Section>
-
-            <Section
-              icon="shield"
-              title={tx("Moderator")}
-              hint={tx("a second agent watching the stream — costs tokens")}
-              pending={moderatorPending()}
-            >
-              <Row
-                label={tx("Enabled by default")}
-                hint={tx("each session can turn it off in its Settings section")}
-              >
-                <SettingToggle
-                  label={tx("Moderator enabled by default")}
-                  checked={current().moderator.enabled}
-                  onChange={(enabled) => void actions.saveSettings({ moderator: { enabled } })}
-                />
-              </Row>
-              <Row label={tx("Moderator model")}>
-                <PillMenu
-                  label={tx("Moderator model")}
-                  value={current().moderator.model}
-                  options={moderatorModels()}
-                  onChange={(model) => void actions.saveSettings({ moderator: { model } })}
-                />
-              </Row>
-              <Row label={tx("Confine tool calls to the working directories")}>
-                <SettingToggle
-                  label={tx("Confine tool calls to the working directories")}
-                  checked={current().moderator.confineToDirs}
-                  onChange={(confineToDirs) =>
-                    void actions.saveSettings({ moderator: { confineToDirs } })
-                  }
-                />
-              </Row>
-
-              <div class="flex flex-col gap-2.5 px-3.5 py-3">
-                <span class="font-semibold text-[11.5px] text-az-muted uppercase tracking-[.04em]">
-                  {tx("On a hold")}
-                </span>
-
-                <HoldRow
-                  severity="CHECK"
-                  tone="warning"
-                  description={tx(
-                    "The step waits on you; everything else keeps running. Tab dot goes red.",
-                  )}
-                  checked={current().moderator.onCheck === "hold_step"}
-                  onChange={(hold) =>
-                    void actions.saveSettings({
-                      moderator: { onCheck: hold ? "hold_step" : "notify" },
-                    })
-                  }
-                />
-                <HoldRow
-                  severity="CRITICAL"
-                  tone="error"
-                  description={tx(
-                    "Cancel the run and its whole process group, then wait. Tab dot goes red.",
-                  )}
-                  checked={current().moderator.onCritical === "cancel_run"}
-                  onChange={(cancel) =>
-                    void actions.saveSettings({
-                      moderator: { onCritical: cancel ? "cancel_run" : "hold_step" },
-                    })
-                  }
-                />
-              </div>
-            </Section>
-
-            <Section
-              icon="info"
-              title={tx("Notifications")}
-              hint={tx("while you are in another window")}
-              pending={runPathPending()}
-            >
-              <Row label={tx("A hold needs your approval")}>
-                <SettingToggle
-                  label={tx("Notify on a hold")}
-                  checked={current().notifications.onHold}
-                  onChange={(onHold) => void actions.saveSettings({ notifications: { onHold } })}
-                />
-              </Row>
-              <Row label={tx("A run finishes")}>
-                <SettingToggle
-                  label={tx("Notify when a run finishes")}
-                  checked={current().notifications.onRunFinished}
-                  onChange={(onRunFinished) =>
-                    void actions.saveSettings({ notifications: { onRunFinished } })
-                  }
-                />
-              </Row>
-              <Row label={tx("A task fails")}>
-                <SettingToggle
-                  label={tx("Notify when a task fails")}
-                  checked={current().notifications.onTaskFailed}
-                  onChange={(onTaskFailed) =>
-                    void actions.saveSettings({ notifications: { onTaskFailed } })
-                  }
-                />
-              </Row>
-              <Row label={tx("Rate limited by the provider")}>
-                <SettingToggle
-                  label={tx("Notify when rate limited")}
-                  checked={current().notifications.onRateLimited}
-                  onChange={(onRateLimited) =>
-                    void actions.saveSettings({ notifications: { onRateLimited } })
-                  }
-                />
-              </Row>
-              <Row label={tx("Play a sound")} isLast>
-                <SettingToggle
-                  label={tx("Play a sound")}
-                  checked={current().notifications.sound}
-                  onChange={(sound) => void actions.saveSettings({ notifications: { sound } })}
-                />
-              </Row>
-            </Section>
-
-            <Section
-              icon="lock"
-              title={tx("Environment")}
-              pending={runPathPending()}
-              hint={tx("what the agent process inherits from this machine")}
-            >
-              <Row
-                label={tx("Environment policy")}
-                hint={tx(
-                  "Minimal passes only PATH, HOME and USER — the verified floor for all three CLIs",
-                )}
-              >
-                <PillMenu<EnvPolicy>
-                  label={tx("Environment policy")}
-                  value={current().envPolicy}
-                  options={(["minimal", "inherit"] as const).map((policy) => ({
-                    value: policy,
-                    label: envPolicyLabel(policy),
-                  }))}
-                  onChange={(envPolicy) => void actions.saveSettings({ envPolicy })}
-                />
-              </Row>
-              <Row
-                label={tx("Forward proxy and custom-CA variables")}
-                hint={tx("off by default: HTTPS_PROXY often embeds credentials")}
-                isLast
-              >
-                <SettingToggle
-                  label={tx("Forward proxy and custom-CA variables")}
-                  checked={current().forwardProxyVars}
-                  onChange={(forwardProxyVars) => void actions.saveSettings({ forwardProxyVars })}
-                />
-              </Row>
-            </Section>
-
-            <Show when={isLive("claudeUsage")}>
-              <ExperimentalSettings />
+                  <Row
+                    label={tx("Snapshot")}
+                    hint={tx("a copy of the store as it stands, without closing the app")}
+                    isLast
+                  >
+                    <StoreSnapshotControl />
+                  </Row>
+                </>
+              )}
             </Show>
+          </Section>
 
-            <InternalPerformance />
+          <ChatImportSettings />
 
-            <p class="flex gap-2 text-[11.5px] text-az-muted leading-[1.5]">
-              <Icon name="info" class="relative top-0.5 shrink-0 text-[13px]" />
-              <span>
-                {tx("Sessions are stored per project by agent-abstraction at")}{" "}
-                <code class="font-mono">{tx("<dir>/<project-slug>/<name>.json")}</code>.
+          <StudySettings />
+
+          <Section
+            icon="lock"
+            title={tx("Agent authority")}
+            hint={tx("explicit capabilities delegated to Prompt Syntax")}
+          >
+            <Row
+              label={tx("Update app settings")}
+              hint={tx("off by default; allows only the settings keys this build declares")}
+              isLast
+            >
+              <SettingToggle
+                label={tx("Allow agents to update app settings")}
+                checked={current().agentSettingsUpdates}
+                onChange={(agentSettingsUpdates) =>
+                  void actions.saveSettings({ agentSettingsUpdates })
+                }
+              />
+            </Row>
+          </Section>
+
+          <Section
+            icon="shield"
+            title={tx("Moderator")}
+            hint={tx("a second agent watching the stream — costs tokens")}
+            pending={moderatorPending()}
+          >
+            <Row
+              label={tx("Enabled by default")}
+              hint={tx("each session can turn it off in its Settings section")}
+            >
+              <SettingToggle
+                label={tx("Moderator enabled by default")}
+                checked={current().moderator.enabled}
+                onChange={(enabled) => void actions.saveSettings({ moderator: { enabled } })}
+              />
+            </Row>
+            <Row label={tx("Moderator model")}>
+              <PillMenu
+                label={tx("Moderator model")}
+                value={current().moderator.model}
+                options={moderatorModels()}
+                onChange={(model) => void actions.saveSettings({ moderator: { model } })}
+              />
+            </Row>
+            <Row label={tx("Confine tool calls to the working directories")}>
+              <SettingToggle
+                label={tx("Confine tool calls to the working directories")}
+                checked={current().moderator.confineToDirs}
+                onChange={(confineToDirs) =>
+                  void actions.saveSettings({ moderator: { confineToDirs } })
+                }
+              />
+            </Row>
+
+            <div class="flex flex-col gap-2.5 px-3.5 py-3">
+              <span class="font-semibold text-[11.5px] text-az-muted uppercase tracking-[.04em]">
+                {tx("On a hold")}
               </span>
-            </p>
-          </>
+
+              <HoldRow
+                severity="CHECK"
+                tone="warning"
+                description={tx(
+                  "The step waits on you; everything else keeps running. Tab dot goes red.",
+                )}
+                checked={current().moderator.onCheck === "hold_step"}
+                onChange={(hold) =>
+                  void actions.saveSettings({
+                    moderator: { onCheck: hold ? "hold_step" : "notify" },
+                  })
+                }
+              />
+              <HoldRow
+                severity="CRITICAL"
+                tone="error"
+                description={tx(
+                  "Cancel the run and its whole process group, then wait. Tab dot goes red.",
+                )}
+                checked={current().moderator.onCritical === "cancel_run"}
+                onChange={(cancel) =>
+                  void actions.saveSettings({
+                    moderator: { onCritical: cancel ? "cancel_run" : "hold_step" },
+                  })
+                }
+              />
+            </div>
+          </Section>
+
+          <Section
+            icon="info"
+            title={tx("Notifications")}
+            hint={tx("while you are in another window")}
+            pending={runPathPending()}
+          >
+            <Row label={tx("A hold needs your approval")}>
+              <SettingToggle
+                label={tx("Notify on a hold")}
+                checked={current().notifications.onHold}
+                onChange={(onHold) => void actions.saveSettings({ notifications: { onHold } })}
+              />
+            </Row>
+            <Row label={tx("A run finishes")}>
+              <SettingToggle
+                label={tx("Notify when a run finishes")}
+                checked={current().notifications.onRunFinished}
+                onChange={(onRunFinished) =>
+                  void actions.saveSettings({ notifications: { onRunFinished } })
+                }
+              />
+            </Row>
+            <Row label={tx("A task fails")}>
+              <SettingToggle
+                label={tx("Notify when a task fails")}
+                checked={current().notifications.onTaskFailed}
+                onChange={(onTaskFailed) =>
+                  void actions.saveSettings({ notifications: { onTaskFailed } })
+                }
+              />
+            </Row>
+            <Row label={tx("Rate limited by the provider")}>
+              <SettingToggle
+                label={tx("Notify when rate limited")}
+                checked={current().notifications.onRateLimited}
+                onChange={(onRateLimited) =>
+                  void actions.saveSettings({ notifications: { onRateLimited } })
+                }
+              />
+            </Row>
+            <Row label={tx("Play a sound")} isLast>
+              <SettingToggle
+                label={tx("Play a sound")}
+                checked={current().notifications.sound}
+                onChange={(sound) => void actions.saveSettings({ notifications: { sound } })}
+              />
+            </Row>
+          </Section>
+
+          <Section
+            icon="lock"
+            title={tx("Environment")}
+            pending={runPathPending()}
+            hint={tx("what the agent process inherits from this machine")}
+          >
+            <Row
+              label={tx("Environment policy")}
+              hint={tx(
+                "Minimal passes only PATH, HOME and USER — the verified floor for all three CLIs",
+              )}
+            >
+              <PillMenu<EnvPolicy>
+                label={tx("Environment policy")}
+                value={current().envPolicy}
+                options={(["minimal", "inherit"] as const).map((policy) => ({
+                  value: policy,
+                  label: envPolicyLabel(policy),
+                }))}
+                onChange={(envPolicy) => void actions.saveSettings({ envPolicy })}
+              />
+            </Row>
+            <Row
+              label={tx("Forward proxy and custom-CA variables")}
+              hint={tx("off by default: HTTPS_PROXY often embeds credentials")}
+              isLast
+            >
+              <SettingToggle
+                label={tx("Forward proxy and custom-CA variables")}
+                checked={current().forwardProxyVars}
+                onChange={(forwardProxyVars) => void actions.saveSettings({ forwardProxyVars })}
+              />
+            </Row>
+          </Section>
+
+          <Show when={isLive("claudeUsage")}>
+            <ExperimentalSettings />
+          </Show>
+
+          <InternalPerformance />
+
+          <p class="flex gap-2 text-[11.5px] text-az-muted leading-[1.5]">
+            <Icon name="info" class="relative top-0.5 shrink-0 text-[13px]" />
+            <span>
+              {tx("Sessions are stored per project by agent-abstraction at")}{" "}
+              <code class="font-mono">{tx("<dir>/<project-slug>/<name>.json")}</code>.
+            </span>
+          </p>
         </Show>
       </div>
     </div>
