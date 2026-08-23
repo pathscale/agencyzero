@@ -20,7 +20,7 @@ on:
         required: false
         type: string
       cover:
-        description: 'Also inventory semantic reachability on every surface'
+        description: 'Also inventory and activate every eligible semantic control'
         required: false
         type: boolean
         default: false
@@ -144,11 +144,57 @@ jobs:
           # tests/ps-qa/ relative to the working directory.
           ps-qa --trace qa ${{ inputs.group }} 2>&1 | tee /tmp/qa.txt
 
+      # Outcome checks intentionally mutate the fixture. The exhaustive pass
+      # needs the committed starting state, not a project already renamed,
+      # reordered, or left behind a modal by a failing check.
+      - name: Restart from a clean profile for full coverage
+        if: ${{ inputs.cover }}
+        run: |
+          old_pid="$(cat /tmp/az-qa.pid)"
+          kill -TERM "$old_pid" 2>/dev/null || true
+          for _ in $(seq 1 20); do
+            if ! kill -0 "$old_pid" 2>/dev/null; then break; fi
+            sleep 0.5
+          done
+          if kill -0 "$old_pid" 2>/dev/null; then
+            kill -KILL "$old_pid"
+            for _ in $(seq 1 20); do
+              if ! kill -0 "$old_pid" 2>/dev/null; then break; fi
+              sleep 0.1
+            done
+          fi
+          if kill -0 "$old_pid" 2>/dev/null; then
+            echo "audit instance $old_pid did not exit after KILL" >&2
+            exit 1
+          fi
+
+          scripts/qa-profile-restore.sh /tmp/qa-profile-db
+          AZ_DATA_DIR=/tmp/qa-profile-db \
+            ./target/debug/az-gui >> /tmp/az-qa.log 2>&1 &
+          echo $! > /tmp/az-qa.pid
+          for _ in $(seq 1 60); do
+            ps-qa nodes > /tmp/reattach.txt 2>&1 && break
+            sleep 2
+          done
+          if ! ps-qa nodes > /tmp/reattach.txt 2>&1; then
+            echo "ps-qa could not reattach to the clean audit instance" >&2
+            cat /tmp/reattach.txt >&2
+            tail -40 /tmp/az-qa.log >&2
+            exit 1
+          fi
+          sleep 10
+
       - name: Reachability inventory
         if: ${{ inputs.cover }}
         continue-on-error: true
         run: |
           ps-qa inventory 2>&1 | tee /tmp/cover.txt
+
+      - name: Exercise every eligible control
+        if: ${{ inputs.cover }}
+        continue-on-error: true
+        run: |
+          ps-qa --trace cover 2>&1 | tee /tmp/sweep.txt
 
       # Collection continues past integrity faults so one macOS launch yields
       # all evidence, but a ghost tree can never receive a green verdict.
@@ -176,17 +222,31 @@ jobs:
               echo '`manual` controls are excluded native dialogs and external destinations.'
               echo '`anonymous` controls lack an accessible name and fail semantic reachability.'
             fi
+            if [ -f /tmp/sweep.txt ]; then
+              echo
+              echo '## Full semantic sweep'
+              echo
+              echo '```'
+              tail -80 /tmp/sweep.txt
+              echo '```'
+            fi
             echo
             echo 'Full inventory: `tests/ps-qa/issues.md`.'
           } >> "$GITHUB_STEP_SUMMARY"
 
-      # Exact PID, TERM only. A name pattern can reach another checkout and a
-      # hard kill can tear the single-writer profile.
+      # Exact PID. Give the store ten seconds to flush after TERM, then stop a
+      # genuinely wedged audit child without touching any other instance.
       - name: Stop the app
         if: always()
         run: |
           if [ -f /tmp/az-qa.pid ]; then
-            kill -TERM "$(cat /tmp/az-qa.pid)" 2>/dev/null || true
+            audit_pid="$(cat /tmp/az-qa.pid)"
+            kill -TERM "$audit_pid" 2>/dev/null || true
+            for _ in $(seq 1 20); do
+              if ! kill -0 "$audit_pid" 2>/dev/null; then exit 0; fi
+              sleep 0.5
+            done
+            kill -KILL "$audit_pid" 2>/dev/null || true
           fi
 
       - name: Upload logs
@@ -200,4 +260,5 @@ jobs:
             /tmp/ghost.txt
             /tmp/qa.txt
             /tmp/cover.txt
+            /tmp/sweep.txt
           if-no-files-found: ignore
