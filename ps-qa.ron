@@ -14,7 +14,7 @@ AppProfile(
         (name: "project",   opener: "\u{0}dynamic-document", marker: Some("Send")),
         (name: "settings",  opener: "Settings", marker: Some("Appearance")),
         (name: "analytics", opener: "Analytics", marker: Some("Outcome per dollar")),
-        (name: "home",      opener: "Home", marker: Some("Cycle Home sort")),
+        (name: "home",      opener: "Home", marker: Some("Sort Home")),
     ],
 
     // Always in the strip, never a document. The doubled form is accepted too,
