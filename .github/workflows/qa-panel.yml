@@ -8,7 +8,7 @@ name: QA panel
 # release bundle), and it takes minutes rather than seconds. Running it on every
 # push would make the expensive half of CI the common case.
 #
-# The 56 declared outcomes and the tree-integrity checks are gates. Their steps
+# The 60 declared outcomes and the tree-integrity checks are gates. Their steps
 # continue long enough to collect and upload every diagnostic, then the final
 # enforcement steps turn the job red. Broad coverage still inventories control
 # instances that do not yet have a dedicated outcome.
@@ -16,7 +16,7 @@ on:
   workflow_dispatch:
     inputs:
       group:
-        description: 'Check group to run (blank = all 56). One of: icons hover status items sections chrome tasklog rename toggles verbosity dialog delete settings analytics composer'
+        description: 'Check group to run (blank = all 60). One of: icons hover status items sections chrome tasklog rename toggles verbosity dialog delete settings analytics composer home'
         required: false
         type: string
       cover:

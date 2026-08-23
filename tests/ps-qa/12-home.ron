@@ -1,0 +1,47 @@
+// Home project-row controls and filtering. Repeated Pin controls are resolved
+// to one painted node id; ValueChanges follows that same id after activation.
+// Search runs last because it intentionally filters every fixture row away.
+[
+    (
+        id: "home-pin-project",
+        group: "home",
+        what: "pinning a project changes the exact row control",
+        open: Some("Home"),
+        hover: None,
+        click: Some("Pin project"),
+        subject: "Pin project",
+        expect: ValueChanges,
+    ),
+    (
+        id: "home-collapse-project",
+        group: "home",
+        what: "a project group can be collapsed",
+        open: Some("Home"),
+        hover: None,
+        click: Some("Collapse theta theta north indi"),
+        subject: "Expand theta theta north indi",
+        expect: Paints,
+    ),
+    (
+        id: "home-expand-project",
+        group: "home",
+        what: "a project group can be expanded again",
+        open: Some("Home"),
+        hover: None,
+        click: Some("Expand theta theta north indi"),
+        subject: "Collapse theta theta north indi",
+        expect: Paints,
+    ),
+    (
+        id: "home-search-filters",
+        group: "home",
+        what: "project search removes non-matching rows from the screen",
+        open: Some("Home"),
+        hover: None,
+        click: None,
+        type_into: Some("Search projects and items"),
+        text: Some("qa-no-project-has-this-name"),
+        subject: "theta theta north indi",
+        expect: Vanishes,
+    ),
+]
