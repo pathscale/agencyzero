@@ -11,7 +11,7 @@ QA profile before changing any status.
 - blitz-control-protocol and tauri-runtime-blitz: version 0.1.5, published
 - PromptSyntax-rs: version 0.2.0, published
 - PathScale UI: version 2.9.1, published
-- Checks: 64 in 17 groups
+- Checks: 65 in 17 groups
 
 The current run must use `--features blitz-inspector` and
 `/tmp/qa-profile-db`. ps-qa discovers the live descriptor through its normal
@@ -68,7 +68,7 @@ lookups.
 | status | 2 |
 | sections | 9 |
 | chrome | 6 |
-| tasklog | 2 |
+| tasklog | 3 |
 | rename | 2 |
 | toggles | 5 |
 | verbosity | 1 |
@@ -79,7 +79,7 @@ lookups.
 | composer | 8 |
 | notes | 1 |
 | home | 4 |
-| **total** | **64** |
+| **total** | **65** |
 
 Run 32640904469 completed 19/23. Two failures were the same real UI regression:
 semantic activation of both rename buttons left a 0x0 textbox. The component
