@@ -875,6 +875,7 @@ export function SettingsTab(): JSX.Element {
               stack
             >
               <Textarea
+                aria-label={tx("PR review prompt")}
                 rows={3}
                 value={current().review?.prompt ?? ""}
                 placeholder={tx(
