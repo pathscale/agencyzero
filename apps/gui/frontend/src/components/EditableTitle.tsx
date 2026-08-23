@@ -100,10 +100,7 @@ export function EditableTitle(props: {
      * does honour.
      */
     <span class={`flex min-w-0 items-center gap-1.5 ${props.class ?? ""}`}>
-      <span
-        class={nameClass()}
-        aria-hidden={editing() ? "true" : undefined}
-      >
+      <span class={nameClass()} aria-hidden={editing() ? "true" : undefined}>
         <Show
           when={props.onActivate}
           fallback={<span class="min-w-0 truncate">{props.value}</span>}
