@@ -288,23 +288,47 @@ describe("settings own the defaults", () => {
   });
 
   /*
-   * Disabling a model withdraws it everywhere, not just from the menu. A tab
-   * left on a withdrawn model would send the next message under a model the
-   * user had just removed.
+   * Disabling a model withdraws it from the menu, and a tab already on it keeps
+   * it.
+   *
+   * This used to move every conflicting tab onto the new default, so that no
+   * tab could send under a model that had just been removed. The concern was
+   * right and the remedy was not: the swap was silent, and a tab whose agent
+   * differed from the default changed vendor too, so withdrawing a Codex model
+   * could hand a Codex project to Claude. A pick is binding. The composer
+   * refuses to send a withdrawn model and names it, which is where that failure
+   * belongs, so the tab can hold the real choice until the owner replaces it.
    */
-  it("moves a conflicting project onto the new default", async () => {
+  it("leaves a project on a withdrawn model rather than swapping it", async () => {
     const workspace = await mountWorkspace();
     const onSonnet = () =>
       workspace.state.tabs.filter((tab) => tab.model === "sonnet").map((tab) => tab.key);
-    expect(onSonnet().length).toBeGreaterThan(0);
+    const before = onSonnet();
+    expect(before.length).toBeGreaterThan(0);
 
     await workspace.actions.setDefaultModel("claude", "opus");
     await workspace.actions.toggleModel("claude", "sonnet", false);
 
-    expect(onSonnet()).toEqual([]);
-    for (const tab of workspace.state.tabs) {
-      expect(workspace.state.settings?.models.claude.enabled).toContain(tab.model);
-    }
+    // Still there, and still on the model that was picked.
+    expect(onSonnet()).toEqual(before);
+    expect(workspace.state.settings?.models.claude.enabled).not.toContain("sonnet");
+  });
+
+  /*
+   * The vendor half, stated separately because it is the worse failure: a
+   * settings edit that names no agent must never change which company receives
+   * the prompt.
+   */
+  it("never changes a tab's agent when its model is withdrawn", async () => {
+    const workspace = await mountWorkspace();
+    workspace.actions.setTabModel("worktable", "codex", "gpt-5.6-sol", "read_only");
+    flush();
+
+    await workspace.actions.toggleModel("codex", "gpt-5.6-sol", false);
+
+    const worktable = () => workspace.state.tabs.find((tab) => tab.key === "worktable");
+    await waitFor(() => expect(worktable()?.agent).toBe("codex"));
+    expect(worktable()?.model).toBe("gpt-5.6-sol");
   });
 
   /*

@@ -83,6 +83,42 @@ describe("Composer", () => {
     expect(onSend).not.toHaveBeenCalled();
   });
 
+  /*
+   * The other half of "a pick is binding". The store no longer substitutes a
+   * withdrawn model, so the refusal has to land here: a prompt must never go
+   * out under a model the owner did not choose, and silently sending to the
+   * default is a worse failure than not sending, because the answer is read as
+   * though the chosen model produced it.
+   */
+  it("keeps the draft and disables Send when the selected model is withdrawn", async () => {
+    const { field, onSend, booted, getByRole, getByLabelText } = mount({
+      model: "gpt-4.1-retired",
+      agent: "claude",
+    });
+    await booted();
+
+    type(field, "Please do not go to another model");
+
+    expect(getByRole("alert")).toHaveTextContent("Model not available");
+    // Names the model, so the owner can tell which pick is the problem.
+    expect(getByRole("alert")).toHaveTextContent("gpt-4.1-retired");
+    expect(getByLabelText("Send")).toBeDisabled();
+    expect(field.value).toBe("Please do not go to another model");
+    expect(onSend).not.toHaveBeenCalled();
+  });
+
+  it("sends normally when the selected model is still offered", async () => {
+    const { field, onSend, booted, getByLabelText, queryByRole } = mount();
+    await booted();
+
+    type(field, "This one is fine");
+
+    expect(queryByRole("alert")).toBeNull();
+    expect(getByLabelText("Send")).not.toBeDisabled();
+    fireEvent.click(getByLabelText("Send"));
+    await waitFor(() => expect(onSend).toHaveBeenCalled());
+  });
+
   it("puts the cursor in the prompt when the tab opens", () => {
     const { field } = mount({ autofocus: true });
     expect(document.activeElement).toBe(field);

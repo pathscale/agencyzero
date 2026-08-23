@@ -881,6 +881,9 @@ const en = {
   "{agent} is not ready. Install or sign in from Settings, then run the agent checks again.":
     "{agent} is not ready. Install or sign in from Settings, then run the agent checks again.",
   "Agent setup required": "Agent setup required",
+  "Model not available": "Model not available",
+  "{model} is not available for {agent}. It was turned off in Settings, or the agent no longer offers it. Pick another model to send.":
+    "{model} is not available for {agent}. It was turned off in Settings, or the agent no longer offers it. Pick another model to send.",
   "Open Settings": "Open Settings",
   "Install or sign in to {agent} before sending prompts":
     "Install or sign in to {agent} before sending prompts",

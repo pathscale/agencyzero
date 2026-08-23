@@ -1620,10 +1620,15 @@ function createWorkspace() {
           : "claude"
         : defaultAgent();
     const selection = state.settings?.models[agent];
-    const model =
-      last?.model && selection?.enabled.includes(last.model)
-        ? last.model
-        : (selection?.default ?? "");
+    /*
+     * The model this conversation last ran under, withdrawn or not.
+     *
+     * Falling back to the default when it had been withdrawn meant reopening a
+     * project silently moved it to another model, and the next message went out
+     * under one nobody picked. The composer refuses to send a withdrawn model
+     * and names it, which is recoverable; a silent swap is not.
+     */
+    const model = last?.model ?? selection?.default ?? "";
     const permission = compatiblePermission(
       state.agents,
       agent,
@@ -2560,13 +2565,15 @@ function createWorkspace() {
              * An unpinned draft takes the new default outright, which is what
              * this branch exists for: choosing a default model with an Untitled
              * tab open and finding it unchanged reads as the setting being
-             * ignored. A pinned one keeps the model that was picked alongside
-             * the agent, unless it has since been withdrawn.
+             * ignored.
+             *
+             * A pinned one keeps what was picked, even once it is withdrawn.
+             * Swapping it for the default here is how a prompt went out under a
+             * model nobody chose; the composer refuses to send a withdrawn
+             * model and says which one, so the tab holds the real choice and
+             * the owner resolves it.
              */
-            model:
-              tab.agentPinned && draftSelection.enabled.includes(tab.model)
-                ? tab.model
-                : draftSelection.default,
+            model: tab.agentPinned ? tab.model : draftSelection.default,
             permission: compatiblePermission(state.agents, draftAgent, settings.defaultPermission),
             effort: settings.defaultEffort,
           });
@@ -2575,18 +2582,23 @@ function createWorkspace() {
       }
 
       /*
-       * A project keeps its per-tab choice, and only moves when the model it is
-       * on has actually been withdrawn. An unrelated settings edit must not
-       * silently reset a deliberate override.
+       * A project keeps its per-tab choice, withdrawn or not.
+       *
+       * This used to move a tab whose model had been withdrawn onto
+       * `defaultAgent` and that agent's default model. Withdrawing a Codex
+       * model could therefore hand a Codex project to Claude: a vendor switch
+       * out of a settings edit that named neither. The tab holds what was
+       * picked, the composer refuses to send it and says why, and the owner
+       * chooses the replacement rather than having one chosen for them.
+       *
+       * Only the posture is still narrowed, because it is a capability of the
+       * agent rather than a choice: an agent that cannot ask for approval
+       * cannot be sent `ask`, and there is no other value that honours it.
        */
-      const tabSelection = settings.models[tab.agent];
-      if (isProjectAgent(tab.agent) && tabSelection?.enabled.includes(tab.model)) return;
+      const narrowed = compatiblePermission(state.agents, tab.agent, tab.permission);
+      if (narrowed === tab.permission) return;
       setState((d) => {
-        Object.assign(d.tabs[index], {
-          agent: defaultAgent,
-          model: selection.default,
-          permission: compatiblePermission(state.agents, defaultAgent, tab.permission),
-        });
+        d.tabs[index].permission = narrowed;
       });
     });
   }
