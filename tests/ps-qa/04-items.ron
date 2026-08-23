@@ -28,4 +28,16 @@
         subject: "Save description",
         expect: Enabled,
     ),
+    (
+        id: "items-filter",
+        group: "items",
+        what: "item filtering removes non-matching rows from the screen",
+        open: Some("theta theta north indi"),
+        hover: None,
+        click: None,
+        type_into: Some("Filter items"),
+        text: Some("qa-no-item-has-this-name"),
+        subject: "Change the status of",
+        expect: Vanishes,
+    ),
 ]
