@@ -7,14 +7,15 @@ QA profile before changing any status.
 ## Current audit subject
 
 - AgencyZero: PR 186, app version 0.8.32
-- ps-qa: PR 7 at `d70a93f`, version 0.3.0
-- blitz-control-protocol and tauri-runtime-blitz: PR 28, version 0.1.2
+- ps-qa: PR 8 at `5d11dc9`, version 0.3.0
+- blitz-control-protocol and tauri-runtime-blitz: PR 30 at `fe25e2a`,
+  version 0.1.3 pending publication
 - Checks: 23 in 9 groups
 
-The current run must use `--features blitz-inspector`, the explicit
-`target/blitz-control.json` descriptor and `/tmp/qa-profile-db`. Every action is
-addressed by semantic node id. Coordinate pointer activation is not valid audit
-evidence.
+The current run must use `--features blitz-inspector` and
+`/tmp/qa-profile-db`. ps-qa discovers the live descriptor through its normal
+CLI path. Every action is addressed by semantic node id. Coordinate pointer
+activation is not valid audit evidence.
 
 ps-qa still provides generic coordinate `press` diagnostics. AgencyZero's RON
 checks intentionally omit `press`; this application must use semantic actions
@@ -44,6 +45,10 @@ lookups.
   macOS-26-only `NSGlassEffectView` on a macOS 14 runner and panicked before
   ps-qa attached. TRB PR 30 guards class availability and falls back to
   vibrancy. That run produced no tree or component verdict.
+- Run 32638367663 still compiled crates.io 0.1.2: Cargo reported that the
+  0.1.3 Git patches were unused because the lockfile selection remained on
+  0.1.2. The workflow now advances that package to 0.1.3 explicitly before
+  building.
 
 ## Outcome checks
 
@@ -73,8 +78,9 @@ The automated audit excludes the exact `manual_controls` in `ps-qa.ron`:
   close;
 - external URL, browser and repository controls.
 
-`cover` must print each control it encountered. These are neither passes nor
-automated failures. A person verifies them once per release.
+`inventory` counts these without activation and `cover` prints each one it
+encountered. These are neither passes nor automated failures. A person verifies
+them once per release.
 
 ## Known coverage gaps
 
@@ -92,7 +98,7 @@ These are missing assertions, not application failures:
 
 ## Dependency delivery status
 
-`blitz-control-protocol` and `tauri-runtime-blitz` 0.1.2 are published. ps-qa
-PR 7 is locally green with 29 tests and strict Clippy against the published
-protocol. TRB PR 29 adds Linux protocol and macOS runtime CI plus ordered crate
-publishing; both CI jobs are green.
+`blitz-control-protocol` and `tauri-runtime-blitz` 0.1.2 are published. TRB PR
+30 carries the 0.1.3 macOS availability guard; Linux protocol and macOS runtime
+CI are green. ps-qa PR 8 is green with 29 tests and strict Clippy against the
+published protocol, and makes coverage hover rows by semantic node id.
