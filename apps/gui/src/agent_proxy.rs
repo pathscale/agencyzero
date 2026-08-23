@@ -7,7 +7,7 @@
 use agency_proxy_client::Client;
 use agency_proxy_protocol::{
     ApprovalDecision, ClientMessage, ErrorCode, ProviderAccountUsage, ProviderStatus, RunEvent,
-    RunId, RunRequest, ServerFrame, ServerResponse, ShutdownMode,
+    RunId, RunRequest, RunSnapshot, ServerFrame, ServerResponse, ShutdownMode,
 };
 use agent_abstraction::{Decision, Event, Outcome};
 use serde::Serialize;
@@ -158,6 +158,70 @@ impl AgencyProxy {
         {
             ServerResponse::Runs { runs } => Ok(runs),
             response => Err(response_error(response)),
+        }
+    }
+
+    /// Cancel every live daemon run owned by one AgencyZero project and wait
+    /// until the daemon confirms that none remains active.
+    ///
+    /// The GUI's in-memory run slot is not authoritative after a stalled task
+    /// or reconnect. Project Reset therefore asks the daemon by project
+    /// metadata instead of assuming that removing the local slot stopped the
+    /// provider process.
+    pub async fn cancel_project_runs(&self, project_id: &str) -> Result<usize, String> {
+        let client = self.connect().await?;
+        let snapshots = match client
+            .request(ClientMessage::ListRuns)
+            .await
+            .map_err(|error| error.to_string())?
+        {
+            ServerResponse::Runs { runs } => runs,
+            response => return Err(response_error(response)),
+        };
+        let run_ids = active_project_run_ids(&snapshots, project_id);
+        for run_id in &run_ids {
+            match client
+                .request(ClientMessage::CancelRun {
+                    run_id: run_id.clone(),
+                    idempotency_key: format!("{}:project-cancel", run_id.0),
+                })
+                .await
+                .map_err(|error| error.to_string())?
+            {
+                ServerResponse::Accepted
+                | ServerResponse::Error {
+                    code: ErrorCode::Conflict | ErrorCode::NotFound,
+                    ..
+                } => {}
+                response => return Err(response_error(response)),
+            }
+        }
+        if run_ids.is_empty() {
+            return Ok(0);
+        }
+
+        let deadline = tokio::time::Instant::now() + CANCEL_CONFIRMATION;
+        loop {
+            let snapshots = match client
+                .request(ClientMessage::ListRuns)
+                .await
+                .map_err(|error| error.to_string())?
+            {
+                ServerResponse::Runs { runs } => runs,
+                response => return Err(response_error(response)),
+            };
+            let still_active = active_project_run_ids(&snapshots, project_id);
+            if still_active.is_empty() {
+                return Ok(run_ids.len());
+            }
+            if tokio::time::Instant::now() >= deadline {
+                return Err(format!(
+                    "AgencyProxy did not stop {} project run(s) within {}s",
+                    still_active.len(),
+                    CANCEL_CONFIRMATION.as_secs()
+                ));
+            }
+            tokio::time::sleep(Duration::from_millis(100)).await;
         }
     }
 
@@ -694,6 +758,25 @@ fn run_is_active(state: &agency_proxy_protocol::RunState) -> bool {
     )
 }
 
+fn active_project_run_ids(snapshots: &[RunSnapshot], project_id: &str) -> Vec<RunId> {
+    snapshots
+        .iter()
+        .filter(|snapshot| {
+            snapshot
+                .metadata
+                .get("projectId")
+                .and_then(serde_json::Value::as_str)
+                == Some(project_id)
+                && run_is_active(&snapshot.state)
+        })
+        .map(|snapshot| snapshot.run_id.clone())
+        .collect()
+}
+
+fn injection_idempotency_key(run_id: &RunId, interaction_id: &str) -> String {
+    format!("{}:inject:{interaction_id}", run_id.0)
+}
+
 #[derive(Clone, Debug)]
 pub struct ProxyControl {
     client: Client,
@@ -717,17 +800,36 @@ impl ProxyControl {
         self.acknowledge(u64::MAX).await
     }
 
-    pub async fn send(&self, body: &str) -> Result<(), String> {
-        accepted(
-            self.client
+    pub async fn send(&self, body: &str, interaction_id: &str) -> Result<(), String> {
+        let deadline = tokio::time::Instant::now() + INJECTION_CONFIRMATION;
+        loop {
+            let response = self
+                .client
                 .request(ClientMessage::InjectMessage {
                     run_id: self.run_id.clone(),
                     body: body.into(),
-                    idempotency_key: format!("{}:inject", self.run_id.0),
+                    // Every message needs its own key. Reusing one key for the
+                    // entire run made the daemon correctly deduplicate the
+                    // second and later owner steers as repeats of the first.
+                    idempotency_key: injection_idempotency_key(&self.run_id, interaction_id),
                 })
                 .await
-                .map_err(|error| error.to_string())?,
-        )
+                .map_err(|error| error.to_string())?;
+            match response {
+                ServerResponse::Accepted => return Ok(()),
+                ServerResponse::Error {
+                    code: ErrorCode::Conflict,
+                    ..
+                } if tokio::time::Instant::now() < deadline => {
+                    // The run owns its slot before Codex has finished opening
+                    // the turn. Keep this ordered steer in flight until the
+                    // daemon can attach it instead of handing it back to the
+                    // visible prompt queue.
+                    tokio::time::sleep(Duration::from_millis(50)).await;
+                }
+                response => return accepted(response),
+            }
+        }
     }
 
     pub async fn respond(&self, approval_id: &str, decision: &Decision) -> Result<(), String> {
@@ -987,6 +1089,9 @@ const SHUTDOWN_CONFIRMATION: Duration = Duration::from_secs(15);
 /// outcome, never the teardown.
 const CANCEL_CONFIRMATION: Duration = Duration::from_secs(10);
 
+/// How long an owner steer may wait for a starting Codex turn to accept it.
+const INJECTION_CONFIRMATION: Duration = Duration::from_secs(10);
+
 fn event_from_wire(event: RunEvent) -> Result<Option<Event>, String> {
     let event = match event {
         RunEvent::SessionOpened {
@@ -1034,7 +1139,12 @@ fn decode<T: serde::de::DeserializeOwned>(
 
 #[cfg(test)]
 mod tests {
-    use super::{AgencyProxy, ConnectionState, proxy_socket_path, proxy_startup_failure};
+    use super::{
+        AgencyProxy, ConnectionState, active_project_run_ids, injection_idempotency_key,
+        proxy_socket_path, proxy_startup_failure,
+    };
+    use agency_proxy_protocol::{RunId, RunSnapshot, RunState};
+    use std::collections::BTreeMap;
     use std::path::Path;
 
     #[test]
@@ -1043,6 +1153,46 @@ mod tests {
         assert!(!ConnectionState::Live.may_spawn());
         assert!(!ConnectionState::Crashed.may_spawn());
         assert!(!ConnectionState::Stopped.may_spawn());
+    }
+
+    #[test]
+    fn project_cancel_targets_only_its_live_daemon_runs() {
+        let snapshot = |id: &str, project: &str, state| RunSnapshot {
+            run_id: RunId(id.into()),
+            state,
+            provider: "codex".into(),
+            model: "gpt-5.6-sol".into(),
+            provider_session_id: Some("session-current".into()),
+            latest_sequence: 1,
+            acknowledged_sequence: 0,
+            workspace_roots: vec!["/repo".into()],
+            metadata: BTreeMap::from([("projectId".into(), project.into())]),
+        };
+        let runs = vec![
+            snapshot("run-live", "project-a", RunState::Running),
+            snapshot("run-starting", "project-a", RunState::Starting),
+            snapshot("run-finished", "project-a", RunState::Completed),
+            snapshot("run-other", "project-b", RunState::Running),
+        ];
+
+        assert_eq!(
+            active_project_run_ids(&runs, "project-a"),
+            [RunId("run-live".into()), RunId("run-starting".into())]
+        );
+    }
+
+    #[test]
+    fn every_mid_turn_message_has_its_own_idempotency_key() {
+        let run = RunId("run-live".into());
+        assert_ne!(
+            injection_idempotency_key(&run, "message-one"),
+            injection_idempotency_key(&run, "message-two")
+        );
+        assert_eq!(
+            injection_idempotency_key(&run, "message-one"),
+            injection_idempotency_key(&run, "message-one"),
+            "a transport retry of one message stays idempotent"
+        );
     }
 
     #[test]

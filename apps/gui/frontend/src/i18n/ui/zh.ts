@@ -589,8 +589,7 @@ const zh = {
   "session id, e.g. 019fc95e-…": "会话 id，例如 019fc95e-…",
   Attach: "附加",
   "Reset session": "重置会话",
-  "Start the next message fresh — the recovery path for a wedged conversation":
-    "下一条消息重新开始 — 卡住会话的恢复方式",
+  "Clear stuck run state and continue this conversation": "清除卡住的运行状态并继续此对话",
   "Confirm reset": "确认重置",
   "Force reset": "强制重置",
   "Confirm force reset": "确认强制重置",
@@ -638,10 +637,8 @@ const zh = {
     "在设置中降低输出详细程度，每轮回复的 token 更少。",
   "Compact this session (~{cost} once) to shrink the resent context.":
     "压缩此会话（一次约 {cost}）以缩减重发的上下文。",
-  "Or start a fresh session (Reset in the panel) if the history no longer helps the next task.":
-    "或者，如果历史对下一个任务已无帮助，就开启新会话（在面板中重置）。",
-  "A run is stuck — force-reset clears the slot and starts the next message fresh":
-    "任务卡住了 — 强制重置会清空运行槽并让下一条消息重新开始",
+  "A run is stuck; force-reset stops it and keeps this conversation":
+    "任务卡住了；强制重置会停止任务并保留此对话",
   "Cancel the active run first": "请先取消正在运行的任务",
   "Icon sprite": "图标精灵",
   Analytics: "分析",
