@@ -1,0 +1,37 @@
+// A dialog opens *and* can be dismissed.
+//
+// The failure this exists for: the fork dialog's root was re-parented with
+// document.body.append, the engine reallocated the slot, and the node that
+// painted was no longer the node the handlers were bound to. Every exit was
+// inert, with no error, and 68 of that surface's 84 controls sat unreachable
+// behind it.
+//
+// `Vanishes` rather than `Absent`: a dismissed dialog is still in the tree at
+// 0x0, so asking for absence reports a working control as broken. 1344x900 while
+// open, nothing once closed.
+[
+    (
+        id: "dialog-opens",
+        group: "dialog",
+        what: "the fork dialog opens when its control is pressed",
+        open: Some("Home"),
+        hover: None,
+        click: Some("Fork "),
+        press: true,
+        subject: "Start fork",
+        expect: Paints,
+        panel_only: false,
+    ),
+    (
+        id: "dialog-cancel-dismisses",
+        group: "dialog",
+        what: "the fork dialog's Cancel actually dismisses it",
+        open: Some("Home"),
+        hover: None,
+        click: Some("Cancel"),
+        press: true,
+        subject: "Start fork",
+        expect: Vanishes,
+        panel_only: false,
+    ),
+]
