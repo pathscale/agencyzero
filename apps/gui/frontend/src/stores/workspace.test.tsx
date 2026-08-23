@@ -404,6 +404,47 @@ describe("openDraft", () => {
     expect(workspace.state.tabs.filter((tab) => tab.kind === "draft")).toHaveLength(1);
     await waitFor(() => expect(workspace.state.activeKey).toBe(draftKey));
   });
+
+  /*
+   * The draft branch of `reconcileTabModels` used to move the agent with the
+   * model, so a settings write - any settings write, including one the agent
+   * itself makes - put a draft on Codex back on the default. The picker had
+   * been used, the pill re-rendered as Claude, and the prompt went to Claude.
+   */
+  it("keeps a draft on the agent that was picked when settings are written", async () => {
+    const workspace = await mountWorkspace();
+    workspace.actions.openDraft();
+    flush();
+    const draftKey = workspace.state.activeKey;
+
+    workspace.actions.setTabModel(draftKey, "codex", "gpt-5.6-sol", "read_only");
+    flush();
+
+    // An unrelated setting: nothing here mentions an agent or a model.
+    await workspace.actions.saveSettings({ defaultPermission: "plan" });
+    flush();
+
+    const draft = () => workspace.state.tabs.find((tab) => tab.key === draftKey);
+    await waitFor(() => expect(draft()?.agent).toBe("codex"));
+    // The model too. Resetting Sol to Codex's default is the same bug one
+    // level down, and it would send the prompt to a model nobody chose.
+    expect(draft()?.model).toBe("gpt-5.6-sol");
+  });
+
+  it("still follows the default agent on a draft nobody has picked on", async () => {
+    const workspace = await mountWorkspace();
+    workspace.actions.openDraft();
+    flush();
+    const draftKey = workspace.state.activeKey;
+
+    await workspace.actions.saveSettings({ defaultAgent: "codex" });
+    flush();
+
+    // Untouched, so it tracks the default: this is what the draft branch is
+    // for, and the fix must not cost it.
+    const draft = () => workspace.state.tabs.find((tab) => tab.key === draftKey);
+    await waitFor(() => expect(draft()?.agent).toBe("codex"));
+  });
 });
 
 describe("tabStatus", () => {
