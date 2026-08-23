@@ -2,8 +2,8 @@ name: QA panel
 
 # Manual only, never on push or pull_request.
 #
-# This job drives a real window: it launches the app, moves a real pointer and
-# reads back the boxes the renderer computed. That needs macOS, which the rest
+# This job drives a real window: it launches the app, resolves controls through
+# the semantic tree and activates exact node ids. That needs macOS, which the rest
 # of CI deliberately avoids (see the note in ci.yml, where the only macOS is the
 # release bundle), and it takes minutes rather than seconds. Running it on every
 # push would make the expensive half of CI the common case.
@@ -28,7 +28,7 @@ on:
         description: 'ps-qa version requirement (caret, so patches come for free)'
         required: false
         type: string
-        default: '^0.2'
+        default: '^0.3'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -47,6 +47,19 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
 
       - uses: Swatinem/rust-cache@v2
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      # The Rust binary embeds apps/gui/dist, which cargo does not build or
+      # track. Build it explicitly so the audit never runs against a stale or
+      # absent frontend.
+      - name: Build the frontend az-gui embeds
+        working-directory: apps/gui/frontend
+        run: |
+          bun install --frozen-lockfile
+          bun run build
 
       # blitz-inspector, NOT blitz-runtime: a blitz-runtime build answers every
       # inspector call with diagnosticsUnavailable, so the run would fail with
@@ -77,6 +90,7 @@ jobs:
           export TAURI_BLITZ_CONTROL_DESCRIPTOR="$PWD/target/blitz-control.json"
           AZ_DATA_DIR=/tmp/qa-profile-db \
             ./target/release/az-gui > /tmp/az-qa.log 2>&1 &
+          echo $! > /tmp/az-qa.pid
           # The window has to exist before anything can be pressed. Poll for the
           # descriptor rather than sleeping a fixed time, which is the
           # difference between a slow runner passing and a slow runner
@@ -107,7 +121,7 @@ jobs:
         run: |
           for surface in home project settings analytics; do
             ps-qa cover "$surface" \
-              --descriptor "$PWD/target/blitz-control.json" 2>&1 | grep -E '^= ' || true
+              --descriptor "$PWD/target/blitz-control.json" 2>&1 || true
           done | tee /tmp/cover.txt
 
       - name: Summary
@@ -135,11 +149,14 @@ jobs:
             echo 'Full inventory: `tests/ps-qa/issues.md`.'
           } >> "$GITHUB_STEP_SUMMARY"
 
-      # Never -9: the store is single-writer and a hard kill can tear its index,
-      # which the next run then reports as a corrupt profile.
+      # Exact PID, TERM only. A name pattern can reach another checkout and a
+      # hard kill can tear the single-writer profile.
       - name: Stop the app
         if: always()
-        run: pkill -TERM -f 'release/az-gui' || true
+        run: |
+          if [ -f /tmp/az-qa.pid ]; then
+            kill -TERM "$(cat /tmp/az-qa.pid)" 2>/dev/null || true
+          fi
 
       - name: Upload logs
         if: always()
