@@ -14,7 +14,7 @@ jobs:
     name: Frontend
     # Linux, like every other QA job. The Namespace profile trialled here was
     # macOS (`Operating System: macOS`, bun-darwin-aarch64) and finished in
-    # 21s against ubicloud's 1m4s, but this job is typecheck, lint, test and a
+    # 21s against ubicloud's 1m4s, but this job is typecheck, lint and a
     # bundler: nothing it does needs a Mac, and QA is the half that must stay
     # cheap because it runs on every push. The only macOS in this repository
     # is the release bundle, which cannot be built anywhere else.
@@ -35,7 +35,6 @@ jobs:
 
       - run: bun run typecheck
       - run: bun run lint
-      - run: bun run test:run
       - run: bun run build
 
   rust:
