@@ -26,6 +26,17 @@
 
 use promptsyntax::{Argument, Directive as ParsedDirective, Parser, Reference, Scalar};
 
+/// Incremental decoder for the one authoring surface this application owns.
+///
+/// PromptSyntax, rather than the run loop, owns provider chunk boundaries and
+/// Markdown provenance. Keeping construction beside [`SURFACE`] prevents the
+/// renderer and executor from drifting onto different namespace rules.
+pub(crate) fn authoring_stream() -> promptsyntax::AuthoringStream {
+    Parser::new()
+        .authoring_namespace(SURFACE.namespace)
+        .authoring_stream()
+}
+
 /// The authoring surface this application declares, per Prompt Syntax 13.2.
 ///
 /// A standing promotion: model-generated text is inert by default, and an
