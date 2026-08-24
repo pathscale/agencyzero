@@ -1,0 +1,18 @@
+// This runs last because it deliberately changes the committed fixture.
+// Opening an editor is not a rename outcome: the harness must enter a value,
+// commit it, and observe the new accessible project-row control.
+[
+    (
+        id: "rename-project-persists",
+        group: "rename",
+        what: "the project pencil accepts and persists a replacement name",
+        open: Some("Home"),
+        hover: None,
+        click: Some("Rename e756"),
+        type_into: Some("textbox:Rename e756"),
+        text: Some("qa audit renamed project"),
+        key: Some("Enter"),
+        subject: "button:Rename qa audit renamed project",
+        expect: PaintsNamed,
+    ),
+]

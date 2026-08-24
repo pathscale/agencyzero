@@ -1,7 +1,5 @@
-import { Input } from "@pathscale/ui";
 import type { JSX } from "@solidjs/web";
 import { createSignal, Show } from "solid-js";
-import { Button } from "~/components/Button";
 import { Icon } from "~/components/Icon";
 import { describeError, log } from "~/lib/log";
 import { tx } from "~/stores/i18n";
@@ -60,16 +58,16 @@ export function EditableTitle(props: {
               fallback={<span class="min-w-0 truncate">{props.value}</span>}
             >
               {(activate) => (
-                <Button
+                <button
                   type="button"
                   onClick={() => activate()()}
                   class="min-w-0 truncate text-left"
                 >
                   {props.value}
-                </Button>
+                </button>
               )}
             </Show>
-            <Button
+            <button
               type="button"
               onClick={start}
               disabled={busy()}
@@ -77,12 +75,12 @@ export function EditableTitle(props: {
               class="flex size-[18px] shrink-0 items-center justify-center rounded p-0 text-az-faint transition-colors hover:bg-white/8 hover:text-az-body"
             >
               <Icon name="pencil" class="text-[11px]" />
-            </Button>
+            </button>
           </span>
         }
       >
         <span class="flex min-w-0 flex-1">
-          <Input
+          <input
             ref={(element: HTMLInputElement) => {
               field = element;
             }}

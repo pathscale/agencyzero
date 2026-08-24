@@ -75,6 +75,18 @@
         expect: Vanishes,
     ),
     (
+        id: "home-search-restores",
+        group: "home",
+        what: "clearing project search restores the filtered project rows",
+        open: Some("Home"),
+        hover: None,
+        click: None,
+        type_into: Some("Search projects and items"),
+        text: Some(""),
+        subject: "theta theta north indi",
+        expect: Paints,
+    ),
+    (
         id: "home-task-manager-debug",
         group: "home",
         what: "the task-manager diagnostics reveal changes state",

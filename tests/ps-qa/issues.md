@@ -70,7 +70,7 @@ lookups.
 | chrome | 11 |
 | tasklog | 5 |
 | transcript | 1 |
-| rename | 2 |
+| rename | 3 |
 | toggles | 6 |
 | verbosity | 1 |
 | dialog | 5 |
@@ -79,15 +79,15 @@ lookups.
 | analytics | 6 |
 | composer | 8 |
 | notes | 1 |
-| home | 10 |
+| home | 11 |
 | theme | 18 |
-| **total** | **112** |
+| **total** | **114** |
 
 Run 32640904469 completed 19/23. Two failures were the same real UI regression:
-semantic activation of both rename buttons left a 0x0 textbox. The component
-used a pointer-only path; it now uses an ordinary button `click`. The idle
-painted Stop button is also fixed by unmounting the control while retaining
-only its layout slot.
+semantic activation of both rename buttons left a 0x0 textbox. The critical
+rename path now uses literal platform controls; its verdict uses ordinary
+semantic node activation. The idle painted Stop button is also fixed by
+unmounting the control while retaining only its layout slot.
 
 The other two failures were invalid evidence: the status check compared a broad
 hover-revealed count, and the fork Cancel semantic check disagreed with direct
@@ -104,9 +104,12 @@ enter edit state; this is an application action regression, not a layout-only
 failure. Restoring AgencyZero 0.8.30's `mousedown` phase did not change the
 live result, which excludes gesture choice. Earlier live measurements in this
 component identified the boundary: UI Button's Dynamic element painted but
-dropped the nested consumer handler under Blitz. UI PR 262 fixes that once in
-the library; Agency keeps the ordinary `onClick={start}` contract. Its live
-rerun against UI 2.9.2 is pending.
+dropped the nested consumer handler under Blitz. UI PR 262 replaced that
+element, but the combined PR-186/UI-262 candidate still left the pencil inert
+when the owner exercised it. Agency now keeps this critical edit path on
+literal `<button>` and `<input>` elements. The rename verdict also types a
+replacement, commits it, and requires the newly named project control to
+paint; merely opening a textbox is no longer accepted as a successful rename.
 
 Run 32672023708 deliberately remeasured that known failure after the workflow
 started preserving ps-qa's pipeline exit status. The job finished red at
@@ -136,17 +139,29 @@ The automated audit excludes the exact `manual_controls` in `ps-qa.ron`:
 encountered. These are neither passes nor automated failures. A person verifies
 them once per release.
 
+## Audit acceptance contract
+
+An interactive node is not audited because inventory found it, because a broad
+sweep clicked it, or because jsdom dispatched an event to it. It is audited
+only when a named check drives the running rendered control through semantic
+node ids and observes the specific user-visible state change promised by that
+control. Manual native panels and external links remain the only exclusions,
+and they are counted and named for per-release verification.
+
+The inventory currently contains 475 controls while the outcome suite contains
+114 checks. That is an incomplete audit. Unverified controls remain work; they
+must never be summarized as passes.
+
 ## Known coverage gaps
 
 These are missing assertions, not application failures:
 
-1. Rename and fork checks do not yet assert the durable store result.
-2. Editors open, but no outcome check types and persists a value.
-3. Reorder controls lack ordered-sequence assertions; newest-item order now has a rendered check.
-4. The icon check does not yet mutation-test captured ink.
-5. Most controls have not been promoted from broad coverage into a specific
+1. Fork checks do not yet assert the durable store result.
+2. Reorder controls lack ordered-sequence assertions; newest-item order now has a rendered check.
+3. The icon check does not yet mutation-test captured ink.
+4. Most controls have not been promoted from broad coverage into a specific
    outcome check.
-6. The 713-test legacy frontend suite is renderer-blind and manual-only. Delete
+5. The 713-test legacy frontend suite is renderer-blind and manual-only. Delete
    each obsolete test after its real outcome check exists, or immediately when
    it never asserted a user-visible outcome.
 

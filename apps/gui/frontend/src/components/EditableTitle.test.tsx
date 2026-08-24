@@ -22,7 +22,7 @@ import { IconSprite } from "~/components/IconSprite";
  * They drive `click`, matching the standard button interaction used after the
  * Home row stopped owning nested pointer gestures. Note what this file cannot
  * see: jsdom dispatches straight at the node it is handed and has no
- * hit-testing, layout, or renderer. `scripts/button-sweep.sh` covers that gap.
+ * hit-testing, layout, or renderer. The ps-qa rename outcome is authoritative.
  */
 describe("the editable title", () => {
   const setup = (onRename = vi.fn().mockResolvedValue(undefined)) => {
@@ -52,6 +52,17 @@ describe("the editable title", () => {
     expect(screen.getByLabelText("Project name")).toBeTruthy();
     // The name it replaces steps out of the way.
     expect(screen.queryByLabelText("Rename derived name")).toBeNull();
+  });
+
+  it("uses literal platform controls for the complete edit path", () => {
+    const { screen } = setup();
+    const pencil = screen.getByLabelText("Rename derived name");
+    expect(pencil.tagName).toBe("BUTTON");
+
+    fireEvent.click(pencil);
+    flush();
+
+    expect(screen.getByLabelText("Project name").tagName).toBe("INPUT");
   });
 
   it("starts the draft from the current name", () => {
