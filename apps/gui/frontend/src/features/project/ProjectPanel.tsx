@@ -1119,6 +1119,7 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
     url: string;
   } | null>(null);
   const [savingIssueId, setSavingIssueId] = createSignal<string | null>(null);
+  let issueField: HTMLInputElement | undefined;
 
   const saveEdit = async (item: ProjectItem): Promise<void> => {
     const value = editTitle().trim();
@@ -1133,7 +1134,11 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
 
   const saveIssue = async (): Promise<void> => {
     const draft = issueDraft();
-    const url = draft?.url.trim() ?? "";
+    // Read the exact rendered field at commit time. The semantic SetValue path
+    // updates the DOM value synchronously; relying only on a framework event to
+    // mirror it can submit the stale draft even though the editor visibly holds
+    // the new URL.
+    const url = (issueField?.value ?? draft?.url ?? "").trim();
     if (!draft || !url || savingIssueId() === draft.item.id) return;
     setSavingIssueId(draft.item.id);
     try {
@@ -1744,6 +1749,9 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
                 {(draft) => (
                   <section class="flex items-center gap-2 rounded-b-[9px] border-primary/24 border-t bg-az-inset px-3 py-2.5 shadow-[inset_2px_0_0_color-mix(in_srgb,var(--color-primary)_55%,transparent)]">
                     <Input.Field
+                      ref={(element: HTMLInputElement) => {
+                        issueField = element;
+                      }}
                       autofocus
                       type="text"
                       value={draft().url}
