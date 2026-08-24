@@ -3138,7 +3138,24 @@ function createWorkspace() {
     createItem: (projectId: string, title: string) => client().createItem(projectId, title),
     reorderItems: (projectId: string, ids: string[]) => client().reorderItems(projectId, ids),
     setItemStatus: (id: string, status: ProjectStatus) => client().setItemStatus(id, status),
-    updateItem: (id: string, title: string) => client().updateItem(id, title),
+    async updateItem(id: string, title: string) {
+      const previous = Object.values(state.items)
+        .flat()
+        .find((item) => item.id === id);
+      if (previous) upsertItem({ ...previous, title });
+      try {
+        const item = await client().updateItem(id, title);
+        upsertItem(item);
+        return item;
+      } catch (cause) {
+        // Do not overwrite a newer edit if two saves crossed in flight.
+        const current = Object.values(state.items)
+          .flat()
+          .find((item) => item.id === id);
+        if (previous && current?.title === title) upsertItem(previous);
+        throw cause;
+      }
+    },
     getItemContext: (id: string) => client().getItemContext(id),
     setItemContext: (id: string, context: string) => client().setItemContext(id, context),
     async setItemIssue(id: string, url: string) {
