@@ -7,7 +7,7 @@ semantic node id; AgencyZero checks never use coordinate-pointer activation.
 ## Current subject
 
 - AgencyZero PR 186, app 0.8.37
-- ps-qa PR 10 candidate, 209 checks in 22 groups
+- ps-qa PR 10 candidate, 207 checks in 22 groups
 - PathScale UI PR 262 candidate, package version 2.9.2
 - tauri-runtime-blitz candidate based on 0.1.5; the next release will include
   native, selected, pressed and checked state in one semantic boolean
@@ -92,14 +92,21 @@ present on any delivery branch.
 10. Empty model menus looked interactive in environments with no alternative
     installed model. Composer and Task Manager now expose those controls as
     disabled instead of opening an empty menu.
+11. Adopting a recovered session succeeded in the backend but the frontend
+    returned without updating its project state, so the promised attached-id
+    status did not repaint. The action now updates the local session map only
+    after the durable backend write succeeds.
+12. Keyboard checks resolved broad substrings by largest painted area, so
+    `button:Send` selected the larger “Parse Prompt Syntax controls before
+    sending” control. Keyboard input now uses the same exact-name-first,
+    role-qualified semantic resolver as activation.
 
 ## Validation still running
 
-- 32709197709: project-name rename
-- 32709865981: shared UI LanguageSwitcher menu
-- 32710039045: deterministic Composer behavior
-- 32710160446: visible Resume-session path
-- 32710302056: Settings unavailable-model and study-data state
+- 32712761929: native shared UI language selector — passed
+- 32713924972: direct Resume-session editor with synchronized project state
+- 32714269528: exact Composer keyboard targets and disabled model state
+- 32713546432: standard Settings moderator-model selector
 
 No PR is updated and no candidate dependency is published until these runs are
 classified. A focused failure is fixed and rerun; it is never averaged into a
