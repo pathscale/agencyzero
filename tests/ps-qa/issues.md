@@ -7,7 +7,7 @@ semantic node id; AgencyZero checks never use coordinate-pointer activation.
 ## Current subject
 
 - AgencyZero PR 186, app 0.8.37
-- ps-qa PR 10 candidate, 205 checks in 22 groups
+- ps-qa PR 10 candidate, 212 checks in 23 groups
 - PathScale UI PR 262 candidate, package version 2.9.2
 - tauri-runtime-blitz candidate based on 0.1.5; the next release will include
   native, selected, pressed and checked state in one semantic boolean
@@ -39,10 +39,11 @@ continuation, and their implementation changes infrequently.
 
 | area | result | run |
 | --- | ---: | ---: |
-| project rename, including persisted replacement | 5/5 | 32696302228 |
+| project rename, including persisted replacement | 5/5 | 32733364792 |
 | inert-pencil mutation (expected red) | 0/5 | 32702341694 |
 | item creation, ordering, editing and Escape | 4/4 | 32698944567 |
-| project-panel row move/edit/delete | 5/5 | 32709128655 |
+| project-panel row move/edit/delete | 5/5 | 32733364792 |
+| item issue editor and persisted semantic link | 5/5 | 32735458366 |
 | Home navigation/item edit/delete/search | 18/18 | 32709132027 |
 | fork/setup dialog dismissal and workspace creation | 6/6 | 32707938707 |
 | Settings menus, writes and backend round trips | 60/60 | 32715244253 |
@@ -119,13 +120,26 @@ present on any delivery branch.
     not the active project element. Replacing a project therefore left all
     panel props stale. Its reactive source now resolves and tracks the active
     project and tab directly.
+17. Item issue persistence was initially reported as 4/5 because the check
+    searched for the visual shorthand `(issue #40)`. The renderer correctly
+    names that external-link control from its exact `title`, `Open
+    https://github.com/pathscale/WorkTable/issues/40`. The check now observes
+    that semantic URL without activating the external destination and passes
+    5/5. The keyed store update also mutates the stable item node instead of
+    rebuilding the entire items array.
 
-## Validation still running
+## Current validation checkpoint
 
 - 32712761929: native shared UI language selector — passed
 - 32717589257: direct Resume-session editor with semantic attached-state change — passed 8/8
 - 32717296869: enabled Composer model-node activation and disconnected-agent Send gate — passed 13/13
 - 32715244253: native Settings moderator-model selector — passed 60/60
+- 32733364792: both project rename editors and project-panel row operations — passed 10/10
+- 32735458366: issue editor open/cancel/reopen, backend write, and semantic link — passed 5/5
+
+The combined shared-controls run, deliberate negative mutations, and final
+full-control inventory are still running. The historical exact inventory above
+is not carried forward as the final candidate count.
 
 No PR is updated and no candidate dependency is published until these runs are
 classified. A focused failure is fixed and rerun; it is never averaged into a
@@ -163,6 +177,6 @@ or process-level outcome. Inventory alone is not a pass. The broad sweep is a
 diagnostic for newly introduced controls; the named reconciled outcomes are the
 release gate.
 
-The legacy frontend suite is manual-only. It currently has 78 files and 673
+The legacy frontend suite is manual-only. It currently has 77 files and 670
 direct declarations. Delete a renderer-blind test only after its live
 replacement passes and a negative mutation proves that replacement turns red.

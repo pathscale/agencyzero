@@ -1,6 +1,6 @@
 # Legacy frontend suite migration
 
-The legacy suite currently spans 78 `*.test.ts(x)` files and 674 direct
+The legacy suite currently spans 77 `*.test.ts(x)` files and 670 direct
 `it`/`test` declarations; parameterized cases account for the higher executed
 total. This is an inventory, not a promise to create the same number of ps-qa
 checks.
@@ -66,4 +66,4 @@ surface-persistence test now consumes ColorSwatch's public semantic contract.
 could not observe layout, focus, event forwarding, or persistence and stayed
 green while both live pencils were inert. The rendered rename group now proves
 both editors open, Escape preserves the name, whitespace is rejected, and an
-exact replacement persists (5/5 in run 32696302228).
+exact replacement persists (5/5 in run 32733364792).
