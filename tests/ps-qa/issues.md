@@ -158,8 +158,11 @@ present on any delivery branch.
   missing reopen assertion rather than proving the Escape detector
 - 32745826995: strengthened positive dialog group — expectedly exposed the real
   stale-state regression at 6/7; isolated Start fork still passed 1/1
-- 32747120204: shared UI Popover state fix, including reopen after Escape — queued
-- 32747124208: isolated stale-Escape-state mutation against the UI fix — queued;
+- 32747120204: infrastructure-only failure before build; the workflow contained
+  an incorrect expansion of the correct short UI commit and ran no app checks
+- 32747356042: exact lint-clean UI Popover state fix, including reopen after
+  Escape — queued
+- 32747360594: isolated stale-Escape-state mutation against the UI fix — queued;
   ordinary Cancel must pass while reopen-after-Escape fails
 - 32744366001: the prior 212-outcome full run — superseded by the new reopen
   assertion and automatically canceled when the strengthened same-ref run began
