@@ -8,7 +8,7 @@ name: QA panel
 # release bundle), and it takes minutes rather than seconds. Running it on every
 # push would make the expensive half of CI the common case.
 #
-# The 117 declared outcomes and the tree-integrity checks are gates. Their steps
+# The 166 declared outcomes and the tree-integrity checks are gates. Their steps
 # continue long enough to collect and upload every diagnostic, then the final
 # enforcement steps turn the job red. Full coverage maps every control instance
 # to named outcomes and remains red while any eligible instance has none.
@@ -16,7 +16,7 @@ on:
   workflow_dispatch:
     inputs:
       group:
-        description: 'Check group to run (blank = all 117). One of: icons hover status items sections chrome tasklog transcript rename toggles verbosity dialog delete settings analytics composer notes home theme'
+        description: 'Check group to run (blank = all 166).'
         required: false
         type: string
       cover:
@@ -177,8 +177,12 @@ jobs:
         run: |
           set -o pipefail
           # Reachability without a named behavioral verdict is incomplete
-          # coverage, not a pass.
-          ps-qa inventory --require-outcomes 2>&1 | tee /tmp/cover.txt
+          # coverage, not a pass. Isolated controls are proven after the
+          # ordinary sweep because their success closes the control socket.
+          ps-qa inventory 2>&1 | tee /tmp/cover.txt
+          unverified="$(awk '/^unverified:/ { print $2; exit }' /tmp/cover.txt)"
+          isolated="$(awk '/^isolated:/ { print $2; exit }' /tmp/cover.txt)"
+          test "${unverified:-999}" -le "${isolated:-0}"
 
       - name: Exercise every eligible control
         id: sweep
@@ -187,6 +191,114 @@ jobs:
         run: |
           set -o pipefail
           ps-qa --trace cover 2>&1 | tee /tmp/sweep.txt
+
+      - name: Restart clean for isolated controls
+        if: ${{ inputs.cover }}
+        run: |
+          old_pid="$(cat /tmp/az-qa.pid)"
+          kill -TERM "$old_pid" 2>/dev/null || true
+          for _ in $(seq 1 20); do
+            if ! kill -0 "$old_pid" 2>/dev/null; then break; fi
+            sleep 0.5
+          done
+          if kill -0 "$old_pid" 2>/dev/null; then kill -KILL "$old_pid"; fi
+
+          scripts/qa-profile-restore.sh /tmp/qa-profile-db
+          AZ_DATA_DIR=/tmp/qa-profile-db \
+            ./target/debug/az-gui --blitz-control >> /tmp/az-qa.log 2>&1 &
+          echo $! > /tmp/az-qa.pid
+          for _ in $(seq 1 60); do
+            ps-qa nodes > /tmp/isolated-attach.txt 2>&1 && break
+            sleep 2
+          done
+          ps-qa nodes > /tmp/isolated-attach.txt 2>&1
+          sleep 10
+
+      - name: Verify the inspection toggle disconnects control
+        id: isolated
+        if: ${{ inputs.cover }}
+        continue-on-error: true
+        run: |
+          ps-qa click Settings
+          sleep 2
+          ps-qa click "Enable inspection and agent control" \
+            > /tmp/isolated.txt 2>&1 || true
+          if ps-qa nodes > /tmp/isolated-probe.txt 2>&1; then
+            ps-qa click "Enable inspection and agent control" \
+              >> /tmp/isolated.txt 2>&1 || true
+          fi
+          disconnected=0
+          for _ in $(seq 1 20); do
+            if ! ps-qa nodes > /tmp/isolated-probe.txt 2>&1; then
+              disconnected=1
+              break
+            fi
+            sleep 0.5
+          done
+          if [ "$disconnected" -ne 1 ]; then
+            echo "inspection toggle left the control socket reachable" >&2
+            exit 1
+          fi
+
+      - name: Restart clean for the relaunch control
+        if: ${{ inputs.cover }}
+        run: |
+          old_pid="$(cat /tmp/az-qa.pid)"
+          kill -TERM "$old_pid" 2>/dev/null || true
+          for _ in $(seq 1 20); do
+            if ! kill -0 "$old_pid" 2>/dev/null; then break; fi
+            sleep 0.5
+          done
+          if kill -0 "$old_pid" 2>/dev/null; then kill -KILL "$old_pid"; fi
+
+          scripts/qa-profile-restore.sh /tmp/qa-profile-db
+          AZ_DATA_DIR=/tmp/qa-profile-db \
+            ./target/debug/az-gui --blitz-control >> /tmp/az-qa.log 2>&1 &
+          echo $! > /tmp/az-qa.pid
+          for _ in $(seq 1 60); do
+            ps-qa nodes > /tmp/restart-attach.txt 2>&1 && break
+            sleep 2
+          done
+          ps-qa nodes > /tmp/restart-attach.txt 2>&1
+          sleep 10
+
+      - name: Verify Restart relaunches into a controllable process
+        id: isolated_restart
+        if: ${{ inputs.cover }}
+        continue-on-error: true
+        run: |
+          old_pid="$(cat /tmp/az-qa.pid)"
+          ps-qa click Settings
+          sleep 2
+          ps-qa click Restart > /tmp/restart.txt 2>&1 || true
+
+          relaunched=0
+          for _ in $(seq 1 60); do
+            if ! kill -0 "$old_pid" 2>/dev/null &&
+               ps-qa tree > /tmp/restart-probe.txt 2>&1; then
+              relaunched=1
+              break
+            fi
+            sleep 2
+          done
+          if [ "$relaunched" -ne 1 ]; then
+            echo "Restart did not replace audit pid $old_pid with a controllable instance" >&2
+            exit 1
+          fi
+
+          new_pid="$(awk '$1 == "\"pid\":" { gsub(/,/, "", $2); print $2; exit }' /tmp/restart-probe.txt)"
+          case "$new_pid" in
+            ''|*[!0-9]*)
+              echo "could not read the relaunched pid from ps-qa tree" >&2
+              exit 1
+              ;;
+          esac
+          if [ "$new_pid" = "$old_pid" ]; then
+            echo "Restart kept the old pid $old_pid" >&2
+            exit 1
+          fi
+          echo "$new_pid" > /tmp/az-qa.pid
+          echo "Restart replaced pid $old_pid with pid $new_pid"
 
       # Collection continues past integrity faults so one macOS launch yields
       # all evidence, but a ghost tree can never receive a green verdict.
@@ -207,6 +319,14 @@ jobs:
 
       - name: Enforce semantic sweep
         if: ${{ steps.sweep.outcome == 'failure' }}
+        run: exit 1
+
+      - name: Enforce isolated controls
+        if: ${{ steps.isolated.outcome == 'failure' }}
+        run: exit 1
+
+      - name: Enforce restart outcome
+        if: ${{ steps.isolated_restart.outcome == 'failure' }}
         run: exit 1
 
       - name: Summary
@@ -268,4 +388,9 @@ jobs:
             /tmp/qa.txt
             /tmp/cover.txt
             /tmp/sweep.txt
+            /tmp/isolated.txt
+            /tmp/isolated-probe.txt
+            /tmp/restart.txt
+            /tmp/restart-probe.txt
+            /tmp/restart-attach.txt
           if-no-files-found: ignore
