@@ -2777,23 +2777,29 @@ pub async fn update_item(
     Ok(dto)
 }
 
-fn github_issue_url(authored: &str) -> Option<String> {
+fn github_issue_url(authored: &str) -> Result<String, &'static str> {
     const HOST: &str = "https://github.com/";
-    let path = authored.trim().strip_prefix(HOST)?.trim_end_matches('/');
+    let path = authored
+        .trim()
+        .strip_prefix(HOST)
+        .ok_or("GitHub issue URL must start with https://github.com/")?
+        .trim_end_matches('/');
     let mut parts = path.split('/');
     let (Some(owner), Some(repo), Some("issues"), Some(number)) =
         (parts.next(), parts.next(), parts.next(), parts.next())
     else {
-        return None;
+        return Err("GitHub issue URL must end with /owner/repository/issues/number");
     };
-    if owner.is_empty()
-        || repo.is_empty()
-        || number.parse::<u32>().is_err()
-        || parts.next().is_some()
-    {
-        return None;
+    if owner.is_empty() || repo.is_empty() {
+        return Err("GitHub issue URL needs a non-empty owner and repository");
     }
-    Some(format!("{HOST}{owner}/{repo}/issues/{number}"))
+    if number.parse::<u32>().is_err() {
+        return Err("GitHub issue URL needs a numeric issue number");
+    }
+    if parts.next().is_some() {
+        return Err("GitHub issue URL cannot contain a path after the issue number");
+    }
+    Ok(format!("{HOST}{owner}/{repo}/issues/{number}"))
 }
 
 async fn link_item_issue_inner(
@@ -2802,8 +2808,8 @@ async fn link_item_issue_inner(
     id: &str,
     authored_url: &str,
 ) -> Result<ProjectItemDto, String> {
-    let url = github_issue_url(authored_url)
-        .ok_or_else(|| "ENTITY_NOT_FOUND: not a GitHub issue URL".to_string())?;
+    let url =
+        github_issue_url(authored_url).map_err(|reason| format!("ENTITY_NOT_FOUND: {reason}"))?;
     tables
         .project_item
         .update_reference_by_id(
@@ -13771,12 +13777,9 @@ mod tests {
     fn github_issues_are_canonical_and_pull_requests_are_refused() {
         assert_eq!(
             github_issue_url("https://github.com/pathscale/agencyzero/issues/42/"),
-            Some("https://github.com/pathscale/agencyzero/issues/42".into())
+            Ok("https://github.com/pathscale/agencyzero/issues/42".into())
         );
-        assert_eq!(
-            github_issue_url("https://github.com/pathscale/agencyzero/pull/42"),
-            None
-        );
+        assert!(github_issue_url("https://github.com/pathscale/agencyzero/pull/42").is_err());
     }
 
     #[test]
