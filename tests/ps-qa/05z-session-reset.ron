@@ -1,0 +1,25 @@
+// Reset invalidates the attached provider session, so it runs in its own clean
+// profile group. The first check proves the guard; the second proves Confirm
+// reset performs the advertised destructive action rather than merely closing.
+[
+    (
+        id: "session-reset-isolated-confirms",
+        group: "session-reset",
+        what: "session reset asks for confirmation in the disposable profile",
+        open: Some("theta theta north indi"),
+        hover: None,
+        click: Some("Reset"),
+        subject: "Confirm reset",
+        expect: Paints,
+    ),
+    (
+        id: "session-reset-isolated-clears-attachment",
+        group: "session-reset",
+        what: "Confirm reset clears the attached session and restores Resume",
+        open: None,
+        hover: None,
+        click: Some("Confirm reset"),
+        subject: "button:Resume a session by id",
+        expect: PaintsNamed,
+    ),
+]

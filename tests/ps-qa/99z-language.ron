@@ -1,0 +1,25 @@
+// Language changes every accessible label in the application. Run this group
+// alone and last: selecting Chinese is the outcome, not setup for another
+// English-named check.
+[
+    (
+        id: "language-menu-names-options",
+        group: "language",
+        what: "the shared language menu exposes a concrete Chinese option",
+        open: Some("Settings"),
+        hover: None,
+        click: Some("Current language: English"),
+        subject: "menuitem:中文",
+        expect: PaintsNamed,
+    ),
+    (
+        id: "language-selects-chinese",
+        group: "language",
+        what: "selecting Chinese changes the language trigger's accessible name",
+        open: None,
+        hover: None,
+        click: Some("menuitem:中文"),
+        subject: "Current language: English",
+        expect: NameChanges,
+    ),
+]
