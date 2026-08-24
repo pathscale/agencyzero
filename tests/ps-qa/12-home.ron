@@ -69,8 +69,8 @@
         open: Some("Home"),
         hover: None,
         click: Some("Pin project"),
-        subject: "Pin project",
-        expect: SelectionChanges,
+        subject: "Unpin project",
+        expect: Paints,
     ),
     (
         id: "home-unpin-project",
@@ -79,8 +79,8 @@
         open: Some("Home"),
         hover: None,
         click: Some("Unpin project"),
-        subject: "Unpin project",
-        expect: SelectionChanges,
+        subject: "Pin project",
+        expect: Paints,
     ),
     (
         id: "home-item-edit-opens",
@@ -147,7 +147,7 @@
         click: None,
         type_into: Some("Search projects and items"),
         text: Some("qa-no-project-has-this-name"),
-        subject: "theta theta north indi",
+        subject: "button:Open project theta theta north indi",
         expect: Vanishes,
     ),
     (
@@ -159,7 +159,7 @@
         click: None,
         type_into: Some("Search projects and items"),
         text: Some(""),
-        subject: "theta theta north indi",
+        subject: "button:Open project theta theta north indi",
         expect: Paints,
     ),
     (

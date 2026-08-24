@@ -52,6 +52,26 @@
         subject: "Show the whole command",
         expect: Paints,
     ),
+    (
+        id: "tasklog-collapse-items-for-paging",
+        group: "tasklog",
+        what: "collapsing Items brings the task-log pager into the visible panel",
+        open: Some("theta theta north indi"),
+        hover: None,
+        click: Some("Collapse Items"),
+        subject: "Expand Items",
+        expect: Paints,
+    ),
+    (
+        id: "tasklog-collapse-running-for-paging",
+        group: "tasklog",
+        what: "collapsing Running leaves the task-log pager reachable without coordinates",
+        open: Some("theta theta north indi"),
+        hover: None,
+        click: Some("Collapse Running"),
+        subject: "Expand Running",
+        expect: Paints,
+    ),
     // `PaintsMore`, not `Grows`. `Grows` counts tree membership, so a page of
     // rows that mounted and then laid out at 0x0 satisfies it: the log would
     // look paged and show the owner nothing. Measured both ways on a working

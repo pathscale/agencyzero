@@ -17,7 +17,7 @@
         what: "changing the attached session opens the standard session-id editor",
         open: Some("theta theta north indi"),
         hover: None,
-        click: Some("Change"),
+        click: Some("button:Change Resume a session by id"),
         subject: "textbox:session id, e.g.",
         expect: PaintsNamed,
     ),
