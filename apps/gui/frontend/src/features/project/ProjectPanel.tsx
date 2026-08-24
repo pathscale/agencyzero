@@ -1384,6 +1384,7 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
             }
           >
             <div class="rounded-[9px]">
+              {/* biome-ignore lint/a11y/useSemanticElements: this expandable composite row owns sibling editors, so native li nesting would be invalid */}
               <div
                 data-item-id={item.id}
                 role="listitem"
@@ -2143,108 +2144,109 @@ function TaskLogList(props: { projectId: string }): JSX.Element {
       }}
       class="az-scroll flex max-h-[45vh] min-h-0 flex-1 flex-col gap-[7px] px-3 pt-2.5 pb-3"
     >
-      <For each={entries()}>
-        {(entry) => (
-          /*
-           * Three states, not two. `ok` is `boolean | null`, and null means the
-           * agent did not report an outcome — which is not failure. Rendering
-           * it with the error mark would tell you a tool failed when nothing
-           * said so.
-           */
-          <div
-            role="listitem"
-            aria-label={entry.label}
-            tabindex={-1}
-            onPointerEnter={() => setActiveEntryId(entry.id)}
-            onPointerLeave={() => {
-              if (activeEntryId() === entry.id) setActiveEntryId(null);
-            }}
-            onFocusIn={() => setActiveEntryId(entry.id)}
-            onFocusOut={(event) => {
-              const next = event.relatedTarget;
-              if (!(next instanceof Node) || !event.currentTarget.contains(next)) {
+      <ul class="contents">
+        <For each={entries()}>
+          {(entry) => (
+            /*
+             * Three states, not two. `ok` is `boolean | null`, and null means the
+             * agent did not report an outcome — which is not failure. Rendering
+             * it with the error mark would tell you a tool failed when nothing
+             * said so.
+             */
+            <li
+              aria-label={entry.label}
+              tabindex={-1}
+              onPointerEnter={() => setActiveEntryId(entry.id)}
+              onPointerLeave={() => {
                 if (activeEntryId() === entry.id) setActiveEntryId(null);
-              }
-            }}
-            class="flex flex-col gap-1 text-[11.5px]"
-          >
-            <div class="flex items-baseline gap-2">
-              <Icon
-                name={entry.ok === true ? "check" : entry.ok === false ? "x" : "info"}
-                label={entry.ok === null ? tx("Outcome not reported") : undefined}
-                class={`shrink-0 text-[12px] ${
-                  entry.ok === true
-                    ? "text-success"
-                    : entry.ok === false
-                      ? "text-error"
-                      : "text-az-muted"
-                }`}
-              />
-              {/*
-               * Expands in place rather than truncating for good. A task log
-               * entry *is* the command, and a command cut at the panel's width
-               * (for example, "…gh run rerun \"$ID\" --failed 2>&1 | t") cannot be read,
-               * checked or copied, which is the whole reason to keep a log.
-               * The title attribute was the only way to see the rest, and a
-               * tooltip cannot be selected.
-               */}
-              {/*
-               * The verb, which the label alone does not carry. A row reading
-               * `Cargo.toml` says a file was involved and nothing about what
-               * happened to it: read, searched, written and stat'd all look
-               * identical. The tool name was already on the row's data and
-               * simply was not rendered.
-               */}
-              <span class="shrink-0 font-mono text-[11px] text-az-muted">{entry.tool}</span>
-              {/*
-               * `aria-label` rather than `title`: the tooltip fired on hover
-               * over every row on the way past, which reads as the panel
-               * flinching. The pointer already says the row is a control.
-               */}
-              <Button
-                type="button"
-                onClick={() => setExpanded(expanded() === entry.id ? null : entry.id)}
-                aria-label={
-                  expanded() === entry.id
-                    ? tx("Hide the whole command")
-                    : tx("Show the whole command")
+              }}
+              onFocusIn={() => setActiveEntryId(entry.id)}
+              onFocusOut={(event) => {
+                const next = event.relatedTarget;
+                if (!(next instanceof Node) || !event.currentTarget.contains(next)) {
+                  if (activeEntryId() === entry.id) setActiveEntryId(null);
                 }
-                class={`min-w-0 flex-1 cursor-pointer text-left text-az-body ${
-                  expanded() === entry.id ? "whitespace-pre-wrap break-all" : "truncate"
-                }`}
-              >
-                <span data-selectable>{entry.label}</span>
-              </Button>
-              <span class={`shrink-0 ${entry.ok === false ? "text-error" : "text-az-muted"}`}>
-                {taskMeta(entry)}
-              </span>
-              <Show when={activeEntryId() === entry.id}>
+              }}
+              class="flex flex-col gap-1 text-[11.5px]"
+            >
+              <div class="flex items-baseline gap-2">
+                <Icon
+                  name={entry.ok === true ? "check" : entry.ok === false ? "x" : "info"}
+                  label={entry.ok === null ? tx("Outcome not reported") : undefined}
+                  class={`shrink-0 text-[12px] ${
+                    entry.ok === true
+                      ? "text-success"
+                      : entry.ok === false
+                        ? "text-error"
+                        : "text-az-muted"
+                  }`}
+                />
+                {/*
+                 * Expands in place rather than truncating for good. A task log
+                 * entry *is* the command, and a command cut at the panel's width
+                 * (for example, "…gh run rerun \"$ID\" --failed 2>&1 | t") cannot be read,
+                 * checked or copied, which is the whole reason to keep a log.
+                 * The title attribute was the only way to see the rest, and a
+                 * tooltip cannot be selected.
+                 */}
+                {/*
+                 * The verb, which the label alone does not carry. A row reading
+                 * `Cargo.toml` says a file was involved and nothing about what
+                 * happened to it: read, searched, written and stat'd all look
+                 * identical. The tool name was already on the row's data and
+                 * simply was not rendered.
+                 */}
+                <span class="shrink-0 font-mono text-[11px] text-az-muted">{entry.tool}</span>
+                {/*
+                 * `aria-label` rather than `title`: the tooltip fired on hover
+                 * over every row on the way past, which reads as the panel
+                 * flinching. The pointer already says the row is a control.
+                 */}
                 <Button
                   type="button"
-                  onClick={() =>
-                    void copyEntry(
-                      entry.id,
-                      [`${entry.tool} ${entry.label}`, entry.output].filter(Boolean).join("\n\n"),
-                    )
+                  onClick={() => setExpanded(expanded() === entry.id ? null : entry.id)}
+                  aria-label={
+                    expanded() === entry.id
+                      ? tx("Hide the whole command")
+                      : tx("Show the whole command")
                   }
-                  aria-label={tx(
-                    copied() === entry.id ? "Copied task-log entry" : "Copy this task-log entry",
-                  )}
-                  title={copied() === entry.id ? tx("Copied") : tx("Copy")}
-                  class="shrink-0 rounded p-0.5 text-az-faint transition-colors hover:text-az-body"
+                  class={`min-w-0 flex-1 cursor-pointer text-left text-az-body ${
+                    expanded() === entry.id ? "whitespace-pre-wrap break-all" : "truncate"
+                  }`}
                 >
-                  <Icon name={copied() === entry.id ? "check" : "copy"} class="text-[11px]" />
+                  <span data-selectable>{entry.label}</span>
                 </Button>
+                <span class={`shrink-0 ${entry.ok === false ? "text-error" : "text-az-muted"}`}>
+                  {taskMeta(entry)}
+                </span>
+                <Show when={activeEntryId() === entry.id}>
+                  <Button
+                    type="button"
+                    onClick={() =>
+                      void copyEntry(
+                        entry.id,
+                        [`${entry.tool} ${entry.label}`, entry.output].filter(Boolean).join("\n\n"),
+                      )
+                    }
+                    aria-label={tx(
+                      copied() === entry.id ? "Copied task-log entry" : "Copy this task-log entry",
+                    )}
+                    title={copied() === entry.id ? tx("Copied") : tx("Copy")}
+                    class="shrink-0 rounded p-0.5 text-az-faint transition-colors hover:text-az-body"
+                  >
+                    <Icon name={copied() === entry.id ? "check" : "copy"} class="text-[11px]" />
+                  </Button>
+                </Show>
+              </div>
+              <Show when={expanded() === entry.id && entry.output}>
+                <pre class="az-scroll max-h-64 whitespace-pre-wrap break-words rounded-md border border-az-hairline bg-az-inset px-2 py-1.5 font-mono text-[10.5px] text-az-body">
+                  {entry.output}
+                </pre>
               </Show>
-            </div>
-            <Show when={expanded() === entry.id && entry.output}>
-              <pre class="az-scroll max-h-64 whitespace-pre-wrap break-words rounded-md border border-az-hairline bg-az-inset px-2 py-1.5 font-mono text-[10.5px] text-az-body">
-                {entry.output}
-              </pre>
-            </Show>
-          </div>
-        )}
-      </For>
+            </li>
+          )}
+        </For>
+      </ul>
 
       {/*
         Below the rows, because the list reads newest-first: what this reveals
