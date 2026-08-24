@@ -178,6 +178,7 @@ gates instead of holding a paid subscription:
 - Attach files for the task manager
 - Back up & close
 - Choose…
+- Choose folder
 - Export JSONL
 - Select backup file…
 - Send / Send into the running turn
