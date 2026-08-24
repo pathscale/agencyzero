@@ -43,6 +43,17 @@
         expect: Enabled,
     ),
     (
+        id: "items-created-row-deletes",
+        group: "items",
+        what: "the exact disposable row created by this run can be deleted",
+        open: Some("theta theta north indi"),
+        hover: Some("Change the status of qa audit second new item"),
+        click: Some("button:Delete qa audit second new item"),
+        subject: "button:Delete qa audit second new item",
+        expect: Vanishes,
+        covers: ["button:Delete *"],
+    ),
+    (
         id: "items-new-cancel-closes",
         group: "items",
         what: "Escape closes the new-item editor without creating another row",

@@ -1882,7 +1882,7 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
           <Button
             type="button"
             onClick={() => setAdding(true)}
-            class="mt-1 flex items-center gap-2 rounded-[9px] border border-primary/16 border-dashed px-2.5 py-2 text-[12px] text-az-muted transition-colors hover:border-primary hover:text-primary"
+            class="sticky bottom-0 z-10 mt-1 flex items-center gap-2 rounded-[9px] border border-primary/16 border-dashed bg-base-200 px-2.5 py-2 text-[12px] text-az-muted transition-colors hover:border-primary hover:text-primary"
           >
             <Icon name="plus" class="text-[13px]" />
             {tx("New item")}
@@ -1899,7 +1899,7 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
             if (event.key === "Enter") void create();
             if (event.key === "Escape") setAdding(false);
           }}
-          class="mt-1 rounded-[9px] border border-primary/40 bg-base-300 px-2.5 py-2 text-[12px] text-az-body focus:outline-none"
+          class="sticky bottom-0 z-10 mt-1 rounded-[9px] border border-primary/40 bg-base-300 px-2.5 py-2 text-[12px] text-az-body focus:outline-none"
         />
       </Show>
 

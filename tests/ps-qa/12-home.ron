@@ -115,7 +115,7 @@
         text: Some("qa audit edited item"),
         key: Some("Enter"),
         key_on: Some("textbox:Edit iota beta zeta delta north cobalt epsilon omega lambda epsilon"),
-        subject: "button:Edit qa audit edited item",
+        subject: "button:Change the status of qa audit edited item",
         expect: PaintsNamed,
     ),
     (
