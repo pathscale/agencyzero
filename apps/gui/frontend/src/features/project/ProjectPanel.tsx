@@ -117,7 +117,7 @@ export function ProjectPanel(props: { project: Project; agent: Agent }): JSX.Ele
             : "flex-none"
         }
         contentClass="flex min-h-0 flex-1 flex-col"
-        contentDelayMs={0}
+        contentDelayMs={120}
       >
         <ItemList projectId={props.project.id} items={panelItems()} />
       </SectionPanel>
@@ -135,7 +135,7 @@ export function ProjectPanel(props: { project: Project; agent: Agent }): JSX.Ele
         isOpen={prefs.panelSections.running}
         onToggle={() => togglePanelSection("running")}
         class="flex-none"
-        contentDelayMs={20}
+        contentDelayMs={240}
       >
         <RunningList projectId={props.project.id} />
       </SectionPanel>
@@ -158,7 +158,7 @@ export function ProjectPanel(props: { project: Project; agent: Agent }): JSX.Ele
         isOpen={prefs.panelSections.log}
         onToggle={() => togglePanelSection("log")}
         class={prefs.panelSections.log ? "flex min-h-[160px] flex-col" : "flex-none"}
-        contentDelayMs={40}
+        contentDelayMs={360}
       >
         <TaskLogList projectId={props.project.id} />
       </SectionPanel>
@@ -171,7 +171,7 @@ export function ProjectPanel(props: { project: Project; agent: Agent }): JSX.Ele
         isOpen={prefs.panelSections.io}
         onToggle={() => togglePanelSection("io")}
         class={prefs.panelSections.io ? "flex min-h-[160px] flex-col" : "flex-none"}
-        contentDelayMs={60}
+        contentDelayMs={480}
       >
         <AgentIoList projectId={props.project.id} />
       </SectionPanel>
@@ -183,7 +183,7 @@ export function ProjectPanel(props: { project: Project; agent: Agent }): JSX.Ele
         isOpen={prefs.panelSections.notes}
         onToggle={() => togglePanelSection("notes")}
         class="flex-none"
-        contentDelayMs={80}
+        contentDelayMs={600}
       >
         <NotesEditor projectId={props.project.id} />
       </SectionPanel>
@@ -512,7 +512,7 @@ function SettingsSection(props: { project: Project; agent: Agent }): JSX.Element
       isOpen={prefs.panelSections.settings}
       onToggle={() => togglePanelSection("settings")}
       class="flex-none"
-      contentDelayMs={100}
+      contentDelayMs={720}
     >
       <div class="flex flex-col gap-2.5 px-3 pt-3 pb-3.5">
         <div class="text-[11.5px] text-az-muted">{tx("Working directories")}</div>
@@ -1091,7 +1091,10 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
   const [itemLimit, setItemLimit] = createSignal(PROJECT_ITEM_PAGE_SIZE);
   const [hoveredRowId, setHoveredRowId] = createSignal<string | null>(null);
   const [focusedRowId, setFocusedRowId] = createSignal<string | null>(null);
-  const activeRowId = () => focusedRowId() ?? hoveredRowId();
+  // A deliberate hover must override focus left on a previously used row.
+  // Otherwise its action cluster stays mounted while the row under the pointer
+  // has no semantic Edit/Delete/Move controls at all.
+  const activeRowId = () => hoveredRowId() ?? focusedRowId();
   const shown = createMemo(() => {
     const needle = query().trim().toLowerCase();
     const items = needle
@@ -1161,11 +1164,15 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
     }
   };
 
-  async function create(): Promise<void> {
+  function create(): void {
     const value = title().trim();
-    if (value) await actions.createItem(props.projectId, value);
     setTitle("");
     setAdding(false);
+    if (value) {
+      void actions
+        .createItem(props.projectId, value)
+        .catch((cause) => log.error(`could not create the item: ${describeError(cause)}`));
+    }
   }
 
   /*
@@ -1325,556 +1332,555 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
   }
 
   return (
-    <div
-      data-item-list
-      class="az-scroll flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto overflow-x-hidden px-2 pt-1.5 pb-2.5"
-    >
-      <Show when={props.items.length > 3}>
-        <div class="mb-1 flex items-center gap-2 border-az-hairline-soft border-b bg-az-inset px-2.5 py-1.5">
-          <Icon name="search" class="shrink-0 text-[12px] text-primary/70" />
-          <Input.Field
-            type="text"
-            value={query()}
-            onInput={(event) => {
-              setQuery(event.currentTarget.value);
-              setItemLimit(PROJECT_ITEM_PAGE_SIZE);
-            }}
-            placeholder={tx("Filter items…")}
-            aria-label={tx("Filter items")}
-            class="min-w-0 flex-1 bg-transparent text-[12px] text-az-body outline-none placeholder:text-az-faint"
-          />
-          <Show when={filtering()}>
-            <Button
-              type="button"
-              onClick={() => {
-                setQuery("");
+    <div data-item-list class="flex min-h-0 flex-1 flex-col gap-0.5 overflow-hidden px-2 pb-2.5">
+      <div class="az-scroll min-h-0 flex-1 overflow-y-auto overflow-x-hidden pt-1.5">
+        <Show when={props.items.length > 3}>
+          <div class="mb-1 flex items-center gap-2 border-az-hairline-soft border-b bg-az-inset px-2.5 py-1.5">
+            <Icon name="search" class="shrink-0 text-[12px] text-primary/70" />
+            <Input.Field
+              type="text"
+              value={query()}
+              onInput={(event) => {
+                setQuery(event.currentTarget.value);
                 setItemLimit(PROJECT_ITEM_PAGE_SIZE);
               }}
-              aria-label={tx("Clear the filter")}
-              class="shrink-0 rounded-md p-0.5 text-az-faint transition-colors hover:text-az-body"
-            >
-              <Icon name="x" class="text-[11px]" />
-            </Button>
-          </Show>
-        </div>
-      </Show>
-      <Show when={filtering() && shown().length === 0}>
-        <p class="px-2.5 py-3 text-[12px] text-az-muted">
-          {tx("No item matches “{query}”", { query: query().trim() })}
-        </p>
-      </Show>
-      <For each={visibleShown()}>
-        {(item, index) => (
-          <Show
-            when={editingId() !== item.id}
-            /*
-             * The editor is built when a row enters edit mode, not with the row.
-             *
-             * `fallback` is an ordinary prop, so this JSX used to be evaluated
-             * as each row was created: every visible row constructed an
-             * `Input.Field` that only one row can ever show. Wrapping it in a
-             * `<Show>` of its own makes the construction conditional, which is
-             * what the fallback reads as but is not.
-             */
-            fallback={
-              <Show when={editingId() === item.id}>
-                <Input.Field
-                  autofocus
-                  value={editTitle()}
-                  aria-label={tx("Edit {name}", { name: item.title })}
-                  onInput={(event) => setEditTitle(event.currentTarget.value)}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter") void saveEdit(item);
-                    if (event.key === "Escape") setEditingId(null);
-                  }}
-                  class="rounded-[9px] border border-primary/40 bg-base-300 px-2.5 py-2 text-[12.5px] text-az-body focus:outline-none"
-                />
-              </Show>
-            }
-          >
-            <div class="rounded-[9px]">
-              {/* biome-ignore lint/a11y/useSemanticElements: this expandable composite row owns sibling editors, so native li nesting would be invalid */}
-              <div
-                data-item-id={item.id}
-                role="listitem"
-                aria-label={item.title}
-                tabindex={-1}
-                onPointerEnter={() => setHoveredRowId(item.id)}
-                onPointerLeave={() => {
-                  if (hoveredRowId() === item.id) setHoveredRowId(null);
+              placeholder={tx("Filter items…")}
+              aria-label={tx("Filter items")}
+              class="min-w-0 flex-1 bg-transparent text-[12px] text-az-body outline-none placeholder:text-az-faint"
+            />
+            <Show when={filtering()}>
+              <Button
+                type="button"
+                onClick={() => {
+                  setQuery("");
+                  setItemLimit(PROJECT_ITEM_PAGE_SIZE);
                 }}
-                onFocusIn={() => {
-                  setFocusedRowId(item.id);
-                  if (descriptionDraft() && descriptionDraft()?.item.id !== item.id) {
-                    setDescriptionDraft(null);
-                  }
-                  if (issueDraft() && issueDraft()?.item.id !== item.id) {
-                    setIssueDraft(null);
-                  }
-                }}
-                onFocusOut={(event) => {
-                  const next = event.relatedTarget;
-                  if (!(next instanceof Node) || !event.currentTarget.contains(next)) {
-                    if (focusedRowId() === item.id) setFocusedRowId(null);
-                  }
-                }}
-                /*
-                 * The row is `relative` and the action cluster below is absolute,
-                 * so the buttons take ZERO layout width. They used to be a normal
-                 * flex sibling: even at opacity-0 they held ~120px of a 322px
-                 * column, so every title wrapped into a four-word ribbon. Now the
-                 * title owns the whole width and the controls float over its right
-                 * end only on hover.
-                 */
-                class={`group relative flex items-center outline-none transition-colors ${
-                  descriptionDraft()?.item.id === item.id || issueDraft()?.item.id === item.id
-                    ? "rounded-t-[9px]"
-                    : "rounded-[9px]"
-                } ${
-                  state.itemReveal?.id === item.id
-                    ? "ring-1 ring-primary/70 ring-offset-1 ring-offset-base-200"
-                    : ""
-                } ${item.archived ? "border border-primary/18 border-dashed opacity-75" : ""} ${
-                  item.status === "active"
-                    ? "bg-base-300 shadow-[inset_2px_0_0_var(--color-primary)]"
-                    : /*
-                       * Zebra striping so a long list reads row by row; the hover
-                       * still lifts on top of whichever stripe is underneath. The
-                       * odd stripe is deliberately not faint: barely-visible
-                       * striping reads as a rendering smudge, not a pattern.
-                       *
-                       * Tinted rather than white. `bg-white/[0.055]` was a white
-                       * film over a near-white row in light mode, which is
-                       * nothing at all, and close enough to nothing in dark mode
-                       * to be the smudge this comment warns about. The token is
-                       * derived from the accent per mode, so both read.
-                       */
-                      index() % 2 === 1
-                      ? "bg-az-stripe hover:bg-az-stripe-hover"
-                      : "hover:bg-az-stripe"
-                }`}
+                aria-label={tx("Clear the filter")}
+                class="shrink-0 rounded-md p-0.5 text-az-faint transition-colors hover:text-az-body"
               >
-                <div class="flex min-w-0 flex-1 items-center gap-1">
-                  {/*
-                   * The marker is the status control, and the only one.
-                   *
-                   * The whole row used to be a button titled "Change status", so
-                   * reading a list meant hovering a row that offered to mutate it
-                   * and clicking one by accident cycled it. A status change is a
-                   * deliberate act: it gets the smallest target that can carry it,
-                   * and the title beside it goes back to being text.
-                   */}
-                  <Button
-                    type="button"
-                    onClick={() => advance(item)}
-                    aria-label={tx("Change the status of {name}", { name: item.title })}
-                    title={`${statusSuffix(item.status)} — click for ${statusLabel(nextStatus(item.status))}`}
-                    class="ml-1.5 flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-full transition-colors hover:bg-az-chip focus-visible:bg-az-chip"
-                  >
-                    <ItemMarker status={item.status} />
-                  </Button>
-                  <div class="flex min-w-0 flex-1 items-center gap-1.5 px-1.5 py-1 text-left">
-                    <span
-                      data-selectable
-                      title={item.title}
-                      class={`line-clamp-2 min-w-0 flex-1 text-[12.5px] leading-[1.35] ${
-                        item.status === "active" || item.status === "planning"
-                          ? "text-base-content"
-                          : item.status === "finished"
-                            ? "text-az-muted"
-                            : "text-az-body"
-                      }`}
+                <Icon name="x" class="text-[11px]" />
+              </Button>
+            </Show>
+          </div>
+        </Show>
+        <Show when={filtering() && shown().length === 0}>
+          <p class="px-2.5 py-3 text-[12px] text-az-muted">
+            {tx("No item matches “{query}”", { query: query().trim() })}
+          </p>
+        </Show>
+        <For each={visibleShown()}>
+          {(item, index) => (
+            <Show
+              when={editingId() !== item.id}
+              /*
+               * The editor is built when a row enters edit mode, not with the row.
+               *
+               * `fallback` is an ordinary prop, so this JSX used to be evaluated
+               * as each row was created: every visible row constructed an
+               * `Input.Field` that only one row can ever show. Wrapping it in a
+               * `<Show>` of its own makes the construction conditional, which is
+               * what the fallback reads as but is not.
+               */
+              fallback={
+                <Show when={editingId() === item.id}>
+                  <Input.Field
+                    autofocus
+                    value={editTitle()}
+                    aria-label={tx("Edit {name}", { name: item.title })}
+                    onInput={(event) => setEditTitle(event.currentTarget.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") void saveEdit(item);
+                      if (event.key === "Escape") setEditingId(null);
+                    }}
+                    class="rounded-[9px] border border-primary/40 bg-base-300 px-2.5 py-2 text-[12.5px] text-az-body focus:outline-none"
+                  />
+                </Show>
+              }
+            >
+              <div class="rounded-[9px]">
+                {/* biome-ignore lint/a11y/useSemanticElements: this expandable composite row owns sibling editors, so native li nesting would be invalid */}
+                <div
+                  data-item-id={item.id}
+                  role="listitem"
+                  aria-label={item.title}
+                  tabindex={-1}
+                  onPointerEnter={() => setHoveredRowId(item.id)}
+                  onPointerLeave={() => {
+                    if (hoveredRowId() === item.id) setHoveredRowId(null);
+                  }}
+                  onFocusIn={() => {
+                    setFocusedRowId(item.id);
+                    if (descriptionDraft() && descriptionDraft()?.item.id !== item.id) {
+                      setDescriptionDraft(null);
+                    }
+                    if (issueDraft() && issueDraft()?.item.id !== item.id) {
+                      setIssueDraft(null);
+                    }
+                  }}
+                  onFocusOut={(event) => {
+                    const next = event.relatedTarget;
+                    if (!(next instanceof Node) || !event.currentTarget.contains(next)) {
+                      if (focusedRowId() === item.id) setFocusedRowId(null);
+                    }
+                  }}
+                  /*
+                   * The row is `relative` and the action cluster below is absolute,
+                   * so the buttons take ZERO layout width. They used to be a normal
+                   * flex sibling: even at opacity-0 they held ~120px of a 322px
+                   * column, so every title wrapped into a four-word ribbon. Now the
+                   * title owns the whole width and the controls float over its right
+                   * end only on hover.
+                   */
+                  class={`group relative flex items-center outline-none transition-colors ${
+                    descriptionDraft()?.item.id === item.id || issueDraft()?.item.id === item.id
+                      ? "rounded-t-[9px]"
+                      : "rounded-[9px]"
+                  } ${
+                    state.itemReveal?.id === item.id
+                      ? "ring-1 ring-primary/70 ring-offset-1 ring-offset-base-200"
+                      : ""
+                  } ${item.archived ? "border border-primary/18 border-dashed opacity-75" : ""} ${
+                    item.status === "active"
+                      ? "bg-base-300 shadow-[inset_2px_0_0_var(--color-primary)]"
+                      : /*
+                         * Zebra striping so a long list reads row by row; the hover
+                         * still lifts on top of whichever stripe is underneath. The
+                         * odd stripe is deliberately not faint: barely-visible
+                         * striping reads as a rendering smudge, not a pattern.
+                         *
+                         * Tinted rather than white. `bg-white/[0.055]` was a white
+                         * film over a near-white row in light mode, which is
+                         * nothing at all, and close enough to nothing in dark mode
+                         * to be the smudge this comment warns about. The token is
+                         * derived from the accent per mode, so both read.
+                         */
+                        index() % 2 === 1
+                        ? "bg-az-stripe hover:bg-az-stripe-hover"
+                        : "hover:bg-az-stripe"
+                  }`}
+                >
+                  <div class="flex min-w-0 flex-1 items-center gap-1">
+                    {/*
+                     * The marker is the status control, and the only one.
+                     *
+                     * The whole row used to be a button titled "Change status", so
+                     * reading a list meant hovering a row that offered to mutate it
+                     * and clicking one by accident cycled it. A status change is a
+                     * deliberate act: it gets the smallest target that can carry it,
+                     * and the title beside it goes back to being text.
+                     */}
+                    <Button
+                      type="button"
+                      onClick={() => advance(item)}
+                      aria-label={tx("Change the status of {name}", { name: item.title })}
+                      title={`${statusSuffix(item.status)} — click for ${statusLabel(nextStatus(item.status))}`}
+                      class="ml-1.5 flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-full transition-colors hover:bg-az-chip focus-visible:bg-az-chip"
                     >
-                      {item.title}
-                    </span>
-                    <span
-                      class={`flex shrink-0 flex-col items-end text-[10.5px] leading-[1.2] ${
-                        item.status === "active"
-                          ? "font-semibold text-primary"
-                          : item.status === "shipped"
-                            ? "font-semibold text-warning"
-                            : item.status === "planning"
-                              ? "text-info"
-                              : item.status === "finished"
-                                ? "text-success"
-                                : "text-az-muted"
-                      }`}
-                    >
-                      {/*
+                      <ItemMarker status={item.status} />
+                    </Button>
+                    <div class="flex min-w-0 flex-1 items-center gap-1.5 px-1.5 py-1 text-left">
+                      <span
+                        data-selectable
+                        title={item.title}
+                        class={`line-clamp-2 min-w-0 flex-1 text-[12.5px] leading-[1.35] ${
+                          item.status === "active" || item.status === "planning"
+                            ? "text-base-content"
+                            : item.status === "finished"
+                              ? "text-az-muted"
+                              : "text-az-body"
+                        }`}
+                      >
+                        {item.title}
+                      </span>
+                      <span
+                        class={`flex shrink-0 flex-col items-end text-[10.5px] leading-[1.2] ${
+                          item.status === "active"
+                            ? "font-semibold text-primary"
+                            : item.status === "shipped"
+                              ? "font-semibold text-warning"
+                              : item.status === "planning"
+                                ? "text-info"
+                                : item.status === "finished"
+                                  ? "text-success"
+                                  : "text-az-muted"
+                        }`}
+                      >
+                        {/*
                     Status is never replaced by its reference. A shipped row
                     needs both facts: what state the work claims and which PR
                     the owner should inspect. The wider panel lets those stack
                     without taking another column from the title.
                   */}
-                      <span>{item.archived ? tx("archived") : statusSuffix(item.status)}</span>
-                      <Show when={item.reference}>
-                        {(reference) => (
-                          <Show
-                            when={issueUrl(reference())}
-                            fallback={
-                              /*
+                        <span>{item.archived ? tx("archived") : statusSuffix(item.status)}</span>
+                        <Show when={item.reference}>
+                          {(reference) => (
+                            <Show
+                              when={issueUrl(reference())}
+                              fallback={
+                                /*
                         And it opens. The number is there to be checked, so
                         reading it and then going to find the pull request by
                         hand is the one thing it should not cost. Plain text
                         when the project has no pull request by that number,
                         rather than a link that goes nowhere.
                       */
-                              <Show
-                                when={prUrl(reference())}
-                                fallback={
-                                  <>
-                                    {tx("(PR #")}
-                                    {reference()})
-                                  </>
-                                }
-                              >
-                                {(url) => (
-                                  <Button
-                                    type="button"
-                                    onClick={() => void actions.openExternal(url())}
-                                    title={tx("Open {url}", { url: url() })}
-                                    class="cursor-pointer underline decoration-dotted underline-offset-2 hover:text-primary"
-                                  >
-                                    {tx("(PR #")}
-                                    {reference()})
-                                  </Button>
-                                )}
-                              </Show>
-                            }
-                          >
-                            {(url) => (
-                              <Button
-                                type="button"
-                                onClick={() => void actions.openExternal(url())}
-                                title={tx("Open {url}", { url: url() })}
-                                class="cursor-pointer underline decoration-dotted underline-offset-2 hover:text-primary"
-                              >
-                                {tx("(issue #")}
-                                {issueNumber(url())})
-                              </Button>
-                            )}
-                          </Show>
-                        )}
-                      </Show>
-                    </span>
+                                <Show
+                                  when={prUrl(reference())}
+                                  fallback={
+                                    <>
+                                      {tx("(PR #")}
+                                      {reference()})
+                                    </>
+                                  }
+                                >
+                                  {(url) => (
+                                    <Button
+                                      type="button"
+                                      onClick={() => void actions.openExternal(url())}
+                                      title={tx("Open {url}", { url: url() })}
+                                      class="cursor-pointer underline decoration-dotted underline-offset-2 hover:text-primary"
+                                    >
+                                      {tx("(PR #")}
+                                      {reference()})
+                                    </Button>
+                                  )}
+                                </Show>
+                              }
+                            >
+                              {(url) => (
+                                <Button
+                                  type="button"
+                                  onClick={() => void actions.openExternal(url())}
+                                  title={tx("Open {url}", { url: url() })}
+                                  class="cursor-pointer underline decoration-dotted underline-offset-2 hover:text-primary"
+                                >
+                                  {tx("(issue #")}
+                                  {issueNumber(url())})
+                                </Button>
+                              )}
+                            </Show>
+                          )}
+                        </Show>
+                      </span>
+                    </div>
                   </div>
-                </div>
-                <Show when={item.status === "questions"}>
-                  <Show
-                    when={questionFor(item)}
-                    fallback={
-                      <Button
-                        type="button"
-                        onClick={() => run(item)}
-                        disabled={isRunning()}
-                        title={
-                          isRunning()
-                            ? tx("A run is already in flight on this project")
-                            : tx("No unanswered question — work on this item")
-                        }
-                        aria-label={tx("Work on {name}; it has no unanswered question", {
-                          name: item.title,
-                        })}
-                        class="relative z-10 mr-1 ml-0.5 flex size-[22px] shrink-0 items-center justify-center rounded-md border border-primary/55 bg-az-chip text-primary transition-colors hover:border-primary hover:bg-az-chip-strong disabled:opacity-30"
-                      >
-                        <Icon name="play" class="text-[11px]" />
-                      </Button>
-                    }
-                  >
-                    {(question) => (
-                      <Button
-                        type="button"
-                        onClick={() => replyTo(question())}
-                        title={tx("Reply to this item's question")}
-                        aria-label={tx("Reply to the question for {name}", { name: item.title })}
-                        class="relative z-10 mr-1 ml-0.5 flex size-[22px] shrink-0 items-center justify-center rounded-md border border-warning/65 bg-warning/22 text-warning shadow-[0_0_0_1px_rgb(from_var(--color-warning)_r_g_b/.08)] transition-colors hover:border-warning hover:bg-warning/34 focus-visible:border-warning focus-visible:bg-warning/34"
-                      >
-                        <Icon name="message-square-dashed" class="text-[12px]" />
-                      </Button>
-                    )}
+                  <Show when={item.status === "questions"}>
+                    <Show
+                      when={questionFor(item)}
+                      fallback={
+                        <Button
+                          type="button"
+                          onClick={() => run(item)}
+                          disabled={isRunning()}
+                          title={
+                            isRunning()
+                              ? tx("A run is already in flight on this project")
+                              : tx("No unanswered question — work on this item")
+                          }
+                          aria-label={tx("Work on {name}; it has no unanswered question", {
+                            name: item.title,
+                          })}
+                          class="relative z-10 mr-1 ml-0.5 flex size-[22px] shrink-0 items-center justify-center rounded-md border border-primary/55 bg-az-chip text-primary transition-colors hover:border-primary hover:bg-az-chip-strong disabled:opacity-30"
+                        >
+                          <Icon name="play" class="text-[11px]" />
+                        </Button>
+                      }
+                    >
+                      {(question) => (
+                        <Button
+                          type="button"
+                          onClick={() => replyTo(question())}
+                          title={tx("Reply to this item's question")}
+                          aria-label={tx("Reply to the question for {name}", { name: item.title })}
+                          class="relative z-10 mr-1 ml-0.5 flex size-[22px] shrink-0 items-center justify-center rounded-md border border-warning/65 bg-warning/22 text-warning shadow-[0_0_0_1px_rgb(from_var(--color-warning)_r_g_b/.08)] transition-colors hover:border-warning hover:bg-warning/34 focus-visible:border-warning focus-visible:bg-warning/34"
+                        >
+                          <Icon name="message-square-dashed" class="text-[12px]" />
+                        </Button>
+                      )}
+                    </Show>
                   </Show>
-                </Show>
-                {/*
-                 * Absolutely positioned over the row's right end, only ink when
-                 * hovered or busy. Out of the layout flow entirely so the title
-                 * gets the full column width; a translucent gradient underlay
-                 * keeps the icons legible where they overlap a long title. These
-                 * act on the row, they are not part of reading it.
-                 */}
-                <Show when={activeRowId() === item.id}>
-                  <div
-                    class={`absolute inset-y-0 flex items-center justify-end gap-1 rounded-r-[9px] bg-gradient-to-l from-60% from-base-300 to-transparent pr-2 pl-6 ${
-                      item.status === "questions" ? "right-[26px]" : "right-0"
-                    }`}
-                  >
-                    <Button
-                      type="button"
-                      onClick={(event) => {
-                        const box = event.currentTarget.getBoundingClientRect();
-                        setContextAnchor({
-                          left: box.left,
-                          top: box.top,
-                          right: box.right,
-                          bottom: box.bottom,
-                          width: box.width,
-                          height: box.height,
-                        });
-                        void toggleDescription(item);
-                      }}
-                      title={tx("Description / sub-items")}
-                      aria-label={tx("Edit the description for {name}", { name: item.title })}
-                      aria-expanded={descriptionDraft()?.item.id === item.id ? "true" : "false"}
-                      aria-controls={`item-description-${item.id}`}
-                      class={`shrink-0 rounded-md border p-1 transition-colors hover:border-primary/70 hover:bg-az-chip-strong ${
-                        descriptionDraft()?.item.id === item.id || item.context?.trim()
-                          ? "border-primary/45 bg-az-chip text-primary"
-                          : "border-primary/20 bg-az-chip text-az-muted"
+                  {/*
+                   * Absolutely positioned over the row's right end, only ink when
+                   * hovered or busy. Out of the layout flow entirely so the title
+                   * gets the full column width; a translucent gradient underlay
+                   * keeps the icons legible where they overlap a long title. These
+                   * act on the row, they are not part of reading it.
+                   */}
+                  <Show when={activeRowId() === item.id}>
+                    <div
+                      class={`absolute inset-y-0 flex items-center justify-end gap-1 rounded-r-[9px] bg-gradient-to-l from-60% from-base-300 to-transparent pr-2 pl-6 ${
+                        item.status === "questions" ? "right-[26px]" : "right-0"
                       }`}
                     >
-                      <Icon name="list-checks" class="text-[12px]" />
-                    </Button>
-                    <Button
-                      type="button"
-                      onClick={(event) => {
-                        const box = event.currentTarget.getBoundingClientRect();
-                        setContextAnchor({
-                          left: box.left,
-                          top: box.top,
-                          right: box.right,
-                          bottom: box.bottom,
-                          width: box.width,
-                          height: box.height,
-                        });
-                        openFork(item);
-                      }}
-                      disabled={forkingId() === item.id}
-                      title={
-                        forkFor(item.id)
-                          ? tx("Open this item's lower-token fork")
-                          : tx("Start a fresh fork to avoid resending this project's long chat")
-                      }
-                      aria-label={
-                        forkFor(item.id)
-                          ? tx("Open the fork for {name}", { name: item.title })
-                          : tx("Fork {name} into a fresh chat", { name: item.title })
-                      }
-                      class={`shrink-0 rounded-md border p-1 transition-colors hover:border-primary/70 hover:bg-az-chip-strong disabled:opacity-30 ${
-                        forkFor(item.id)
-                          ? "border-primary/55 bg-az-chip text-primary"
-                          : "border-primary/30 bg-az-chip text-primary/80"
-                      }`}
-                    >
-                      <Icon name="git-fork" class="text-[12px]" />
-                    </Button>
-                    <Show when={item.status !== "finished"}>
+                      <Button
+                        type="button"
+                        onClick={(event) => {
+                          const box = event.currentTarget.getBoundingClientRect();
+                          setContextAnchor({
+                            left: box.left,
+                            top: box.top,
+                            right: box.right,
+                            bottom: box.bottom,
+                            width: box.width,
+                            height: box.height,
+                          });
+                          void toggleDescription(item);
+                        }}
+                        title={tx("Description / sub-items")}
+                        aria-label={tx("Edit the description for {name}", { name: item.title })}
+                        aria-expanded={descriptionDraft()?.item.id === item.id ? "true" : "false"}
+                        aria-controls={`item-description-${item.id}`}
+                        class={`shrink-0 rounded-md border p-1 transition-colors hover:border-primary/70 hover:bg-az-chip-strong ${
+                          descriptionDraft()?.item.id === item.id || item.context?.trim()
+                            ? "border-primary/45 bg-az-chip text-primary"
+                            : "border-primary/20 bg-az-chip text-az-muted"
+                        }`}
+                      >
+                        <Icon name="list-checks" class="text-[12px]" />
+                      </Button>
+                      <Button
+                        type="button"
+                        onClick={(event) => {
+                          const box = event.currentTarget.getBoundingClientRect();
+                          setContextAnchor({
+                            left: box.left,
+                            top: box.top,
+                            right: box.right,
+                            bottom: box.bottom,
+                            width: box.width,
+                            height: box.height,
+                          });
+                          openFork(item);
+                        }}
+                        disabled={forkingId() === item.id}
+                        title={
+                          forkFor(item.id)
+                            ? tx("Open this item's lower-token fork")
+                            : tx("Start a fresh fork to avoid resending this project's long chat")
+                        }
+                        aria-label={
+                          forkFor(item.id)
+                            ? tx("Open the fork for {name}", { name: item.title })
+                            : tx("Fork {name} into a fresh chat", { name: item.title })
+                        }
+                        class={`shrink-0 rounded-md border p-1 transition-colors hover:border-primary/70 hover:bg-az-chip-strong disabled:opacity-30 ${
+                          forkFor(item.id)
+                            ? "border-primary/55 bg-az-chip text-primary"
+                            : "border-primary/30 bg-az-chip text-primary/80"
+                        }`}
+                      >
+                        <Icon name="git-fork" class="text-[12px]" />
+                      </Button>
+                      <Show when={item.status !== "finished"}>
+                        <Button
+                          type="button"
+                          onClick={() => {
+                            const question = questionFor(item);
+                            if (question) replyTo(question);
+                            else run(item);
+                          }}
+                          // Not gated on isLive: the mock serves sendMessage the same
+                          // as the composer does, so the preview can exercise this.
+                          disabled={!questionFor(item) && isRunning()}
+                          title={
+                            questionFor(item)
+                              ? tx("Reply to this item's question")
+                              : isRunning()
+                                ? tx("A run is already in flight on this project")
+                                : tx("Send this item to the agent, on this project's session")
+                          }
+                          aria-label={
+                            questionFor(item)
+                              ? tx("Reply to the question for {name}", { name: item.title })
+                              : tx("Run {name}", { name: item.title })
+                          }
+                          class={`shrink-0 rounded-md border p-1 transition-colors disabled:opacity-30 ${
+                            questionFor(item)
+                              ? "border-warning/55 bg-warning/18 text-warning hover:border-warning hover:bg-warning/30"
+                              : "border-transparent text-az-faint hover:border-primary/25 hover:bg-az-chip hover:text-primary"
+                          }`}
+                        >
+                          <Icon
+                            name={questionFor(item) ? "message-square-dashed" : "play"}
+                            class="text-[12px]"
+                          />
+                        </Button>
+                      </Show>
+                      {/* Revealed on hover: the controls all the time would be louder
+                than the titles they act on. */}
                       <Button
                         type="button"
                         onClick={() => {
-                          const question = questionFor(item);
-                          if (question) replyTo(question);
-                          else run(item);
+                          setDescriptionDraft(null);
+                          setIssueDraft({
+                            item,
+                            url: issueUrl(item.reference ?? "") ?? "",
+                          });
                         }}
-                        // Not gated on isLive: the mock serves sendMessage the same
-                        // as the composer does, so the preview can exercise this.
-                        disabled={!questionFor(item) && isRunning()}
-                        title={
-                          questionFor(item)
-                            ? tx("Reply to this item's question")
-                            : isRunning()
-                              ? tx("A run is already in flight on this project")
-                              : tx("Send this item to the agent, on this project's session")
-                        }
-                        aria-label={
-                          questionFor(item)
-                            ? tx("Reply to the question for {name}", { name: item.title })
-                            : tx("Run {name}", { name: item.title })
-                        }
-                        class={`shrink-0 rounded-md border p-1 transition-colors disabled:opacity-30 ${
-                          questionFor(item)
-                            ? "border-warning/55 bg-warning/18 text-warning hover:border-warning hover:bg-warning/30"
-                            : "border-transparent text-az-faint hover:border-primary/25 hover:bg-az-chip hover:text-primary"
-                        }`}
+                        aria-label={tx("Link a GitHub issue to {name}", { name: item.title })}
+                        title={tx("Link a GitHub issue")}
+                        class="shrink-0 rounded-md p-1 text-az-faint transition-colors hover:text-primary"
                       >
-                        <Icon
-                          name={questionFor(item) ? "message-square-dashed" : "play"}
-                          class="text-[12px]"
-                        />
-                      </Button>
-                    </Show>
-                    {/* Revealed on hover: the controls all the time would be louder
-                than the titles they act on. */}
-                    <Button
-                      type="button"
-                      onClick={() => {
-                        setDescriptionDraft(null);
-                        setIssueDraft({
-                          item,
-                          url: issueUrl(item.reference ?? "") ?? "",
-                        });
-                      }}
-                      aria-label={tx("Link a GitHub issue to {name}", { name: item.title })}
-                      title={tx("Link a GitHub issue")}
-                      class="shrink-0 rounded-md p-1 text-az-faint transition-colors hover:text-primary"
-                    >
-                      <Icon name="git-pull-request" class="text-[11px]" />
-                    </Button>
-                    <Button
-                      type="button"
-                      onClick={() => {
-                        setEditTitle(item.title);
-                        setEditingId(item.id);
-                      }}
-                      aria-label={tx("Edit {name}", { name: item.title })}
-                      title={tx("Edit this item")}
-                      class="shrink-0 rounded-md p-1 text-az-faint transition-colors hover:text-az-body"
-                    >
-                      <Icon name="pencil" class="text-[11px]" />
-                    </Button>
-                    <Button
-                      type="button"
-                      onClick={() =>
-                        void actions
-                          .deleteItem(item.id)
-                          .catch((cause) =>
-                            log.error(`could not delete the item: ${describeError(cause)}`),
-                          )
-                      }
-                      aria-label={tx("Delete {name}", { name: item.title })}
-                      title={tx("Delete this item")}
-                      class="shrink-0 rounded-md p-1 text-az-faint transition-colors hover:text-error"
-                    >
-                      <Icon name="x" class="text-[12px]" />
-                    </Button>
-                    <div class="flex shrink-0 flex-col">
-                      <Button
-                        type="button"
-                        onClick={() => move(item, -1)}
-                        disabled={filtering() || index() === 0}
-                        aria-label={tx("Move {name} up", { name: item.title })}
-                        class="rounded-sm px-0.5 text-az-faint transition-colors hover:text-az-body disabled:opacity-25"
-                      >
-                        <Icon name="chevron-up" class="text-[10px]" />
+                        <Icon name="git-pull-request" class="text-[11px]" />
                       </Button>
                       <Button
                         type="button"
-                        onClick={() => move(item, 1)}
-                        disabled={filtering() || index() === shown().length - 1}
-                        aria-label={tx("Move {name} down", { name: item.title })}
-                        class="rounded-sm px-0.5 text-az-faint transition-colors hover:text-az-body disabled:opacity-25"
+                        onClick={() => {
+                          setEditTitle(item.title);
+                          setEditingId(item.id);
+                        }}
+                        aria-label={tx("Edit {name}", { name: item.title })}
+                        title={tx("Edit this item")}
+                        class="shrink-0 rounded-md p-1 text-az-faint transition-colors hover:text-az-body"
                       >
-                        <Icon name="chevron-down" class="text-[10px]" />
+                        <Icon name="pencil" class="text-[11px]" />
                       </Button>
-                    </div>
-                  </div>
-                </Show>
-              </div>
-              <Show when={issueDraft()?.item.id === item.id ? issueDraft() : null}>
-                {(draft) => (
-                  <section class="flex items-center gap-2 rounded-b-[9px] border-primary/24 border-t bg-az-inset px-3 py-2.5 shadow-[inset_2px_0_0_color-mix(in_srgb,var(--color-primary)_55%,transparent)]">
-                    <Input.Field
-                      ref={(element: HTMLInputElement) => {
-                        issueField = element;
-                      }}
-                      autofocus
-                      type="text"
-                      value={draft().url}
-                      aria-label={tx("GitHub issue URL")}
-                      onInput={(event) =>
-                        setIssueDraft({ ...draft(), url: event.currentTarget.value })
-                      }
-                      onKeyDown={(event) => {
-                        if (event.key === "Enter") void saveIssue();
-                        if (event.key === "Escape") setIssueDraft(null);
-                      }}
-                      class="min-w-0 flex-1 rounded-lg border border-primary/28 bg-base-300 px-2.5 py-1.5 font-mono text-[11.5px] text-az-body outline-none placeholder:text-az-faint focus:border-primary/60"
-                    />
-                    <Button
-                      type="button"
-                      onClick={() => setIssueDraft(null)}
-                      class="rounded-md px-2.5 py-1 text-[11px] text-az-muted hover:bg-white/6 hover:text-az-body"
-                    >
-                      {tx("Cancel")}
-                    </Button>
-                    <Button
-                      type="button"
-                      disabled={!draft().url.trim() || savingIssueId() === item.id}
-                      onClick={() => void saveIssue()}
-                      class="rounded-md border border-primary/40 bg-az-chip px-2.5 py-1 font-semibold text-[11px] text-primary hover:bg-az-chip-strong disabled:opacity-35"
-                    >
-                      {tx("Link a GitHub issue")}
-                    </Button>
-                  </section>
-                )}
-              </Show>
-              <Show when={descriptionDraft()?.item.id === item.id ? descriptionDraft() : null}>
-                {(draft) => (
-                  <section
-                    id={`item-description-${item.id}`}
-                    class="flex flex-col gap-2 rounded-b-[9px] border-primary/24 border-t bg-az-inset px-3 py-2.5 shadow-[inset_2px_0_0_color-mix(in_srgb,var(--color-primary)_55%,transparent)]"
-                  >
-                    <div class="flex items-center justify-between gap-3">
-                      <span class="font-semibold text-[11.5px] text-az-body">
-                        {tx("Description / sub-items")}
-                      </span>
-                      <span class="font-mono text-[10px] text-az-faint">
-                        {draft().context.length} / {NOTES_BUDGET}
-                      </span>
-                    </div>
-                    <Textarea
-                      autofocus
-                      value={draft().context}
-                      maxlength={NOTES_BUDGET}
-                      onInput={(event) =>
-                        setDescriptionDraft({ ...draft(), context: event.currentTarget.value })
-                      }
-                      aria-label={tx("Description / sub-items")}
-                      placeholder={tx(
-                        "Describe constraints, acceptance criteria, decisions, and useful pointers…",
-                      )}
-                      class="az-scroll min-h-[138px] resize-y rounded-lg border border-primary/22 bg-base-300 px-3 py-2.5 text-[12px] text-az-body leading-[1.5] outline-none placeholder:text-az-faint focus:border-primary/55"
-                    />
-                    <div class="flex items-center justify-between gap-3">
-                      <span class="text-[10.5px] text-az-muted">
-                        {tx("Use one Markdown bullet or checklist line per sub-item.")}
-                      </span>
-                      <div class="flex shrink-0 items-center gap-1.5">
+                      <Button
+                        type="button"
+                        onClick={() =>
+                          void actions
+                            .deleteItem(item.id)
+                            .catch((cause) =>
+                              log.error(`could not delete the item: ${describeError(cause)}`),
+                            )
+                        }
+                        aria-label={tx("Delete {name}", { name: item.title })}
+                        title={tx("Delete this item")}
+                        class="shrink-0 rounded-md p-1 text-az-faint transition-colors hover:text-error"
+                      >
+                        <Icon name="x" class="text-[12px]" />
+                      </Button>
+                      <div class="flex shrink-0 flex-col">
                         <Button
                           type="button"
-                          onClick={() => setDescriptionDraft(null)}
-                          class="rounded-md px-2.5 py-1 text-[11px] text-az-muted hover:bg-white/6 hover:text-az-body"
+                          onClick={() => move(item, -1)}
+                          disabled={filtering() || index() === 0}
+                          aria-label={tx("Move {name} up", { name: item.title })}
+                          class="rounded-sm px-0.5 text-az-faint transition-colors hover:text-az-body disabled:opacity-25"
                         >
-                          {tx("Close")}
+                          <Icon name="chevron-up" class="text-[10px]" />
                         </Button>
                         <Button
                           type="button"
-                          disabled={
-                            savingDescriptionId() === item.id || draft().context === draft().saved
-                          }
-                          onClick={() => void saveDescription()}
-                          class="rounded-md border border-primary/40 bg-az-chip px-2.5 py-1 font-semibold text-[11px] text-primary hover:bg-az-chip-strong disabled:opacity-35"
+                          onClick={() => move(item, 1)}
+                          disabled={filtering() || index() === shown().length - 1}
+                          aria-label={tx("Move {name} down", { name: item.title })}
+                          class="rounded-sm px-0.5 text-az-faint transition-colors hover:text-az-body disabled:opacity-25"
                         >
-                          {tx("Save description")}
+                          <Icon name="chevron-down" class="text-[10px]" />
                         </Button>
                       </div>
                     </div>
-                  </section>
-                )}
-              </Show>
-            </div>
-          </Show>
-        )}
-      </For>
-      <Show when={shown().length > visibleShown().length}>
-        <Button
-          type="button"
-          onClick={() => setItemLimit((limit) => limit + PROJECT_ITEM_PAGE_SIZE)}
-          class="mt-1 flex-none rounded-[9px] border border-primary/24 bg-az-chip px-2.5 py-2 font-semibold text-[11.5px] text-primary transition-colors hover:bg-az-chip"
-        >
-          {tx("Show {count} more items", {
-            count: Math.min(PROJECT_ITEM_PAGE_SIZE, shown().length - visibleShown().length),
-          })}
-        </Button>
-      </Show>
+                  </Show>
+                </div>
+                <Show when={issueDraft()?.item.id === item.id ? issueDraft() : null}>
+                  {(draft) => (
+                    <section class="flex items-center gap-2 rounded-b-[9px] border-primary/24 border-t bg-az-inset px-3 py-2.5 shadow-[inset_2px_0_0_color-mix(in_srgb,var(--color-primary)_55%,transparent)]">
+                      <Input.Field
+                        ref={(element: HTMLInputElement) => {
+                          issueField = element;
+                        }}
+                        autofocus
+                        type="text"
+                        value={draft().url}
+                        aria-label={tx("GitHub issue URL")}
+                        onInput={(event) =>
+                          setIssueDraft({ ...draft(), url: event.currentTarget.value })
+                        }
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter") void saveIssue();
+                          if (event.key === "Escape") setIssueDraft(null);
+                        }}
+                        class="min-w-0 flex-1 rounded-lg border border-primary/28 bg-base-300 px-2.5 py-1.5 font-mono text-[11.5px] text-az-body outline-none placeholder:text-az-faint focus:border-primary/60"
+                      />
+                      <Button
+                        type="button"
+                        onClick={() => setIssueDraft(null)}
+                        class="rounded-md px-2.5 py-1 text-[11px] text-az-muted hover:bg-white/6 hover:text-az-body"
+                      >
+                        {tx("Cancel")}
+                      </Button>
+                      <Button
+                        type="button"
+                        disabled={!draft().url.trim() || savingIssueId() === item.id}
+                        onClick={() => void saveIssue()}
+                        class="rounded-md border border-primary/40 bg-az-chip px-2.5 py-1 font-semibold text-[11px] text-primary hover:bg-az-chip-strong disabled:opacity-35"
+                      >
+                        {tx("Link a GitHub issue")}
+                      </Button>
+                    </section>
+                  )}
+                </Show>
+                <Show when={descriptionDraft()?.item.id === item.id ? descriptionDraft() : null}>
+                  {(draft) => (
+                    <section
+                      id={`item-description-${item.id}`}
+                      class="flex flex-col gap-2 rounded-b-[9px] border-primary/24 border-t bg-az-inset px-3 py-2.5 shadow-[inset_2px_0_0_color-mix(in_srgb,var(--color-primary)_55%,transparent)]"
+                    >
+                      <div class="flex items-center justify-between gap-3">
+                        <span class="font-semibold text-[11.5px] text-az-body">
+                          {tx("Description / sub-items")}
+                        </span>
+                        <span class="font-mono text-[10px] text-az-faint">
+                          {draft().context.length} / {NOTES_BUDGET}
+                        </span>
+                      </div>
+                      <Textarea
+                        autofocus
+                        value={draft().context}
+                        maxlength={NOTES_BUDGET}
+                        onInput={(event) =>
+                          setDescriptionDraft({ ...draft(), context: event.currentTarget.value })
+                        }
+                        aria-label={tx("Description / sub-items")}
+                        placeholder={tx(
+                          "Describe constraints, acceptance criteria, decisions, and useful pointers…",
+                        )}
+                        class="az-scroll min-h-[138px] resize-y rounded-lg border border-primary/22 bg-base-300 px-3 py-2.5 text-[12px] text-az-body leading-[1.5] outline-none placeholder:text-az-faint focus:border-primary/55"
+                      />
+                      <div class="flex items-center justify-between gap-3">
+                        <span class="text-[10.5px] text-az-muted">
+                          {tx("Use one Markdown bullet or checklist line per sub-item.")}
+                        </span>
+                        <div class="flex shrink-0 items-center gap-1.5">
+                          <Button
+                            type="button"
+                            onClick={() => setDescriptionDraft(null)}
+                            class="rounded-md px-2.5 py-1 text-[11px] text-az-muted hover:bg-white/6 hover:text-az-body"
+                          >
+                            {tx("Close")}
+                          </Button>
+                          <Button
+                            type="button"
+                            disabled={
+                              savingDescriptionId() === item.id || draft().context === draft().saved
+                            }
+                            onClick={() => void saveDescription()}
+                            class="rounded-md border border-primary/40 bg-az-chip px-2.5 py-1 font-semibold text-[11px] text-primary hover:bg-az-chip-strong disabled:opacity-35"
+                          >
+                            {tx("Save description")}
+                          </Button>
+                        </div>
+                      </div>
+                    </section>
+                  )}
+                </Show>
+              </div>
+            </Show>
+          )}
+        </For>
+        <Show when={shown().length > visibleShown().length}>
+          <Button
+            type="button"
+            onClick={() => setItemLimit((limit) => limit + PROJECT_ITEM_PAGE_SIZE)}
+            class="mt-1 flex-none rounded-[9px] border border-primary/24 bg-az-chip px-2.5 py-2 font-semibold text-[11.5px] text-primary transition-colors hover:bg-az-chip"
+          >
+            {tx("Show {count} more items", {
+              count: Math.min(PROJECT_ITEM_PAGE_SIZE, shown().length - visibleShown().length),
+            })}
+          </Button>
+        </Show>
+      </div>
 
       <Show
         when={adding()}
@@ -1882,7 +1888,7 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
           <Button
             type="button"
             onClick={() => setAdding(true)}
-            class="sticky bottom-0 z-10 mt-1 flex items-center gap-2 rounded-[9px] border border-primary/16 border-dashed bg-base-200 px-2.5 py-2 text-[12px] text-az-muted transition-colors hover:border-primary hover:text-primary"
+            class="mt-1 flex flex-none items-center gap-2 rounded-[9px] border border-primary/16 border-dashed bg-base-200 px-2.5 py-2 text-[12px] text-az-muted transition-colors hover:border-primary hover:text-primary"
           >
             <Icon name="plus" class="text-[13px]" />
             {tx("New item")}
@@ -1896,10 +1902,10 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
           aria-label={tx("New item")}
           onInput={(event) => setTitle(event.currentTarget.value)}
           onKeyDown={(event) => {
-            if (event.key === "Enter") void create();
+            if (event.key === "Enter") create();
             if (event.key === "Escape") setAdding(false);
           }}
-          class="sticky bottom-0 z-10 mt-1 rounded-[9px] border border-primary/40 bg-base-300 px-2.5 py-2 text-[12px] text-az-body focus:outline-none"
+          class="mt-1 flex-none rounded-[9px] border border-primary/40 bg-base-300 px-2.5 py-2 text-[12px] text-az-body focus:outline-none"
         />
       </Show>
 

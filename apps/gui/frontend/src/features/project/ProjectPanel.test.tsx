@@ -406,6 +406,67 @@ describe("the project side panel", () => {
     expect(within(row).getByRole("button", { name: linkName })).toBeInTheDocument();
   });
 
+  it("lets the hovered row take actions from an older focused row", async () => {
+    let workspace!: Workspace;
+
+    function Gate() {
+      workspace = useWorkspace();
+      return (
+        <Show when={workspace.state.boot.status === "ready"}>
+          <ProjectPanel project={{ ...PROJECT, id: "worktable" }} agent="codex" />
+        </Show>
+      );
+    }
+
+    const screen = render(() => (
+      <WorkspaceProvider>
+        <Gate />
+      </WorkspaceProvider>
+    ));
+    await waitFor(() => expect(workspace.state.boot.status).toBe("ready"), { timeout: 5_000 });
+    const rows = await waitFor(() => {
+      const current = [...screen.container.querySelectorAll<HTMLElement>("[data-item-id]")];
+      expect(current.length).toBeGreaterThan(1);
+      return current;
+    });
+    const first = rows[0];
+    const second = rows[1];
+    if (!first || !second) throw new Error("two item rows are required");
+    const firstTitle = first.getAttribute("aria-label") ?? "";
+    const secondTitle = second.getAttribute("aria-label") ?? "";
+
+    fireEvent.focusIn(first);
+    fireEvent.pointerEnter(second);
+    flush();
+
+    expect(
+      within(second).getByRole("button", { name: `Delete ${secondTitle}` }),
+    ).toBeInTheDocument();
+    expect(within(first).queryByRole("button", { name: `Delete ${firstTitle}` })).toBeNull();
+  });
+
+  it("keeps new-item entry outside the scrolling row viewport", async () => {
+    let workspace!: Workspace;
+
+    function Gate() {
+      workspace = useWorkspace();
+      return (
+        <Show when={workspace.state.boot.status === "ready"}>
+          <ProjectPanel project={{ ...PROJECT, id: "worktable" }} agent="codex" />
+        </Show>
+      );
+    }
+
+    const screen = render(() => (
+      <WorkspaceProvider>
+        <Gate />
+      </WorkspaceProvider>
+    ));
+    await waitFor(() => expect(workspace.state.boot.status).toBe("ready"), { timeout: 5_000 });
+    const add = await screen.findByRole("button", { name: "New item" });
+    expect(add.parentElement).toHaveAttribute("data-item-list");
+  });
+
   /*
    * The rows are rendered from the sorted, paged view; the order written back
    * is the project's own. Those two agree only under a status sort on a list

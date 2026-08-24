@@ -670,6 +670,40 @@ describe("createProject", () => {
   });
 });
 
+describe("optimistic item persistence", () => {
+  it("paints a created row before its command settles", async () => {
+    const workspace = await mountWorkspace();
+    const pending = workspace.actions.createItem("worktable", "optimistic paint");
+    flush();
+
+    expect(
+      workspace.state.items.worktable.some(
+        (item) => item.title === "optimistic paint" && item.id.startsWith("optimistic-item-"),
+      ),
+    ).toBe(true);
+
+    await pending;
+    await waitFor(() => {
+      const matches = workspace.state.items.worktable.filter(
+        (item) => item.title === "optimistic paint",
+      );
+      expect(matches).toHaveLength(1);
+      expect(matches[0]?.id).not.toMatch(/^optimistic-item-/);
+    });
+  });
+
+  it("removes a row before its delete command settles", async () => {
+    const workspace = await mountWorkspace();
+    const id = workspace.state.items.worktable.find((item) => !item.archived)?.id;
+    if (!id) throw new Error("an ordinary item is required");
+
+    const pending = workspace.actions.deleteItem(id);
+    flush();
+    expect(workspace.state.items.worktable.some((item) => item.id === id)).toBe(false);
+    await pending;
+  });
+});
+
 describe("item forks", () => {
   it("opens one linked child chat and inherits the parent tab selection", async () => {
     const workspace = await mountWorkspace();

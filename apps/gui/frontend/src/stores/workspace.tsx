@@ -469,6 +469,7 @@ function createWorkspace() {
     live: [],
     boot: { status: "loading" },
   });
+  let optimisticItemSequence = 0;
 
   /*
    * Held in a plain variable, not a signal.
@@ -3135,7 +3136,36 @@ function createWorkspace() {
       client().setProjectModerator(id, enabled),
     addDir: (projectId: string, path: string) => client().addDir(projectId, path),
     removeDir: (projectId: string, path: string) => client().removeDir(projectId, path),
-    createItem: (projectId: string, title: string) => client().createItem(projectId, title),
+    async createItem(projectId: string, title: string) {
+      const temporaryId = `optimistic-item-${++optimisticItemSequence}`;
+      const list = state.items[projectId] ?? [];
+      const temporary: ProjectItem = {
+        id: temporaryId,
+        projectId,
+        title,
+        status: "new",
+        order: list.reduce((greatest, item) => Math.max(greatest, item.order), -1) + 1,
+        reference: null,
+      };
+      upsertItem(temporary);
+      try {
+        const item = await client().createItem(projectId, title);
+        setState((d) => {
+          d.items[projectId] = (d.items[projectId] ?? []).filter(
+            (candidate) => candidate.id !== temporaryId,
+          );
+        });
+        upsertItem(item);
+        return item;
+      } catch (cause) {
+        setState((d) => {
+          d.items[projectId] = (d.items[projectId] ?? []).filter(
+            (candidate) => candidate.id !== temporaryId,
+          );
+        });
+        throw cause;
+      }
+    },
     async reorderItems(projectId: string, ids: string[]) {
       const previous = (state.items[projectId] ?? []).map((item) => ({
         id: item.id,
@@ -3189,7 +3219,24 @@ function createWorkspace() {
       upsertItem(item);
       return item;
     },
-    deleteItem: (id: string) => client().deleteItem(id),
+    async deleteItem(id: string) {
+      const previous = Object.values(state.items)
+        .flat()
+        .find((item) => item.id === id);
+      if (previous) {
+        setState((d) => {
+          d.items[previous.projectId] = (d.items[previous.projectId] ?? []).filter(
+            (item) => item.id !== id,
+          );
+        });
+      }
+      try {
+        await client().deleteItem(id);
+      } catch (cause) {
+        if (previous) upsertItem(previous);
+        throw cause;
+      }
+    },
     unmarkItemDeletion: (id: string) => client().unmarkItemDeletion(id),
     chooseAttachments: () => client().chooseAttachments(),
     dismissPullRequest: (id: string) => client().dismissPullRequest(id),
