@@ -7,7 +7,7 @@ semantic node id; AgencyZero checks never use coordinate-pointer activation.
 ## Current subject
 
 - AgencyZero PR 186, app 0.8.37
-- ps-qa PR 10 candidate, 207 checks in 22 groups
+- ps-qa PR 10 candidate, 205 checks in 22 groups
 - PathScale UI PR 262 candidate, package version 2.9.2
 - tauri-runtime-blitz candidate based on 0.1.5; the next release will include
   native, selected, pressed and checked state in one semantic boolean
@@ -50,6 +50,7 @@ continuation, and their implementation changes infrequently.
 | shell and list chrome | 11/11 | 32709136042 |
 | isolated session reset | 2/2 | 32708266768 |
 | theme and glass controls | 19/19 | 32703091144 |
+| native shared language selector | 2/2 | 32712761929 |
 
 The settings snapshot verdict is not a click acknowledgement. Its log contains
 `create_store_snapshot` followed by `store snapshot written`; the check only
@@ -100,13 +101,17 @@ present on any delivery branch.
     `button:Send` selected the larger “Parse Prompt Syntax controls before
     sending” control. Keyboard input now uses the same exact-name-first,
     role-qualified semantic resolver as activation.
+13. Settings still carried a duplicate assertion for the removed language menu,
+    and its custom moderator-model selector did not expose options to the real
+    renderer. The duplicate is gone and moderator selection now uses the same
+    native semantic combobox pattern proven by the language control.
 
 ## Validation still running
 
 - 32712761929: native shared UI language selector — passed
-- 32713924972: direct Resume-session editor with synchronized project state
+- 32715106015: direct Resume-session editor with reactive project replacement
 - 32714269528: exact Composer keyboard targets and disabled model state
-- 32713546432: standard Settings moderator-model selector
+- 32715244253: native Settings moderator-model selector
 
 No PR is updated and no candidate dependency is published until these runs are
 classified. A focused failure is fixed and rerun; it is never averaged into a
