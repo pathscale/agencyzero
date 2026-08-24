@@ -7,7 +7,7 @@ semantic node id; AgencyZero checks never use coordinate-pointer activation.
 ## Current subject
 
 - AgencyZero PR 186, app 0.8.37
-- ps-qa PR 10 candidate, 212 checks in 24 clean-profile groups
+- ps-qa PR 10 candidate, 213 checks in 24 clean-profile groups
 - PathScale UI PR 262 candidate, package version 2.9.2
 - tauri-runtime-blitz candidate based on 0.1.5; the next release will include
   native, selected, pressed and checked state in one semantic boolean
@@ -146,14 +146,20 @@ present on any delivery branch.
 - 32743024916: dialog open/Cancel/Escape/welcome plus isolated Start fork — passed 7/7
 - 32743048974: deliberate Analytics mutation — expected red, 1/8 passed; all seven
   selected-state outcomes failed while the unaffected refresh control passed
-- 32744344962: deliberate modal Escape mutation — running; it must turn the
-  Escape outcome red before that detector is accepted
-- 32744366001: all 212 outcomes in 24 clean-profile groups, reachability,
-  semantic sweep, and inspector lifecycle — running
+- 32744344962: deliberate stale modal-state mutation — Cancel failed as
+  expected, but the first Escape-only outcome still passed because the shared
+  primitive hid itself while application state remained set; this exposed a
+  missing reopen assertion rather than proving the Escape detector
+- 32745826995: strengthened positive dialog group, including reopen after
+  Escape — queued
+- 32745830576: strengthened stale-state mutation — queued; Cancel and the new
+  reopen-after-Escape outcome must both fail
+- 32744366001: the prior 212-outcome full run — still useful evidence, but
+  superseded as the final gate by the new reopen assertion
 
-The final modal negative mutation and exhaustive full-control inventory are
-still running. The historical exact inventory above is not carried forward as
-the final candidate count.
+The strengthened focused positive and negative runs are queued. Once they are
+classified, the 213-outcome candidate gets a fresh exhaustive full-control run;
+the historical exact inventory above is not carried forward as its count.
 
 No PR is updated and no candidate dependency is published until these runs are
 classified. A focused failure is fixed and rerun; it is never averaged into a
@@ -163,9 +169,9 @@ pass count.
 
 The automated audit counts but does not activate controls that open an external
 destination or native chooser the harness cannot close, or the two low-churn
-restart controls that can terminate audit cleanup. Authenticated provider Send
-is also local manual-only; CI verifies its disconnected-agent gate instead of
-holding a paid subscription:
+restart controls that can terminate audit cleanup. Authenticated provider
+Send/Run/Reply are also local manual-only; CI verifies their disconnected-agent
+gates instead of holding a paid subscription:
 
 - Add dir
 - Attach files
