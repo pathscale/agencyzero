@@ -3136,7 +3136,33 @@ function createWorkspace() {
     addDir: (projectId: string, path: string) => client().addDir(projectId, path),
     removeDir: (projectId: string, path: string) => client().removeDir(projectId, path),
     createItem: (projectId: string, title: string) => client().createItem(projectId, title),
-    reorderItems: (projectId: string, ids: string[]) => client().reorderItems(projectId, ids),
+    async reorderItems(projectId: string, ids: string[]) {
+      const previous = (state.items[projectId] ?? []).map((item) => ({
+        id: item.id,
+        order: item.order,
+      }));
+      setState((d) => {
+        const list = d.items[projectId] ?? [];
+        ids.forEach((id, order) => {
+          const item = list.find((candidate) => candidate.id === id);
+          if (item) item.order = order;
+        });
+      });
+      try {
+        const items = await client().reorderItems(projectId, ids);
+        for (const item of items) upsertItem(item);
+        return items;
+      } catch (cause) {
+        setState((d) => {
+          const list = d.items[projectId] ?? [];
+          for (const saved of previous) {
+            const item = list.find((candidate) => candidate.id === saved.id);
+            if (item) item.order = saved.order;
+          }
+        });
+        throw cause;
+      }
+    },
     setItemStatus: (id: string, status: ProjectStatus) => client().setItemStatus(id, status),
     async updateItem(id: string, title: string) {
       const previous = Object.values(state.items)
