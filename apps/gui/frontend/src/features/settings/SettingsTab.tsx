@@ -1026,6 +1026,7 @@ export function SettingsTab(): JSX.Element {
                   value: model.id,
                   label: model.name,
                 }))}
+                isDisabled={enabledModels(current().taskManager.agent).length < 2}
                 onChange={selectTaskManagerModel}
               />
             </Row>
