@@ -7,14 +7,14 @@ QA profile before changing any status.
 ## Current audit subject
 
 - AgencyZero: PR 186, app version 0.8.36
-- ps-qa: version 0.3.2, published from merged PR 9
+- ps-qa: PR 10 candidate (0.3.3), deliberately not published until this audit batch is stable
 - blitz-control-protocol and tauri-runtime-blitz: version 0.1.5, published
 - PromptSyntax-rs: version 0.2.0, published
 - PathScale UI: version 2.9.1, published
-- Checks: 112 in 19 groups
+- Checks: 139 in 20 groups
 
-The current run must use `--features blitz-inspector` and
-`/tmp/qa-profile-db`. ps-qa discovers the live descriptor through its normal
+The current run uses `/tmp/qa-profile-db` and launches the built application
+with `--blitz-control`. ps-qa discovers the live descriptor through its normal
 CLI path. Every action is addressed by semantic node id. Coordinate pointer
 activation is not valid audit evidence.
 
@@ -68,20 +68,21 @@ lookups.
 | status | 2 |
 | sections | 17 |
 | chrome | 11 |
-| tasklog | 5 |
-| transcript | 1 |
+| tasklog | 7 |
+| transcript | 2 |
+| session | 5 |
 | rename | 3 |
 | toggles | 6 |
 | verbosity | 1 |
 | dialog | 5 |
 | delete | 2 |
-| settings | 9 |
-| analytics | 6 |
+| settings | 19 |
+| analytics | 7 |
 | composer | 8 |
-| notes | 1 |
-| home | 14 |
+| notes | 3 |
+| home | 15 |
 | theme | 18 |
-| **total** | **117** |
+| **total** | **139** |
 
 Run 32640904469 completed 19/23. Two failures were the same real UI regression:
 semantic activation of both rename buttons left a 0x0 textbox. The critical
@@ -124,9 +125,19 @@ resolves the previously anonymous verbosity slider. It is not an outcome
 verdict: released ps-qa 0.3.2 rejected the new `Enabled` expectation before
 running any of the declared checks. The broad sweep then reached the UI 2.9.1
 event-forwarding failure: Settings controls reported no semantic change and
-the retained Settings surface prevented Analytics and Home from opening. UI PR
-262 and ps-qa PR 10 are green and must be released before the 112-check rerun.
-Until then the only defensible failure count is "measurement blocked", not zero.
+the retained Settings surface prevented Analytics and Home from opening.
+
+Since that run, PR 186 has standardized dynamic project, recent, item and
+disclosure names and expanded the suite to 139 checks. Clipboard, session,
+notes, verbosity, refresh, re-check, usage, performance and proxy lifecycle
+actions now require a semantic state transition rather than accepting a click.
+The exact local build is
+`/Users/revenge/AgencyZero/builds/AgencyZero-pr186-530b675.app`. Its frontend
+gate is 79/79 files and 707/707 tests; the Rust workspace is green with 336
+tests, and the source-bearing PR CI jobs are green. The managed agent sandbox
+cannot launch even `/Applications/AgencyZero.app` through LaunchServices, so
+the latest 139-check live rerun is still required before merge. The defensible
+live failure count remains "measurement blocked", not zero.
 
 ## Manual release worklist
 
@@ -149,9 +160,11 @@ node ids and observes the specific user-visible state change promised by that
 control. Manual native panels and external links remain the only exclusions,
 and they are counted and named for per-release verification.
 
-The inventory currently contains 475 controls while the outcome suite contains
-117 checks. That is an incomplete audit. Unverified controls remain work; they
-must never be summarized as passes.
+The last live inventory contains 475 controls while the current outcome suite
+contains 139 checks. One check may cover a repeated family only when every
+instance has the same explicit accessible action contract. The latest live
+inventory/reconciliation is still required. Unverified controls remain work;
+they must never be summarized as passes.
 
 ## Known coverage gaps
 
@@ -160,9 +173,11 @@ These are missing assertions, not application failures:
 1. Fork checks do not yet assert the durable store result.
 2. Reorder controls lack ordered-sequence assertions; newest-item order now has a rendered check.
 3. The icon check does not yet mutation-test captured ink.
-4. Most controls have not been promoted from broad coverage into a specific
-   outcome check.
-5. The 713-test legacy frontend suite is renderer-blind and manual-only. Delete
+4. The two process-level inspection/restart controls require disposable-process
+   outcome runs; they cannot be turned green in the shared application process.
+5. The latest source needs a fresh live inventory to replace the stale dynamic
+   names in run 32673498486 and establish the exact remaining count.
+6. The 707-test legacy frontend suite is renderer-blind and manual-only. Delete
    each obsolete test after its real outcome check exists, or immediately when
    it never asserted a user-visible outcome.
 
@@ -174,8 +189,10 @@ appended to resumed provider turns rather than only the first system prompt.
 ## Dependency delivery status
 
 `blitz-control-protocol` and `tauri-runtime-blitz` 0.1.5 are published after
-green Linux protocol and macOS 14/26 runtime jobs. ps-qa 0.3.2 is published from
-merged PR 9 with strict Clippy and generic post-action diagnostics. PromptSyntax
+green Linux protocol and macOS 14/26 runtime jobs. ps-qa PR 10 is green with
+strict Clippy, exact-node value/name transitions, disabled-state outcomes,
+strict inventory gating and offline reconciliation; it remains unreleased so
+the next version contains the complete audit batch rather than a micro release. PromptSyntax
 0.2.0 and PathScale UI 2.9.1 are also published. Agency's workflow now consumes
 released versions rather than git patches and inventories every interactive
 role by semantic node id with explicit manual, isolated and unverified classes.
