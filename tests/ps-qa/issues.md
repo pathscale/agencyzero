@@ -52,6 +52,7 @@ continuation, and their implementation changes infrequently.
 | theme and glass controls | 19/19 | 32703091144 |
 | native shared language selector | 2/2 | 32712761929 |
 | Composer controls and disconnected-agent gate | 13/13 | 32717296869 |
+| recovered-session editor and reset controls | 8/8 | 32717589257 |
 
 The settings snapshot verdict is not a click acknowledgement. Its log contains
 `create_store_snapshot` followed by `store snapshot written`; the check only
@@ -122,7 +123,7 @@ present on any delivery branch.
 ## Validation still running
 
 - 32712761929: native shared UI language selector — passed
-- 32716735293: direct Resume-session editor with reactive active-project source
+- 32717589257: direct Resume-session editor with semantic attached-state change — passed 8/8
 - 32717296869: enabled Composer model-node activation and disconnected-agent Send gate — passed 13/13
 - 32715244253: native Settings moderator-model selector — passed 60/60
 
