@@ -54,7 +54,7 @@
     (
         id: "session-change-persists-id",
         group: "session",
-        what: "entering a replacement session id persists it into the attached-session status",
+        what: "entering a replacement session id changes the editor's attached-session status",
         open: None,
         hover: None,
         click: None,
@@ -62,8 +62,8 @@
         text: Some("019fc95e-qa-audit-session"),
         key: Some("Enter"),
         key_on: Some("textbox:Resume a session by id"),
-        subject: "Attached: 019fc95e-qa-audit-session",
-        expect: Paints,
+        subject: "textbox:Resume a session by id",
+        expect: NameChanges,
     ),
     (
         id: "session-reset-confirms",

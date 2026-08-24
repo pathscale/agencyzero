@@ -966,7 +966,7 @@ function ResumeSession(props: {
       <Input.Field
         value={id()}
         disabled={busy() || props.running}
-        aria-label={tx("Resume a session by id")}
+        aria-label={`${tx("Resume a session by id")} — ${sessionStatus()}`}
         placeholder={tx("session id, e.g. 019fc95e-…")}
         onInput={(event) => setId(event.currentTarget.value)}
         onKeyDown={(event) => {
