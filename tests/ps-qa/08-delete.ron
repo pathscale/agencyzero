@@ -6,7 +6,7 @@
         what: "deleting a project asks before it removes anything",
         open: Some("Home"),
         hover: None,
-        click: Some("Delete e756"),
+        click: Some("Delete project e756"),
         // Assert the unique semantic confirmation control, not nearby prose.
         // Plain text is not guaranteed to become an accessibility node.
         subject: "Confirm delete: e756",
@@ -16,7 +16,7 @@
         id: "delete-cancel-restores-row",
         group: "delete",
         what: "Cancel exits project deletion without removing the row",
-        open: Some("Delete e756"),
+        open: Some("Delete project e756"),
         hover: None,
         click: Some("Cancel"),
         subject: "Confirm delete: e756",

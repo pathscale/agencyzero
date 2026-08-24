@@ -14,8 +14,8 @@
         what: "pressing the pencil opens an editor the owner can type into",
         open: Some("Home"),
         hover: None,
-        click: Some("Rename e756"),
-        subject: "textbox:Rename e756",
+        click: Some("Rename project "),
+        subject: "textbox:Rename project ",
         expect: PaintsNamed,
     ),
     (

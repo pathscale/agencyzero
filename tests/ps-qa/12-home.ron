@@ -78,8 +78,8 @@
         what: "a project group can be collapsed",
         open: Some("Home"),
         hover: None,
-        click: Some("Collapse theta theta north indi"),
-        subject: "Expand theta theta north indi",
+        click: Some("Collapse project "),
+        subject: "Expand project ",
         expect: Paints,
     ),
     (
@@ -88,8 +88,8 @@
         what: "a project group can be expanded again",
         open: Some("Home"),
         hover: None,
-        click: Some("Expand theta theta north indi"),
-        subject: "Collapse theta theta north indi",
+        click: Some("Expand project "),
+        subject: "Collapse project ",
         expect: Paints,
     ),
     (

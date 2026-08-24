@@ -366,7 +366,7 @@ describe("Home item rows", () => {
       true,
     );
 
-    fireEvent.click(screen.getByLabelText("Delete foo.bar"));
+    fireEvent.click(screen.getByLabelText("Delete project foo.bar"));
     flush();
 
     expect(screen.getByText("Delete?")).toBeTruthy();

@@ -1314,7 +1314,7 @@ function ProjectGroup(props: {
           value={props.project.name}
           onRename={(name) => actions.renameProject(props.project.id, name)}
           onActivate={() => actions.openProject(props.project.id)}
-          label={`Rename ${props.project.name}`}
+          label={tx("Rename project {name}", { name: props.project.name })}
           class="min-w-0 font-semibold text-[13px] text-base-content"
           inputClass="font-semibold text-[13px]"
         />
@@ -1348,7 +1348,7 @@ function ProjectGroup(props: {
             <Button
               type="button"
               onClick={() => setConfirming(true)}
-              aria-label={tx("Delete {name}", { name: props.project.name })}
+              aria-label={tx("Delete project {name}", { name: props.project.name })}
               class="shrink-0 text-az-ghost transition-colors hover:text-error"
             >
               <Icon name="x" class="text-[14px]" />
@@ -1387,7 +1387,7 @@ function ProjectGroup(props: {
           type="button"
           onClick={toggleCollapsed}
           aria-expanded={!collapsed() ? "true" : "false"}
-          aria-label={tx(collapsed() ? "Expand {name}" : "Collapse {name}", {
+          aria-label={tx(collapsed() ? "Expand project {name}" : "Collapse project {name}", {
             name: props.project.name,
           })}
           class="shrink-0 text-az-dim transition-colors hover:text-az-body"
