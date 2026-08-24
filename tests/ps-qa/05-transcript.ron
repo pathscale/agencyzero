@@ -2,6 +2,16 @@
 // hidden retained tree.
 [
     (
+        id: "transcript-copy-message",
+        group: "transcript",
+        what: "copying a transcript message reports that the clipboard write succeeded",
+        open: Some("theta theta north indi"),
+        hover: None,
+        click: Some("Copy this message"),
+        subject: "Copied message",
+        expect: Paints,
+    ),
+    (
         id: "transcript-show-earlier",
         group: "transcript",
         what: "revealing earlier transcript messages adds rendered rows",

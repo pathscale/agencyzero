@@ -603,7 +603,7 @@ export function CopyMessageButton(props: { body: string }): JSX.Element {
           window.setTimeout(() => setCopied(false), 1_400);
         });
       }}
-      aria-label={tx("Copy this message")}
+      aria-label={tx(copied() ? "Copied message" : "Copy this message")}
       title={tx("Copy the whole message")}
       class="shrink-0 text-az-faint transition-colors hover:text-base-content"
     >

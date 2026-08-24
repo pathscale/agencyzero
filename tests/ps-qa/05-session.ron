@@ -1,0 +1,14 @@
+// Clipboard actions only pass when the live UI acknowledges a successful
+// write. Merely activating the button is not an outcome.
+[
+    (
+        id: "session-copy-id",
+        group: "session",
+        what: "copying the current session id reports that the clipboard write succeeded",
+        open: Some("theta theta north indi"),
+        hover: None,
+        click: Some("Copy session id"),
+        subject: "Copied session id",
+        expect: Paints,
+    ),
+]

@@ -921,7 +921,7 @@ function SessionChip(props: { sessionId: string | null }): JSX.Element {
           <Button
             type="button"
             onClick={() => void copy(id())}
-            aria-label={tx("Copy session id")}
+            aria-label={tx(copied() ? "Copied session id" : "Copy session id")}
             class="flex size-[18px] items-center justify-center rounded transition-colors hover:bg-white/8 hover:text-az-body"
           >
             <Icon name={copied() ? "check" : "copy"} class="text-[10px]" />

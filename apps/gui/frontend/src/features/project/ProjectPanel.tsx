@@ -2149,7 +2149,9 @@ function TaskLogList(props: { projectId: string }): JSX.Element {
                     [`${entry.tool} ${entry.label}`, entry.output].filter(Boolean).join("\n\n"),
                   )
                 }
-                aria-label={tx("Copy this task-log entry")}
+                aria-label={tx(
+                  copied() === entry.id ? "Copied task-log entry" : "Copy this task-log entry",
+                )}
                 title={copied() === entry.id ? tx("Copied") : tx("Copy")}
                 class="shrink-0 rounded p-0.5 text-az-faint transition-colors hover:text-az-body"
               >
@@ -2202,6 +2204,7 @@ function TaskLogList(props: { projectId: string }): JSX.Element {
 /** The whole visible log as text: outcome, label, meta — one line per entry. */
 function CopyLogButton(props: { projectId: string }): JSX.Element {
   const { state } = useWorkspace();
+  const [copied, setCopied] = createSignal(false);
   const copy = async (): Promise<void> => {
     const text = (state.taskLog[props.projectId] ?? [])
       .map(
@@ -2209,19 +2212,18 @@ function CopyLogButton(props: { projectId: string }): JSX.Element {
           `${entry.ok === true ? "ok" : entry.ok === false ? "FAILED" : "?"} ${entry.label} · ${taskMeta(entry)}`,
       )
       .join("\n");
-    try {
-      await navigator.clipboard.writeText(text);
-    } catch (cause) {
-      log.warn(`could not copy the task log: ${describeError(cause)}`);
-    }
+    if (!(await copyText(text))) return;
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 1_400);
   };
   return (
     <Button
       type="button"
       onClick={() => void copy()}
+      aria-label={tx(copied() ? "Copied task log" : "Copy task log")}
       class="shrink-0 text-[11px] text-az-faint transition-colors hover:text-base-content"
     >
-      {tx("Copy")}
+      {tx(copied() ? "Copied" : "Copy")}
     </Button>
   );
 }
