@@ -12,7 +12,12 @@ AppProfile(
     // before the others would delete the rows those others are reached through.
     surfaces: [
         (name: "project",   opener: "\u{0}dynamic-document", marker: Some("Send")),
-        (name: "settings",  opener: "Settings", marker: Some("Appearance")),
+        (
+            name: "settings",
+            opener: "Settings",
+            marker: Some("Appearance"),
+            reveal_with: Some("Search settings"),
+        ),
         (name: "analytics", opener: "Analytics", marker: Some("Outcome per dollar")),
         (name: "home",      opener: "Home", marker: Some("Sort Home")),
     ],
