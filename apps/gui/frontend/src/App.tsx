@@ -38,11 +38,13 @@ function ActiveProjectPanel(): JSX.Element {
    */
   const [lastSeen, setLastSeen] = createSignal<{ project: Project; tab: Tab } | null>(null);
   createEffect(
-    () => [state.activeKey, state.projects, state.tabs] as const,
     () => {
       const project = state.projects.find((candidate) => candidate.id === state.activeKey);
       const tab = state.tabs.find((candidate) => candidate.key === state.activeKey);
-      if (project && tab) setLastSeen({ project, tab });
+      return project && tab ? { project, tab } : null;
+    },
+    (current) => {
+      if (current) setLastSeen(current);
     },
   );
   const active = lastSeen;
