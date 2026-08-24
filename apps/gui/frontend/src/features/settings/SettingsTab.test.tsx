@@ -112,7 +112,7 @@ describe("store backups", () => {
 describe("AgencyProxy lifecycle", () => {
   it("keeps an idle stop down until the owner starts it", async () => {
     const screen = await mountSettings();
-    const stop = await screen.findByRole("button", { name: "Stop" });
+    const stop = await screen.findByRole("button", { name: "Stop AgencyProxy" });
 
     expect(screen.getByText("(fixture endpoint)")).toBeTruthy();
 
@@ -121,7 +121,7 @@ describe("AgencyProxy lifecycle", () => {
     await waitFor(() => expect(screen.getByText("AgencyProxy stopped")).toBeTruthy());
     expect(screen.workspace.state.agencyProxy?.connected).toBe(false);
 
-    const start = screen.getByRole("button", { name: "Start" });
+    const start = screen.getByRole("button", { name: "Start AgencyProxy" });
     await waitFor(() => expect(start).toBeEnabled());
     fireEvent.click(start);
     flush();
@@ -132,7 +132,7 @@ describe("AgencyProxy lifecycle", () => {
   it("offers graceful Stop during a live run and explains the wait", async () => {
     setMockProxyActiveRuns(1);
     const screen = await mountSettings();
-    const stop = await screen.findByRole("button", { name: "Stop" });
+    const stop = await screen.findByRole("button", { name: "Stop AgencyProxy" });
 
     fireEvent.click(stop);
     flush();

@@ -683,6 +683,7 @@ export function SettingsTab(): JSX.Element {
                 </Button>
                 <Button
                   type="button"
+                  aria-label={tx("Use bundled AgencyProxy")}
                   disabled={!current().agentProxyBinary}
                   onClick={() => void actions.saveSettings({ agentProxyBinary: "" })}
                   class="rounded-lg border border-az-hairline-strong px-3 py-[5px] text-[12px] text-az-muted transition-colors hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-40"
@@ -721,6 +722,13 @@ export function SettingsTab(): JSX.Element {
               </Button>
               <Button
                 type="button"
+                aria-label={
+                  state.agencyProxy?.connected === false
+                    ? tx("Start AgencyProxy")
+                    : (state.agencyProxy?.activeRuns ?? 0) > 0
+                      ? tx("Wait and restart AgencyProxy")
+                      : tx("Restart AgencyProxy")
+                }
                 disabled={proxyAction() !== null || !isLive("restartAgentProxy")}
                 onClick={() => restartProxy("drain")}
                 class="rounded-lg border border-warning/40 px-3 py-[5px] text-[12px] text-warning transition-colors hover:border-warning hover:bg-warning/8 disabled:cursor-not-allowed disabled:opacity-40"
@@ -755,6 +763,7 @@ export function SettingsTab(): JSX.Element {
               <Show when={state.agencyProxy?.connected && isLive("stopAgentProxy")}>
                 <Button
                   type="button"
+                  aria-label={tx("Stop AgencyProxy")}
                   disabled={proxyAction() !== null}
                   onClick={stopProxy}
                   class="rounded-lg border border-az-hairline-strong px-3 py-[5px] text-[12px] text-az-muted transition-colors hover:border-error hover:text-error disabled:cursor-not-allowed disabled:opacity-40"
