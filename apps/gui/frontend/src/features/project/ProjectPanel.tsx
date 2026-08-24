@@ -1553,72 +1553,6 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
                     </span>
                   </div>
                 </div>
-                <Button
-                  type="button"
-                  onClick={(event) => {
-                    const box = event.currentTarget.getBoundingClientRect();
-                    setContextAnchor({
-                      left: box.left,
-                      top: box.top,
-                      right: box.right,
-                      bottom: box.bottom,
-                      width: box.width,
-                      height: box.height,
-                    });
-                    void toggleDescription(item);
-                  }}
-                  title={tx("Description / sub-items")}
-                  aria-label={tx("Edit the description for {name}", { name: item.title })}
-                  aria-expanded={descriptionDraft()?.item.id === item.id ? "true" : "false"}
-                  aria-controls={`item-description-${item.id}`}
-                  /*
-                    These action buttons are plain siblings in the row, so
-                    without a margin their 1px borders meet and read as one
-                    segmented control rather than three separate targets. The
-                    row cannot carry a `gap` instead: it also holds the title
-                    and the status label, which want the wider spacing.
-                  */
-                  class={`relative ml-0.5 flex size-[22px] shrink-0 items-center justify-center rounded-md border transition-colors hover:border-primary/70 hover:bg-az-chip-strong ${
-                    descriptionDraft()?.item.id === item.id || item.context?.trim()
-                      ? "border-primary/45 bg-az-chip text-primary"
-                      : "border-primary/20 bg-az-chip text-az-muted"
-                  }`}
-                >
-                  <Icon name="list-checks" class="text-[13px]" />
-                </Button>
-                <Button
-                  type="button"
-                  onClick={(event) => {
-                    const box = event.currentTarget.getBoundingClientRect();
-                    setContextAnchor({
-                      left: box.left,
-                      top: box.top,
-                      right: box.right,
-                      bottom: box.bottom,
-                      width: box.width,
-                      height: box.height,
-                    });
-                    openFork(item);
-                  }}
-                  disabled={forkingId() === item.id}
-                  title={
-                    forkFor(item.id)
-                      ? tx("Open this item's lower-token fork")
-                      : tx("Start a fresh fork to avoid resending this project's long chat")
-                  }
-                  aria-label={
-                    forkFor(item.id)
-                      ? tx("Open the fork for {name}", { name: item.title })
-                      : tx("Fork {name} into a fresh chat", { name: item.title })
-                  }
-                  class={`relative ml-0.5 flex size-[22px] shrink-0 items-center justify-center rounded-md border transition-colors hover:border-primary/70 hover:bg-az-chip-strong disabled:opacity-30 ${
-                    forkFor(item.id)
-                      ? "border-primary/55 bg-az-chip text-primary"
-                      : "border-primary/30 bg-az-chip text-primary/80"
-                  } ${item.status === "questions" ? "" : "mr-1"}`}
-                >
-                  <Icon name="git-fork" class="text-[13px]" />
-                </Button>
                 <Show when={item.status === "questions"}>
                   <Show
                     when={questionFor(item)}
@@ -1664,9 +1598,68 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
                 <Show when={activeRowId() === item.id}>
                   <div
                     class={`absolute inset-y-0 flex items-center justify-end gap-1 rounded-r-[9px] bg-gradient-to-l from-60% from-base-300 to-transparent pr-2 pl-6 ${
-                      item.status === "questions" ? "right-[74px]" : "right-[50px]"
+                      item.status === "questions" ? "right-[26px]" : "right-0"
                     }`}
                   >
+                    <Button
+                      type="button"
+                      onClick={(event) => {
+                        const box = event.currentTarget.getBoundingClientRect();
+                        setContextAnchor({
+                          left: box.left,
+                          top: box.top,
+                          right: box.right,
+                          bottom: box.bottom,
+                          width: box.width,
+                          height: box.height,
+                        });
+                        void toggleDescription(item);
+                      }}
+                      title={tx("Description / sub-items")}
+                      aria-label={tx("Edit the description for {name}", { name: item.title })}
+                      aria-expanded={descriptionDraft()?.item.id === item.id ? "true" : "false"}
+                      aria-controls={`item-description-${item.id}`}
+                      class={`shrink-0 rounded-md border p-1 transition-colors hover:border-primary/70 hover:bg-az-chip-strong ${
+                        descriptionDraft()?.item.id === item.id || item.context?.trim()
+                          ? "border-primary/45 bg-az-chip text-primary"
+                          : "border-primary/20 bg-az-chip text-az-muted"
+                      }`}
+                    >
+                      <Icon name="list-checks" class="text-[12px]" />
+                    </Button>
+                    <Button
+                      type="button"
+                      onClick={(event) => {
+                        const box = event.currentTarget.getBoundingClientRect();
+                        setContextAnchor({
+                          left: box.left,
+                          top: box.top,
+                          right: box.right,
+                          bottom: box.bottom,
+                          width: box.width,
+                          height: box.height,
+                        });
+                        openFork(item);
+                      }}
+                      disabled={forkingId() === item.id}
+                      title={
+                        forkFor(item.id)
+                          ? tx("Open this item's lower-token fork")
+                          : tx("Start a fresh fork to avoid resending this project's long chat")
+                      }
+                      aria-label={
+                        forkFor(item.id)
+                          ? tx("Open the fork for {name}", { name: item.title })
+                          : tx("Fork {name} into a fresh chat", { name: item.title })
+                      }
+                      class={`shrink-0 rounded-md border p-1 transition-colors hover:border-primary/70 hover:bg-az-chip-strong disabled:opacity-30 ${
+                        forkFor(item.id)
+                          ? "border-primary/55 bg-az-chip text-primary"
+                          : "border-primary/30 bg-az-chip text-primary/80"
+                      }`}
+                    >
+                      <Icon name="git-fork" class="text-[12px]" />
+                    </Button>
                     <Show when={item.status !== "finished"}>
                       <Button
                         type="button"

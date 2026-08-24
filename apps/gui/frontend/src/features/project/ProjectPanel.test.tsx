@@ -143,7 +143,7 @@ describe("the project side panel", () => {
     expect(input.nextElementSibling).toBe(control);
   });
 
-  it("keeps the lower-token fork action visible without waiting for hover", async () => {
+  it("reveals the lower-token fork action with the row actions", async () => {
     let workspace!: Workspace;
 
     function Gate() {
@@ -162,8 +162,12 @@ describe("the project side panel", () => {
     ));
     await waitFor(() => expect(workspace.state.boot.status).toBe("ready"), { timeout: 5_000 });
 
+    const row = screen.container.querySelector<HTMLElement>("[data-item-id]");
+    if (!row) throw new Error("item row is missing");
+    fireEvent.pointerEnter(row);
+    flush();
+
     const fork = screen.getAllByLabelText(/Fork .* into a fresh chat/)[0];
-    expect(fork.classList).not.toContain("opacity-0");
     expect(fork.getAttribute("title")).toContain("avoid resending");
   });
 
@@ -185,6 +189,11 @@ describe("the project side panel", () => {
       </WorkspaceProvider>
     ));
     await waitFor(() => expect(workspace.state.boot.status).toBe("ready"), { timeout: 5_000 });
+
+    const row = screen.container.querySelector<HTMLElement>("[data-item-id]");
+    if (!row) throw new Error("item row is missing");
+    fireEvent.pointerEnter(row);
+    flush();
 
     const clickDescription = () =>
       fireEvent.click(
