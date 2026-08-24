@@ -175,13 +175,15 @@ holding a paid subscription:
 - Export JSONL
 - Select backup file…
 - Send / Send into the running turn
+- Run an item through an authenticated agent
+- Reply through an authenticated running agent
 - Restart AgencyProxy
 - Restart AgencyZero
 - Star on GitHub
 - View source
 
-The duplicate accessible labels account for twelve concrete controls. A person
-verifies them once per release.
+The final inventory records the exact concrete instances separately from these
+label families. A person verifies them once per release.
 
 ## Acceptance contract
 
