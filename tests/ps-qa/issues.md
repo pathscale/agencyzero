@@ -106,10 +106,11 @@ live result, which excludes gesture choice. Earlier live measurements in this
 component identified the boundary: UI Button's Dynamic element painted but
 dropped the nested consumer handler under Blitz. UI PR 262 replaced that
 element, but the combined PR-186/UI-262 candidate still left the pencil inert
-when the owner exercised it. Agency now keeps this critical edit path on
-literal `<button>` and `<input>` elements. The rename verdict also types a
-replacement, commits it, and requires the newly named project control to
-paint; merely opening a textbox is no longer accepted as a successful rename.
+when the owner exercised it. Agency now keeps the UI-owned Button and Input
+mounted and swaps one ordinary display class, avoiding a fresh reactive branch
+at activation time. The rename verdict also types a replacement, commits it,
+and requires the newly named project control to paint; merely opening a
+textbox is no longer accepted as a successful rename.
 
 Run 32672023708 deliberately remeasured that known failure after the workflow
 started preserving ps-qa's pipeline exit status. The job finished red at

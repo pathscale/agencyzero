@@ -35,34 +35,21 @@ describe("the editable title", () => {
     return { screen, onRename };
   };
 
-  // Asserts the field is there or not, rather than which classes it carries.
-  // These used to check for a "hidden" class, because both branches were
-  // mounted for the life of the component to work around a renderer that would
-  // not attach a `<Show>` branch. It attaches them now, so the swap is an
-  // ordinary mount and a class assertion would only describe the styling.
+  const hidden = (element: HTMLElement): boolean => Boolean(element.closest(".hidden"));
+
   it("shows the field and hides the name when the pencil is pressed", () => {
     const { screen } = setup();
-    const pencil = screen.getByLabelText("Rename derived name");
+    const pencil = screen.getByLabelText("Rename derived name") as HTMLElement;
+    const field = screen.getByLabelText("Project name") as HTMLElement;
 
-    expect(screen.queryByLabelText("Project name")).toBeNull();
-
-    fireEvent.click(pencil);
-    flush();
-
-    expect(screen.getByLabelText("Project name")).toBeTruthy();
-    // The name it replaces steps out of the way.
-    expect(screen.queryByLabelText("Rename derived name")).toBeNull();
-  });
-
-  it("uses literal platform controls for the complete edit path", () => {
-    const { screen } = setup();
-    const pencil = screen.getByLabelText("Rename derived name");
-    expect(pencil.tagName).toBe("BUTTON");
+    expect(hidden(field)).toBe(true);
+    expect(hidden(pencil)).toBe(false);
 
     fireEvent.click(pencil);
     flush();
 
-    expect(screen.getByLabelText("Project name").tagName).toBe("INPUT");
+    expect(hidden(field)).toBe(false);
+    expect(hidden(pencil)).toBe(true);
   });
 
   it("starts the draft from the current name", () => {
@@ -101,7 +88,7 @@ describe("the editable title", () => {
     flush();
 
     expect(onRename).not.toHaveBeenCalled();
-    expect(screen.queryByLabelText("Project name")).toBeNull();
+    expect(hidden(field)).toBe(true);
   });
 
   it("refuses to write an empty name", () => {

@@ -1,5 +1,7 @@
+import { Input } from "@pathscale/ui";
 import type { JSX } from "@solidjs/web";
 import { createSignal, Show } from "solid-js";
+import { Button } from "~/components/Button";
 import { Icon } from "~/components/Icon";
 import { describeError, log } from "~/lib/log";
 import { tx } from "~/stores/i18n";
@@ -49,58 +51,49 @@ export function EditableTitle(props: {
 
   return (
     <span class={`flex min-w-0 items-center gap-1.5 ${props.class ?? ""}`}>
-      <Show
-        when={editing()}
-        fallback={
-          <span class="flex min-w-0 flex-1 items-center gap-1.5">
-            <Show
-              when={props.onActivate}
-              fallback={<span class="min-w-0 truncate">{props.value}</span>}
-            >
-              {(activate) => (
-                <button
-                  type="button"
-                  onClick={() => activate()()}
-                  class="min-w-0 truncate text-left"
-                >
-                  {props.value}
-                </button>
-              )}
-            </Show>
-            <button
-              type="button"
-              onClick={start}
-              disabled={busy()}
-              aria-label={props.label ?? tx("Rename {name}", { name: props.value })}
-              class="flex size-[18px] shrink-0 items-center justify-center rounded p-0 text-az-faint transition-colors hover:bg-white/8 hover:text-az-body"
-            >
-              <Icon name="pencil" class="text-[11px]" />
-            </button>
-          </span>
-        }
-      >
-        <span class="flex min-w-0 flex-1">
-          <input
-            ref={(element: HTMLInputElement) => {
-              field = element;
-            }}
-            value={draft()}
-            aria-label={props.label ?? tx("Project name")}
-            onInput={(event) => setDraft(event.currentTarget.value)}
-            onBlur={() => void commit()}
-            onKeyDown={(event) => {
-              if (event.key === "Enter") {
-                event.preventDefault();
-                void commit();
-              } else if (event.key === "Escape") {
-                event.preventDefault();
-                cancel();
-              }
-            }}
-            class={`min-w-0 flex-1 rounded-md border border-az-hairline-strong bg-az-inset px-2 py-0.5 text-az-title outline-none focus:border-az-link ${props.inputClass ?? ""}`}
-          />
-        </span>
-      </Show>
+      <span class={`${editing() ? "hidden" : "flex"} min-w-0 flex-1 items-center gap-1.5`}>
+        <Show
+          when={props.onActivate}
+          fallback={<span class="min-w-0 truncate">{props.value}</span>}
+        >
+          {(activate) => (
+            <Button type="button" onClick={() => activate()()} class="min-w-0 truncate text-left">
+              {props.value}
+            </Button>
+          )}
+        </Show>
+        <Button
+          type="button"
+          onClick={start}
+          disabled={busy()}
+          aria-label={props.label ?? tx("Rename {name}", { name: props.value })}
+          class="flex size-[18px] shrink-0 items-center justify-center rounded p-0 text-az-faint transition-colors hover:bg-white/8 hover:text-az-body"
+        >
+          <Icon name="pencil" class="text-[11px]" />
+        </Button>
+      </span>
+      {/* Keep the editor mounted: Blitz must only toggle one display class. */}
+      <span class={`${editing() ? "flex" : "hidden"} min-w-0 flex-1`}>
+        <Input
+          ref={(element: HTMLInputElement) => {
+            field = element;
+          }}
+          value={draft()}
+          aria-label={props.label ?? tx("Project name")}
+          onInput={(event) => setDraft(event.currentTarget.value)}
+          onBlur={() => void commit()}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") {
+              event.preventDefault();
+              void commit();
+            } else if (event.key === "Escape") {
+              event.preventDefault();
+              cancel();
+            }
+          }}
+          class={`min-w-0 flex-1 rounded-md border border-az-hairline-strong bg-az-inset px-2 py-0.5 text-az-title outline-none focus:border-az-link ${props.inputClass ?? ""}`}
+        />
+      </span>
     </span>
   );
 }
