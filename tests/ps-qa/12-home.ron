@@ -29,7 +29,7 @@
         open: Some("Home"),
         hover: None,
         click: Some("Open project "),
-        subject: "Send",
+        subject: "button:Send",
         expect: Paints,
     ),
     (
@@ -39,7 +39,7 @@
         open: Some("Home"),
         hover: None,
         click: Some("Open recent project "),
-        subject: "Send",
+        subject: "button:Send",
         expect: Paints,
     ),
     (
@@ -49,7 +49,7 @@
         open: Some("Home"),
         hover: None,
         click: Some("Open item "),
-        subject: "Send",
+        subject: "button:Send",
         expect: Paints,
     ),
     (
