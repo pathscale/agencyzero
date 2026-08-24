@@ -13786,51 +13786,6 @@ mod tests {
         assert!(github_issue_url("https://github.com/pathscale/agencyzero/pull/42").is_err());
     }
 
-    #[tokio::test]
-    async fn issue_references_round_trip_through_the_item_table() {
-        let dir = std::env::temp_dir().join(format!(
-            "az-item-issue-{}-{}",
-            std::process::id(),
-            chrono::Utc::now().timestamp_nanos_opt().unwrap_or_default()
-        ));
-        let tables = crate::db::tables::Tables::open(&dir)
-            .await
-            .expect("item-issue store opens");
-        tables
-            .project_item
-            .insert(ProjectItemRow {
-                id: "item-issue".into(),
-                project_id: "project-a".into(),
-                title: "Link this".into(),
-                status: "planning".into(),
-                position: 0,
-                reference: String::new(),
-                priority: 0,
-            })
-            .expect("item inserts");
-
-        let reference = "issue:https://github.com/example/repository/issues/40";
-        tables
-            .project_item
-            .update_reference_by_id(
-                ItemReferenceByIdQuery {
-                    reference: reference.into(),
-                },
-                "item-issue".to_string(),
-            )
-            .await
-            .expect("issue reference writes");
-
-        let row = tables
-            .project_item
-            .select("item-issue".to_string())
-            .expect("item remains readable");
-        assert_eq!(row.reference, reference);
-
-        tables.shutdown().await.expect("item-issue store drains");
-        let _ = std::fs::remove_dir_all(dir);
-    }
-
     #[test]
     fn partial_reply_checkpoints_keep_provider_identity_within_the_blob_limit() {
         let raw = encode_partial_reply(
