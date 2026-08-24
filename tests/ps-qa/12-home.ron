@@ -13,6 +13,17 @@
         expect: Disabled,
     ),
     (
+        id: "home-project-page-reveals",
+        group: "home",
+        what: "the Home pager renders the next viewport-sized project page",
+        open: Some("Home"),
+        hover: None,
+        click: Some("button:Show 5 more projects"),
+        subject: "button:Open project ",
+        expect: PaintsMore,
+        covers: ["button:Show * more projects"],
+    ),
+    (
         id: "home-new-project",
         group: "home",
         what: "New Project opens an editable draft",

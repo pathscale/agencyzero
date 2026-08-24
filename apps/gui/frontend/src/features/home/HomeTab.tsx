@@ -23,8 +23,12 @@ import { prefs, setPrefs, togglePanelSection } from "~/stores/prefs";
 import { TASK_MANAGER_ID, useWorkspace } from "~/stores/workspace";
 import type { Project, ProjectItem } from "~/types";
 
-export const HOME_PROJECT_PAGE_SIZE = 30;
-export const HOME_RECENT_PAGE_SIZE = 20;
+// Five full groups or recent cards fill their respective viewport columns.
+// Building 30 groups plus 20 duplicate cards before first paint made a return
+// to Home take 8-10 seconds on a realistic profile; the existing pagers keep
+// the complete collection one semantic activation away.
+export const HOME_PROJECT_PAGE_SIZE = 5;
+export const HOME_RECENT_PAGE_SIZE = 5;
 
 const STATUS_TONE: Record<ProjectItem["status"], string> = {
   active: "font-semibold text-primary",
