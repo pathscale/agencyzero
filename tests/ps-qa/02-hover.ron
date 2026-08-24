@@ -1,14 +1,13 @@
-// Project-row actions stay mounted for keyboard and semantic access, while CSS
-// reveals their ink on hover/focus. Test what the controls actually promise:
-// ordering, editing and deletion. Merely finding an icon after Hover was a
-// renderer-blind assertion and let an unmounted action cluster pass.
+// Project-row actions mount for the active row only. Hover the row's named
+// status control first, then drive the revealed action by semantic node id.
+// Test what the controls actually promise: ordering, editing and deletion.
 [
     (
         id: "row-action-moves-up",
         group: "row-actions",
         what: "Move up places the exact middle item above its previous sibling",
         open: Some("theta theta north indi"),
-        hover: None,
+        hover: Some("Change the status of iota beta zeta delta north cobalt epsilon omega lambda epsilon"),
         click: Some("button:Move iota beta zeta delta north cobalt epsilon omega lambda epsilon up"),
         compare: Some("Change the status of amber omega zeta east amber zeta cobalt omega north beta sigma amber amber om"),
         subject: "Change the status of iota beta zeta delta north cobalt epsilon omega lambda epsilon",
@@ -20,7 +19,7 @@
         group: "row-actions",
         what: "Move down restores the exact item below its previous sibling",
         open: Some("theta theta north indi"),
-        hover: None,
+        hover: Some("Change the status of iota beta zeta delta north cobalt epsilon omega lambda epsilon"),
         click: Some("button:Move iota beta zeta delta north cobalt epsilon omega lambda epsilon down"),
         compare: Some("Change the status of iota beta zeta delta north cobalt epsilon omega lambda epsilon"),
         subject: "Change the status of amber omega zeta east amber zeta cobalt omega north beta sigma amber amber om",
@@ -31,7 +30,7 @@
         group: "row-actions",
         what: "the project-row pencil opens the exact inline editor",
         open: Some("theta theta north indi"),
-        hover: None,
+        hover: Some("Change the status of iota beta zeta delta north cobalt epsilon omega lambda epsilon"),
         click: Some("button:Edit iota beta zeta delta north cobalt epsilon omega lambda epsilon"),
         subject: "textbox:Edit iota beta zeta delta north cobalt epsilon omega lambda epsilon",
         expect: PaintsNamed,
@@ -42,7 +41,7 @@
         group: "row-actions",
         what: "the project-row editor saves a replacement title on Enter",
         open: None,
-        hover: None,
+        hover: Some("Change the status of qa audit project item"),
         click: None,
         type_into: Some("textbox:Edit iota beta zeta delta north cobalt epsilon omega lambda epsilon"),
         text: Some("qa audit project item"),

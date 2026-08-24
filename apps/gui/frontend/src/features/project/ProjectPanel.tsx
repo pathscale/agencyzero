@@ -1082,6 +1082,7 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
    */
   const [query, setQuery] = createSignal("");
   const [itemLimit, setItemLimit] = createSignal(PROJECT_ITEM_PAGE_SIZE);
+  const [activeRowId, setActiveRowId] = createSignal<string | null>(null);
   const shown = createMemo(() => {
     const needle = query().trim().toLowerCase();
     const items = needle
@@ -1385,13 +1386,26 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
             <div class="rounded-[9px]">
               <div
                 data-item-id={item.id}
+                role="listitem"
+                aria-label={item.title}
                 tabindex={-1}
+                onPointerEnter={() => setActiveRowId(item.id)}
+                onPointerLeave={() => {
+                  if (activeRowId() === item.id) setActiveRowId(null);
+                }}
                 onFocusIn={() => {
+                  setActiveRowId(item.id);
                   if (descriptionDraft() && descriptionDraft()?.item.id !== item.id) {
                     setDescriptionDraft(null);
                   }
                   if (issueDraft() && issueDraft()?.item.id !== item.id) {
                     setIssueDraft(null);
+                  }
+                }}
+                onFocusOut={(event) => {
+                  const next = event.relatedTarget;
+                  if (!(next instanceof Node) || !event.currentTarget.contains(next)) {
+                    if (activeRowId() === item.id) setActiveRowId(null);
                   }
                 }}
                 /*
@@ -1643,111 +1657,113 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
                  * keeps the icons legible where they overlap a long title. These
                  * act on the row, they are not part of reading it.
                  */}
-                <div
-                  class={`absolute inset-y-0 flex items-center justify-end gap-1 rounded-r-[9px] bg-gradient-to-l from-60% from-base-300 to-transparent pr-2 pl-6 opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100 ${
-                    item.status === "questions" ? "right-[74px]" : "right-[50px]"
-                  }`}
-                >
-                  <Show when={item.status !== "finished"}>
+                <Show when={activeRowId() === item.id}>
+                  <div
+                    class={`absolute inset-y-0 flex items-center justify-end gap-1 rounded-r-[9px] bg-gradient-to-l from-60% from-base-300 to-transparent pr-2 pl-6 ${
+                      item.status === "questions" ? "right-[74px]" : "right-[50px]"
+                    }`}
+                  >
+                    <Show when={item.status !== "finished"}>
+                      <Button
+                        type="button"
+                        onClick={() => {
+                          const question = questionFor(item);
+                          if (question) replyTo(question);
+                          else run(item);
+                        }}
+                        // Not gated on isLive: the mock serves sendMessage the same
+                        // as the composer does, so the preview can exercise this.
+                        disabled={!questionFor(item) && isRunning()}
+                        title={
+                          questionFor(item)
+                            ? tx("Reply to this item's question")
+                            : isRunning()
+                              ? tx("A run is already in flight on this project")
+                              : tx("Send this item to the agent, on this project's session")
+                        }
+                        aria-label={
+                          questionFor(item)
+                            ? tx("Reply to the question for {name}", { name: item.title })
+                            : tx("Run {name}", { name: item.title })
+                        }
+                        class={`shrink-0 rounded-md border p-1 transition-colors disabled:opacity-30 ${
+                          questionFor(item)
+                            ? "border-warning/55 bg-warning/18 text-warning hover:border-warning hover:bg-warning/30"
+                            : "border-transparent text-az-faint hover:border-primary/25 hover:bg-az-chip hover:text-primary"
+                        }`}
+                      >
+                        <Icon
+                          name={questionFor(item) ? "message-square-dashed" : "play"}
+                          class="text-[12px]"
+                        />
+                      </Button>
+                    </Show>
+                    {/* Revealed on hover: the controls all the time would be louder
+                than the titles they act on. */}
                     <Button
                       type="button"
                       onClick={() => {
-                        const question = questionFor(item);
-                        if (question) replyTo(question);
-                        else run(item);
+                        setDescriptionDraft(null);
+                        setIssueDraft({
+                          item,
+                          url: issueUrl(item.reference ?? "") ?? "",
+                        });
                       }}
-                      // Not gated on isLive: the mock serves sendMessage the same
-                      // as the composer does, so the preview can exercise this.
-                      disabled={!questionFor(item) && isRunning()}
-                      title={
-                        questionFor(item)
-                          ? tx("Reply to this item's question")
-                          : isRunning()
-                            ? tx("A run is already in flight on this project")
-                            : tx("Send this item to the agent, on this project's session")
-                      }
-                      aria-label={
-                        questionFor(item)
-                          ? tx("Reply to the question for {name}", { name: item.title })
-                          : tx("Run {name}", { name: item.title })
-                      }
-                      class={`shrink-0 rounded-md border p-1 transition-colors disabled:opacity-30 ${
-                        questionFor(item)
-                          ? "border-warning/55 bg-warning/18 text-warning hover:border-warning hover:bg-warning/30"
-                          : "border-transparent text-az-faint hover:border-primary/25 hover:bg-az-chip hover:text-primary"
-                      }`}
+                      aria-label={tx("Link a GitHub issue to {name}", { name: item.title })}
+                      title={tx("Link a GitHub issue")}
+                      class="shrink-0 rounded-md p-1 text-az-faint transition-colors hover:text-primary"
                     >
-                      <Icon
-                        name={questionFor(item) ? "message-square-dashed" : "play"}
-                        class="text-[12px]"
-                      />
-                    </Button>
-                  </Show>
-                  {/* Revealed on hover: the controls all the time would be louder
-                than the titles they act on. */}
-                  <Button
-                    type="button"
-                    onClick={() => {
-                      setDescriptionDraft(null);
-                      setIssueDraft({
-                        item,
-                        url: issueUrl(item.reference ?? "") ?? "",
-                      });
-                    }}
-                    aria-label={tx("Link a GitHub issue to {name}", { name: item.title })}
-                    title={tx("Link a GitHub issue")}
-                    class="shrink-0 rounded-md p-1 text-az-faint transition-colors hover:text-primary"
-                  >
-                    <Icon name="git-pull-request" class="text-[11px]" />
-                  </Button>
-                  <Button
-                    type="button"
-                    onClick={() => {
-                      setEditTitle(item.title);
-                      setEditingId(item.id);
-                    }}
-                    aria-label={tx("Edit {name}", { name: item.title })}
-                    title={tx("Edit this item")}
-                    class="shrink-0 rounded-md p-1 text-az-faint transition-colors hover:text-az-body"
-                  >
-                    <Icon name="pencil" class="text-[11px]" />
-                  </Button>
-                  <Button
-                    type="button"
-                    onClick={() =>
-                      void actions
-                        .deleteItem(item.id)
-                        .catch((cause) =>
-                          log.error(`could not delete the item: ${describeError(cause)}`),
-                        )
-                    }
-                    aria-label={tx("Delete {name}", { name: item.title })}
-                    title={tx("Delete this item")}
-                    class="shrink-0 rounded-md p-1 text-az-faint transition-colors hover:text-error"
-                  >
-                    <Icon name="x" class="text-[12px]" />
-                  </Button>
-                  <div class="flex shrink-0 flex-col">
-                    <Button
-                      type="button"
-                      onClick={() => move(item, -1)}
-                      disabled={filtering() || index() === 0}
-                      aria-label={tx("Move {name} up", { name: item.title })}
-                      class="rounded-sm px-0.5 text-az-faint transition-colors hover:text-az-body disabled:opacity-25"
-                    >
-                      <Icon name="chevron-up" class="text-[10px]" />
+                      <Icon name="git-pull-request" class="text-[11px]" />
                     </Button>
                     <Button
                       type="button"
-                      onClick={() => move(item, 1)}
-                      disabled={filtering() || index() === shown().length - 1}
-                      aria-label={tx("Move {name} down", { name: item.title })}
-                      class="rounded-sm px-0.5 text-az-faint transition-colors hover:text-az-body disabled:opacity-25"
+                      onClick={() => {
+                        setEditTitle(item.title);
+                        setEditingId(item.id);
+                      }}
+                      aria-label={tx("Edit {name}", { name: item.title })}
+                      title={tx("Edit this item")}
+                      class="shrink-0 rounded-md p-1 text-az-faint transition-colors hover:text-az-body"
                     >
-                      <Icon name="chevron-down" class="text-[10px]" />
+                      <Icon name="pencil" class="text-[11px]" />
                     </Button>
+                    <Button
+                      type="button"
+                      onClick={() =>
+                        void actions
+                          .deleteItem(item.id)
+                          .catch((cause) =>
+                            log.error(`could not delete the item: ${describeError(cause)}`),
+                          )
+                      }
+                      aria-label={tx("Delete {name}", { name: item.title })}
+                      title={tx("Delete this item")}
+                      class="shrink-0 rounded-md p-1 text-az-faint transition-colors hover:text-error"
+                    >
+                      <Icon name="x" class="text-[12px]" />
+                    </Button>
+                    <div class="flex shrink-0 flex-col">
+                      <Button
+                        type="button"
+                        onClick={() => move(item, -1)}
+                        disabled={filtering() || index() === 0}
+                        aria-label={tx("Move {name} up", { name: item.title })}
+                        class="rounded-sm px-0.5 text-az-faint transition-colors hover:text-az-body disabled:opacity-25"
+                      >
+                        <Icon name="chevron-up" class="text-[10px]" />
+                      </Button>
+                      <Button
+                        type="button"
+                        onClick={() => move(item, 1)}
+                        disabled={filtering() || index() === shown().length - 1}
+                        aria-label={tx("Move {name} down", { name: item.title })}
+                        class="rounded-sm px-0.5 text-az-faint transition-colors hover:text-az-body disabled:opacity-25"
+                      >
+                        <Icon name="chevron-down" class="text-[10px]" />
+                      </Button>
+                    </div>
                   </div>
-                </div>
+                </Show>
               </div>
               <Show when={issueDraft()?.item.id === item.id ? issueDraft() : null}>
                 {(draft) => (
