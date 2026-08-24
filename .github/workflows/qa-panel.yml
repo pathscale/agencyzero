@@ -75,10 +75,10 @@ jobs:
       # inspector call with diagnosticsUnavailable, so the run would fail with
       # every check unable to see anything rather than with a real verdict.
       - name: Build az-gui with the inspector
-        run: cargo build --features blitz-inspector --bin az-gui
+        run: cargo build --features blitz-inspector,experimental --bin az-gui
 
       - name: Scrubber unit tests
-        run: cargo test --bin az-gui --features blitz-inspector qa_profile
+        run: cargo test --bin az-gui --features blitz-inspector,experimental qa_profile
 
       # From the committed archive, so a run measures what is in the tree. The
       # profile is single-writer and every check mutates it, so this restores a

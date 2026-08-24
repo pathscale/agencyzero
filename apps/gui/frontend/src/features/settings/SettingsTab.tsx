@@ -2063,8 +2063,13 @@ function ExperimentalSettings(): JSX.Element {
     setNote(null);
     try {
       // Forced: asking for a reading by hand should outrank the poll's backoff.
-      await Promise.all([actions.refreshQuota(), actions.refreshClaudeUsage({ force: true })]);
+      const results = await Promise.allSettled([
+        actions.refreshQuota(),
+        actions.refreshClaudeUsage({ force: true }),
+      ]);
       setRefreshGeneration((generation) => generation + 1);
+      const failed = results.find((result) => result.status === "rejected");
+      if (failed?.status === "rejected") throw failed.reason;
     } catch (cause) {
       setNote(describeError(cause));
     } finally {
