@@ -1,6 +1,6 @@
 import { ComplexColorWheel, Flex } from "@pathscale/ui";
 import type { JSX } from "@solidjs/web";
-import { createEffect, For } from "solid-js";
+import { createEffect, createMemo, createSignal, For } from "solid-js";
 import { Button } from "~/components/Button";
 import {
   accentOptions,
@@ -46,6 +46,60 @@ export function ThemePicker(props: {
   const colors = () => surfaceColors(prefs.colorMode);
   let previousSurfacePalette = colors();
 
+  const [surface, setSurface] = createSignal(props.theme.surface);
+  const [accent, setAccent] = createSignal(props.theme.accent);
+  const [accentTwo, setAccentTwo] = createSignal(props.theme.accentTwo ?? "");
+  const [softness, setSoftness] = createSignal(props.theme.softness);
+  const [wash, setWash] = createSignal(normalizeWash(props.theme.wash));
+  const [textBrightness, setTextBrightness] = createSignal(props.theme.textBrightness);
+
+  createEffect(
+    () =>
+      [
+        props.theme.surface,
+        props.theme.accent,
+        props.theme.accentTwo ?? "",
+        props.theme.softness,
+        normalizeWash(props.theme.wash),
+        props.theme.textBrightness,
+      ] as const,
+    ([nextSurface, nextAccent, nextAccentTwo, nextSoftness, nextWash, nextBrightness]) => {
+      setSurface(nextSurface);
+      setAccent(nextAccent);
+      setAccentTwo(nextAccentTwo);
+      setSoftness(nextSoftness);
+      setWash(nextWash);
+      setTextBrightness(nextBrightness);
+    },
+  );
+
+  const chooseSurface = (value: string) => {
+    setSurface(value);
+    props.onSurface(value);
+  };
+  const chooseAccent = (value: string) => {
+    setAccent(value);
+    writeAccentPreview(value, { accentTwo: accentTwo() });
+    props.onAccent(value);
+  };
+  const chooseAccentTwo = (value: string) => {
+    setAccentTwo(value);
+    writeAccentPreview(accent(), { accentTwo: value });
+    props.onAccentTwo(value);
+  };
+  const chooseSoftness = (value: number) => {
+    setSoftness(value);
+    props.onSoftness(value);
+  };
+  const chooseWash = (value: number) => {
+    setWash(value);
+    props.onWash(value);
+  };
+  const chooseTextBrightness = (value: number) => {
+    setTextBrightness(value);
+    props.onBrightness(value);
+  };
+
   // A palette choice is semantic. Preserve its petal across light/dark mode
   // changes and migrate literal colours written by older builds to the
   // nearest standard petal.
@@ -53,15 +107,16 @@ export function ThemePicker(props: {
     () => prefs.colorMode,
     () => {
       const next = colors();
-      const value = props.theme.surface.trim().toLowerCase();
+      const value = surface().trim().toLowerCase();
       if (value) {
         let selected = previousSurfacePalette.findIndex((color) => color.toLowerCase() === value);
         if (selected < 0) selected = closestColorIndex(value, previousSurfacePalette);
         const rebased = next[selected];
-        if (rebased && rebased.toLowerCase() !== value) props.onSurface(rebased);
+        if (rebased && rebased.toLowerCase() !== value) chooseSurface(rebased);
       }
       previousSurfacePalette = next;
     },
+    { defer: true },
   );
 
   /**
@@ -104,58 +159,59 @@ export function ThemePicker(props: {
   };
   // The panel's own multiplier, so a swatch is the surface it stands for.
   const deskStrength = (wash: number) => Math.min(wash * 1.2, 100);
-  const deskPreview = (theme: ThemeSettings) =>
-    `color-mix(in oklab, ${theme.surface || DEFAULT_ACCENT} ${deskStrength(theme.wash)}%, ${deskAnchor(theme.softness)})`;
+  const deskPreview = () =>
+    `color-mix(in oklab, ${surface() || DEFAULT_ACCENT} ${deskStrength(wash())}%, ${deskAnchor(softness())})`;
+  const adjustments = createMemo(() => [
+    {
+      id: "strength",
+      label: t("appearance.colourStrength"),
+      hint: t("appearance.colourStrengthHint"),
+      stops: WASH_STOPS,
+      value: wash(),
+      onChange: chooseWash,
+      preview: (stop: number) =>
+        `color-mix(in oklab, ${surface() || DEFAULT_ACCENT} ${deskStrength(stop)}%, ${deskAnchor(softness())})`,
+      formatValue: (stop: number) => `${stop}%`,
+    },
+    {
+      id: "softness",
+      label: t("appearance.softness"),
+      hint: t("appearance.softnessHint"),
+      stops: softnessStops(),
+      value: softness(),
+      onChange: chooseSoftness,
+      preview: (stop: number) =>
+        `color-mix(in oklab, ${surface() || DEFAULT_ACCENT} ${deskStrength(wash())}%, ${deskAnchor(stop)})`,
+      formatValue: (stop: number) => `${Math.round((stop / MAX_SOFTNESS) * 100)}%`,
+    },
+    {
+      id: "text-brightness",
+      label: t("appearance.textBrightness"),
+      hint: t("appearance.textBrightnessHint"),
+      stops: BRIGHTNESS_STOPS,
+      value: textBrightness(),
+      onChange: chooseTextBrightness,
+      preview: deskPreview,
+      ink: (stop: number) =>
+        prefs.colorMode === "light"
+          ? `oklch(calc(28% + ${softness() * 0.45 - stop}%) 0.009 245)`
+          : `oklch(calc(75% - ${softness() * 0.45 - stop}%) 0.009 245)`,
+      formatValue: (stop: number) => {
+        const index = (BRIGHTNESS_STOPS as readonly number[]).indexOf(stop);
+        return `${Math.round((index / (BRIGHTNESS_STOPS.length - 1)) * 100)}%`;
+      },
+    },
+  ]);
 
   return (
     <div class="flex flex-col gap-3">
       <ComplexColorWheel
-        value={props.theme.surface || DEFAULT_ACCENT}
-        onChange={props.onSurface}
+        value={surface() || DEFAULT_ACCENT}
+        onChange={chooseSurface}
         mode={prefs.colorMode}
         palette={colors()}
         aria-label={t("appearance.surfaceColour")}
-        adjustments={[
-          {
-            id: "strength",
-            label: t("appearance.colourStrength"),
-            hint: t("appearance.colourStrengthHint"),
-            stops: WASH_STOPS,
-            value: normalizeWash(props.theme.wash),
-            onChange: props.onWash,
-            preview: (stop) =>
-              `color-mix(in oklab, ${props.theme.surface || DEFAULT_ACCENT} ${deskStrength(stop)}%, ${deskAnchor(props.theme.softness)})`,
-            formatValue: (stop) => `${stop}%`,
-          },
-          {
-            id: "softness",
-            label: t("appearance.softness"),
-            hint: t("appearance.softnessHint"),
-            stops: softnessStops(),
-            value: props.theme.softness,
-            onChange: props.onSoftness,
-            preview: (stop) =>
-              `color-mix(in oklab, ${props.theme.surface || DEFAULT_ACCENT} ${deskStrength(props.theme.wash)}%, ${deskAnchor(stop)})`,
-            formatValue: (stop) => `${Math.round((stop / MAX_SOFTNESS) * 100)}%`,
-          },
-          {
-            id: "text-brightness",
-            label: t("appearance.textBrightness"),
-            hint: t("appearance.textBrightnessHint"),
-            stops: BRIGHTNESS_STOPS,
-            value: props.theme.textBrightness,
-            onChange: props.onBrightness,
-            preview: () => deskPreview(props.theme),
-            ink: (stop) =>
-              prefs.colorMode === "light"
-                ? `oklch(calc(28% + ${props.theme.softness * 0.45 - stop}%) 0.009 245)`
-                : `oklch(calc(75% - ${props.theme.softness * 0.45 - stop}%) 0.009 245)`,
-            formatValue: (stop) => {
-              const index = (BRIGHTNESS_STOPS as readonly number[]).indexOf(stop);
-              return `${Math.round((index / (BRIGHTNESS_STOPS.length - 1)) * 100)}%`;
-            },
-          },
-        ]}
+        adjustments={adjustments()}
         action={
           <Button
             type="button"
@@ -171,10 +227,10 @@ export function ThemePicker(props: {
 
       <div class="flex flex-col gap-3 px-3.5 pb-3">
         <AccentSelector
-          surface={props.theme.surface || DEFAULT_ACCENT}
-          accent={props.theme.accent}
-          wash={props.theme.wash}
-          softness={props.theme.softness}
+          surface={surface() || DEFAULT_ACCENT}
+          accent={accent()}
+          wash={wash()}
+          softness={softness()}
           /*
            * Paint first, persist after.
            *
@@ -184,10 +240,7 @@ export function ThemePicker(props: {
            * to 92 while `paint_avg_ms` and `renderer_avg_ms` were both 0.00,
            * which is the loop waiting rather than the renderer working.
            */
-          onPick={(value) => {
-            writeAccentPreview(value, { accentTwo: props.theme.accentTwo });
-            props.onAccent(value);
-          }}
+          onPick={chooseAccent}
         />
 
         {/*
@@ -205,15 +258,12 @@ export function ThemePicker(props: {
         <AccentSelector
           label={t("appearance.accentTwo")}
           hint={t("appearance.accentTwoHint")}
-          surface={props.theme.surface || DEFAULT_ACCENT}
-          accent={props.theme.accentTwo ?? ""}
-          wash={props.theme.wash}
-          softness={props.theme.softness}
+          surface={surface() || DEFAULT_ACCENT}
+          accent={accentTwo()}
+          wash={wash()}
+          softness={softness()}
           // Same trade as the row above, for the accent that reaches the icons.
-          onPick={(value) => {
-            writeAccentPreview(props.theme.accent, { accentTwo: value });
-            props.onAccentTwo(value);
-          }}
+          onPick={chooseAccentTwo}
         />
       </div>
     </div>
@@ -286,6 +336,7 @@ function AccentSelector(props: {
       }
       previous = next;
     },
+    { defer: true },
   );
   return (
     <div class="flex flex-col gap-1.5">
