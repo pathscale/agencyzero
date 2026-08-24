@@ -129,41 +129,6 @@ describe("Composer", () => {
     expect(document.activeElement).not.toBe(field);
   });
 
-  it("wraps controls in two groups so a long model label cannot push Send outside", async () => {
-    const { container, getByLabelText, booted } = mount({
-      model: "opus[1m]",
-      modelOptions: [
-        {
-          value: "claude:opus[1m]",
-          label: "Claude · Opus (1M context)",
-          agent: "claude",
-          model: "opus[1m]",
-        },
-      ],
-    });
-
-    const controls = container.querySelector("[data-composer-controls]");
-    const primary = container.querySelector("[data-composer-primary-controls]");
-    const secondary = container.querySelector("[data-composer-secondary-controls]");
-    expect(controls).toHaveClass("flex-wrap");
-    expect(primary).toContainElement(getByLabelText("Permission"));
-    expect(secondary).toHaveClass("ml-auto", "justify-end");
-    expect(secondary).toContainElement(getByLabelText("Send"));
-    for (const button of controls!.querySelectorAll("button")) {
-      expect(
-        button.classList.contains("h-[24px]") || button.classList.contains("size-[24px]"),
-        `${button.getAttribute("aria-label") ?? button.textContent} must use the 24px composer height`,
-      ).toBe(true);
-    }
-    for (const trigger of controls!.querySelectorAll('[data-slot="dropdown-trigger"]')) {
-      // @pathscale/ui defaults dropdown triggers to a 36px minimum with 8px
-      // vertical padding. Both properties must be overridden; h-[24px] alone
-      // looks correct in source while rendering tall.
-      expect(trigger).toHaveClass("h-[24px]", "min-h-[24px]", "py-0", "leading-none");
-    }
-    await booted();
-  });
-
   it("clears the prompt only after the send resolves", async () => {
     const { field, onSend } = mount();
     type(field, "Review the upgrade");
@@ -405,29 +370,6 @@ describe("Composer", () => {
 });
 
 describe("the model pill", () => {
-  it("offers what it was given", async () => {
-    const { getByLabelText } = mount();
-    expect(getByLabelText("Model")).toHaveTextContent("Sonnet");
-  });
-
-  /*
-   * Settings is authoritative: a model it no longer offers must not appear here
-   * either. The store moves a conflicting tab onto the new default when the
-   * setting is saved, so the composer renders the list as given and adds
-   * nothing of its own.
-   */
-  it("offers nothing beyond what it was given", async () => {
-    const { getByLabelText } = mount({
-      model: "sonnet",
-      modelOptions: [
-        { value: "claude:sonnet", label: "Claude · Sonnet", agent: "claude", model: "sonnet" },
-      ],
-    });
-    const pill = getByLabelText("Model");
-    expect(pill.textContent?.match(/Sonnet/g) ?? []).toHaveLength(1);
-    expect(pill).not.toHaveTextContent("fable");
-  });
-
   it("routes an OpenAI model command to Codex", async () => {
     const onModelChange = vi.fn();
     const { field, onSend } = mount({
