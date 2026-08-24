@@ -45,7 +45,7 @@ continuation, and their implementation changes infrequently.
 | project-panel row move/edit/delete | 5/5 | 32709128655 |
 | Home navigation/item edit/delete/search | 18/18 | 32709132027 |
 | fork/setup dialog dismissal and workspace creation | 6/6 | 32707938707 |
-| Settings menus, writes and backend round trips | 42/42 | 32699343684 |
+| Settings menus, writes and backend round trips | 60/60 | 32715244253 |
 | task-log copy/expand/page/clear | 9/9 | 32707599080 |
 | shell and list chrome | 11/11 | 32709136042 |
 | isolated session reset | 2/2 | 32708266768 |
@@ -118,8 +118,8 @@ present on any delivery branch.
 
 - 32712761929: native shared UI language selector — passed
 - 32715980958: direct Resume-session editor with semantic live status
-- 32715574852: exact Composer menus and disconnected-agent Send gate
-- 32715244253: native Settings moderator-model selector
+- 32716288389: exact Composer model-node activation and disconnected-agent Send gate
+- 32715244253: native Settings moderator-model selector — passed 60/60
 
 No PR is updated and no candidate dependency is published until these runs are
 classified. A focused failure is fixed and rerun; it is never averaged into a
