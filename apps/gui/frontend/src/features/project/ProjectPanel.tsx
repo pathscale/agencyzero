@@ -963,18 +963,20 @@ function ResumeSession(props: {
           class="btn btn-xs border-az-hairline bg-base-100 text-[11px]"
           disabled={props.running}
           title={props.running ? tx("Cancel the active run first") : undefined}
+          aria-expanded={open() ? "true" : "false"}
+          aria-controls="resume-session-editor"
           aria-label={
             props.currentSession
               ? `${tx("Change")} ${tx("Resume a session by id")}: ${props.currentSession}`
               : tx("Resume a session by id")
           }
-          onClick={() => setOpen((value) => !value)}
+          onClick={() => setOpen(true)}
         >
           {tx(props.currentSession ? "Change" : "Resume")}
         </Button>
       </div>
       <Show when={open()}>
-        <div class="flex items-center gap-1.5 pl-[26px]">
+        <div id="resume-session-editor" class="flex items-center gap-1.5 pl-[26px]">
           <Input.Field
             value={id()}
             placeholder={tx("session id, e.g. 019fc95e-…")}
