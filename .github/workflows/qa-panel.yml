@@ -8,15 +8,15 @@ name: QA panel
 # release bundle), and it takes minutes rather than seconds. Running it on every
 # push would make the expensive half of CI the common case.
 #
-# The 112 declared outcomes and the tree-integrity checks are gates. Their steps
+# The 114 declared outcomes and the tree-integrity checks are gates. Their steps
 # continue long enough to collect and upload every diagnostic, then the final
-# enforcement steps turn the job red. Broad coverage still inventories control
-# instances that do not yet have a dedicated outcome.
+# enforcement steps turn the job red. Full coverage maps every control instance
+# to named outcomes and remains red while any eligible instance has none.
 on:
   workflow_dispatch:
     inputs:
       group:
-        description: 'Check group to run (blank = all 112). One of: icons hover status items sections chrome tasklog transcript rename toggles verbosity dialog delete settings analytics composer notes home theme'
+        description: 'Check group to run (blank = all 114). One of: icons hover status items sections chrome tasklog transcript rename toggles verbosity dialog delete settings analytics composer notes home theme'
         required: false
         type: string
       cover:
@@ -54,7 +54,7 @@ jobs:
       # spending minutes building or launching an app with an incompatible
       # harness release.
       - name: Install ps-qa
-        run: cargo install ps-qa --version 0.3.2
+        run: cargo install ps-qa --version 0.3.3
 
       - name: Validate the QA profile and outcome manifest
         run: ps-qa --app ps-qa.ron list --checks tests/ps-qa
@@ -176,7 +176,9 @@ jobs:
         continue-on-error: true
         run: |
           set -o pipefail
-          ps-qa inventory 2>&1 | tee /tmp/cover.txt
+          # Reachability without a named behavioral verdict is incomplete
+          # coverage, not a pass.
+          ps-qa inventory --require-outcomes 2>&1 | tee /tmp/cover.txt
 
       - name: Exercise every eligible control
         id: sweep
