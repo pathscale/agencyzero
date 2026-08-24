@@ -133,12 +133,13 @@ present on any delivery branch.
     parent chains before geometry is computed and reports the node as not
     interactable instead of panicking. Dialog dismissal, Escape, welcome setup,
     and the isolated destructive fork outcome now pass 7/7.
-19. Escape visually hid the shared anchored Popover but did not clear its
-    owning application signal, so the same fork dialog could not reopen. The
-    original vanish-only check missed that stale state. UI now captures whether
-    an open-state request changes the value before mutating internal state, then
-    always notifies the owner. The live outcome now requires reopen plus a
-    normal second dismissal.
+19. The strengthened reopen outcome initially used the ambiguous `Fork ` prefix.
+    ps-qa classified it as an unknown document opener, scrolled Home, and
+    escalated a different row path, so its missing Cancel was test drift rather
+    than proof of stale application state. Every dialog route now names one
+    exact fixture row and reconciles the repeated Fork family. The narrow UI
+    audit also fixed a real uncontrolled-Popover callback ordering bug by
+    recording change before internal mutation.
 
 ## Current validation checkpoint
 
@@ -160,9 +161,10 @@ present on any delivery branch.
   stale-state regression at 6/7; isolated Start fork still passed 1/1
 - 32747120204: infrastructure-only failure before build; the workflow contained
   an incorrect expansion of the correct short UI commit and ran no app checks
-- 32747356042: exact lint-clean UI Popover state fix, including reopen after
-  Escape — queued
-- 32747360594: isolated stale-Escape-state mutation against the UI fix — queued;
+- 32747356042: strengthened positive outcome still used ambiguous `Fork ` and
+  failed 6/7 through document-opener escalation; this is classified test drift
+- 32748336510: exact named-row dialog/reopen outcome — queued
+- 32748341254: isolated stale-Escape-state mutation with the same exact row — queued;
   ordinary Cancel must pass while reopen-after-Escape fails
 - 32744366001: the prior 212-outcome full run — superseded by the new reopen
   assertion and automatically canceled when the strengthened same-ref run began
