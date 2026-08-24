@@ -176,7 +176,9 @@
         open: Some("theta theta north indi"),
         hover: None,
         click: None,
-        key: Some("Right"),
+        // The fixture starts at the maximum. Move toward a value that can
+        // change rather than asking a correct slider to exceed its range.
+        key: Some("Left"),
         key_on: Some("Response verbosity for this project"),
         subject: "Response verbosity for this project",
         expect: ValueChanges,
