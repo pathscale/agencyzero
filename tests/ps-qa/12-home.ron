@@ -70,7 +70,7 @@
         hover: None,
         click: Some("Pin project"),
         subject: "Pin project",
-        expect: ValueChanges,
+        expect: SelectionChanges,
     ),
     (
         id: "home-unpin-project",
@@ -80,7 +80,7 @@
         hover: None,
         click: Some("Unpin project"),
         subject: "Unpin project",
-        expect: ValueChanges,
+        expect: SelectionChanges,
     ),
     (
         id: "home-collapse-project",
@@ -134,7 +134,7 @@
         hover: None,
         click: Some("Show the task manager's reply and collected list"),
         subject: "Show the task manager's reply and collected list",
-        expect: ValueChanges,
+        expect: SelectionChanges,
     ),
     (
         id: "home-prompt-shrinks",

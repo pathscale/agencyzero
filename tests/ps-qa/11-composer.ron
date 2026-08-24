@@ -9,7 +9,7 @@
         hover: None,
         click: Some("Parse Prompt Syntax controls before sending"),
         subject: "Parse Prompt Syntax controls before sending",
-        expect: ValueChanges,
+        expect: SelectionChanges,
     ),
     (
         id: "composer-permission-menu",
@@ -49,7 +49,7 @@
         hover: None,
         click: Some("Extra Thinking: let the model reason before it answers"),
         subject: "Extra Thinking: let the model reason before it answers",
-        expect: ValueChanges,
+        expect: SelectionChanges,
     ),
     (
         id: "composer-model-menu",

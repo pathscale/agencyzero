@@ -16,7 +16,10 @@
         id: "delete-cancel-restores-row",
         group: "delete",
         what: "Cancel exits project deletion without removing the row",
-        open: Some("Delete project e756"),
+        // The preceding check leaves this confirmation open. Re-opening the
+        // delete control while a modal owns focus is neither possible nor part
+        // of Cancel's contract.
+        open: None,
         hover: None,
         click: Some("Cancel"),
         subject: "Confirm delete: e756",
