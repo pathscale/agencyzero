@@ -132,19 +132,20 @@ describe("the side panel", () => {
 
     workspace.actions.openProject("worktable");
     await waitFor(() => expect(workspace.state.activeKey).toBe("worktable"));
-    const worktableItems = workspace.itemsFor("worktable").map((item) => item.title);
-    await waitFor(() =>
-      expect(panelBox(screen.container)?.textContent).toContain(worktableItems[0]),
-    );
+    const worktableIds = new Set(workspace.itemsFor("worktable").map((item) => item.id));
+    await waitFor(() => {
+      const rendered = panelBox(screen.container)?.querySelector<HTMLElement>("[data-item-id]");
+      expect(rendered?.dataset.itemId && worktableIds.has(rendered.dataset.itemId)).toBe(true);
+    });
 
     workspace.actions.openProject("cafe");
     await waitFor(() => expect(workspace.state.activeKey).toBe("cafe"));
 
-    const cafeItems = workspace.itemsFor("cafe").map((item) => item.title);
-    await waitFor(() => expect(panelBox(screen.container)?.textContent).toContain(cafeItems[0]));
-    expect(
-      panelBox(screen.container)?.textContent,
-      "the panel still shows the project it was first pointed at",
-    ).not.toContain(worktableItems[0]);
+    const cafeIds = new Set(workspace.itemsFor("cafe").map((item) => item.id));
+    await waitFor(() => {
+      const rendered = panelBox(screen.container)?.querySelector<HTMLElement>("[data-item-id]");
+      expect(rendered?.dataset.itemId && cafeIds.has(rendered.dataset.itemId)).toBe(true);
+      expect(rendered?.dataset.itemId && worktableIds.has(rendered.dataset.itemId)).toBe(false);
+    });
   });
 });

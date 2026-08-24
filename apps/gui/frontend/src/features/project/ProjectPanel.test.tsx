@@ -134,7 +134,7 @@ describe("the project side panel", () => {
      * is guarded there and by `deadSelectors.test.ts`. What matters here is
      * that the hook is on the element and the control is where it belongs.
      */
-    const input = screen.getByRole("checkbox", { name: "Keep across restarts" });
+    const input = await screen.findByRole("checkbox", { name: "Keep across restarts" });
     const label = input.closest<HTMLElement>('[data-slot="checkbox"]');
     const control = label?.querySelector<HTMLElement>(".checkbox__control");
     if (!label || !control) throw new Error("Agent I/O checkbox control was not rendered");
@@ -162,8 +162,11 @@ describe("the project side panel", () => {
     ));
     await waitFor(() => expect(workspace.state.boot.status).toBe("ready"), { timeout: 5_000 });
 
-    const row = screen.container.querySelector<HTMLElement>("[data-item-id]");
-    if (!row) throw new Error("item row is missing");
+    const row = await waitFor(() => {
+      const current = screen.container.querySelector<HTMLElement>("[data-item-id]");
+      expect(current).not.toBeNull();
+      return current as HTMLElement;
+    });
     fireEvent.pointerEnter(row);
     flush();
 
@@ -190,8 +193,11 @@ describe("the project side panel", () => {
     ));
     await waitFor(() => expect(workspace.state.boot.status).toBe("ready"), { timeout: 5_000 });
 
-    const row = screen.container.querySelector<HTMLElement>("[data-item-id]");
-    if (!row) throw new Error("item row is missing");
+    const row = await waitFor(() => {
+      const current = screen.container.querySelector<HTMLElement>("[data-item-id]");
+      expect(current).not.toBeNull();
+      return current as HTMLElement;
+    });
     fireEvent.pointerEnter(row);
     flush();
 
@@ -376,8 +382,11 @@ describe("the project side panel", () => {
     ));
     await waitFor(() => expect(workspace.state.boot.status).toBe("ready"), { timeout: 5_000 });
 
-    const row = screen.container.querySelector<HTMLElement>("[data-item-id]");
-    if (!row) throw new Error("item row is missing");
+    const row = await waitFor(() => {
+      const current = screen.container.querySelector<HTMLElement>("[data-item-id]");
+      expect(current).not.toBeNull();
+      return current as HTMLElement;
+    });
     const item = (workspace.state.items.worktable ?? []).find(
       (candidate) => candidate.id === row.dataset.itemId,
     );

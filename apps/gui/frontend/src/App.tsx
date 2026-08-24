@@ -36,9 +36,10 @@ function ActiveProjectPanel(): JSX.Element {
    * supplementary. Point the panel at the new project after the main surface
    * has painted, so its item and task-log trees cannot hold up tab feedback.
    *
-   * Keep the existing panel in place during that one-frame handoff. Gating the
-   * subtree off would destroy and rebuild it, causing both a visible flash and
-   * the retained-tree problem this shared panel replaced.
+   * Drop the old project's panel during that one-frame handoff. Keeping it
+   * alive makes every reactive item/log body repoint in one blocking turn and
+   * briefly shows the wrong project's controls beside the new transcript.
+   * ProjectPanel stages its heavy open bodies after the headers paint.
    */
   const [displayed, setDisplayed] = createSignal<{ project: Project; tab: Tab } | null>(null);
   let readyFrame: number | undefined;
@@ -46,9 +47,7 @@ function ActiveProjectPanel(): JSX.Element {
   const currentProject = () =>
     state.projects.find((candidate) => candidate.id === state.activeKey) ?? null;
   const shown = () =>
-    Boolean(currentProject()) &&
-    prefs.projectPanelVisible &&
-    !currentProject()?.forkedFrom?.itemId;
+    Boolean(currentProject()) && prefs.projectPanelVisible && !currentProject()?.forkedFrom?.itemId;
   /*
    * A signal makes the active project and tab one reactive value. The enclosing
    * project `Match` disposes this component before `activeKey` can represent a
@@ -67,6 +66,7 @@ function ActiveProjectPanel(): JSX.Element {
         setDisplayed(null);
         return;
       }
+      if (displayed()?.project.id !== current.project.id) setDisplayed(null);
 
       const repoint = (): void => {
         readyFrame = undefined;

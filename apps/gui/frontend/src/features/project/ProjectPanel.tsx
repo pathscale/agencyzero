@@ -117,6 +117,7 @@ export function ProjectPanel(props: { project: Project; agent: Agent }): JSX.Ele
             : "flex-none"
         }
         contentClass="flex min-h-0 flex-1 flex-col"
+        contentDelayMs={0}
       >
         <ItemList projectId={props.project.id} items={panelItems()} />
       </SectionPanel>
@@ -134,6 +135,7 @@ export function ProjectPanel(props: { project: Project; agent: Agent }): JSX.Ele
         isOpen={prefs.panelSections.running}
         onToggle={() => togglePanelSection("running")}
         class="flex-none"
+        contentDelayMs={20}
       >
         <RunningList projectId={props.project.id} />
       </SectionPanel>
@@ -156,6 +158,7 @@ export function ProjectPanel(props: { project: Project; agent: Agent }): JSX.Ele
         isOpen={prefs.panelSections.log}
         onToggle={() => togglePanelSection("log")}
         class={prefs.panelSections.log ? "flex min-h-[160px] flex-col" : "flex-none"}
+        contentDelayMs={40}
       >
         <TaskLogList projectId={props.project.id} />
       </SectionPanel>
@@ -168,6 +171,7 @@ export function ProjectPanel(props: { project: Project; agent: Agent }): JSX.Ele
         isOpen={prefs.panelSections.io}
         onToggle={() => togglePanelSection("io")}
         class={prefs.panelSections.io ? "flex min-h-[160px] flex-col" : "flex-none"}
+        contentDelayMs={60}
       >
         <AgentIoList projectId={props.project.id} />
       </SectionPanel>
@@ -179,6 +183,7 @@ export function ProjectPanel(props: { project: Project; agent: Agent }): JSX.Ele
         isOpen={prefs.panelSections.notes}
         onToggle={() => togglePanelSection("notes")}
         class="flex-none"
+        contentDelayMs={80}
       >
         <NotesEditor projectId={props.project.id} />
       </SectionPanel>
@@ -507,6 +512,7 @@ function SettingsSection(props: { project: Project; agent: Agent }): JSX.Element
       isOpen={prefs.panelSections.settings}
       onToggle={() => togglePanelSection("settings")}
       class="flex-none"
+      contentDelayMs={100}
     >
       <div class="flex flex-col gap-2.5 px-3 pt-3 pb-3.5">
         <div class="text-[11.5px] text-az-muted">{tx("Working directories")}</div>
