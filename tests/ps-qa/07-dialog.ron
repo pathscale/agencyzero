@@ -50,7 +50,7 @@
         id: "dialog-reopens-after-escape",
         group: "dialog",
         what: "Escape clears the owning dialog state so the same exact fork can reopen",
-        open: None,
+        open: Some("Home"),
         hover: None,
         click: Some("button:Fork iota beta zeta delta north cobalt epsilon omega lambda epsilon into a fresh chat"),
         subject: "Start fork",
