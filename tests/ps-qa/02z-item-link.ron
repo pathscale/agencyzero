@@ -52,7 +52,10 @@
         open: None,
         hover: None,
         click: Some("button:Link a GitHub issue"),
-        subject: "button:(issue #40)",
+        // The external-link button's accessible name is its destination; the
+        // compact `(issue #40)` caption is visible text, not the semantic name.
+        // Observe it without activating the browser handoff.
+        subject: "button:Open https://github.com/pathscale/WorkTable/issues/40",
         expect: PaintsNamed,
     ),
 ]
