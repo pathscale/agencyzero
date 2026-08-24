@@ -137,27 +137,15 @@ export function SectionPanel(props: SectionPanelProps): JSX.Element {
         </Button>
       </div>
 
-      {/*
-       * Retained, not mounted by the disclosure click.
-       *
-       * PathScale/UI controls contain positioned paint children, such as a
-       * Toggle thumb. Under Blitz, mounting one while this panel simultaneously
-       * grows can expose one provisional frame at the panel origin before the
-       * child's final offset is resolved. That was the detached white pill at
-       * the top-left of Settings. Keeping the subtree alive gives every child
-       * stable layout; `hidden` removes it from layout, paint and accessibility
-       * while collapsed without reconstructing it on expansion.
-       */}
-      <div
-        aria-hidden={!props.isOpen ? "true" : undefined}
-        // `classList` is gone in Solid 2; the conditional class rides in the
-        // template instead, which is what it compiled to anyway.
-        class={`overflow-hidden border-az-hairline-soft border-t ${props.contentClass ?? ""} ${
-          props.isOpen ? "" : "hidden"
-        }`}
-      >
-        {props.children}
-      </div>
+      {/* A closed disclosure owns no interactive subtree. Retaining every row,
+          editor and log control behind `hidden` made each tab switch rebuild
+          thousands of unreachable nodes. Mounting the body only while open is
+          the standard disclosure lifecycle and keeps the semantic tree honest. */}
+      <Show when={props.isOpen}>
+        <div class={`overflow-hidden border-az-hairline-soft border-t ${props.contentClass ?? ""}`}>
+          {props.children}
+        </div>
+      </Show>
     </Panel>
   );
 }

@@ -21,17 +21,18 @@ import { prefs, setPrefs, togglePanelSection } from "~/stores/prefs";
 import { useNow, useWorkspace } from "~/stores/workspace";
 import type { Agent, Project, ProjectItem, Question, RunningTask } from "~/types";
 
-export const PROJECT_ITEM_PAGE_SIZE = 12;
+/** Three rich rows fit without making tab navigation pay for off-screen work. */
+export const PROJECT_ITEM_PAGE_SIZE = 3;
 
 /**
  * How many task-log rows are built up front.
  *
- * Twenty, which is more than the section shows at its 45vh cap, so the page
- * covers what is reachable by scrolling before the control is needed.
+ * Six rows cover the section's ordinary viewport without constructing
+ * off-screen log controls during every tab switch.
  * Hydration loads at most 40 entries however large the stored log is, so this
  * is a render cap, not a data one.
  */
-export const TASK_LOG_PAGE_SIZE = 20;
+export const TASK_LOG_PAGE_SIZE = 6;
 
 export function itemPage<T>(items: readonly T[], limit: number): T[] {
   return items.slice(0, Math.max(0, limit));

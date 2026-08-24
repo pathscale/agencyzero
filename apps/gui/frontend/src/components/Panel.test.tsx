@@ -14,7 +14,7 @@ describe("SectionPanel", () => {
     expect(screen.getByText("row").closest(".isolate")).not.toBeNull();
   });
 
-  it("retains interactive content while collapsed and only changes visibility", () => {
+  it("mounts interactive content only while expanded", () => {
     function Harness() {
       const [open, setOpen] = createSignal(false);
       return (
@@ -25,25 +25,16 @@ describe("SectionPanel", () => {
     }
 
     const view = render(() => <Harness />);
-    const control = view.container.querySelector<HTMLInputElement>('[data-slot="switch-input"]');
-    if (!control) throw new Error("retained disclosure control was not mounted");
-    const content = control.parentElement?.parentElement;
-    if (!content) throw new Error("retained disclosure content has no wrapper");
-
-    expect(content).toHaveClass("hidden");
-    expect(content).toHaveAttribute("aria-hidden", "true");
+    expect(view.container.querySelector('[data-slot="switch-input"]')).toBeNull();
 
     fireEvent.click(screen.getAllByRole("button", { name: "Expand Settings" })[0]);
     flush();
 
-    expect(view.container.querySelector('[data-slot="switch-input"]')).toBe(control);
-    expect(content).not.toHaveClass("hidden");
-    expect(content).not.toHaveAttribute("aria-hidden");
+    expect(view.container.querySelector('[data-slot="switch-input"]')).not.toBeNull();
 
     fireEvent.click(screen.getAllByRole("button", { name: "Collapse Settings" })[0]);
     flush();
 
-    expect(view.container.querySelector('[data-slot="switch-input"]')).toBe(control);
-    expect(content).toHaveClass("hidden");
+    expect(view.container.querySelector('[data-slot="switch-input"]')).toBeNull();
   });
 });

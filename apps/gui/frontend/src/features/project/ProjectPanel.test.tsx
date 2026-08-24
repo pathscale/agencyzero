@@ -25,7 +25,7 @@ describe("the project side panel", () => {
     const items = Array.from({ length: PROJECT_ITEM_PAGE_SIZE + 5 }, (_, index) => index);
 
     expect(itemPage(items, PROJECT_ITEM_PAGE_SIZE)).toEqual(items.slice(0, PROJECT_ITEM_PAGE_SIZE));
-    expect(itemPage(items, PROJECT_ITEM_PAGE_SIZE * 2)).toEqual(items);
+    expect(itemPage(items, items.length)).toEqual(items);
   });
 
   it("pages a large live item list without hiding the remaining rows", async () => {
@@ -335,8 +335,14 @@ describe("the project side panel", () => {
       "worktable-0",
       "https://github.com/pathscale/WorkTable/issues/58",
     );
+    workspace.actions.revealItem("worktable-0");
+    flush();
 
-    const row = screen.container.querySelector('[data-item-id="worktable-0"]');
+    const row = await waitFor(() => {
+      const current = screen.container.querySelector('[data-item-id="worktable-0"]');
+      expect(current).not.toBeNull();
+      return current;
+    });
     if (!row) throw new Error("item row is missing");
     expect(within(row as HTMLElement).getByText("(Shipped)")).toBeInTheDocument();
     expect(within(row as HTMLElement).getByText("(issue #58)")).toBeInTheDocument();
