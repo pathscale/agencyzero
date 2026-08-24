@@ -15,11 +15,11 @@
     (
         id: "session-reset-isolated-clears-attachment",
         group: "session-reset",
-        what: "Confirm reset clears the attached session and restores Resume",
+        what: "Confirm reset clears the rendered attached-session status",
         open: None,
         hover: None,
         click: Some("Confirm reset"),
-        subject: "button:Resume a session by id",
-        expect: PaintsNamed,
+        subject: "Attached:",
+        expect: Vanishes,
     ),
 ]

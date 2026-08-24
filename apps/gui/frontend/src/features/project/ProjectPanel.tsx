@@ -927,7 +927,6 @@ function ResumeSession(props: {
   currentSession?: string | null;
 }): JSX.Element {
   const { actions } = useWorkspace();
-  const [open, setOpen] = createSignal(false);
   const [id, setId] = createSignal("");
   const [busy, setBusy] = createSignal(false);
 
@@ -937,7 +936,6 @@ function ResumeSession(props: {
     setBusy(true);
     try {
       await actions.adoptSession(props.projectId, props.agent, sessionId);
-      setOpen(false);
       setId("");
     } catch (cause) {
       log.error(`could not adopt the session: ${describeError(cause)}`);
@@ -958,45 +956,19 @@ function ResumeSession(props: {
               : tx("Attach a session recovered by its id so the next message continues it")}
           </span>
         </span>
-        <Button
-          type="button"
-          class="btn btn-xs border-az-hairline bg-base-100 text-[11px]"
-          disabled={props.running}
-          title={props.running ? tx("Cancel the active run first") : undefined}
-          aria-expanded={open() ? "true" : "false"}
-          aria-controls="resume-session-editor"
-          aria-label={
-            props.currentSession
-              ? `${tx("Change")} ${tx("Resume a session by id")}: ${props.currentSession}`
-              : tx("Resume a session by id")
-          }
-          onClick={() => setOpen(true)}
-        >
-          {tx(props.currentSession ? "Change" : "Resume")}
-        </Button>
       </div>
-      <Show when={open()}>
-        <div id="resume-session-editor" class="flex items-center gap-1.5 pl-[26px]">
-          <Input.Field
-            value={id()}
-            placeholder={tx("session id, e.g. 019fc95e-…")}
-            onInput={(event) => setId(event.currentTarget.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Enter") void adopt();
-              if (event.key === "Escape") setOpen(false);
-            }}
-            class="min-w-0 flex-1 rounded-md border border-az-hairline bg-base-300 px-2 py-1 font-mono text-[11px] text-az-body focus:outline-none"
-          />
-          <Button
-            type="button"
-            class="btn btn-xs btn-primary text-[11px]"
-            disabled={busy() || props.running || !id().trim()}
-            onClick={() => void adopt()}
-          >
-            {tx("Attach")}
-          </Button>
-        </div>
-      </Show>
+      <Input.Field
+        value={id()}
+        disabled={busy() || props.running}
+        aria-label={tx("Resume a session by id")}
+        placeholder={tx("session id, e.g. 019fc95e-…")}
+        onInput={(event) => setId(event.currentTarget.value)}
+        onKeyDown={(event) => {
+          if (event.key === "Enter") void adopt();
+          if (event.key === "Escape") setId("");
+        }}
+        class="ml-[26px] min-w-0 flex-1 rounded-md border border-az-hairline bg-base-300 px-2 py-1 font-mono text-[11px] text-az-body focus:outline-none disabled:opacity-45"
+      />
     </div>
   );
 }
