@@ -288,6 +288,29 @@ fn arg(arguments: &[Argument], key: &str) -> Option<String> {
         .and_then(|argument| scalar_text(&argument.value))
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum BindError {
+    UnknownVerb,
+    Required(&'static str),
+    Invalid(&'static str),
+}
+
+impl BindError {
+    fn code(self) -> String {
+        match self {
+            Self::UnknownVerb => "ENTITY_NOT_FOUND".into(),
+            Self::Required(field) => format!("ARGUMENT_REQUIRED:{field}"),
+            Self::Invalid(field) => format!("ARGUMENT_INVALID:{field}"),
+        }
+    }
+}
+
+fn required_arg(arguments: &[Argument], key: &'static str) -> Result<String, BindError> {
+    arg(arguments, key)
+        .filter(|value| !value.is_empty())
+        .ok_or(BindError::Required(key))
+}
+
 fn authored_reference(line: &str) -> Option<Result<Reference, String>> {
     let trimmed = line.trim();
     let header = trimmed.strip_prefix("<ps")?;
@@ -298,16 +321,23 @@ fn authored_reference(line: &str) -> Option<Result<Reference, String>> {
     if !namespace.eq_ignore_ascii_case(SURFACE.namespace) {
         return None;
     }
+    // From this point the line explicitly designated AgencyZero's declared
+    // authoring surface. Even if malformed quoting prevents PromptSyntax from
+    // finding a closing `>`, it must receive a typed refusal rather than fall
+    // back to ordinary visible prose.
+    let invalid_header = header.trim_start().trim_end_matches('>').trim().to_string();
     let parsed = Parser::new().authoring_namespace(namespace).parse(trimmed);
-    let segment = parsed.segments.as_slice().first()?;
+    let Some(segment) = parsed.segments.as_slice().first() else {
+        return Some(Err(invalid_header));
+    };
     if parsed.segments.len() != 1
         || segment.span().start != 0
         || segment.span().end != trimmed.len()
     {
-        return None;
+        return Some(Err(invalid_header));
     }
     let promptsyntax::Segment::Directive(segment) = segment else {
-        return None;
+        return Some(Err(invalid_header));
     };
     match &segment.directive {
         ParsedDirective::AuthoringSegment { reference } => Some(Ok(reference.clone())),
@@ -316,13 +346,13 @@ fn authored_reference(line: &str) -> Option<Result<Reference, String>> {
     }
 }
 
-fn from_reference(reference: &Reference) -> Option<Directive> {
+fn from_reference(reference: &Reference) -> Result<Directive, BindError> {
     let verb = reference.name.as_str();
     let args = &reference.arguments;
     if verb.eq_ignore_ascii_case("items.state") {
-        let id = arg(args, "id")?;
-        let status = arg(args, "status")?;
-        return (!id.is_empty() && !status.is_empty()).then(|| Directive::ItemState {
+        let id = required_arg(args, "id")?;
+        let status = required_arg(args, "status")?;
+        return Ok(Directive::ItemState {
             id,
             status: status.to_ascii_lowercase(),
             pr: arg(args, "pr")
@@ -331,8 +361,8 @@ fn from_reference(reference: &Reference) -> Option<Directive> {
         });
     }
     if verb.eq_ignore_ascii_case("items.add") {
-        let title = arg(args, "title")?;
-        return (!title.is_empty()).then(|| Directive::ItemAdd {
+        let title = required_arg(args, "title")?;
+        return Ok(Directive::ItemAdd {
             handle: arg(args, "ref").filter(|handle| !handle.is_empty()),
             project: arg(args, "project").filter(|project| !project.is_empty()),
             title,
@@ -345,22 +375,22 @@ fn from_reference(reference: &Reference) -> Option<Directive> {
         });
     }
     if verb.eq_ignore_ascii_case("items.describe") {
-        let id = arg(args, "id")?;
-        let description = arg(args, "description")?;
-        return (!id.is_empty()).then_some(Directive::ItemDescribe { id, description });
+        let id = required_arg(args, "id")?;
+        let description = arg(args, "description").ok_or(BindError::Required("description"))?;
+        return Ok(Directive::ItemDescribe { id, description });
     }
     if verb.eq_ignore_ascii_case("items.retire") {
-        let id = arg(args, "id")?;
-        return (!id.is_empty()).then_some(Directive::ItemRetire { id });
+        let id = required_arg(args, "id")?;
+        return Ok(Directive::ItemRetire { id });
     }
     if verb.eq_ignore_ascii_case("settings.update") {
-        let key = arg(args, "key")?;
-        let value = arg(args, "value")?;
-        return (!key.is_empty()).then_some(Directive::SettingsUpdate { key, value });
+        let key = required_arg(args, "key")?;
+        let value = arg(args, "value").ok_or(BindError::Required("value"))?;
+        return Ok(Directive::SettingsUpdate { key, value });
     }
     if verb.eq_ignore_ascii_case("ask") {
-        let text = arg(args, "text")?;
-        return (!text.is_empty()).then(|| Directive::Ask {
+        let text = required_arg(args, "text")?;
+        return Ok(Directive::Ask {
             text,
             // Normalized to one of the three levels; anything else, including a
             // missing value, becomes `blocking` — a question that does not say
@@ -385,40 +415,49 @@ fn from_reference(reference: &Reference) -> Option<Directive> {
         let item = arg(args, "item")
             .map(|item| item.trim().to_string())
             .filter(|item| !item.is_empty());
-        return (url.is_some() || (number.is_some() && item.is_some()))
-            .then_some(Directive::PrLink { url, number, item });
+        return if url.is_some() || (number.is_some() && item.is_some()) {
+            Ok(Directive::PrLink { url, number, item })
+        } else {
+            Err(BindError::Required("url_or_number_with_item"))
+        };
     }
     if verb.eq_ignore_ascii_case("pr.retire") {
-        let id = arg(args, "id")?;
-        return (!id.is_empty()).then_some(Directive::PrRetire { id });
+        let id = required_arg(args, "id")?;
+        return Ok(Directive::PrRetire { id });
     }
     if verb.eq_ignore_ascii_case("issue.link") {
-        let url = arg(args, "url")?;
-        let item = arg(args, "item")?;
-        return (!url.is_empty() && !item.is_empty()).then_some(Directive::IssueLink { url, item });
+        let url = required_arg(args, "url")?;
+        let item = required_arg(args, "item")?;
+        return Ok(Directive::IssueLink { url, item });
     }
     if verb.eq_ignore_ascii_case("app.restart") {
-        let mode = arg(args, "mode")?.to_ascii_lowercase();
-        return matches!(mode.as_str(), "disk" | "update")
-            .then_some(Directive::AppRestart { mode });
+        let mode = required_arg(args, "mode")?.to_ascii_lowercase();
+        return if matches!(mode.as_str(), "disk" | "update") {
+            Ok(Directive::AppRestart { mode })
+        } else {
+            Err(BindError::Invalid("mode"))
+        };
     }
     // Argument-free by design: a pong carries no state, only the fact that the
     // agent reached this line while the turn was still running. `ping` parses
     // as the same nothing so that the injected line is inert if it is ever
     // echoed back rather than answered.
     if verb.eq_ignore_ascii_case("pong") || verb.eq_ignore_ascii_case("ping") {
-        return Some(Directive::Pong);
+        return Ok(Directive::Pong);
     }
     if verb.eq_ignore_ascii_case("extend-watchdog") {
-        let what = arg(args, "what").or_else(|| arg(args, "text"))?;
+        let what = arg(args, "what")
+            .or_else(|| arg(args, "text"))
+            .filter(|what| !what.is_empty())
+            .ok_or(BindError::Required("what"))?;
         // A declaration with no duration still means "expect silence", so it
         // gets one ordinary idle window rather than being refused outright.
         let seconds = arg(args, "seconds")
             .and_then(|seconds| seconds.parse::<u64>().ok())
             .unwrap_or(300);
-        return (!what.is_empty()).then_some(Directive::ExtendWatchdog { what, seconds });
+        return Ok(Directive::ExtendWatchdog { what, seconds });
     }
-    None
+    Err(BindError::UnknownVerb)
 }
 
 /// Recognize one directive on one line, or nothing.
@@ -433,7 +472,7 @@ pub fn parse(line: &str) -> Option<Directive> {
     authored_reference(line)
         .and_then(Result::ok)
         .as_ref()
-        .and_then(from_reference)
+        .and_then(|reference| from_reference(reference).ok())
 }
 
 /// Resolve one explicit authoring segment, including its failure path.
@@ -453,7 +492,7 @@ pub fn parse_authored(line: &str) -> Option<Authored> {
                 .iter()
                 .any(|candidate| reference.name.eq_ignore_ascii_case(candidate));
             let directive = from_reference(&reference);
-            (named, known, directive)
+            (named, known, Some(directive))
         }
         Err(header) => {
             let verb = header
@@ -471,17 +510,14 @@ pub fn parse_authored(line: &str) -> Option<Authored> {
             (named, known, None)
         }
     };
-    if let Some(directive) = directive {
-        return Some(Authored::Directive(directive));
-    }
-    Some(Authored::Refused(Outcome::Refused {
-        what: named,
-        code: if known {
-            "SYNTAX_INVALID".into()
-        } else {
-            "ENTITY_NOT_FOUND".into()
-        },
-    }))
+    let code = match directive {
+        Some(Ok(directive)) => return Some(Authored::Directive(directive)),
+        Some(Err(error)) if known => error.code(),
+        Some(Err(_)) => "ENTITY_NOT_FOUND".into(),
+        None if known => "SYNTAX_INVALID".into(),
+        None => "ENTITY_NOT_FOUND".into(),
+    };
+    Some(Authored::Refused(Outcome::Refused { what: named, code }))
 }
 
 /// Whether the agent is allowed to set this status.
@@ -509,9 +545,29 @@ pub fn resolve<'a>(known: &[&'a str], named: &str) -> Result<&'a str, String> {
     }
 }
 
+/// Resolve an item id or a temporary handle created earlier in this turn.
+///
+/// Handles are deliberately turn-local. They make an `items.add(ref: "t1", …)`
+/// immediately usable by a following state, description, link, or retire
+/// directive without turning the short model-chosen name into durable identity.
+pub fn resolve_item(
+    known: &[&str],
+    handles: &std::collections::HashMap<String, String>,
+    named: &str,
+) -> Result<String, String> {
+    let named = named.trim();
+    if known.contains(&named) {
+        return Ok(named.to_string());
+    }
+    let canonical = handles.get(named).map_or(named, String::as_str);
+    resolve(known, canonical).map(str::to_string)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    const REPORTED_DESCRIPTION: &str = "Usable verified foundation at /Users/revenge/code/agentcode: endpoint-libs daemon/client; TOON-first CLI with compactness regression test; persisted Arctic exact symbol/text/dependency indexes plus WTI prefix/adjacency; native topology/WAL restore and bounded repair; Rust RA-syntax and OXC JS/TS/TSX outlines/references; exact/prefix/contains search; forward/reverse evidence-stamped graph; graph-ranked byte-budgeted context-map; authoritative FileChange deltas; recoverable edits/undo and typed validation. Reviewed CodeIndexer, Aider, Repomix, rtk, Caveman, mcp-compressor, and ccusage; integration decisions in ADR 0010. Dogfooded TOON context map; 23 tests plus strict Clippy/build pass. Remaining: incremental delta application/watchers, full RA semantics/rename, OXC rename, structural queries, affected validation, lazy MCP facade, distillation and acceptance benchmarks.";
 
     #[test]
     fn a_state_directive_carries_an_id_a_status_and_a_pull_request() {
@@ -607,6 +663,58 @@ mod tests {
             })
         );
         assert!(parse(r#"<ps @agency:items.describe(description: "Missing id")>"#).is_none());
+    }
+
+    #[test]
+    fn the_reported_long_description_is_valid_when_it_has_an_id() {
+        let line = format!(
+            r#"<ps @agency:items.describe(id: "item-2edd1f1b", description: "{REPORTED_DESCRIPTION}")>"#
+        );
+
+        assert_eq!(
+            parse(&line),
+            Some(Directive::ItemDescribe {
+                id: "item-2edd1f1b".into(),
+                description: REPORTED_DESCRIPTION.into(),
+            })
+        );
+    }
+
+    #[test]
+    fn the_reported_long_description_with_an_empty_id_names_the_failure() {
+        let line = format!(
+            r#"<ps @agency:items.describe(id: "", description: "{REPORTED_DESCRIPTION}")>"#
+        );
+
+        assert!(matches!(
+            parse_authored(&line),
+            Some(Authored::Refused(Outcome::Refused { ref code, .. }))
+                if code == "ARGUMENT_REQUIRED:id"
+        ));
+    }
+
+    #[test]
+    fn paired_inner_quotes_are_accepted_but_an_unmatched_quote_is_refused() {
+        let escaped = r#"<ps @agency:items.describe(id: "item-a3f9", description: "Define \"file change\" precisely.")>"#;
+        assert!(matches!(
+            parse(escaped),
+            Some(Directive::ItemDescribe { ref description, .. })
+                if description == "Define \"file change\" precisely."
+        ));
+
+        let paired = r#"<ps @agency:items.describe(id: "item-a3f9", description: "Define "file change" precisely.")>"#;
+        assert!(matches!(
+            parse(paired),
+            Some(Directive::ItemDescribe { ref description, .. })
+                if description == "Define \"file change\" precisely."
+        ));
+
+        let unmatched = r#"<ps @agency:items.describe(id: "item-a3f9", description: "Define "file change precisely.")>"#;
+        assert!(matches!(
+            parse_authored(unmatched),
+            Some(Authored::Refused(Outcome::Refused { ref code, .. }))
+                if code == "SYNTAX_INVALID"
+        ));
     }
 
     #[test]
@@ -743,7 +851,7 @@ mod tests {
         assert!(matches!(
             malformed,
             Some(Authored::Refused(Outcome::Refused { ref code, .. }))
-                if code == "SYNTAX_INVALID"
+                if code == "ARGUMENT_REQUIRED:id"
         ));
         assert_eq!(parse_authored("ordinary prose"), None);
     }
@@ -887,5 +995,30 @@ mod tests {
         // An exact id wins even where it is also a prefix of another.
         let shadowed = ["item-a3f9", "item-a3f9c2d1"];
         assert_eq!(resolve(&shadowed, "item-a3f9"), Ok("item-a3f9"));
+    }
+
+    #[test]
+    fn a_turn_local_handle_resolves_to_the_id_returned_by_add() {
+        let known = ["item-a3f9c2d1", "item-77b0e4aa"];
+        let handles =
+            std::collections::HashMap::from([("t1".to_string(), "item-a3f9c2d1".to_string())]);
+
+        assert_eq!(
+            resolve_item(&known, &handles, "t1"),
+            Ok("item-a3f9c2d1".into())
+        );
+        assert_eq!(
+            resolve_item(&known, &handles, "item-77"),
+            Ok("item-77b0e4aa".into())
+        );
+
+        let shadowing = std::collections::HashMap::from([(
+            "item-77b0e4aa".to_string(),
+            "item-a3f9c2d1".to_string(),
+        )]);
+        assert_eq!(
+            resolve_item(&known, &shadowing, "item-77b0e4aa"),
+            Ok("item-77b0e4aa".into())
+        );
     }
 }

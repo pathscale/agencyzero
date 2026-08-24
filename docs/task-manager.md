@@ -70,9 +70,10 @@ Ordinary project conversations use the same directives. The prompt supplies
 the current ids and the declared closed verb set:
 
 - `items.add` creates a row. Its `ref` is a temporary handle echoed beside the
-  real id in the next-turn receipt. Repeating one uniquely matching title
-  returns that stable id and applies the requested status; legacy duplicate
-  titles are refused as ambiguous rather than choosing one.
+  real id in the next-turn receipt and accepted by later directives in the
+  same turn. Repeating one uniquely matching title returns that stable id and
+  applies the requested status; legacy duplicate titles are refused as
+  ambiguous rather than choosing one.
 - `items.state` moves an existing id through `new`, `planning`, `active`,
   `questions`, `shipped`, `finished`, or `canceled`.
 - `finished` remains visible for the number of subsequent user turns stored in
