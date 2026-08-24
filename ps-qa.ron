@@ -48,6 +48,10 @@ AppProfile(
     // How a Home row announces itself. The project's own name is scrubbed and
     // differs per profile, so the summary beside it is the only stable handle.
     document_row_markers: [" open \u{b7} ", "no working directory", " ago"],
+    // The scrubbed validation profile gives its primary project this stable
+    // name. Reuse its open surface across checks instead of returning Home and
+    // remounting the same project before every outcome.
+    document_openers: ["theta theta north indi"],
 
     // Verbs this application's controls start with. Swept last, or excluded
     // from the search for a control that opens a document.
