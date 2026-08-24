@@ -47,7 +47,7 @@
     ),
     (
         id: "dialog-starts-fork",
-        group: "dialog",
+        group: "dialog-fork",
         what: "starting a fork closes the dialog and opens a new project tab",
         open: Some("Fork "),
         hover: None,
