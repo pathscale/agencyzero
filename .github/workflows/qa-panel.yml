@@ -290,7 +290,7 @@ jobs:
               cat /tmp/cover.txt
               echo '```'
               echo
-              echo '`manual` controls are excluded native dialogs and external destinations.'
+              echo '`manual` controls are native/external actions, restart controls, and authenticated provider Send.'
               echo '`anonymous` controls lack an accessible name and fail semantic reachability.'
             fi
             if [ -f /tmp/sweep.txt ]; then
