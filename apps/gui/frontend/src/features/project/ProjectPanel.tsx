@@ -1,14 +1,6 @@
 import { Checkbox, createFlexGrid, Flex, Input, Slider, Switch, Textarea } from "@pathscale/ui";
 import type { JSX } from "@solidjs/web";
-import {
-  type Accessor,
-  createEffect,
-  createMemo,
-  createSignal,
-  For,
-  onSettled,
-  Show,
-} from "solid-js";
+import { createEffect, createMemo, createSignal, For, onSettled, Show } from "solid-js";
 import { NOTES_BUDGET } from "~/api/client";
 import { AppModal, type ModalAnchor } from "~/components/AppModal";
 import { Button } from "~/components/Button";
@@ -125,7 +117,7 @@ export function ProjectPanel(props: { project: Project; agent: Agent }): JSX.Ele
         }
         contentClass="flex min-h-0 flex-1 flex-col"
       >
-        <ItemList projectId={props.project.id} items={panelItems} />
+        <ItemList projectId={props.project.id} items={panelItems()} />
       </SectionPanel>
       {sectionMark("items")}
 
@@ -1046,7 +1038,7 @@ function ApprovalRules(props: { projectId: string }): JSX.Element {
   );
 }
 
-function ItemList(props: { projectId: string; items: Accessor<ProjectItem[]> }): JSX.Element {
+function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Element {
   const { state, actions } = useWorkspace();
   const [adding, setAdding] = createSignal(false);
   const [title, setTitle] = createSignal("");
@@ -1093,19 +1085,19 @@ function ItemList(props: { projectId: string; items: Accessor<ProjectItem[]> }):
   const shown = createMemo(() => {
     const needle = query().trim().toLowerCase();
     const items = needle
-      ? props.items().filter((item) => item.title.toLowerCase().includes(needle))
-      : props.items();
+      ? props.items.filter((item) => item.title.toLowerCase().includes(needle))
+      : props.items;
     return sortItems(items, prefs.itemSortBy, prefs.itemSortDirection);
   });
   const visibleShown = createMemo(() => itemPage(shown(), itemLimit()));
   const filtering = () => query().trim().length > 0;
 
   createEffect(
-    () => [state.itemReveal, props.items()] as const,
+    () => [state.itemReveal, props.items] as const,
     () => {
       const target = state.itemReveal;
       target?.revision;
-      if (!target || !props.items().some((item) => item.id === target.id)) return;
+      if (!target || !props.items.some((item) => item.id === target.id)) return;
       setQuery("");
       const targetIndex = shown().findIndex((item) => item.id === target.id);
       if (targetIndex >= 0) {
@@ -1312,7 +1304,7 @@ function ItemList(props: { projectId: string; items: Accessor<ProjectItem[]> }):
     const from = rendered.findIndex((row) => row.id === item.id);
     const to = from + delta;
     if (from < 0 || to < 0 || to >= rendered.length) return;
-    const ordered = props.items().map((row) => row.id);
+    const ordered = props.items.map((row) => row.id);
     const left = ordered.indexOf(item.id);
     const right = ordered.indexOf(rendered[to].id);
     if (left < 0 || right < 0) return;
@@ -1327,7 +1319,7 @@ function ItemList(props: { projectId: string; items: Accessor<ProjectItem[]> }):
       data-item-list
       class="az-scroll flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto overflow-x-hidden px-2 pt-1.5 pb-2.5"
     >
-      <Show when={props.items().length > 3}>
+      <Show when={props.items.length > 3}>
         <div class="mb-1 flex items-center gap-2 border-az-hairline-soft border-b bg-az-inset px-2.5 py-1.5">
           <Icon name="search" class="shrink-0 text-[12px] text-primary/70" />
           <Input.Field
