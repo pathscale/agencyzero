@@ -24,6 +24,11 @@ on:
         required: false
         type: boolean
         default: false
+      lifecycle:
+        description: 'Also verify inspection-disable and application restart in isolated processes'
+        required: false
+        type: boolean
+        default: false
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -35,7 +40,7 @@ jobs:
     # macOS because the harness needs a window server. There is no headless
     # path: the whole point is to ask the compositor what it actually drew.
     runs-on: macos-14
-    # A full instance-level sweep drives roughly 475 controls after a 10-minute
+    # A full instance-level sweep drives roughly 674 controls after a 10-minute
     # build. Keep enough room for every Home row and guaranteed process cleanup.
     timeout-minutes: 75
     steps:
@@ -193,7 +198,7 @@ jobs:
           ps-qa --trace cover 2>&1 | tee /tmp/sweep.txt
 
       - name: Restart clean for isolated controls
-        if: ${{ inputs.cover }}
+        if: ${{ inputs.cover || inputs.lifecycle }}
         run: |
           old_pid="$(cat /tmp/az-qa.pid)"
           kill -TERM "$old_pid" 2>/dev/null || true
@@ -216,7 +221,7 @@ jobs:
 
       - name: Verify the inspection toggle disconnects control
         id: isolated
-        if: ${{ inputs.cover }}
+        if: ${{ inputs.cover || inputs.lifecycle }}
         continue-on-error: true
         run: |
           ps-qa click Settings
@@ -241,7 +246,7 @@ jobs:
           fi
 
       - name: Restart clean for the relaunch control
-        if: ${{ inputs.cover }}
+        if: ${{ inputs.cover || inputs.lifecycle }}
         run: |
           old_pid="$(cat /tmp/az-qa.pid)"
           kill -TERM "$old_pid" 2>/dev/null || true
@@ -264,7 +269,7 @@ jobs:
 
       - name: Verify Restart relaunches into a controllable process
         id: isolated_restart
-        if: ${{ inputs.cover }}
+        if: ${{ inputs.cover || inputs.lifecycle }}
         continue-on-error: true
         run: |
           old_pid="$(cat /tmp/az-qa.pid)"
