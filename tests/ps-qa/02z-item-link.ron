@@ -28,7 +28,7 @@
         group: "item-link",
         what: "the issue editor remains available after cancellation",
         open: Some("theta theta north indi"),
-        hover: None,
+        hover: Some("Change the status of iota beta zeta delta north cobalt epsilon omega lambda epsilon"),
         click: Some("button:Link a GitHub issue to iota beta zeta delta north cobalt epsilon omega lambda epsilon"),
         subject: "textbox:GitHub issue URL",
         expect: PaintsNamed,
