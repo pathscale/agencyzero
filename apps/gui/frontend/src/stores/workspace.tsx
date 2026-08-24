@@ -3246,11 +3246,12 @@ function createWorkspace() {
       client().resetProjectSession(projectId, agent, force),
     adoptSession: async (projectId: string, agent: Agent, sessionId: string): Promise<void> => {
       await client().adoptSession(projectId, agent, sessionId);
-      setState((draft) => {
-        const project = draft.projects.find((candidate) => candidate.id === projectId);
-        if (!project) return;
-        project.sessions[agent] = sessionId;
-        if (agent === "claude") project.sessionId = sessionId;
+      const project = state.projects.find((candidate) => candidate.id === projectId);
+      if (!project) return;
+      upsertProject({
+        ...project,
+        sessions: { ...project.sessions, [agent]: sessionId },
+        sessionId: agent === "claude" ? sessionId : project.sessionId,
       });
     },
     getProjectNotes: (projectId: string) => client().getProjectNotes(projectId),
