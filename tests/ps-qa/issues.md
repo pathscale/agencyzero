@@ -110,11 +110,14 @@ present on any delivery branch.
     substring. Exact targets now retain priority before enabled-state gating;
     the disconnected-agent Send state is recorded honestly instead of claiming
     that CI submitted a prompt to an unavailable external agent.
+15. Recovered-session adoption persisted and replaced the reactive project, but
+    its attached-id status remained an unlabeled nested span. It is now a
+    standard live `output` whose accessible name is the exact visible status.
 
 ## Validation still running
 
 - 32712761929: native shared UI language selector — passed
-- 32715106015: direct Resume-session editor with reactive project replacement
+- 32715980958: direct Resume-session editor with semantic live status
 - 32715574852: exact Composer menus and disconnected-agent Send gate
 - 32715244253: native Settings moderator-model selector
 
