@@ -7,6 +7,7 @@ import {
   type GlassMode,
   type GlassTuning,
   Input,
+  NativeSelect,
   Select,
   Slider,
   Switch,
@@ -1612,7 +1613,7 @@ export function SettingsTab(): JSX.Element {
               />
             </Row>
             <Row label={tx("Moderator model")}>
-              <select
+              <NativeSelect
                 aria-label={`${tx("Moderator model")}: ${moderatorModelLabel()}`}
                 value={current().moderator.model}
                 onChange={(event) =>
@@ -1629,7 +1630,7 @@ export function SettingsTab(): JSX.Element {
                 <For each={moderatorModels()}>
                   {(model) => <option value={model.value}>{model.label}</option>}
                 </For>
-              </select>
+              </NativeSelect>
             </Row>
             <Row label={tx("Confine tool calls to the working directories")}>
               <SettingToggle
