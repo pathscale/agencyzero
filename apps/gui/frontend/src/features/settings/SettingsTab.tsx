@@ -2047,6 +2047,7 @@ function ExperimentalSettings(): JSX.Element {
   const now = useNow(30_000);
   const [busy, setBusy] = createSignal(false);
   const [note, setNote] = createSignal<string | null>(null);
+  const [refreshGeneration, setRefreshGeneration] = createSignal(0);
 
   const refresh = async (): Promise<void> => {
     setBusy(true);
@@ -2054,6 +2055,7 @@ function ExperimentalSettings(): JSX.Element {
     try {
       // Forced: asking for a reading by hand should outrank the poll's backoff.
       await Promise.all([actions.refreshQuota(), actions.refreshClaudeUsage({ force: true })]);
+      setRefreshGeneration((generation) => generation + 1);
     } catch (cause) {
       setNote(describeError(cause));
     } finally {
@@ -2152,11 +2154,21 @@ function ExperimentalSettings(): JSX.Element {
         isLast
       >
         <Flex align="center" gap="sm">
+          <span
+            role="status"
+            aria-label={tx("Usage refresh generation {count}", {
+              count: refreshGeneration(),
+            })}
+            class="sr-only"
+          >
+            {tx("Usage refresh generation {count}", { count: refreshGeneration() })}
+          </span>
           <Show when={note()}>
             {(message) => <span class="max-w-[230px] text-[11px] text-error">{message()}</span>}
           </Show>
           <Button
             type="button"
+            aria-label={tx("Refresh provider usage")}
             disabled={busy()}
             onClick={() => void refresh()}
             class="rounded-lg border border-az-hairline-strong px-3 py-[5px] text-[12px] text-az-body transition-colors hover:border-primary hover:text-primary disabled:opacity-40"
@@ -2858,7 +2870,12 @@ function admitSection(ordinal: number): void {
 function InternalPerformance(): JSX.Element {
   const { state } = useWorkspace();
   const [table, setTable] = createSignal(perfSnapshot());
-  const refresh = () => setTable(perfSnapshot());
+  const [refreshGeneration, setRefreshGeneration] = createSignal(0);
+  const [resetGeneration, setResetGeneration] = createSignal(0);
+  const refresh = () => {
+    setTable(perfSnapshot());
+    setRefreshGeneration((generation) => generation + 1);
+  };
 
   /*
    * Re-read whenever Settings comes to the front.
@@ -2894,14 +2911,41 @@ function InternalPerformance(): JSX.Element {
         hint={tx("since this window opened, or since the last reset")}
       >
         <Flex align="center" gap="sm">
-          <Button type="button" class="az-ui-button-neutral" onClick={refresh}>
+          <span
+            role="status"
+            aria-label={tx("Performance refresh generation {count}", {
+              count: refreshGeneration(),
+            })}
+            class="sr-only"
+          >
+            {tx("Performance refresh generation {count}", {
+              count: refreshGeneration(),
+            })}
+          </span>
+          <span
+            role="status"
+            aria-label={tx("Performance reset generation {count}", {
+              count: resetGeneration(),
+            })}
+            class="sr-only"
+          >
+            {tx("Performance reset generation {count}", { count: resetGeneration() })}
+          </span>
+          <Button
+            type="button"
+            aria-label={tx("Refresh performance measurements")}
+            class="az-ui-button-neutral"
+            onClick={refresh}
+          >
             {tx("Refresh")}
           </Button>
           <Button
             type="button"
+            aria-label={tx("Reset performance measurements")}
             class="az-ui-button-neutral"
             onClick={() => {
               perfReset();
+              setResetGeneration((generation) => generation + 1);
               refresh();
             }}
           >
