@@ -32,6 +32,26 @@ import type { Project, Tab } from "~/types";
 function ActiveProjectPanel(): JSX.Element {
   const { state } = useWorkspace();
   /*
+   * The transcript and composer are the project surface; the side panel is
+   * supplementary. Give the main surface one paint before constructing the
+   * panel's paged item and task-log trees, so opening a project cannot spend
+   * several seconds on an optional column before `Send` becomes usable.
+   */
+  const [panelReady, setPanelReady] = createSignal(false);
+  let readyFrame: number | undefined;
+  let readyTimer: number | undefined;
+  onSettled(() => {
+    const mount = (): void => {
+      readyTimer = window.setTimeout(() => setPanelReady(true), 0);
+    };
+    if (typeof requestAnimationFrame === "undefined") mount();
+    else readyFrame = requestAnimationFrame(mount);
+    return () => {
+      if (readyFrame !== undefined) cancelAnimationFrame(readyFrame);
+      if (readyTimer !== undefined) window.clearTimeout(readyTimer);
+    };
+  });
+  /*
    * A signal makes the active project and tab one reactive value. The enclosing
    * project `Match` disposes this component before `activeKey` can represent a
    * non-project surface.
@@ -65,7 +85,7 @@ function ActiveProjectPanel(): JSX.Element {
           : "pointer-events-none ml-0 w-0 translate-x-3 opacity-0"
       }`}
     >
-      <Show when={shown() ? active() : null}>
+      <Show when={shown() && panelReady() ? active() : null}>
         {(current) => <ProjectPanel project={current().project} agent={current().tab.agent} />}
       </Show>
     </div>
