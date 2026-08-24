@@ -165,9 +165,10 @@ present on any delivery branch.
   failed 6/7 through document-opener escalation; this is classified test drift
 - 32748336510: exact named row still used `open:`, which re-navigated Home and
   lost the already-materialized row; test drift at 6/7, isolated fork 1/1
-- 32749347911: exact sequential reopen and second-Cancel outcomes — queued
-- 32749352067: isolated stale-Escape-state mutation using the same sequential
-  actions — queued;
+- 32749347911: direct exact-row click correctly found the row was no longer
+  materialized after Escape; test precondition drift at 6/8, isolated fork 1/1
+- 32750239185: Home-rematerialized exact reopen and second-Cancel outcomes — queued
+- 32750243224: isolated stale-Escape-state mutation using the same sequence — queued;
   ordinary Cancel must pass while reopen-after-Escape fails
 - 32744366001: the prior 212-outcome full run — superseded by the new reopen
   assertion and automatically canceled when the strengthened same-ref run began
