@@ -113,11 +113,15 @@ present on any delivery branch.
 15. Recovered-session adoption persisted and replaced the reactive project, but
     its attached-id status remained an unlabeled nested span. It is now a
     standard live `output` whose accessible name is the exact visible status.
+16. The project panel's retained value watched only the `projects` array object,
+    not the active project element. Replacing a project therefore left all
+    panel props stale. Its reactive source now resolves and tracks the active
+    project and tab directly.
 
 ## Validation still running
 
 - 32712761929: native shared UI language selector — passed
-- 32715980958: direct Resume-session editor with semantic live status
+- 32716735293: direct Resume-session editor with reactive active-project source
 - 32716288389: exact Composer model-node activation and disconnected-agent Send gate
 - 32715244253: native Settings moderator-model selector — passed 60/60
 
@@ -154,6 +158,6 @@ or process-level outcome. Inventory alone is not a pass. The broad sweep is a
 diagnostic for newly introduced controls; the named reconciled outcomes are the
 release gate.
 
-The legacy frontend suite is manual-only. It currently has 78 files and 674
+The legacy frontend suite is manual-only. It currently has 78 files and 673
 direct declarations. Delete a renderer-blind test only after its live
 replacement passes and a negative mutation proves that replacement turns red.
