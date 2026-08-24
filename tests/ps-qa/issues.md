@@ -79,9 +79,9 @@ lookups.
 | analytics | 6 |
 | composer | 8 |
 | notes | 1 |
-| home | 11 |
+| home | 14 |
 | theme | 18 |
-| **total** | **114** |
+| **total** | **117** |
 
 Run 32640904469 completed 19/23. Two failures were the same real UI regression:
 semantic activation of both rename buttons left a 0x0 textbox. The critical
@@ -150,7 +150,7 @@ control. Manual native panels and external links remain the only exclusions,
 and they are counted and named for per-release verification.
 
 The inventory currently contains 475 controls while the outcome suite contains
-114 checks. That is an incomplete audit. Unverified controls remain work; they
+117 checks. That is an incomplete audit. Unverified controls remain work; they
 must never be summarized as passes.
 
 ## Known coverage gaps

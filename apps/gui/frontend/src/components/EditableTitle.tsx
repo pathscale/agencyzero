@@ -57,7 +57,12 @@ export function EditableTitle(props: {
           fallback={<span class="min-w-0 truncate">{props.value}</span>}
         >
           {(activate) => (
-            <Button type="button" onClick={() => activate()()} class="min-w-0 truncate text-left">
+            <Button
+              type="button"
+              onClick={() => activate()()}
+              aria-label={tx("Open project {name}", { name: props.value })}
+              class="min-w-0 truncate text-left"
+            >
               {props.value}
             </Button>
           )}

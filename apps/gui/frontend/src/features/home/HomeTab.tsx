@@ -208,6 +208,7 @@ export function HomeTab(): JSX.Element {
                   <Button
                     type="button"
                     onClick={() => actions.openProject(project.id)}
+                    aria-label={tx("Open project {name}", { name: project.name })}
                     class="flex items-center gap-2.5 rounded-[11px] border border-primary/22 bg-base-300 px-3 py-2.5 text-left transition-colors hover:border-primary/50"
                   >
                     <StatusDot status={tabStatus(project.id)} />
@@ -243,6 +244,7 @@ export function HomeTab(): JSX.Element {
                 <Button
                   type="button"
                   onClick={() => actions.openProject(project.id)}
+                  aria-label={tx("Open recent project {name}", { name: project.name })}
                   class="flex items-center gap-3 rounded-[11px] border border-az-hairline bg-base-300 px-3 py-2.5 text-left transition-colors hover:border-primary/40"
                 >
                   <Icon name="folder-git-2" class="shrink-0 text-[15px] text-primary" />
@@ -991,6 +993,7 @@ function GroupItemRow(props: {
           <Button
             type="button"
             onClick={props.onOpen}
+            aria-label={tx("Open item {name}", { name: props.item.title })}
             class="flex min-w-0 flex-1 items-baseline gap-2.5 text-left"
           >
             <span
