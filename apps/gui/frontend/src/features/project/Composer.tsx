@@ -1476,6 +1476,7 @@ export function Composer(props: ComposerProps): JSX.Element {
                 variant="outline"
                 value={`${props.agent}:${props.model}`}
                 options={props.modelOptions}
+                isDisabled={props.modelOptions.length < 2}
                 onChange={(value) => {
                   const option = props.modelOptions.find((candidate) => candidate.value === value);
                   if (option) props.onModelChange(option.agent, option.model);
