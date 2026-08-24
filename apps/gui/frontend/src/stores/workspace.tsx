@@ -970,6 +970,19 @@ function createWorkspace() {
       .sort((a, b) => a.order - b.order);
   }
 
+  /** Apply one durable item result; backend events use the same idempotent path. */
+  function upsertItem(item: ProjectItem): void {
+    setState((d) => {
+      d.items[item.projectId] = ((list = []) => {
+        const index = list.findIndex((existing) => existing.id === item.id);
+        if (index < 0) return [...list, item];
+        const next = [...list];
+        next[index] = item;
+        return next;
+      })(d.items[item.projectId]);
+    });
+  }
+
   /** The Items badge counts what is left to do, so terminal items drop out. */
   function openItemCount(projectId: string): number {
     return itemsFor(projectId).filter(
@@ -1730,17 +1743,6 @@ function createWorkspace() {
 
     await bind("project:deleted", ({ id }) => purgeProject(id));
 
-    const upsertItem = (item: ProjectItem) => {
-      setState((d) => {
-        d.items[item.projectId] = ((list = []) => {
-          const index = list.findIndex((existing) => existing.id === item.id);
-          if (index < 0) return [...list, item];
-          const next = [...list];
-          next[index] = item;
-          return next;
-        })(d.items[item.projectId]);
-      });
-    };
     // Both event types upsert. A create buffered during hydration can already
     // be present in the snapshot when replay runs, while an update may be the
     // first event seen after reconnecting. Append/map made the former duplicate
@@ -3135,7 +3137,11 @@ function createWorkspace() {
     updateItem: (id: string, title: string) => client().updateItem(id, title),
     getItemContext: (id: string) => client().getItemContext(id),
     setItemContext: (id: string, context: string) => client().setItemContext(id, context),
-    setItemIssue: (id: string, url: string) => client().setItemIssue(id, url),
+    async setItemIssue(id: string, url: string) {
+      const item = await client().setItemIssue(id, url);
+      upsertItem(item);
+      return item;
+    },
     deleteItem: (id: string) => client().deleteItem(id),
     unmarkItemDeletion: (id: string) => client().unmarkItemDeletion(id),
     chooseAttachments: () => client().chooseAttachments(),
