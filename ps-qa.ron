@@ -104,6 +104,11 @@ AppProfile(
         // panels cannot be closed headlessly.
         (label: "Choose\u{2026}",                       command: "choose_data_directory / choose_agent_proxy_binary"),
 
+        // Restarting the sidecar can invalidate the control transport used by
+        // the rest of the audit. Verify it in the manual release pass instead
+        // of destabilising a shared semantic sweep.
+        (label: "Restart AgencyProxy",                  command: "restart_agent_proxy"),
+
         // Controls that hand the screen to the *browser*. Same problem as a
         // native panel and worse manners: a sweep that presses these opens a
         // tab on the owner's desktop for every PR and issue on screen.

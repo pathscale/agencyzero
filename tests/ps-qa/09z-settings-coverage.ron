@@ -242,5 +242,14 @@
         subject: "Use the default",
         expect: Disabled,
     ),
+    (
+        id: "settings-study-delete-disabled-without-data",
+        group: "settings",
+        what: "study-data deletion is unavailable when there is nothing eligible to delete",
+        open: Some("Settings"),
+        hover: None,
+        click: None,
+        subject: "button:Delete data",
+        expect: Disabled,
+    ),
 ]
-

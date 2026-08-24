@@ -72,6 +72,16 @@
         expect: PaintsNamed,
     ),
     (
+        id: "composer-send-disabled-without-draft",
+        group: "composer",
+        what: "Send is visibly unavailable while the composer is empty",
+        open: Some("theta theta north indi"),
+        hover: None,
+        click: None,
+        subject: "button:Send",
+        expect: Disabled,
+    ),
+    (
         id: "composer-draft-enables-send",
         group: "composer",
         what: "entering a prompt enables Send",
@@ -82,5 +92,15 @@
         text: Some("qa draft only"),
         subject: "Send",
         expect: Enabled,
+    ),
+    (
+        id: "composer-send-submits-draft",
+        group: "composer",
+        what: "Send submits the current draft into the rendered transcript",
+        open: None,
+        hover: None,
+        click: Some("button:Send"),
+        subject: "qa draft only",
+        expect: Paints,
     ),
 ]

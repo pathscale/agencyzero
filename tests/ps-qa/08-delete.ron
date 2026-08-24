@@ -11,6 +11,7 @@
         // Plain text is not guaranteed to become an accessibility node.
         subject: "Confirm delete: e756",
         expect: Paints,
+        covers: ["button:Delete project *"],
     ),
     (
         id: "delete-cancel-restores-row",
@@ -23,6 +24,26 @@
         hover: None,
         click: Some("Cancel"),
         subject: "Confirm delete: e756",
+        expect: Vanishes,
+    ),
+    (
+        id: "delete-confirm-asks-again",
+        group: "delete",
+        what: "the disposable project can enter confirmation again after Cancel",
+        open: Some("Home"),
+        hover: None,
+        click: Some("Delete project e756"),
+        subject: "Confirm delete: e756",
+        expect: Paints,
+    ),
+    (
+        id: "delete-confirm-removes-project",
+        group: "delete",
+        what: "confirming project deletion removes the exact disposable project row",
+        open: None,
+        hover: None,
+        click: Some("Confirm delete: e756"),
+        subject: "Open project e756",
         expect: Vanishes,
     ),
 ]
