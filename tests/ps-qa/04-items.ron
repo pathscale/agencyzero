@@ -1,19 +1,33 @@
 // Creating an item is a rendered-order outcome, not merely a successful IPC.
 // The title is entered through the textbox's semantic node id and Enter; the
-// resulting status control must paint below the older item status controls.
+// resulting status controls must preserve creation order inside their shared
+// status group, independent of whichever status existing fixture rows carry.
 [
     (
-        id: "items-newest-last",
+        id: "items-newest-anchor",
         group: "items",
-        what: "a newly created item appears at the bottom of the item list",
+        what: "a first newly created item paints in the rendered list",
         open: Some("theta theta north indi"),
         hover: None,
         click: Some("New item"),
         type_into: Some("New item"),
-        text: Some("qa audit newest"),
+        text: Some("qa audit first new item"),
         key: Some("Enter"),
-        compare: Some("Change the status of qa audit newest"),
-        subject: "Change the status of iota beta zeta delta north cobalt epsilon omega lambda epsilon",
+        subject: "Change the status of qa audit first new item",
+        expect: PaintsNamed,
+    ),
+    (
+        id: "items-newest-last",
+        group: "items",
+        what: "a later newly created item appears below the previous new item",
+        open: Some("theta theta north indi"),
+        hover: None,
+        click: Some("New item"),
+        type_into: Some("New item"),
+        text: Some("qa audit second new item"),
+        key: Some("Enter"),
+        compare: Some("Change the status of qa audit second new item"),
+        subject: "Change the status of qa audit first new item",
         expect: Above,
     ),
     (
