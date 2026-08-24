@@ -7,7 +7,7 @@ semantic node id; AgencyZero checks never use coordinate-pointer activation.
 ## Current subject
 
 - AgencyZero PR 186, app 0.8.37
-- ps-qa PR 10 candidate, 213 checks in 24 clean-profile groups
+- ps-qa PR 10 candidate, 214 checks in 24 clean-profile groups
 - PathScale UI PR 262 candidate, package version 2.9.2
 - tauri-runtime-blitz candidate based on 0.1.5; the next release will include
   native, selected, pressed and checked state in one semantic boolean
@@ -163,14 +163,17 @@ present on any delivery branch.
   an incorrect expansion of the correct short UI commit and ran no app checks
 - 32747356042: strengthened positive outcome still used ambiguous `Fork ` and
   failed 6/7 through document-opener escalation; this is classified test drift
-- 32748336510: exact named-row dialog/reopen outcome — queued
-- 32748341254: isolated stale-Escape-state mutation with the same exact row — queued;
+- 32748336510: exact named row still used `open:`, which re-navigated Home and
+  lost the already-materialized row; test drift at 6/7, isolated fork 1/1
+- 32749347911: exact sequential reopen and second-Cancel outcomes — queued
+- 32749352067: isolated stale-Escape-state mutation using the same sequential
+  actions — queued;
   ordinary Cancel must pass while reopen-after-Escape fails
 - 32744366001: the prior 212-outcome full run — superseded by the new reopen
   assertion and automatically canceled when the strengthened same-ref run began
 
 The strengthened focused positive and negative runs are queued. Once they are
-classified, the 213-outcome candidate gets a fresh exhaustive full-control run;
+classified, the 214-outcome candidate gets a fresh exhaustive full-control run;
 the historical exact inventory above is not carried forward as its count.
 
 No PR is updated and no candidate dependency is published until these runs are
