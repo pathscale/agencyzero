@@ -1365,7 +1365,7 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
              */
             fallback={
               <Show when={editingId() === item.id}>
-                <Input
+                <Input.Field
                   autofocus
                   value={editTitle()}
                   aria-label={tx("Edit {name}", { name: item.title })}
@@ -1374,7 +1374,6 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
                     if (event.key === "Enter") void saveEdit(item);
                     if (event.key === "Escape") setEditingId(null);
                   }}
-                  onBlur={() => void saveEdit(item)}
                   class="rounded-[9px] border border-primary/40 bg-base-300 px-2.5 py-2 text-[12.5px] text-az-body focus:outline-none"
                 />
               </Show>

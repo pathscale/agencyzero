@@ -960,7 +960,6 @@ function GroupItemRow(props: {
               if (event.key === "Enter") void save();
               if (event.key === "Escape") setEditing(false);
             }}
-            onBlur={() => void save()}
             class="mx-2 my-1 rounded-[9px] border border-primary/40 bg-base-300 px-2.5 py-2 text-[12.5px] text-az-body focus:outline-none"
           />
         </Show>
