@@ -10,7 +10,7 @@
         click: None,
         type_into: Some("Notes kept across compaction"),
         text: Some("qa audit note"),
-        subject: "Save",
+        subject: "button:Save",
         expect: Enabled,
     ),
     (
@@ -19,8 +19,8 @@
         what: "saving durable notes makes the stored value available to forget",
         open: Some("theta theta north indi"),
         hover: None,
-        click: Some("Save"),
-        subject: "Forget",
+        click: Some("button:Save"),
+        subject: "button:Forget",
         expect: Enabled,
     ),
     (
@@ -29,8 +29,8 @@
         what: "forgetting durable notes clears the stored value",
         open: Some("theta theta north indi"),
         hover: None,
-        click: Some("Forget"),
-        subject: "Forget",
+        click: Some("button:Forget"),
+        subject: "button:Forget",
         expect: Disabled,
     ),
 ]
