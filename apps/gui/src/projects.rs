@@ -2194,7 +2194,7 @@ fn next_project_position(rows: &[ProjectRow]) -> u32 {
         .map_or(0, |position| position.saturating_add(1))
 }
 
-/// Add one item at the front of a project's manual order.
+/// Add one item after the existing manual order.
 ///
 /// These four item commands land together: the panel's controls existed for
 /// weeks served by the frontend mock, which meant a created or reordered item
@@ -2225,25 +2225,18 @@ pub async fn create_item(
             return Err("an item fork cannot own sub-items; update its parent item instead".into());
         }
     }
-    let mut siblings = state
+    let siblings = state
         .tables
         .project_item
         .select_by_project_id(project_id.clone())
         .execute()
         .unwrap_or_default();
-    siblings.sort_by(|left, right| {
-        left.position
-            .cmp(&right.position)
-            .then_with(|| left.id.cmp(&right.id))
-    });
-    let sibling_ids: Vec<_> = siblings.iter().map(|item| item.id.clone()).collect();
-    write_item_positions(&state.tables, &sibling_ids, 1).await?;
     let row = ProjectItemRow {
         id: id("item"),
         project_id,
         title,
         status: "pending".into(),
-        position: 0,
+        position: next_item_position(siblings.iter()),
         // Nothing has shipped for a row that was only just proposed.
         reference: String::new(),
         priority: NORMAL_PRIORITY,
@@ -2793,18 +2786,19 @@ pub async fn update_item(
     if title.is_empty() {
         return Err("an item needs a title".into());
     }
-    state
-        .tables
-        .project_item
-        .update_title_by_id(ItemTitleByIdQuery { title }, id.clone())
-        .await
-        .map_err(|error| error.to_string())?;
+    let (write, ()) = tokio::join!(
+        state
+            .tables
+            .project_item
+            .update_title_by_id(ItemTitleByIdQuery { title }, id.clone()),
+        touch_item(&state.tables, &id),
+    );
+    write.map_err(|error| error.to_string())?;
     let row = state
         .tables
         .project_item
         .select(id.clone())
         .ok_or_else(|| format!("no item {id}"))?;
-    touch_item(&state.tables, &id).await;
     let dto = item_dto(row, &state.tables);
     let _ = app.emit("item:updated", dto.clone());
     let mut study = crate::study::Record::manual(
@@ -2852,16 +2846,16 @@ async fn link_item_issue_inner(
     let url =
         github_issue_url(authored_url).map_err(|reason| format!("ENTITY_NOT_FOUND: {reason}"))?;
     let reference = format!("issue:{url}");
-    tables
-        .project_item
-        .update_reference_by_id(
+    let (write, ()) = tokio::join!(
+        tables.project_item.update_reference_by_id(
             ItemReferenceByIdQuery {
                 reference: reference.clone(),
             },
             id.to_string(),
-        )
-        .await
-        .map_err(|error| error.to_string())?;
+        ),
+        touch_item(tables, id),
+    );
+    write.map_err(|error| error.to_string())?;
     let row = tables
         .project_item
         .select(id.to_string())
@@ -2869,7 +2863,6 @@ async fn link_item_issue_inner(
     if row.reference != reference {
         return Err("WRITE_FAILED: linked issue reference did not persist".into());
     }
-    touch_item(tables, id).await;
     let dto = item_dto(row, tables);
     let _ = app.emit("item:updated", dto.clone());
     Ok(dto)

@@ -33,48 +33,58 @@ function ActiveProjectPanel(): JSX.Element {
   const { state } = useWorkspace();
   /*
    * The transcript and composer are the project surface; the side panel is
-   * supplementary. Give the main surface one paint before constructing the
-   * panel's paged item and task-log trees, so opening a project cannot spend
-   * several seconds on an optional column before `Send` becomes usable.
+   * supplementary. Point the panel at the new project after the main surface
+   * has painted, so its item and task-log trees cannot hold up tab feedback.
+   *
+   * Keep the existing panel in place during that one-frame handoff. Gating the
+   * subtree off would destroy and rebuild it, causing both a visible flash and
+   * the retained-tree problem this shared panel replaced.
    */
-  const [panelReady, setPanelReady] = createSignal(false);
+  const [displayed, setDisplayed] = createSignal<{ project: Project; tab: Tab } | null>(null);
   let readyFrame: number | undefined;
   let readyTimer: number | undefined;
-  onSettled(() => {
-    const mount = (): void => {
-      readyTimer = window.setTimeout(() => setPanelReady(true), 0);
-    };
-    if (typeof requestAnimationFrame === "undefined") mount();
-    else readyFrame = requestAnimationFrame(mount);
-    return () => {
-      if (readyFrame !== undefined) cancelAnimationFrame(readyFrame);
-      if (readyTimer !== undefined) window.clearTimeout(readyTimer);
-    };
-  });
+  const currentProject = () =>
+    state.projects.find((candidate) => candidate.id === state.activeKey) ?? null;
+  const shown = () =>
+    Boolean(currentProject()) &&
+    prefs.projectPanelVisible &&
+    !currentProject()?.forkedFrom?.itemId;
   /*
    * A signal makes the active project and tab one reactive value. The enclosing
    * project `Match` disposes this component before `activeKey` can represent a
    * non-project surface.
    */
-  const [lastSeen, setLastSeen] = createSignal<{ project: Project; tab: Tab } | null>(null);
   createEffect(
     () => {
       const project = state.projects.find((candidate) => candidate.id === state.activeKey);
       const tab = state.tabs.find((candidate) => candidate.key === state.activeKey);
-      return project && tab ? { project, tab } : null;
+      return project && tab && shown() ? { project, tab } : null;
     },
     (current) => {
-      if (current) setLastSeen(current);
+      if (readyFrame !== undefined) cancelAnimationFrame(readyFrame);
+      if (readyTimer !== undefined) window.clearTimeout(readyTimer);
+      if (!current) {
+        setDisplayed(null);
+        return;
+      }
+
+      const repoint = (): void => {
+        readyFrame = undefined;
+        readyTimer = window.setTimeout(() => {
+          readyTimer = undefined;
+          setDisplayed(current);
+        }, 0);
+      };
+      if (typeof requestAnimationFrame === "undefined") repoint();
+      else readyFrame = requestAnimationFrame(repoint);
     },
   );
-  const active = lastSeen;
-  /*
-   * A fork's pane hides the panel: its column is the fork's parent context, and
-   * the fork has none of its own. Read here rather than passed down, so the
-   * panel does not need to know which pane is in front.
-   */
-  const forked = () => Boolean(active()?.project.forkedFrom?.itemId);
-  const shown = () => Boolean(active()) && prefs.projectPanelVisible && !forked();
+  onCleanup(() => {
+    if (readyFrame !== undefined) cancelAnimationFrame(readyFrame);
+    if (readyTimer !== undefined) window.clearTimeout(readyTimer);
+  });
+
+  const active = displayed;
 
   return (
     <div
@@ -85,7 +95,7 @@ function ActiveProjectPanel(): JSX.Element {
           : "pointer-events-none ml-0 w-0 translate-x-3 opacity-0"
       }`}
     >
-      <Show when={shown() && panelReady() ? active() : null}>
+      <Show when={shown() ? active() : null}>
         {(current) => <ProjectPanel project={current().project} agent={current().tab.agent} />}
       </Show>
     </div>
