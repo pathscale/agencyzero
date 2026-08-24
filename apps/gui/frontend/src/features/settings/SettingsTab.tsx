@@ -3477,7 +3477,12 @@ function StoreSnapshotControl(): JSX.Element {
     setNote("");
     void actions
       .createStoreSnapshot()
-      .then(alive((name) => setNote(tx("Written to {name}", { name }))))
+      .then(
+        alive((name) => {
+          setNote(tx("Written to {name}", { name }));
+          setGeneration((value) => value + 1);
+        }),
+      )
       .catch(
         alive((cause) => {
           setFailed(true);
@@ -3486,7 +3491,6 @@ function StoreSnapshotControl(): JSX.Element {
       )
       .finally(
         alive(() => {
-          setGeneration((value) => value + 1);
           setBusy(false);
         }),
       );
