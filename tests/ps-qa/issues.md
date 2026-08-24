@@ -1,198 +1,124 @@
 # Component audit inventory and failures
 
-This file records measured renderer results, not legacy unit-test results. Run
-the procedure in `docs/QA-button-audit-runbook.md` against a freshly restored
-QA profile before changing any status.
+This is measured renderer evidence. It does not count jsdom event dispatch as a
+working control. Every automated action resolves an accessible name to an exact
+semantic node id; AgencyZero checks never use coordinate-pointer activation.
 
-## Current audit subject
+## Current subject
 
-- AgencyZero: PR 186, app version 0.8.36
-- ps-qa: PR 10 candidate (0.3.3), deliberately not published until this audit batch is stable
-- blitz-control-protocol and tauri-runtime-blitz: version 0.1.5, published
-- PromptSyntax-rs: version 0.2.0, published
-- PathScale UI: version 2.9.1, published
-- Checks: 139 in 20 groups
+- AgencyZero PR 186, app 0.8.37
+- ps-qa PR 10 candidate, 166 checks in 20 groups
+- PathScale UI PR 262 candidate, package version 2.9.2
+- tauri-runtime-blitz candidate based on 0.1.5; the next release will include
+  native, selected, pressed and checked state in one semantic boolean
+- disposable profile: `/tmp/qa-profile-db`
+- launch contract: `az-gui --blitz-control`; no descriptor environment variable
 
-The current run uses `/tmp/qa-profile-db` and launches the built application
-with `--blitz-control`. ps-qa discovers the live descriptor through its normal
-CLI path. Every action is addressed by semantic node id. Coordinate pointer
-activation is not valid audit evidence.
+## Exact inventory
 
-ps-qa still provides generic coordinate `press` diagnostics. AgencyZero's RON
-checks intentionally omit `press`; this application must use semantic actions
-and explicit accessible names, resolving repeated rows to an exact node id.
+Run 32699353075 materialized all deferred settings and Home rows before counting:
 
-Inventory categories are mutually exclusive. A named, painted control disabled
-by current state is `state-disabled`, not an unreachable UI failure; manual
-exclusions and anonymous controls likewise cannot occupy two buckets. Inventory
-exits red only for anonymous or genuinely hidden/zero-box controls.
-
-## Required blocker checks
-
-Record these before any component verdict:
-
-| measurement | required result | current fresh result |
-| --- | --- | --- |
-| inactive top-level surfaces mounted | exactly one | passed in run 32672023708 |
-| hidden and painted buttons | 0 expected | passed in run 32672023708 |
-| ghost nodes | below the configured budget | passed in run 32672023708 |
-| duplicate names | resolved to intended node id | visible painted node-id resolution; hidden matches reported |
-
-If any row fails, fix or explain the measurement blocker and restart the app.
-Do not interpret `qa`, `audit` or `cover` while ghost subtrees can satisfy name
-lookups.
-
-## Resolved launch blockers
-
-- Run 32636554882 could not build because the configured `agency-proxy`
-  sidecar had not been staged. The workflow now calls the repository's staging
-  script before compiling the GUI.
-- Run 32637260189 built and launched, then TRB 0.1.2 tried to allocate the
-  macOS-26-only `NSGlassEffectView` on a macOS 14 runner and panicked before
-  ps-qa attached. TRB PR 30 guards class availability and falls back to
-  vibrancy. That run produced no tree or component verdict.
-- Run 32638367663 still compiled crates.io 0.1.2: Cargo reported that the
-  0.1.3 Git patches were unused because the lockfile selection remained on
-  0.1.2. The workflow now advances that package to 0.1.3 explicitly before
-  building.
-
-## Outcome checks
-
-`ps-qa list` currently loads:
-
-| group | checks |
+| category | controls |
 | --- | ---: |
-| icons | 1 |
-| hover | 4 |
-| items | 3 |
-| status | 2 |
-| sections | 17 |
-| chrome | 11 |
-| tasklog | 7 |
-| transcript | 2 |
-| session | 5 |
-| rename | 3 |
-| toggles | 6 |
-| verbosity | 1 |
-| dialog | 5 |
-| delete | 2 |
-| settings | 19 |
-| analytics | 7 |
-| composer | 8 |
-| notes | 3 |
-| home | 15 |
-| theme | 18 |
-| **total** | **139** |
+| total | 674 |
+| reachable ordinary controls | 654 |
+| unreachable | 0 |
+| anonymous | 0 |
+| disabled by current state | 8 |
+| manual native/external | 10 |
+| isolated lifecycle | 2 |
+| reconciled to named outcomes | 662 |
+| unverified ordinary controls | 0 |
 
-Run 32640904469 completed 19/23. Two failures were the same real UI regression:
-semantic activation of both rename buttons left a 0x0 textbox. The critical
-rename path now uses literal platform controls; its verdict uses ordinary
-semantic node activation. The idle painted Stop button is also fixed by
-unmounting the control while retaining only its layout slot.
+The only two controls not credited to an ordinary named outcome are the Settings
+switch `Enable inspection and agent control` and the Settings button `Restart`.
+They are isolated because success deliberately closes or replaces the process
+that owns the inspector socket.
 
-The other two failures were invalid evidence: the status check compared a broad
-hover-revealed count, and the fork Cancel semantic check disagreed with direct
-release behavior. The status check now follows the exact clicked accessible
-name. The fork checks now pass on the released node-id action path; it is not a
-claimed UI regression.
+## Rendered outcome evidence
 
-Runs 32670085123 and 32670673970 verified the corrected released
-harness/runtime path and clean process shutdown, but both rename outcomes
-remained red. ps-qa 0.3.2 reported
-the decisive distinction: each hidden 0x0 textbox still had a painted rename
-button of the same name after node-id activation. The handler therefore did not
-enter edit state; this is an application action regression, not a layout-only
-failure. Restoring AgencyZero 0.8.30's `mousedown` phase did not change the
-live result, which excludes gesture choice. Earlier live measurements in this
-component identified the boundary: UI Button's Dynamic element painted but
-dropped the nested consumer handler under Blitz. UI PR 262 replaced that
-element, but the combined PR-186/UI-262 candidate still left the pencil inert
-when the owner exercised it. Agency now keeps the UI-owned Button and Input
-mounted and swaps one ordinary display class, avoiding a fresh reactive branch
-at activation time. The rename verdict also types a replacement, commits it,
-and requires the newly named project control to paint; merely opening a
-textbox is no longer accepted as a successful rename.
+| area | result | run |
+| --- | ---: | ---: |
+| project rename, including persisted replacement | 5/5 | 32696302228 |
+| inert-pencil mutation (expected red) | 0/5 | 32702341694 |
+| item creation, ordering, editing and Escape | 4/4 | 32698944567 |
+| fork/setup dialog dismissal | 5/5 | 32697163974 |
+| Settings menus, writes and backend round trips | 42/42 | 32699343684 |
+| theme before the final non-default brightness correction | 18/19 | 32702269348 |
 
-Run 32672023708 deliberately remeasured that known failure after the workflow
-started preserving ps-qa's pipeline exit status. The job finished red at
-`Enforce outcome checks`, still uploaded the artifact, and stopped the exact
-audit PID cleanly. A failing targeted group can no longer appear green because
-`tee` consumed the harness exit code.
+The settings snapshot verdict is not a click acknowledgement. Its log contains
+`create_store_snapshot` followed by `store snapshot written`; the check only
+passes after that successful write generation changes.
 
-Run 32673498486 measured the expanded source at 475 components: 465 reachable,
-0 unreachable, 0 anonymous, 4 state-disabled, 4 manual and 2 isolated. That
-resolves the previously anonymous verbosity slider. It is not an outcome
-verdict: released ps-qa 0.3.2 rejected the new `Enabled` expectation before
-running any of the declared checks. The broad sweep then reached the UI 2.9.1
-event-forwarding failure: Settings controls reported no semantic change and
-the retained Settings surface prevented Analytics and Home from opening.
+The rename negative control disables the pencil on a disposable ref. All five
+checks then fail with the exact missing textbox/key target. The mutation is not
+present on any delivery branch.
 
-Since that run, PR 186 has standardized dynamic project, recent, item and
-disclosure names and expanded the suite to 139 checks. Clipboard, session,
-notes, verbosity, refresh, re-check, usage, performance and proxy lifecycle
-actions now require a semantic state transition rather than accepting a click.
-The exact local build is
-`/Users/revenge/AgencyZero/builds/AgencyZero-pr186-530b675.app`. Its frontend
-gate is 79/79 files and 707/707 tests; the Rust workspace is green with 336
-tests, and the source-bearing PR CI jobs are green. The managed agent sandbox
-cannot launch even `/Applications/AgencyZero.app` through LaunchServices, so
-the latest 139-check live rerun is still required before merge. The defensible
-live failure count remains "measurement blocked", not zero.
+## Failures found and repaired
+
+1. Both project pencils painted but did not enter edit mode through the live
+   renderer. `EditableTitle` now uses one ordinary controlled Button/Input
+   pattern with explicit Enter and Escape behavior. The real build is 5/5 and
+   the inert mutation is 0/5.
+2. The new-item editor used a nonstandard mount/blur sequence. It now uses an
+   ordinary visible Input with explicit Enter/Escape behavior; a new row paints
+   above every older row.
+3. TRB exposed only `aria-selected`; pressed buttons and checked radios always
+   reported false. The candidate now unifies native checked, `aria-selected`,
+   `aria-pressed`, `aria-checked`, and option selection.
+4. `ThemePicker` waited for slow settings round trips before reflecting button
+   state. It now owns immediate controlled values and synchronizes persisted
+   props. UI's `ComplexColorWheel` uses index-stable reactive rows so an
+   adjustment update does not replace its semantic node.
+5. The first theme manifest clicked `Text brightness 50%`, which was already the
+   selected default. It now clicks the explicit non-default 75% stop.
+6. `ps-qa click Restart` chose the earlier substring `Restart AgencyProxy`.
+   Exact accessible names now outrank substrings, and the lifecycle workflow
+   uses `button:Restart` explicitly.
+7. Separate final gate steps stopped after the first `exit 1`, hiding later
+   lifecycle failures. One aggregate gate now reports every failed stage before
+   failing the job.
+8. A single mutable 166-check process took 47 minutes and allowed one check to
+   poison later areas. The full run now restores the committed profile and
+   launches a fresh exact process for each of the 20 groups.
+
+## Validation still running
+
+- 32703091144: final 19-check theme run
+- 32703556449: inspection-disable plus exact application Restart
+- 32703694513: every outcome group against a clean profile
+- 32703981664: exhaustive inventory and generic 674-control diagnostic sweep
+
+No PR is updated and no candidate dependency is published until these runs are
+classified. A focused failure is fixed and rerun; it is never averaged into a
+pass count.
 
 ## Manual release worklist
 
-The automated audit excludes the exact `manual_controls` in `ps-qa.ron`:
+The automated audit counts but does not activate controls that open an external
+destination or a native chooser the harness cannot close:
 
-- native file, directory, import, export and backup panels the harness cannot
-  close;
-- external URL, browser and repository controls.
+- Add dir
+- Attach files
+- Attach files for the task manager
+- Back up & close
+- Choose…
+- Export JSONL
+- Select backup file…
+- Star on GitHub
+- View source
 
-`inventory` counts these without activation and `cover` prints each one it
-encountered. These are neither passes nor automated failures. A person verifies
-them once per release.
+The duplicate accessible labels account for ten concrete controls. A person
+verifies them once per release.
 
-## Audit acceptance contract
+## Acceptance contract
 
-An interactive node is not audited because inventory found it, because a broad
-sweep clicked it, or because jsdom dispatched an event to it. It is audited
-only when a named check drives the running rendered control through semantic
-node ids and observes the specific user-visible state change promised by that
-control. Manual native panels and external links remain the only exclusions,
-and they are counted and named for per-release verification.
+A control passes only when a named check drives the running rendered component
+through a semantic node id and observes its promised visible, semantic, stored,
+or process-level outcome. Inventory alone is not a pass. The broad sweep is a
+diagnostic for newly introduced controls; the named reconciled outcomes are the
+release gate.
 
-The last live inventory contains 475 controls while the current outcome suite
-contains 139 checks. One check may cover a repeated family only when every
-instance has the same explicit accessible action contract. The latest live
-inventory/reconciliation is still required. Unverified controls remain work;
-they must never be summarized as passes.
-
-## Known coverage gaps
-
-These are missing assertions, not application failures:
-
-1. Fork checks do not yet assert the durable store result.
-2. Reorder controls lack ordered-sequence assertions; newest-item order now has a rendered check.
-3. The icon check does not yet mutation-test captured ink.
-4. The two process-level inspection/restart controls require disposable-process
-   outcome runs; they cannot be turned green in the shared application process.
-5. The latest source needs a fresh live inventory to replace the stale dynamic
-   names in run 32673498486 and establish the exact remaining count.
-6. The 707-test legacy frontend suite is renderer-blind and manual-only. Delete
-   each obsolete test after its real outcome check exists, or immediately when
-   it never asserted a user-visible outcome.
-
-Response verbosity now has paired coverage: `verbosity-slider-changes` proves
-the live rendered slider changes its semantic value through node-id keyboard
-input, while the Rust run-builder test proves a stored non-default level is
-appended to resumed provider turns rather than only the first system prompt.
-
-## Dependency delivery status
-
-`blitz-control-protocol` and `tauri-runtime-blitz` 0.1.5 are published after
-green Linux protocol and macOS 14/26 runtime jobs. ps-qa PR 10 is green with
-strict Clippy, exact-node value/name transitions, disabled-state outcomes,
-strict inventory gating and offline reconciliation; it remains unreleased so
-the next version contains the complete audit batch rather than a micro release. PromptSyntax
-0.2.0 and PathScale UI 2.9.1 are also published. Agency's workflow now consumes
-released versions rather than git patches and inventories every interactive
-role by semantic node id with explicit manual, isolated and unverified classes.
+The legacy frontend suite is manual-only. It currently has 78 files and 674
+direct declarations. Delete a renderer-blind test only after its live
+replacement passes and a negative mutation proves that replacement turns red.
