@@ -1745,7 +1745,7 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
                   <section class="flex items-center gap-2 rounded-b-[9px] border-primary/24 border-t bg-az-inset px-3 py-2.5 shadow-[inset_2px_0_0_color-mix(in_srgb,var(--color-primary)_55%,transparent)]">
                     <Input.Field
                       autofocus
-                      type="url"
+                      type="text"
                       value={draft().url}
                       aria-label={tx("GitHub issue URL")}
                       onInput={(event) =>
