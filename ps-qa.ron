@@ -108,6 +108,10 @@ AppProfile(
         (label: "Restart AgencyProxy",                  command: "restart_agent_proxy"),
         (label: "Restart",                              command: "restart_app"),
 
+        // A real turn needs an authenticated paid provider. CI proves the
+        // disconnected-agent gate; an owner launches and verifies Send locally.
+        (label: "Send",                                 command: "authenticated provider turn (local manual)"),
+
         // Controls that hand the screen to the *browser*. Same problem as a
         // native panel and worse manners: a sweep that presses these opens a
         // tab on the owner's desktop for every PR and issue on screen.

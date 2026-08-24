@@ -133,7 +133,9 @@ pass count.
 
 The automated audit counts but does not activate controls that open an external
 destination or native chooser the harness cannot close, or the two low-churn
-restart controls that can terminate audit cleanup:
+restart controls that can terminate audit cleanup. Authenticated provider Send
+is also local manual-only; CI verifies its disconnected-agent gate instead of
+holding a paid subscription:
 
 - Add dir
 - Attach files
@@ -142,6 +144,7 @@ restart controls that can terminate audit cleanup:
 - Choose…
 - Export JSONL
 - Select backup file…
+- Send / Send into the running turn
 - Restart AgencyProxy
 - Restart AgencyZero
 - Star on GitHub

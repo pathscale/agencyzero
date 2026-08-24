@@ -154,11 +154,30 @@ Never activate these unattended:
 - a native dialog the harness cannot close;
 - a control that opens a browser, URL or another application;
 - Application Restart or Restart AgencyProxy, whose success can terminate the
-  audit's cleanup and continuation path.
+  audit's cleanup and continuation path;
+- provider-backed Send, which requires an authenticated paid subscription and
+  is launched and verified locally rather than from CI.
 
 List each one in `ps-qa.ron` under `manual_controls`. `inventory` counts them
 without activating them; `cover` also prints the named manual worklist. They
 stay outside automated pass/fail totals and are verified manually per release.
+
+### Rare local authenticated-Send check
+
+Run this on a release candidate before its delivery push, not in CI and not on
+every audit iteration. Use a locally authenticated provider account, create a
+disposable project, enter a unique prompt marker, and activate the visible Send
+control. Pass requires all of the following in the rendered app:
+
+1. the exact prompt appears as the user message;
+2. the project enters a running state and then returns to quiet;
+3. an agent response appears under the same project;
+4. the project exposes the provider session id for the next turn;
+5. no duplicate user turn, stuck draft, or persistent error remains.
+
+Record the candidate build path, provider, model, and result in the release
+notes. The automated suite separately proves that Send remains disabled when
+no authenticated agent is connected.
 
 ## Legacy frontend unit suite
 
