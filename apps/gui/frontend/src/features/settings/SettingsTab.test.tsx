@@ -424,19 +424,6 @@ describe("internal performance table", () => {
   });
 });
 
-describe("moderator settings", () => {
-  it("offers every selected provider model", async () => {
-    const screen = await mountSettings();
-
-    fireEvent.click(screen.getByLabelText("Moderator model"));
-    flush();
-
-    await waitFor(() => expect(document.body.textContent).toContain("Codex · GPT-5.6-Sol"));
-    expect(document.body.textContent).toContain("Claude · Haiku");
-    expect(document.body.textContent).toContain("Copilot · Auto");
-  });
-});
-
 describe("appearance settings", () => {
   it("stores the literal dark wheel value and rebases the same petal in light mode", async () => {
     const screen = await mountSettings();

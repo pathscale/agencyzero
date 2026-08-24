@@ -159,6 +159,7 @@ const SearchScope = createContext<{
  * there is nothing to batch.
  */
 export function SettingsTab(): JSX.Element {
+  beginSettingsMount();
   const { state, actions, isLive, effortsFor, permissionsFor } = useWorkspace();
   const settings = () => state.settings;
   /**
@@ -2908,6 +2909,19 @@ const SETTINGS_PREBUILD_PX = 600;
 
 let settingsMounted = 0;
 const [settingsBudget, setSettingsBudget] = createSignal(SETTINGS_FIRST_PAINT);
+
+/**
+ * Start a fresh deferred-section sequence for one Settings tree.
+ *
+ * The coordinator lives at module scope because search and each Section share
+ * it without prop plumbing. Its lifetime must not: leaving Settings disposes
+ * every section, so carrying the old ordinal and fully expanded budget into
+ * the next tree eagerly rebuilt the whole page on every return.
+ */
+function beginSettingsMount(): void {
+  settingsMounted = 0;
+  setSettingsBudget(settingsQuery().trim() === "" ? SETTINGS_FIRST_PAINT : Number.MAX_SAFE_INTEGER);
+}
 
 /**
  * Reveal every section, for search.
