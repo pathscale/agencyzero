@@ -1816,8 +1816,20 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
         </Button>
       </Show>
 
-      {adding() ? (
-        <Input
+      <Show
+        when={adding()}
+        fallback={
+          <Button
+            type="button"
+            onClick={() => setAdding(true)}
+            class="mt-1 flex items-center gap-2 rounded-[9px] border border-primary/16 border-dashed px-2.5 py-2 text-[12px] text-az-muted transition-colors hover:border-primary hover:text-primary"
+          >
+            <Icon name="plus" class="text-[13px]" />
+            {tx("New item")}
+          </Button>
+        }
+      >
+        <Input.Field
           autofocus
           value={title()}
           placeholder={tx("What needs doing?")}
@@ -1827,19 +1839,9 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
             if (event.key === "Enter") void create();
             if (event.key === "Escape") setAdding(false);
           }}
-          onBlur={() => void create()}
           class="mt-1 rounded-[9px] border border-primary/40 bg-base-300 px-2.5 py-2 text-[12px] text-az-body focus:outline-none"
         />
-      ) : (
-        <Button
-          type="button"
-          onClick={() => setAdding(true)}
-          class="mt-1 flex items-center gap-2 rounded-[9px] border border-primary/16 border-dashed px-2.5 py-2 text-[12px] text-az-muted transition-colors hover:border-primary hover:text-primary"
-        >
-          <Icon name="plus" class="text-[13px]" />
-          {tx("New item")}
-        </Button>
-      )}
+      </Show>
 
       <Show when={contextDraft()}>
         {(draft) => (
