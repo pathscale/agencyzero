@@ -2810,11 +2810,12 @@ async fn link_item_issue_inner(
 ) -> Result<ProjectItemDto, String> {
     let url =
         github_issue_url(authored_url).map_err(|reason| format!("ENTITY_NOT_FOUND: {reason}"))?;
+    let reference = format!("issue:{url}");
     tables
         .project_item
         .update_reference_by_id(
             ItemReferenceByIdQuery {
-                reference: format!("issue:{url}"),
+                reference: reference.clone(),
             },
             id.to_string(),
         )
@@ -2824,6 +2825,9 @@ async fn link_item_issue_inner(
         .project_item
         .select(id.to_string())
         .ok_or_else(|| format!("no item {id}"))?;
+    if row.reference != reference {
+        return Err("WRITE_FAILED: linked issue reference did not persist".into());
+    }
     touch_item(tables, id).await;
     let dto = item_dto(row, tables);
     let _ = app.emit("item:updated", dto.clone());
@@ -13780,6 +13784,51 @@ mod tests {
             Ok("https://github.com/pathscale/agencyzero/issues/42".into())
         );
         assert!(github_issue_url("https://github.com/pathscale/agencyzero/pull/42").is_err());
+    }
+
+    #[tokio::test]
+    async fn issue_references_round_trip_through_the_item_table() {
+        let dir = std::env::temp_dir().join(format!(
+            "az-item-issue-{}-{}",
+            std::process::id(),
+            chrono::Utc::now().timestamp_nanos_opt().unwrap_or_default()
+        ));
+        let tables = crate::db::tables::Tables::open(&dir)
+            .await
+            .expect("item-issue store opens");
+        tables
+            .project_item
+            .insert(ProjectItemRow {
+                id: "item-issue".into(),
+                project_id: "project-a".into(),
+                title: "Link this".into(),
+                status: "planning".into(),
+                position: 0,
+                reference: String::new(),
+                priority: 0,
+            })
+            .expect("item inserts");
+
+        let reference = "issue:https://github.com/example/repository/issues/40";
+        tables
+            .project_item
+            .update_reference_by_id(
+                ItemReferenceByIdQuery {
+                    reference: reference.into(),
+                },
+                "item-issue".to_string(),
+            )
+            .await
+            .expect("issue reference writes");
+
+        let row = tables
+            .project_item
+            .select("item-issue".to_string())
+            .expect("item remains readable");
+        assert_eq!(row.reference, reference);
+
+        tables.shutdown().await.expect("item-issue store drains");
+        let _ = std::fs::remove_dir_all(dir);
     }
 
     #[test]
