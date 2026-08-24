@@ -177,6 +177,8 @@ export function SettingsTab(): JSX.Element {
   const [proxyNote, setProxyNote] = createSignal("");
   const [proxyRefreshGeneration, setProxyRefreshGeneration] = createSignal(0);
   const [agentCheckGeneration, setAgentCheckGeneration] = createSignal(0);
+  const [modelRefreshGeneration, setModelRefreshGeneration] = createSignal(0);
+  const [modelRefreshError, setModelRefreshError] = createSignal("");
   const [agentCheckError, setAgentCheckError] = createSignal("");
   const alive = whileMounted();
   const [terminateArmed, setTerminateArmed] = createSignal(false);
@@ -215,6 +217,14 @@ export function SettingsTab(): JSX.Element {
       .recheckAgents()
       .then(alive(() => setAgentCheckGeneration((generation) => generation + 1)))
       .catch(alive((cause) => setAgentCheckError(describeError(cause))));
+  };
+
+  const refreshModels = (): void => {
+    setModelRefreshError("");
+    void actions
+      .refreshModels()
+      .then(alive(() => setModelRefreshGeneration((generation) => generation + 1)))
+      .catch(alive((cause) => setModelRefreshError(describeError(cause))));
   };
 
   // Settings needs one current snapshot when it opens. Later changes arrive
@@ -849,6 +859,9 @@ export function SettingsTab(): JSX.Element {
                   .map((agent) => ({ value: agent.agent, label: AGENT_LABELS[agent.agent] }))}
                 onChange={selectDefaultAgent}
               />
+              <Show when={modelRefreshError()}>
+                {(error) => <span class="text-[11.5px] text-error">{error()}</span>}
+              </Show>
             </Row>
             <Row label={tx("Model")} hint={tx("chosen from what Models below has enabled")}>
               <PillMenu
@@ -965,11 +978,16 @@ export function SettingsTab(): JSX.Element {
             <div class="flex flex-wrap items-center gap-2.5 px-3.5 pt-0 pb-3">
               <Button
                 type="button"
-                onClick={() => void actions.refreshModels()}
+                onClick={refreshModels}
                 class="rounded-lg border border-az-hairline-strong px-3 py-[5px] text-[12px] text-az-body transition-colors hover:border-primary hover:text-primary"
               >
                 {tx("Re-read from the CLIs")}
               </Button>
+              <span
+                role="status"
+                aria-label={`Model refresh generation ${modelRefreshGeneration()}`}
+                class="sr-only"
+              />
               <span class="text-[11.5px] text-az-muted">
                 {tx("only Codex can enumerate; the other two stay on the compiled list")}
               </span>
@@ -2549,6 +2567,7 @@ function UpdateControl(): JSX.Element {
   const { state, actions, isLive } = useWorkspace();
   const [busy, setBusy] = createSignal(false);
   const [note, setNote] = createSignal<string | null>(null);
+  const [generation, setGeneration] = createSignal(0);
   const alive = whileMounted();
 
   const check = (): void => {
@@ -2558,7 +2577,12 @@ function UpdateControl(): JSX.Element {
       .checkForUpdate()
       .then(alive((found) => setNote(found ? null : tx("up to date"))))
       .catch(alive((cause) => setNote(describeError(cause))))
-      .finally(alive(() => setBusy(false)));
+      .finally(
+        alive(() => {
+          setGeneration((value) => value + 1);
+          setBusy(false);
+        }),
+      );
   };
 
   // Optimistic and stays that way on success: the process is replaced
@@ -2575,6 +2599,7 @@ function UpdateControl(): JSX.Element {
 
   return (
     <Flex align="center" gap="sm">
+      <span role="status" aria-label={`Update check generation ${generation()}`} class="sr-only" />
       <Show when={note()}>
         {(text) => <span class="max-w-[220px] truncate text-[11.5px] text-az-muted">{text()}</span>}
       </Show>
@@ -3443,6 +3468,7 @@ function StoreSnapshotControl(): JSX.Element {
   const [busy, setBusy] = createSignal(false);
   const [note, setNote] = createSignal("");
   const [failed, setFailed] = createSignal(false);
+  const [generation, setGeneration] = createSignal(0);
   const alive = whileMounted();
 
   const take = (): void => {
@@ -3458,11 +3484,17 @@ function StoreSnapshotControl(): JSX.Element {
           setNote(describeError(cause));
         }),
       )
-      .finally(alive(() => setBusy(false)));
+      .finally(
+        alive(() => {
+          setGeneration((value) => value + 1);
+          setBusy(false);
+        }),
+      );
   };
 
   return (
     <div class="flex max-w-[390px] flex-col items-end gap-1.5">
+      <span role="status" aria-label={`Snapshot generation ${generation()}`} class="sr-only" />
       <Show when={note()}>
         <span
           role={failed() ? "alert" : "status"}
