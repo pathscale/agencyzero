@@ -973,13 +973,13 @@ function createWorkspace() {
   /** Apply one durable item result; backend events use the same idempotent path. */
   function upsertItem(item: ProjectItem): void {
     setState((d) => {
-      d.items[item.projectId] = ((list = []) => {
-        const index = list.findIndex((existing) => existing.id === item.id);
-        if (index < 0) return [...list, item];
-        const next = [...list];
-        next[index] = item;
-        return next;
-      })(d.items[item.projectId]);
+      const list = d.items[item.projectId] ?? (d.items[item.projectId] = []);
+      const index = list.findIndex((existing) => existing.id === item.id);
+      if (index < 0) {
+        list.push(item);
+      } else {
+        Object.assign(list[index], item);
+      }
     });
   }
 
