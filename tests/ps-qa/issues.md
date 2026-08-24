@@ -133,6 +133,12 @@ present on any delivery branch.
     parent chains before geometry is computed and reports the node as not
     interactable instead of panicking. Dialog dismissal, Escape, welcome setup,
     and the isolated destructive fork outcome now pass 7/7.
+19. Escape visually hid the shared anchored Popover but did not clear its
+    owning application signal, so the same fork dialog could not reopen. The
+    original vanish-only check missed that stale state. UI now captures whether
+    an open-state request changes the value before mutating internal state, then
+    always notifies the owner. The live outcome now requires reopen plus a
+    normal second dismissal.
 
 ## Current validation checkpoint
 
@@ -150,10 +156,11 @@ present on any delivery branch.
   expected, but the first Escape-only outcome still passed because the shared
   primitive hid itself while application state remained set; this exposed a
   missing reopen assertion rather than proving the Escape detector
-- 32745826995: strengthened positive dialog group, including reopen after
-  Escape — queued
-- 32746012040: isolated stale-Escape-state mutation — queued; ordinary Cancel
-  remains correct, while reopen-after-Escape must fail
+- 32745826995: strengthened positive dialog group — expectedly exposed the real
+  stale-state regression at 6/7; isolated Start fork still passed 1/1
+- 32747120204: shared UI Popover state fix, including reopen after Escape — queued
+- 32747124208: isolated stale-Escape-state mutation against the UI fix — queued;
+  ordinary Cancel must pass while reopen-after-Escape fails
 - 32744366001: the prior 212-outcome full run — superseded by the new reopen
   assertion and automatically canceled when the strengthened same-ref run began
 
