@@ -46,7 +46,7 @@ describe("analytics refresh", () => {
     // the controls that only render once the panel has data.
     flush();
 
-    fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
+    fireEvent.click(screen.getByRole("button", { name: "Refresh analytics" }));
     flush();
     await waitFor(() => expect(getUsageAnalytics).toHaveBeenCalledTimes(2));
   });

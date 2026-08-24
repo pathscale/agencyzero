@@ -2,6 +2,16 @@
 // aria-selected on the control. The subject is unique content from that tab.
 [
     (
+        id: "analytics-refresh-completes",
+        group: "analytics",
+        what: "refreshing analytics completes a ledger read",
+        open: Some("Analytics"),
+        hover: None,
+        click: Some("Refresh analytics"),
+        subject: "Analytics refresh generation",
+        expect: NameChanges,
+    ),
+    (
         id: "analytics-items",
         group: "analytics",
         what: "the Items analytics tab renders item outcomes",

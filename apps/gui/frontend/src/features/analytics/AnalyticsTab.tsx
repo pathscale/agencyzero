@@ -66,6 +66,7 @@ export function AnalyticsTab(): JSX.Element {
   const { actions } = useWorkspace();
   const [data, setData] = createSignal<UsageAnalytics | null>(null);
   const [refreshing, setRefreshing] = createSignal(false);
+  const [refreshGeneration, setRefreshGeneration] = createSignal(0);
   const [activeTab, setActiveTab] = createSignal<AnalyticsTabKey>("value");
   const alive = whileMounted();
 
@@ -99,6 +100,7 @@ export function AnalyticsTab(): JSX.Element {
     try {
       const next = await actions.getUsageAnalytics();
       alive(setData)(next);
+      alive(() => setRefreshGeneration((generation) => generation + 1))();
     } finally {
       alive(setRefreshing)(false);
     }
@@ -121,7 +123,12 @@ export function AnalyticsTab(): JSX.Element {
         >
           {(usage) => (
             <>
-              <HeadlineRow usage={usage()} refreshing={refreshing()} onRefresh={refresh} />
+              <HeadlineRow
+                usage={usage()}
+                refreshing={refreshing()}
+                refreshGeneration={refreshGeneration()}
+                onRefresh={refresh}
+              />
 
               <div
                 role="tablist"
@@ -401,6 +408,7 @@ function efficiencySignal(usage: UsageAnalytics): { label: string; tone: string 
 function HeadlineRow(props: {
   usage: UsageAnalytics;
   refreshing: boolean;
+  refreshGeneration: number;
   onRefresh: () => Promise<void>;
 }): JSX.Element {
   const tiles = createMemo(() => {
@@ -484,6 +492,15 @@ function HeadlineRow(props: {
   return (
     <div class="rounded-xl border border-az-hairline bg-base-100 p-2">
       <div class="mb-1.5 flex min-w-0 items-center gap-3 px-1.5 py-0.5">
+        <span
+          role="status"
+          aria-label={tx("Analytics refresh generation {count}", {
+            count: props.refreshGeneration,
+          })}
+          class="sr-only"
+        >
+          {tx("Analytics refresh generation {count}", { count: props.refreshGeneration })}
+        </span>
         <div class="min-w-0 flex-1">
           <h1 class="font-semibold text-[16px] text-az-title tracking-[-.01em]">
             {tx("Analytics")}
@@ -502,8 +519,8 @@ function HeadlineRow(props: {
         </div>
         <Button
           type="button"
-          aria-label={tx("Refresh")}
-          title={tx("Refresh")}
+          aria-label={tx("Refresh analytics")}
+          title={tx("Refresh analytics")}
           onClick={() => void props.onRefresh()}
           disabled={props.refreshing}
           class="flex size-8 shrink-0 items-center justify-center rounded-lg text-primary transition-colors hover:bg-az-chip disabled:cursor-wait disabled:opacity-55"

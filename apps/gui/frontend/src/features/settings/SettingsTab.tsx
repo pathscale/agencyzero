@@ -175,6 +175,9 @@ export function SettingsTab(): JSX.Element {
     "refresh" | "drain" | "terminate" | "stop" | null
   >(null);
   const [proxyNote, setProxyNote] = createSignal("");
+  const [proxyRefreshGeneration, setProxyRefreshGeneration] = createSignal(0);
+  const [agentCheckGeneration, setAgentCheckGeneration] = createSignal(0);
+  const [agentCheckError, setAgentCheckError] = createSignal("");
   const alive = whileMounted();
   const [terminateArmed, setTerminateArmed] = createSignal(false);
   const [blitzControlPending, setBlitzControlPending] = createSignal(false);
@@ -201,8 +204,17 @@ export function SettingsTab(): JSX.Element {
     setProxyNote("");
     void actions
       .refreshAgentProxy()
+      .then(alive(() => setProxyRefreshGeneration((generation) => generation + 1)))
       .catch(alive((cause) => setProxyNote(describeError(cause))))
       .finally(alive(() => setProxyAction(null)));
+  };
+
+  const recheckAgents = (): void => {
+    setAgentCheckError("");
+    void actions
+      .recheckAgents()
+      .then(alive(() => setAgentCheckGeneration((generation) => generation + 1)))
+      .catch(alive((cause) => setAgentCheckError(describeError(cause))));
   };
 
   // Settings needs one current snapshot when it opens. Later changes arrive
@@ -680,13 +692,24 @@ export function SettingsTab(): JSX.Element {
               </div>
             </Row>
             <div class="flex flex-wrap items-center justify-end gap-2 px-3.5 py-2.5">
+              <span
+                role="status"
+                aria-label={tx("AgencyProxy refresh generation {count}", {
+                  count: proxyRefreshGeneration(),
+                })}
+                class="sr-only"
+              >
+                {tx("AgencyProxy refresh generation {count}", {
+                  count: proxyRefreshGeneration(),
+                })}
+              </span>
               <Show when={proxyNote()}>
                 <span class="mr-auto text-[11px] text-az-muted">{proxyNote()}</span>
               </Show>
               <Button
                 type="button"
-                title={tx("Refresh")}
-                aria-label={tx("Refresh")}
+                title={tx("Refresh AgencyProxy status")}
+                aria-label={tx("Refresh AgencyProxy status")}
                 disabled={proxyAction() !== null || !isLive("getAgentProxyStatus")}
                 onClick={refreshProxy}
                 class="flex size-8 items-center justify-center rounded-lg border border-az-hairline-strong text-az-muted transition-colors hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-40"
@@ -773,13 +796,25 @@ export function SettingsTab(): JSX.Element {
           >
             <For each={state.agents}>{(agent) => <AgentRow status={agent} />}</For>
             <div class="flex items-center gap-2.5 px-3.5 pt-0 pb-3">
+              <span
+                role="status"
+                aria-label={tx("Agent check generation {count}", {
+                  count: agentCheckGeneration(),
+                })}
+                class="sr-only"
+              >
+                {tx("Agent check generation {count}", { count: agentCheckGeneration() })}
+              </span>
               <Button
                 type="button"
-                onClick={() => void actions.recheckAgents()}
+                onClick={recheckAgents}
                 class="rounded-lg border border-az-hairline-strong px-3 py-[5px] text-[12px] text-az-body transition-colors hover:border-primary hover:text-primary"
               >
                 {tx("Re-check")}
               </Button>
+              <Show when={agentCheckError()}>
+                {(message) => <span class="text-[11px] text-error">{message()}</span>}
+              </Show>
               <Show when={state.agents[0]}>
                 {(first) => (
                   <span class="text-[11.5px] text-az-muted">
