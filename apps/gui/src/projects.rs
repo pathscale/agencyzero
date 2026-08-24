@@ -2129,21 +2129,40 @@ fn next_item_position<'a>(rows: impl Iterator<Item = &'a ProjectItemRow>) -> u32
 }
 
 /// Persist an exact item order starting at `first`.
-async fn write_item_positions(tables: &Tables, ids: &[String], first: u32) -> Result<(), String> {
-    for (index, item_id) in ids.iter().enumerate() {
-        let offset = u32::try_from(index).unwrap_or(u32::MAX);
+async fn write_item_positions(
+    tables: &Tables,
+    ids: &[String],
+    first: u32,
+) -> Result<usize, String> {
+    let changes: Vec<_> = ids
+        .iter()
+        .enumerate()
+        .filter_map(|(index, item_id)| {
+            let offset = u32::try_from(index).unwrap_or(u32::MAX);
+            let position = first.saturating_add(offset);
+            let unchanged = tables
+                .project_item
+                .select(item_id.clone())
+                .is_some_and(|row| row.position == position);
+            (!unchanged).then(|| (item_id.clone(), position))
+        })
+        .collect();
+
+    // A one-row move swaps two positions. Awaiting every row serially made
+    // that ordinary click rewrite the entire list and take 2.2 seconds in the
+    // rendered audit. Queue only positions that changed, together, through the
+    // table's writer; errors remain visible and earlier writes may still have
+    // landed, matching the command's existing partial-write contract.
+    let changed = changes.len();
+    futures::future::try_join_all(changes.into_iter().map(|(item_id, position)| async move {
         tables
             .project_item
-            .update_position_by_id(
-                ItemPositionByIdQuery {
-                    position: first.saturating_add(offset),
-                },
-                item_id.clone(),
-            )
+            .update_position_by_id(ItemPositionByIdQuery { position }, item_id)
             .await
-            .map_err(|error| error.to_string())?;
-    }
-    Ok(())
+            .map_err(|error| error.to_string())
+    }))
+    .await?;
+    Ok(changed)
 }
 
 fn next_project_position(rows: &[ProjectRow]) -> u32 {
@@ -2934,8 +2953,7 @@ pub async fn reorder_items(
     state: State<'_, AppState>,
 ) -> Result<Vec<ProjectItemDto>, String> {
     let started = std::time::Instant::now();
-    let moved = ids.len();
-    write_item_positions(&state.tables, &ids, 0).await?;
+    let moved = write_item_positions(&state.tables, &ids, 0).await?;
     let items = list_items(project_id.clone(), state.clone()).await?;
     for item in &items {
         let _ = app.emit("item:updated", item.clone());
@@ -16678,6 +16696,56 @@ mod tests {
         projects[0].position = 4;
         projects[1].position = 9;
         assert_eq!(next_project_position(&projects), 10);
+    }
+
+    #[tokio::test]
+    async fn reordering_writes_only_positions_that_changed() {
+        let dir = std::env::temp_dir().join(format!(
+            "az-item-reorder-{}-{}",
+            std::process::id(),
+            chrono::Utc::now().timestamp_nanos_opt().unwrap_or_default()
+        ));
+        let tables = Tables::open(&dir).await.expect("item store opens");
+        for (position, id) in ["one", "two", "three"].into_iter().enumerate() {
+            tables
+                .project_item
+                .insert(ProjectItemRow {
+                    id: id.into(),
+                    project_id: "project-a".into(),
+                    title: id.into(),
+                    status: "planning".into(),
+                    position: position as u32,
+                    reference: String::new(),
+                    priority: 0,
+                })
+                .expect("item inserts");
+        }
+
+        let changed =
+            write_item_positions(&tables, &["one".into(), "three".into(), "two".into()], 0)
+                .await
+                .expect("reorder writes");
+
+        assert_eq!(changed, 2, "the unchanged first row is not rewritten");
+        assert_eq!(
+            tables
+                .project_item
+                .select("two".to_string())
+                .expect("two exists")
+                .position,
+            2
+        );
+        assert_eq!(
+            tables
+                .project_item
+                .select("three".to_string())
+                .expect("three exists")
+                .position,
+            1
+        );
+
+        tables.shutdown().await.expect("item store drains");
+        let _ = std::fs::remove_dir_all(dir);
     }
 
     #[tokio::test]
