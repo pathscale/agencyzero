@@ -152,8 +152,8 @@ present on any delivery branch.
   missing reopen assertion rather than proving the Escape detector
 - 32745826995: strengthened positive dialog group, including reopen after
   Escape — queued
-- 32745830576: strengthened stale-state mutation — queued; Cancel and the new
-  reopen-after-Escape outcome must both fail
+- 32746012040: isolated stale-Escape-state mutation — queued; ordinary Cancel
+  remains correct, while reopen-after-Escape must fail
 - 32744366001: the prior 212-outcome full run — superseded by the new reopen
   assertion and automatically canceled when the strengthened same-ref run began
 
