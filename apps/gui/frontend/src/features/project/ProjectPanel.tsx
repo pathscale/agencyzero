@@ -965,7 +965,7 @@ function ResumeSession(props: {
           title={props.running ? tx("Cancel the active run first") : undefined}
           aria-label={
             props.currentSession
-              ? `${tx("Change")} ${tx("Resume a session by id")}`
+              ? `${tx("Change")} ${tx("Resume a session by id")}: ${props.currentSession}`
               : tx("Resume a session by id")
           }
           onClick={() => setOpen((value) => !value)}
