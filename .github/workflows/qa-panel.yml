@@ -133,7 +133,14 @@ jobs:
           set -o pipefail
           # Run from the repository root: the harness discovers ps-qa.ron and
           # tests/ps-qa/ relative to the working directory.
-          ps-qa --trace qa ${{ inputs.group }} 2>&1 | tee /tmp/qa.txt
+          if [ -n "${{ inputs.group }}" ]; then
+            ps-qa --trace qa "${{ inputs.group }}" 2>&1 | tee /tmp/qa.txt
+          else
+            # Every group gets the same committed profile. A destructive or
+            # failed check cannot poison the next area and turn one regression
+            # into dozens of unrelated ten-second timeouts.
+            scripts/qa-run-groups.sh
+          fi
 
       # Outcome checks intentionally mutate the fixture. The exhaustive pass
       # needs the committed starting state, not a project already renamed,
