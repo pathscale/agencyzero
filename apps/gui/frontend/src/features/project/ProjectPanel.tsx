@@ -929,6 +929,10 @@ function ResumeSession(props: {
   const { actions } = useWorkspace();
   const [id, setId] = createSignal("");
   const [busy, setBusy] = createSignal(false);
+  const sessionStatus = () =>
+    props.currentSession
+      ? tx("Attached: {session}", { session: props.currentSession })
+      : tx("Attach a session recovered by its id so the next message continues it");
 
   const adopt = async (): Promise<void> => {
     const sessionId = id().trim();
@@ -950,11 +954,13 @@ function ResumeSession(props: {
         <Icon name="history" class="shrink-0 text-[14px] text-primary/75" />
         <span class="min-w-0 flex-1 text-[12px] text-az-body">
           {tx("Resume a session by id")}
-          <span class="mt-px block text-[11px] text-az-muted">
-            {props.currentSession
-              ? tx("Attached: {session}", { session: props.currentSession })
-              : tx("Attach a session recovered by its id so the next message continues it")}
-          </span>
+          <output
+            aria-live="polite"
+            aria-label={sessionStatus()}
+            class="mt-px block text-[11px] text-az-muted"
+          >
+            {sessionStatus()}
+          </output>
         </span>
       </div>
       <Input.Field
