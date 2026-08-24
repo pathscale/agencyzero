@@ -428,6 +428,10 @@ export function SettingsTab(): JSX.Element {
         label: `${AGENT_LABELS[agent]} · ${model.name}`,
       })),
     );
+  const moderatorModelLabel = () =>
+    moderatorModels().find((model) => model.value === state.settings?.moderator.model)?.label ??
+    state.settings?.moderator.model ??
+    "";
 
   /*
    * Opening Settings puts focus on the page itself, so Page Up and Page Down
@@ -1598,12 +1602,32 @@ export function SettingsTab(): JSX.Element {
               />
             </Row>
             <Row label={tx("Moderator model")}>
-              <PillMenu
-                label={tx("Moderator model")}
+              <Select
                 value={current().moderator.model}
-                options={moderatorModels()}
-                onChange={(model) => void actions.saveSettings({ moderator: { model } })}
-              />
+                onChange={(model) =>
+                  typeof model === "string" && void actions.saveSettings({ moderator: { model } })
+                }
+                class="min-w-[220px]"
+              >
+                <Select.Trigger
+                  aria-label={`${tx("Moderator model")}: ${moderatorModelLabel()}`}
+                  class="h-9 min-w-[220px] rounded-lg border border-az-hairline bg-az-inset px-2.5 text-[12px] text-az-body outline-none"
+                >
+                  <Select.Value />
+                  <Select.Indicator endIcon={<Icon name="chevron-down" />} />
+                </Select.Trigger>
+                <Select.Popover>
+                  <Select.Listbox>
+                    <For each={moderatorModels()}>
+                      {(model) => (
+                        <Select.Option value={model.value} textValue={model.label}>
+                          {model.label}
+                        </Select.Option>
+                      )}
+                    </For>
+                  </Select.Listbox>
+                </Select.Popover>
+              </Select>
             </Row>
             <Row label={tx("Confine tool calls to the working directories")}>
               <SettingToggle
