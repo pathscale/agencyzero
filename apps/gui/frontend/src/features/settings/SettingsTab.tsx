@@ -7,7 +7,6 @@ import {
   type GlassMode,
   type GlassTuning,
   Input,
-  NativeSelect,
   Select,
   Slider,
   Switch,
@@ -1613,7 +1612,12 @@ export function SettingsTab(): JSX.Element {
               />
             </Row>
             <Row label={tx("Moderator model")}>
-              <NativeSelect
+              {/*
+               * This stays a real native select. UI's compound Select uses a
+               * custom popover; it cannot provide the operating-system option
+               * semantics this small single-choice control promises.
+               */}
+              <select
                 aria-label={`${tx("Moderator model")}: ${moderatorModelLabel()}`}
                 value={current().moderator.model}
                 onChange={(event) =>
@@ -1630,7 +1634,7 @@ export function SettingsTab(): JSX.Element {
                 <For each={moderatorModels()}>
                   {(model) => <option value={model.value}>{model.label}</option>}
                 </For>
-              </NativeSelect>
+              </select>
             </Row>
             <Row label={tx("Confine tool calls to the working directories")}>
               <SettingToggle
