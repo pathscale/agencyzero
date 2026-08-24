@@ -19,7 +19,7 @@
         click: Some("button:Fork iota beta zeta delta north cobalt epsilon omega lambda epsilon into a fresh chat"),
         subject: "Start fork",
         expect: Paints,
-        covers: ["button:Fork * into a fresh chat"],
+        covers: ["button:Fork "],
     ),
     (
         id: "dialog-cancel-dismisses",
