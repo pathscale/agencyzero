@@ -41,7 +41,7 @@
         hover: None,
         click: None,
         type_into: Some("textbox:GitHub issue URL"),
-        text: Some("https://github.com/pathscale/agencyzero/issues/999999"),
+        text: Some("https://github.com/pathscale/WorkTable/issues/40"),
         subject: "textbox:GitHub issue URL",
         expect: ValueChanges,
     ),
@@ -52,7 +52,7 @@
         open: None,
         hover: None,
         click: Some("button:Link a GitHub issue"),
-        subject: "button:(issue #999999)",
+        subject: "button:(issue #40)",
         expect: PaintsNamed,
     ),
 ]
