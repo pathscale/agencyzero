@@ -7,9 +7,10 @@
         open: Some("Home"),
         hover: None,
         click: Some("Delete project e756"),
-        // Assert the unique semantic confirmation control, not nearby prose.
-        // Plain text is not guaranteed to become an accessibility node.
-        subject: "Confirm delete: e756",
+        // The standard dialog's escape path is painted immediately. The
+        // confirm button can be outside the virtualized Home viewport until it
+        // is scrolled for the final destructive action below.
+        subject: "button:Cancel",
         expect: Paints,
         covers: ["button:Delete project *"],
     ),
@@ -23,7 +24,7 @@
         open: None,
         hover: None,
         click: Some("Cancel"),
-        subject: "Confirm delete: e756",
+        subject: "button:Cancel",
         expect: Vanishes,
     ),
     (

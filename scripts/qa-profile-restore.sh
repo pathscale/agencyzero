@@ -25,6 +25,11 @@ fi
 # "profile already open", which reads as a corrupt store rather than leftover
 # state.
 rm -rf "$DESTINATION" "$DESTINATION.lock"
+# The fixture stores this exact temp path as its workspace root. Two different
+# UI surfaces create it, so profile isolation includes their external effect;
+# otherwise the first group makes the second surface disappear despite a fresh
+# database. Never derive this deletion from HOME or from fixture content.
+rm -rf /tmp/agencyzero-qa-workspace
 mkdir -p "$(dirname "$DESTINATION")"
 
 readonly STAGING="$(mktemp -d)"

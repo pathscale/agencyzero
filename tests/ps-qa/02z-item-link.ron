@@ -1,0 +1,58 @@
+// Issue linking stays inside the renderer. A JavaScript prompt does not draw
+// in Wry, so the row action must expose an ordinary semantic editor whose
+// Cancel and Save outcomes can both be driven by node id.
+[
+    (
+        id: "item-issue-editor-opens",
+        group: "item-link",
+        what: "the row's issue action opens a standard inline URL editor",
+        open: Some("theta theta north indi"),
+        hover: None,
+        click: Some("button:Link a GitHub issue to iota beta zeta delta north cobalt epsilon omega lambda epsilon"),
+        subject: "textbox:GitHub issue URL",
+        expect: PaintsNamed,
+        covers: ["button:Link a GitHub issue to *"],
+    ),
+    (
+        id: "item-issue-editor-cancels",
+        group: "item-link",
+        what: "Cancel closes the inline issue editor without leaving a prompt behind",
+        open: None,
+        hover: None,
+        click: Some("button:Cancel"),
+        subject: "textbox:GitHub issue URL",
+        expect: Vanishes,
+    ),
+    (
+        id: "item-issue-editor-reopens",
+        group: "item-link",
+        what: "the issue editor remains available after cancellation",
+        open: Some("theta theta north indi"),
+        hover: None,
+        click: Some("button:Link a GitHub issue to iota beta zeta delta north cobalt epsilon omega lambda epsilon"),
+        subject: "textbox:GitHub issue URL",
+        expect: PaintsNamed,
+    ),
+    (
+        id: "item-issue-editor-accepts-url",
+        group: "item-link",
+        what: "the inline issue editor accepts an explicit GitHub issue URL",
+        open: None,
+        hover: None,
+        click: None,
+        type_into: Some("textbox:GitHub issue URL"),
+        text: Some("https://github.com/pathscale/agencyzero/issues/999999"),
+        subject: "textbox:GitHub issue URL",
+        expect: ValueChanges,
+    ),
+    (
+        id: "item-issue-link-persists",
+        group: "item-link",
+        what: "saving the issue URL paints its issue reference on the exact row",
+        open: None,
+        hover: None,
+        click: Some("button:Link a GitHub issue"),
+        subject: "button:(issue #999999)",
+        expect: PaintsNamed,
+    ),
+]

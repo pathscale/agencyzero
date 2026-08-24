@@ -1114,6 +1114,11 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
   /** The item whose title is being rewritten in place, if any. */
   const [editingId, setEditingId] = createSignal<string | null>(null);
   const [editTitle, setEditTitle] = createSignal("");
+  const [issueDraft, setIssueDraft] = createSignal<{
+    item: ProjectItem;
+    url: string;
+  } | null>(null);
+  const [savingIssueId, setSavingIssueId] = createSignal<string | null>(null);
 
   const saveEdit = async (item: ProjectItem): Promise<void> => {
     const value = editTitle().trim();
@@ -1123,6 +1128,21 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
       await actions.updateItem(item.id, value);
     } catch (cause) {
       log.error(`could not rename the item: ${describeError(cause)}`);
+    }
+  };
+
+  const saveIssue = async (): Promise<void> => {
+    const draft = issueDraft();
+    const url = draft?.url.trim() ?? "";
+    if (!draft || !url || savingIssueId() === draft.item.id) return;
+    setSavingIssueId(draft.item.id);
+    try {
+      await actions.setItemIssue(draft.item.id, url);
+      setIssueDraft(null);
+    } catch (cause) {
+      log.error(`could not link the issue: ${describeError(cause)}`);
+    } finally {
+      setSavingIssueId(null);
     }
   };
 
@@ -1365,6 +1385,9 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
                   if (descriptionDraft() && descriptionDraft()?.item.id !== item.id) {
                     setDescriptionDraft(null);
                   }
+                  if (issueDraft() && issueDraft()?.item.id !== item.id) {
+                    setIssueDraft(null);
+                  }
                 }}
                 /*
                  * The row is `relative` and the action cluster below is absolute,
@@ -1375,7 +1398,9 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
                  * end only on hover.
                  */
                 class={`group relative flex items-center outline-none transition-colors ${
-                  descriptionDraft()?.item.id === item.id ? "rounded-t-[9px]" : "rounded-[9px]"
+                  descriptionDraft()?.item.id === item.id || issueDraft()?.item.id === item.id
+                    ? "rounded-t-[9px]"
+                    : "rounded-[9px]"
                 } ${
                   state.itemReveal?.id === item.id
                     ? "ring-1 ring-primary/70 ring-offset-1 ring-offset-base-200"
@@ -1654,14 +1679,11 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
                   <Button
                     type="button"
                     onClick={() => {
-                      const current = issueUrl(item.reference ?? "") ?? "";
-                      const url = window.prompt(tx("GitHub issue URL"), current)?.trim();
-                      if (!url) return;
-                      void actions
-                        .setItemIssue(item.id, url)
-                        .catch((cause) =>
-                          log.error(`could not link the issue: ${describeError(cause)}`),
-                        );
+                      setDescriptionDraft(null);
+                      setIssueDraft({
+                        item,
+                        url: issueUrl(item.reference ?? "") ?? "",
+                      });
                     }}
                     aria-label={tx("Link a GitHub issue to {name}", { name: item.title })}
                     title={tx("Link a GitHub issue")}
@@ -1718,6 +1740,41 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
                   </div>
                 </div>
               </div>
+              <Show when={issueDraft()?.item.id === item.id ? issueDraft() : null}>
+                {(draft) => (
+                  <section class="flex items-center gap-2 rounded-b-[9px] border-primary/24 border-t bg-az-inset px-3 py-2.5 shadow-[inset_2px_0_0_color-mix(in_srgb,var(--color-primary)_55%,transparent)]">
+                    <Input.Field
+                      autofocus
+                      type="url"
+                      value={draft().url}
+                      aria-label={tx("GitHub issue URL")}
+                      onInput={(event) =>
+                        setIssueDraft({ ...draft(), url: event.currentTarget.value })
+                      }
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter") void saveIssue();
+                        if (event.key === "Escape") setIssueDraft(null);
+                      }}
+                      class="min-w-0 flex-1 rounded-lg border border-primary/28 bg-base-300 px-2.5 py-1.5 font-mono text-[11.5px] text-az-body outline-none placeholder:text-az-faint focus:border-primary/60"
+                    />
+                    <Button
+                      type="button"
+                      onClick={() => setIssueDraft(null)}
+                      class="rounded-md px-2.5 py-1 text-[11px] text-az-muted hover:bg-white/6 hover:text-az-body"
+                    >
+                      {tx("Cancel")}
+                    </Button>
+                    <Button
+                      type="button"
+                      disabled={!draft().url.trim() || savingIssueId() === item.id}
+                      onClick={() => void saveIssue()}
+                      class="rounded-md border border-primary/40 bg-az-chip px-2.5 py-1 font-semibold text-[11px] text-primary hover:bg-az-chip-strong disabled:opacity-35"
+                    >
+                      {tx("Link a GitHub issue")}
+                    </Button>
+                  </section>
+                )}
+              </Show>
               <Show when={descriptionDraft()?.item.id === item.id ? descriptionDraft() : null}>
                 {(draft) => (
                   <section

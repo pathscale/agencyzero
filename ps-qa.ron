@@ -109,8 +109,11 @@ AppProfile(
         (label: "Restart",                              command: "restart_app"),
 
         // A real turn needs an authenticated paid provider. CI proves the
-        // disconnected-agent gate; an owner launches and verifies Send locally.
+        // disconnected-agent gate; an owner launches and verifies every entry
+        // point into a real provider turn locally.
         (label: "Send",                                 command: "authenticated provider turn (local manual)"),
+        (label: "Run ",                                 command: "authenticated item run (local manual)"),
+        (label: "Reply to the question for ",           command: "authenticated item reply (local manual)"),
 
         // Controls that hand the screen to the *browser*. Same problem as a
         // native panel and worse manners: a sweep that presses these opens a
