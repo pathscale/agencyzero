@@ -79,13 +79,10 @@ AppProfile(
         "Enable inspection and agent control",
     ],
 
-    // These effects are intentionally outside the semantic tree. They remain
-    // activated by node id, but an unchanged tree is not itself a failure.
-    inert_controls: [
-        "Refresh",
-        "Re-check",
-        "Extra Thinking",
-    ],
+    // Every current control has a rendered acknowledgement. Keep this empty so
+    // the broad sweep rejects a click that changes nothing; copy controls are
+    // recognised generically by their accessible verb.
+    inert_controls: [],
 
     // Controls reserved for the manual release pass: native dialogs the
     // harness cannot close and external destinations that leave this app.

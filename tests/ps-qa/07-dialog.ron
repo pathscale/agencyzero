@@ -51,6 +51,16 @@
         expect: Paints,
     ),
     (
+        id: "dialog-welcome-creates-workspace-root",
+        group: "dialog",
+        what: "creating the recommended workspace removes the setup action after the backend succeeds",
+        open: None,
+        hover: None,
+        click: Some("Create recommended folder"),
+        subject: "Create recommended folder",
+        expect: Vanishes,
+    ),
+    (
         id: "dialog-welcome-closes",
         group: "dialog",
         what: "the replayed setup dialog closes without leaving the app",
