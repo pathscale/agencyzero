@@ -1515,6 +1515,12 @@ export function Composer(props: ComposerProps): JSX.Element {
                 <Button
                   type="button"
                   onClick={() => void submit()}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault();
+                      void submit();
+                    }
+                  }}
                   disabled={!canSend()}
                   aria-label={
                     props.isRunning
