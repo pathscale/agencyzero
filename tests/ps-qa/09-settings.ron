@@ -203,4 +203,14 @@
         subject: "Restart AgencyProxy",
         expect: Paints,
     ),
+    (
+        id: "settings-use-bundled-disabled-at-default",
+        group: "settings",
+        what: "the bundled-proxy action is unavailable while bundled AgencyProxy is already selected",
+        open: Some("Settings"),
+        hover: None,
+        click: None,
+        subject: "Use bundled",
+        expect: Disabled,
+    ),
 ]
