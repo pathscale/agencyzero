@@ -13,7 +13,7 @@
         type_into: Some("New item"),
         text: Some("qa audit first new item"),
         key: Some("Enter"),
-        subject: "Change the status of qa audit first new item",
+        subject: "button:Change the status of qa audit first new item",
         expect: PaintsNamed,
     ),
     (
