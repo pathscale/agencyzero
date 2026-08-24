@@ -46,6 +46,16 @@
         expect: Vanishes,
     ),
     (
+        id: "dialog-reopens-after-escape",
+        group: "dialog",
+        what: "Escape clears the owning dialog state so the same fork can reopen and dismiss again",
+        open: Some("Fork "),
+        hover: None,
+        click: Some("Cancel"),
+        subject: "Start fork",
+        expect: Vanishes,
+    ),
+    (
         id: "dialog-starts-fork",
         group: "dialog-fork",
         what: "starting a fork closes the dialog and opens a new project tab",
