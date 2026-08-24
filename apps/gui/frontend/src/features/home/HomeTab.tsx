@@ -876,6 +876,7 @@ function GroupItemRow(props: {
   // beside the row it is about rather than in the middle of the window.
   const [forkAnchor, setForkAnchor] = createSignal<ModalAnchor | null>(null);
   const [busy, setBusy] = createSignal(false);
+  const [active, setActive] = createSignal(false);
   const fork = () => state.projects.find((project) => project.forkedFrom?.itemId === props.item.id);
 
   const save = async (): Promise<void> => {
@@ -971,8 +972,15 @@ function GroupItemRow(props: {
     >
       <div>
         <div
+          onPointerEnter={() => setActive(true)}
+          onPointerLeave={() => setActive(false)}
           onFocusIn={() => {
+            setActive(true);
             if (!props.descriptionOpen) props.onDescriptionItemChange(null);
+          }}
+          onFocusOut={(event) => {
+            const next = event.relatedTarget;
+            if (!(next instanceof Node) || !event.currentTarget.contains(next)) setActive(false);
           }}
           class={`group flex items-center gap-2.5 px-3.5 py-2.5 transition-colors hover:bg-white/4 ${
             props.descriptionOpen ? "bg-white/[0.025]" : ""
@@ -1020,82 +1028,86 @@ function GroupItemRow(props: {
               onConfirm={() => actions.deleteItem(props.item.id)}
             />
           </Show>
-          <Button
-            type="button"
-            onClick={() => {
-              setTitle(props.item.title);
-              setEditing(true);
-            }}
-            aria-label={tx("Edit {name}", { name: props.item.title })}
-            title={tx("Edit this item")}
-            class="shrink-0 rounded-md p-0.5 text-az-faint opacity-0 transition-[color,opacity] hover:text-az-body group-hover:opacity-100"
-          >
-            <Icon name="pencil" class="text-[11px]" />
-          </Button>
-          <Show when={!props.item.deleteProposed}>
+          <Show when={active() || props.descriptionOpen}>
             <Button
               type="button"
-              onClick={() =>
-                void actions
-                  .deleteItem(props.item.id)
-                  .catch((cause) => log.error(`could not delete the item: ${describeError(cause)}`))
-              }
-              aria-label={tx("Delete {name}", { name: props.item.title })}
-              title={tx("Delete this item")}
-              class="shrink-0 rounded-md p-0.5 text-az-faint opacity-0 transition-[color,opacity] hover:text-error group-hover:opacity-100"
+              onClick={() => {
+                setTitle(props.item.title);
+                setEditing(true);
+              }}
+              aria-label={tx("Edit {name}", { name: props.item.title })}
+              title={tx("Edit this item")}
+              class="shrink-0 rounded-md p-0.5 text-az-faint hover:text-az-body"
             >
-              <Icon name="x" class="text-[12px]" />
+              <Icon name="pencil" class="text-[11px]" />
+            </Button>
+            <Show when={!props.item.deleteProposed}>
+              <Button
+                type="button"
+                onClick={() =>
+                  void actions
+                    .deleteItem(props.item.id)
+                    .catch((cause) =>
+                      log.error(`could not delete the item: ${describeError(cause)}`),
+                    )
+                }
+                aria-label={tx("Delete {name}", { name: props.item.title })}
+                title={tx("Delete this item")}
+                class="shrink-0 rounded-md p-0.5 text-az-faint hover:text-error"
+              >
+                <Icon name="x" class="text-[12px]" />
+              </Button>
+            </Show>
+            <Button
+              type="button"
+              onClick={() => void toggleDescription()}
+              aria-label={tx("Edit the description for {name}", { name: props.item.title })}
+              aria-expanded={props.descriptionOpen ? "true" : "false"}
+              aria-controls={`home-item-description-${props.item.id}`}
+              title={tx("Description / sub-items")}
+              class={`flex size-6 shrink-0 items-center justify-center rounded-md border transition-colors hover:border-primary/70 hover:bg-az-chip-strong ${
+                props.descriptionOpen || props.item.context?.trim()
+                  ? "border-primary/45 bg-az-chip text-primary"
+                  : "border-primary/20 bg-az-chip text-az-muted"
+              }`}
+            >
+              <Icon name="list-checks" class="text-[12px]" />
+            </Button>
+            <Button
+              type="button"
+              onClick={(event) => {
+                const box = event.currentTarget.getBoundingClientRect();
+                setForkAnchor({
+                  left: box.left,
+                  top: box.top,
+                  right: box.right,
+                  bottom: box.bottom,
+                  width: box.width,
+                  height: box.height,
+                });
+                void openFork();
+              }}
+              disabled={busy()}
+              aria-label={
+                fork()
+                  ? tx("Open the fork for {name}", { name: props.item.title })
+                  : tx("Fork {name} into a fresh chat", { name: props.item.title })
+              }
+              title={
+                fork()
+                  ? tx("Open this item's lower-token fork")
+                  : tx("Start a fresh fork to avoid resending this project's long chat")
+              }
+              class={`flex h-6 shrink-0 items-center justify-center gap-1 rounded-md border font-semibold text-primary transition-colors hover:border-primary/70 hover:bg-az-chip-strong disabled:opacity-35 ${
+                fork()
+                  ? "border-primary/38 bg-az-chip px-1.5 text-[10.5px]"
+                  : "size-6 border-primary/28 bg-az-chip"
+              }`}
+            >
+              <Icon name="git-fork" class="text-[12px]" />
+              <Show when={fork()}>{tx("Forked")}</Show>
             </Button>
           </Show>
-          <Button
-            type="button"
-            onClick={() => void toggleDescription()}
-            aria-label={tx("Edit the description for {name}", { name: props.item.title })}
-            aria-expanded={props.descriptionOpen ? "true" : "false"}
-            aria-controls={`home-item-description-${props.item.id}`}
-            title={tx("Description / sub-items")}
-            class={`flex size-6 shrink-0 items-center justify-center rounded-md border transition-colors hover:border-primary/70 hover:bg-az-chip-strong ${
-              props.descriptionOpen || props.item.context?.trim()
-                ? "border-primary/45 bg-az-chip text-primary"
-                : "border-primary/20 bg-az-chip text-az-muted"
-            }`}
-          >
-            <Icon name="list-checks" class="text-[12px]" />
-          </Button>
-          <Button
-            type="button"
-            onClick={(event) => {
-              const box = event.currentTarget.getBoundingClientRect();
-              setForkAnchor({
-                left: box.left,
-                top: box.top,
-                right: box.right,
-                bottom: box.bottom,
-                width: box.width,
-                height: box.height,
-              });
-              void openFork();
-            }}
-            disabled={busy()}
-            aria-label={
-              fork()
-                ? tx("Open the fork for {name}", { name: props.item.title })
-                : tx("Fork {name} into a fresh chat", { name: props.item.title })
-            }
-            title={
-              fork()
-                ? tx("Open this item's lower-token fork")
-                : tx("Start a fresh fork to avoid resending this project's long chat")
-            }
-            class={`flex h-6 shrink-0 items-center justify-center gap-1 rounded-md border font-semibold text-primary transition-colors hover:border-primary/70 hover:bg-az-chip-strong disabled:opacity-35 ${
-              fork()
-                ? "border-primary/38 bg-az-chip px-1.5 text-[10.5px]"
-                : "size-6 border-primary/28 bg-az-chip"
-            }`}
-          >
-            <Icon name="git-fork" class="text-[12px]" />
-            <Show when={fork()}>{tx("Forked")}</Show>
-          </Button>
           {/*
             Keep the status edge where it was while reserving one consistent
             column for every label. Without the fixed width, shorter labels

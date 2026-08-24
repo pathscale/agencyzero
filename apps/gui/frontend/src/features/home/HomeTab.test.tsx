@@ -29,6 +29,17 @@ async function mountHome() {
   return { ...screen, workspace };
 }
 
+function hoverItemRow(screen: Awaited<ReturnType<typeof mountHome>>, name?: string): HTMLElement {
+  const status = name
+    ? screen.getByRole("button", { name: `Change the status of ${name}` })
+    : screen.getAllByRole("button", { name: /^Change the status of / })[0];
+  const row = status?.parentElement;
+  if (!row) throw new Error("an item row is required");
+  fireEvent.pointerEnter(row);
+  flush();
+  return row;
+}
+
 describe("Home item rows", () => {
   /*
    * The arithmetic this used to assert now lives in `createFlexGrid`, which
@@ -176,6 +187,7 @@ describe("Home item rows", () => {
   it("expands one item description and closes it when another item receives focus", async () => {
     const screen = await mountHome();
 
+    hoverItemRow(screen);
     fireEvent.click(screen.getAllByRole("button", { name: /^Edit the description for / })[0]);
     expect(await screen.findByLabelText("Description / sub-items")).toBeTruthy();
 
@@ -186,6 +198,7 @@ describe("Home item rows", () => {
   it("prefills the description dialog before starting a Home item fork", async () => {
     const screen = await mountHome();
 
+    hoverItemRow(screen);
     fireEvent.click(screen.getAllByRole("button", { name: /^Fork .* into a fresh chat$/ })[0]);
 
     flush();
@@ -215,6 +228,7 @@ describe("Home item rows", () => {
     it(`closes the fork dialog from ${exit}`, async () => {
       const screen = await mountHome();
 
+      hoverItemRow(screen);
       fireEvent.click(screen.getAllByRole("button", { name: /^Fork .* into a fresh chat$/ })[0]);
       flush();
 
@@ -241,6 +255,7 @@ describe("Home item rows", () => {
     const fork = await screen.workspace.actions.forkItem("worktable-1");
 
     await waitFor(() => expect(screen.getAllByText(title)).toHaveLength(1));
+    hoverItemRow(screen, title);
     const open = screen.getByRole("button", { name: `Open the fork for ${title}` });
     expect(open).toBeTruthy();
     expect(open).toHaveTextContent("Forked");
@@ -286,6 +301,7 @@ describe("Home item rows", () => {
   it("edits an item title in place", async () => {
     const screen = await mountHome();
 
+    hoverItemRow(screen);
     const pencil = screen.getAllByLabelText(/^Edit /)[0] as HTMLButtonElement;
     const title = (pencil.getAttribute("aria-label") ?? "").replace(/^Edit /, "");
     expect(title.length).toBeGreaterThan(0);
@@ -310,6 +326,7 @@ describe("Home item rows", () => {
   it("escape abandons the edit and keeps the old title", async () => {
     const screen = await mountHome();
 
+    hoverItemRow(screen);
     const pencil = screen.getAllByLabelText(/^Edit /)[0] as HTMLButtonElement;
     const title = (pencil.getAttribute("aria-label") ?? "").replace(/^Edit /, "");
 
@@ -335,10 +352,10 @@ describe("Home item rows", () => {
   it("renders every item with no inner scroll cap", async () => {
     const screen = await mountHome();
 
-    const pencils = screen.getAllByLabelText(/^Edit /);
-    expect(pencils.length).toBeGreaterThan(0);
-    for (const pencil of pencils) {
-      let node: HTMLElement | null = pencil as HTMLElement;
+    const statusControls = screen.getAllByRole("button", { name: /^Change the status of / });
+    expect(statusControls.length).toBeGreaterThan(0);
+    for (const status of statusControls) {
+      let node: HTMLElement | null = status as HTMLElement;
       while (node) {
         expect(node.className ?? "").not.toContain("max-h-[220px]");
         node = node.parentElement;
@@ -350,6 +367,7 @@ describe("Home item rows", () => {
   it("deletes an item from its row", async () => {
     const screen = await mountHome();
 
+    hoverItemRow(screen);
     // By its title attribute: `Delete <name>` aria-labels also belong to the
     // project delete (which confirms in place instead of acting).
     const remove = screen.getAllByTitle("Delete this item")[0] as HTMLButtonElement;
