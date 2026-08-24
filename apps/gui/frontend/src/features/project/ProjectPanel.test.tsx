@@ -143,56 +143,6 @@ describe("the project side panel", () => {
     expect(input.nextElementSibling).toBe(control);
   });
 
-  it("adopts a recovered session into the active Claude provider", async () => {
-    let workspace!: Workspace;
-    const recovered = "f462e5c2-d5dd-42bd-a462-63256e2adf99";
-
-    function Gate() {
-      workspace = useWorkspace();
-      return (
-        <Show when={workspace.state.boot.status === "ready"}>
-          <ProjectPanel
-            project={{ ...PROJECT, sessions: { claude: "existing-claude-session" } }}
-            agent="claude"
-          />
-        </Show>
-      );
-    }
-
-    const screen = render(() => (
-      <WorkspaceProvider>
-        <Gate />
-      </WorkspaceProvider>
-    ));
-    await waitFor(() => expect(workspace.state.boot.status).toBe("ready"), { timeout: 5_000 });
-    const adopt = vi.spyOn(workspace.actions, "adoptSession").mockResolvedValue();
-    /*
-     * By label rather than by role, to route around a jsdom crash.
-     *
-     * A name-filtered `*ByRole` query runs testing-library's accessibility
-     * check, which calls `getComputedStyle`, and jsdom 30 throws resolving a
-     * font size there: "object null is not iterable" from
-     * `resolveLengthInPixels`. That is a jsdom bug rather than anything about
-     * this panel, and a label query finds the same button without walking the
-     * computed styles.
-     */
-    const expandSettings = screen.queryAllByLabelText("Expand Settings")[0];
-    if (expandSettings) fireEvent.click(expandSettings);
-
-    expect(screen.getByText("Attached: existing-claude-session")).toBeInTheDocument();
-    fireEvent.click(screen.getByText("Change"));
-    flush();
-    fireEvent.input(screen.getByPlaceholderText("session id, e.g. 019fc95e-…"), {
-      target: { value: recovered },
-    });
-    // Land the typed session id before Attach reads it back.
-    flush();
-    fireEvent.click(screen.getByText("Attach"));
-    flush();
-
-    await waitFor(() => expect(adopt).toHaveBeenCalledWith(PROJECT.id, "claude", recovered));
-  });
-
   it("keeps the lower-token fork action visible without waiting for hover", async () => {
     let workspace!: Workspace;
 

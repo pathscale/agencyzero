@@ -3244,8 +3244,15 @@ function createWorkspace() {
       client().setProjectVerbosity(projectId, verbosity),
     resetProjectSession: (projectId: string, agent: string, force?: boolean) =>
       client().resetProjectSession(projectId, agent, force),
-    adoptSession: (projectId: string, agent: string, sessionId: string) =>
-      client().adoptSession(projectId, agent, sessionId),
+    adoptSession: async (projectId: string, agent: Agent, sessionId: string): Promise<void> => {
+      await client().adoptSession(projectId, agent, sessionId);
+      setState((draft) => {
+        const project = draft.projects.find((candidate) => candidate.id === projectId);
+        if (!project) return;
+        project.sessions[agent] = sessionId;
+        if (agent === "claude") project.sessionId = sessionId;
+      });
+    },
     getProjectNotes: (projectId: string) => client().getProjectNotes(projectId),
     setProjectNotes: (projectId: string, notes: string) =>
       client().setProjectNotes(projectId, notes),

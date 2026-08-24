@@ -922,7 +922,7 @@ function ResetSession(props: { project: Project; running: boolean }): JSX.Elemen
  */
 function ResumeSession(props: {
   projectId: string;
-  agent: string;
+  agent: Agent;
   running: boolean;
   currentSession?: string | null;
 }): JSX.Element {
