@@ -20,5 +20,6 @@
         click: Some("Show 12 earlier messages"),
         subject: "Copy this message",
         expect: PaintsMore,
+        covers: ["button:Show * earlier messages"],
     ),
 ]

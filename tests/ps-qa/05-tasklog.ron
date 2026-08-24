@@ -82,9 +82,10 @@
         what: "revealing earlier entries adds rows",
         open: Some("theta theta north indi"),
         hover: None,
-        click: Some("Show 20 earlier"),
+        click: Some("Show 6 earlier"),
         subject: "Show the whole command",
         expect: PaintsMore,
+        covers: ["button:Show * earlier"],
     ),
     (
         id: "tasklog-clear",
