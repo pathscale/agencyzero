@@ -119,6 +119,17 @@
         expect: SelectionChanges,
     ),
     (
+        id: "theme-base-colour-layout",
+        group: "theme",
+        what: "the standard theme-colour radio family paints as a flower rather than one stacked control",
+        open: Some("Settings"),
+        hover: None,
+        click: None,
+        covers: [],
+        subject: "radio:Theme color ",
+        expect: DistinctPositions,
+    ),
+    (
         id: "theme-base-colour",
         group: "theme",
         what: "the standard theme-colour radio family changes the surface colour",

@@ -192,13 +192,11 @@ export function Workspace(): JSX.Element {
                   <DraftTab tab={activeTab()} />
                 </div>
               </Match>
-              <Match when={activeTab().kind === "project" && activeProject()}>
-                {(project) => (
-                  <div data-active-project={project().id} class="flex min-h-0 min-w-0 flex-1">
-                    <ProjectTab tab={activeTab()} project={project()} />
-                    <ActiveProjectPanel />
-                  </div>
-                )}
+              <Match when={activeTab().kind === "project" && activeProject() !== null}>
+                <div data-active-project={activeProject()?.id} class="flex min-h-0 min-w-0 flex-1">
+                  <ProjectTab tab={activeTab()} project={activeProject() as Project} />
+                  <ActiveProjectPanel />
+                </div>
               </Match>
               <Match when={activeTab().kind === "project"}>
                 {/*

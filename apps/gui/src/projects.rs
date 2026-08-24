@@ -2133,7 +2133,7 @@ async fn write_item_positions(
     tables: &Tables,
     ids: &[String],
     first: u32,
-) -> Result<usize, String> {
+) -> Result<Vec<String>, String> {
     let changes: Vec<_> = ids
         .iter()
         .enumerate()
@@ -2153,7 +2153,7 @@ async fn write_item_positions(
     // rendered audit. Queue only positions that changed, together, through the
     // table's writer; errors remain visible and earlier writes may still have
     // landed, matching the command's existing partial-write contract.
-    let changed = changes.len();
+    let changed: Vec<String> = changes.iter().map(|(item_id, _)| item_id.clone()).collect();
     futures::future::try_join_all(changes.into_iter().map(|(item_id, position)| async move {
         tables
             .project_item
@@ -2955,13 +2955,14 @@ pub async fn reorder_items(
     let started = std::time::Instant::now();
     let moved = write_item_positions(&state.tables, &ids, 0).await?;
     let items = list_items(project_id.clone(), state.clone()).await?;
-    for item in &items {
+    let moved: std::collections::HashSet<&str> = moved.iter().map(String::as_str).collect();
+    for item in items.iter().filter(|item| moved.contains(item.id.as_str())) {
         let _ = app.emit("item:updated", item.clone());
     }
     let mut study =
         crate::study::Record::manual(project_id.clone(), "items.reorder", "project", project_id);
     study.latency = Some(started.elapsed());
-    study.detail = serde_json::json!({ "itemCount": moved });
+    study.detail = serde_json::json!({ "itemCount": moved.len() });
     crate::study::record(&state.tables, study);
     Ok(items)
 }
@@ -16726,7 +16727,7 @@ mod tests {
                 .await
                 .expect("reorder writes");
 
-        assert_eq!(changed, 2, "the unchanged first row is not rewritten");
+        assert_eq!(changed, ["three", "two"], "the unchanged first row is not rewritten");
         assert_eq!(
             tables
                 .project_item

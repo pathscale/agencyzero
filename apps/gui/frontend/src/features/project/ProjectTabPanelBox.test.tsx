@@ -40,6 +40,29 @@ function panelBox(container: HTMLElement): HTMLElement | null {
  * matter how many projects are open, and it survives switching between them.
  */
 describe("the side panel", () => {
+  it("keeps the same project surface across a project tab switch", async () => {
+    const screen = render(() => (
+      <WorkspaceProvider>
+        <Probe />
+        <Workspace />
+      </WorkspaceProvider>
+    ));
+    await waitFor(() => expect(workspace.state.boot.status).toBe("ready"), { timeout: 5_000 });
+
+    workspace.actions.openProject("worktable");
+    await waitFor(() => expect(workspace.state.activeKey).toBe("worktable"));
+    const first = screen.container.querySelector<HTMLElement>("[data-active-project]");
+
+    workspace.actions.openProject("cafe");
+    await waitFor(() => expect(workspace.state.activeKey).toBe("cafe"));
+
+    expect(
+      screen.container.querySelector<HTMLElement>("[data-active-project]"),
+      "the conversation surface was rebuilt by the switch",
+    ).toBe(first);
+    expect(first?.dataset.activeProject).toBe("cafe");
+  });
+
   it("is one column, no matter how many projects are open", async () => {
     const screen = render(() => (
       <WorkspaceProvider>
