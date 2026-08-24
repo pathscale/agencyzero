@@ -82,7 +82,7 @@ export function EditableTitle(props: {
           </span>
         }
       >
-        <Input
+        <Input.Field
           ref={(element: HTMLInputElement) => {
             field = element;
           }}
