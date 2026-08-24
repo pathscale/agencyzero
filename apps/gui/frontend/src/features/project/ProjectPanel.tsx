@@ -1544,6 +1544,8 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
                       top: box.top,
                       right: box.right,
                       bottom: box.bottom,
+                      width: box.width,
+                      height: box.height,
                     });
                     void toggleDescription(item);
                   }}
@@ -1575,6 +1577,8 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
                       top: box.top,
                       right: box.right,
                       bottom: box.bottom,
+                      width: box.width,
+                      height: box.height,
                     });
                     openFork(item);
                   }}

@@ -1062,7 +1062,14 @@ function GroupItemRow(props: {
             type="button"
             onClick={(event) => {
               const box = event.currentTarget.getBoundingClientRect();
-              setForkAnchor({ left: box.left, top: box.top, right: box.right, bottom: box.bottom });
+              setForkAnchor({
+                left: box.left,
+                top: box.top,
+                right: box.right,
+                bottom: box.bottom,
+                width: box.width,
+                height: box.height,
+              });
               void openFork();
             }}
             disabled={busy()}
