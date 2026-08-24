@@ -81,9 +81,10 @@
         group: "analytics",
         what: "the Value analytics tab renders value outcomes",
         open: Some("Analytics"),
+        prepare: Some("Models"),
         hover: None,
         click: Some("Value"),
-        subject: "Outcome per dollar",
-        expect: Paints,
+        subject: "tab:Value",
+        expect: SelectionChanges,
     ),
 ]

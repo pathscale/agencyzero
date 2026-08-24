@@ -40,7 +40,7 @@
         type_into: None,
         text: None,
         key: Some("Escape"),
-        key_on: Some("dialog:Prepare item fork"),
+        key_on: Some("button:Start fork"),
         compare: None,
         subject: "Start fork",
         expect: Vanishes,
