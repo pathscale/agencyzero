@@ -122,7 +122,7 @@ present on any delivery branch.
 
 - 32712761929: native shared UI language selector — passed
 - 32716735293: direct Resume-session editor with reactive active-project source
-- 32716288389: exact Composer model-node activation and disconnected-agent Send gate
+- 32717296869: enabled Composer model-node activation and disconnected-agent Send gate
 - 32715244253: native Settings moderator-model selector — passed 60/60
 
 No PR is updated and no candidate dependency is published until these runs are
