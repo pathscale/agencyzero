@@ -7,7 +7,7 @@ semantic node id; AgencyZero checks never use coordinate-pointer activation.
 ## Current subject
 
 - AgencyZero PR 186, app 0.8.37
-- ps-qa PR 10 candidate, 214 checks in 24 clean-profile groups
+- ps-qa PR 10 candidate, 212 checks in 24 clean-profile groups
 - PathScale UI PR 262 candidate, package version 2.9.2
 - tauri-runtime-blitz candidate based on 0.1.5; the next release will include
   native, selected, pressed and checked state in one semantic boolean
@@ -133,13 +133,13 @@ present on any delivery branch.
     parent chains before geometry is computed and reports the node as not
     interactable instead of panicking. Dialog dismissal, Escape, welcome setup,
     and the isolated destructive fork outcome now pass 7/7.
-19. The strengthened reopen outcome initially used the ambiguous `Fork ` prefix.
-    ps-qa classified it as an unknown document opener, scrolled Home, and
-    escalated a different row path, so its missing Cancel was test drift rather
-    than proof of stale application state. Every dialog route now names one
-    exact fixture row and reconciles the repeated Fork family. The narrow UI
-    audit also fixed a real uncontrolled-Popover callback ordering bug by
-    recording change before internal mutation.
+19. Experimental same-row reopen checks were non-discriminating because their
+    deep virtualized Home row leaves the semantic tree when the anchored dialog
+    closes; positive and deliberately broken builds failed identically. They
+    were removed instead of inflating coverage with harness noise. Every
+    retained dialog route now names one exact fixture row and reconciles the
+    repeated Fork family. A narrow UI audit separately fixed a real
+    uncontrolled-Popover callback ordering bug.
 
 ## Current validation checkpoint
 
@@ -154,28 +154,15 @@ present on any delivery branch.
 - 32743048974: deliberate Analytics mutation — expected red, 1/8 passed; all seven
   selected-state outcomes failed while the unaffected refresh control passed
 - 32744344962: deliberate stale modal-state mutation — Cancel failed as
-  expected, but the first Escape-only outcome still passed because the shared
-  primitive hid itself while application state remained set; this exposed a
-  missing reopen assertion rather than proving the Escape detector
-- 32745826995: strengthened positive dialog group — expectedly exposed the real
-  stale-state regression at 6/7; isolated Start fork still passed 1/1
-- 32747120204: infrastructure-only failure before build; the workflow contained
-  an incorrect expansion of the correct short UI commit and ran no app checks
-- 32747356042: strengthened positive outcome still used ambiguous `Fork ` and
-  failed 6/7 through document-opener escalation; this is classified test drift
-- 32748336510: exact named row still used `open:`, which re-navigated Home and
-  lost the already-materialized row; test drift at 6/7, isolated fork 1/1
-- 32749347911: direct exact-row click correctly found the row was no longer
-  materialized after Escape; test precondition drift at 6/8, isolated fork 1/1
-- 32750239185: Home-rematerialized exact reopen and second-Cancel outcomes — queued
-- 32750243224: isolated stale-Escape-state mutation using the same sequence — queued;
-  ordinary Cancel must pass while reopen-after-Escape fails
-- 32744366001: the prior 212-outcome full run — superseded by the new reopen
-  assertion and automatically canceled when the strengthened same-ref run began
+  expected while the five unaffected dialog outcomes passed
+- 32750239185: exact-name candidate retained dialog outcomes passed 6/6 and
+  isolated Start fork passed 1/1; two non-discriminating experimental reopen
+  probes were removed afterward
+- 32751536797: final 212-outcome/24-group run with current inventory, broad
+  semantic sweep, and inspector lifecycle — running
 
-The strengthened focused positive and negative runs are queued. Once they are
-classified, the 214-outcome candidate gets a fresh exhaustive full-control run;
-the historical exact inventory above is not carried forward as its count.
+The final exhaustive full-control run is active. The historical exact inventory
+above is not carried forward as its count.
 
 No PR is updated and no candidate dependency is published until these runs are
 classified. A focused failure is fixed and rerun; it is never averaged into a
