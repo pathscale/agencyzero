@@ -7,7 +7,7 @@ semantic node id; AgencyZero checks never use coordinate-pointer activation.
 ## Current subject
 
 - AgencyZero PR 186, app 0.8.37
-- ps-qa PR 10 candidate, 212 checks in 23 groups
+- ps-qa PR 10 candidate, 212 checks in 24 clean-profile groups
 - PathScale UI PR 262 candidate, package version 2.9.2
 - tauri-runtime-blitz candidate based on 0.1.5; the next release will include
   native, selected, pressed and checked state in one semantic boolean
@@ -45,8 +45,9 @@ continuation, and their implementation changes infrequently.
 | project-panel row move/edit/delete | 5/5 | 32733364792 |
 | item issue editor and persisted semantic link | 5/5 | 32735458366 |
 | Home navigation/item edit/delete/search | 18/18 | 32709132027 |
-| fork/setup dialog dismissal and workspace creation | 6/6 | 32707938707 |
+| fork/setup dialog dismissal and workspace creation | 7/7 | 32743024916 |
 | Settings menus, writes and backend round trips | 60/60 | 32715244253 |
+| Analytics tabs, selected-state transitions and refresh | 8/8 | 32739466336 |
 | task-log copy/expand/page/clear | 9/9 | 32707599080 |
 | shell and list chrome | 11/11 | 32709136042 |
 | isolated session reset | 2/2 | 32708266768 |
@@ -89,7 +90,7 @@ present on any delivery branch.
    failing the job.
 8. A single mutable 166-check process took 47 minutes and allowed one check to
    poison later areas. The full run now restores the committed profile and
-   launches a fresh exact process for each of the 22 groups.
+   launches a fresh exact process for each of the 24 groups.
 9. Project-panel and Home item editors closed during their autofocus transition
    because blur committed immediately. They now remain open until explicit
    Enter (save) or Escape (cancel); both real-renderer groups are green.
@@ -127,6 +128,11 @@ present on any delivery branch.
     that semantic URL without activating the external destination and passes
     5/5. The keyed store update also mutates the stable item node instead of
     rebuilding the entire items array.
+18. Dialog dismissal exposed a renderer crash in semantic inspection after a
+    popover removed a layout ancestor. TRB now rejects missing or cyclic layout
+    parent chains before geometry is computed and reports the node as not
+    interactable instead of panicking. Dialog dismissal, Escape, welcome setup,
+    and the isolated destructive fork outcome now pass 7/7.
 
 ## Current validation checkpoint
 
@@ -136,10 +142,18 @@ present on any delivery branch.
 - 32715244253: native Settings moderator-model selector — passed 60/60
 - 32733364792: both project rename editors and project-panel row operations — passed 10/10
 - 32735458366: issue editor open/cancel/reopen, backend write, and semantic link — passed 5/5
+- 32739466336: Analytics tabs, exact selected-state changes, and refresh — passed 8/8
+- 32743024916: dialog open/Cancel/Escape/welcome plus isolated Start fork — passed 7/7
+- 32743048974: deliberate Analytics mutation — expected red, 1/8 passed; all seven
+  selected-state outcomes failed while the unaffected refresh control passed
+- 32744344962: deliberate modal Escape mutation — running; it must turn the
+  Escape outcome red before that detector is accepted
+- 32744366001: all 212 outcomes in 24 clean-profile groups, reachability,
+  semantic sweep, and inspector lifecycle — running
 
-The combined shared-controls run, deliberate negative mutations, and final
-full-control inventory are still running. The historical exact inventory above
-is not carried forward as the final candidate count.
+The final modal negative mutation and exhaustive full-control inventory are
+still running. The historical exact inventory above is not carried forward as
+the final candidate count.
 
 No PR is updated and no candidate dependency is published until these runs are
 classified. A focused failure is fixed and rerun; it is never averaged into a
