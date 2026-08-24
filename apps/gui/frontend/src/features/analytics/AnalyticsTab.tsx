@@ -1,3 +1,4 @@
+import { Tabs } from "@pathscale/ui";
 import type { JSX } from "@solidjs/web";
 import { createMemo, createSignal, For, onSettled, Show } from "solid-js";
 import { Button } from "~/components/Button";
@@ -70,30 +71,6 @@ export function AnalyticsTab(): JSX.Element {
   const [activeTab, setActiveTab] = createSignal<AnalyticsTabKey>("value");
   const alive = whileMounted();
 
-  const selectTabFromKeyboard = (
-    event: KeyboardEvent & { currentTarget: HTMLButtonElement },
-    index: number,
-  ): void => {
-    const last = ANALYTICS_TABS.length - 1;
-    const next =
-      event.key === "ArrowRight"
-        ? (index + 1) % ANALYTICS_TABS.length
-        : event.key === "ArrowLeft"
-          ? (index + last) % ANALYTICS_TABS.length
-          : event.key === "Home"
-            ? 0
-            : event.key === "End"
-              ? last
-              : null;
-    if (next === null) return;
-    event.preventDefault();
-    setActiveTab(ANALYTICS_TABS[next].key);
-    event.currentTarget.parentElement
-      ?.querySelectorAll<HTMLButtonElement>('[role="tab"]')
-      .item(next)
-      .focus();
-  };
-
   const refresh = async (): Promise<void> => {
     if (refreshing()) return;
     setRefreshing(true);
@@ -130,63 +107,56 @@ export function AnalyticsTab(): JSX.Element {
                 onRefresh={refresh}
               />
 
-              <div
-                role="tablist"
-                aria-label={tx("Analytics sections")}
-                class="flex shrink-0 items-center gap-1 overflow-x-auto rounded-lg border border-az-hairline bg-base-200/55 p-1"
+              <Tabs.Root
+                selectedKey={activeTab()}
+                onSelectionChange={(key) => setActiveTab(key as AnalyticsTabKey)}
+                class="gap-0"
               >
-                <For each={ANALYTICS_TABS}>
-                  {(tab, index) => {
-                    const selected = () => activeTab() === tab.key;
-                    return (
-                      <Button
-                        id={`analytics-tab-${tab.key}`}
-                        type="button"
-                        role="tab"
-                        aria-label={tx(tab.label)}
-                        aria-selected={selected() ? "true" : "false"}
-                        aria-controls={`analytics-panel-${tab.key}`}
-                        tabindex={selected() ? 0 : -1}
-                        onClick={() => setActiveTab(tab.key)}
-                        onKeyDown={(event) => selectTabFromKeyboard(event, index())}
-                        class={`shrink-0 rounded-md px-3 py-1.5 font-medium text-[11.5px] transition-colors ${
-                          selected()
-                            ? "bg-base-100 text-az-title shadow-sm"
-                            : "text-az-muted hover:bg-base-100/55 hover:text-az-strong"
-                        }`}
-                      >
-                        {tx(tab.label)}
-                      </Button>
-                    );
-                  }}
-                </For>
-              </div>
+                <Tabs.List
+                  aria-label={tx("Analytics sections")}
+                  class="flex shrink-0 items-center gap-1 overflow-x-auto rounded-lg border border-az-hairline bg-base-200/55 p-1"
+                >
+                  <For each={ANALYTICS_TABS}>
+                    {(tab) => {
+                      const selected = () => activeTab() === tab.key;
+                      return (
+                        <Tabs.Tab
+                          id={tab.key}
+                          aria-label={tx(tab.label)}
+                          class={`shrink-0 rounded-md px-3 py-1.5 font-medium text-[11.5px] transition-colors ${
+                            selected()
+                              ? "bg-base-100 text-az-title shadow-sm"
+                              : "text-az-muted hover:bg-base-100/55 hover:text-az-strong"
+                          }`}
+                        >
+                          {tx(tab.label)}
+                        </Tabs.Tab>
+                      );
+                    }}
+                  </For>
+                </Tabs.List>
 
-              <div
-                id={`analytics-panel-${activeTab()}`}
-                role="tabpanel"
-                aria-labelledby={`analytics-tab-${activeTab()}`}
-                class="min-w-0"
-              >
-                <Show when={activeTab() === "value"}>
-                  <AgentValue agents={usage().agents} />
-                </Show>
-                <Show when={activeTab() === "sessions"}>
-                  <SessionBreakdown sessions={usage().sessions} />
-                </Show>
-                <Show when={activeTab() === "items"}>
-                  <ItemBreakdown items={usage().items} />
-                </Show>
-                <Show when={activeTab() === "daily"}>
-                  <DaySeries days={usage().days} />
-                </Show>
-                <Show when={activeTab() === "projects"}>
-                  <ProjectBreakdown projects={usage().projects} total={usage().totalUsd} />
-                </Show>
-                <Show when={activeTab() === "models"}>
-                  <ModelBreakdown models={usage().models} />
-                </Show>
-              </div>
+                <Tabs.Panel id={activeTab()} class="min-w-0 p-0">
+                  <Show when={activeTab() === "value"}>
+                    <AgentValue agents={usage().agents} />
+                  </Show>
+                  <Show when={activeTab() === "sessions"}>
+                    <SessionBreakdown sessions={usage().sessions} />
+                  </Show>
+                  <Show when={activeTab() === "items"}>
+                    <ItemBreakdown items={usage().items} />
+                  </Show>
+                  <Show when={activeTab() === "daily"}>
+                    <DaySeries days={usage().days} />
+                  </Show>
+                  <Show when={activeTab() === "projects"}>
+                    <ProjectBreakdown projects={usage().projects} total={usage().totalUsd} />
+                  </Show>
+                  <Show when={activeTab() === "models"}>
+                    <ModelBreakdown models={usage().models} />
+                  </Show>
+                </Tabs.Panel>
+              </Tabs.Root>
             </>
           )}
         </Show>
