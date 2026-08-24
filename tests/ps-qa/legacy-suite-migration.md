@@ -1,9 +1,8 @@
 # Legacy frontend suite migration
 
-The legacy suite currently spans 76 `*.test.ts(x)` files and 665 direct
-`it`/`test` declarations; parameterized cases account for the higher executed
-total. This is an inventory, not a promise to create the same number of ps-qa
-checks.
+The legacy suite remains a migration inventory, not a promise to create the
+same number of ps-qa checks. Parameterized cases make executed totals especially
+misleading; each visible behavior gets one stronger live outcome instead.
 
 ## Conversion rule
 
@@ -73,3 +72,14 @@ cases stayed inside jsdom and could not prove native hit testing, layout, or
 application outcomes. The live replacements include the inert-pencil mutation
 (0/5), current rename (5/5), the red dialog-Cancel mutation, disconnected Send
 disabled-state checks, and the named semantic activations across this audit.
+
+The fork-dialog jsdom case in `ProjectPanel.test.tsx` is removed. It reported
+the complete dialog DOM as inaccessible because jsdom left UI Popover at
+`visibility:hidden`; it could neither prove paint nor the native event path.
+The live replacement opens the rendered dialog, changes the exact Description
+textarea by semantic node id, verifies its value changes, and then starts the
+fork in the following outcome.
+
+The moderator-model DOM case is removed as a duplicate. The live
+`settings-moderator-model-changes` outcome reaches the deferred Settings section,
+drives its native combobox, and requires its accessible name to change.

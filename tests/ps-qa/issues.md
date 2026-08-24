@@ -7,7 +7,7 @@ semantic node id; AgencyZero checks never use coordinate-pointer activation.
 ## Current subject
 
 - AgencyZero PR 186, app 0.8.37
-- ps-qa PR 10 candidate, 212 checks in 24 clean-profile groups
+- ps-qa PR 10 candidate, 214 checks in 24 surface-grouped outcome areas
 - PathScale UI PR 262 candidate, package version 2.9.2
 - tauri-runtime-blitz candidate based on 0.1.5; the next release will include
   native, selected, pressed and checked state in one semantic boolean
@@ -16,18 +16,18 @@ semantic node id; AgencyZero checks never use coordinate-pointer activation.
 
 ## Exact inventory
 
-Run 32699353075 materialized all deferred settings and Home rows before counting:
+Run 32760902020 materialized every deferred surface before counting:
 
 | category | controls |
 | --- | ---: |
-| total | 674 |
-| reachable ordinary controls | 653 |
+| total | 746 |
+| reachable ordinary controls | 711 |
 | unreachable | 0 |
 | anonymous | 0 |
-| disabled by current state | 8 |
-| manual release controls | 12 |
+| disabled by current state | 9 |
+| manual release controls | 25 |
 | isolated lifecycle | 1 |
-| stable/disabled instances reconciled to named outcomes | 661 |
+| instances reconciled to named outcomes | 720 |
 | unverified ordinary controls | 0 |
 
 The declaration gap is zero. `Enable inspection and agent control` is isolated
@@ -88,9 +88,10 @@ present on any delivery branch.
 7. Separate final gate steps stopped after the first `exit 1`, hiding later
    lifecycle failures. One aggregate gate now reports every failed stage before
    failing the job.
-8. A single mutable 166-check process took 47 minutes and allowed one check to
-   poison later areas. The full run now restores the committed profile and
-   launches a fresh exact process for each of the 24 groups.
+8. A restart-per-group suite took more than 30 minutes and concealed state
+   dependencies. The audit now keeps one exact app process, groups checks by
+   surface, restores mutated fixtures explicitly, and runs outcomes plus the
+   exhaustive unmapped sweep in under three minutes.
 9. Project-panel and Home item editors closed during their autofocus transition
    because blur committed immediately. They now remain open until explicit
    Enter (save) or Escape (cancel); both real-renderer groups are green.
@@ -140,6 +141,21 @@ present on any delivery branch.
     retained dialog route now names one exact fixture row and reconciles the
     repeated Fork family. A narrow UI audit separately fixed a real
     uncontrolled-Popover callback ordering bug.
+20. The outcome runner bucketed project checks together but did not recognize
+    the deterministic project title as the already-open dynamic document. It
+    returned Home and remounted Project before every check, costing 8-10
+    seconds each. Dynamic document opener names are now explicit app-profile
+    data; the first project outcome fell to 103ms.
+21. Dormant item-row and task-log copy actions were all mounted for every row.
+    They now mount only for the semantically hovered or keyboard-focused row.
+    The harness scrolls the exact hover node id into view before hovering it.
+22. Settings' deferred-section ordinal and fully expanded budget survived
+    unmount at module scope, so later visits rebuilt the whole page eagerly.
+    Each Settings tree now starts a fresh viewport-sized mount budget.
+23. Home eagerly built 30 project groups plus 20 duplicate Recent cards. Both
+    shared grids now begin with five viewport-sized rows. A live pagination
+    outcome proves the next page paints, while inventory expands every declared
+    semantic pager before counting all row instances.
 
 ## Current validation checkpoint
 
@@ -158,11 +174,17 @@ present on any delivery branch.
 - 32750239185: exact-name candidate retained dialog outcomes passed 6/6 and
   isolated Start fork passed 1/1; two non-discriminating experimental reopen
   probes were removed afterward
-- 32751536797: final 212-outcome/24-group run with current inventory, broad
-  semantic sweep, and inspector lifecycle — running
+- 32760902020: exact 746-component inventory, with zero ordinary unreachable or
+  unverified controls
+- 32762003982: 68-second outcomes plus 73-second exhaustive sweep; final gate
+  identified the project-navigation timeout
+- 32763982842: explicit dynamic-document reuse made the first project outcome
+  pass in 103ms; its artifact then identified off-viewport semantic hover
+- 32764818905: active full 214-outcome run with pagination inventory, one app
+  process, sub-second action gate, exhaustive sweep, and final inspection toggle
 
-The final exhaustive full-control run is active. The historical exact inventory
-above is not carried forward as its count.
+The final exhaustive full-control run is active. Its pagination-aware inventory
+must reproduce or explain every instance relative to the exact 746 baseline.
 
 No PR is updated and no candidate dependency is published until these runs are
 classified. A focused failure is fixed and rerun; it is never averaged into a
@@ -203,6 +225,5 @@ or process-level outcome. Inventory alone is not a pass. The broad sweep is a
 diagnostic for newly introduced controls; the named reconciled outcomes are the
 release gate.
 
-The legacy frontend suite is manual-only. It currently has 76 files and 665
-direct declarations. Delete a renderer-blind test only after its live
+The legacy frontend suite is manual-only. Delete a renderer-blind test only after its live
 replacement passes and a negative mutation proves that replacement turns red.
