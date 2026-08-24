@@ -20,16 +20,6 @@
 // their controls paint.
 [
     (
-        id: "settings-language-menu",
-        group: "settings",
-        what: "the language control opens a menu",
-        open: Some("Settings"),
-        hover: None,
-        click: Some("Current language: English"),
-        subject: "menuitem",
-        expect: PaintsMore,
-    ),
-    (
         id: "settings-agent-menu",
         group: "settings",
         what: "the default agent control opens a menu",

@@ -432,6 +432,16 @@ export function SettingsTab(): JSX.Element {
     moderatorModels().find((model) => model.value === state.settings?.moderator.model)?.label ??
     state.settings?.moderator.model ??
     "";
+  const moveModeratorModel = (offset: number): void => {
+    const models = moderatorModels();
+    const currentIndex = models.findIndex(
+      (model) => model.value === state.settings?.moderator.model,
+    );
+    const next = models[Math.max(0, Math.min(models.length - 1, currentIndex + offset))];
+    if (next && next.value !== state.settings?.moderator.model) {
+      void actions.saveSettings({ moderator: { model: next.value } });
+    }
+  };
 
   /*
    * Opening Settings puts focus on the page itself, so Page Up and Page Down
@@ -1602,32 +1612,24 @@ export function SettingsTab(): JSX.Element {
               />
             </Row>
             <Row label={tx("Moderator model")}>
-              <Select
+              <select
+                aria-label={`${tx("Moderator model")}: ${moderatorModelLabel()}`}
                 value={current().moderator.model}
-                onChange={(model) =>
-                  typeof model === "string" && void actions.saveSettings({ moderator: { model } })
+                onChange={(event) =>
+                  void actions.saveSettings({ moderator: { model: event.currentTarget.value } })
                 }
-                class="min-w-[220px]"
+                onKeyDown={(event) => {
+                  if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+                    event.preventDefault();
+                    moveModeratorModel(event.key === "ArrowDown" ? 1 : -1);
+                  }
+                }}
+                class="h-9 min-w-[220px] rounded-lg border border-az-hairline bg-az-inset px-2.5 text-[12px] text-az-body outline-none"
               >
-                <Select.Trigger
-                  aria-label={`${tx("Moderator model")}: ${moderatorModelLabel()}`}
-                  class="h-9 min-w-[220px] rounded-lg border border-az-hairline bg-az-inset px-2.5 text-[12px] text-az-body outline-none"
-                >
-                  <Select.Value />
-                  <Select.Indicator endIcon={<Icon name="chevron-down" />} />
-                </Select.Trigger>
-                <Select.Popover>
-                  <Select.Listbox>
-                    <For each={moderatorModels()}>
-                      {(model) => (
-                        <Select.Option value={model.value} textValue={model.label}>
-                          {model.label}
-                        </Select.Option>
-                      )}
-                    </For>
-                  </Select.Listbox>
-                </Select.Popover>
-              </Select>
+                <For each={moderatorModels()}>
+                  {(model) => <option value={model.value}>{model.label}</option>}
+                </For>
+              </select>
             </Row>
             <Row label={tx("Confine tool calls to the working directories")}>
               <SettingToggle
