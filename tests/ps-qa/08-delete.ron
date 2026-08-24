@@ -34,7 +34,7 @@
         open: Some("Home"),
         hover: None,
         click: Some("Delete project e756"),
-        subject: "Confirm delete: e756",
+        subject: "button:Cancel",
         expect: Paints,
     ),
     (
