@@ -71,9 +71,9 @@
         what: "the standard colour wheel changes text brightness",
         open: Some("Settings"),
         hover: None,
-        click: Some("Text brightness 50%"),
+        click: Some("Text brightness 75%"),
         covers: ["button:Text brightness "],
-        subject: "Text brightness 50%",
+        subject: "Text brightness 75%",
         expect: SelectionChanges,
     ),
     (
