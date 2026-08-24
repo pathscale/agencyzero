@@ -41,7 +41,7 @@
         group: "row-actions",
         what: "the project-row editor saves a replacement title on Enter",
         open: None,
-        hover: Some("Change the status of qa audit project item"),
+        hover: None,
         click: None,
         type_into: Some("textbox:Edit iota beta zeta delta north cobalt epsilon omega lambda epsilon"),
         text: Some("qa audit project item"),
