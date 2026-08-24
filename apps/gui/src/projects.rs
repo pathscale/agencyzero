@@ -2134,25 +2134,47 @@ async fn write_item_positions(
     ids: &[String],
     first: u32,
 ) -> Result<Vec<String>, String> {
-    let changes: Vec<_> = ids
+    let current: std::collections::HashMap<_, _> = ids
         .iter()
-        .enumerate()
-        .filter_map(|(index, item_id)| {
-            let offset = u32::try_from(index).unwrap_or(u32::MAX);
-            let position = first.saturating_add(offset);
-            let unchanged = tables
+        .filter_map(|item_id| {
+            tables
                 .project_item
                 .select(item_id.clone())
-                .is_some_and(|row| row.position == position);
-            (!unchanged).then(|| (item_id.clone(), position))
+                .map(|row| (item_id.clone(), row.position))
         })
         .collect();
 
-    // A one-row move swaps two positions. Awaiting every row serially made
-    // that ordinary click rewrite the entire list and take 2.2 seconds in the
-    // rendered audit. Queue only positions that changed, together, through the
-    // table's writer; errors remain visible and earlier writes may still have
-    // landed, matching the command's existing partial-write contract.
+    // A reorder changes identity order, not the numeric slots themselves. Keep
+    // every existing unique slot and assign the requested ids to those slots;
+    // an adjacent move then persists exactly the two swapped rows even when an
+    // old database has gaps. Creation passes `first = 1` and deliberately
+    // requests a compact shift so position zero remains available to the new
+    // row. Missing or duplicate reorder slots also fall back to normalization.
+    let mut slots: Vec<_> = current.values().copied().collect();
+    slots.sort_unstable();
+    let slots_are_unique = slots.windows(2).all(|pair| pair[0] != pair[1]);
+    let preserve_slots = first == 0 && current.len() == ids.len() && slots_are_unique;
+    let target_positions: Vec<_> = if preserve_slots {
+        slots
+    } else {
+        (0..ids.len())
+            .map(|index| {
+                let offset = u32::try_from(index).unwrap_or(u32::MAX);
+                first.saturating_add(offset)
+            })
+            .collect()
+    };
+
+    let changes: Vec<_> = ids
+        .iter()
+        .zip(target_positions)
+        .filter(|(item_id, position)| current.get(*item_id) != Some(position))
+        .map(|(item_id, position)| (item_id.clone(), position))
+        .collect();
+
+    // Queue only positions that changed, together, through the table's writer;
+    // errors remain visible and earlier writes may still have landed, matching
+    // the command's existing partial-write contract.
     let changed: Vec<String> = changes.iter().map(|(item_id, _)| item_id.clone()).collect();
     futures::future::try_join_all(changes.into_iter().map(|(item_id, position)| async move {
         tables
@@ -16707,7 +16729,7 @@ mod tests {
             chrono::Utc::now().timestamp_nanos_opt().unwrap_or_default()
         ));
         let tables = Tables::open(&dir).await.expect("item store opens");
-        for (position, id) in ["one", "two", "three"].into_iter().enumerate() {
+        for (position, id) in [(0, "one"), (10, "two"), (20, "three")] {
             tables
                 .project_item
                 .insert(ProjectItemRow {
@@ -16715,7 +16737,7 @@ mod tests {
                     project_id: "project-a".into(),
                     title: id.into(),
                     status: "planning".into(),
-                    position: position as u32,
+                    position,
                     reference: String::new(),
                     priority: 0,
                 })
@@ -16727,14 +16749,18 @@ mod tests {
                 .await
                 .expect("reorder writes");
 
-        assert_eq!(changed, ["three", "two"], "the unchanged first row is not rewritten");
+        assert_eq!(
+            changed,
+            ["three", "two"],
+            "the unchanged first row is not rewritten"
+        );
         assert_eq!(
             tables
                 .project_item
                 .select("two".to_string())
                 .expect("two exists")
                 .position,
-            2
+            20
         );
         assert_eq!(
             tables
@@ -16742,10 +16768,29 @@ mod tests {
                 .select("three".to_string())
                 .expect("three exists")
                 .position,
-            1
+            10
         );
 
         tables.shutdown().await.expect("item store drains");
+        let reopened = Tables::open(&dir).await.expect("item store reopens");
+        assert_eq!(
+            reopened
+                .project_item
+                .select("two".to_string())
+                .expect("two survives reopen")
+                .position,
+            20,
+            "the sparse-slot swap remains durable"
+        );
+        assert_eq!(
+            reopened
+                .project_item
+                .select("three".to_string())
+                .expect("three survives reopen")
+                .position,
+            10
+        );
+        reopened.shutdown().await.expect("reopened store drains");
         let _ = std::fs::remove_dir_all(dir);
     }
 
