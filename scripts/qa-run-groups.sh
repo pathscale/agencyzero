@@ -49,9 +49,13 @@ start_app() {
 }
 
 groups=()
-while IFS= read -r group; do
-  groups[${#groups[@]}]="$group"
-done < <(ps-qa list | awk 'NF == 1 && $1 !~ /^[0-9]+$/ { print $1 }')
+if [ -n "${QA_GROUPS:-}" ]; then
+  read -r -a groups <<< "$QA_GROUPS"
+else
+  while IFS= read -r group; do
+    groups[${#groups[@]}]="$group"
+  done < <(ps-qa list | awk 'NF == 1 && $1 !~ /^[0-9]+$/ { print $1 }')
+fi
 
 if [ "${#groups[@]}" -eq 0 ]; then
   echo "ps-qa listed no outcome groups" >&2
