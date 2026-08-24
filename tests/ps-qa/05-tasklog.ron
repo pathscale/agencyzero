@@ -6,10 +6,10 @@
     (
         id: "tasklog-1",
         group: "tasklog",
-        what: "task log rows render their per-row copy control",
+        what: "task log rows render their primary command control",
         open: Some("theta theta north indi"),
         hover: None, click: None,
-        subject: "Copy this task-log entry",
+        subject: "Show the whole command",
         expect: Paints,
     ),
     (
@@ -17,7 +17,7 @@
         group: "tasklog",
         what: "copying a task-log row reports that the clipboard write succeeded",
         open: Some("theta theta north indi"),
-        hover: None,
+        hover: Some("Show the whole command"),
         click: Some("Copy this task-log entry"),
         subject: "Copied task-log entry",
         expect: Paints,
@@ -83,7 +83,7 @@
         open: Some("theta theta north indi"),
         hover: None,
         click: Some("Show 20 earlier"),
-        subject: "Copy this task-log entry",
+        subject: "Show the whole command",
         expect: PaintsMore,
     ),
     (
@@ -93,7 +93,7 @@
         open: Some("theta theta north indi"),
         hover: None,
         click: Some("Clear"),
-        subject: "Copy this task-log entry",
+        subject: "Show the whole command",
         expect: Vanishes,
     ),
 ]

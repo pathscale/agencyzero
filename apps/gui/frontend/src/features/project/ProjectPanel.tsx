@@ -2110,6 +2110,8 @@ function TaskLogList(props: { projectId: string }): JSX.Element {
   const [expanded, setExpanded] = createSignal<string | null>(null);
   /** The row whose copy action most recently succeeded. */
   const [copied, setCopied] = createSignal<string | null>(null);
+  /** The only row that needs its secondary copy action mounted. */
+  const [activeEntryId, setActiveEntryId] = createSignal<string | null>(null);
 
   const copyEntry = async (id: string, text: string): Promise<void> => {
     if (!(await copyText(text))) return;
@@ -2149,7 +2151,23 @@ function TaskLogList(props: { projectId: string }): JSX.Element {
            * it with the error mark would tell you a tool failed when nothing
            * said so.
            */
-          <div class="flex flex-col gap-1 text-[11.5px]">
+          <div
+            role="listitem"
+            aria-label={entry.label}
+            tabindex={-1}
+            onPointerEnter={() => setActiveEntryId(entry.id)}
+            onPointerLeave={() => {
+              if (activeEntryId() === entry.id) setActiveEntryId(null);
+            }}
+            onFocusIn={() => setActiveEntryId(entry.id)}
+            onFocusOut={(event) => {
+              const next = event.relatedTarget;
+              if (!(next instanceof Node) || !event.currentTarget.contains(next)) {
+                if (activeEntryId() === entry.id) setActiveEntryId(null);
+              }
+            }}
+            class="flex flex-col gap-1 text-[11.5px]"
+          >
             <div class="flex items-baseline gap-2">
               <Icon
                 name={entry.ok === true ? "check" : entry.ok === false ? "x" : "info"}
@@ -2200,22 +2218,24 @@ function TaskLogList(props: { projectId: string }): JSX.Element {
               <span class={`shrink-0 ${entry.ok === false ? "text-error" : "text-az-muted"}`}>
                 {taskMeta(entry)}
               </span>
-              <Button
-                type="button"
-                onClick={() =>
-                  void copyEntry(
-                    entry.id,
-                    [`${entry.tool} ${entry.label}`, entry.output].filter(Boolean).join("\n\n"),
-                  )
-                }
-                aria-label={tx(
-                  copied() === entry.id ? "Copied task-log entry" : "Copy this task-log entry",
-                )}
-                title={copied() === entry.id ? tx("Copied") : tx("Copy")}
-                class="shrink-0 rounded p-0.5 text-az-faint transition-colors hover:text-az-body"
-              >
-                <Icon name={copied() === entry.id ? "check" : "copy"} class="text-[11px]" />
-              </Button>
+              <Show when={activeEntryId() === entry.id}>
+                <Button
+                  type="button"
+                  onClick={() =>
+                    void copyEntry(
+                      entry.id,
+                      [`${entry.tool} ${entry.label}`, entry.output].filter(Boolean).join("\n\n"),
+                    )
+                  }
+                  aria-label={tx(
+                    copied() === entry.id ? "Copied task-log entry" : "Copy this task-log entry",
+                  )}
+                  title={copied() === entry.id ? tx("Copied") : tx("Copy")}
+                  class="shrink-0 rounded p-0.5 text-az-faint transition-colors hover:text-az-body"
+                >
+                  <Icon name={copied() === entry.id ? "check" : "copy"} class="text-[11px]" />
+                </Button>
+              </Show>
             </div>
             <Show when={expanded() === entry.id && entry.output}>
               <pre class="az-scroll max-h-64 whitespace-pre-wrap break-words rounded-md border border-az-hairline bg-az-inset px-2 py-1.5 font-mono text-[10.5px] text-az-body">
