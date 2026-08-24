@@ -48,6 +48,16 @@
         expect: PaintsNamed,
     ),
     (
+        id: "settings-task-manager-agent-selects-option",
+        group: "settings",
+        what: "choosing Claude changes the task-manager agent trigger's accessible value",
+        open: None,
+        hover: None,
+        click: Some("menuitem:Claude"),
+        subject: "Task manager agent",
+        expect: NameChanges,
+    ),
+    (
         id: "settings-task-manager-directory-adds",
         group: "settings",
         what: "a task-manager directory entered by name paints in the saved list",
@@ -221,6 +231,16 @@
         click: Some("Environment policy"),
         subject: "menuitem:Inherit",
         expect: PaintsNamed,
+    ),
+    (
+        id: "settings-environment-policy-selects-option",
+        group: "settings",
+        what: "choosing Minimal changes the environment-policy trigger's accessible value",
+        open: None,
+        hover: None,
+        click: Some("menuitem:Minimal"),
+        subject: "Environment policy",
+        expect: NameChanges,
     ),
     (
         id: "settings-forward-proxy-toggle",

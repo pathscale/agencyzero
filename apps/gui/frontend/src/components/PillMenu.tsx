@@ -38,12 +38,13 @@ export type PillMenuProps<T extends string> = {
  */
 export function PillMenu<T extends string>(props: PillMenuProps<T>): JSX.Element {
   const current = () => props.options.find((option) => option.value === props.value);
+  const currentLabel = () => current()?.label ?? props.value;
 
   // Opens upward: every pill in this app sits in a composer at the window's bottom edge.
   return (
     <Dropdown placement="top">
       <Dropdown.Trigger
-        aria-label={props.label}
+        aria-label={`${props.label}: ${currentLabel()}`}
         disabled={props.isDisabled}
         class={`flex h-[24px] min-h-[24px] shrink-0 items-center gap-[7px] rounded-full px-2.5 py-0 font-medium text-[11px] leading-none transition-colors ${
           props.variant === "outline"
@@ -60,7 +61,7 @@ export function PillMenu<T extends string>(props: PillMenuProps<T>): JSX.Element
           <span class="font-semibold text-base-content">{props.prefix}</span>
         </Show>
         <span class={props.prefix ? "text-az-muted" : "text-az-strong"}>
-          {current()?.triggerLabel ?? current()?.label ?? props.value}
+          {current()?.triggerLabel ?? currentLabel()}
         </span>
         <Icon name="chevron-down" class="text-[12px] text-az-faint" />
       </Dropdown.Trigger>
