@@ -270,7 +270,7 @@ jobs:
           old_pid="$(cat /tmp/az-qa.pid)"
           ps-qa click Settings
           sleep 2
-          ps-qa click Restart > /tmp/restart.txt 2>&1 || true
+          ps-qa click button:Restart > /tmp/restart.txt 2>&1 || true
 
           relaunched=0
           for _ in $(seq 1 60); do
@@ -300,34 +300,27 @@ jobs:
           echo "$new_pid" > /tmp/az-qa.pid
           echo "Restart replaced pid $old_pid with pid $new_pid"
 
-      # Collection continues past integrity faults so one macOS launch yields
-      # all evidence, but a ghost tree can never receive a green verdict.
-      - name: Enforce tree integrity
-        if: ${{ steps.integrity.outcome == 'failure' }}
-        run: exit 1
-
-      # Collection continues through red outcomes so one expensive launch still
-      # yields the full inventory, but the completed workflow must tell the
-      # truth: a failed outcome check is a red audit.
-      - name: Enforce outcome checks
-        if: ${{ steps.checks.outcome == 'failure' }}
-        run: exit 1
-
-      - name: Enforce reachability inventory
-        if: ${{ steps.inventory.outcome == 'failure' }}
-        run: exit 1
-
-      - name: Enforce semantic sweep
-        if: ${{ steps.sweep.outcome == 'failure' }}
-        run: exit 1
-
-      - name: Enforce isolated controls
-        if: ${{ steps.isolated.outcome == 'failure' }}
-        run: exit 1
-
-      - name: Enforce restart outcome
-        if: ${{ steps.isolated_restart.outcome == 'failure' }}
-        run: exit 1
+      # Report every red gate before failing the job. Separate `exit 1` steps
+      # stopped at the first failure and silently hid later lifecycle failures.
+      - name: Enforce complete QA outcome
+        if: always()
+        run: |
+          failed=0
+          for gate in \
+            'tree integrity:${{ steps.integrity.outcome }}' \
+            'outcome checks:${{ steps.checks.outcome }}' \
+            'reachability inventory:${{ steps.inventory.outcome }}' \
+            'semantic sweep:${{ steps.sweep.outcome }}' \
+            'inspection toggle:${{ steps.isolated.outcome }}' \
+            'restart outcome:${{ steps.isolated_restart.outcome }}'; do
+            name="${gate%%:*}"
+            outcome="${gate#*:}"
+            if [ "$outcome" = failure ]; then
+              echo "$name failed" >&2
+              failed=1
+            fi
+          done
+          exit "$failed"
 
       - name: Summary
         if: always()
