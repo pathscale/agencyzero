@@ -47,6 +47,18 @@
         expect: Vanishes,
     ),
     (
+        id: "dialog-edits-fork-context",
+        group: "dialog-fork",
+        what: "the fork dialog accepts replacement item context before starting",
+        open: Some("button:Fork iota beta zeta delta north cobalt epsilon omega lambda epsilon into a fresh chat"),
+        hover: None,
+        click: None,
+        type_into: Some("textbox:Description / sub-items"),
+        text: Some("Preserve the owner decision and run the focused tests."),
+        subject: "textbox:Description / sub-items",
+        expect: ValueChanges,
+    ),
+    (
         id: "dialog-starts-fork",
         group: "dialog-fork",
         what: "starting a fork closes the dialog and opens a new project tab",
