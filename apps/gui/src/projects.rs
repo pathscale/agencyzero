@@ -1425,6 +1425,12 @@ fn should_route_approvals(permission: &str) -> bool {
 #[derive(Debug, Default, PartialEq, Eq)]
 struct FenceState(Option<(char, usize)>);
 
+#[derive(Debug, Default)]
+struct DirectiveApplyState {
+    fenced: FenceState,
+    item_handles: std::collections::HashMap<String, String>,
+}
+
 fn fence_marker(line: &str) -> Option<(char, usize, &str)> {
     let marker = line.chars().next()?;
     if !matches!(marker, '`' | '~') {
@@ -3702,6 +3708,7 @@ async fn apply_directive(
     tables: &crate::db::tables::Tables,
     project_id: &str,
     actor: &str,
+    item_handles: &mut std::collections::HashMap<String, String>,
     directive: crate::directives::Directive,
 ) -> crate::directives::Outcome {
     use crate::directives::{Directive, Outcome};
@@ -3731,8 +3738,8 @@ async fn apply_directive(
                 };
             }
             let known: Vec<&str> = rows.iter().map(|row| row.id.as_str()).collect();
-            let resolved = match crate::directives::resolve(&known, &id) {
-                Ok(found) => found.to_string(),
+            let resolved = match crate::directives::resolve_item(&known, item_handles, &id) {
+                Ok(found) => found,
                 Err(code) => {
                     return Outcome::Refused {
                         what: format!("items.state({id})"),
@@ -3804,8 +3811,8 @@ async fn apply_directive(
         }
         Directive::ItemDescribe { id, description } => {
             let known: Vec<&str> = rows.iter().map(|row| row.id.as_str()).collect();
-            let resolved = match crate::directives::resolve(&known, &id) {
-                Ok(found) => found.to_string(),
+            let resolved = match crate::directives::resolve_item(&known, item_handles, &id) {
+                Ok(found) => found,
                 Err(code) => {
                     return Outcome::Refused {
                         what: format!("items.describe({id})"),
@@ -3991,6 +3998,9 @@ async fn apply_directive(
                         }
                     }
                     let state = moved.then(|| format!("; -> {status}"));
+                    if let Some(handle) = handle.as_ref() {
+                        item_handles.insert(handle.clone(), existing.id.clone());
+                    }
                     return Outcome::Done(match handle {
                         Some(handle) => format!(
                             "{handle} -> {} (already open{})",
@@ -4024,6 +4034,9 @@ async fn apply_directive(
             match tables.project_item.insert(row.clone()) {
                 Ok(_) => {
                     touch_item(tables, &row.id).await;
+                    if let Some(handle) = handle.as_ref() {
+                        item_handles.insert(handle.clone(), row.id.clone());
+                    }
                     let said = match handle {
                         Some(handle) => format!("{handle} -> {} {:?}", row.id, row.title),
                         None => format!("{} {:?}", row.id, row.title),
@@ -4039,8 +4052,8 @@ async fn apply_directive(
         }
         Directive::ItemRetire { id } => {
             let known: Vec<&str> = rows.iter().map(|row| row.id.as_str()).collect();
-            let resolved = match crate::directives::resolve(&known, &id) {
-                Ok(found) => found.to_string(),
+            let resolved = match crate::directives::resolve_item(&known, item_handles, &id) {
+                Ok(found) => found,
                 Err(code) => {
                     return Outcome::Refused {
                         what: format!("items.retire({id})"),
@@ -4139,8 +4152,9 @@ async fn apply_directive(
             let linked = match item.as_deref() {
                 Some(item) => {
                     let known: Vec<&str> = rows.iter().map(|row| row.id.as_str()).collect();
-                    let resolved = match crate::directives::resolve(&known, item) {
-                        Ok(found) => found.to_string(),
+                    let resolved = match crate::directives::resolve_item(&known, item_handles, item)
+                    {
+                        Ok(found) => found,
                         Err(code) => {
                             return Outcome::Refused {
                                 what: format!("pr.link(item: {item})"),
@@ -4217,8 +4231,8 @@ async fn apply_directive(
         }
         Directive::IssueLink { url, item } => {
             let known: Vec<&str> = rows.iter().map(|row| row.id.as_str()).collect();
-            let resolved = match crate::directives::resolve(&known, &item) {
-                Ok(found) => found.to_string(),
+            let resolved = match crate::directives::resolve_item(&known, item_handles, &item) {
+                Ok(found) => found,
                 Err(code) => {
                     return Outcome::Refused {
                         what: format!("issue.link(item: {item})"),
@@ -4252,8 +4266,8 @@ async fn apply_directive(
             let reference = match reference.as_deref() {
                 Some(reference) if !reference.starts_with("https://") => {
                     let known: Vec<&str> = rows.iter().map(|row| row.id.as_str()).collect();
-                    match crate::directives::resolve(&known, reference) {
-                        Ok(found) => Some(found.to_string()),
+                    match crate::directives::resolve_item(&known, item_handles, reference) {
+                        Ok(found) => Some(found),
                         Err(code) => {
                             return Outcome::Refused {
                                 what: format!("ask(reference: {reference})"),
@@ -4382,6 +4396,7 @@ struct StudyTarget {
 /// afterwards.
 fn study_target_before(
     tables: &crate::db::tables::Tables,
+    item_handles: &std::collections::HashMap<String, String>,
     directive: &crate::directives::Directive,
 ) -> StudyTarget {
     use crate::directives::Directive;
@@ -4393,9 +4408,7 @@ fn study_target_before(
         .unwrap_or_default();
     let known: Vec<&str> = rows.iter().map(|row| row.id.as_str()).collect();
     let resolve = |named: &str| {
-        crate::directives::resolve(&known, named)
-            .map(str::to_string)
-            .unwrap_or_default()
+        crate::directives::resolve_item(&known, item_handles, named).unwrap_or_default()
     };
 
     match directive {
@@ -4505,14 +4518,16 @@ async fn apply_directives_with_state(
     turn_id: &str,
     agent: &str,
     text: &str,
-    fenced: &mut FenceState,
+    state: &mut DirectiveApplyState,
 ) -> Vec<crate::directives::Outcome> {
     let mut done = Vec::new();
     for line in text.lines() {
-        match authored_directive_line(line, fenced).and_then(crate::directives::parse_authored) {
+        match authored_directive_line(line, &mut state.fenced)
+            .and_then(crate::directives::parse_authored)
+        {
             Some(crate::directives::Authored::Directive(directive)) => {
                 let operation = directive.operation();
-                let mut target = study_target_before(tables, &directive);
+                let mut target = study_target_before(tables, &state.item_handles, &directive);
                 let interaction_id = id("interaction");
                 crate::study::record(
                     tables,
@@ -4533,7 +4548,15 @@ async fn apply_directives_with_state(
                     },
                 );
                 let started = std::time::Instant::now();
-                let outcome = apply_directive(app, tables, project_id, agent, directive).await;
+                let outcome = apply_directive(
+                    app,
+                    tables,
+                    project_id,
+                    agent,
+                    &mut state.item_handles,
+                    directive,
+                )
+                .await;
                 let (result, code) = outcome.study_result();
                 study_target_after_add(tables, &mut target, operation, result == "applied");
                 crate::study::record(
@@ -4611,16 +4634,8 @@ async fn apply_directives(
     agent: &str,
     text: &str,
 ) -> Vec<crate::directives::Outcome> {
-    apply_directives_with_state(
-        app,
-        tables,
-        project_id,
-        turn_id,
-        agent,
-        text,
-        &mut FenceState::default(),
-    )
-    .await
+    let mut state = DirectiveApplyState::default();
+    apply_directives_with_state(app, tables, project_id, turn_id, agent, text, &mut state).await
 }
 
 /// Whether a submitted turn itself contains a live AgencyZero authoring line.
@@ -11336,7 +11351,7 @@ async fn drive_run(
     let mut directives_scanned_to = recovered_body
         .rfind('\n')
         .map_or(0, |index| index.saturating_add(1));
-    let mut directives_fenced = FenceState::default();
+    let mut directive_state = DirectiveApplyState::default();
     let mut visible_agent_text = crate::directives::authoring_stream();
 
     /*
@@ -11909,7 +11924,7 @@ async fn drive_run(
                      */
                     if ping_outstanding
                         && matches!(
-                            authored_directive_line(&line, &mut directives_fenced)
+                            authored_directive_line(&line, &mut directive_state.fenced)
                                 .and_then(crate::directives::parse_authored),
                             Some(crate::directives::Authored::Directive(
                                 crate::directives::Directive::Pong
@@ -11948,7 +11963,7 @@ async fn drive_run(
                      */
                     if let Some(crate::directives::Authored::Directive(
                         crate::directives::Directive::ExtendWatchdog { what, seconds },
-                    )) = authored_directive_line(&line, &mut directives_fenced)
+                    )) = authored_directive_line(&line, &mut directive_state.fenced)
                         .and_then(crate::directives::parse_authored)
                     {
                         let granted = seconds
@@ -11993,7 +12008,7 @@ async fn drive_run(
                         &directive_turn_id,
                         agent_wire_name(agent),
                         &line,
-                        &mut directives_fenced,
+                        &mut directive_state,
                     )
                     .await;
                     if !done.is_empty() {
@@ -12769,7 +12784,7 @@ async fn drive_run(
                     &directive_turn_id,
                     agent_wire_name(agent),
                     &body[tail_at..],
-                    &mut directives_fenced,
+                    &mut directive_state,
                 )
                 .await
             } else {
@@ -15967,6 +15982,30 @@ mod tests {
     }
 
     #[test]
+    fn a_long_description_parses_at_every_provider_chunk_boundary() {
+        let directive = r#"<ps @agency:items.describe(id: "item-2edd1f1b", description: "Usable verified foundation at /Users/revenge/code/agentcode: endpoint-libs daemon/client; TOON-first CLI with compactness regression test; persisted Arctic exact symbol/text/dependency indexes plus WTI prefix/adjacency; native topology/WAL restore and bounded repair; Rust RA-syntax and OXC JS/TS/TSX outlines/references; exact/prefix/contains search; forward/reverse evidence-stamped graph; graph-ranked byte-budgeted context-map; authoritative FileChange deltas; recoverable edits/undo and typed validation. Reviewed CodeIndexer, Aider, Repomix, rtk, Caveman, mcp-compressor, and ccusage; integration decisions in ADR 0010. Dogfooded TOON context map; 23 tests plus strict Clippy/build pass. Remaining: incremental delta application/watchers, full RA semantics/rename, OXC rename, structural queries, affected validation, lazy MCP facade, distillation and acceptance benchmarks.")>"#;
+
+        for split in 0..=directive.len() {
+            let mut stream = crate::directives::authoring_stream();
+            let first = stream.push(&directive[..split]);
+            let second = stream.push(&directive[split..]);
+            let final_output = stream.finish();
+            let parsed =
+                first.directives.len() + second.directives.len() + final_output.directives.len();
+
+            assert_eq!(parsed, 1, "directive lost at byte split {split}");
+            assert_eq!(
+                format!(
+                    "{}{}{}",
+                    first.data_plane, second.data_plane, final_output.data_plane
+                ),
+                "",
+                "directive leaked at byte split {split}"
+            );
+        }
+    }
+
+    #[test]
     fn live_prompt_syntax_is_removed_without_gluing_surrounding_prose() {
         let directive = r#"<ps @agency:items.state(id: "item-a", status: "active")>"#;
         let mut visible = crate::directives::authoring_stream();
@@ -16026,6 +16065,7 @@ mod tests {
 
         let target = study_target_before(
             &tables,
+            &std::collections::HashMap::new(),
             &crate::directives::Directive::ItemState {
                 id: "item-a3f9".into(),
                 status: "shipped".into(),

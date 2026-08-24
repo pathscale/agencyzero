@@ -18,9 +18,10 @@ silent no-op.
   `finished`, `canceled`.
 - `<ps @agency:items.add(ref: "t1", title: "<one line>", status: "planning")>` —
   open a new item. `ref` is your temporary handle, echoed back beside the real
-  id. Add `priority: "high"` or `"low"` when it is not ordinary work; omitted
-  is normal. The per-turn list is ranked and capped, so a high item stays
-  visible on a long backlog and a low one stops being re-sent every turn.
+  id and accepted by later directives in the same turn. Add `priority: "high"`
+  or `"low"` when it is not ordinary work; omitted is normal. The per-turn list
+  is ranked and capped, so a high item stays visible on a long backlog and a low
+  one stops being re-sent every turn.
 - `<ps @agency:items.describe(id: "<id>", description: "<concise context>")>` —
   replace an existing item's description. An empty description clears it.
 - `<ps @agency:items.retire(id: "<id>")>` — remove a row that should not exist.
