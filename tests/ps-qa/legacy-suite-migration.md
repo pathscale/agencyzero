@@ -1,6 +1,6 @@
 # Legacy frontend suite migration
 
-The legacy suite currently spans 77 `*.test.ts(x)` files and 670 direct
+The legacy suite currently spans 76 `*.test.ts(x)` files and 665 direct
 `it`/`test` declarations; parameterized cases account for the higher executed
 total. This is an inventory, not a promise to create the same number of ps-qa
 checks.
@@ -67,3 +67,9 @@ could not observe layout, focus, event forwarding, or persistence and stayed
 green while both live pencils were inert. The rendered rename group now proves
 both editors open, Escape preserves the name, whitespace is rejected, and an
 exact replacement persists (5/5 in run 32733364792).
+
+`components/ButtonClick.test.tsx` is removed as well. Its five synthetic event
+cases stayed inside jsdom and could not prove native hit testing, layout, or
+application outcomes. The live replacements include the inert-pencil mutation
+(0/5), current rename (5/5), the red dialog-Cancel mutation, disconnected Send
+disabled-state checks, and the named semantic activations across this audit.

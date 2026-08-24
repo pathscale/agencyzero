@@ -203,6 +203,6 @@ or process-level outcome. Inventory alone is not a pass. The broad sweep is a
 diagnostic for newly introduced controls; the named reconciled outcomes are the
 release gate.
 
-The legacy frontend suite is manual-only. It currently has 77 files and 670
+The legacy frontend suite is manual-only. It currently has 76 files and 665
 direct declarations. Delete a renderer-blind test only after its live
 replacement passes and a negative mutation proves that replacement turns red.
