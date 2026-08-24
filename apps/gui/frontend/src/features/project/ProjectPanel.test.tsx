@@ -93,7 +93,9 @@ describe("the project side panel", () => {
     expect(panel.classList).toContain("min-h-0");
     expect(panel.classList).toContain("overflow-y-auto");
 
-    const items = screen.getByRole("button", { name: "Collapse Items" }).closest(".rounded-panel");
+    const items = screen
+      .getAllByRole("button", { name: "Collapse Items" })[0]
+      .closest(".rounded-panel");
     expect(items?.classList).toContain("flex-none");
     expect(items?.className).toContain("min-h-[52px]");
   });
@@ -174,7 +176,7 @@ describe("the project side panel", () => {
      * this panel, and a label query finds the same button without walking the
      * computed styles.
      */
-    const expandSettings = screen.queryByLabelText("Expand Settings");
+    const expandSettings = screen.queryAllByLabelText("Expand Settings")[0];
     if (expandSettings) fireEvent.click(expandSettings);
 
     expect(screen.getByText("Attached: existing-claude-session")).toBeInTheDocument();
