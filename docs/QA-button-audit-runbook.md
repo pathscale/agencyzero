@@ -136,12 +136,12 @@ generic ps-qa `press` command and `press: true` check option remain available
 for other applications and pointer-path diagnostics; they are deliberately not
 used by this suite.
 
-Controls that terminate the app or irreversibly reset the fixture belong in
-`isolated_controls`, not `manual_controls`. The shared `cover` run counts and
-names them without pressing them, and their outcome checks run against a
-disposable process. This keeps a successful Restart from severing the control
-socket halfway through the remaining surfaces while still leaving it visible
-as unfinished automated coverage.
+Use `isolated_controls` only when the disposable process can still report the
+outcome and complete cleanup. AgencyZero's inspection-disable toggle qualifies:
+success closes the control socket, but the owning workflow can still stop the
+exact process. Application Restart and Restart AgencyProxy do not qualify;
+either can sever cleanup or the next test step, so they remain explicit manual
+release controls.
 
 Mutation-test every check: reintroduce the defect, confirm red, restore it, and
 confirm green. A check that has only passed has not proved that it can detect
@@ -152,7 +152,9 @@ its claimed failure.
 Never activate these unattended:
 
 - a native dialog the harness cannot close;
-- a control that opens a browser, URL or another application.
+- a control that opens a browser, URL or another application;
+- Application Restart or Restart AgencyProxy, whose success can terminate the
+  audit's cleanup and continuation path.
 
 List each one in `ps-qa.ron` under `manual_controls`. `inventory` counts them
 without activating them; `cover` also prints the named manual worklist. They
