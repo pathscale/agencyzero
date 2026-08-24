@@ -68,11 +68,12 @@ AppProfile(
     ],
 
     // These actions need a disposable application process. A successful
-    // restart closes the control socket; reset and sign-out invalidate the QA
-    // fixture. They stay automated work, but never run in the shared sweep.
+    // Disabling inspection closes the control socket; reset and sign-out
+    // invalidate the QA fixture. They stay automated work, but never run in
+    // the shared sweep. Application and sidecar restart remain manual because
+    // process replacement prevents reliable cleanup and continuation.
     isolated_controls: [
         "Start fork",
-        "Restart",
         "Reset all",
         "Sign out",
         "Enable inspection and agent control",
@@ -108,6 +109,7 @@ AppProfile(
         // the rest of the audit. Verify it in the manual release pass instead
         // of destabilising a shared semantic sweep.
         (label: "Restart AgencyProxy",                  command: "restart_agent_proxy"),
+        (label: "Restart",                              command: "restart_app"),
 
         // Controls that hand the screen to the *browser*. Same problem as a
         // native panel and worse manners: a sweep that presses these opens a

@@ -25,7 +25,7 @@ on:
         type: boolean
         default: false
       lifecycle:
-        description: 'Also verify inspection-disable and application restart in isolated processes'
+        description: 'Also verify inspection-disable in an isolated process'
         required: false
         type: boolean
         default: false
@@ -252,66 +252,6 @@ jobs:
             exit 1
           fi
 
-      - name: Restart clean for the relaunch control
-        if: ${{ inputs.cover || inputs.lifecycle }}
-        run: |
-          old_pid="$(cat /tmp/az-qa.pid)"
-          kill -TERM "$old_pid" 2>/dev/null || true
-          for _ in $(seq 1 20); do
-            if ! kill -0 "$old_pid" 2>/dev/null; then break; fi
-            sleep 0.5
-          done
-          if kill -0 "$old_pid" 2>/dev/null; then kill -KILL "$old_pid"; fi
-
-          scripts/qa-profile-restore.sh /tmp/qa-profile-db
-          AZ_DATA_DIR=/tmp/qa-profile-db \
-            ./target/debug/az-gui --blitz-control >> /tmp/az-qa.log 2>&1 &
-          echo $! > /tmp/az-qa.pid
-          for _ in $(seq 1 60); do
-            ps-qa nodes > /tmp/restart-attach.txt 2>&1 && break
-            sleep 2
-          done
-          ps-qa nodes > /tmp/restart-attach.txt 2>&1
-          sleep 10
-
-      - name: Verify Restart relaunches into a controllable process
-        id: isolated_restart
-        if: ${{ inputs.cover || inputs.lifecycle }}
-        continue-on-error: true
-        run: |
-          old_pid="$(cat /tmp/az-qa.pid)"
-          ps-qa click Settings
-          sleep 2
-          ps-qa click button:Restart > /tmp/restart.txt 2>&1 || true
-
-          relaunched=0
-          for _ in $(seq 1 60); do
-            if ! kill -0 "$old_pid" 2>/dev/null &&
-               ps-qa tree > /tmp/restart-probe.txt 2>&1; then
-              relaunched=1
-              break
-            fi
-            sleep 2
-          done
-          if [ "$relaunched" -ne 1 ]; then
-            echo "Restart did not replace audit pid $old_pid with a controllable instance" >&2
-            exit 1
-          fi
-
-          new_pid="$(awk '$1 == "\"pid\":" { gsub(/,/, "", $2); print $2; exit }' /tmp/restart-probe.txt)"
-          case "$new_pid" in
-            ''|*[!0-9]*)
-              echo "could not read the relaunched pid from ps-qa tree" >&2
-              exit 1
-              ;;
-          esac
-          if [ "$new_pid" = "$old_pid" ]; then
-            echo "Restart kept the old pid $old_pid" >&2
-            exit 1
-          fi
-          echo "$new_pid" > /tmp/az-qa.pid
-          echo "Restart replaced pid $old_pid with pid $new_pid"
-
       # Report every red gate before failing the job. Separate `exit 1` steps
       # stopped at the first failure and silently hid later lifecycle failures.
       - name: Enforce complete QA outcome
@@ -323,8 +263,7 @@ jobs:
             'outcome checks:${{ steps.checks.outcome }}' \
             'reachability inventory:${{ steps.inventory.outcome }}' \
             'semantic sweep:${{ steps.sweep.outcome }}' \
-            'inspection toggle:${{ steps.isolated.outcome }}' \
-            'restart outcome:${{ steps.isolated_restart.outcome }}'; do
+            'inspection toggle:${{ steps.isolated.outcome }}'; do
             name="${gate%%:*}"
             outcome="${gate#*:}"
             if [ "$outcome" = failure ]; then
