@@ -52,6 +52,9 @@ AppProfile(
     // name. Reuse its open surface across checks instead of returning Home and
     // remounting the same project before every outcome.
     document_openers: ["theta theta north indi"],
+    // Both Home columns use the shared project pager. Inventory expands them
+    // by semantic node id before counting every row instance.
+    pagination_controls: [" more projects"],
 
     // Verbs this application's controls start with. Swept last, or excluded
     // from the search for a control that opens a document.
