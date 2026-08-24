@@ -1082,7 +1082,9 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
    */
   const [query, setQuery] = createSignal("");
   const [itemLimit, setItemLimit] = createSignal(PROJECT_ITEM_PAGE_SIZE);
-  const [activeRowId, setActiveRowId] = createSignal<string | null>(null);
+  const [hoveredRowId, setHoveredRowId] = createSignal<string | null>(null);
+  const [focusedRowId, setFocusedRowId] = createSignal<string | null>(null);
+  const activeRowId = () => focusedRowId() ?? hoveredRowId();
   const shown = createMemo(() => {
     const needle = query().trim().toLowerCase();
     const items = needle
@@ -1390,12 +1392,12 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
                 role="listitem"
                 aria-label={item.title}
                 tabindex={-1}
-                onPointerEnter={() => setActiveRowId(item.id)}
+                onPointerEnter={() => setHoveredRowId(item.id)}
                 onPointerLeave={() => {
-                  if (activeRowId() === item.id) setActiveRowId(null);
+                  if (hoveredRowId() === item.id) setHoveredRowId(null);
                 }}
                 onFocusIn={() => {
-                  setActiveRowId(item.id);
+                  setFocusedRowId(item.id);
                   if (descriptionDraft() && descriptionDraft()?.item.id !== item.id) {
                     setDescriptionDraft(null);
                   }
@@ -1406,7 +1408,7 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
                 onFocusOut={(event) => {
                   const next = event.relatedTarget;
                   if (!(next instanceof Node) || !event.currentTarget.contains(next)) {
-                    if (activeRowId() === item.id) setActiveRowId(null);
+                    if (focusedRowId() === item.id) setFocusedRowId(null);
                   }
                 }}
                 /*

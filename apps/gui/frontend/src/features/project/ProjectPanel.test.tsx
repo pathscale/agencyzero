@@ -342,6 +342,46 @@ describe("the project side panel", () => {
     expect(within(row as HTMLElement).getByText("(issue #58)")).toBeInTheDocument();
   });
 
+  it("keeps hover actions available after an inline issue editor closes", async () => {
+    let workspace!: Workspace;
+
+    function Gate() {
+      workspace = useWorkspace();
+      return (
+        <Show when={workspace.state.boot.status === "ready"}>
+          <ProjectPanel project={{ ...PROJECT, id: "worktable" }} agent="codex" />
+        </Show>
+      );
+    }
+
+    const screen = render(() => (
+      <WorkspaceProvider>
+        <Gate />
+      </WorkspaceProvider>
+    ));
+    await waitFor(() => expect(workspace.state.boot.status).toBe("ready"), { timeout: 5_000 });
+
+    const row = screen.container.querySelector<HTMLElement>("[data-item-id]");
+    if (!row) throw new Error("item row is missing");
+    const item = (workspace.state.items.worktable ?? []).find(
+      (candidate) => candidate.id === row.dataset.itemId,
+    );
+    if (!item) throw new Error("rendered item is missing from the store");
+    const wrapper = row.parentElement;
+    if (!wrapper) throw new Error("item wrapper is missing");
+    const linkName = `Link a GitHub issue to ${item.title}`;
+
+    fireEvent.pointerEnter(row);
+    flush();
+    fireEvent.click(within(row).getByRole("button", { name: linkName }));
+    flush();
+    fireEvent.focus(screen.getByRole("textbox", { name: "GitHub issue URL" }));
+    fireEvent.click(within(wrapper).getByRole("button", { name: "Cancel" }));
+    flush();
+
+    expect(within(row).getByRole("button", { name: linkName })).toBeInTheDocument();
+  });
+
   /*
    * The rows are rendered from the sorted, paged view; the order written back
    * is the project's own. Those two agree only under a status sort on a list
