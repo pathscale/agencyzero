@@ -88,8 +88,8 @@ export function EditableTitle(props: {
           }}
           value={draft()}
           aria-label={props.label ?? tx("Project name")}
+          autofocus
           onInput={(event) => setDraft(event.currentTarget.value)}
-          onBlur={() => void commit()}
           onKeyDown={(event) => {
             if (event.key === "Enter") {
               event.preventDefault();
