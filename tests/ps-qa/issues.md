@@ -154,8 +154,8 @@ present on any delivery branch.
   Escape — queued
 - 32745830576: strengthened stale-state mutation — queued; Cancel and the new
   reopen-after-Escape outcome must both fail
-- 32744366001: the prior 212-outcome full run — still useful evidence, but
-  superseded as the final gate by the new reopen assertion
+- 32744366001: the prior 212-outcome full run — superseded by the new reopen
+  assertion and automatically canceled when the strengthened same-ref run began
 
 The strengthened focused positive and negative runs are queued. Once they are
 classified, the 213-outcome candidate gets a fresh exhaustive full-control run;
