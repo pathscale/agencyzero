@@ -29,6 +29,18 @@
         expect: Enabled,
     ),
     (
+        id: "items-new-cancel-closes",
+        group: "items",
+        what: "Escape closes the new-item editor without creating another row",
+        open: Some("theta theta north indi"),
+        hover: None,
+        click: Some("New item"),
+        key: Some("Escape"),
+        key_on: Some("textbox:New item"),
+        subject: "button:New item",
+        expect: PaintsNamed,
+    ),
+    (
         id: "items-filter",
         group: "items",
         what: "item filtering removes non-matching rows from the screen",
