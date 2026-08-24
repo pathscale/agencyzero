@@ -15,11 +15,9 @@
 // not the control did anything. Painted entries are stable: 0 with every menu
 // closed, 6 with one open.
 //
-// # Not covered
-//
-// `Refresh`, `Stop` and `Re-check` act on the update channel, so their outcome is
-// a network round trip needing a store assertion rather than a geometry one.
-// Three further controls open native macOS file panels, which cannot be driven.
+// Native macOS file panels remain manual-release checks. Network and process
+// actions need explicit status outcomes; they are not credited merely because
+// their controls paint.
 [
     (
         id: "settings-language-menu",
@@ -110,5 +108,29 @@
         click: Some("Agent restart authority"),
         subject: "menuitem:Disabled",
         expect: PaintsNamed,
+    ),
+    (
+        id: "settings-response-verbosity-changes",
+        group: "settings",
+        what: "the per-project response verbosity control changes its semantic value",
+        open: Some("theta theta north indi"),
+        hover: None,
+        click: None,
+        key: Some("Right"),
+        key_on: Some("Response verbosity for this project"),
+        subject: "Response verbosity for this project",
+        expect: ValueChanges,
+    ),
+    (
+        id: "settings-review-prompt-changes",
+        group: "settings",
+        what: "editing the PR review prompt changes the real text field value",
+        open: Some("Settings"),
+        hover: None,
+        click: None,
+        type_into: Some("PR review prompt"),
+        text: Some("QA review prompt persistence check"),
+        subject: "PR review prompt",
+        expect: ValueChanges,
     ),
 ]
