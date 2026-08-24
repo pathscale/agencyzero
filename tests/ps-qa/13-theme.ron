@@ -11,7 +11,7 @@
         hover: None,
         click: Some("Light"),
         subject: "Light",
-        expect: ValueChanges,
+        expect: SelectionChanges,
     ),
     (
         id: "theme-dark-mode",
@@ -21,7 +21,7 @@
         hover: None,
         click: Some("Dark"),
         subject: "Dark",
-        expect: ValueChanges,
+        expect: SelectionChanges,
     ),
     (
         id: "theme-large-size",
@@ -31,7 +31,7 @@
         hover: None,
         click: Some("Large Interface size"),
         subject: "Large Interface size",
-        expect: ValueChanges,
+        expect: SelectionChanges,
     ),
     (
         id: "theme-normal-size",
@@ -41,7 +41,7 @@
         hover: None,
         click: Some("Normal Interface size"),
         subject: "Normal Interface size",
-        expect: ValueChanges,
+        expect: SelectionChanges,
     ),
     (
         id: "theme-colour-strength",
@@ -52,7 +52,7 @@
         click: Some("Colour strength 20%"),
         covers: ["button:Colour strength "],
         subject: "Colour strength 20%",
-        expect: ValueChanges,
+        expect: SelectionChanges,
     ),
     (
         id: "theme-softness",
@@ -63,7 +63,7 @@
         click: Some("Softness 50%"),
         covers: ["button:Softness "],
         subject: "Softness 50%",
-        expect: ValueChanges,
+        expect: SelectionChanges,
     ),
     (
         id: "theme-text-brightness",
@@ -74,7 +74,7 @@
         click: Some("Text brightness 50%"),
         covers: ["button:Text brightness "],
         subject: "Text brightness 50%",
-        expect: ValueChanges,
+        expect: SelectionChanges,
     ),
     (
         id: "theme-control-accent",
@@ -85,7 +85,7 @@
         click: Some("Accent colour 2"),
         covers: ["button:Accent colour"],
         subject: "Accent colour 2",
-        expect: ValueChanges,
+        expect: SelectionChanges,
     ),
     (
         id: "theme-control-accent-restores",
@@ -95,7 +95,7 @@
         hover: None,
         click: Some("Accent colour: Designed yellow accent"),
         subject: "Accent colour: Designed yellow accent",
-        expect: ValueChanges,
+        expect: SelectionChanges,
     ),
     (
         id: "theme-art-accent",
@@ -106,7 +106,7 @@
         click: Some("Accent 2 2"),
         covers: ["button:Accent 2"],
         subject: "Accent 2 2",
-        expect: ValueChanges,
+        expect: SelectionChanges,
     ),
     (
         id: "theme-art-accent-restores",
@@ -116,7 +116,7 @@
         hover: None,
         click: Some("Accent 2: Designed yellow accent"),
         subject: "Accent 2: Designed yellow accent",
-        expect: ValueChanges,
+        expect: SelectionChanges,
     ),
     (
         id: "theme-base-colour",
@@ -127,7 +127,7 @@
         click: Some("Theme color #AE7032"),
         covers: ["radio:Theme color "],
         subject: "Theme color #AE7032",
-        expect: ValueChanges,
+        expect: SelectionChanges,
     ),
     (
         id: "theme-glass-blur",
