@@ -33,14 +33,14 @@ describe("SectionPanel", () => {
     expect(content).toHaveClass("hidden");
     expect(content).toHaveAttribute("aria-hidden", "true");
 
-    fireEvent.click(screen.getByRole("button", { name: "Settings" }));
+    fireEvent.click(screen.getAllByRole("button", { name: "Expand Settings" })[0]);
     flush();
 
     expect(view.container.querySelector('[data-slot="switch-input"]')).toBe(control);
     expect(content).not.toHaveClass("hidden");
     expect(content).not.toHaveAttribute("aria-hidden");
 
-    fireEvent.click(screen.getByRole("button", { name: "Settings" }));
+    fireEvent.click(screen.getAllByRole("button", { name: "Collapse Settings" })[0]);
     flush();
 
     expect(view.container.querySelector('[data-slot="switch-input"]')).toBe(control);
