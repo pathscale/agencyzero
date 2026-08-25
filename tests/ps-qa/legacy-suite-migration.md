@@ -23,6 +23,56 @@ Static policy checks are not renderer tests. The former
 `scripts/check-ui-controls.ts` lint gate, so it stays automatic without running
 the legacy Vitest suite or pretending a source scan verifies rendered behavior.
 
+## The contract for a component that enters a mode
+
+A control that swaps one thing for another - an inline editor, a disclosure, a
+dialog, a picker - needs four checks, not one. Three of them are easy to write
+and prove nothing on their own.
+
+1. **It enters.** The mode's own node paints, addressed by `role:name` rather
+   than by name. A name-only `Paints` is satisfied by the control that opens the
+   mode, which paints whether or not anything happened.
+2. **It does its work.** The typed name is accepted, the chosen value lands, the
+   dialog's action runs. *This is the one that gets skipped*, and it is the only
+   one that distinguishes a working component from a decorative one.
+3. **It leaves by each exit.** Every way out a reader has: the confirming key,
+   the abandoning key, and clicking away. A mode with no pointer exit traps
+   anyone who opened it without a keyboard.
+4. **It restores.** The last check puts the fixture back, so the group can run
+   twice against one instance.
+
+Check 2 is not optional and is not implied by the others. The rename group had
+1, half of 3, and no 2: it opened the editor, pressed Escape, and pressed Enter
+on a blank name - three checks that all end with the editor closed, which is the
+state a completely inert editor is already in. Both pencils shipped unable to
+accept a name while that group reported 5/5, and this had already happened once
+before (see "Failures found and repaired" in `issues.md`, item 1) and regressed
+because the repair was verified by the same checks that could not see it.
+
+Mutation-test check 2 specifically. Break the commit path, not the open path,
+and watch it go red.
+
+### Making this mechanical rather than remembered
+
+Today each of the four is hand-written per call site, which is why the missing
+one stayed missing: nothing declares that a component *has* a mode, so nothing
+can notice that its outcome check is absent.
+
+The piece that would close it is a component identity in the semantic tree. A
+PathScale/UI component already names its parts in a recipe and emits them as
+`data-slot`, but the tree TRB hands to ps-qa carries only `id`, `role`, `name`,
+`bounds`, `visible` and `value` - `data-slot` is dropped, and `ps-qa dom`'s
+`attrs:` column is the node's value, not its attributes. Verified against the
+running app: every node in the rename subtree reports `attrs: (none)`.
+
+With the slot exposed, a component that declares a `trigger` and a `field` slot
+would be enough for the harness to generate the four checks for every instance
+of it, and to report a component that has a mode and no outcome check as a gap
+rather than as a pass. Until then the contract above is a review rule, and the
+cost of it being a review rule is documented in `issues.md` item 1: the same
+component was repaired once, verified 5/5 by checks that could not see the
+defect, and shipped inert again.
+
 ## Largest migration hotspots
 
 | file | direct cases |
