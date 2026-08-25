@@ -953,16 +953,11 @@ function ResumeSession(props: {
     const sessionId = id().trim();
     if (!sessionId) return;
     setBusy(true);
-    // Leave the key event before starting persistence. Blitz finishes native
-    // default-action bookkeeping synchronously; beginning a store command from
-    // inside that dispatch held the inspector reply behind the database write.
-    window.setTimeout(() => {
-      void actions
-        .adoptSession(props.projectId, props.agent, sessionId)
-        .then(alive(() => setId("")))
-        .catch((cause) => log.error(`could not adopt the session: ${describeError(cause)}`))
-        .finally(alive(() => setBusy(false)));
-    }, 100);
+    void actions
+      .adoptSession(props.projectId, props.agent, sessionId)
+      .then(alive(() => setId("")))
+      .catch((cause) => log.error(`could not adopt the session: ${describeError(cause)}`))
+      .finally(alive(() => setBusy(false)));
   };
 
   return (

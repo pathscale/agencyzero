@@ -54,6 +54,7 @@
         key_on: Some("textbox:Resume a session by id"),
         subject: "textbox:Resume a session by id",
         expect: NameChanges,
+        settle_after_ms: 1800,
     ),
     (
         id: "session-reset-confirms",
