@@ -3122,7 +3122,9 @@ function Section(props: {
    * removes it: a section off the bottom of the page is not built until the
    * reader approaches it.
    */
-  const titleMatches = createMemo(() => matchesSearch(`${props.title} ${props.hint}`));
+  const titleMatches = createMemo(() =>
+    matchesSearch(`${props.title} ${props.hint} ${props.pending ?? ""}`),
+  );
   const [mounted, setMounted] = createSignal(ordinal < settingsBudget());
   createEffect(
     () => ordinal < settingsBudget() || (settingsQuery().trim() !== "" && titleMatches()),
@@ -3178,21 +3180,13 @@ function Section(props: {
             )}
           </Show>
         </div>
-        {/*
-        `inert` rather than a disabled prop on every control: it takes the whole
-        subtree out of the tab order and out of pointer events in one place, so
-        a control added later cannot be accidentally live.
-      */}
-        <div
-          inert={props.pending ? "" : undefined}
-          class={props.pending ? "pointer-events-none opacity-45" : undefined}
-        >
+        <div>
           {/*
-            Deferred, not conditional. Once a section has mounted it stays
-            mounted, so this only ever runs during the first few ticks after
-            the tab opens and never takes a row away from search afterwards.
+            Wired sections mount once admitted and remain mounted. Pending
+            sections stop at their explicit header instead of constructing a
+            dead control tree that slows every global theme/language update.
           */}
-          <Show when={mounted()}>{props.children}</Show>
+          <Show when={mounted() && !props.pending}>{props.children}</Show>
         </div>
       </Panel>
     </SearchScope>
