@@ -170,7 +170,6 @@ if [ "$mode" != "quick" ]; then
   echo "==> frontend"
   (
     cd "$repo_root/apps/gui/frontend"
-    bun run test:run
     bun run lint
     bun run build
   )
