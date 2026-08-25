@@ -1814,12 +1814,9 @@ export function ReviewNote(props: { message: Message }): JSX.Element {
   );
 }
 
-/**
- * A moderator note. When it needs approval the run is holding, so the note
- * carries the decision rather than sending you somewhere else to make it.
- */
+/** A stored moderator note; decisions stay disabled until the Phase 4 runner exists. */
 function ModeratorNote(props: { message: Message }): JSX.Element {
-  const { actions } = useWorkspace();
+  const { state, actions } = useWorkspace();
   const moderation = () => props.message.moderation;
   const isCritical = () => moderation()?.severity === "critical";
 
@@ -1866,6 +1863,7 @@ function ModeratorNote(props: { message: Message }): JSX.Element {
           <div class="flex items-center gap-2 pt-0.5">
             <Button
               type="button"
+              disabled={state.backend !== "mock"}
               onClick={() => void actions.resolveModeration(props.message.id, true)}
               class="rounded-lg bg-primary px-[13px] py-[5px] font-semibold text-[12px] text-primary-content transition-colors hover:bg-az-primary-hover"
             >
@@ -1873,12 +1871,22 @@ function ModeratorNote(props: { message: Message }): JSX.Element {
             </Button>
             <Button
               type="button"
+              disabled={state.backend !== "mock"}
               onClick={() => void actions.resolveModeration(props.message.id, false)}
               class="rounded-lg border border-primary/18 px-3 py-[5px] text-[12px] text-az-body transition-colors hover:border-error hover:text-error"
             >
               {tx("Deny")}
             </Button>
-            <span class="text-[11.5px] text-az-muted">{tx("· agent is paused")}</span>
+            <Show
+              when={state.backend === "mock"}
+              fallback={
+                <span class="text-[11.5px] text-az-muted">
+                  {"· moderator decisions are not wired"}
+                </span>
+              }
+            >
+              <span class="text-[11.5px] text-az-muted">{tx("· agent is paused")}</span>
+            </Show>
           </div>
         </Show>
       </div>

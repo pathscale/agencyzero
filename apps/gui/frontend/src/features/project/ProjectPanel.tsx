@@ -602,6 +602,7 @@ function SettingsSection(props: { project: Project; agent: Agent }): JSX.Element
           <Switch
             aria-label={tx("Moderator for this session")}
             checked={props.project.moderatorEnabled}
+            disabled
             flavor="accent"
             size="sm"
             onChange={(event) =>

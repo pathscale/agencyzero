@@ -103,7 +103,6 @@ const AGENT_USE = {
  * which is the same coupling written out longhand.
  */
 const [settingsQuery, setSettingsQuery] = createSignal("");
-const [, setMatchingSearchSections] = createSignal(new Set<number>());
 let searchRevealFrame: number | undefined;
 
 createRoot(() => {
@@ -113,7 +112,6 @@ createRoot(() => {
     // Untracked: revealing sections writes state, which would re-arm the
     // computation on its own write if it ran in the compute.
     (query) => {
-      setMatchingSearchSections(new Set<number>());
       if (searchRevealFrame !== undefined) {
         cancelAnimationFrame(searchRevealFrame);
         searchRevealFrame = undefined;
@@ -318,21 +316,12 @@ export function SettingsTab(): JSX.Element {
       );
   };
 
-  /**
-   * Why a section is not wired yet, or `undefined` when it is.
-   *
-   * Two different gaps, and they are worth telling apart. A command Rust has not
-   * implemented is a backend gap the capability probe already knows about. A
-   * setting that persists correctly but that nothing reads is a *consumer* gap:
-   * `set_settings` stores the moderator config faithfully and no moderator runs,
-   * because the agent run path does not exist. Only the second needs saying by
-   * hand, and it is deliberately short.
-   */
-  const runPathPending = (): string | undefined =>
-    isLive("sendMessage") ? undefined : "needs the agent run path";
-
-  /** The moderator rides the same run, so it unblocks with it. */
-  const moderatorPending = (): string | undefined => runPathPending();
+  // These settings persist, but no production consumer reads them yet. Keep
+  // their future configuration visible and explicitly inert rather than
+  // claiming success when only the database changed.
+  const moderatorPending = (): string => "moderator run is not implemented";
+  const notificationPending = (): string => "desktop notifications are not implemented";
+  const environmentPending = (): string => "agent environment policy is not applied yet";
 
   /**
    * The catalogue entries this agent's picker may show.
@@ -1692,7 +1681,7 @@ export function SettingsTab(): JSX.Element {
             icon="info"
             title={tx("Notifications")}
             hint={tx("while you are in another window")}
-            pending={runPathPending()}
+            pending={notificationPending()}
           >
             <Row label={tx("A hold needs your approval")}>
               <SettingToggle
@@ -1740,7 +1729,7 @@ export function SettingsTab(): JSX.Element {
           <Section
             icon="lock"
             title={tx("Environment")}
-            pending={runPathPending()}
+            pending={environmentPending()}
             hint={tx("what the agent process inherits from this machine")}
           >
             <Row
@@ -3170,26 +3159,6 @@ function Section(props: {
       return next;
     });
   };
-  const searchMatches = () => settingsQuery().trim() !== "" && (titleMatches() || hits().size > 0);
-  createEffect(
-    () => searchMatches(),
-    (matched) => {
-      setMatchingSearchSections((previous) => {
-        const next = new Set(previous);
-        if (matched) next.add(ordinal);
-        else next.delete(ordinal);
-        return next;
-      });
-    },
-  );
-  onCleanup(() =>
-    setMatchingSearchSections((previous) => {
-      const next = new Set(previous);
-      next.delete(ordinal);
-      return next;
-    }),
-  );
-
   return (
     <SearchScope value={{ titleMatches, report }}>
       <Panel ref={shell} class={`flex-none rounded-[13px] ${visible() ? "" : "hidden"}`}>

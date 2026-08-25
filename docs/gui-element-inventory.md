@@ -77,7 +77,7 @@ fields the UI never reads. The inert and missing rows are the actual backlog.
 | Element | Status | Notes |
 | --- | --- | --- |
 | User bubble / agent prose / moderator note | Display | |
-| Approve once / Deny | **Live** | `resolve_moderation`. |
+| Approve once / Deny | **Missing** | Phase 4 has no moderator run or `resolve_moderation`; production controls stay disabled. |
 | Starter chips on the empty state | **Live** | Send the chip text as the first message. |
 | "nd" avatar on user bubbles | Display | Hardcoded initials, same as the tab-strip avatar. |
 | **Streaming text** | **Missing** | `Event::Text` deltas have nowhere to land. Needs an `AppEvents` addition or `useStreamingBuffer`. Decide before Rust emits them. |
@@ -110,7 +110,7 @@ fields the UI never reads. The inert and missing rows are the actual backlog.
 | Working directory list | Display | |
 | Add dir | **Live** | Takes a **typed path**. A native picker needs the Tauri dialog plugin. |
 | Remove dir × | **Live** | |
-| Moderator toggle (this session) | **Live** | `set_project_moderator`. |
+| Moderator toggle (this session) | **Saved, disabled** | Persists, but no moderator run consumes it; production control is disabled until Phase 4. |
 
 ### Items section
 
@@ -146,11 +146,11 @@ fields the UI never reads. The inert and missing rows are the actual backlog.
 | Agent rows: dot, version, state, caps chips | Display | |
 | Re-check | **Live** | Real probe is Phase 2. |
 | Default agent / model / permission | **Live** | The agent picker offers only `connected` agents. |
-| Moderator: enabled, model, confine to dirs | **Live** | |
-| Moderator: CHECK / CRITICAL hold behaviour | **Live** | |
-| **Notifications ×5** | **Saved** | Persist correctly. **Nothing sends a notification** — needs the Tauri notification plugin and a capability. |
-| **Environment policy** | **Saved** | Nothing spawns an agent process yet, so nothing applies `minimal` vs `inherit`. |
-| **Forward proxy vars** | **Saved** | Same. |
+| Moderator: enabled, model, confine to dirs | **Saved, pending** | No moderator run consumes these settings. |
+| Moderator: CHECK / CRITICAL hold behaviour | **Saved, pending** | Phase 4 is not implemented. |
+| **Notifications ×5** | **Saved, pending** | Persist correctly. **Nothing sends a notification** — the section is visibly inert until the Tauri notification plugin and capability exist. |
+| **Environment policy** | **Saved, pending** | Nothing applies `minimal` vs `inherit`; the section is visibly inert. |
+| **Forward proxy vars** | **Saved, pending** | Same. |
 
 The Saved rows are the ones most likely to mislead: they look wired, they persist, and they
 change nothing. Worth either building the consumer or visibly marking them pending.

@@ -4,12 +4,12 @@
     (
         id: "toggles-moderator",
         group: "toggles",
-        what: "the session moderator setting changes",
+        what: "the unwired session moderator cannot pretend to change live behavior",
         open: Some("theta theta north indi"),
         hover: None,
-        click: Some("Moderator for this session"),
+        click: None,
         subject: "Moderator for this session",
-        expect: ValueChanges,
+        expect: Disabled,
     ),
     (
         id: "toggles-raw-exchange",
