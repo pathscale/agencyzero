@@ -9,7 +9,7 @@
         open: Some("theta theta north indi"),
         hover: None,
         click: Some("Settings"),
-        subject: "Appearance",
+        subject: "heading:Appearance",
         expect: PaintsNamed,
     ),
     (
@@ -19,7 +19,7 @@
         open: Some("Settings"),
         hover: None,
         click: Some("Analytics"),
-        subject: "Outcome per dollar",
+        subject: "heading:Outcome per dollar",
         expect: PaintsNamed,
     ),
     (
@@ -29,7 +29,7 @@
         open: Some("Analytics"),
         hover: None,
         click: Some("Home"),
-        subject: "Sort Home",
+        subject: "button:Sort Home",
         expect: PaintsNamed,
     ),
     (

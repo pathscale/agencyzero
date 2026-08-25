@@ -1850,6 +1850,9 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
                         onInput={(event) =>
                           setDescriptionDraft({ ...draft(), context: event.currentTarget.value })
                         }
+                        onKeyDown={(event) => {
+                          if (event.key === "Escape") setDescriptionDraft(null);
+                        }}
                         aria-label={tx("Description / sub-items")}
                         placeholder={tx(
                           "Describe constraints, acceptance criteria, decisions, and useful pointers…",

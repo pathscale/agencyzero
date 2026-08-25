@@ -12,7 +12,7 @@
         click: None,
         type_into: Some("Search settings"),
         text: Some("Appearance"),
-        subject: "Light",
+        subject: "button:Light",
         expect: PaintsNamed,
     ),
     (
@@ -256,7 +256,7 @@
         click: None,
         type_into: Some("Search settings"),
         text: Some(""),
-        subject: "Welcome Tutorial",
+        subject: "button:Welcome Tutorial",
         expect: PaintsNamed,
     ),
 ]

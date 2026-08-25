@@ -103,6 +103,8 @@ const AGENT_USE = {
  * which is the same coupling written out longhand.
  */
 const [settingsQuery, setSettingsQuery] = createSignal("");
+const [matchingSearchSections, setMatchingSearchSections] = createSignal(new Set<number>());
+let searchRevealFrame: number | undefined;
 
 createRoot(() => {
   createEffect(
@@ -111,8 +113,12 @@ createRoot(() => {
     // Untracked: revealing sections writes state, which would re-arm the
     // computation on its own write if it ran in the compute.
     (query) => {
-      // Any query at all, including one being typed, needs every row present.
-      if (query.trim() !== "") revealAllSections();
+      setMatchingSearchSections(new Set<number>());
+      if (searchRevealFrame !== undefined) {
+        cancelAnimationFrame(searchRevealFrame);
+        searchRevealFrame = undefined;
+      }
+      if (query.trim() !== "") revealSearchSections();
     },
   );
 });
@@ -2920,19 +2926,24 @@ const [settingsBudget, setSettingsBudget] = createSignal(SETTINGS_FIRST_PAINT);
  */
 function beginSettingsMount(): void {
   settingsMounted = 0;
-  setSettingsBudget(settingsQuery().trim() === "" ? SETTINGS_FIRST_PAINT : Number.MAX_SAFE_INTEGER);
+  setSettingsBudget(SETTINGS_FIRST_PAINT);
 }
 
-/**
- * Reveal every section, for search.
- *
- * A section that is not mounted has no rows, and rows are what report whether
- * they match a query. Rather than teach search to work without them, a query
- * simply mounts everything: searching is deliberate and occasional, opening
- * the tab is neither.
- */
-function revealAllSections(): void {
-  setSettingsBudget((budget) => Math.max(budget, settingsMounted));
+/** Reveal deferred search candidates a frame at a time, stopping at a match. */
+function revealSearchSections(): void {
+  if (searchRevealFrame !== undefined) return;
+  searchRevealFrame = requestAnimationFrame(() => {
+    searchRevealFrame = undefined;
+    if (
+      settingsQuery().trim() === "" ||
+      matchingSearchSections().size > 0 ||
+      settingsBudget() >= settingsMounted
+    ) {
+      return;
+    }
+    setSettingsBudget((budget) => Math.min(settingsMounted, budget + 1));
+    revealSearchSections();
+  });
 }
 
 /** Admit sections up to and including `ordinal`. Never gives one back. */
@@ -3119,7 +3130,10 @@ function Section(props: {
    * removes it: a section off the bottom of the page is not built until the
    * reader approaches it.
    */
-  const mounted = createMemo(() => ordinal < settingsBudget());
+  const titleMatches = createMemo(() => matchesSearch(`${props.title} ${props.hint}`));
+  const mounted = createMemo(
+    () => ordinal < settingsBudget() || (settingsQuery().trim() !== "" && titleMatches()),
+  );
   onSettled(() => {
     if (!shell) return;
     const scroller = shell.closest(".az-scroll");
@@ -3140,7 +3154,6 @@ function Section(props: {
     // Returned, not `onCleanup`: Solid 2 forbids it inside `onSettled`.
     return () => scroller.removeEventListener("scroll", check);
   });
-  const titleMatches = createMemo(() => matchesSearch(`${props.title} ${props.hint}`));
   const visible = () => settingsQuery().trim() === "" || titleMatches() || hits().size > 0;
   const report = (label: string, hit: boolean): void => {
     setHits((prev) => {
@@ -3150,6 +3163,25 @@ function Section(props: {
       return next;
     });
   };
+  const searchMatches = () => settingsQuery().trim() !== "" && (titleMatches() || hits().size > 0);
+  createEffect(
+    () => searchMatches(),
+    (matched) => {
+      setMatchingSearchSections((previous) => {
+        const next = new Set(previous);
+        if (matched) next.add(ordinal);
+        else next.delete(ordinal);
+        return next;
+      });
+    },
+  );
+  onCleanup(() =>
+    setMatchingSearchSections((previous) => {
+      const next = new Set(previous);
+      next.delete(ordinal);
+      return next;
+    }),
+  );
 
   return (
     <SearchScope value={{ titleMatches, report }}>
