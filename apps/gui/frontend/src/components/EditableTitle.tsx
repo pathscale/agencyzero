@@ -1,5 +1,6 @@
 import { InlineEdit } from "@pathscale/ui";
 import type { JSX } from "@solidjs/web";
+import { Button } from "~/components/Button";
 import { Icon } from "~/components/Icon";
 import { describeError, log } from "~/lib/log";
 import { tx } from "~/stores/i18n";
@@ -39,14 +40,14 @@ export function EditableTitle(props: {
       fieldClass={props.inputClass}
     >
       {props.onActivate ? (
-        <button
+        <Button
           type="button"
           onClick={() => props.onActivate?.()}
           aria-label={tx("Open project {name}", { name: props.value })}
           class="min-w-0 truncate text-left"
         >
           {props.value}
-        </button>
+        </Button>
       ) : undefined}
     </InlineEdit>
   );
