@@ -3131,8 +3131,12 @@ function Section(props: {
    * reader approaches it.
    */
   const titleMatches = createMemo(() => matchesSearch(`${props.title} ${props.hint}`));
-  const mounted = createMemo(
+  const [mounted, setMounted] = createSignal(ordinal < settingsBudget());
+  createEffect(
     () => ordinal < settingsBudget() || (settingsQuery().trim() !== "" && titleMatches()),
+    (admitted) => {
+      if (admitted) setMounted(true);
+    },
   );
   onSettled(() => {
     if (!shell) return;
