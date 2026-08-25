@@ -52,9 +52,10 @@ AppProfile(
     // name. Reuse its open surface across checks instead of returning Home and
     // remounting the same project before every outcome.
     document_openers: ["theta theta north indi"],
-    // Home and the project panel both page rich rows. Inventory expands them
-    // by semantic node id before counting every concrete row instance.
-    pagination_controls: [" more projects", " more items"],
+    // Repeated rows are one component family, not one outcome per stored row.
+    // Dedicated checks cover representative rows, Show more, and reveal; the
+    // inventory must not materialize every duplicate page before counting.
+    pagination_controls: [],
 
     // Verbs this application's controls start with. Swept last, or excluded
     // from the search for a control that opens a document.
