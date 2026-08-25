@@ -52,6 +52,25 @@ because the repair was verified by the same checks that could not see it.
 Mutation-test check 2 specifically. Break the commit path, not the open path,
 and watch it go red.
 
+### The four, written out for an inline editor
+
+`06-rename.ron` is the worked example, and the shape transfers to any component
+that swaps one thing for another. Read it as a template rather than as four
+checks about renaming:
+
+| | check | `expect` | why that one |
+| --- | --- | --- | --- |
+| 1 | `rename-opens-editor` | `PaintsNamed` on `textbox:<name>` | `role:name`, because the trigger and the field share an accessible name and a name-only `Paints` is satisfied by the trigger |
+| 2 | `rename-commits-typed-name` | `Vanishes` on the field | the field survives in the tree either way, so only its box distinguishes a commit from a keystroke that was swallowed |
+| 3 | `rename-escape-keeps-name`, `rename-closes-on-click-away` | `Vanishes` / `PaintsNamed` | one per exit a reader has; the pointer exit is the one usually missing |
+| 4 | `rename-restores-the-original-name` | `Vanishes` | renames the row back, so the group can run twice against one instance |
+
+Check 2 is `Vanishes` rather than an assertion about the new name because the
+component's contract is that the mode closes on a successful commit. Whether the
+*application* then shows the new name is a separate outcome, and
+`99-rename-persists.ron` is where that belongs. Keeping them apart is what lets
+the first four be written from the component alone.
+
 ### Making this mechanical rather than remembered
 
 Today each of the four is hand-written per call site, which is why the missing
