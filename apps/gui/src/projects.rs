@@ -1409,12 +1409,29 @@ fn take_incomplete_prompt_syntax_tail(body: &mut String) -> Option<String> {
 
 /// Whether this run needs an approval callback as well as its sandbox posture.
 ///
-/// Ask is explicitly human-gated for every capable provider. Auto deliberately
-/// has no approval channel: agent-abstraction gives Codex network access inside
-/// the declared workspace roots, while a request to widen beyond those roots
-/// is refused instead of becoming a hidden owner prompt.
-fn should_route_approvals(permission: &str) -> bool {
-    permission == "ask"
+/// Ask is explicitly human-gated for every capable provider.
+///
+/// Auto opens the same channel on Codex only, and answers it itself. Codex's
+/// app-server takes `approvalPolicy: never` without a channel, so anything its
+/// sandbox does not already cover — a path outside the declared roots, an
+/// escalated command — is refused outright, mid-task, with no way to grant it.
+/// That is not automatic, it is a quieter refusal: the owner picked Auto and
+/// got an agent that reports it cannot work. [`auto_allows`] supplies the yes.
+///
+/// Claude is deliberately excluded. Its own `--permission-mode auto` already
+/// means this, and opening the channel would replace that mode with `manual`
+/// (see `argv_claude` in agent-abstraction), turning every gated tool call into
+/// a round trip this app would only answer yes to anyway.
+fn should_route_approvals(permission: &str, agent: Agent) -> bool {
+    permission == "ask" || (permission == "auto" && agent == Agent::Codex)
+}
+
+/// Whether Auto answers this run's approvals itself rather than asking.
+///
+/// The distinction that keeps the channel honest: `ask` routes to a human,
+/// `auto` is answered here. Anything stricter than Auto keeps its own posture.
+fn auto_allows(permission: &str) -> bool {
+    permission == "auto"
 }
 
 /// The Markdown fence currently making reply content inert.
@@ -10804,14 +10821,18 @@ fn build_proxy_request(
     extra_thinking: Option<bool>,
     scope: &InvocationScope,
 ) -> agency_proxy_protocol::RunRequest {
-    let asks = should_route_approvals(permission) && agent.caps().approvals;
+    let asks = should_route_approvals(permission, agent) && agent.caps().approvals;
+    // Only a run that actually reaches a human names one as the reviewer. Auto
+    // opens the same channel but answers it itself, so pointing Codex at a user
+    // reviewer there would advertise a prompt that is never shown.
+    let human_reviews = asks && !auto_allows(permission);
     let permission = proxy_permission(permission);
     let mut environment = std::collections::BTreeMap::new();
     if agent == Agent::Claude {
         environment.insert("ENABLE_PROMPT_CACHING_1H".into(), "1".into());
     }
     let mut unchecked_args = Vec::new();
-    if asks && agent == Agent::Codex {
+    if human_reviews && agent == Agent::Codex {
         unchecked_args.extend(["-c".into(), "approvals_reviewer=\"user\"".into()]);
     }
     agency_proxy_protocol::RunRequest {
@@ -11834,14 +11855,31 @@ async fn drive_run(
                  * here — audited in the I/O panel, never silently.
                  */
                 let signature = approval_signature(&approval.tool, &approval.input);
-                if load_rules(&tables, &project_id)
+                let by_rule = load_rules(&tables, &project_id)
                     .iter()
-                    .any(|rule| rule == &signature)
-                {
+                    .any(|rule| rule == &signature);
+                // Auto answers its own questions. The channel is open precisely
+                // so this can be a yes: with it closed the provider refuses the
+                // same request unilaterally, which is what made Auto feel like
+                // it could not work. Still audited in the I/O panel, so an
+                // automatic yes remains something the owner can read back.
+                //
+                // Gated on the same predicate that opened the channel, so a
+                // provider whose Auto is native — Claude — is never answered
+                // here on a question it did not route through this app.
+                let by_auto = !by_rule
+                    && auto_allows(&permission)
+                    && should_route_approvals(&permission, agent);
+                if by_rule || by_auto {
+                    let why = if by_rule {
+                        format!("remembered rule [{signature}]")
+                    } else {
+                        "auto".to_string()
+                    };
                     crate::log!(
                         crate::log::Level::Info,
                         "run",
-                        "{project_id}: auto-allowed by remembered rule [{signature}]"
+                        "{project_id}: auto-allowed by {why}"
                     );
                     if let Err(error) = run.respond(&approval.id, &Decision::Allow).await {
                         crate::log!(
@@ -11856,10 +11894,7 @@ async fn drive_run(
                         &project_id,
                         "sent",
                         "approval",
-                        format!(
-                            "{} — allowed by remembered rule [{signature}]",
-                            approval.tool
-                        ),
+                        format!("{} — allowed by {why}", approval.tool),
                     );
                     last_was_text = false;
                     continue;
@@ -14956,11 +14991,28 @@ mod tests {
         assert!(!same_roots(&["/a".into()], &["/a".into(), "/b".into()]));
     }
 
+    /// Auto opens the approval channel and answers it; Ask opens it and asks.
+    ///
+    /// The channel is what makes Auto automatic. Closed, the provider's policy
+    /// is `never` and it refuses anything outside the sandbox on its own — the
+    /// owner picks Auto and gets an agent that says it cannot work.
     #[test]
-    fn codex_auto_stays_prompt_free_and_ask_routes_to_the_user() {
-        assert!(!should_route_approvals("auto"));
-        assert!(should_route_approvals("ask"));
-        assert!(!should_route_approvals("edit"));
+    fn codex_auto_answers_its_own_approvals_and_ask_routes_to_the_user() {
+        assert!(should_route_approvals("auto", Agent::Codex));
+        assert!(should_route_approvals("ask", Agent::Codex));
+        assert!(!should_route_approvals("edit", Agent::Codex));
+        assert!(!should_route_approvals("read_only", Agent::Codex));
+
+        // Claude's Auto is native: opening the channel would swap its own
+        // `auto` mode for `manual` and gate every tool call on a round trip
+        // this app would only ever answer yes to.
+        assert!(!should_route_approvals("auto", Agent::Claude));
+        assert!(should_route_approvals("ask", Agent::Claude));
+
+        // Only Auto answers for itself. Ask must still reach a human.
+        assert!(auto_allows("auto"));
+        assert!(!auto_allows("ask"));
+        assert!(!auto_allows("edit"));
 
         let scope = InvocationScope {
             cwd: "/workspace".into(),
@@ -14987,12 +15039,35 @@ mod tests {
         };
 
         assert!(
+            request("auto").approvals,
+            "Auto opens the channel, so a request the sandbox does not cover \
+             can be granted rather than refused by the provider"
+        );
+        assert!(
             !forces_user_review(&request("auto")),
-            "Auto opens no approval channel"
+            "Auto answers itself, so it never names a human reviewer"
         );
         assert!(
             forces_user_review(&request("ask")),
             "Ask routes the decision to AgencyZero's approval card"
+        );
+        assert!(
+            !request("edit").approvals,
+            "Edit keeps its own posture and opens no channel"
+        );
+
+        let claude_auto = build_proxy_request(
+            Agent::Claude,
+            "probe".into(),
+            "auto",
+            "claude-opus-5",
+            None,
+            None,
+            &scope,
+        );
+        assert!(
+            !claude_auto.approvals,
+            "Claude's Auto is its own permission mode, not this app's channel"
         );
     }
 

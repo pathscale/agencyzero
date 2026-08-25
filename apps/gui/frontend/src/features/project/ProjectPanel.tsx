@@ -508,12 +508,19 @@ function SettingsSection(props: { project: Project; agent: Agent }): JSX.Element
     }
   }
 
+  /*
+   * Enter and blur both land here, and Enter causes the blur: closing the field
+   * unmounts it. Clearing the path before the await is what makes the second
+   * call a no-op — reading `path()` again after an `await` would still see the
+   * old value, because the signal write has not been applied yet, and the
+   * directory would be added twice.
+   */
   async function addDir(): Promise<void> {
     const value = path().trim();
     if (!value) return;
-    await actions.addDir(props.project.id, value);
     setPath("");
     setAdding(false);
+    await actions.addDir(props.project.id, value);
   }
 
   return (

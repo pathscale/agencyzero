@@ -3142,8 +3142,25 @@ function createWorkspace() {
     setProjectTranscriptPosition,
     setProjectModerator: (id: string, enabled: boolean) =>
       client().setProjectModerator(id, enabled),
-    addDir: (projectId: string, path: string) => client().addDir(projectId, path),
-    removeDir: (projectId: string, path: string) => client().removeDir(projectId, path),
+    /*
+     * Apply the row the command returns, rather than waiting for
+     * `project:updated` to carry the same change back. The event still arrives
+     * and `upsertProject` matches on id, so this is a duplicate write, not a
+     * competing one. Without it the panel renders the directory list from
+     * before the add until the round trip lands: the folder the owner just
+     * attached is simply missing, which reads as the attachment having failed
+     * and makes every later permission complaint look like lost state.
+     */
+    async addDir(projectId: string, path: string) {
+      const project = await client().addDir(projectId, path);
+      upsertProject(project);
+      return project;
+    },
+    async removeDir(projectId: string, path: string) {
+      const project = await client().removeDir(projectId, path);
+      upsertProject(project);
+      return project;
+    },
     async createItem(projectId: string, title: string) {
       const temporaryId = `optimistic-item-${++optimisticItemSequence}`;
       const list = state.items[projectId] ?? [];
