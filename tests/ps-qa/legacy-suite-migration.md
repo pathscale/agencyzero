@@ -92,6 +92,30 @@ cost of it being a review rule is documented in `issues.md` item 1: the same
 component was repaired once, verified 5/5 by checks that could not see the
 defect, and shipped inert again.
 
+## The renderer-blind half is gone
+
+35 of the 76 frontend test files are deleted: every `.test.tsx` outside
+`stores/`, plus `Button`, `Panel`, `StatusDot` and `iconInstances`.
+
+They could not observe what they claimed to. jsdom computes no layout, paints
+nothing, and dispatches no native events, so a check there reads a class string
+and calls it a rendered outcome. `panelRadius.test.tsx` asserted a border-radius
+utility was present; `Button.test.tsx` asserted `button--ghost` and
+`az-ui-button-neutral`. Neither can tell a control a person can press from one
+that is 0x0, which is how both rename pencils shipped inert while their suite
+reported green. The live replacement for the same ground is `ps-qa audit`: 68
+buttons measured against what the renderer drew, 0 faults.
+
+What stays, and why:
+
+- `stores/*.test.tsx` (7) - message ordering, queue draining, retry after a
+  rejected session. State before any of it reaches a surface, so no rendered
+  check can reach it. They are `.tsx` only because the workspace provider is a
+  component.
+- `*.test.ts` (34) - formatting, parsing, pricing, sorting. No DOM at all.
+
+41 files, 435 tests, 22s.
+
 ## Largest migration hotspots
 
 | file | direct cases |
