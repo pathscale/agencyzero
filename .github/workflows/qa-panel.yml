@@ -40,10 +40,10 @@ jobs:
     # macOS because the harness needs a window server. There is no headless
     # path: the whole point is to ask the compositor what it actually drew.
     runs-on: macos-14
-    # A full instance-level sweep drives hundreds of controls after a 10-minute
-    # build. Keep enough room for every Home row and guaranteed process cleanup;
-    # the run itself reports the exact current count.
-    timeout-minutes: 75
+    # Compilation is outside the measured interaction sweep. Keep enough room
+    # for a cold release build and cleanup, but never leave a stale QA process
+    # occupying a runner for an hour.
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
 
@@ -130,7 +130,7 @@ jobs:
       - name: Run the checks
         id: checks
         continue-on-error: true
-        timeout-minutes: 5
+        timeout-minutes: 3
         env:
           QA_GROUPS: ${{ inputs.group }}
         run: |
