@@ -36,6 +36,7 @@
         group: "composer",
         what: "choosing Edit changes the composer permission trigger's accessible value",
         open: None,
+        prepare: Some("Permission"),
         hover: None,
         click: Some("menuitem:Edit"),
         subject: "Permission",

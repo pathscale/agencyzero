@@ -290,6 +290,7 @@
         group: "settings",
         what: "choosing Codex changes the default-agent trigger's accessible value",
         open: None,
+        prepare: Some("Default agent"),
         hover: None,
         click: Some("menuitem:Codex"),
         subject: "Default agent",

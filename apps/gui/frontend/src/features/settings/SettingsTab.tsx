@@ -1466,6 +1466,7 @@ export function SettingsTab(): JSX.Element {
               {(root) => (
                 <Row
                   label={tx("Workspace")}
+                  searchTerms={[tx("Create it")]}
                   hint={
                     root().exists
                       ? tx("new projects run here")
@@ -2219,6 +2220,7 @@ function ExperimentalSettings(): JSX.Element {
       </Show>
       <Row
         label={tx("Refresh usage")}
+        searchTerms={[tx("Refresh provider usage")]}
         hint={
           usage() ? `checked ${relativeTime(usage()!.checkedAt, now())}` : (note() ?? undefined)
         }
@@ -3004,6 +3006,7 @@ function InternalPerformance(): JSX.Element {
     >
       <Row
         label={tx("Measurements")}
+        searchTerms={[tx("Refresh performance measurements"), tx("Reset performance measurements")]}
         hint={tx("since this window opened, or since the last reset")}
       >
         <Flex align="center" gap="sm">
@@ -3230,6 +3233,8 @@ function Section(props: {
 function Row(props: {
   label: string;
   hint?: string;
+  /** Accessible child names that should reveal this row through Settings search. */
+  searchTerms?: readonly string[];
   isLast?: boolean;
   /**
    * Stack the control under the label instead of beside it. A wide control
@@ -3240,7 +3245,9 @@ function Row(props: {
   children: JSX.Element;
 }): JSX.Element {
   const scope = useContext(SearchScope);
-  const hit = createMemo(() => matchesSearch(`${props.label} ${props.hint ?? ""}`));
+  const hit = createMemo(() =>
+    matchesSearch([props.label, props.hint ?? "", ...(props.searchTerms ?? [])].join(" ")),
+  );
   // Reported rather than read: only the row knows its own words, and the
   // section needs to know whether any of them answered the search.
   createEffect(
