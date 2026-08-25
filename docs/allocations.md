@@ -71,7 +71,13 @@ or drop it. No design, no architecture, and it does not depend on any decision i
 it lands most of the win then path caching buys the difference rather than the whole
 figure.
 
-## Instrumentation is compiled into the shipping build
+## Instrumentation is compiled into the shipping build — FIXED 2026-08-11
+
+> **This section describes a defect that has since been fixed.** `log-phase-times` now
+> sits on the `blitz-inspector` feature (`apps/gui/Cargo.toml:53`) and the base `blitz-dom`
+> dependency line carries only `system-fonts, parallel-construct`. The call site is
+> `#[cfg]`-gated, so the code is not compiled rather than compiled and cheap. Kept because
+> consequence 2 below still governs how to read every number taken before that date.
 
 [apps/gui/Cargo.toml](../apps/gui/Cargo.toml) enables `log-phase-times` on `blitz-dom` on
 the base dependency line, and
@@ -150,17 +156,59 @@ owns a `BezPath` per fill and stroke, and `GlyphRunCommand` clones `FontData`, c
 keeps all of that resident.
 
 With an unexplained 819 MB baseline, that trade should be made after the memory is
-attributed, not before.
+attributed, not before. **Still true, and more so**: the 2026-08-25 reading below puts the
+footprint at 2.4G with 1.3G of live small allocations, so anything that adds retention is
+being added on top of a problem that is getting worse, not better.
 
 ## Order of work, if this is the thread being pulled
 
-1. Move `log-phase-times` onto `blitz-inspector`. One line, removes work from the ship
-   build, and cleans the baseline everything else is measured against.
-2. Try mimalloc as the global allocator. One line, measure with `blitz-bench`, keep or
-   drop.
-3. Attribute the RSS with `vmmap` and `heap` before adding anything that retains.
-4. Only then consider caching paths or scene fragments, with 1 and 2 already banked so the
-   measurement attributes the win correctly.
+**Status as of 2026-08-25.** Steps 1 and 3 are done; the order is kept because the
+reasoning still reads correctly, with each line marked.
+
+1. ~~Move `log-phase-times` onto `blitz-inspector`.~~ **Done 2026-08-11**,
+   `apps/gui/Cargo.toml:53`. The base `blitz-dom` line carries only `system-fonts,
+   parallel-construct`, so the ship build no longer pays for counters it cannot display.
+2. Try mimalloc as the global allocator. **Not started, and re-scoped down** by the
+   measurement below: still one line, still worth measuring, but aimed at churn rather
+   than at footprint.
+3. ~~Attribute the RSS with `vmmap` and `heap`.~~ **Done twice**, 2026-08-11 and
+   2026-08-25. The answer both times is `MALLOC_SMALL`: many small live allocations, not
+   the GPU pool.
+4. Only then consider caching paths or scene fragments. Still correct, and note that
+   [TODO.md](TODO.md) re-scoped path caching after measuring that clipped *area*, not path
+   count, is the frame cost.
+
+## Measured, 2026-08-25: 2.4G, and `MALLOC_SMALL` is 1.3G of it
+
+`vmmap -summary` on the running System instance, az-gui 0.8.30, ~7.5h uptime. Read-only,
+so it did not disturb the process.
+
+| Region | Resident | Dirty |
+|---|---|---|
+| `MALLOC_SMALL` | **1.3G** | 1.1G, plus 407.5M swapped |
+| `owned unmapped (graphics)` | 458.5M | 458.5M |
+| `MALLOC_LARGE` | 86.9M | 86.9M |
+| `IOSurface` | 56.4M | 56.4M |
+| `MALLOC_LARGE (empty)` | 28.6M | 28.6M |
+
+Physical footprint is **2.4G**, against the 855MB recorded on 0.5.25. This re-ranks the
+candidate list above:
+
+- **vello's `ResourcePool` is not the leading term**, which the 2026-08-11 reading already
+  said. It is a weaker acquittal than recorded, though: that reading put "everything
+  GPU-side" at 67M because `owned unmapped (graphics)` was not counted. The real GPU-side
+  total is ~533M, so the pool deserves a second look once the small-allocation work lands.
+- **Per-attribute `String`s are the leading hypothesis**, and they are exactly the shape
+  `MALLOC_SMALL` holds: small, live, one per attribute per element, never shared.
+  `node/attributes.rs:11` is a plain owned `String`, `:16` a plain `Vec<Attribute>`.
+  Verified still true in ps-blitz at `0.3.0-beta.7`.
+- **The mimalloc experiment loses most of its justification.** It was scoped against 78M
+  of empty-but-resident malloc regions; that is 28.6M now, against 1.3G of *live* small
+  allocations. A different allocator redistributes live objects rather than freeing them.
+
+Caveat on the comparison: 7.5h of uptime here against a fresh instance on 0.5.25, so some
+of the growth is session retention rather than a per-build regression. Same-build fresh
+versus aged is the measurement that separates them, and it has not been taken.
 
 ## Related
 

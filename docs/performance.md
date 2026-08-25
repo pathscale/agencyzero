@@ -6,6 +6,19 @@ inferred rather than measured it says so.
 
 ## How to measure
 
+> **Naming, corrected 2026-08-25.** `blitz-bench` was renamed **`ps-qa`**
+> (commit `3b09967`, "rename blitz-bench to ps-qa, and say what it is"), and it
+> is no longer the Rust bench binary described below: `tests/ps-qa/` is now a
+> RON scenario suite. Every `cargo run -p blitz-bench -- …` invocation in this
+> document and in the other perf docs is written against the old tool and will
+> not run as spelled. The measurement *approach* — drive the app through the
+> inspector socket, saturate before claiming a ceiling, read deltas not totals
+> — is unchanged and still correct. Check `tests/ps-qa/` for the current entry
+> points before reproducing anything here.
+>
+> `BENCH_PACE=0` remains essential: see the correction under "What the numbers
+> said".
+
 Nothing below is reproducible without the diagnostics build, so start there.
 
 ```sh
@@ -94,6 +107,22 @@ Each of these produced a confident, wrong conclusion before it was caught.
     own work and neither will say so.
 
 ## What the numbers said
+
+> **Two corrections, both dated after this table was written. Read them before
+> quoting any figure from it.**
+>
+> 1. **Every fps and `missedRefreshes` figure below describes the benchmark,
+>    not the app** (2026-08-11). `blitz-bench scroll` paced itself at 60Hz and
+>    said so nowhere. Unpaced, the same app runs **120.6 fps with zero missed
+>    refreshes**. The millisecond phase timings are unaffected and stand.
+> 2. **Every number here was taken while the app burned 76% of a core idle**
+>    (2026-08-12), on the same window thread. One line in `blitz-shell`'s
+>    `about_to_wait` left a stale `ControlFlow::WaitUntil` in force with a
+>    deadline already past. Fixed; 11.45s of CPU per 15s wall became 1.17s.
+>
+> Together these mean the table is a valid *relative* record of what the fixes
+> did and an invalid *absolute* baseline. Re-baselining unpaced is item B in
+> [TODO.md](TODO.md) and has not been done.
 
 Measured on a 3,400 node tree, driven scroll, same binary throughout.
 
@@ -332,21 +361,39 @@ route cannot provide.
 
 ## What is still open
 
-- **What a textarea `value` write damages.** The only remaining candidate, and
-  the only thing that varies with nothing.
+> **Status pass, 2026-08-25.** Several entries below were closed by work on
+> 2026-08-11/12. They are struck through with what closed them rather than
+> deleted, because the reasoning that led to each is still worth reading. The
+> live list is [TODO.md](TODO.md).
+
+- ~~**What a textarea `value` write damages.**~~ **Closed 2026-08-11.** The
+  cost was not damage breadth: a text input now answers `scrollHeight` from its
+  parley editor instead of forcing a full `doc.resolve`, which was 89% of the
+  cost of typing a character. **Keystroke 21.55 ms to 3.50 ms.**
+  `layout:flush_from_script` left the profile rather than shrinking.
 - **Taffy cache misses.** 16,842 recomputations from 15 dirty nodes, 52% hit
-  rate, and the single largest engine cost in the application.
-- **Settings' ~118 ms of component construction.** Application-side.
-- **Memory.** 819 MB RSS on a fresh stable instance with a 4,899 node tree, and
-  3.9 GB on a long-running Experimental one. Unexplained, and worth explaining
-  before anything is added that retains more.
+  rate. Still open, and still the gate on most speed numbers. Taffy was bumped
+  to **0.13.0** and the suite is green, but the A/B against 0.12.2 was never
+  taken, so nothing here has been re-measured.
+- **Settings' ~118 ms of component construction.** Application-side. Still open.
+- **Memory.** ~~819 MB RSS on a fresh stable instance, 3.9 GB on a long-running
+  Experimental one.~~ **Attributed 2026-08-25, not yet fixed.** `vmmap` on the
+  running 0.8.30 System instance: **2.4 G footprint, 1.3 G resident in
+  `MALLOC_SMALL`**, 458.5 M in `owned unmapped (graphics)`, and only 28.6 M of
+  empty-but-resident malloc regions. It is live small allocations, not the GPU
+  pool and not allocator waste. Leading hypothesis is one owned `String` per
+  attribute per element. See [allocations.md](allocations.md).
 - **The mount stall.** One `poll_hook` call measured 812 ms, and worst-case
   figures of 785 ms to 1369 ms still show up once per session. Steady state is
-  0.67 ms, so this is one event, not a per-frame cost.
+  0.67 ms, so this is one event, not a per-frame cost. Still open.
 - **`renderer` at 6.55 ms** is now 76% of frame work. The `hybrid-renderer`
   feature swaps Vello for the lighter pipeline: renderer falls to 2.41 ms but
   scene rises to 7.29 ms, so it is a wash today. Damage-region redraw is the
-  real answer.
+  real answer. **Re-scoped 2026-08-11:** layer *count* is not the cost, clipped
+  *area* is. 312 no-op layers removed bought 0.26 ms; the ~30 real ones are
+  worth 2.5 ms of a 7.4 ms frame, at ~0.8 µs for a background clip against
+  ~110 µs for a scrollport clip. That question is now item A in
+  [TODO.md](TODO.md).
 - **Slow pages generally.** Typing is the case that got measured because it is
   reproducible. Other heavy views are still reported slow and are not yet
   attributed. Anything that measures geometry after mutating (autosize, scroll
@@ -396,13 +443,16 @@ where it contradicts an earlier line, the contradiction is called out.
 
 ### Two things above were measured with a thumb on the scale
 
-- **The instrumentation ships.** `log-phase-times` is enabled on the base `blitz-dom`
-  dependency line in `apps/gui/Cargo.toml`, and `release.yml` builds with
-  `--features blitz-runtime`, so per-frame phase instrumentation is in the distributed app:
-  a `HashMap` op per `compute_child_layout` (16,842 of them per keystroke, by the number
-  above), a sort per frame, and a `format!` plus locked `stdout` write per frame into a
-  descriptor a bundle discards. **Every number above was taken with this on**, so it sits
-  inside the baseline rather than on top of it. See [allocations.md](allocations.md).
+- **The instrumentation ships.** ~~`log-phase-times` is enabled on the base `blitz-dom`
+  dependency line in `apps/gui/Cargo.toml`~~ **Fixed 2026-08-11**: it now sits on the
+  `blitz-inspector` feature (`apps/gui/Cargo.toml:53`), and the base line carries only
+  `system-fonts, parallel-construct`. The call site is `#[cfg]`-gated, so the code is not
+  compiled rather than compiled and cheap. The consequence for reading this document is
+  unchanged: per-frame phase instrumentation *was* in the distributed app when every
+  number above was taken — a `HashMap` op per `compute_child_layout` (16,842 of them per
+  keystroke), a sort per frame, and a `format!` plus locked `stdout` write per frame into
+  a descriptor a bundle discards. **Every number above sits inside that baseline rather
+  than on top of it.** See [allocations.md](allocations.md).
 - **"`hybrid-renderer` is a wash" holds only under full repaint.** Hybrid's 7.29 ms "scene"
   is CPU strip generation inside the `PaintScene` calls, so it is proportional to emitted
   content and falls with damage culling; vello's 6.55 ms is GPU rasterization over the whole
@@ -422,8 +472,12 @@ no frontend change moves it. The cause is documented upstream. Taffy's own chang
 The mechanism is a 9-slot cache with deterministic slot assignment in which `Definite(_)`
 shares a slot with `MaxContent`, so two different definite widths overwrite each other, and
 a lookup that requires exact key equality. Yoga, Chromium and Gecko each solve this
-differently and better. Taffy 0.13.0 shipped 2026-08-08 and has not been A/B tested here.
-See [layout-caching-prior-art.md](layout-caching-prior-art.md).
+differently and better. ~~Taffy 0.13.0 shipped 2026-08-08 and has not been A/B tested
+here.~~ **Updated 2026-08-25: we now run 0.13.0** (`ps-blitz/Cargo.toml:146`, `ps-taffy
+^0.13.0`) and the suite is green. **The A/B against 0.12.2 was still never taken**, so
+whether the release moved the cache-thrash number is unknown, and the 0.12.0 changelog
+quoted above no longer describes the version in the build. See
+[layout-caching-prior-art.md](layout-caching-prior-art.md).
 
 ### Why the negative result in section 8 was negative
 

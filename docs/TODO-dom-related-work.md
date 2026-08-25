@@ -1,15 +1,21 @@
 # TODO: DOM-related work
 
-Written 2026-08-11. A plan, not a design doc: each item says what to change, where, why,
-what it depends on, and how to tell it worked. The reasoning behind each lives in the
-linked document.
+> **Read [TODO.md](TODO.md) first — it is the plan of record and supersedes this file
+> where they disagree.** Written 2026-08-11, reviewed 2026-08-25. This document is still
+> the best per-item breakdown, and every item below was re-verified as still-unfixed in
+> the engine on 2026-08-25. What is stale is the *priority ordering* at the bottom, which
+> measurement has since moved. In particular **item 8 is no longer second and is
+> explicitly not next**; see the note on it.
 
-**Engine paths here are `ps-blitz/packages/blitz-dom/src/...`**, the checkout this
-repository patches in. Chuzz now consumes the *published* `ps-blitz-*` crates rather
-than a second checkout, so a fix here reaches it only once it is released; it keeps its
-own list at `chuzz/docs/TODO-dom-related-work.md`. **A fix in this tree does not reach
-chuzz until it ships.** Items marked ENGINE need landing in both, or the
-two checkouts need converging first.
+A plan, not a design doc: each item says what to change, where, why, what it depends on,
+and how to tell it worked. The reasoning behind each lives in the linked document.
+
+**Engine paths here are `ps-blitz/packages/blitz-dom/src/...`.** Corrected 2026-08-25:
+this repository no longer patches that checkout in. `apps/gui/Cargo.toml:124` takes the
+**published** `ps-blitz-dom ^0.3.0-beta.6`, exactly as chuzz does, so a fix in the local
+checkout reaches *neither* app until it is released. The local tree is at
+`0.3.0-beta.7`. Chuzz keeps its own list at `chuzz/docs/TODO-dom-related-work.md`; items
+marked ENGINE need landing once and then releasing, rather than landing in two places.
 
 Nothing below is measured unless it says so. Numbers cited come from
 [performance.md](performance.md), 2026-08-10.
@@ -21,10 +27,14 @@ Nothing below is measured unless it says so. Numbers cited come from
    milliseconds is gated on [layout-caching-prior-art.md](layout-caching-prior-art.md).
 2. **Snapshot correctness before hint narrowing.** Item 1a must land before 1c, or a
    performance fix becomes stale styles.
-3. **Instrumentation currently ships.** `log-phase-times` is on the base `blitz-dom`
-   dependency line, so the counters you would measure with are in the release build and are
-   not free ([allocations.md](allocations.md)). Fix that, or measure before-and-after on the
-   same build.
+3. ~~**Instrumentation currently ships.**~~ **Fixed 2026-08-11.** `log-phase-times` is on
+   `blitz-inspector` (`apps/gui/Cargo.toml:53`) and the base `blitz-dom` line carries only
+   `system-fonts, parallel-construct`. Numbers taken before that date sit inside the old
+   baseline; numbers taken after do not ([allocations.md](allocations.md)).
+4. **Every frame-rate figure predating 2026-08-12 is wrong.** The bench paced itself at
+   60Hz and the app was burning 76% of a core idle. Millisecond phase timings survive;
+   fps and `missedRefreshes` counts do not. Re-baseline unpaced before trusting any A/B
+   ([TODO.md](TODO.md), item B).
 
 ---
 
@@ -147,11 +157,20 @@ frame. We then override the result twice.
 | Rare fields in a side table | `node_rare_data.h:108`, "sparse storage of fields for Node and Element" | `node/node.rs:90` carries everything inline for every node; `node/element.rs:35` puts `background_images` and `mask_images` on every element |
 
 - **What:** measure first. Count distinct versus total attribute values on a live tree.
-- **Why:** our UI is Tailwind, so class strings are long and duplicated per list row. This
-  is the most plausible unexamined contributor to the unexplained 819 MB RSS in
-  [allocations.md](allocations.md).
-- **Depends on:** nothing. The measurement is cheap and should happen before any change.
+- **Why:** our UI is Tailwind, so class strings are long and duplicated per list row.
+  **Promoted 2026-08-25 to the leading memory item.** `vmmap` on the running 0.8.30
+  instance reports a 2.4G footprint with **1.3G resident in `MALLOC_SMALL`** and only
+  28.6M of empty-but-resident regions. That is 1.3G of *live small* allocations, which is
+  exactly the shape this item describes: one owned `String` per attribute per element,
+  never shared. Confirmed still true at ps-blitz `0.3.0-beta.7`:
+  `node/attributes.rs:11` is `value: String`, `:16` is a plain `Vec<Attribute>`.
+- **Depends on:** nothing. The measurement is cheap and should happen before any change,
+  because it separates "duplicated" from merely "many".
 - **Size:** measurement small, fix medium.
+- **Note on the fix:** `Attributes` derefs to `Vec<Attribute>` (`:46-57`) and `attrs` is a
+  public field on `Element` (`node/element.rs:56`), so the type is reachable from many
+  call sites. An interning change wants the `Deref` seam closed first, or it turns into a
+  wide refactor.
 
 ---
 
@@ -181,10 +200,27 @@ fix. Listed for completeness and because a cached split may help memory if it is
 
 ---
 
-## 8. Frontend: the streaming write path
+## 8. Frontend: the streaming write path — MOSTLY DONE, and the rest is NOT next
 
-Not an engine item, but it terminates in the DOM write path and it is the largest
-quadratic in the app. Full detail in
+> **Superseded 2026-08-11/12 by measurement.** The quadratic this item was written about
+> is **fixed**: `splitBlocks` is now an incremental line-by-line parse
+> (`MessageBody.tsx:266` `parseBlocks`), and a 40KB reply went from **2348ms to 16.4ms, a
+> 142x win**. The directive scan got the same treatment, 105.9ms to 17.3ms. `bun run
+> bench` reproduces both.
+>
+> What remains is only the Boa concatenation, and TODO.md marks it **"Explicitly not
+> next"**: arithmetic puts it at ~30ms across a 50,000-character reply, about one percent
+> of the 2.3s the parse cost, and it cannot be measured outside the app because Node's V8
+> has cons strings and Boa does not. `workspace.tsx:2038` still does `current + delta`
+> and that is a deliberate hold, not an oversight.
+>
+> Also recorded there, and worth knowing before re-issuing this: **holding the reply as
+> `string[]` and joining wins nothing.** Boa's `Array.prototype.join` collects a
+> `Vec<JsString>` and makes one `js_string!` call into the same `concat_array` that `+`
+> uses. It is slightly worse than neutral and it breaks the character counter and four
+> emptiness checks.
+
+Original text, kept for the reasoning. Full detail in
 [zero-copy-and-hot-paths.md](zero-copy-and-hot-paths.md).
 
 - **Where:** `apps/gui/frontend/src/stores/workspace.tsx:1462`,
@@ -197,7 +233,25 @@ quadratic in the app. Full detail in
 
 ---
 
-## Suggested order
+## Suggested order — SUPERSEDED, use TODO.md
+
+> **Do not follow this list.** Written 2026-08-11 before the measurements that reordered
+> it. Kept only to show what changed and why. The live ordering is
+> [TODO.md](TODO.md)'s "Do next" and "Then, in order".
+>
+> What moved, and on what evidence:
+>
+> - **Item 8 dropped from second to not-next.** The quadratic it names is fixed (142x);
+>   only the Boa concatenation is left, worth ~1% of what was fixed.
+> - **Item 5's measurement is now the *leading* memory item, not a cheap preliminary.**
+>   `vmmap` on 2026-08-25 puts the footprint at 2.4G with **1.3G in `MALLOC_SMALL`**,
+>   which is precisely the shape one-`String`-per-attribute-per-element produces.
+> - **Item 6's measurement is trivial and still not done**, so it stays cheap-and-first.
+> - **Taffy was bumped to 0.13.0** and the suite is green, but the A/B against 0.12.2 was
+>   never taken, so the gate it represents is still closed.
+> - **A new gate outranks all of this:** re-baseline unpaced (TODO.md item B). Every
+>   pre-2026-08-12 frame figure was taken through a self-pacing bench on a machine where
+>   the app burned 76% of a core.
 
 1. Item 5 and 6 measurements. Cheap, and they inform everything about memory.
 2. Item 8. Frontend-only, no engine coordination, largest single win in the app.

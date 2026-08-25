@@ -194,18 +194,27 @@ Two other things the table surfaced and neither is the renderer:
 1. **The Taffy layout cache gates almost every speed number.** Style is 167 microseconds
    against 18 ms of layout per keystroke. Anything promising milliseconds waits on
    [layout-caching-prior-art.md](layout-caching-prior-art.md).
-2. **Instrumentation currently ships in release builds**, so the counters you would measure
-   with are inside the baseline. See [allocations.md](allocations.md). Fix it, or compare
-   before-and-after on the same build.
-3. **Engine changes land in a checkout AgencyZero does not currently share with chuzz.**
-   Chuzz depends on the published `ps-blitz-*` crates; this repository builds ps-blitz from
-   a pinned git rev. A fix in one does not reach the other until it is released.
+2. ~~**Instrumentation currently ships in release builds**~~ **Fixed 2026-08-11**, item 1.
+   `log-phase-times` is on `blitz-inspector` (`apps/gui/Cargo.toml:53`) and the base
+   `blitz-dom` line carries only `system-fonts, parallel-construct`. Numbers taken before
+   that date still sit inside the old baseline; numbers taken after do not.
+3. **Engine changes reach neither app until they are published.** Corrected 2026-08-25:
+   this repository no longer builds ps-blitz from a pinned git rev. `apps/gui/Cargo.toml`
+   takes the **published** `ps-blitz-dom ^0.3.0-beta.6`, exactly as chuzz does. So an
+   engine fix in `~/code/ps-blitz` reaches *neither* app until it is released; the local
+   checkout is at `0.3.0-beta.7`. Budget a release for every ENGINE item.
 
 ## Resume here
 
-Paused 2026-08-11 for one short unrelated project. This is where the performance
-workstream picks up, in this order, and each line already has its measurement — see
-"Done, 2026-08-11" below for what produced them.
+Paused 2026-08-11 for one short unrelated project, and **still paused as of 2026-08-25**:
+the intervening two weeks went to QA/button-audit and side-panel work, not to this. Nothing
+in A, B or C below was started. This is where the performance workstream picks up, in this
+order, and each line already has its measurement — see "Done, 2026-08-11" below for what
+produced them.
+
+**B is the gate.** Every remaining figure was measured against a baseline taken while the
+app burned 76% of a core, on a bench that paced itself at 60Hz. Until B is redone, any A/B
+you run compares against fiction.
 
 **A. Why a scrollport clip costs ~110us.** The largest measured item left. Clip and
 opacity layers are 44% of the frame, and within that the count is not the cost: a
@@ -248,10 +257,10 @@ the app. Leave it until something measures it there.
 |---|---|---|
 | 1 | ~~Move `log-phase-times` off the base `blitz-dom` dependency onto `blitz-inspector`.~~ **Done** 2026-08-11, `apps/gui/Cargo.toml:33`. | [allocations.md](allocations.md) |
 | 2 | ~~Bound the streaming tail block: split prose on blank lines in `extractProseStructures`.~~ **Done** 2026-08-11, along with the incremental parse that followed it. See "Done" below before re-issuing this. | [js-engine-big-problem.md](js-engine-big-problem.md) |
-| 3 | **Half done.** ~~`vmmap`/`heap` on a live instance~~ (done: 855MB, `MALLOC_SMALL` 552M, GPU-side only 67M). Still open: distinct versus total attribute values on a tree. | [allocations.md](allocations.md), [blink-what-we-can-learn.md](blink-what-we-can-learn.md) section 7 |
+| 3 | **Half done, and re-measured 2026-08-25.** ~~`vmmap`/`heap` on a live instance~~ done twice: 855MB on 0.5.25, and **2.4GB on 0.8.30 after 7.5h uptime, with `MALLOC_SMALL` at 1.3G resident / 1.1G dirty**. Small live allocations are the whole story and they have more than doubled. Still open: distinct versus total attribute values on a tree. | [allocations.md](allocations.md), [blink-what-we-can-learn.md](blink-what-we-can-learn.md) section 7 |
 | 4 | Make Stylo snapshots updatable (`document.rs:1258`). A correctness fix, and it unblocks the invalidation work. | [style-invalidation-we-already-ship.md](style-invalidation-we-already-ship.md) |
 | 5 | **Partial.** Animation-driven redraw now distinguishes idle, CSS-only (15fps), and interactive (30fps) pacing, with interval tests in `blitz-shell/src/window.rs`. Still open: remeasure the shipped 0.6.4 stack with `BENCH_PACE=0`, confirm input-driven frames bypass the slow cadence, and record idle/active CPU plus frame-tail results. | [animation-gap.md](animation-gap.md) |
-| 6 | Try mimalloc as the global allocator. One line, measure, keep or drop. | [allocations.md](allocations.md) |
+| 6 | **Re-scoped down by the 2026-08-25 measurement.** Try mimalloc as the global allocator. One line, measure, keep or drop — but the 78M of empty-but-resident regions it was aimed at is **28.6M** on the current build, against 1.3G of *live* small allocations. An allocator redistributes those; it does not remove them. Do it for the churn, not for the footprint. | [allocations.md](allocations.md) |
 
 Items 1 to 6 are independent of each other and of the layout cache.
 
@@ -377,6 +386,41 @@ measurement behind it.
   streaming quadratic. Brimstone has cons strings, is unpublished and self-describes as not
   production ready. Revisit when that changes; do not act now.
   [js-engine-big-problem.md](js-engine-big-problem.md)
+
+## Measured, 2026-08-25: the memory number has more than doubled
+
+`vmmap -summary` against the owner's running System instance, az-gui **0.8.30**, pid
+31507, ~7.5h uptime. Read-only, so it did not disturb the process.
+
+| Region | Resident | Dirty |
+|---|---|---|
+| `MALLOC_SMALL` | **1.3G** | 1.1G, plus 407.5M swapped |
+| `owned unmapped (graphics)` | 458.5M | 458.5M |
+| `MALLOC_LARGE` | 86.9M | 86.9M |
+| `IOSurface` | 56.4M | 56.4M |
+| `MALLOC_LARGE (empty)` | 28.6M | 28.6M |
+| `IOAccelerator (graphics)` | 17.7M | 10.5M |
+
+Physical footprint **2.4G**, peak 2.4G, against the 855MB recorded on 0.5.25.
+
+Three things this changes, all of them corrections to what is written above and in
+[allocations.md](allocations.md):
+
+- **`MALLOC_SMALL` is the entire memory story, and it grew from 552M to 1.3G.** The old
+  reading's conclusion holds and is now much stronger.
+- **"GPU-side only 67M" was wrong**, because `owned unmapped (graphics)` was not in that
+  accounting. GPU-side is ~533M. Vello's `ResourcePool` is still not the leading term, so
+  the conclusion drawn from the old number survives, but the margin is far narrower than
+  recorded and the pool deserves a second look if the small-allocation work lands.
+- **The mimalloc item loses most of its stated justification.** It was scoped against 78M
+  of empty-but-resident regions; that figure is **28.6M** now. The 1.3G is *live* small
+  objects, and an allocator redistributes those rather than removing them. The win has to
+  come from allocating fewer or sharing them.
+
+This is uptime-sensitive: 7.5h on the System instance against a fresh one on 0.5.25, so
+part of the growth is retention over a session rather than a per-build regression. That
+distinction is itself worth a measurement — same build, fresh versus aged — before
+attributing it.
 
 ## Done, 2026-08-12
 
