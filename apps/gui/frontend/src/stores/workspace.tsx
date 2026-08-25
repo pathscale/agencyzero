@@ -84,9 +84,7 @@ const FALLBACK_EFFORT = "high";
 // timer starts. Keeping it here gives every optimistic editor one contract.
 const OPTIMISTIC_PERSIST_AFTER_PAINT_MS = 900;
 const afterOptimisticPaint = () =>
-  new Promise<void>((resolve) =>
-    globalThis.setTimeout(resolve, OPTIMISTIC_PERSIST_AFTER_PAINT_MS),
-  );
+  new Promise<void>((resolve) => globalThis.setTimeout(resolve, OPTIMISTIC_PERSIST_AFTER_PAINT_MS));
 
 /** Matches the strip's poll period; see `claudeUsageBackoffMs`. */
 const CLAUDE_USAGE_POLL_MS = 60_000;

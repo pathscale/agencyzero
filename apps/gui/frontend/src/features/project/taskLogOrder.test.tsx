@@ -1,8 +1,8 @@
 import { render, waitFor } from "@solidjs/testing-library";
-import { Show } from "solid-js";
+import { flush, Show } from "solid-js";
 import { describe, expect, it } from "vitest";
 import { ProjectPanel } from "~/features/project/ProjectPanel";
-import { prefs } from "~/stores/prefs";
+import { setPrefs } from "~/stores/prefs";
 import { useWorkspace, type Workspace, WorkspaceProvider } from "~/stores/workspace";
 import type { Project } from "~/types";
 
@@ -49,11 +49,15 @@ describe("the task log's order", () => {
     await waitFor(() => expect(workspace.state.boot.status).toBe("ready"), { timeout: 5_000 });
     // The panel reads the store; opening the project is what fills it.
     workspace.actions.openProject(PROJECT.id);
+    flush();
     return { screen, workspace: workspace as Workspace };
   };
 
   it("puts the newest entry at the top of the column", async () => {
-    prefs.panelSections.log = true;
+    setPrefs((d) => {
+      d.panelSections.log = true;
+    });
+    flush();
     const { screen, workspace } = await mount();
 
     const stored = () => workspace.state.taskLog.worktable ?? [];
@@ -63,12 +67,13 @@ describe("the task log's order", () => {
     const newest = [...stored()].sort((a, b) => b.finishedAt.localeCompare(a.finishedAt))[0];
     expect(stored()[0].id).toBe(newest.id);
 
-    const labels = [...screen.container.querySelectorAll("[data-selectable] span[data-selectable]")]
-      .map((node) => node.textContent)
-      .filter(Boolean);
-    expect(labels.length).toBeGreaterThan(0);
+    const renderedLabels = () =>
+      [...screen.container.querySelectorAll("[data-selectable] span[data-selectable]")]
+        .map((node) => node.textContent)
+        .filter(Boolean);
+    await waitFor(() => expect(renderedLabels().length).toBeGreaterThan(0));
     // Whatever the page size, the first row on screen is the newest entry.
-    expect(labels[0]).toBe(newest.label);
+    expect(renderedLabels()[0]).toBe(newest.label);
   });
 
   /*
@@ -78,7 +83,10 @@ describe("the task log's order", () => {
    * and scrolling both ran out early under an honest total.
    */
   it("fetches earlier entries from the server once the held page runs out", async () => {
-    prefs.panelSections.log = true;
+    setPrefs((d) => {
+      d.panelSections.log = true;
+    });
+    flush();
     const { workspace } = await mount();
 
     const held = () => workspace.state.taskLog.worktable ?? [];

@@ -43,6 +43,7 @@ function mount() {
   setPrefs((d) => {
     d.panelSections.notes = true;
   });
+  flush();
   let workspace!: Workspace;
 
   function Gate() {
@@ -189,16 +190,22 @@ describe("the notes a compaction kept", () => {
 describe("the knowledge checkpoint switch", () => {
   // `mount` opens the notes section; this opens Settings alongside it, which is
   // where the switch lives.
-  const openSettings = () =>
+  const openSettings = () => {
     setPrefs((d) => {
       d.panelSections.settings = true;
     });
+    flush();
+  };
 
   it("is off until it is asked for", async () => {
-    openSettings();
     const { ready, screen } = mount();
     await ready();
+    openSettings();
 
+    await waitFor(
+      () => expect(screen.getByLabelText("Knowledge checkpoints for this project")).toBeTruthy(),
+      { timeout: 2_000 },
+    );
     const toggle = screen.getByLabelText(
       "Knowledge checkpoints for this project",
     ) as HTMLInputElement;
@@ -206,10 +213,11 @@ describe("the knowledge checkpoint switch", () => {
   });
 
   it("says what it costs and what it is for, in the settings themselves", async () => {
-    openSettings();
     const { ready, screen } = mount();
     await ready();
+    openSettings();
 
+    await waitFor(() => expect(screen.getByText(/300k/)).toBeTruthy(), { timeout: 2_000 });
     // The three thresholds, the price, and the reason — not a tooltip.
     expect(screen.getByText(/300k/)).toBeTruthy();
     expect(screen.getByText(/one extra turn each/)).toBeTruthy();
@@ -217,10 +225,14 @@ describe("the knowledge checkpoint switch", () => {
   });
 
   it("keeps the switch where it was put", async () => {
-    openSettings();
     const { ready, screen } = mount();
     await ready();
+    openSettings();
 
+    await waitFor(
+      () => expect(screen.getByLabelText("Knowledge checkpoints for this project")).toBeTruthy(),
+      { timeout: 2_000 },
+    );
     const toggle = screen.getByLabelText(
       "Knowledge checkpoints for this project",
     ) as HTMLInputElement;
@@ -232,12 +244,17 @@ describe("the knowledge checkpoint switch", () => {
 
 describe("project response verbosity", () => {
   it("starts at model default and keeps the project-local choice", async () => {
+    const { ready, screen } = mount();
+    await ready();
     setPrefs((d) => {
       d.panelSections.settings = true;
     });
-    const { ready, screen } = mount();
-    await ready();
+    flush();
 
+    await waitFor(
+      () => expect(screen.getByLabelText("Response verbosity for this project")).toBeTruthy(),
+      { timeout: 2_000 },
+    );
     const slider = screen.getByLabelText("Response verbosity for this project");
     await waitFor(() => expect(slider).toHaveAttribute("aria-valuenow", "0"));
 
