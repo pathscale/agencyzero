@@ -245,6 +245,7 @@ const IMPLEMENTED: &[&str] = &[
     "delete_project",
     "set_project_pinned",
     "set_project_moderator",
+    "reorder_projects",
     "rename_project",
     "add_dir",
     "remove_dir",
@@ -779,13 +780,14 @@ mod restart_resume_tests {
     }
 
     #[test]
-    fn project_moderation_never_routes_to_fixture_data() {
-        assert!(
-            list_capabilities()
-                .iter()
-                .any(|command| command == "set_project_moderator"),
-            "a live project id cannot be updated through the fixture backend"
-        );
+    fn live_project_mutations_never_route_to_fixture_data() {
+        let capabilities = list_capabilities();
+        for command in ["set_project_moderator", "reorder_projects"] {
+            assert!(
+                capabilities.iter().any(|candidate| candidate == command),
+                "{command} cannot update a live project through fixture data"
+            );
+        }
     }
 }
 
@@ -2235,6 +2237,7 @@ fn main() {
             projects::delete_project,
             projects::set_project_pinned,
             projects::set_project_moderator,
+            projects::reorder_projects,
             projects::rename_project,
             projects::add_dir,
             projects::remove_dir,

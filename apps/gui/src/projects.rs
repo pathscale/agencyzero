@@ -34,7 +34,7 @@ use worktable::prelude::*;
 use crate::db::schema::message::{FinalizeByIdQuery, MessageRow};
 use crate::db::schema::project::{
     DirsByIdQuery, LastActivityByIdQuery, ModeratorByIdQuery, NameByIdQuery, PinnedByIdQuery,
-    ProjectRow,
+    PositionByIdQuery, ProjectRow,
 };
 use crate::db::schema::project_item::{
     PositionByIdQuery as ItemPositionByIdQuery, ProjectItemRow,
@@ -8882,6 +8882,37 @@ pub async fn set_project_moderator(
     );
     let _ = app.emit("project:updated", &project);
     Ok(project)
+}
+
+/// Persist the visible project-tab order.
+///
+/// The frontend updates its strip optimistically and calls this once when a
+/// drag ends. Keeping the mutation in Rust makes the order survive a restart;
+/// routing it to fixture data makes the drag appear to work and then revert.
+///
+/// # Errors
+/// Returns the store's error when any named project cannot be updated.
+#[tauri::command]
+pub async fn reorder_projects(
+    app: AppHandle,
+    ids: Vec<String>,
+    state: State<'_, AppState>,
+) -> Result<Vec<ProjectDto>, String> {
+    for (position, id) in ids.iter().enumerate() {
+        let position = u32::try_from(position).map_err(|_| "too many project tabs".to_string())?;
+        state
+            .tables
+            .project
+            .update_position_by_id(PositionByIdQuery { position }, id.clone())
+            .await
+            .map_err(|error| error.to_string())?;
+    }
+
+    let projects = list_projects(state);
+    for project in &projects {
+        let _ = app.emit("project:updated", project);
+    }
+    Ok(projects)
 }
 
 /// Delete a project and everything that belongs to it.

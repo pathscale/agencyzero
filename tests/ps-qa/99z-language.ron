@@ -1,6 +1,6 @@
-// Language changes every accessible label in the application. Run this group
-// alone and last: selecting Chinese is the outcome, not setup for another
-// English-named check.
+// Language changes every accessible label in the application. Restore English
+// in the same group so a complete one-process run does not poison every later
+// semantic name if the harness groups checks by surface rather than filename.
 [
     (
         id: "language-selector-paints",
@@ -22,6 +22,18 @@
         key: Some("ArrowDown"),
         key_on: Some("combobox:Current language: English"),
         subject: "combobox:Current language: English",
+        expect: NameChanges,
+    ),
+    (
+        id: "language-restores-english",
+        group: "language",
+        what: "the language selector returns to English for the remaining audit",
+        open: None,
+        hover: None,
+        click: None,
+        key: Some("ArrowUp"),
+        key_on: Some("combobox:当前语言: 中文"),
+        subject: "combobox:当前语言: 中文",
         expect: NameChanges,
     ),
 ]
