@@ -962,7 +962,7 @@ function ResumeSession(props: {
         .then(alive(() => setId("")))
         .catch((cause) => log.error(`could not adopt the session: ${describeError(cause)}`))
         .finally(alive(() => setBusy(false)));
-    }, 0);
+    }, 100);
   };
 
   return (
@@ -1181,16 +1181,24 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
     setAdding(false);
     if (value) {
       setLastCreatedTitle(value);
-      void actions
-        .createItem(props.projectId, value)
-        .then((item) => {
-          setFocusedRowId(item.id);
-          setLastCreatedTitle(null);
-        })
-        .catch((cause) => {
-          setLastCreatedTitle(null);
-          log.error(`could not create the item: ${describeError(cause)}`);
-        });
+      // Paint and acknowledge the semantic action before beginning persistence.
+      // A slow database write must not hold the key event or inspector reply.
+      window.setTimeout(() => {
+        void actions
+          .createItem(props.projectId, value)
+          .then(
+            alive((item) => {
+              setFocusedRowId(item.id);
+              setLastCreatedTitle(null);
+            }),
+          )
+          .catch(
+            alive((cause) => {
+              setLastCreatedTitle(null);
+              log.error(`could not create the item: ${describeError(cause)}`);
+            }),
+          );
+      }, 100);
     }
   }
 
