@@ -84,7 +84,7 @@ jobs:
         run: cargo build --release --features blitz-inspector,experimental --bin az-gui
 
       - name: Scrubber unit tests
-        run: cargo test --bin az-gui --features blitz-inspector,experimental qa_profile
+        run: cargo test --release --bin az-gui --features blitz-inspector,experimental qa_profile
 
       # From the committed archive, so a run measures what is in the tree. The
       # profile is single-writer and every check mutates it, so this restores a
