@@ -13,6 +13,7 @@
         subject: "Change the status of iota beta zeta delta north cobalt epsilon omega lambda epsilon",
         expect: Above,
         covers: ["button:Move *"],
+        settle_after_ms: 1200,
     ),
     (
         id: "row-action-moves-down",
@@ -24,6 +25,7 @@
         compare: Some("Change the status of iota beta zeta delta north cobalt epsilon omega lambda epsilon"),
         subject: "Change the status of amber omega zeta east amber zeta cobalt omega north beta sigma amber amber om",
         expect: Above,
+        settle_after_ms: 1200,
     ),
     (
         id: "row-action-edit-opens",
@@ -49,6 +51,7 @@
         key_on: Some("textbox:Edit iota beta zeta delta north cobalt epsilon omega lambda epsilon"),
         subject: "button:Change the status of qa audit project item",
         expect: PaintsNamed,
+        settle_after_ms: 1200,
     ),
     (
         id: "row-action-edit-restores",
@@ -63,5 +66,6 @@
         key_on: Some("textbox:Edit qa audit project item"),
         subject: "button:Change the status of iota beta zeta delta north cobalt epsilon omega lambda epsilon",
         expect: PaintsNamed,
+        settle_after_ms: 1200,
     ),
 ]

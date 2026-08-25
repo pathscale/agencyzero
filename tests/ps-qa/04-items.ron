@@ -15,6 +15,7 @@
         key: Some("Enter"),
         subject: "button:Change the status of qa audit first new item",
         expect: PaintsNamed,
+        settle_after_ms: 1200,
     ),
     (
         id: "items-newest-last",
@@ -29,6 +30,7 @@
         compare: Some("Change the status of qa audit second new item"),
         subject: "Change the status of qa audit first new item",
         expect: Above,
+        settle_after_ms: 1200,
     ),
     (
         id: "items-description-enables-save",

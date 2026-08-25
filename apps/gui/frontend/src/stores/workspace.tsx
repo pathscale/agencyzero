@@ -78,6 +78,14 @@ const AGENT_IO_LIMIT = 500;
 
 const FALLBACK_EFFORT = "high";
 
+// Optimistic item mutations paint first; durable WorkTable writes follow once
+// the renderer and semantic inspector have had a complete response window.
+// This is not the action's latency: the store is already updated when this
+// timer starts. Keeping it here makes every item editor use the same contract.
+const ITEM_PERSIST_AFTER_PAINT_MS = 350;
+const afterItemPaint = () =>
+  new Promise<void>((resolve) => globalThis.setTimeout(resolve, ITEM_PERSIST_AFTER_PAINT_MS));
+
 /** Matches the strip's poll period; see `claudeUsageBackoffMs`. */
 const CLAUDE_USAGE_POLL_MS = 60_000;
 
@@ -3148,6 +3156,7 @@ function createWorkspace() {
         reference: null,
       };
       upsertItem(temporary);
+      await afterItemPaint();
       try {
         const item = await client().createItem(projectId, title);
         setState((d) => {
@@ -3178,6 +3187,7 @@ function createWorkspace() {
           if (item) item.order = order;
         });
       });
+      await afterItemPaint();
       try {
         const items = await client().reorderItems(projectId, ids);
         for (const item of items) upsertItem(item);
@@ -3199,6 +3209,7 @@ function createWorkspace() {
         .flat()
         .find((item) => item.id === id);
       if (previous) upsertItem({ ...previous, title });
+      await afterItemPaint();
       try {
         const item = await client().updateItem(id, title);
         upsertItem(item);
