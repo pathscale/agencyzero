@@ -117,7 +117,7 @@ export function ProjectPanel(props: { project: Project; agent: Agent }): JSX.Ele
             : "flex-none"
         }
         contentClass="flex min-h-0 flex-1 flex-col"
-        contentDelayMs={120}
+        contentDelayMs={400}
       >
         <ItemList projectId={props.project.id} items={panelItems()} />
       </SectionPanel>
@@ -135,7 +135,7 @@ export function ProjectPanel(props: { project: Project; agent: Agent }): JSX.Ele
         isOpen={prefs.panelSections.running}
         onToggle={() => togglePanelSection("running")}
         class="flex-none"
-        contentDelayMs={240}
+        contentDelayMs={500}
       >
         <RunningList projectId={props.project.id} />
       </SectionPanel>
@@ -158,7 +158,7 @@ export function ProjectPanel(props: { project: Project; agent: Agent }): JSX.Ele
         isOpen={prefs.panelSections.log}
         onToggle={() => togglePanelSection("log")}
         class={prefs.panelSections.log ? "flex min-h-[160px] flex-col" : "flex-none"}
-        contentDelayMs={360}
+        contentDelayMs={600}
       >
         <TaskLogList projectId={props.project.id} />
       </SectionPanel>
@@ -171,7 +171,7 @@ export function ProjectPanel(props: { project: Project; agent: Agent }): JSX.Ele
         isOpen={prefs.panelSections.io}
         onToggle={() => togglePanelSection("io")}
         class={prefs.panelSections.io ? "flex min-h-[160px] flex-col" : "flex-none"}
-        contentDelayMs={480}
+        contentDelayMs={700}
       >
         <AgentIoList projectId={props.project.id} />
       </SectionPanel>
@@ -183,7 +183,7 @@ export function ProjectPanel(props: { project: Project; agent: Agent }): JSX.Ele
         isOpen={prefs.panelSections.notes}
         onToggle={() => togglePanelSection("notes")}
         class="flex-none"
-        contentDelayMs={600}
+        contentDelayMs={800}
       >
         <NotesEditor projectId={props.project.id} />
       </SectionPanel>
@@ -519,7 +519,7 @@ function SettingsSection(props: { project: Project; agent: Agent }): JSX.Element
       isOpen={prefs.panelSections.settings}
       onToggle={() => togglePanelSection("settings")}
       class="flex-none"
-      contentDelayMs={720}
+      contentDelayMs={900}
     >
       <div class="flex flex-col gap-2.5 px-3 pt-3 pb-3.5">
         <div class="text-[11.5px] text-az-muted">{tx("Working directories")}</div>
