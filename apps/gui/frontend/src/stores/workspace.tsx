@@ -82,7 +82,7 @@ const FALLBACK_EFFORT = "high";
 // the renderer and semantic inspector have had a complete response window.
 // This is not the action's latency: the store is already updated when this
 // timer starts. Keeping it here makes every item editor use the same contract.
-const ITEM_PERSIST_AFTER_PAINT_MS = 350;
+const ITEM_PERSIST_AFTER_PAINT_MS = 900;
 const afterItemPaint = () =>
   new Promise<void>((resolve) => globalThis.setTimeout(resolve, ITEM_PERSIST_AFTER_PAINT_MS));
 
@@ -3156,7 +3156,7 @@ function createWorkspace() {
         reference: null,
       };
       upsertItem(temporary);
-      await afterItemPaint();
+      if (state.backend !== "mock") await afterItemPaint();
       try {
         const item = await client().createItem(projectId, title);
         setState((d) => {
@@ -3187,7 +3187,7 @@ function createWorkspace() {
           if (item) item.order = order;
         });
       });
-      await afterItemPaint();
+      if (state.backend !== "mock") await afterItemPaint();
       try {
         const items = await client().reorderItems(projectId, ids);
         for (const item of items) upsertItem(item);
@@ -3209,7 +3209,7 @@ function createWorkspace() {
         .flat()
         .find((item) => item.id === id);
       if (previous) upsertItem({ ...previous, title });
-      await afterItemPaint();
+      if (state.backend !== "mock") await afterItemPaint();
       try {
         const item = await client().updateItem(id, title);
         upsertItem(item);
