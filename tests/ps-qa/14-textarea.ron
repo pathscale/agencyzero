@@ -1,0 +1,46 @@
+// The project notes textarea, which is `Textarea` from the library.
+//
+// Nothing addressed it before: the frontend suite covered it in jsdom, where a
+// textarea has no box and takes no real keystroke, so "it renders" was the
+// whole assertion. These drive the control the application actually shows.
+[
+    (
+        id: "textarea-notes-paints",
+        group: "textarea",
+        what: "the project notes textarea is on screen with a box worth typing into",
+        open: Some("\u{0}dynamic-document"),
+        hover: None,
+        click: None,
+        // `role:name`, not the name alone: the panel labels its heading and its
+        // field alike, so a name-only match is answered by the heading.
+        subject: "textbox:Notes kept across compaction",
+        expect: PaintsNamed,
+    ),
+    (
+        id: "textarea-notes-accepts-text",
+        group: "textarea",
+        what: "typing into the notes textarea changes the value it exposes",
+        open: Some("\u{0}dynamic-document"),
+        hover: None,
+        click: None,
+        type_into: Some("textbox:Notes kept across compaction"),
+        text: Some("ps-qa wrote this note"),
+        // The exposed value, not the box. A textarea that paints but drops
+        // keystrokes is the failure this catches, and its geometry does not
+        // move either way.
+        subject: "textbox:Notes kept across compaction",
+        expect: ValueChanges,
+    ),
+    (
+        id: "textarea-notes-restores",
+        group: "textarea",
+        what: "the note can be cleared again, leaving the fixture as it was",
+        open: Some("\u{0}dynamic-document"),
+        hover: None,
+        click: None,
+        type_into: Some("textbox:Notes kept across compaction"),
+        text: Some(""),
+        subject: "textbox:Notes kept across compaction",
+        expect: ValueChanges,
+    ),
+]
