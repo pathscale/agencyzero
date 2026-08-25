@@ -8592,11 +8592,6 @@ pub async fn adopt_session(
     // The partial-reply checkpoint belonged to whatever session was here before;
     // clear it so the adopted session's next turn does not splice an old tail on.
     clear_partial_reply(&state.tables, &project_id).await;
-    state
-        .tables
-        .kv_put(&partial_reply_key(&project_id), String::new())
-        .await
-        .map_err(|error| error.to_string())?;
     state.startup_visibility.reset(&project_id, agent);
 
     crate::log!(

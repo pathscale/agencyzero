@@ -340,6 +340,7 @@ const zh = {
   "Keep across restarts": "重启后保留",
   "Nothing sent yet on this project.": "此项目尚未发送任何内容。",
   "Copy all": "全部复制",
+  "Copied all": "已全部复制",
   Shrink: "收起",
   Expand: "展开",
   dir: "个目录",

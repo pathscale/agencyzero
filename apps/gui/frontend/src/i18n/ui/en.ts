@@ -355,6 +355,7 @@ const en = {
   "Keep across restarts": "Keep across restarts",
   "Nothing sent yet on this project.": "Nothing sent yet on this project.",
   "Copy all": "Copy all",
+  "Copied all": "Copied all",
   Shrink: "Shrink",
   Expand: "Expand",
   dir: "dir",

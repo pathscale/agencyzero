@@ -4,6 +4,36 @@
 // and it could not page past its first fetch.
 [
     (
+        id: "agent-io-expands",
+        group: "agent-io",
+        what: "the agent I/O viewport expands without remounting the panel",
+        open: Some("theta theta north indi"),
+        hover: None,
+        click: Some("button:Expand"),
+        subject: "button:Shrink",
+        expect: PaintsNamed,
+    ),
+    (
+        id: "agent-io-shrinks",
+        group: "agent-io",
+        what: "the expanded agent I/O viewport returns to its compact height",
+        open: Some("theta theta north indi"),
+        hover: None,
+        click: Some("button:Shrink"),
+        subject: "button:Expand",
+        expect: PaintsNamed,
+    ),
+    (
+        id: "agent-io-copies-all",
+        group: "agent-io",
+        what: "copying every agent I/O entry reports clipboard success",
+        open: Some("theta theta north indi"),
+        hover: None,
+        click: Some("button:Copy all"),
+        subject: "button:Copied all",
+        expect: PaintsNamed,
+    ),
+    (
         id: "tasklog-1",
         group: "tasklog",
         what: "task log rows render their primary command control",

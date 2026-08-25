@@ -329,6 +329,8 @@ function IoPersistToggle(props: { projectId: string }): JSX.Element {
 export function AgentIoList(props: { projectId: string }): JSX.Element {
   const { state } = useWorkspace();
   const lines = () => state.agentIo[props.projectId] ?? [];
+  const [copied, setCopied] = createSignal(false);
+  const alive = whileMounted();
 
   /*
    * Two heights, because this panel has two jobs. Normally it is a tail you
@@ -367,6 +369,11 @@ export function AgentIoList(props: { projectId: string }): JSX.Element {
       .join("\n\n");
     try {
       await navigator.clipboard.writeText(text);
+      setCopied(true);
+      window.setTimeout(
+        alive(() => setCopied(false)),
+        1_500,
+      );
     } catch (cause) {
       log.warn(`could not copy the agent log: ${describeError(cause)}`);
     }
@@ -401,7 +408,7 @@ export function AgentIoList(props: { projectId: string }): JSX.Element {
             onClick={() => void copyAll()}
             class="rounded-md border border-az-hairline px-2 py-0.5 text-[10.5px] text-az-muted transition-colors hover:border-az-hairline-strong hover:text-base-content"
           >
-            {tx("Copy all")}
+            {copied() ? tx("Copied all") : tx("Copy all")}
           </Button>
           <span class="ml-auto text-[10.5px] text-az-faint">
             {lines().length} {tx("entries")}
@@ -1049,6 +1056,7 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
   const { state, actions } = useWorkspace();
   const [adding, setAdding] = createSignal(false);
   const [title, setTitle] = createSignal("");
+  const [lastCreatedTitle, setLastCreatedTitle] = createSignal<string | null>(null);
   const [forkingId, setForkingId] = createSignal<string | null>(null);
   const alive = whileMounted();
   // Where the control that opened the dialog was, so it lands beside the row
@@ -1169,9 +1177,17 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
     setTitle("");
     setAdding(false);
     if (value) {
+      setLastCreatedTitle(value);
       void actions
         .createItem(props.projectId, value)
-        .catch((cause) => log.error(`could not create the item: ${describeError(cause)}`));
+        .then((item) => {
+          setFocusedRowId(item.id);
+          setLastCreatedTitle(null);
+        })
+        .catch((cause) => {
+          setLastCreatedTitle(null);
+          log.error(`could not create the item: ${describeError(cause)}`);
+        });
     }
   }
 
@@ -1606,7 +1622,7 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
                    * keeps the icons legible where they overlap a long title. These
                    * act on the row, they are not part of reading it.
                    */}
-                  <Show when={activeRowId() === item.id}>
+                  <Show when={activeRowId() === item.id || lastCreatedTitle() === item.title}>
                     <div
                       class={`absolute inset-y-0 flex items-center justify-end gap-1 rounded-r-[9px] bg-gradient-to-l from-60% from-base-300 to-transparent pr-2 pl-6 ${
                         item.status === "questions" ? "right-[26px]" : "right-0"
