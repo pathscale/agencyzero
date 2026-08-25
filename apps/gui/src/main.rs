@@ -94,6 +94,15 @@ fn no_persist_requested() -> bool {
         || std::env::args().any(|arg| arg == "--debug-no-persist")
 }
 
+/// How many times to ask the main window to show before giving up. `show()` can
+/// return `Ok` while the window stays hidden, so the result is checked and the
+/// call repeated rather than trusted once.
+const SHOW_ATTEMPTS: u32 = 5;
+
+/// Gap between show attempts. Long enough for the compositor to settle, short
+/// enough that a window that will appear is not held back noticeably.
+const SHOW_RETRY_DELAY: std::time::Duration = std::time::Duration::from_millis(120);
+
 /// Resolve and claim the Blitz profile before AppKit, a window, or frontend
 /// JavaScript exists. This is the soft duplicate-instance probe: a busy return
 /// ends `main` normally, while an acquired lock is handed into setup and held
@@ -2702,11 +2711,56 @@ fn main() {
              * way to reach it, so that is logged loudly rather than ignored.
              */
             if let Some(window) = app.get_webview_window("main") {
-                if let Err(error) = window.show() {
+                /*
+                 * `show()` returning `Ok` means the request was dispatched, not
+                 * that the window came up: the call can succeed while the
+                 * window stays hidden, and the app then runs headless with a
+                 * fully built UI behind an invisible window. That is
+                 * indistinguishable from a blank screen and reports no error,
+                 * so ask the window what it actually is and retry rather than
+                 * trusting the return value.
+                 */
+                let mut shown = false;
+                for attempt in 1..=SHOW_ATTEMPTS {
+                    if let Err(error) = window.show() {
+                        crate::log!(
+                            log::Level::Error,
+                            "boot",
+                            "the main window could not be shown (attempt {attempt}): {error}"
+                        );
+                    }
+                    match window.is_visible() {
+                        Ok(true) => {
+                            shown = true;
+                            break;
+                        }
+                        Ok(false) => {
+                            crate::log!(
+                                log::Level::Warn,
+                                "boot",
+                                "the main window is still hidden after show() (attempt {attempt})"
+                            );
+                        }
+                        Err(error) => {
+                            crate::log!(
+                                log::Level::Warn,
+                                "boot",
+                                "the main window visibility could not be read (attempt {attempt}): {error}"
+                            );
+                        }
+                    }
+                    // No wait after the last look: there is nothing left to
+                    // retry, and boot should not pay for a delay it cannot use.
+                    if attempt < SHOW_ATTEMPTS {
+                        std::thread::sleep(SHOW_RETRY_DELAY);
+                    }
+                }
+                if !shown {
                     crate::log!(
                         log::Level::Error,
                         "boot",
-                        "the main window could not be shown: {error}"
+                        "the main window is not visible after {SHOW_ATTEMPTS} attempts; the app \
+                         is running with no way to reach it"
                     );
                 }
             } else {
