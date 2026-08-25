@@ -3158,6 +3158,7 @@ function createWorkspace() {
         reference: null,
       };
       upsertItem(temporary);
+      flush();
       if (state.backend !== "mock") await afterOptimisticPaint();
       try {
         const item = await client().createItem(projectId, title);
@@ -3189,6 +3190,7 @@ function createWorkspace() {
           if (item) item.order = order;
         });
       });
+      flush();
       if (state.backend !== "mock") await afterOptimisticPaint();
       try {
         const items = await client().reorderItems(projectId, ids);
@@ -3211,6 +3213,7 @@ function createWorkspace() {
         .flat()
         .find((item) => item.id === id);
       if (previous) upsertItem({ ...previous, title });
+      flush();
       if (state.backend !== "mock") await afterOptimisticPaint();
       try {
         const item = await client().updateItem(id, title);
@@ -3365,6 +3368,7 @@ function createWorkspace() {
         sessions: { ...project.sessions, [agent]: sessionId },
         sessionId: agent === "claude" ? sessionId : project.sessionId,
       });
+      flush();
       if (state.backend !== "mock") await afterOptimisticPaint();
       try {
         await client().adoptSession(projectId, agent, sessionId);
