@@ -2215,9 +2215,32 @@ pub async fn create_item(
     if title.is_empty() {
         return Err("an item needs a title".into());
     }
+    let tables = Arc::clone(&state.tables);
+    let row = tokio::task::spawn_blocking(move || create_item_row(&tables, project_id, title))
+        .await
+        .map_err(|error| error.to_string())??;
+    touch_item(&state.tables, &row.id).await;
+    let dto = item_dto(row, &state.tables);
+    let _ = app.emit("item:created", dto.clone());
+    let mut study =
+        crate::study::Record::manual(dto.project_id.clone(), "items.add", "item", dto.id.clone());
+    study.latency = Some(started.elapsed());
+    crate::study::record(&state.tables, study);
+    Ok(dto)
+}
+
+/// Validate and persist a new item away from the window and async-runtime threads.
+///
+/// WorkTable selection and insertion are synchronous. Running them directly in
+/// the async Tauri command held semantic input dispatch and inspector snapshots
+/// behind a roughly one-second store write on the release QA profile.
+fn create_item_row(
+    tables: &Tables,
+    project_id: String,
+    title: String,
+) -> Result<ProjectItemRow, String> {
     if project_id != crate::tasks::TASK_MANAGER_ID {
-        let project = state
-            .tables
+        let project = tables
             .project
             .select(project_id.clone())
             .ok_or_else(|| format!("no project {project_id}"))?;
@@ -2225,8 +2248,7 @@ pub async fn create_item(
             return Err("an item fork cannot own sub-items; update its parent item instead".into());
         }
     }
-    let siblings = state
-        .tables
+    let siblings = tables
         .project_item
         .select_by_project_id(project_id.clone())
         .execute()
@@ -2241,19 +2263,11 @@ pub async fn create_item(
         reference: String::new(),
         priority: NORMAL_PRIORITY,
     };
-    state
-        .tables
+    tables
         .project_item
         .insert(row.clone())
         .map_err(|error| error.to_string())?;
-    touch_item(&state.tables, &row.id).await;
-    let dto = item_dto(row, &state.tables);
-    let _ = app.emit("item:created", dto.clone());
-    let mut study =
-        crate::study::Record::manual(dto.project_id.clone(), "items.add", "item", dto.id.clone());
-    study.latency = Some(started.elapsed());
-    crate::study::record(&state.tables, study);
-    Ok(dto)
+    Ok(row)
 }
 
 /// Open one item's work in a fresh, linked project.
