@@ -499,8 +499,15 @@ impl AgencyProxy {
             return Ok(client);
         }
         if state == ConnectionState::Live {
+            // Inferred from a failed connect, not from watching the process.
+            // `watch_proxy_child` logs how it actually ended, under `[proxy]`,
+            // and that line is the one to read: this one only knows the socket
+            // stopped answering. The two can also race, since the watcher
+            // thread and this connect attempt are independent.
             return Err(self.record_failure(
-                "AgencyProxy stopped unexpectedly; start it from Settings".into(),
+                "AgencyProxy stopped unexpectedly; start it from Settings \
+                 (the proxy log records how it ended)"
+                    .into(),
             ));
         }
         debug_assert!(state.may_spawn());
@@ -565,11 +572,28 @@ impl AgencyProxy {
         } else {
             command.stdout(Stdio::null()).stderr(Stdio::null());
         }
-        if let Err(error) = command.spawn() {
-            return Err(
-                self.record_failure(format!("could not start {}: {error}", binary.display()))
-            );
-        }
+        let child = match command.spawn() {
+            Ok(child) => child,
+            Err(error) => {
+                return Err(
+                    self.record_failure(format!("could not start {}: {error}", binary.display()))
+                );
+            }
+        };
+        // Watch the child so its death is *observed* rather than inferred.
+        //
+        // The handle used to be dropped right here. Nothing could then wait on
+        // it, so the only evidence the daemon had gone was a later `connect`
+        // failing, which is what produces "AgencyProxy stopped unexpectedly"
+        // further up. That message is a guess about a process we were the
+        // parent of: a segfault, a clean exit and an abort all reach it by the
+        // same path and read identically, and none of them writes a crash
+        // report for a `Stopped` case. On 2026-08-25 the daemon disappeared
+        // mid-session and there was nothing anywhere to say why.
+        //
+        // A reaped child also stops being a zombie, which is a second thing
+        // the dropped handle got wrong.
+        watch_proxy_child(child, self.connection_state.clone());
         for _ in 0..50 {
             match Client::connect(&self.socket_path).await {
                 Ok(client) => {
@@ -674,6 +698,101 @@ fn proxy_socket_path(config_dir: &Path) -> PathBuf {
     std::env::temp_dir()
         .join(format!("azp-{hash:016x}"))
         .join("runtime.sock")
+}
+
+/// Describe how a process ended, in the terms the operating system used.
+///
+/// `ExitStatus`'s own `Display` says "signal: 11 (SIGSEGV)" on Unix and just a
+/// code elsewhere, which is close but loses the distinction that matters most
+/// here: whether the daemon *chose* to exit. A clean `exit(0)` and a kill are
+/// both "it is gone" to a socket, and they call for opposite responses, so the
+/// wording separates them explicitly.
+#[cfg(unix)]
+fn describe_exit(status: std::process::ExitStatus) -> String {
+    use std::os::unix::process::ExitStatusExt;
+
+    if let Some(signal) = status.signal() {
+        // SIGKILL is worth naming outright. It cannot be caught or handled, so
+        // the daemon had no chance to flush or say anything, and the sender is
+        // someone else entirely: the kernel under memory pressure, a crash
+        // reporter, or a script. Anything looking for "who killed it" starts
+        // here rather than in our own code.
+        let name = match signal {
+            libc::SIGKILL => " (SIGKILL, uncatchable: sent by the kernel or another process)",
+            libc::SIGTERM => " (SIGTERM, a request to stop)",
+            libc::SIGSEGV => " (SIGSEGV, a crash)",
+            libc::SIGBUS => " (SIGBUS, a crash)",
+            libc::SIGABRT => " (SIGABRT, an abort or panic)",
+            libc::SIGPIPE => " (SIGPIPE, wrote to a closed socket)",
+            _ => "",
+        };
+        let core = if status.core_dumped() {
+            ", core dumped"
+        } else {
+            ""
+        };
+        return format!("killed by signal {signal}{name}{core}");
+    }
+    match status.code() {
+        Some(0) => "exited cleanly with status 0".to_string(),
+        Some(code) => format!("exited with status {code}"),
+        None => "ended for an unknown reason".to_string(),
+    }
+}
+
+#[cfg(not(unix))]
+fn describe_exit(status: std::process::ExitStatus) -> String {
+    match status.code() {
+        Some(0) => "exited cleanly with status 0".to_string(),
+        Some(code) => format!("exited with status {code}"),
+        None => "ended for an unknown reason".to_string(),
+    }
+}
+
+/// Reap the proxy child on a thread and record how it ended.
+///
+/// One thread per spawned daemon, and it lives exactly as long as that daemon.
+/// `wait` is blocking and this deliberately does not use tokio: the runtime is
+/// not guaranteed to still be running during shutdown, which is one of the
+/// windows in which the answer matters most.
+///
+/// The connection state is only moved to `Crashed` when the exit was *not*
+/// clean, and only from `Live`. A daemon we asked to stop reaches `Stopped`
+/// through the shutdown path, and overwriting that here would make an orderly
+/// quit report itself as a crash on the next launch.
+fn watch_proxy_child(mut child: std::process::Child, connection_state: Arc<AtomicU8>) {
+    let pid = child.id();
+    std::thread::Builder::new()
+        .name("agency-proxy-watch".into())
+        .spawn(move || match child.wait() {
+            Ok(status) => {
+                let description = describe_exit(status);
+                let clean = status.success();
+                crate::log!(
+                    if clean {
+                        crate::log::Level::Info
+                    } else {
+                        crate::log::Level::Error
+                    },
+                    "proxy",
+                    "AgencyProxy (pid {pid}) {description}",
+                );
+                if !clean
+                    && ConnectionState::from_raw(connection_state.load(Ordering::Acquire))
+                        == ConnectionState::Live
+                {
+                    connection_state.store(ConnectionState::Crashed as u8, Ordering::Release);
+                }
+            }
+            Err(error) => {
+                crate::log!(
+                    crate::log::Level::Warn,
+                    "proxy",
+                    "could not wait on AgencyProxy (pid {pid}): {error}",
+                );
+            }
+        })
+        .ok();
 }
 
 fn proxy_startup_failure(output_path: &Path, socket_path: &Path) -> String {
@@ -1181,13 +1300,19 @@ fn decode<T: serde::de::DeserializeOwned>(
 
 #[cfg(test)]
 mod tests {
+    #[cfg(unix)]
+    use super::describe_exit;
     use super::{
         AgencyProxy, ConnectionState, active_project_run_ids, injection_idempotency_key,
-        proxy_socket_path, proxy_startup_failure,
+        proxy_socket_path, proxy_startup_failure, watch_proxy_child,
     };
     use agency_proxy_protocol::{RunId, RunSnapshot, RunState};
     use std::collections::BTreeMap;
     use std::path::Path;
+    use std::process::{Command, Stdio};
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicU8, Ordering};
+    use std::time::Duration;
 
     #[test]
     fn only_a_cold_proxy_may_be_started_automatically() {
@@ -1392,6 +1517,148 @@ mod tests {
         assert_eq!(
             first.file_name().and_then(|name| name.to_str()),
             Some("runtime.sock")
+        );
+    }
+
+    /// Run a shell fragment to exit and report how the wait described it.
+    ///
+    /// Real processes exiting for real reasons, rather than a fabricated
+    /// `ExitStatus`: the point of this code is to report what the OS says, so
+    /// a test that invents the status would only be checking its own `match`.
+    #[cfg(unix)]
+    fn describe_shell_exit(script: &str) -> String {
+        let child = Command::new("/bin/sh")
+            .arg("-c")
+            .arg(script)
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .expect("spawn a shell");
+        let status = child.wait_with_output().expect("wait for the shell").status;
+        describe_exit(status)
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_clean_exit_is_not_reported_as_a_crash() {
+        assert_eq!(
+            describe_shell_exit("exit 0"),
+            "exited cleanly with status 0"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_nonzero_exit_reports_its_code() {
+        assert_eq!(describe_shell_exit("exit 3"), "exited with status 3");
+    }
+
+    /// The case that motivated all of this.
+    ///
+    /// A SIGKILL leaves no crash report and no log line of its own, so before
+    /// this it was indistinguishable from a clean exit: both are just "the
+    /// socket stopped answering". It has to name the signal *and* say that
+    /// nobody in this process could have handled it.
+    #[cfg(unix)]
+    #[test]
+    fn a_sigkill_is_named_and_attributed_to_something_outside_the_daemon() {
+        let described = describe_shell_exit("kill -KILL $$");
+        assert!(
+            described.contains("signal 9"),
+            "the signal number is what a reader greps for, got: {described}"
+        );
+        assert!(
+            described.contains("SIGKILL"),
+            "the name is what makes it readable, got: {described}"
+        );
+        assert!(
+            described.contains("uncatchable"),
+            "a SIGKILL cannot be handled, so the daemon is not the suspect: {described}"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_termination_request_is_distinguished_from_a_crash() {
+        let terminated = describe_shell_exit("kill -TERM $$");
+        assert!(
+            terminated.contains("signal 15") && terminated.contains("a request to stop"),
+            "a TERM is somebody asking politely, not a fault: {terminated}"
+        );
+
+        let crashed = describe_shell_exit("kill -SEGV $$");
+        assert!(
+            crashed.contains("signal 11") && crashed.contains("a crash"),
+            "a SEGV is a fault and must read as one: {crashed}"
+        );
+    }
+
+    /// A daemon we deliberately stopped must not come back as `Crashed`.
+    ///
+    /// `Stopped` and `Crashed` drive different UI: one offers Start, the other
+    /// reports a failure. The watcher only escalates a *non-clean* exit, and
+    /// only from `Live`, so an orderly quit keeps whatever state the shutdown
+    /// path set.
+    #[test]
+    fn watching_a_clean_exit_leaves_the_state_alone() {
+        let state = Arc::new(AtomicU8::new(ConnectionState::Stopped as u8));
+        let child = Command::new("/bin/sh")
+            .arg("-c")
+            .arg("exit 0")
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .expect("spawn a shell");
+
+        watch_proxy_child(child, state.clone());
+
+        // The watcher runs on its own thread, so give it a bounded moment
+        // rather than sleeping a fixed amount and hoping.
+        for _ in 0..100 {
+            if ConnectionState::from_raw(state.load(Ordering::Acquire)) != ConnectionState::Stopped
+            {
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(10));
+        }
+
+        assert_eq!(
+            ConnectionState::from_raw(state.load(Ordering::Acquire)),
+            ConnectionState::Stopped,
+            "a clean exit must not overwrite a deliberate stop with a crash",
+        );
+    }
+
+    /// A daemon that dies while we thought it was `Live` becomes `Crashed`.
+    #[cfg(unix)]
+    #[test]
+    fn watching_a_killed_daemon_marks_it_crashed() {
+        let state = Arc::new(AtomicU8::new(ConnectionState::Live as u8));
+        let child = Command::new("/bin/sh")
+            .arg("-c")
+            .arg("kill -KILL $$")
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .expect("spawn a shell");
+
+        watch_proxy_child(child, state.clone());
+
+        for _ in 0..100 {
+            if ConnectionState::from_raw(state.load(Ordering::Acquire)) == ConnectionState::Crashed
+            {
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(10));
+        }
+
+        assert_eq!(
+            ConnectionState::from_raw(state.load(Ordering::Acquire)),
+            ConnectionState::Crashed,
+            "a daemon killed while Live has crashed, and the panel must say so",
         );
     }
 }
