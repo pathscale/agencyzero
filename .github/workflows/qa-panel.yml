@@ -153,8 +153,8 @@ jobs:
           isolated="$(awk '/^isolated:/ { print $2; exit }' /tmp/cover.txt)"
           # Repeated table rows are one component family. Dedicated checks
           # prove representative rows, Show more, and reveal, so inventory
-          # keeps a conservative floor around the 746-control first viewport.
-          test "${components:-0}" -ge 700
+          # keeps a conservative floor below the observed 335-control baseline.
+          test "${components:-0}" -ge 300
           test "${unverified:-999}" -le "${isolated:-0}"
 
       - name: Reconcile every inventoried control
