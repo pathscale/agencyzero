@@ -25,7 +25,7 @@ on:
         type: boolean
         default: false
       lifecycle:
-        description: 'Also verify inspection-disable in an isolated process'
+        description: 'Also verify inspection-disable as the final semantic action'
         required: false
         type: boolean
         default: false
@@ -130,98 +130,44 @@ jobs:
       - name: Run the checks
         id: checks
         continue-on-error: true
+        timeout-minutes: 5
         env:
           QA_GROUPS: ${{ inputs.group }}
         run: |
           set -o pipefail
-          # Every requested group gets the same committed profile. A destructive
-          # or failed check cannot poison the next area and turn one regression
-          # into dozens of unrelated ten-second timeouts. Blank means all groups.
+          # One process, ordered semantic preconditions. Blank means all groups.
           scripts/qa-run-groups.sh
 
-      # Outcome checks intentionally mutate the fixture. The exhaustive pass
-      # needs the committed starting state, not a project already renamed,
-      # reordered, or left behind a modal by a failing check.
-      - name: Restart from a clean profile for full coverage
-        if: ${{ inputs.cover }}
-        run: |
-          old_pid="$(cat /tmp/az-qa.pid)"
-          kill -TERM "$old_pid" 2>/dev/null || true
-          for _ in $(seq 1 20); do
-            if ! kill -0 "$old_pid" 2>/dev/null; then break; fi
-            sleep 0.5
-          done
-          if kill -0 "$old_pid" 2>/dev/null; then
-            kill -KILL "$old_pid"
-            for _ in $(seq 1 20); do
-              if ! kill -0 "$old_pid" 2>/dev/null; then break; fi
-              sleep 0.1
-            done
-          fi
-          if kill -0 "$old_pid" 2>/dev/null; then
-            echo "audit instance $old_pid did not exit after KILL" >&2
-            exit 1
-          fi
-
-          scripts/qa-profile-restore.sh /tmp/qa-profile-db
-          AZ_DATA_DIR=/tmp/qa-profile-db \
-            ./target/debug/az-gui --blitz-control >> /tmp/az-qa.log 2>&1 &
-          echo $! > /tmp/az-qa.pid
-          for _ in $(seq 1 60); do
-            ps-qa nodes > /tmp/reattach.txt 2>&1 && break
-            sleep 2
-          done
-          if ! ps-qa nodes > /tmp/reattach.txt 2>&1; then
-            echo "ps-qa could not reattach to the clean audit instance" >&2
-            cat /tmp/reattach.txt >&2
-            tail -40 /tmp/az-qa.log >&2
-            exit 1
-          fi
-          sleep 10
-
+      # Besides preserving the deterministic fixture's exact count, inventory
+      # visits and materializes every surface once. It follows the timed
+      # outcomes so the same app process carries cross-component state.
       - name: Reachability inventory
         id: inventory
         if: ${{ inputs.cover }}
         continue-on-error: true
+        timeout-minutes: 3
         run: |
           set -o pipefail
-          # Reachability without a named behavioral verdict is incomplete
-          # coverage, not a pass. Isolated controls are proven after the
-          # ordinary sweep because their success closes the control socket.
           ps-qa inventory 2>&1 | tee /tmp/cover.txt
+          components="$(awk '/^components:/ { print $2; exit }' /tmp/cover.txt)"
           unverified="$(awk '/^unverified:/ { print $2; exit }' /tmp/cover.txt)"
           isolated="$(awk '/^isolated:/ { print $2; exit }' /tmp/cover.txt)"
+          # Current full materialization is 2,006 controls. A missing pager or
+          # surface must not certify a smaller, internally gap-free subset.
+          test "${components:-0}" -ge 1900
           test "${unverified:-999}" -le "${isolated:-0}"
 
-      - name: Exercise every eligible control
+      - name: Reconcile every inventoried control
         id: sweep
         if: ${{ inputs.cover }}
         continue-on-error: true
         run: |
           set -o pipefail
-          ps-qa --trace cover 2>&1 | tee /tmp/sweep.txt
-
-      - name: Restart clean for isolated controls
-        if: ${{ inputs.cover || inputs.lifecycle }}
-        run: |
-          old_pid="$(cat /tmp/az-qa.pid)"
-          kill -TERM "$old_pid" 2>/dev/null || true
-          for _ in $(seq 1 20); do
-            if ! kill -0 "$old_pid" 2>/dev/null; then break; fi
-            sleep 0.5
-          done
-          if kill -0 "$old_pid" 2>/dev/null; then kill -KILL "$old_pid"; fi
-
-          scripts/qa-profile-restore.sh /tmp/qa-profile-db
-          AZ_DATA_DIR=/tmp/qa-profile-db \
-            ./target/debug/az-gui --blitz-control >> /tmp/az-qa.log 2>&1 &
-          echo $! > /tmp/az-qa.pid
-          for _ in $(seq 1 60); do
-            ps-qa nodes > /tmp/isolated-attach.txt 2>&1 && break
-            sleep 2
-          done
-          ps-qa nodes > /tmp/isolated-attach.txt 2>&1
-          sleep 10
+          # Inventory already materialized every concrete instance. Reconcile
+          # its saved report against the named outcomes without activating all
+          # 2,000 controls a second time.
+          ps-qa reconcile /tmp/cover.txt --checks tests/ps-qa \
+            2>&1 | tee /tmp/sweep.txt
 
       - name: Verify the inspection toggle disconnects control
         id: isolated
@@ -331,7 +277,4 @@ jobs:
             /tmp/sweep.txt
             /tmp/isolated.txt
             /tmp/isolated-probe.txt
-            /tmp/restart.txt
-            /tmp/restart-probe.txt
-            /tmp/restart-attach.txt
           if-no-files-found: ignore
