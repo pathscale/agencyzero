@@ -9955,7 +9955,23 @@ pub async fn send_message(
             // difference (same dirs, different sequence) force a queue, which is
             // a big part of why a Codex follow-up "frequently" queued when it
             // could have been injected. Compare as sets.
+            //
+            // When they genuinely differ, the queue is still the only correct
+            // route, but it does not have to be a long one. Nothing frees the
+            // slot except the turn ending on its own, so a message typed right
+            // after attaching a directory used to wait out the rest of the run:
+            // minutes of the owner watching their correction sit there. Ask the
+            // live run to stop, and the queued message starts a fresh
+            // invocation that resumes the same session with the wider sandbox
+            // as soon as the slot clears.
             if agent == Agent::Codex && !same_roots(&running.workspace_roots, &workspace_roots) {
+                let _ = running.cancel.send(true);
+                crate::log!(
+                    crate::log::Level::Info,
+                    "run",
+                    "{}: stopping the live turn so a widened workspace can take effect",
+                    input.project_id
+                );
                 drop(active);
                 return Err(BUSY_WITH_RUN.into());
             }
@@ -14983,12 +14999,22 @@ mod tests {
             &["/a".into(), "/b".into(), "/mem".into()],
             &["/mem".into(), "/a".into(), "/b".into()],
         ));
-        // A genuinely different set still forces a queue.
+        // A genuinely different set still forces a queue. `send_message` pairs
+        // that queue with a stop on the live run, so the wait is the turn's
+        // teardown rather than the rest of its work; the sandbox itself still
+        // cannot widen in place, which is why this stays a queue at all.
         assert!(!same_roots(
             &["/a".into(), "/b".into()],
             &["/a".into(), "/c".into()]
         ));
         assert!(!same_roots(&["/a".into()], &["/a".into(), "/b".into()]));
+
+        // A directory attached mid-turn is exactly the widening case: the
+        // memory root is unchanged, one repository is new, so the sets differ.
+        assert!(!same_roots(
+            &["/workspace".into(), "/mem".into()],
+            &["/workspace".into(), "/repo".into(), "/mem".into()],
+        ));
     }
 
     /// Auto opens the approval channel and answers it; Ask opens it and asks.
