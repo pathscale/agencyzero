@@ -13,6 +13,17 @@
         expect: Disabled,
     ),
     (
+        id: "home-item-page-reveals",
+        group: "home",
+        what: "a long Home project group renders its next bounded item page",
+        open: Some("Home"),
+        hover: None,
+        click: Some("button:Show 8 more items"),
+        subject: "button:Open item ",
+        expect: PaintsMore,
+        covers: ["button:Show * more items"],
+    ),
+    (
         id: "home-project-page-reveals",
         group: "home",
         what: "the Home pager renders the next viewport-sized project page",
