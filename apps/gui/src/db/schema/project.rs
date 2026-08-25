@@ -58,6 +58,7 @@ worktable!(
             DirsById(dirs) by id,
             StatusById(status) by id,
             PinnedById(pinned) by id,
+            ModeratorById(moderator_enabled) by id,
             PositionById(position) by id,
             LastActivityById(last_activity_at) by id,
         },

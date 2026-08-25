@@ -244,6 +244,7 @@ const IMPLEMENTED: &[&str] = &[
     "clear_task_log",
     "delete_project",
     "set_project_pinned",
+    "set_project_moderator",
     "rename_project",
     "add_dir",
     "remove_dir",
@@ -775,6 +776,16 @@ mod restart_resume_tests {
         let probe = probe_store(&store).expect("the released profile can be opened");
         assert!(matches!(probe, StoreProbe::Acquired(_)));
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn project_moderation_never_routes_to_fixture_data() {
+        assert!(
+            list_capabilities()
+                .iter()
+                .any(|command| command == "set_project_moderator"),
+            "a live project id cannot be updated through the fixture backend"
+        );
     }
 }
 
@@ -2223,6 +2234,7 @@ fn main() {
             projects::clear_task_log,
             projects::delete_project,
             projects::set_project_pinned,
+            projects::set_project_moderator,
             projects::rename_project,
             projects::add_dir,
             projects::remove_dir,

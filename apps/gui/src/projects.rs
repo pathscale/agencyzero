@@ -33,7 +33,8 @@ use worktable::prelude::*;
 
 use crate::db::schema::message::{FinalizeByIdQuery, MessageRow};
 use crate::db::schema::project::{
-    DirsByIdQuery, LastActivityByIdQuery, NameByIdQuery, PinnedByIdQuery, ProjectRow,
+    DirsByIdQuery, LastActivityByIdQuery, ModeratorByIdQuery, NameByIdQuery, PinnedByIdQuery,
+    ProjectRow,
 };
 use crate::db::schema::project_item::{
     PositionByIdQuery as ItemPositionByIdQuery, ProjectItemRow,
@@ -8823,6 +8824,61 @@ pub async fn set_project_pinned(
         &state,
         &id,
         if pinned { "pinned" } else { "unpinned" }.to_string(),
+    );
+    let _ = app.emit("project:updated", &project);
+    Ok(project)
+}
+
+/// Enable or disable moderation for one project's current session.
+///
+/// This must be a real command rather than a fixture fallback: the project IDs
+/// in a live store do not exist in the mock catalogue, so routing this control
+/// to the mock makes every rendered toggle fail with `unknown project`.
+///
+/// # Errors
+/// Returns the store's error when the project cannot be updated.
+#[tauri::command]
+pub async fn set_project_moderator(
+    app: AppHandle,
+    id: String,
+    enabled: bool,
+    state: State<'_, AppState>,
+) -> Result<ProjectDto, String> {
+    state
+        .tables
+        .project
+        .update_moderator_by_id(
+            ModeratorByIdQuery {
+                moderator_enabled: enabled,
+            },
+            id.clone(),
+        )
+        .await
+        .map_err(|error| {
+            crate::log!(
+                crate::log::Level::Error,
+                "projects",
+                "could not set moderator on {id}: {error}"
+            );
+            error.to_string()
+        })?;
+
+    let row = state
+        .tables
+        .project
+        .select(id.clone())
+        .ok_or_else(|| format!("no project {id}"))?;
+    let project = with_session(ProjectDto::from(row), &state.tables);
+    note_gui(
+        &app,
+        &state,
+        &id,
+        if enabled {
+            "moderator enabled"
+        } else {
+            "moderator disabled"
+        }
+        .to_string(),
     );
     let _ = app.emit("project:updated", &project);
     Ok(project)
