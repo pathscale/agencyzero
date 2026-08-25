@@ -67,6 +67,38 @@
         expect: SelectionChanges,
     ),
     (
+        id: "theme-colour-strength-restores",
+        group: "theme",
+        what: "surface strength can be put back, leaving the theme as it was",
+        open: Some("Settings"),
+        hover: None,
+        // The stop the fixture ships. The check before this one moves it to
+        // 20%, so the group leaves the theme where it found it and can be run
+        // twice against one instance.
+        click: Some("Colour strength 10%"),
+        covers: ["button:Colour strength "],
+        subject: "Colour strength 10%",
+        expect: SelectionChanges,
+    ),
+    (
+        id: "theme-adjustment-axes-lay-out-apart",
+        group: "theme",
+        what: "the wheel's adjustment axes each occupy their own position",
+        open: Some("Settings"),
+        hover: None,
+        click: None,
+        /*
+         * The three axes are one component's rows, and they were a single
+         * column whatever room they had. `ComplexColorWheel` now chooses by the
+         * width it is given, so what has to hold either way is that the axes
+         * are laid out apart rather than stacked on one another: a family drawn
+         * at one position is the failure a column-or-grid change can introduce
+         * without changing any label or value.
+         */
+        subject: "button:Colour strength ",
+        expect: DistinctPositions,
+    ),
+    (
         id: "theme-softness",
         group: "theme",
         what: "the standard colour wheel changes surface softness",
