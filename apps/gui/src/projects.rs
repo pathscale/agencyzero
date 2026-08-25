@@ -2215,7 +2215,7 @@ pub async fn create_item(
     if title.is_empty() {
         return Err("an item needs a title".into());
     }
-    let tables = Arc::clone(&state.tables);
+    let tables = std::sync::Arc::clone(&state.tables);
     let row = tokio::task::spawn_blocking(move || create_item_row(&tables, project_id, title))
         .await
         .map_err(|error| error.to_string())??;
