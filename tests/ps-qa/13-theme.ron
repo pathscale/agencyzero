@@ -4,6 +4,18 @@
 // controls too: audit their semantic values rather than trusting their paint.
 [
     (
+        id: "theme-reveals-appearance",
+        group: "theme",
+        what: "the Settings search reveals the Appearance controls for semantic activation",
+        open: Some("Settings"),
+        hover: None,
+        click: None,
+        type_into: Some("Search settings"),
+        text: Some("Appearance"),
+        subject: "Light",
+        expect: PaintsNamed,
+    ),
+    (
         id: "theme-light-mode",
         group: "theme",
         what: "Light mode can be selected",
@@ -234,5 +246,17 @@
         click: Some("Glass"),
         subject: "Glass",
         expect: ValueChanges,
+    ),
+    (
+        id: "theme-search-restores",
+        group: "theme",
+        what: "clearing the Settings search restores the ordinary settings surface",
+        open: Some("Settings"),
+        hover: None,
+        click: None,
+        type_into: Some("Search settings"),
+        text: Some(""),
+        subject: "Welcome Tutorial",
+        expect: PaintsNamed,
     ),
 ]
