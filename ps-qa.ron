@@ -122,6 +122,7 @@ AppProfile(
         (label: "Send",                                 command: "authenticated provider turn (local manual)"),
         (label: "Run ",                                 command: "authenticated item run (local manual)"),
         (label: "Reply to the question for ",           command: "authenticated item reply (local manual)"),
+        (label: "Refresh provider usage",               command: "authenticated provider usage (local manual)"),
 
         // Controls that hand the screen to the *browser*. Same problem as a
         // native panel and worse manners: a sweep that presses these opens a

@@ -339,6 +339,8 @@ export function AgentIoList(props: { projectId: string }): JSX.Element {
    * 200px window onto a few hundred entries is unusable.
    */
   const [tall, setTall] = createSignal(false);
+  const resizeButtonClass =
+    "rounded-md border border-az-hairline px-2 py-0.5 text-[10.5px] text-az-muted transition-colors hover:border-az-hairline-strong hover:text-base-content";
 
   /** Newest last, so it reads like a terminal; the view follows the tail. */
   let scroller: HTMLDivElement | undefined;
@@ -396,13 +398,18 @@ export function AgentIoList(props: { projectId: string }): JSX.Element {
         }
       >
         <div class="flex flex-none items-center gap-1.5 px-2.5 pb-1.5">
-          <Button
-            type="button"
-            onClick={() => setTall((open) => !open)}
-            class="rounded-md border border-az-hairline px-2 py-0.5 text-[10.5px] text-az-muted transition-colors hover:border-az-hairline-strong hover:text-base-content"
+          <Show
+            when={tall()}
+            fallback={
+              <Button type="button" onClick={() => setTall(true)} class={resizeButtonClass}>
+                {tx("Expand")}
+              </Button>
+            }
           >
-            {tall() ? tx("Shrink") : tx("Expand")}
-          </Button>
+            <Button type="button" onClick={() => setTall(false)} class={resizeButtonClass}>
+              {tx("Shrink")}
+            </Button>
+          </Show>
           <Button
             type="button"
             onClick={() => void copyAll()}

@@ -20,8 +20,8 @@
         open: Some("theta theta north indi"),
         hover: None,
         click: Some("button:Shrink"),
-        subject: "button:Shrink",
-        expect: NameChanges,
+        subject: "button:Expand",
+        expect: PaintsNamed,
     ),
     (
         id: "agent-io-copies-all",
