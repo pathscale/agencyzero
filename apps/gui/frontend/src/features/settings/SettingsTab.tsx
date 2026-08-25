@@ -103,7 +103,7 @@ const AGENT_USE = {
  * which is the same coupling written out longhand.
  */
 const [settingsQuery, setSettingsQuery] = createSignal("");
-const [matchingSearchSections, setMatchingSearchSections] = createSignal(new Set<number>());
+const [, setMatchingSearchSections] = createSignal(new Set<number>());
 let searchRevealFrame: number | undefined;
 
 createRoot(() => {
@@ -2931,19 +2931,19 @@ function beginSettingsMount(): void {
   setSettingsBudget(SETTINGS_FIRST_PAINT);
 }
 
-/** Reveal deferred search candidates a frame at a time, stopping at a match. */
+/** Reveal every deferred search candidate in small frame-sized batches. */
 function revealSearchSections(): void {
   if (searchRevealFrame !== undefined) return;
   searchRevealFrame = requestAnimationFrame(() => {
     searchRevealFrame = undefined;
-    if (
-      settingsQuery().trim() === "" ||
-      matchingSearchSections().size > 0 ||
-      settingsBudget() >= settingsMounted
-    ) {
+    if (settingsQuery().trim() === "" || settingsBudget() >= settingsMounted) {
       return;
     }
-    setSettingsBudget((budget) => Math.min(settingsMounted, budget + 1));
+    // A prior retained Settings tree can report a match before the active tree
+    // reaches the same row. Never stop on that global report: admit all
+    // candidates quickly enough for an interactive search, without rebuilding
+    // the full page in one frame.
+    setSettingsBudget((budget) => Math.min(settingsMounted, budget + 4));
     revealSearchSections();
   });
 }

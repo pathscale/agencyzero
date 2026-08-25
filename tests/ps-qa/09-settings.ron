@@ -164,6 +164,7 @@
         group: "settings",
         what: "choosing restart-only changes the authority trigger without restarting the app",
         open: None,
+        prepare: Some("Agent restart authority"),
         hover: None,
         click: Some("menuitem:Restart only"),
         subject: "Agent restart authority",

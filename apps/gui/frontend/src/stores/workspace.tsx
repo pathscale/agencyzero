@@ -3207,24 +3207,12 @@ function createWorkspace() {
     },
     setItemStatus: (id: string, status: ProjectStatus) => client().setItemStatus(id, status),
     async updateItem(id: string, title: string) {
-      const previous = Object.values(state.items)
-        .flat()
-        .find((item) => item.id === id);
-      if (previous) upsertItem({ ...previous, title });
-      flush();
-      if (state.backend !== "mock") await afterOptimisticPaint();
-      try {
-        const item = await client().updateItem(id, title);
-        upsertItem(item);
-        return item;
-      } catch (cause) {
-        // Do not overwrite a newer edit if two saves crossed in flight.
-        const current = Object.values(state.items)
-          .flat()
-          .find((item) => item.id === id);
-        if (previous && current?.title === title) upsertItem(previous);
-        throw cause;
-      }
+      // A renamed row is also the acknowledgement that persistence succeeded.
+      // Painting it optimistically let Delete remove the row while this write
+      // was still queued, then the delayed update hit a deleted id.
+      const item = await client().updateItem(id, title);
+      upsertItem(item);
+      return item;
     },
     getItemContext: (id: string) => client().getItemContext(id),
     setItemContext: (id: string, context: string) => client().setItemContext(id, context),
