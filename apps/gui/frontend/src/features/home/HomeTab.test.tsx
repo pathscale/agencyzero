@@ -3,6 +3,7 @@ import { flush } from "solid-js";
 import { describe, expect, it, vi } from "vitest";
 import {
   CleanupRowActions,
+  HOME_ITEM_PAGE_SIZE,
   HOME_PROJECT_PAGE_SIZE,
   HomeTab,
   TASK_CLEANUP_PROMPT,
@@ -342,17 +343,32 @@ describe("Home item rows", () => {
     expect(screen.queryByText("should be discarded")).toBeNull();
   });
 
-  /*
-   * "Home tasks projects can fully expand to fill the height if there's
-   * room": no group carries an inner scroll cap any more — every item row
-   * renders, and the projects column is the only scroller. The 220px
-   * porthole (with its Show-all footer scrolled out of its own reach) is
-   * what this pins against returning.
-   */
-  it("renders every item with no inner scroll cap", async () => {
+  it("reveals long project item lists in bounded pages without an inner scroll cap", async () => {
     const screen = await mountHome();
 
-    const statusControls = screen.getAllByRole("button", { name: /^Change the status of / });
+    for (let index = 0; index < HOME_ITEM_PAGE_SIZE + 2; index += 1) {
+      await screen.workspace.actions.createItem("worktable", `Home page item ${index}`);
+    }
+
+    const group = screen.container.querySelector<HTMLElement>('[data-project-id="worktable"]');
+    if (!group) throw new Error("worktable project group is required");
+    const visibleRows = () =>
+      within(group).queryAllByRole("button", { name: /^Change the status of / }).length;
+    await waitFor(() => {
+      expect(visibleRows()).toBe(HOME_ITEM_PAGE_SIZE);
+    });
+
+    const reveal = within(group).getByRole("button", {
+      name: /^Show \d+ more items$/,
+    });
+    fireEvent.click(reveal);
+    await waitFor(() => {
+      expect(visibleRows()).toBeGreaterThan(HOME_ITEM_PAGE_SIZE);
+    });
+
+    const statusControls = within(group).getAllByRole("button", {
+      name: /^Change the status of /,
+    });
     expect(statusControls.length).toBeGreaterThan(0);
     for (const status of statusControls) {
       let node: HTMLElement | null = status as HTMLElement;
@@ -361,7 +377,7 @@ describe("Home item rows", () => {
         node = node.parentElement;
       }
     }
-    expect(screen.queryByText(/^Show all \d+$/)).toBeNull();
+    expect(group.querySelector(".max-h-\\[220px\\]")).toBeNull();
   });
 
   it("deletes an item from its row", async () => {

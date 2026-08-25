@@ -29,6 +29,7 @@ import type { Project, ProjectItem } from "~/types";
 // the complete collection one semantic activation away.
 export const HOME_PROJECT_PAGE_SIZE = 5;
 export const HOME_RECENT_PAGE_SIZE = 5;
+export const HOME_ITEM_PAGE_SIZE = 8;
 
 const STATUS_TONE: Record<ProjectItem["status"], string> = {
   active: "font-semibold text-primary",
@@ -1301,6 +1302,7 @@ function ProjectGroup(props: {
     }
     return sortItems(combined, prefs.homeSortBy, prefs.homeSortDirection);
   };
+  const itemGrid = createFlexGrid({ rows: items, pageSize: HOME_ITEM_PAGE_SIZE });
   const openCount = () =>
     items().filter((item) => item.status !== "finished" && item.status !== "canceled").length;
   const activeCount = () => items().filter((item) => item.status === "active").length;
@@ -1421,16 +1423,13 @@ function ProjectGroup(props: {
       </div>
 
       {/*
-        No inner cap and no inner scrollbar. The 220px window (and the
-        "Show all" footer that lived, unreachably, inside its own scroll
-        area) had a 23-item list scrolling in a porthole while the page
-        below sat empty. The group grows to what it holds; the projects
-        column is the one scroller, and folding the group is the tool for
-        getting a long list out of the way.
+        No inner cap and no inner scrollbar. The group grows in small pages
+        inside the one projects-column scroller. This keeps tab entry bounded
+        without bringing back the old 220px porthole or hiding the full list.
       */}
       <Show when={!collapsed()}>
         <div class="flex flex-col border-az-hairline-soft border-t">
-          <For each={items()}>
+          <For each={itemGrid.visible()}>
             {(item) => (
               <GroupItemRow
                 item={item}
@@ -1454,6 +1453,15 @@ function ProjectGroup(props: {
               />
             )}
           </For>
+          <Show when={itemGrid.hasMore()}>
+            <Button
+              type="button"
+              onClick={itemGrid.revealMore}
+              class="border-az-hairline-soft border-t px-3.5 py-2 text-left font-semibold text-[11px] text-primary transition-colors hover:bg-az-chip"
+            >
+              {tx("Show {count} more items", { count: itemGrid.nextCount() })}
+            </Button>
+          </Show>
         </div>
       </Show>
     </div>
