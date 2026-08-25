@@ -943,23 +943,26 @@ function ResumeSession(props: {
   const { actions } = useWorkspace();
   const [id, setId] = createSignal("");
   const [busy, setBusy] = createSignal(false);
+  const alive = whileMounted();
   const sessionStatus = () =>
     props.currentSession
       ? tx("Attached: {session}", { session: props.currentSession })
       : tx("Attach a session recovered by its id so the next message continues it");
 
-  const adopt = async (): Promise<void> => {
+  const adopt = (): void => {
     const sessionId = id().trim();
     if (!sessionId) return;
     setBusy(true);
-    try {
-      await actions.adoptSession(props.projectId, props.agent, sessionId);
-      setId("");
-    } catch (cause) {
-      log.error(`could not adopt the session: ${describeError(cause)}`);
-    } finally {
-      setBusy(false);
-    }
+    // Leave the key event before starting persistence. Blitz finishes native
+    // default-action bookkeeping synchronously; beginning a store command from
+    // inside that dispatch held the inspector reply behind the database write.
+    window.setTimeout(() => {
+      void actions
+        .adoptSession(props.projectId, props.agent, sessionId)
+        .then(alive(() => setId("")))
+        .catch((cause) => log.error(`could not adopt the session: ${describeError(cause)}`))
+        .finally(alive(() => setBusy(false)));
+    }, 0);
   };
 
   return (
@@ -984,7 +987,7 @@ function ResumeSession(props: {
         placeholder={tx("session id, e.g. 019fc95e-…")}
         onInput={(event) => setId(event.currentTarget.value)}
         onKeyDown={(event) => {
-          if (event.key === "Enter") void adopt();
+          if (event.key === "Enter") adopt();
           if (event.key === "Escape") setId("");
         }}
         class="ml-[26px] min-w-0 flex-1 rounded-md border border-az-hairline bg-base-300 px-2 py-1 font-mono text-[11px] text-az-body focus:outline-none disabled:opacity-45"
