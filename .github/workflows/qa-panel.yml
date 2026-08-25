@@ -81,7 +81,7 @@ jobs:
       # inspector call with diagnosticsUnavailable, so the run would fail with
       # every check unable to see anything rather than with a real verdict.
       - name: Build az-gui with the inspector
-        run: cargo build --features blitz-inspector,experimental --bin az-gui
+        run: cargo build --release --features blitz-inspector,experimental --bin az-gui
 
       - name: Scrubber unit tests
         run: cargo test --bin az-gui --features blitz-inspector,experimental qa_profile
@@ -95,7 +95,7 @@ jobs:
       - name: Launch the app
         run: |
           AZ_DATA_DIR=/tmp/qa-profile-db \
-            ./target/debug/az-gui --blitz-control > /tmp/az-qa.log 2>&1 &
+            ./target/release/az-gui --blitz-control > /tmp/az-qa.log 2>&1 &
           echo $! > /tmp/az-qa.pid
           # The window has to exist before anything can be addressed. Poll the
           # CLI's normal descriptor discovery rather than creating an Agency
