@@ -323,13 +323,17 @@ export function ProjectTab(props: { tab: Tab; project: Project }): JSX.Element {
             <Show
               when={forkInfo()}
               fallback={
-                <EditableTitle
-                  value={props.project.name}
-                  onRename={(name) => actions.renameProject(props.project.id, name)}
-                  label={tx("Rename project")}
-                  class="min-w-0 flex-1 font-semibold text-[14.5px] text-az-title"
-                  inputClass="font-semibold text-[14.5px]"
-                />
+                <Show when={props.project.id} keyed>
+                  {(projectId) => (
+                    <EditableTitle
+                      value={props.project.name}
+                      onRename={(name) => actions.renameProject(projectId, name)}
+                      label={tx("Rename project")}
+                      class="min-w-0 flex-1 font-semibold text-[14.5px] text-az-title"
+                      inputClass="font-semibold text-[14.5px]"
+                    />
+                  )}
+                </Show>
               }
             >
               {(fork) => (

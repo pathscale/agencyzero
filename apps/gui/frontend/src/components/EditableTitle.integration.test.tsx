@@ -4,8 +4,9 @@ import { createSignal } from "solid-js";
 import { describe, expect, it, vi } from "vitest";
 import { Button } from "~/components/Button";
 
-function Harness() {
+function Harness(props: { captureSetValue?: (setValue: (value: string) => void) => void }) {
   const [value, setValue] = createSignal("Alpha project");
+  props.captureSetValue?.((nextValue) => setValue(nextValue));
 
   return (
     <>
@@ -15,8 +16,8 @@ function Harness() {
         trigger={<span>Pencil</span>}
         onCommit={vi.fn()}
       />
-      <Button type="button" onClick={() => setValue("Beta project")}>
-        Switch project
+      <Button type="button" onClick={() => undefined}>
+        Outside control
       </Button>
     </>
   );
@@ -24,14 +25,15 @@ function Harness() {
 
 describe("InlineEdit rendered integration", () => {
   it("closes when a reused owner supplies a different project value", async () => {
-    const view = render(() => <Harness />);
+    let setValue!: (value: string) => void;
+    const view = render(() => <Harness captureSetValue={(setter) => (setValue = setter)} />);
     const root = view.container.querySelector<HTMLElement>("[data-slot='root']");
     expect(root).not.toBeNull();
 
     fireEvent.click(view.getByRole("button", { name: "Rename project" }));
     await waitFor(() => expect(root?.classList.contains("inline-edit--editing")).toBe(true));
 
-    fireEvent.click(view.getByRole("button", { name: "Switch project" }));
+    setValue("Beta project");
     await waitFor(() => expect(root?.classList.contains("inline-edit--editing")).toBe(false));
   });
 
@@ -43,7 +45,7 @@ describe("InlineEdit rendered integration", () => {
     fireEvent.click(view.getByRole("button", { name: "Rename project" }));
     await waitFor(() => expect(root?.classList.contains("inline-edit--editing")).toBe(true));
 
-    fireEvent.pointerDown(view.getByRole("button", { name: "Switch project" }));
+    fireEvent.click(view.getByRole("button", { name: "Outside control" }));
     await waitFor(() => expect(root?.classList.contains("inline-edit--editing")).toBe(false));
   });
 });
