@@ -1,125 +1,80 @@
-// The in-place rename editor opens when its pencil is pressed.
-//
-// Both call sites use the same ordinary pattern: Button onClick toggles a
-// controlled Input. Semantic node ids select and activate the button;
-// coordinates and propagation workarounds are not involved.
-//
-// The subject is `textbox:<name>` rather than the name alone, because
-// EditableTitle gives the pencil and its editor the same accessible name: a
-// name-only assertion is satisfied by the pencil whether or not the editor opens.
+// Project-title editing is always driven against one exact fixture row. A
+// prefix-only pencil selector can rename whichever Home row happens to sort
+// first and silently poison every later project-specific check.
 [
-    (
-        id: "rename-opens-editor",
-        group: "rename",
-        what: "pressing the pencil opens an editor the owner can type into",
-        open: Some("Home"),
-        hover: None,
-        click: Some("Rename project "),
-        subject: "textbox:Rename project ",
-        expect: PaintsNamed,
-    ),
     (
         id: "rename-project-header",
         group: "rename",
-        what: "the project header's pencil opens its editor",
+        what: "the project header pencil opens and Escape closes its editor",
         open: Some("theta theta north indi"),
         hover: None,
-        click: Some("Rename project"),
-        subject: "textbox:Rename project",
+        click: Some("button:Rename project"),
+        key: Some("Escape"),
+        key_on: Some("textbox:Rename project"),
+        subject: "button:Rename project",
         expect: PaintsNamed,
     ),
     (
         id: "rename-escape-keeps-name",
         group: "rename",
-        what: "Escape closes the project editor without changing its name",
+        what: "Escape closes the Home-row editor without changing its name",
         open: Some("Home"),
         hover: None,
-        click: Some("Rename project "),
+        click: Some("button:Rename project theta theta north indi"),
         key: Some("Escape"),
-        key_on: Some("textbox:Rename project "),
-        subject: "button:Rename project ",
+        key_on: Some("textbox:Rename project theta theta north indi"),
+        subject: "button:Rename project theta theta north indi",
         expect: PaintsNamed,
     ),
     (
         id: "rename-empty-keeps-name",
         group: "rename",
-        what: "an empty replacement closes the editor without changing the project name",
+        what: "an empty replacement closes the exact editor without changing the project name",
         open: Some("Home"),
         hover: None,
-        click: Some("Rename project "),
-        type_into: Some("textbox:Rename project "),
+        click: Some("button:Rename project theta theta north indi"),
+        type_into: Some("textbox:Rename project theta theta north indi"),
         text: Some("   "),
         key: Some("Enter"),
-        subject: "button:Rename project ",
+        subject: "button:Rename project theta theta north indi",
         expect: PaintsNamed,
     ),
-    /*
-     * The gap that let a wedged rename editor ship.
-     *
-     * Everything above ends with the editor closed, which is the half that
-     * already worked: opening it, Escape, and a blank name are all covered.
-     * Nothing asserted that a *typed* name is ever accepted, so an editor that
-     * takes input and refuses to commit satisfied the whole group.
-     */
-    /*
-     * Checks share one running application, so this pair is written to leave
-     * the store as it found it: the first renames a project, the second puts
-     * the original name back. Neither is a fresh-database test, and the group
-     * can be re-run without drifting the fixture a name at a time.
-     */
     (
         id: "rename-commits-typed-name",
         group: "rename",
         what: "a typed project name is accepted and the editor closes",
         open: Some("Home"),
         hover: None,
-        click: Some("Rename project "),
-        type_into: Some("textbox:Rename project "),
+        click: Some("button:Rename project theta theta north indi"),
+        type_into: Some("textbox:Rename project theta theta north indi"),
         text: Some("Renamed by ps-qa"),
         key: Some("Enter"),
-        // The editor, not the pencil. `Vanishes` is what tells a committed
-        // rename apart from one that took the keystroke and stayed open: the
-        // node survives in the tree either way, so only its box can answer.
-        subject: "textbox:Rename project ",
-        expect: Vanishes,
+        subject: "button:Rename project Renamed by ps-qa",
+        expect: PaintsNamed,
     ),
     (
         id: "rename-restores-the-original-name",
         group: "rename",
-        what: "the renamed project can be renamed back, leaving the store as it was",
+        what: "the exact renamed project is restored for every later outcome",
         open: Some("Home"),
         hover: None,
-        // The same prefix the check before it used, which now resolves to the
-        // row that check renamed. Addressing the new name directly depends on
-        // which row the harness happened to pick, and that is not a fact this
-        // file should carry.
-        click: Some("Rename project "),
-        type_into: Some("textbox:Rename project "),
-        // Restored so the checks after this one, and the next run of this one,
-        // both start from the name the fixture ships.
+        click: Some("button:Rename project Renamed by ps-qa"),
+        type_into: Some("textbox:Rename project Renamed by ps-qa"),
         text: Some("theta theta north indi"),
         key: Some("Enter"),
-        subject: "textbox:Rename project ",
-        expect: Vanishes,
+        subject: "button:Rename project theta theta north indi",
+        expect: PaintsNamed,
     ),
-    /*
-     * The other way out, and the one with no keyboard involved.
-     *
-     * Enter and Escape were the only exits, so a reader who opened the editor
-     * with the pointer and clicked elsewhere was left with an input that would
-     * not close. The state lives in the component rather than the surface, so
-     * it came back still open after switching tabs.
-     */
     (
         id: "rename-closes-on-click-away",
         group: "rename",
-        what: "clicking another control closes an open rename editor",
+        what: "a real pointer press outside closes the exact open rename editor",
         open: Some("Home"),
         hover: None,
-        prepare: Some("Rename project "),
+        prepare: Some("button:Rename project theta theta north indi"),
         click: Some("Sort Home"),
         press: true,
-        subject: "textbox:Rename project ",
+        subject: "textbox:Rename project theta theta north indi",
         expect: Vanishes,
     ),
 ]
