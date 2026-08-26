@@ -22,6 +22,16 @@
         expect: ValueChanges,
     ),
     (
+        id: "toggles-raw-exchange-restores",
+        group: "toggles",
+        what: "raw Agent I/O persistence can be restored on the same checkbox",
+        open: Some("theta theta north indi"),
+        hover: None,
+        click: Some("Keep this project's raw exchange in the database"),
+        subject: "Keep this project's raw exchange in the database",
+        expect: ValueChanges,
+    ),
+    (
         id: "toggles-checkpoints",
         group: "toggles",
         what: "project knowledge checkpoints change",

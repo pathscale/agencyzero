@@ -100,9 +100,24 @@ jobs:
       - name: Restore the QA profile
         run: scripts/qa-profile-restore.sh /tmp/qa-profile-db
 
+      # Select is used for provider-session imports, which are intentionally
+      # absent on a clean runner. Two synthetic read-only rollouts make the
+      # real component deterministic without borrowing a developer's store.
+      - name: Stage provider sessions for input-control QA
+        run: |
+          mkdir -p /tmp/qa-home/.codex/sessions
+          printf '%s\n' \
+            '{"type":"session_meta","timestamp":"2026-08-26T00:00:00Z","payload":{"id":"ps-qa-select-new","cwd":"/tmp"}}' \
+            '{"type":"event_msg","timestamp":"2026-08-26T00:00:01Z","payload":{"type":"user_message","message":"ps-qa newer select fixture"}}' \
+            > /tmp/qa-home/.codex/sessions/rollout-ps-qa-select-new.jsonl
+          printf '%s\n' \
+            '{"type":"session_meta","timestamp":"2026-08-25T00:00:00Z","payload":{"id":"ps-qa-select-old","cwd":"/tmp"}}' \
+            '{"type":"event_msg","timestamp":"2026-08-25T00:00:01Z","payload":{"type":"user_message","message":"ps-qa older select fixture"}}' \
+            > /tmp/qa-home/.codex/sessions/rollout-ps-qa-select-old.jsonl
+
       - name: Launch the app
         run: |
-          AZ_DATA_DIR=/tmp/qa-profile-db \
+          HOME=/tmp/qa-home AZ_DATA_DIR=/tmp/qa-profile-db \
             ./target/release/az-gui --blitz-control > /tmp/az-qa.log 2>&1 &
           echo $! > /tmp/az-qa.pid
           # The window has to exist before anything can be addressed. Poll the
@@ -150,7 +165,7 @@ jobs:
       # app process carries cross-component state.
       - name: Reachability inventory
         id: inventory
-        if: ${{ inputs.cover }}
+        if: ${{ github.event_name == 'pull_request' || inputs.cover }}
         continue-on-error: true
         timeout-minutes: 3
         run: |
@@ -167,7 +182,7 @@ jobs:
 
       - name: Reconcile every inventoried control
         id: sweep
-        if: ${{ inputs.cover }}
+        if: ${{ github.event_name == 'pull_request' || inputs.cover }}
         continue-on-error: true
         run: |
           set -o pipefail
