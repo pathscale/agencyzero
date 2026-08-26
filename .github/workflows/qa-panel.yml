@@ -135,23 +135,39 @@ jobs:
 
       - name: Launch the app
         run: |
-          HOME=/tmp/qa-home AZ_DATA_DIR=/tmp/qa-profile-db \
-            ./target/release/az-gui --blitz-control > /tmp/az-qa.log 2>&1 &
-          echo $! > /tmp/az-qa.pid
-          # The window has to exist before anything can be addressed. Poll the
-          # CLI's normal descriptor discovery rather than creating an Agency
-          # environment contract for the socket path.
-          for _ in $(seq 1 60); do
-            ps-qa nodes > /tmp/attach.txt 2>&1 && break
-            sleep 2
-          done
-          if ! ps-qa nodes > /tmp/attach.txt 2>&1; then
-            echo "ps-qa could not discover the app control descriptor" >&2
+          launch_app() {
+            HOME=/tmp/qa-home AZ_DATA_DIR=/tmp/qa-profile-db \
+              ./target/release/az-gui --blitz-control > /tmp/az-qa.log 2>&1 &
+            echo $! > /tmp/az-qa.pid
+          }
+          visible_surface() {
+            for _ in $(seq 1 20); do
+              if ps-qa find 'Home' --role button --limit 1 > /tmp/attach.txt 2>&1 && \
+                grep -Eq '^matched:[[:space:]]*[1-9]' /tmp/attach.txt; then
+                return 0
+              fi
+              sleep 2
+            done
+            return 1
+          }
+
+          launch_app
+          if ! visible_surface; then
+            # A macOS hosted runner can occasionally create the control socket
+            # without assigning the native window a monitor. That is not an
+            # application verdict. Restart once from the pristine fixture and
+            # require a real visible surface before any outcome can run.
+            kill "$(cat /tmp/az-qa.pid)" 2>/dev/null || true
+            wait "$(cat /tmp/az-qa.pid)" 2>/dev/null || true
+            scripts/qa-profile-restore.sh /tmp/qa-profile-db
+            launch_app
+          fi
+          if ! visible_surface; then
+            echo "ps-qa could not reach a visible application surface" >&2
             cat /tmp/attach.txt >&2
-            tail -40 /tmp/az-qa.log >&2
+            tail -80 /tmp/az-qa.log >&2
             exit 1
           fi
-          sleep 10
 
       - name: Verify tree integrity
         id: integrity
