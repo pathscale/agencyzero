@@ -1,18 +1,29 @@
 name: QA panel
 
-# Manual only, never on push or pull_request.
+# Automatic for pull requests that can change a rendered interaction, and
+# manually runnable for audits of any branch.
 #
 # This job drives a real window: it launches the app, resolves controls through
 # the semantic tree and activates exact node ids. That needs macOS, which the rest
-# of CI deliberately avoids (see the note in ci.yml, where the only macOS is the
-# release bundle), and it takes minutes rather than seconds. Running it on every
-# push would make the expensive half of CI the common case.
+# of CI deliberately avoids. Path filtering keeps the expensive half focused on
+# frontend and QA changes while making a UI dependency bump prove the exact
+# package it resolves before that pull request can merge.
 #
 # Every declared outcome and the tree-integrity checks are gates. Their steps
 # continue long enough to collect and upload every diagnostic, then the final
 # enforcement steps turn the job red. Full coverage maps every control instance
 # to named outcomes and remains red while any eligible instance has none.
 on:
+  pull_request:
+    paths:
+      - '.github/workflows/qa-panel.yml'
+      - 'apps/gui/frontend/bun.lock'
+      - 'apps/gui/frontend/package.json'
+      - 'apps/gui/frontend/src/**'
+      - 'ps-qa.ron'
+      - 'scripts/qa-profile-restore.sh'
+      - 'scripts/qa-run-groups.sh'
+      - 'tests/ps-qa/**'
   workflow_dispatch:
     inputs:
       group:
