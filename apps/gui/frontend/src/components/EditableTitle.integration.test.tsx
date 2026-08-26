@@ -2,24 +2,18 @@ import { InlineEdit } from "@pathscale/ui";
 import { fireEvent, render, waitFor } from "@solidjs/testing-library";
 import { createSignal } from "solid-js";
 import { describe, expect, it, vi } from "vitest";
-import { Button } from "~/components/Button";
 
 function Harness(props: { captureSetValue?: (setValue: (value: string) => void) => void }) {
   const [value, setValue] = createSignal("Alpha project");
   props.captureSetValue?.((nextValue) => setValue(nextValue));
 
   return (
-    <>
-      <InlineEdit
-        value={value()}
-        label="Rename project"
-        trigger={<span>Pencil</span>}
-        onCommit={vi.fn()}
-      />
-      <Button type="button" onClick={() => undefined}>
-        Outside control
-      </Button>
-    </>
+    <InlineEdit
+      value={value()}
+      label="Rename project"
+      trigger={<span>Pencil</span>}
+      onCommit={vi.fn()}
+    />
   );
 }
 
@@ -44,8 +38,10 @@ describe("InlineEdit rendered integration", () => {
 
     fireEvent.click(view.getByRole("button", { name: "Rename project" }));
     await waitFor(() => expect(root?.classList.contains("inline-edit--editing")).toBe(true));
+    const dismiss = document.querySelector<HTMLElement>("[data-slot='inline-edit-dismiss']");
+    expect(dismiss).not.toBeNull();
 
-    fireEvent.click(view.getByRole("button", { name: "Outside control" }));
+    fireEvent.pointerDown(dismiss as HTMLElement);
     await waitFor(() => expect(root?.classList.contains("inline-edit--editing")).toBe(false));
   });
 });
