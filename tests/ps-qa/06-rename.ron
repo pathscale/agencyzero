@@ -102,6 +102,18 @@
         expect: PaintsNamed,
     ),
     (
+        id: "rename-closes-on-keyboard-focus-away",
+        group: "rename",
+        what: "keyboard focus leaving the exact editor closes it before another control receives input",
+        open: Some("Home"),
+        hover: None,
+        prepare: Some("button:Rename project theta theta north indi"),
+        key: Some("Tab"),
+        key_on: Some("textbox:Rename project theta theta north indi"),
+        subject: "textbox:Rename project theta theta north indi",
+        expect: Vanishes,
+    ),
+    (
         id: "rename-closes-on-click-away",
         group: "rename",
         what: "a real pointer press outside closes the exact open rename editor",
