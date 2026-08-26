@@ -1,5 +1,5 @@
 import { InlineEdit } from "@pathscale/ui";
-import { fireEvent, render, waitFor } from "@solidjs/testing-library";
+import { fireEvent, render, screen, waitFor } from "@solidjs/testing-library";
 import { createSignal } from "solid-js";
 import { describe, expect, it, vi } from "vitest";
 
@@ -38,10 +38,9 @@ describe("InlineEdit rendered integration", () => {
 
     fireEvent.click(view.getByRole("button", { name: "Rename project" }));
     await waitFor(() => expect(root?.classList.contains("inline-edit--editing")).toBe(true));
-    const dismiss = document.querySelector<HTMLElement>("[data-slot='inline-edit-dismiss']");
-    expect(dismiss).not.toBeNull();
+    const dismiss = screen.getByRole("button", { name: "Finish editing" });
 
-    fireEvent.pointerDown(dismiss as HTMLElement);
+    fireEvent.pointerDown(dismiss);
     await waitFor(() => expect(root?.classList.contains("inline-edit--editing")).toBe(false));
   });
 });

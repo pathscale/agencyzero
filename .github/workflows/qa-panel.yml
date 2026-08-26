@@ -64,7 +64,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: pathscale/ui
-          ref: cc24036ccb68c708943c8d9014d736f82b83cede
+          ref: 7bb30103b73acae270aff8ad92bcfe02584f0a69
           path: ui-under-test
 
       - uses: dtolnay/rust-toolchain@stable
