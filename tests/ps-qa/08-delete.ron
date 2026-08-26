@@ -1,6 +1,18 @@
 // A destructive control asks before it destroys.
 [
     (
+        id: "delete-project-search",
+        group: "delete",
+        what: "Home search exposes the exact disposable project before destructive controls are tested",
+        open: Some("Home"),
+        hover: None,
+        click: None,
+        type_into: Some("Search projects and items"),
+        text: Some("e756"),
+        subject: "button:Open project e756",
+        expect: PaintsNamed,
+    ),
+    (
         id: "delete-asks-first",
         group: "delete",
         what: "deleting a project asks before it removes anything",
@@ -46,5 +58,17 @@
         click: Some("Confirm delete: e756"),
         subject: "Open project e756",
         expect: Vanishes,
+    ),
+    (
+        id: "delete-search-clears",
+        group: "delete",
+        what: "the destructive fixture leaves Home search ready for later behavior checks",
+        open: Some("Home"),
+        hover: None,
+        click: None,
+        type_into: Some("Search projects and items"),
+        text: Some(""),
+        subject: "button:New Project",
+        expect: PaintsNamed,
     ),
 ]

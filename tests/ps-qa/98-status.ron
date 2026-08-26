@@ -1,0 +1,49 @@
+// Status changes can reorder a row under status sorting. Filter to the exact
+// fixture first so the audit proves the row survives instead of mistaking a
+// legitimate reorder outside the rendered page for deletion.
+[
+    (
+        id: "status-target-filter",
+        group: "status",
+        what: "the item filter isolates the exact row whose status will change",
+        open: Some("theta theta north indi"),
+        hover: None,
+        click: None,
+        type_into: Some("Filter items"),
+        text: Some("kappa eta north cobalt epsilon north delta east eta zeta beta"),
+        subject: "button:Change the status of kappa eta north cobalt epsilon north delta east eta zeta beta",
+        expect: PaintsNamed,
+    ),
+    (
+        id: "status-1",
+        group: "status",
+        what: "clicking the status marker does not remove the row",
+        open: Some("theta theta north indi"),
+        hover: Some("button:Change the status of kappa eta north cobalt epsilon north delta east eta zeta beta"),
+        click: Some("button:Change the status of kappa eta north cobalt epsilon north delta east eta zeta beta"),
+        subject: "button:Change the status of kappa eta north cobalt epsilon north delta east eta zeta beta",
+        expect: PaintsNamed,
+    ),
+    (
+        id: "status-2",
+        group: "status",
+        what: "the marker never cycles a row into a terminal state",
+        open: Some("theta theta north indi"),
+        hover: Some("button:Change the status of kappa eta north cobalt epsilon north delta east eta zeta beta"),
+        click: Some("button:Change the status of kappa eta north cobalt epsilon north delta east eta zeta beta"),
+        subject: "(Finished)",
+        expect: Absent,
+    ),
+    (
+        id: "status-filter-restores",
+        group: "status",
+        what: "status coverage restores the ordinary project item list",
+        open: Some("theta theta north indi"),
+        hover: None,
+        click: None,
+        type_into: Some("Filter items"),
+        text: Some(""),
+        subject: "button:New item",
+        expect: PaintsNamed,
+    ),
+]

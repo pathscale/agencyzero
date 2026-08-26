@@ -152,12 +152,12 @@ jobs:
           ps-qa ghost 2>&1 | tee /tmp/ghost.txt || integrity=1
           exit "$integrity"
 
-      - name: Run the focused Select checks
+      - name: Run the focused input checks
         id: checks
         continue-on-error: true
         timeout-minutes: 3
         env:
-          QA_GROUPS: ${{ github.event_name == 'pull_request' && 'select' || inputs.group }}
+          QA_GROUPS: ${{ github.event_name == 'pull_request' && 'rename select' || inputs.group }}
         run: |
           set -o pipefail
           # One process, ordered semantic preconditions. Blank means all groups.
@@ -251,7 +251,7 @@ jobs:
           failed=0
           for gate in \
             'tree integrity:${{ steps.integrity.outcome }}' \
-            'focused Select checks:${{ steps.checks.outcome }}' \
+            'focused input checks:${{ steps.checks.outcome }}' \
             'complete behavior audit:${{ steps.full.outcome }}' \
             'reachability inventory:${{ steps.inventory.outcome }}' \
             'semantic sweep:${{ steps.sweep.outcome }}' \

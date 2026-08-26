@@ -118,6 +118,7 @@
         hover: None,
         prepare: Some("Rename project "),
         click: Some("Sort Home"),
+        press: true,
         subject: "textbox:Rename project ",
         expect: Vanishes,
     ),
