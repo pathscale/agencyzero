@@ -115,11 +115,11 @@
     (
         id: "rename-closes-on-click-away",
         group: "rename",
-        what: "a real pointer press outside closes the exact open rename editor",
+        what: "a real pointer press on the full-viewport dismissal control closes the exact open rename editor",
         open: Some("Home"),
         hover: None,
         prepare: Some("button:Rename project theta theta north indi"),
-        click: Some("Sort Home"),
+        click: Some("button:Finish editing"),
         press: true,
         subject: "textbox:Rename project theta theta north indi",
         expect: Vanishes,
