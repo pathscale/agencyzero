@@ -1,5 +1,5 @@
-import { InlineEdit } from "@pathscale/ui";
-import { fireEvent, render, screen, waitFor } from "@solidjs/testing-library";
+import { Button, InlineEdit } from "@pathscale/ui";
+import { fireEvent, render, waitFor } from "@solidjs/testing-library";
 import { createSignal } from "solid-js";
 import { describe, expect, it, vi } from "vitest";
 
@@ -8,12 +8,15 @@ function Harness(props: { captureSetValue?: (setValue: (value: string) => void) 
   props.captureSetValue?.((nextValue) => setValue(nextValue));
 
   return (
-    <InlineEdit
-      value={value()}
-      label="Rename project"
-      trigger={<span>Pencil</span>}
-      onCommit={vi.fn()}
-    />
+    <>
+      <InlineEdit
+        value={value()}
+        label="Rename project"
+        trigger={<span>Pencil</span>}
+        onCommit={vi.fn()}
+      />
+      <Button aria-label="Outside control">Outside</Button>
+    </>
   );
 }
 
@@ -31,16 +34,14 @@ describe("InlineEdit rendered integration", () => {
     await waitFor(() => expect(root?.classList.contains("inline-edit--editing")).toBe(false));
   });
 
-  it("closes through its owned pointer-away surface", async () => {
+  it("closes on a pointer press outside its own root", async () => {
     const view = render(() => <Harness />);
     const root = view.container.querySelector<HTMLElement>("[data-slot='root']");
     expect(root).not.toBeNull();
 
     fireEvent.click(view.getByRole("button", { name: "Rename project" }));
     await waitFor(() => expect(root?.classList.contains("inline-edit--editing")).toBe(true));
-    const dismiss = screen.getByRole("button", { name: "Finish editing" });
-
-    fireEvent.pointerDown(dismiss);
+    fireEvent.pointerDown(view.getByRole("button", { name: "Outside control" }));
     await waitFor(() => expect(root?.classList.contains("inline-edit--editing")).toBe(false));
   });
 });
