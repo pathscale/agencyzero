@@ -119,7 +119,7 @@
         open: Some("Home"),
         hover: None,
         prepare: Some("button:Rename project theta theta north indi"),
-        click: Some("button:Sort Home by status; choose time"),
+        click: Some("button:Home"),
         press: true,
         subject: "textbox:Rename project theta theta north indi",
         expect: Vanishes,
