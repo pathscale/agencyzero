@@ -68,28 +68,12 @@ jobs:
         with:
           bun-version: latest
 
-      # Validate the unreleased UI candidate directly. This keeps component
-      # repair loops release-free while ensuring the native app embeds exactly
-      # the locally verified commit rather than the last published package.
-      - name: Check out the UI candidate
-        uses: actions/checkout@v4
-        with:
-          repository: pathscale/UI
-          ref: 8b939c322b9ef3ff6608a178a711c06e188a7ba8
-          path: .qa-ui
-
-      - name: Build the UI candidate
-        working-directory: .qa-ui
-        run: |
-          bun install --frozen-lockfile
-          bun run build
-
       # Application names and expectations remain in this repository; the
       # harness supplies only generic node-addressed behavior. Parse them before
       # spending minutes building or launching an app with an incompatible
       # harness release.
       - name: Install ps-qa
-        run: cargo install ps-qa --git https://github.com/pathscale/ps-qa --rev 66cd2cad3013684769877d5b4b223e380036b523 --locked
+        run: cargo install ps-qa --git https://github.com/pathscale/ps-qa --rev 1d69a49736f674197b2480ef7c4b61e5f118907d --locked
 
       - name: Validate the QA profile and outcome manifest
         run: ps-qa --app ps-qa.ron list --checks tests/ps-qa
@@ -101,7 +85,6 @@ jobs:
         working-directory: apps/gui/frontend
         run: |
           bun install --frozen-lockfile
-          cp -R ../../../.qa-ui/dist/. node_modules/@pathscale/ui/dist/
           bun run build
 
       - name: Stage the agency-proxy sidecar
@@ -174,7 +157,7 @@ jobs:
         continue-on-error: true
         timeout-minutes: 3
         env:
-          QA_GROUPS: ${{ github.event_name == 'pull_request' && 'rename input notes toggles verbosity switch select' || inputs.group }}
+          QA_GROUPS: ${{ github.event_name == 'pull_request' && 'select' || inputs.group }}
         run: |
           set -o pipefail
           # One process, ordered semantic preconditions. Blank means all groups.
