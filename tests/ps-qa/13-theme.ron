@@ -28,6 +28,18 @@
         expect: PaintsNamed,
     ),
     (
+        id: "theme-base-colour-first-paint",
+        group: "theme-first-paint",
+        what: "revealing Appearance paints the theme-colour flower in its final distinct geometry without a long mount animation",
+        open: Some("Settings"),
+        hover: None,
+        click: None,
+        type_into: Some("Search settings"),
+        text: Some("Appearance"),
+        subject: "radio:Theme color ",
+        expect: DistinctPositions,
+    ),
+    (
         id: "theme-light-mode",
         group: "theme",
         what: "Light mode can be selected",
