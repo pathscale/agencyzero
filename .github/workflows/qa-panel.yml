@@ -88,7 +88,7 @@ jobs:
       # spending minutes building or launching an app with an incompatible
       # harness release.
       - name: Install ps-qa
-        run: cargo install ps-qa --git https://github.com/pathscale/ps-qa --rev 180ee1168b0d0a5ee204524942a74c641435eaf3 --locked
+        run: cargo install ps-qa --git https://github.com/pathscale/ps-qa --rev 43b288e9b54d5a6243b0f3c312a40a69a511728b --locked
 
       - name: Validate the QA profile and outcome manifest
         run: ps-qa --app ps-qa.ron list --checks tests/ps-qa
