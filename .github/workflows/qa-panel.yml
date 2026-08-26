@@ -58,6 +58,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Validate an unpublished UI change in the consuming native application
+      # before asking for a package release. Remove this checkout/overlay once
+      # the proven UI commit is published and the dependency is advanced.
+      - uses: actions/checkout@v4
+        with:
+          repository: pathscale/ui
+          ref: 941356770a75c9de66b5c2a17da80146f035608a
+          path: ui-under-test
+
       - uses: dtolnay/rust-toolchain@stable
 
       - uses: Swatinem/rust-cache@v2
@@ -67,6 +76,12 @@ jobs:
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
+
+      - name: Build the unpublished UI package under test
+        working-directory: ui-under-test
+        run: |
+          bun install --frozen-lockfile
+          bun run build
 
       # Application names and expectations remain in this repository; the
       # harness supplies only generic node-addressed behavior. Parse them before
@@ -85,6 +100,7 @@ jobs:
         working-directory: apps/gui/frontend
         run: |
           bun install --frozen-lockfile
+          cp -R ../../../ui-under-test/dist/. node_modules/@pathscale/ui/dist/
           bun run build
 
       - name: Stage the agency-proxy sidecar
