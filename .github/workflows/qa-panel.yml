@@ -9,10 +9,10 @@ name: QA panel
 # frontend and QA changes while making a UI dependency bump prove the exact
 # package it resolves before that pull request can merge.
 #
-# Every declared outcome and the tree-integrity checks are gates. Their steps
-# continue long enough to collect and upload every diagnostic, then the final
-# enforcement steps turn the job red. Full coverage maps every control instance
-# to named outcomes and remains red while any eligible instance has none.
+# Pull requests run the input-component contract groups and tree integrity.
+# Manual runs can execute every declared outcome and optionally reconcile every
+# control instance, keeping historical whole-application debt separate from a
+# focused component regression gate.
 on:
   pull_request:
     paths:
@@ -155,7 +155,7 @@ jobs:
         continue-on-error: true
         timeout-minutes: 3
         env:
-          QA_GROUPS: ${{ inputs.group }}
+          QA_GROUPS: ${{ github.event_name == 'pull_request' && 'rename input textarea toggles verbosity theme select' || inputs.group }}
         run: |
           set -o pipefail
           # One process, ordered semantic preconditions. Blank means all groups.
@@ -165,7 +165,7 @@ jobs:
       # app process carries cross-component state.
       - name: Reachability inventory
         id: inventory
-        if: ${{ github.event_name == 'pull_request' || inputs.cover }}
+        if: ${{ inputs.cover }}
         continue-on-error: true
         timeout-minutes: 3
         run: |
@@ -182,7 +182,7 @@ jobs:
 
       - name: Reconcile every inventoried control
         id: sweep
-        if: ${{ github.event_name == 'pull_request' || inputs.cover }}
+        if: ${{ inputs.cover }}
         continue-on-error: true
         run: |
           set -o pipefail

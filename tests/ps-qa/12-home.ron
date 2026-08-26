@@ -196,7 +196,7 @@
     ),
     (
         id: "home-search-filters",
-        group: "home",
+        group: "input",
         what: "project search removes non-matching rows from the screen",
         open: Some("Home"),
         hover: None,
@@ -208,7 +208,7 @@
     ),
     (
         id: "home-search-restores",
-        group: "home",
+        group: "input",
         what: "clearing project search restores the filtered project rows",
         open: Some("Home"),
         hover: None,
