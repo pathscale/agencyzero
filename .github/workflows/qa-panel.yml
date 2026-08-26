@@ -88,7 +88,7 @@ jobs:
       # spending minutes building or launching an app with an incompatible
       # harness release.
       - name: Install ps-qa
-        run: cargo install ps-qa --git https://github.com/pathscale/ps-qa --rev 1a4780fe1f3f4dc2f8946fd46ccf2eb7a80bad2f --locked
+        run: cargo install ps-qa --git https://github.com/pathscale/ps-qa --rev 8872d8320cbf831aa7ffe875d0904dfc30aaa122 --locked
 
       - name: Validate the QA profile and outcome manifest
         run: ps-qa --app ps-qa.ron list --checks tests/ps-qa
@@ -186,6 +186,7 @@ jobs:
 
       - name: Run the focused input checks
         id: checks
+        if: ${{ github.event_name == 'pull_request' || inputs.group != '' }}
         continue-on-error: true
         timeout-minutes: 3
         env:
@@ -211,7 +212,7 @@ jobs:
       # a blank group, after the focused regression is green.
       - name: Run the complete behavior audit
         id: full
-        if: ${{ github.event_name == 'workflow_dispatch' && inputs.group == '' && steps.checks.outcome == 'success' }}
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.group == '' }}
         continue-on-error: true
         timeout-minutes: 8
         env:
