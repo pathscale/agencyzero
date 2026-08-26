@@ -23,7 +23,7 @@
   },
   "license": "MIT",
   "dependencies": {
-    "@pathscale/ui": "^2.11.3",
+    "@pathscale/ui": "^2.11.4",
     "@tauri-apps/api": "^2.1.1",
     "clsx": "^2.1.1",
     "popmotion": "^11.0.5",
