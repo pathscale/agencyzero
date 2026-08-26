@@ -48,10 +48,10 @@
         what: "copying a task-log row reports that the clipboard write succeeded",
         open: Some("theta theta north indi"),
         // The per-entry copy action is intentionally a row-hover affordance.
-        // Keep the row hovered while expanding the command so the check drives
-        // the same control a person can actually see.
+        // Keep the row hovered so the check drives the same control a person
+        // can actually see. Expanding first replaces the hovered affordance
+        // and needlessly races the per-entry copy action against that remount.
         hover: Some("Show the whole command"),
-        prepare: Some("Show the whole command"),
         click: Some("Copy this task-log entry"),
         subject: "Copied task-log entry",
         expect: Paints,

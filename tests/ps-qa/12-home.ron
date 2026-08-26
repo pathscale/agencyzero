@@ -19,7 +19,7 @@
         open: Some("Home"),
         hover: None,
         click: Some("button:Show 5 more projects"),
-        subject: "button:Open project ",
+        subject: "button:Rename project ",
         // The projects column is a fixed-height scroller. revealMore mounts
         // the next page, but the viewport still paints five rows at once.
         expect: Grows,

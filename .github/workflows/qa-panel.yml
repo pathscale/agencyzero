@@ -88,7 +88,7 @@ jobs:
       # spending minutes building or launching an app with an incompatible
       # harness release.
       - name: Install ps-qa
-        run: cargo install ps-qa --git https://github.com/pathscale/ps-qa --rev 43b288e9b54d5a6243b0f3c312a40a69a511728b --locked
+        run: cargo install ps-qa --git https://github.com/pathscale/ps-qa --rev 1a4780fe1f3f4dc2f8946fd46ccf2eb7a80bad2f --locked
 
       - name: Validate the QA profile and outcome manifest
         run: ps-qa --app ps-qa.ron list --checks tests/ps-qa
@@ -189,7 +189,7 @@ jobs:
         continue-on-error: true
         timeout-minutes: 3
         env:
-          QA_GROUPS: ${{ github.event_name == 'pull_request' && 'rename select' || inputs.group }}
+          QA_GROUPS: ${{ github.event_name == 'pull_request' && 'rename select tasklog-copy-entry dialog-opens settings-model-selects-option settings-effort-selects-option home-project-page-reveals' || inputs.group }}
         run: |
           set -o pipefail
           # One process, ordered semantic preconditions. Blank means all groups.
@@ -206,11 +206,12 @@ jobs:
           ps-qa find '*' --role listbox --limit 10
           ps-qa find '*' --role option --limit 20
 
-      # The expensive complete audit runs exactly once, after the focused
-      # regression is green, against the same compiled app and restored store.
+      # Pull-request iterations run only their focused native controls. The
+      # expensive complete audit is a deliberate final workflow dispatch with
+      # a blank group, after the focused regression is green.
       - name: Run the complete behavior audit
         id: full
-        if: ${{ steps.checks.outcome == 'success' }}
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.group == '' && steps.checks.outcome == 'success' }}
         continue-on-error: true
         timeout-minutes: 8
         env:
