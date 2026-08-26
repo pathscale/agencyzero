@@ -68,6 +68,22 @@ jobs:
         with:
           bun-version: latest
 
+      # Validate the unreleased UI candidate directly. This keeps component
+      # repair loops release-free while ensuring the native app embeds exactly
+      # the locally verified commit rather than the last published package.
+      - name: Check out the UI candidate
+        uses: actions/checkout@v4
+        with:
+          repository: pathscale/UI
+          ref: f68de204702e81433875ab516d1989f6c2551419
+          path: .qa-ui
+
+      - name: Build the UI candidate
+        working-directory: .qa-ui
+        run: |
+          bun install --frozen-lockfile
+          bun run build
+
       # Application names and expectations remain in this repository; the
       # harness supplies only generic node-addressed behavior. Parse them before
       # spending minutes building or launching an app with an incompatible
@@ -85,6 +101,7 @@ jobs:
         working-directory: apps/gui/frontend
         run: |
           bun install --frozen-lockfile
+          cp -R ../../../.qa-ui/dist/. node_modules/@pathscale/ui/dist/
           bun run build
 
       - name: Stage the agency-proxy sidecar
