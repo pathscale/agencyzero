@@ -180,6 +180,17 @@ jobs:
           # One process, ordered semantic preconditions. Blank means all groups.
           scripts/qa-run-groups.sh
 
+      # Keep Select failures self-diagnosing. These are semantic queries through
+      # the native inspector: they distinguish a closed/hidden popup from one
+      # whose listbox never reached the renderer at all.
+      - name: Diagnose Select semantic state
+        if: always()
+        continue-on-error: true
+        run: |
+          ps-qa find '@ui-select-trigger' --limit 10
+          ps-qa find '*' --role listbox --limit 10
+          ps-qa find '*' --role option --limit 20
+
       # Inventory visits every surface after the timed outcomes so the same
       # app process carries cross-component state.
       - name: Reachability inventory
