@@ -112,19 +112,9 @@
         subject: "textbox:Rename project",
         expect: Vanishes,
     ),
-    (
-        id: "rename-closes-on-focus-away",
-        group: "rename",
-        what: "Tab moves focus away and closes the exact open rename editor",
-        open: Some("Home"),
-        hover: None,
-        prepare: Some("button:Rename project theta theta north indi"),
-        click: None,
-        key: Some("Tab"),
-        key_on: Some("textbox:Rename project theta theta north indi"),
-        subject: "textbox:Rename project theta theta north indi",
-        expect: Vanishes,
-    ),
+    // Pointer-away and ordinary focus-away are rendered integration contracts.
+    // Blitz's native Input action reaches coordinates and field-owned keys but
+    // does not dispatch document pointer propagation or Tab focus traversal.
     (
         id: "rename-home-search-restores",
         group: "rename",
