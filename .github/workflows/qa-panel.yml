@@ -75,7 +75,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: pathscale/UI
-          ref: f68de204702e81433875ab516d1989f6c2551419
+          ref: 8b939c322b9ef3ff6608a178a711c06e188a7ba8
           path: .qa-ui
 
       - name: Build the UI candidate
