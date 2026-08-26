@@ -152,7 +152,7 @@ jobs:
           ps-qa ghost 2>&1 | tee /tmp/ghost.txt || integrity=1
           exit "$integrity"
 
-      - name: Run the checks
+      - name: Run the focused Select checks
         id: checks
         continue-on-error: true
         timeout-minutes: 3
@@ -174,11 +174,24 @@ jobs:
           ps-qa find '*' --role listbox --limit 10
           ps-qa find '*' --role option --limit 20
 
+      # The expensive complete audit runs exactly once, after the focused
+      # regression is green, against the same compiled app and restored store.
+      - name: Run the complete behavior audit
+        id: full
+        if: ${{ steps.checks.outcome == 'success' }}
+        continue-on-error: true
+        timeout-minutes: 3
+        env:
+          QA_GROUPS: ''
+        run: |
+          set -o pipefail
+          QA_LOG=/tmp/qa-full.txt scripts/qa-run-groups.sh
+
       # Inventory visits every surface after the timed outcomes so the same
       # app process carries cross-component state.
       - name: Reachability inventory
         id: inventory
-        if: ${{ inputs.cover }}
+        if: ${{ (github.event_name == 'pull_request' && steps.full.outcome == 'success') || inputs.cover }}
         continue-on-error: true
         timeout-minutes: 3
         run: |
@@ -195,7 +208,7 @@ jobs:
 
       - name: Reconcile every inventoried control
         id: sweep
-        if: ${{ inputs.cover }}
+        if: ${{ (github.event_name == 'pull_request' && steps.full.outcome == 'success') || inputs.cover }}
         continue-on-error: true
         run: |
           set -o pipefail
@@ -206,7 +219,7 @@ jobs:
 
       - name: Verify the inspection toggle disconnects control
         id: isolated
-        if: ${{ inputs.cover || inputs.lifecycle }}
+        if: ${{ (github.event_name == 'pull_request' && steps.full.outcome == 'success') || inputs.cover || inputs.lifecycle }}
         continue-on-error: true
         run: |
           ps-qa click Settings
@@ -238,7 +251,8 @@ jobs:
           failed=0
           for gate in \
             'tree integrity:${{ steps.integrity.outcome }}' \
-            'outcome checks:${{ steps.checks.outcome }}' \
+            'focused Select checks:${{ steps.checks.outcome }}' \
+            'complete behavior audit:${{ steps.full.outcome }}' \
             'reachability inventory:${{ steps.inventory.outcome }}' \
             'semantic sweep:${{ steps.sweep.outcome }}' \
             'inspection toggle:${{ steps.isolated.outcome }}'; do
@@ -260,6 +274,14 @@ jobs:
             echo '```'
             tail -20 /tmp/qa.txt 2>/dev/null || echo 'the run produced no output'
             echo '```'
+            if [ -f /tmp/qa-full.txt ]; then
+              echo
+              echo '## Complete behavior audit'
+              echo
+              echo '```'
+              tail -20 /tmp/qa-full.txt
+              echo '```'
+            fi
             if [ -f /tmp/cover.txt ]; then
               echo
               echo '## Coverage'
@@ -308,6 +330,7 @@ jobs:
             /tmp/hidden-painted.txt
             /tmp/ghost.txt
             /tmp/qa.txt
+            /tmp/qa-full.txt
             /tmp/cover.txt
             /tmp/sweep.txt
             /tmp/isolated.txt
