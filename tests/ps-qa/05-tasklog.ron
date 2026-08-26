@@ -47,8 +47,11 @@
         group: "tasklog",
         what: "copying a task-log row reports that the clipboard write succeeded",
         open: Some("theta theta north indi"),
+        // The per-entry copy action is intentionally a row-hover affordance.
+        // Keep the row hovered while expanding the command so the check drives
+        // the same control a person can actually see.
+        hover: Some("Show the whole command"),
         prepare: Some("Show the whole command"),
-        hover: None,
         click: Some("Copy this task-log entry"),
         subject: "Copied task-log entry",
         expect: Paints,
@@ -117,16 +120,6 @@
         subject: "Show the whole command",
         expect: PaintsMore,
         covers: ["button:Show * earlier"],
-    ),
-    (
-        id: "tasklog-clear",
-        group: "tasklog",
-        what: "clearing the task log removes its rendered rows",
-        open: Some("theta theta north indi"),
-        hover: None,
-        click: Some("Clear"),
-        subject: "Show the whole command",
-        expect: Vanishes,
     ),
     (
         id: "tasklog-restore-running",

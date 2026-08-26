@@ -1,0 +1,16 @@
+// Destructive task-log coverage runs after every interaction that depends on
+// the committed fixture's task history. Keeping it beside the ordinary
+// task-log checks let Clear poison the later fork-dialog checks while each
+// isolated check remained green.
+[
+    (
+        id: "tasklog-clear",
+        group: "tasklog-destructive",
+        what: "clearing the task log removes its rendered rows",
+        open: Some("theta theta north indi"),
+        hover: None,
+        click: Some("Clear"),
+        subject: "Show the whole command",
+        expect: Vanishes,
+    ),
+]
