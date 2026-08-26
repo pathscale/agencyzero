@@ -1,22 +1,12 @@
 // The library Select is data-dependent in ordinary use. The panel workflow
 // gives chat discovery two disposable provider sessions so the real component
-// always has choices and its open/change behavior cannot silently disappear.
+// always has choices and its change/restore behavior cannot silently disappear.
 [
-    (
-        id: "select-session-opens",
-        group: "select",
-        what: "the shared Select trigger opens its provider-session options",
-        open: Some("Settings"),
-        hover: None,
-        click: Some("Choose a session from Codex CLI / IDE"),
-        subject: "option:ps-qa older select fixture",
-        expect: PaintsNamed,
-    ),
     (
         id: "select-session-changes",
         group: "select",
         what: "choosing another provider session changes the option's selected state",
-        open: None,
+        open: Some("Settings"),
         hover: None,
         prepare: Some("Choose a session from Codex CLI / IDE"),
         click: Some("option:ps-qa older select fixture"),

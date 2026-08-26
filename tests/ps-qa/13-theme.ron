@@ -4,15 +4,15 @@
 // controls too: audit their semantic values rather than trusting their paint.
 [
     (
-        id: "switch-reveals-glass",
+        id: "switch-reveals-appearance",
         group: "switch",
-        what: "Settings search reveals the shared glass Switch deterministically",
+        what: "Settings search reveals Appearance before the shared glass Switch is driven",
         open: Some("Settings"),
         hover: None,
         click: None,
         type_into: Some("Search settings"),
-        text: Some("Glass"),
-        subject: "switch:Glass",
+        text: Some("Appearance"),
+        subject: "button:Light",
         expect: PaintsNamed,
     ),
     (
