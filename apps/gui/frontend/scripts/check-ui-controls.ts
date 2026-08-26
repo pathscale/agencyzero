@@ -34,7 +34,7 @@ const inputCoverage: Record<string, readonly [string, string]> = {
   Select: ["select-session-changes", "select-session-restores"],
   Slider: ["verbosity-slider-changes", "verbosity-slider-restores"],
   Switch: ["theme-glass-toggle", "theme-glass-restores"],
-  Textarea: ["textarea-notes-accepts-text", "textarea-notes-restores"],
+  Textarea: ["notes-draft-enables-save", "notes-forget-clears"],
 };
 
 function tsxFiles(directory: string): string[] {

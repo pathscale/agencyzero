@@ -4,6 +4,18 @@
 // controls too: audit their semantic values rather than trusting their paint.
 [
     (
+        id: "switch-reveals-glass",
+        group: "switch",
+        what: "Settings search reveals the shared glass Switch deterministically",
+        open: Some("Settings"),
+        hover: None,
+        click: None,
+        type_into: Some("Search settings"),
+        text: Some("Glass"),
+        subject: "switch:Glass",
+        expect: PaintsNamed,
+    ),
+    (
         id: "theme-reveals-appearance",
         group: "theme",
         what: "the Settings search reveals the Appearance controls for semantic activation",
@@ -261,7 +273,7 @@
     ),
     (
         id: "theme-glass-toggle",
-        group: "theme",
+        group: "switch",
         what: "the global glass setting changes",
         open: Some("Settings"),
         hover: None,
@@ -271,13 +283,25 @@
     ),
     (
         id: "theme-glass-restores",
-        group: "theme",
+        group: "switch",
         what: "the global glass setting can be restored",
         open: Some("Settings"),
         hover: None,
         click: Some("Glass"),
         subject: "Glass",
         expect: ValueChanges,
+    ),
+    (
+        id: "switch-search-restores",
+        group: "switch",
+        what: "the Switch contract leaves Settings search as it found it",
+        open: Some("Settings"),
+        hover: None,
+        click: None,
+        type_into: Some("Search settings"),
+        text: Some(""),
+        subject: "button:Welcome Tutorial",
+        expect: PaintsNamed,
     ),
     (
         id: "theme-search-restores",

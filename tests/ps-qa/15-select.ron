@@ -18,6 +18,7 @@
         what: "choosing another provider session changes the option's selected state",
         open: None,
         hover: None,
+        prepare: Some("Choose a session from Codex CLI / IDE"),
         click: Some("option:ps-qa older select fixture"),
         subject: "option:ps-qa older select fixture",
         expect: SelectionChanges,

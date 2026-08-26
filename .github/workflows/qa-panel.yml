@@ -155,7 +155,7 @@ jobs:
         continue-on-error: true
         timeout-minutes: 3
         env:
-          QA_GROUPS: ${{ github.event_name == 'pull_request' && 'rename input textarea toggles verbosity theme select' || inputs.group }}
+          QA_GROUPS: ${{ github.event_name == 'pull_request' && 'rename input notes toggles verbosity switch select' || inputs.group }}
         run: |
           set -o pipefail
           # One process, ordered semantic preconditions. Blank means all groups.
