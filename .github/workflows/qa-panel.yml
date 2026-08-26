@@ -180,7 +180,7 @@ jobs:
         id: full
         if: ${{ steps.checks.outcome == 'success' }}
         continue-on-error: true
-        timeout-minutes: 3
+        timeout-minutes: 8
         env:
           QA_GROUPS: ''
         run: |

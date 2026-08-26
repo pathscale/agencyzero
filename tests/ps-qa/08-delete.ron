@@ -5,7 +5,7 @@
         group: "delete",
         what: "deleting a project asks before it removes anything",
         open: Some("Home"),
-        hover: None,
+        hover: Some("Open project e756"),
         click: Some("Delete project e756"),
         // The standard dialog's escape path is painted immediately. The
         // confirm button can be outside the virtualized Home viewport until it
@@ -32,7 +32,7 @@
         group: "delete",
         what: "the disposable project can enter confirmation again after Cancel",
         open: Some("Home"),
-        hover: None,
+        hover: Some("Open project e756"),
         click: Some("Delete project e756"),
         subject: "button:Cancel",
         expect: Paints,
