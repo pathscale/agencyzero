@@ -107,7 +107,7 @@ tauri-runtime-blitz = { version = "^0.1.6", optional = true, features = ["macos-
 # reasons its manifest records.
 #
 # These carried a caret *and* a git branch, which is two sources of truth that
-# nothing reconciles: the caret said `^0.3.0-beta.3` while the branch delivered
+# nothing reconciles: the caret said `^0.3.0` while the branch delivered
 # whatever master happened to be, so the declared range documented nothing and
 # the resolved crate depended on when anyone last fetched. It broke exactly as
 # that predicts - `ps-blitz` moved to `ps-anyrender ^0.13.0`, this tree still
@@ -121,8 +121,8 @@ tauri-runtime-blitz = { version = "^0.1.6", optional = true, features = ["macos-
 # file. Working against a local checkout stays possible through the `[patch]`
 # entries in `.cargo/config.toml`, so the default exercises what a release
 # actually resolves.
-blitz-dom = { package = "ps-blitz-dom", version = "^0.3.0-beta.6", features = ["system-fonts", "parallel-construct"], optional = true }
-blitz-script = { package = "ps-blitz-script", version = "^0.3.0-beta.6", features = ["system-fonts"], optional = true }
+blitz-dom = { package = "ps-blitz-dom", version = "^0.3.0", features = ["system-fonts", "parallel-construct"], optional = true }
+blitz-script = { package = "ps-blitz-script", version = "^0.3.0", features = ["system-fonts"], optional = true }
 brotli = { version = "8.0.4", default-features = false, features = ["std"], optional = true }
 url = { version = "2.5.8", optional = true }
 tauri-plugin-updater = "2"

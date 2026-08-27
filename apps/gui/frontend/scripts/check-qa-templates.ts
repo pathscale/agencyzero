@@ -48,9 +48,9 @@ function parseTemplates(source: string): Template[] {
 
   for (const block of blocks) {
     const kind = block.match(/^\s*"([^"]+)"/)?.[1];
-    const appliesTo = [...(block.match(/applies_to:\s*\[([^\]]*)\]/)?.[1] ?? "").matchAll(/"([^"]+)"/g)].map(
-      (match) => match[1],
-    );
+    const appliesTo = [
+      ...(block.match(/applies_to:\s*\[([^\]]*)\]/)?.[1] ?? "").matchAll(/"([^"]+)"/g),
+    ].map((match) => match[1]);
     if (!kind) continue;
 
     const required: Requirement[] = [];
@@ -95,7 +95,8 @@ const checks = parseChecks();
  */
 const controlsGate = readFileSync(join(import.meta.dir, "check-ui-controls.ts"), "utf8");
 const coverage = new Map<string, string[]>();
-const coverageBlock = controlsGate.match(/const inputCoverage[^=]*=\s*\{([\s\S]*?)\n\};/)?.[1] ?? "";
+const coverageBlock =
+  controlsGate.match(/const inputCoverage[^=]*=\s*\{([\s\S]*?)\n\};/)?.[1] ?? "";
 for (const entry of coverageBlock.matchAll(/(\w+):\s*\[([\s\S]*?)\]/g)) {
   coverage.set(
     entry[1],

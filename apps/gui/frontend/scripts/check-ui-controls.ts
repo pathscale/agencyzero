@@ -33,11 +33,7 @@ const inputComponents = new Set([
 // meaningful state change and every required exit or restore path.
 const inputCoverage: Record<string, readonly string[]> = {
   Checkbox: ["toggles-raw-exchange", "toggles-raw-exchange-restores"],
-  Dropdown: [
-    "pillmenu-effort-opens",
-    "pillmenu-effort-selects-low",
-    "pillmenu-effort-restores",
-  ],
+  Dropdown: ["pillmenu-effort-opens", "pillmenu-effort-selects-low", "pillmenu-effort-restores"],
   InlineEdit: [
     "rename-commits-typed-name",
     "rename-escape-keeps-name",
