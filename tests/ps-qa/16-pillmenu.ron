@@ -3,18 +3,24 @@
 // Permission triggers change, but only ever names one option per pill, so these
 // cover the Effort pill's full open/choose/restore cycle against the renderer.
 //
-// KNOWN GAP, deliberately not asserted here: adding `press: true` to either
-// check fails with "no visible, enabled, sized semantic control matching it",
-// while the identical check without it passes. `press` drives the physical
-// pointer path a person's mouse takes; `click` activates the resolved node.
-// The same `press` reaches ordinary composer buttons and the pill trigger
-// itself, and fails only for nodes inside the fixed overlay.
+// The gap recorded here was two faults, and only one was the application's.
 //
-// That is either a real dismissal-on-pointerdown defect in the overlay or a
-// limitation of how the harness resolves a hoisted fixed subtree for pointer
-// input, and it is not yet known which. It is left out rather than written as
-// a passing check, because a check that quietly avoids the pointer path is
-// exactly the kind that reported a broken Select as green.
+// `press: true` used to fail with "no visible, enabled, sized semantic
+// control", which read as the overlay refusing pointer input. It was the
+// harness: `press` resolved through a button-only lookup, so a `menuitem`
+// could never match whatever the renderer did. Fixed in ps-qa.
+//
+// What is left is real, and `-by-pointer` below asserts it. With resolution
+// working, the press lands on the option, the menu closes, and the value does
+// not change - while `click` on that same node commits the selection, and
+// `press` on the pill trigger just outside the overlay activates it normally.
+// So the pointer path works everywhere except inside the hoisted fixed
+// subtree, which is where a person's mouse has to land to choose anything.
+//
+// Not a dismissal-on-pointerdown defect in the component: the outside-click
+// guard was instrumented and made to ignore the menu subtree three different
+// ways, and the behaviour did not move. The remaining suspect is hit-testing
+// or event dispatch into the hoisted stacking context in the renderer.
 [
     (
         id: "pillmenu-effort-opens",

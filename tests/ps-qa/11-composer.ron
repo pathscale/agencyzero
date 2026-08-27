@@ -158,6 +158,41 @@
         expect: NameChanges,
     ),
     (
+        // Paired with the restore below, so this group is repeatable.
+        //
+        // A `NameChanges` check that leaves the control on its new value
+        // passes once and fails every time after, because the second run
+        // selects a value the pill already holds. Both of these read as
+        // application defects - "accessible name stayed" - when the previous
+        // run is the only thing that changed.
+        id: "composer-model-selects-option",
+        group: "composer",
+        what: "choosing Opus changes the exact composer model trigger",
+        open: Some("theta theta north indi"),
+        prepare: Some("button:Model:"),
+        hover: None,
+        // Named in full. "Opus" alone is a substring of all four Claude
+        // entries, so which one it selected depended on tree order, and the
+        // restore below could not know what to undo.
+        click: Some("menuitem:Claude · Claude Opus 5"),
+        subject: "button:Model:",
+        expect: NameChanges,
+    ),
+    (
+        id: "composer-model-restores",
+        group: "composer",
+        what: "the Model pill returns to its default for the rest of the audit",
+        open: Some("theta theta north indi"),
+        prepare: Some("button:Model:"),
+        hover: None,
+        // The default this profile starts on, read from the live menu rather
+        // than assumed: the options are all "Claude - Opus ..." variants and
+        // there is no Sonnet entry to go back to.
+        click: Some("menuitem:Claude · Opus (1M context)"),
+        subject: "button:Model:",
+        expect: NameChanges,
+    ),
+    (
         id: "composer-effort-selects-option",
         group: "composer",
         what: "choosing high changes the composer effort trigger's accessible value",
@@ -169,6 +204,17 @@
         // a working application. A `NameChanges` check has to name a value the
         // control does not already hold.
         click: Some("menuitem:high"),
+        subject: "Effort",
+        expect: NameChanges,
+    ),
+    (
+        id: "composer-effort-restores",
+        group: "composer",
+        what: "the Effort pill returns to medium for the rest of the audit",
+        open: Some("theta theta north indi"),
+        prepare: Some("Effort"),
+        hover: None,
+        click: Some("menuitem:medium"),
         subject: "Effort",
         expect: NameChanges,
     ),
