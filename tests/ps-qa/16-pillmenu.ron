@@ -1,0 +1,80 @@
+// The composer's three pill menus (Model, Effort, Permission) are the library
+// `Dropdown` behind `PillMenu`. `11-composer.ron` proves the Model, Effort and
+// Permission triggers change, but only ever names one option per pill, so these
+// cover the Effort pill's full open/choose/restore cycle against the renderer.
+//
+// KNOWN GAP, deliberately not asserted here: adding `press: true` to either
+// check fails with "no visible, enabled, sized semantic control matching it",
+// while the identical check without it passes. `press` drives the physical
+// pointer path a person's mouse takes; `click` activates the resolved node.
+// The same `press` reaches ordinary composer buttons and the pill trigger
+// itself, and fails only for nodes inside the fixed overlay.
+//
+// That is either a real dismissal-on-pointerdown defect in the overlay or a
+// limitation of how the harness resolves a hoisted fixed subtree for pointer
+// input, and it is not yet known which. It is left out rather than written as
+// a passing check, because a check that quietly avoids the pointer path is
+// exactly the kind that reported a broken Select as green.
+[
+    (
+        id: "pillmenu-effort-opens",
+        group: "pillmenu",
+        what: "the Effort pill's menu reaches the renderer as an addressable item",
+        open: Some("theta theta north indi"),
+        hover: None,
+        prepare: Some("Effort"),
+        settle_after_ms: 600,
+        click: None,
+        // `menuitem:low` rather than the pill's own name: a name-only check is
+        // satisfied by the trigger, which paints whether or not the menu opened.
+        subject: "menuitem:low",
+        expect: PaintsNamed,
+    ),
+    (
+        id: "pillmenu-effort-selects-low",
+        group: "pillmenu",
+        what: "choosing low from the Effort pill changes what the trigger reads",
+        open: Some("theta theta north indi"),
+        hover: None,
+        prepare: Some("Effort"),
+        settle_after_ms: 600,
+        click: Some("menuitem:low"),
+        subject: "Effort",
+        expect: NameChanges,
+    ),
+    (
+        // The same selection over the physical pointer path, which is what a
+        // person's mouse does and what the owner reports as broken. The check
+        // above resolves a node id and activates it; this one opens the menu by
+        // pressing the trigger and picks the option by pressing that, both
+        // inside one process so the menu is still open when the option is hit.
+        //
+        // Worth having as its own check rather than flipping the one above:
+        // when these two disagree, the split localises the defect to pointer
+        // handling over the hoisted overlay rather than to the menu itself.
+        id: "pillmenu-effort-selects-low-by-pointer",
+        group: "pillmenu",
+        what: "a real pointer press on a menu option commits the selection",
+        open: Some("theta theta north indi"),
+        hover: None,
+        prepare: Some("Effort"),
+        prepare_press: true,
+        settle_after_ms: 600,
+        click: Some("menuitem:low"),
+        press: true,
+        subject: "Effort",
+        expect: NameChanges,
+    ),
+    (
+        id: "pillmenu-effort-restores",
+        group: "pillmenu",
+        what: "the Effort pill returns to its original value for the rest of the audit",
+        open: Some("theta theta north indi"),
+        hover: None,
+        prepare: Some("Effort"),
+        settle_after_ms: 600,
+        click: Some("menuitem:medium"),
+        subject: "Effort",
+        expect: NameChanges,
+    ),
+]

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Run a cargo command against the renderer working checkouts instead of the pins.
+# Run a cargo command against renderer working checkouts instead of releases.
 #
 #     scripts/local-renderer.sh check -p az-gui --features blitz-runtime
 #     scripts/local-renderer.sh run -p az-gui --features blitz-runtime
@@ -9,7 +9,7 @@
 # This is opt-in on purpose. The redirect used to live in `.cargo/config.toml`
 # and was therefore always on, so no ordinary build ever fetched the revisions
 # in `apps/gui/Cargo.toml` and they rotted unseen until a macOS release build
-# found out. Now the default exercises the pins and this is reached for only
+# found out. Now the default exercises published ranges and this is reached for only
 # while renderer work is in flight.
 set -euo pipefail
 

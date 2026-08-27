@@ -164,13 +164,8 @@ paraphrases were how the old checkbox contract created near-duplicates. Full con
   tracked, because it carried the macOS link flag and the `usvg` patch every
   build needs, so `.gitignore` could not protect it and the paths went in four
   times. `skip-worktree` hid the file from `git status` as well and blocked
-  branch switches. The redirect was always on, so no ordinary build ever fetched
-  the revisions in `apps/gui/Cargo.toml` and they rotted unseen until a macOS
-  release build found out. And a redirected build rewrites the committed
-  `Cargo.lock`, replacing git revisions with paths, which reached a commit twice.
-
-  The wrapper snapshots and restores the lockfile around the build, so none of
-  that is left to remember.
+  branch switches. The redirect was always on, so ordinary builds did not
+  exercise the published dependency ranges.
 
   **There is no `.cargo/config.toml` any more**, and nothing should recreate one:
   `.cargo/` holds only the gitignored `local-renderer.toml`. Both of its former
@@ -183,10 +178,9 @@ paraphrases were how the old checkbox contract created near-duplicates. Full con
   existed on one machine, which is how a file nobody could delete became a file
   nobody could safely commit.
 
-  Pins still want checking before a release, because the opt-in path skips them
-  by definition. `scripts/check-one-rev-per-git-source.sh` refuses a lockfile
-  holding one git source at two revisions, which is what a half-finished repin
-  produces.
+  Dependency manifests use caret ranges. Cargo and Bun lockfiles are ignored,
+  and CI resolves those ranges afresh instead of promoting a machine-local
+  resolution into release policy.
 
 - **One change per commit.** Shared files are an ordering problem, not an excuse.
 - **Name the branch when pushing**: `git push origin branch-name`.

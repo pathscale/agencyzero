@@ -73,9 +73,11 @@ the first four be written from the component alone.
 
 ### Making this mechanical rather than remembered
 
-Today each of the four is hand-written per call site, which is why the missing
-one stayed missing: nothing declares that a component *has* a mode, so nothing
-can notice that its outcome check is absent.
+Each contract is hand-written per component family, but its required outcome
+ids are declared in `scripts/check-ui-controls.ts`. Adding or removing an input
+primitive without the live change, exit, and restore outcomes fails the normal
+frontend lint job. `InlineEdit` explicitly requires commit, Escape,
+physical-pointer dismissal, owner-change dismissal, and restore outcomes.
 
 The piece that would close it is a component identity in the semantic tree. A
 PathScale/UI component already names its parts in a recipe and emits them as
@@ -84,13 +86,10 @@ PathScale/UI component already names its parts in a recipe and emits them as
 `attrs:` column is the node's value, not its attributes. Verified against the
 running app: every node in the rename subtree reports `attrs: (none)`.
 
-With the slot exposed, a component that declares a `trigger` and a `field` slot
-would be enough for the harness to generate the four checks for every instance
-of it, and to report a component that has a mode and no outcome check as a gap
-rather than as a pass. Until then the contract above is a review rule, and the
-cost of it being a review rule is documented in `issues.md` item 1: the same
-component was repaired once, verified 5/5 by checks that could not see the
-defect, and shipped inert again.
+With the slot exposed, the harness could generate those checks per concrete
+instance instead of crediting a declared component family. Until then the
+static contract makes missing outcome ids a build failure, while `inventory`
+and `reconcile` reject concrete reachable controls with no named verdict.
 
 ## The renderer-blind half is gone
 

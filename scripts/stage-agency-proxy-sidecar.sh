@@ -25,7 +25,6 @@ install_root="$repo_root/target/agency-proxy-sidecar"
 build_target="${CARGO_TARGET_DIR:-$repo_root/target/agency-proxy-sidecar-build}"
 CARGO_TARGET_DIR="$build_target" cargo install \
   --version "$proxy_version" \
-  --locked \
   --root "$install_root" \
   agency-proxy
 

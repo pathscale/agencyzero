@@ -17,7 +17,6 @@ on:
   pull_request:
     paths:
       - '.github/workflows/qa-panel.yml'
-      - 'apps/gui/frontend/bun.lock'
       - 'apps/gui/frontend/package.json'
       - 'apps/gui/frontend/src/**'
       - 'ps-qa.ron'
@@ -26,20 +25,19 @@ on:
       - 'tests/ps-qa/**'
   workflow_dispatch:
     inputs:
+      suite:
+        description: 'QA depth'
+        required: true
+        type: choice
+        default: focused
+        options:
+          - focused
+          - full
+          - exhaustive
       group:
-        description: 'Space-separated check groups (blank = all declared outcomes).'
+        description: 'Advanced: exact check/group names; overrides QA depth when set.'
         required: false
         type: string
-      cover:
-        description: 'Also inventory and activate every eligible semantic control'
-        required: false
-        type: boolean
-        default: false
-      lifecycle:
-        description: 'Also verify inspection-disable as the final semantic action'
-        required: false
-        type: boolean
-        default: false
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -58,15 +56,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Validate an unpublished UI change in the consuming native application
-      # before asking for a package release. Remove this checkout/overlay once
-      # the proven UI commit is published and the dependency is advanced.
-      - uses: actions/checkout@v4
-        with:
-          repository: pathscale/ui
-          ref: d7b15faf558891b16393454b7f7e117bc5a8cf98
-          path: ui-under-test
-
       - uses: dtolnay/rust-toolchain@stable
 
       - uses: Swatinem/rust-cache@v2
@@ -77,18 +66,12 @@ jobs:
         with:
           bun-version: latest
 
-      - name: Build the unpublished UI package under test
-        working-directory: ui-under-test
-        run: |
-          bun install --frozen-lockfile
-          bun run build
-
       # Application names and expectations remain in this repository; the
       # harness supplies only generic node-addressed behavior. Parse them before
       # spending minutes building or launching an app with an incompatible
       # harness release.
       - name: Install ps-qa
-        run: cargo install ps-qa --git https://github.com/pathscale/ps-qa --rev a7137ca95dae98acf4c942a73d01d5ec13826e5d --locked
+        run: cargo install ps-qa --version '^0.4.1'
 
       - name: Validate the QA profile and outcome manifest
         run: ps-qa --app ps-qa.ron list --checks tests/ps-qa
@@ -99,8 +82,7 @@ jobs:
       - name: Build the frontend az-gui embeds
         working-directory: apps/gui/frontend
         run: |
-          bun install --frozen-lockfile
-          cp -R ../../../ui-under-test/dist/. node_modules/@pathscale/ui/dist/
+          bun install --no-save
           bun run build
 
       - name: Stage the agency-proxy sidecar
@@ -186,11 +168,11 @@ jobs:
 
       - name: Run the focused input checks
         id: checks
-        if: ${{ github.event_name == 'pull_request' || inputs.group != '' }}
+        if: ${{ github.event_name == 'pull_request' || inputs.group != '' || inputs.suite == 'focused' }}
         continue-on-error: true
         timeout-minutes: 3
         env:
-          QA_GROUPS: ${{ github.event_name == 'pull_request' && 'rename select tasklog-copy-entry dialog-opens settings-model-selects-option settings-effort-selects-option home-project-page-reveals theme-first-paint' || inputs.group }}
+          QA_GROUPS: ${{ inputs.group || 'rename dirs select tasklog-copy-entry dialog-opens settings-model-selects-option settings-effort-selects-option home-project-page-reveals theme-first-paint' }}
         run: |
           set -o pipefail
           # One process, ordered semantic preconditions. Blank means all groups.
@@ -212,9 +194,9 @@ jobs:
       # a blank group, after the focused regression is green.
       - name: Run the complete behavior audit
         id: full
-        if: ${{ github.event_name == 'workflow_dispatch' && inputs.group == '' }}
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.group == '' && inputs.suite != 'focused' }}
         continue-on-error: true
-        timeout-minutes: 8
+        timeout-minutes: 3
         env:
           QA_GROUPS: ''
         run: |
@@ -225,7 +207,7 @@ jobs:
       # app process carries cross-component state.
       - name: Reachability inventory
         id: inventory
-        if: ${{ (github.event_name == 'pull_request' && steps.full.outcome == 'success') || inputs.cover }}
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.group == '' && inputs.suite == 'exhaustive' && steps.full.outcome == 'success' }}
         continue-on-error: true
         timeout-minutes: 3
         run: |
@@ -242,7 +224,7 @@ jobs:
 
       - name: Reconcile every inventoried control
         id: sweep
-        if: ${{ (github.event_name == 'pull_request' && steps.full.outcome == 'success') || inputs.cover }}
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.group == '' && inputs.suite == 'exhaustive' && steps.full.outcome == 'success' }}
         continue-on-error: true
         run: |
           set -o pipefail
@@ -253,7 +235,7 @@ jobs:
 
       - name: Verify the inspection toggle disconnects control
         id: isolated
-        if: ${{ (github.event_name == 'pull_request' && steps.full.outcome == 'success') || inputs.cover || inputs.lifecycle }}
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.group == '' && inputs.suite == 'exhaustive' && steps.full.outcome == 'success' }}
         continue-on-error: true
         run: |
           ps-qa click Settings

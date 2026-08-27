@@ -139,14 +139,14 @@ jobs:
           cache-targets: true
 
       - name: Install frontend dependencies
-        run: bun install --frozen-lockfile
+        run: bun install --no-save
         working-directory: apps/gui/frontend
 
       # The Rust build of the same CLI that `@tauri-apps/cli` wraps. The npm
       # package is a thin Node shim around this binary, so taking it from
       # crates.io is what keeps Node out of the release path entirely.
       - name: Install the Tauri CLI
-        run: cargo install tauri-cli --version "^2.11" --locked
+        run: cargo install tauri-cli --version "^2.11"
 
       - name: Build the AgencyProxy sidecar
         run: scripts/stage-agency-proxy-sidecar.sh

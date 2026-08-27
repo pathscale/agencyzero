@@ -160,11 +160,15 @@
     (
         id: "composer-effort-selects-option",
         group: "composer",
-        what: "choosing medium changes the composer effort trigger's accessible value",
+        what: "choosing high changes the composer effort trigger's accessible value",
         open: Some("theta theta north indi"),
         prepare: Some("Effort"),
         hover: None,
-        click: Some("menuitem:medium"),
+        // `high`, not `medium`: the composer starts on medium, so selecting it
+        // asserted a change that could not happen and the check failed against
+        // a working application. A `NameChanges` check has to name a value the
+        // control does not already hold.
+        click: Some("menuitem:high"),
         subject: "Effort",
         expect: NameChanges,
     ),

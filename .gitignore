@@ -2,7 +2,10 @@
 # blitz-preview is not a workspace member, so it builds into its own target
 # directory rather than the root one above.
 /apps/blitz-preview/target
+# Lockfiles are not committed anywhere in this project: dependencies are
+# expressed as carets and resolved at build time.
 /Cargo.lock
+/apps/blitz-preview/Cargo.lock
 /apps/gui/frontend/bun.lock
 .DS_Store
 /apps/gui/gen/schemas

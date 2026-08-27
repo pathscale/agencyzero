@@ -14,6 +14,7 @@ jobs:
   unit:
     name: Legacy frontend unit suite (non-gating)
     runs-on: ubicloud-standard-2
+    timeout-minutes: 3
     defaults:
       run:
         working-directory: apps/gui/frontend
@@ -24,5 +25,5 @@ jobs:
         with:
           bun-version: latest
 
-      - run: bun install --frozen-lockfile
+      - run: bun install --no-save
       - run: bun run test:run

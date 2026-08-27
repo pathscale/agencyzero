@@ -1,0 +1,69 @@
+// QA templates, one per component type.
+//
+// The point of this file is that writing QA for a UI/ component should need no
+// invention: name the component's type and the accessible name of its instance,
+// and the template says exactly which checks must exist and what each one is
+// allowed to assert. A check that does not match its type's template is wrong
+// even when it is green.
+//
+// Why templates rather than judgement. `15-select.ron` passed 2/2 against a
+// Select that demonstrably could not select, because it asserted
+// `SelectionChanges` on an *option node*: the option's own state flips whether
+// or not the value ever reaches the trigger or the application. Every weak
+// check has this shape, so the fix is not "write better checks" but "stop
+// letting the weak assertion be spelled at all" for a type where a strong one
+// exists.
+//
+// The rule each template encodes: assert the *observable result on the control
+// the reader looks at*, never the internal state of the thing that was pressed.
+// For a Select that is the trigger's rendered text, not the option's selected
+// flag. `subject_role` is what enforces it.
+(
+    templates: [
+        // A control that swaps one thing for another: inline editor, disclosure,
+        // dialog, picker. Four checks, and check 2 is the one that gets skipped.
+        (
+            kind: "mode",
+            applies_to: ["InlineEdit", "Collapsible", "Dialog", "Drawer", "Popover", "Dropdown"],
+            required: [
+                (suffix: "opens",     expect: "PaintsNamed", subject_role: Some("textbox|dialog|menu|listbox"), why: "the mode's own node paints, addressed by role:name; a name-only Paints is satisfied by the trigger, which paints either way"),
+                (suffix: "commits",   expect: "Vanishes|ValueChanges|NameChanges", subject_role: None, why: "the work actually lands: the typed name is accepted, the action runs. This is the check that distinguishes a working component from a decorative one"),
+                (suffix: "escape",    expect: "Vanishes", subject_role: None, why: "the abandoning key exits"),
+                (suffix: "pointer-away", expect: "Vanishes", subject_role: None, why: "the pointer exit; a mode with no pointer exit traps anyone who opened it without a keyboard"),
+                (suffix: "restores",  expect: "Vanishes|NameChanges", subject_role: None, why: "puts the fixture back so the group can run twice against one instance"),
+            ],
+        ),
+
+        // A control that carries a value the reader can see. The trigger, not
+        // the option, is the subject: that is the whole lesson of 15-select.
+        (
+            kind: "value",
+            applies_to: ["Select", "RadioGroup", "Slider", "Switch", "Checkbox", "Input", "Textarea", "DateField", "DatePicker", "TimeField"],
+            required: [
+                (suffix: "displays",  expect: "PaintsNamed|NameChanges", subject_role: Some("button|combobox|textbox|slider|switch|checkbox"), why: "the control shows its current value before anything is done to it"),
+                (suffix: "changes",   expect: "NameChanges|ValueChanges|PaintsMore", subject_role: Some("button|combobox|textbox|slider|switch|checkbox"), why: "MUST be asserted on the value-bearing control the reader reads, never on the option/tick that was pressed. An option's own selected flag flips even when the value never reaches the trigger"),
+                (suffix: "restores",  expect: "NameChanges|ValueChanges", subject_role: Some("button|combobox|textbox|slider|switch|checkbox"), why: "returns the fixture to its original value, on the same subject"),
+            ],
+        ),
+
+        // A control that does something once and shows it happened.
+        (
+            kind: "action",
+            applies_to: ["Button", "CloseButton", "ButtonGroup"],
+            required: [
+                (suffix: "paints",  expect: "PaintsNamed", subject_role: Some("button"), why: "the control is on screen and addressable"),
+                (suffix: "acts",    expect: "Vanishes|PaintsNamed|NameChanges|PaintsMore", subject_role: None, why: "the visible consequence the button's name promises, asserted on what changed rather than on the button"),
+            ],
+        ),
+
+        // Something that only ever displays. No interaction to get wrong, so a
+        // paint is the whole contract.
+        (
+            kind: "display",
+            applies_to: ["Badge", "Chip", "Avatar", "Alert", "Card", "Breadcrumb", "Accordion", "Tabs", "Toast", "Tooltip"],
+            required: [
+                (suffix: "paints", expect: "PaintsNamed|Paints", subject_role: None, why: "it reaches the renderer with a box, under its accessible name"),
+            ],
+        ),
+    ],
+)

@@ -34,7 +34,7 @@ and `@pathscale/ui`, built by rsbuild into `apps/gui/dist/`. It needs `tauri-cli
 Bun:
 
 ```bash
-cargo install tauri-cli --locked   # or: cargo binstall tauri-cli
+cargo install tauri-cli --version '^2.11'   # or: cargo binstall tauri-cli
 ```
 
 ```bash

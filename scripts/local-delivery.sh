@@ -39,7 +39,7 @@ run_tauri() {
   elif [ -x "$HOME/.cargo/bin/cargo-tauri" ]; then
     "$HOME/.cargo/bin/cargo-tauri" "$@"
   else
-    echo "cargo-tauri is not installed; run: cargo install tauri-cli --locked" >&2
+    echo "cargo-tauri is not installed; run: cargo install tauri-cli --version '^2.11'" >&2
     exit 1
   fi
 }

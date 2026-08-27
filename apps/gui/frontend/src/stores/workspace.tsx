@@ -1362,17 +1362,27 @@ function createWorkspace() {
       await i18n.setLocale(settings.locale);
       syncWindowChrome(settings.theme);
 
-      setState((d) => reconcile(projects)(d.projects));
-      setState((d) => reconcile(itemsByProject)(d.items));
-      setState((d) => reconcile(homeSnapshot.turnCounts)(d.turnCounts));
+      setState((d) => {
+        reconcile(projects)(d.projects);
+      });
+      setState((d) => {
+        reconcile(itemsByProject)(d.items);
+      });
+      setState((d) => {
+        reconcile(homeSnapshot.turnCounts)(d.turnCounts);
+      });
       setState((d) => {
         d.settings = settings;
       });
-      setState((d) => reconcile(agents)(d.agents));
+      setState((d) => {
+        reconcile(agents)(d.agents);
+      });
       setState((d) => {
         d.agencyProxy = agencyProxy;
       });
-      setState((d) => reconcile(models)(d.models));
+      setState((d) => {
+        reconcile(models)(d.models);
+      });
       setState((d) => {
         d.pricing = pricing;
       });
@@ -1748,7 +1758,9 @@ function createWorkspace() {
     await bind("project:updated", upsertProject);
 
     await bind("settings:updated", (settings) => {
-      setState((d) => reconcile(settings)(d.settings));
+      setState((d) => {
+        reconcile(settings)(d.settings);
+      });
       reconcileTabModels(settings);
 
       syncWindowChrome(settings.theme);
@@ -3401,7 +3413,9 @@ function createWorkspace() {
       // Awaited first: the updater is synchronous in Solid 2, so the call
       // cannot be made from inside it.
       const next = await client().listAgentStatus(true);
-      setState((d) => reconcile(next)(d.agents));
+      setState((d) => {
+        reconcile(next)(d.agents);
+      });
     },
     /**
      * Re-read the catalogues, asking each CLI to enumerate where it can.
@@ -3526,7 +3540,9 @@ function createWorkspace() {
       // Awaited first: the updater is synchronous in Solid 2, so the call
       // cannot be made from inside it.
       const next = await client().listModels(true);
-      setState((d) => reconcile(next)(d.models));
+      setState((d) => {
+        reconcile(next)(d.models);
+      });
     },
     /**
      * Add or remove a model from an agent's picker.

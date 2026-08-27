@@ -11,6 +11,10 @@ const nativeSelectOwner = join(sourceRoot, "features", "settings", "SettingsTab.
 // outcomes, or this check fails before the component reaches a pull request.
 const inputComponents = new Set([
   "Checkbox",
+  // Reached through `~/components/PillMenu`, not imported here directly, which
+  // is exactly why it went uncovered: the composer's Model, Effort and
+  // Permission pills are all Dropdown, and nothing gated any of them.
+  "Dropdown",
   "DateField",
   "DatePicker",
   "DateRangePicker",
@@ -25,13 +29,24 @@ const inputComponents = new Set([
   "TimeField",
 ]);
 
-// More than a paint check: each used primitive has an outcome that changes its
-// value or state and a second outcome that exits or restores it safely.
-const inputCoverage: Record<string, readonly [string, string]> = {
+// More than a paint check: each used primitive has explicit outcomes for its
+// meaningful state change and every required exit or restore path.
+const inputCoverage: Record<string, readonly string[]> = {
   Checkbox: ["toggles-raw-exchange", "toggles-raw-exchange-restores"],
-  InlineEdit: ["rename-commits-typed-name", "rename-restores-the-original-name"],
+  Dropdown: [
+    "pillmenu-effort-opens",
+    "pillmenu-effort-selects-low",
+    "pillmenu-effort-restores",
+  ],
+  InlineEdit: [
+    "rename-commits-typed-name",
+    "rename-escape-keeps-name",
+    "rename-closes-on-pointer-away",
+    "rename-closes-on-project-switch",
+    "rename-restores-the-original-name",
+  ],
   Input: ["home-search-filters", "home-search-restores"],
-  Select: ["select-session-changes", "select-session-restores"],
+  Select: ["select-session-displays", "select-session-changes", "select-session-restores"],
   Slider: ["verbosity-slider-changes", "verbosity-slider-restores"],
   Switch: ["theme-glass-toggle", "theme-glass-restores"],
   Textarea: ["notes-draft-enables-save", "notes-forget-clears"],

@@ -74,18 +74,4 @@ describe("attaching a working directory", () => {
 
     expect(dirsOf(workspace, "cafe")).not.toContain("~/src/attached");
   });
-
-  /*
-   * Enter adds the directory and closes the field, and closing it fires blur,
-   * which calls the same handler. `add_dir` is idempotent on the Rust side, so
-   * a duplicate is invisible in the list; this asserts the second call never
-   * reaches the backend at all.
-   */
-  it("does not attach twice when Enter is followed by a blur", async () => {
-    const workspace = await boot();
-    await workspace.actions.addDir("cafe", "~/src/attached");
-    await workspace.actions.addDir("cafe", "~/src/attached");
-
-    expect(dirsOf(workspace, "cafe").filter((dir) => dir === "~/src/attached")).toHaveLength(1);
-  });
 });

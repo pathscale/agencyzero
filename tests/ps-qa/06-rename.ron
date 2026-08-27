@@ -65,6 +65,18 @@
         expect: Vanishes,
     ),
     (
+        id: "rename-closes-on-pointer-away",
+        group: "rename",
+        what: "a physical pointer press outside InlineEdit closes the editor",
+        open: Some("Home"),
+        prepare: Some("button:Rename project theta theta north indi"),
+        hover: None,
+        click: Some("textbox:Search projects and items"),
+        press: true,
+        subject: "textbox:Rename project theta theta north indi",
+        expect: Vanishes,
+    ),
+    (
         id: "rename-home-search-follows-new-name",
         group: "rename",
         what: "Home search follows the committed title and proves the exact renamed row exists",
@@ -112,9 +124,6 @@
         subject: "textbox:Rename project",
         expect: Vanishes,
     ),
-    // Pointer-away and ordinary focus-away are rendered integration contracts.
-    // Blitz's native Input action reaches coordinates and field-owned keys but
-    // does not dispatch document pointer propagation or Tab focus traversal.
     (
         id: "rename-home-search-restores",
         group: "rename",
