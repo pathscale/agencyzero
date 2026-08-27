@@ -351,7 +351,18 @@ fn main() {
             .expect("main() runs on the main thread");
         let application = NSApplication::sharedApplication(mtm);
         application.setActivationPolicy(NSApplicationActivationPolicy::Accessory);
-        trace("activation policy set to accessory");
+        /*
+         * Also stop the app activating itself when the window is created.
+         * `setActivationPolicy` alone is not enough: winit calls
+         * `activateIgnoringOtherApps` while creating the window, which pulls a
+         * process to the front whatever its policy says. Overriding the
+         * activation-policy default here is what makes the accessory policy
+         * stick through window creation.
+         */
+        unsafe {
+            application.setActivationPolicy(NSApplicationActivationPolicy::Prohibited);
+        }
+        trace("activation policy set to prohibited");
     }
     #[cfg(not(test))]
     {
