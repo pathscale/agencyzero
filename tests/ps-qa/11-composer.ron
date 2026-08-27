@@ -48,6 +48,40 @@
          * Nothing else here can see that: every other assertion is satisfied
          * by any non-zero box, so a pill at 8px or at 28px passes them all.
          */
+        /*
+         * The whole cycle: open the pill, choose a value, and read the trigger.
+         *
+         * Every other check here asks half the question. `-opens` proves a menu
+         * appears and `-height` proves the trigger is the size it claims, and a
+         * dropdown can pass both while being useless: it opens, you click, and
+         * nothing happens. That is what "the pill dropdowns are broken" means
+         * to somebody using the app, and nothing in this suite was asking it.
+         *
+         * Driven the way a reader drives it. `prepare` presses the trigger by
+         * the name it currently reads, the click names the item by *role* and
+         * name, and the assertion is on the trigger rather than the item: an
+         * option that highlights without committing is exactly the failure.
+         *
+         * Addressing by `menuitem:` is not decoration. A bare "Plan" matched a
+         * token-usage tooltip elsewhere on screen containing the word, pressed
+         * that instead, and reported success while the value never changed.
+         *
+         * "Bypass" rather than a likelier value, because the assertion is that
+         * the name *changed*: choosing whatever the pill already reads is a
+         * no-op and would fail a working component. The QA profile ships with
+         * this pill on a different setting.
+         */
+        id: "composer-permission-selects-and-commits",
+        group: "composer",
+        what: "choosing a permission changes what the pill trigger reads",
+        open: Some("theta theta north indi"),
+        prepare: Some("Permission"),
+        hover: None,
+        click: Some("menuitem:Bypass"),
+        subject: "Permission",
+        expect: NameChanges,
+    ),
+    (
         id: "composer-permission-pill-height",
         group: "composer",
         what: "the Permission pill is the 24px tall its style declares",
@@ -57,7 +91,7 @@
         click: None,
         subject: "Permission",
         expect_size: Some("x=24"),
-        expect: ExpectSize,
+        expect: Measures,
     ),
     (
         id: "composer-permission-hover-leaves-nothing",
