@@ -50,7 +50,6 @@ dependencies = [
  "tauri",
  "tauri-build",
  "tauri-runtime-blitz",
- "tokio",
  "url",
  "usvg",
 ]
@@ -331,6 +330,8 @@ dependencies = [
 [[package]]
 name = "blitz-control-protocol"
 version = "0.1.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "57f042a2fb85d1ef7a19c4b52ddac395877bb1f8f4725739eba0993ae7db9fcf"
 dependencies = [
  "endpoint-libs",
  "serde",
@@ -5535,6 +5536,8 @@ dependencies = [
 [[package]]
 name = "tauri-runtime-blitz"
 version = "0.1.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1811b92fdb2dbfa55cfb045d746c39870348eecc48b32440d56ba78f970de7ee"
 dependencies = [
  "base64 0.22.1",
  "blitz-control-protocol",
