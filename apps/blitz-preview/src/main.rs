@@ -63,13 +63,15 @@ impl ScriptFetcher for EmbeddedScriptFetcher {
     }
 }
 
-#[cfg(all(not(test), feature = "capture"))]
+// Not `capture`-gated: the windowed path loads a dist too, through
+// `BLITZ_PREVIEW_DIST`, so this serves both.
+#[cfg(not(test))]
 struct CapturedScriptFetcher {
     url: String,
     javascript: String,
 }
 
-#[cfg(all(not(test), feature = "capture"))]
+#[cfg(not(test))]
 impl ScriptFetcher for CapturedScriptFetcher {
     fn fetch(&self, url: &Url) -> Result<String, FetchError> {
         if url.as_str() == self.url {
@@ -103,7 +105,7 @@ fn create_document(url: &str) -> Result<ScriptDocument, String> {
     Ok(document)
 }
 
-#[cfg(all(not(test), feature = "capture"))]
+#[cfg(not(test))]
 fn create_dist_document(dist: &std::path::Path, url: &str) -> Result<ScriptDocument, String> {
     fn asset_url<'a>(html: &'a str, attribute: &str) -> Result<&'a str, String> {
         let marker = format!("{attribute}=\"");
@@ -118,12 +120,25 @@ fn create_dist_document(dist: &std::path::Path, url: &str) -> Result<ScriptDocum
         Ok(&html[start..end])
     }
 
+    /*
+     * Brotli or plain, decided by the bytes rather than by configuration.
+     *
+     * The capture path is fed a Brotli dist, and AgencyZero's own `dist` is
+     * plain text; a harness dist is whatever its bundler emitted. Requiring one
+     * of the two produced `could not decompress embedded external CSS: Invalid
+     * Data` on a perfectly good stylesheet, and the page then rendered with no
+     * styles at all, which reads as broken components rather than a rejected
+     * asset.
+     */
     fn read_brotli_asset(dist: &std::path::Path, url: &str, label: &str) -> Result<String, String> {
         let relative = url.split('?').next().unwrap_or(url).trim_start_matches('/');
         let path = dist.join(relative);
-        let compressed = fs::read(&path)
+        let bytes = fs::read(&path)
             .map_err(|error| format!("could not read {}: {error}", path.display()))?;
-        decompress_utf8(&compressed, label)
+        match decompress_utf8(&bytes, label) {
+            Ok(text) => Ok(text),
+            Err(compressed_error) => String::from_utf8(bytes).map_err(|_| compressed_error),
+        }
     }
 
     trace(&format!("external dist loading: {}", dist.display()));
@@ -134,8 +149,24 @@ fn create_dist_document(dist: &std::path::Path, url: &str) -> Result<ScriptDocum
     let stylesheet_url = asset_url(&index, "href")?;
     let css = read_brotli_asset(dist, stylesheet_url, "external CSS")?;
     let javascript = read_brotli_asset(dist, javascript_url, "external JavaScript")?;
+    /*
+     * `data-theme` rides along from the source document. Every design token in
+     * `@pathscale/ui` is defined under a `[data-theme=...]` selector, so a body
+     * without one leaves `var(--color-base-100)` and friends unresolved: the
+     * page renders, and every component in it is transparent and unconstrained.
+     * That reads as broken components rather than a dropped attribute.
+     */
+    let theme = index
+        .find("data-theme=\"")
+        .map(|start| start + "data-theme=\"".len())
+        .and_then(|start| {
+            index[start..]
+                .find('"')
+                .map(|end| &index[start..start + end])
+        })
+        .unwrap_or("dark");
     let html = format!(
-        "<!doctype html><html><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><style>{css}</style></head><body><div id=\"root\"></div><script src=\"{javascript_url}\"></script></body></html>"
+        "<!doctype html><html><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><style>{css}</style></head><body data-theme=\"{theme}\"><div id=\"root\"></div><script src=\"{javascript_url}\"></script></body></html>"
     );
     let base_url = Url::parse(url).map_err(|error| format!("invalid capture URL: {error}"))?;
     let script_url = base_url
@@ -318,15 +349,55 @@ fn main() {
     }
     set_runtime_trace(trace);
     trace("runtime trace configured");
-    set_document_factory(create_document);
+
+    /*
+     * `BLITZ_PREVIEW_DIST` points the window at any built frontend, which is
+     * what makes this binary a general harness host rather than a fixture
+     * viewer: `@pathscale/ui`'s `qa/` builds a page per component, and pointing
+     * this at it is how those components get driven against the real renderer
+     * without the consuming application around them.
+     *
+     * The capture path already reads a dist through `BLITZ_CAPTURE_DIST`. This
+     * is the same thing for the windowed path, under its own name so a headless
+     * capture and a live window can be aimed at different builds.
+     */
+    match std::env::var_os("BLITZ_PREVIEW_DIST") {
+        Some(dist) => {
+            let dist = std::path::PathBuf::from(dist);
+            trace(&format!("preview dist: {}", dist.display()));
+            set_document_factory(move |url| create_dist_document(&dist, url));
+        }
+        None => set_document_factory(create_document),
+    }
     trace("document factory configured");
 
     let context = tauri::generate_context!("tauri.conf.json");
     trace("Tauri context generated");
-    builder()
+    let app = builder()
         .invoke_handler(tauri::generate_handler![greet, list_capabilities])
-        .run(context)
-        .expect("AgencyZero Tauri Blitz preview failed");
+        .build(context)
+        .expect("AgencyZero Tauri Blitz preview failed to build");
+
+    /*
+     * The control socket, on the same `--blitz-control` flag az-gui uses.
+     *
+     * Applied between `build` and `run` for the reason az-gui's copy documents:
+     * the runtime exists after `build`, while Tauri's setup callback does not
+     * execute until `run`, so this gap is where ps-qa's discovery descriptor
+     * can be published without depending on native app activation.
+     */
+    if std::env::args().any(|argument| argument == "--blitz-control") {
+        tauri_runtime_blitz::apply_runtime_debug_options(
+            tauri_runtime_blitz::RuntimeDebugOptions {
+                inspection_and_agent_control: true,
+                deep_intrusive_profiling: false,
+            },
+        )
+        .expect("could not enable Blitz control for the preview");
+        trace("blitz control enabled");
+    }
+
+    app.run(|_app, _event| {});
     trace("Tauri runtime returned");
 }
 
