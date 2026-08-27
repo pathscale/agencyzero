@@ -12,6 +12,8 @@ use std::io::Read;
 use std::io::Write;
 #[cfg(not(test))]
 use std::time::{SystemTime, UNIX_EPOCH};
+// `Manager` brings `get_webview_window`, for the offscreen move below.
+use tauri::Manager;
 use tauri_runtime_blitz::{builder, set_document_factory, set_runtime_trace};
 use url::Url;
 
@@ -327,6 +329,30 @@ fn list_capabilities() -> Vec<String> {
 fn main() {
     reset_trace();
     trace("main entered");
+
+    /*
+     * `--offscreen`: become an accessory process before anything else runs.
+     *
+     * A QA sweep launches one window per component, and 71 windows appearing
+     * over the owner's desktop is not acceptable. Setting the policy later does
+     * not work: `App::set_activation_policy` is only reachable once the app is
+     * built, and by then macOS has activated the process and taken focus, so
+     * the window flashes to the front first. `focus: false` and repositioning
+     * are both too late for the same reason.
+     *
+     * `NSApplicationActivationPolicyAccessory` on the shared application, set
+     * here, means the process never activates and never enters the Dock. The
+     * renderer still lays out and paints, so every measurement is unchanged.
+     */
+    #[cfg(target_os = "macos")]
+    if std::env::args().any(|argument| argument == "--offscreen") {
+        use objc2_app_kit::{NSApplication, NSApplicationActivationPolicy};
+        let mtm = objc2::MainThreadMarker::new()
+            .expect("main() runs on the main thread");
+        let application = NSApplication::sharedApplication(mtm);
+        application.setActivationPolicy(NSApplicationActivationPolicy::Accessory);
+        trace("activation policy set to accessory");
+    }
     #[cfg(not(test))]
     {
         if let Some(output) = std::env::var_os("AGENCYZERO_BLITZ_CAPTURE") {
@@ -373,7 +399,7 @@ fn main() {
 
     let context = tauri::generate_context!("tauri.conf.json");
     trace("Tauri context generated");
-    let app = builder()
+    let mut app = builder()
         .invoke_handler(tauri::generate_handler![greet, list_capabilities])
         .build(context)
         .expect("AgencyZero Tauri Blitz preview failed to build");
@@ -395,6 +421,29 @@ fn main() {
         )
         .expect("could not enable Blitz control for the preview");
         trace("blitz control enabled");
+    }
+
+    /*
+     * `--offscreen` runs the window as a macOS accessory application.
+     *
+     * A QA sweep launches one window per component. At 71 components that is 71
+     * windows appearing over whatever the owner is doing, and it is not enough
+     * to move them: a regular application activates when it launches, so the
+     * window flashes and takes focus before any reposition can run. An
+     * accessory application never activates and never appears in the Dock.
+     *
+     * The renderer still lays out and paints exactly as it would on screen, so
+     * every measurement a check makes is unchanged. `visible: false` would not
+     * do: a hidden window stops painting, and a check would then measure a
+     * component that never rendered.
+     */
+    if std::env::args().any(|argument| argument == "--offscreen") {
+        #[cfg(target_os = "macos")]
+        app.set_activation_policy(tauri::ActivationPolicy::Accessory);
+        if let Some(window) = app.get_webview_window("main") {
+            let _ = window.set_position(tauri::PhysicalPosition::new(-20_000, -20_000));
+        }
+        trace("running as an accessory application, offscreen");
     }
 
     app.run(|_app, _event| {});

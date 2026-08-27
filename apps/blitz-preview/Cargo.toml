@@ -7,8 +7,13 @@ publish = false
 build = "build.rs"
 
 [dependencies]
-anyrender = "^0.12.0"
-anyrender_vello_cpu = { version = "^0.15.0", optional = true }
+# `ps-anyrender`, not plain `anyrender`: ps-blitz-paint takes the ps- fork
+# (`package = "ps-anyrender"`), and mixing the two put two copies of the
+# `PaintScene` trait in the graph, so the vello-cpu painter could not satisfy
+# the one blitz-paint asked for. That is what stopped the capture feature, and
+# with it the only genuinely headless path, from building at all.
+anyrender = { package = "ps-anyrender", version = "^0.13.0" }
+anyrender_vello_cpu = { package = "ps-anyrender-vello-cpu", version = "^0.16.0", optional = true }
 blitz-dom = { package = "ps-blitz-dom", version = "^0.3.0-beta.11", features = ["system-fonts"] }
 blitz-paint = { package = "ps-blitz-paint", version = "^0.3.0-beta.11", features = ["scrollbars"] }
 blitz-script = { package = "ps-blitz-script", version = "^0.3.0-beta.11", features = ["system-fonts"] }
@@ -18,6 +23,13 @@ png = { version = "^0.18.1", optional = true }
 tauri = { version = "^2.11.5", default-features = false, features = ["compression"] }
 tauri-runtime-blitz = "^0.1.0"
 url = "^2.5.8"
+
+# For `--offscreen`: the activation policy has to be set before any window
+# exists, and Tauri only exposes it on a built app, by which point macOS has
+# already activated the process and taken focus.
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "^0.6"
+objc2-app-kit = "^0.3"
 
 [build-dependencies]
 brotli = { version = "^8.0.4", default-features = false, features = ["std"] }
