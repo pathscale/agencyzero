@@ -304,180 +304,30 @@ fn capture_preview(output: &std::path::Path) -> Result<(), String> {
      * this path writes the tree to a file instead of serving it.
      */
     if let Some(tree_path) = std::env::var_os("AGENCYZERO_BLITZ_TREE") {
-        /*
-         * Lay out before reading the tree.
-         *
-         * The dump carries each node's box now, and a box is only meaningful
-         * after `resolve`. This used to run before the `resolve` further down
-         * and emitted no geometry, so nothing depended on the ordering; a
-         * bounds column read from an unresolved tree would be uniformly zero,
-         * which is indistinguishable from a component that painted nothing.
-         */
-        document.inner_mut().resolve(0.0);
         let update = document.inner().build_accessibility_tree();
-
-        /*
-         * Fold each element's text onto the element itself.
-         *
-         * `build_accessibility_node` in blitz-dom sets a `value` only on text
-         * nodes, and links the element to it with `push_labelled_by`. So the
-         * tree says role `Button` on one node and the text "Save" on a
-         * different one, and a check addressed as `button:Save` matches
-         * neither. Measured over 71 components: 159 nodes carried a name and
-         * every single one had role `TextRun`, so no `role:name` subject could
-         * ever match.
-         *
-         * `labelled_by` is exactly the edge blitz-dom already recorded for this
-         * purpose, so walking it reassembles the pairing the accessibility
-         * layer intended rather than guessing at one. Fixing it in blitz-dom
-         * proper means naming the element at build time; that is the better
-         * home for it and is filed, but it is a published crate and this needs
-         * to work now.
-         */
-        /*
-         * Keyed by the raw `u64` rather than `accesskit::NodeId`: accesskit is
-         * not a direct dependency here, and adding one to name a key risks
-         * resolving a different version of the crate than the one blitz-dom
-         * built the tree with. `NodeId` is a newtype over `u64`, so `.0` is the
-         * same identity without the dependency.
-         */
-        let text_of: std::collections::HashMap<u64, String> = update
-            .nodes
-            .iter()
-            .filter_map(|(id, node)| node.value().map(|value| (id.0, value.to_owned())))
-            .collect();
-
-        /*
-         * Absolute boxes, taken from the layout tree rather than from accesskit.
-         *
-         * blitz-dom never calls `set_bounds` when it builds an accessibility
-         * node, so `node.bounds()` is `None` for every node in the tree and a
-         * bounds column sourced from it is uniformly empty. The layout tree has
-         * the real geometry, and `final_layout()` is public.
-         *
-         * `final_layout().location` is relative to the parent, so this walks
-         * down accumulating the offset. `visit` is a pre-order traversal, which
-         * is what makes a single pass sufficient: a node's parent has always
-         * been placed before the node is reached.
-         */
-        let mut boxes: std::collections::HashMap<u64, (f64, f64, f64, f64)> =
-            std::collections::HashMap::new();
-        /*
-         * `aria-label`, which the accessibility tree drops entirely.
-         *
-         * `build_accessibility_node` names a node from its text and nothing
-         * else, so an element whose only name is an `aria-label` reaches the
-         * tree anonymous. The QA harness marks its fixture region with
-         * `aria-label="fixture"` and could not address it at all; the same is
-         * true of every icon-only control in the application, which is the
-         * more important case.
-         *
-         * Read straight off the DOM here rather than waiting on blitz-dom,
-         * matching the attribute by string so this does not need `LocalName`
-         * and the stylo atom machinery behind it.
-         */
-        let mut labels: std::collections::HashMap<u64, String> =
-            std::collections::HashMap::new();
-        {
-            let doc = document.inner();
-            doc.visit(|node_id, node| {
-                if let Some(attrs) = node.attrs() {
-                    for attr in attrs {
-                        if &*attr.name.local == "aria-label" && !attr.value.is_empty() {
-                            labels.insert(node_id.as_u64(), attr.value.to_string());
-                        }
-                    }
-                }
-                let parent = node
-                    .parent
-                    .and_then(|parent| boxes.get(&parent.as_u64()).copied());
-                let (parent_x, parent_y) = parent.map(|(x, y, _, _)| (x, y)).unwrap_or((0.0, 0.0));
-
-                /*
-                 * `final_layout` panics rather than returning an option on any
-                 * node that is not an element, an anonymous block or the
-                 * document, and a text node is none of those. Calling it
-                 * unguarded aborted the whole run on the first text node, which
-                 * every page has.
-                 *
-                 * A text node takes its parent's box. It has no layout of its
-                 * own, it is drawn inside the element that owns it, and that
-                 * element's box is the right answer for "where is this text" —
-                 * which matters because the text node is what carries the name
-                 * a check matches on.
-                 */
-                // The document node is the one with no parent. Checked that way
-                // rather than through `TNode::as_document`, to avoid pulling a
-                // stylo trait into scope for a single predicate.
-                let box_for_node = if node.is_element() || node.parent.is_none() {
-                    let layout = node.final_layout();
-                    (
-                        parent_x + f64::from(layout.location.x),
-                        parent_y + f64::from(layout.location.y),
-                        f64::from(layout.size.width),
-                        f64::from(layout.size.height),
-                    )
-                } else {
-                    match parent {
-                        Some(box_) => box_,
-                        None => return,
-                    }
-                };
-
-                boxes.insert(node_id.as_u64(), box_for_node);
-            });
-        }
-
         let mut lines = String::new();
         for (id, node) in &update.nodes {
-            /*
-             * `aria-label` wins, then accesskit's own label, then the node's
-             * own text, then the text of whatever labels it. The last is what
-             * names an element, and the first is what names a control that has
-             * no text at all.
-             */
-            let name = labels
-                .get(&id.0)
-                .cloned()
-                .or_else(|| node.label().map(|label| label.to_owned()))
-                .or_else(|| node.value().map(|value| value.to_owned()))
-                .or_else(|| {
-                    node.labelled_by()
-                        .iter()
-                        .find_map(|target| text_of.get(&target.0).cloned())
-                })
-                .unwrap_or_default();
-
             /*
              * Skip the document's own `<style>` text. It reaches the tree as a
              * `TextRun` carrying the whole stylesheet, which buried the handful
              * of nodes a check actually addresses under 70 kB of Tailwind.
              */
+            let name = node.label().or_else(|| node.value()).unwrap_or_default();
             if name.len() > 200 {
                 continue;
             }
-
-            /*
-             * Geometry, so `Paints` is decidable from the file.
-             *
-             * `ps-qa`'s judge asks for `visible` and a box with area; without
-             * these columns the only expectation a headless run could decide
-             * was "some node has this text", which is not what any generated
-             * check asserts. Emitted as x,y,w,h with an empty field when the
-             * node has no box at all, which is itself the answer to `Paints`.
-             */
-            let bounds = boxes
-                .get(&id.0)
-                .map(|(x, y, w, h)| format!("{x},{y},{w},{h}"))
-                .unwrap_or_default();
-
             lines.push_str(&format!(
-                "{}\t{:?}\t{}\t{}\t{}\n",
+                "{}\t{:?}\t{}\n",
                 id.0,
                 node.role(),
+                /*
+                 * `label` is only set when a node carries an explicit one, and
+                 * almost none do: the first dump had 27 nodes and not a single
+                 * name, which is exactly why 30 generated checks could not
+                 * address anything. A node's `value` carries its text, which is
+                 * what Blitz names a node from and what a check matches on.
+                 */
                 name,
-                bounds,
-                !node.is_hidden(),
             ));
         }
         fs::write(std::path::Path::new(&tree_path), lines)
