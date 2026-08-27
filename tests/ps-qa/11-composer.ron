@@ -22,6 +22,68 @@
         expect: SelectionChanges,
     ),
     (
+        /*
+         * Hovering the pill repeatedly leaves nothing behind.
+         *
+         * The pill's hover changes its border and runs a colour transition. A
+         * hover that appends something and never removes it looks correct the
+         * first time and accumulates from the second, so a check that enters
+         * once cannot see it and neither can anyone who does not happen to
+         * hover twice by hand. This was reported from a real build as the pill
+         * dropdowns being visibly broken.
+         *
+         * The count is the whole check: `("Permission", 8)` enters eight times,
+         * leaving between each, and the harness compares the tree before the
+         * first entry against after the last. `Holds` states the contract the
+         * comparison enforces - whatever the hover adds, it takes away again.
+         */
+        /*
+         * The pill is the height it is designed to be.
+         *
+         * `PillMenu` declares `h-[24px] min-h-[24px]`. Measured on a running
+         * app the trigger is 27.8px, so something is adding 3.8px that the
+         * fixed height was supposed to prevent - a border, a line-height, or a
+         * padding that survived a change it should not have.
+         *
+         * Nothing else here can see that: every other assertion is satisfied
+         * by any non-zero box, so a pill at 8px or at 28px passes them all.
+         */
+        id: "composer-permission-pill-height",
+        group: "composer",
+        what: "the Permission pill is the 24px tall its style declares",
+        open: Some("theta theta north indi"),
+        prepare: None,
+        hover: None,
+        click: None,
+        subject: "Permission",
+        expect_size: Some("x=24"),
+        expect: ExpectSize,
+    ),
+    (
+        id: "composer-permission-hover-leaves-nothing",
+        group: "composer",
+        what: "hovering the Permission pill repeatedly adds no lasting nodes",
+        open: Some("theta theta north indi"),
+        prepare: None,
+        hover: Some(("Permission", 8)),
+        click: None,
+        subject: "Permission",
+        expect: Holds,
+    ),
+    (
+        // The same for the Model pill, which is the other one in the composer
+        // and carries a two-tone label the Permission pill does not.
+        id: "composer-model-hover-leaves-nothing",
+        group: "composer",
+        what: "hovering the Model pill repeatedly adds no lasting nodes",
+        open: Some("theta theta north indi"),
+        prepare: None,
+        hover: Some(("Model", 8)),
+        click: None,
+        subject: "Model",
+        expect: Holds,
+    ),
+    (
         id: "composer-permission-selects-option",
         group: "composer",
         what: "choosing Edit changes the composer permission trigger's accessible value",
