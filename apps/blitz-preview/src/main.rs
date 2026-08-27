@@ -1,4 +1,6 @@
-#[cfg(any(test, feature = "capture"))]
+// `Document` provides `inner_mut` and `poll`, which both the capture path
+// and the inspection host call. Unconditional: it is used in every
+// configuration now.
 use blitz_dom::Document;
 use blitz_dom::DocumentConfig;
 use blitz_script::{DefaultScriptFetcher, FetchError, ScriptDocument, ScriptFetcher};
@@ -185,6 +187,202 @@ fn create_dist_document(dist: &std::path::Path, url: &str) -> Result<ScriptDocum
             javascript,
         }),
     )
+}
+
+/*
+ * Serve inspection over the control socket, with no window.
+ *
+ * This is how a component gets driven. The process builds the document, hosts
+ * the socket `ps-qa` attaches to, and answers `Inspect` and `Act` from
+ * tauri-runtime-blitz's own handlers, so a headless run and the real
+ * application answer from one implementation.
+ *
+ * It replaces the screenshot and tree-file paths for QA. Both could only report
+ * what was on screen at one instant, so every check that presses something was
+ * undecidable and the majority of the suite could not run at all. A live
+ * document behind a socket can be clicked and re-read.
+ *
+ * The document lives on this thread and the socket server runs on its own, so
+ * requests arrive from outside and are applied here. That is the same shape the
+ * windowed runtime uses, minus the window: the bridge closure hands a request
+ * over a channel, this loop performs it and sends the answer back.
+ */
+#[cfg(not(test))]
+fn serve_inspection() -> Result<(), String> {
+    use blitz_traits::shell::{ColorScheme, Viewport};
+    use std::sync::mpsc;
+    use tauri_runtime_blitz::control_protocol::{
+        AgentAction, AgentControlRequest, DebugError, DebugResponse, InputCommand, KeyPhase,
+    };
+    use tauri_runtime_blitz::{
+        AgentControlServer, ControlBridgeRequest, click_agent_node, inspect_document,
+        press_agent_key,
+    };
+
+    fn dimension(variable: &str, default: u32) -> u32 {
+        std::env::var(variable)
+            .ok()
+            .and_then(|value| value.parse::<u32>().ok())
+            .filter(|value| *value > 0)
+            .unwrap_or(default)
+    }
+
+    let width = dimension("AGENCYZERO_BLITZ_WIDTH", 1344);
+    let height = dimension("AGENCYZERO_BLITZ_HEIGHT", 900);
+
+    trace("headless inspection started");
+    let mut document = match std::env::var_os("AGENCYZERO_BLITZ_DIST") {
+        Some(dist) => create_dist_document(std::path::Path::new(&dist), "tauri://localhost/")?,
+        None => create_document("tauri://localhost/")?,
+    };
+    document
+        .inner_mut()
+        .set_viewport(Viewport::new(width, height, 1.0, ColorScheme::Dark));
+    document.execute_scripts();
+
+    // Let the page settle before anyone can ask about it. The fixture backend
+    // resolves commands after 90 ms, so a client that attaches instantly would
+    // otherwise inspect a document that has not mounted yet and see an empty
+    // page, which reads as a component that renders nothing.
+    for _ in 0..8 {
+        std::thread::sleep(std::time::Duration::from_millis(100));
+        document.eval("void 0");
+        document.poll(None);
+    }
+    document.inner_mut().resolve(0.0);
+    trace("headless document ready");
+
+    /*
+     * The bridge hands a request to this thread and waits for the answer.
+     *
+     * A `SyncSender` with a zero-capacity channel would rendezvous, but the
+     * server thread must not block indefinitely if this loop has gone away, so
+     * the reply travels on a per-request oneshot the caller owns.
+     */
+    let (request_tx, request_rx) = mpsc::channel::<(
+        AgentControlRequest,
+        std::sync::mpsc::Sender<DebugResponse>,
+    )>();
+
+    let bridge: tauri_runtime_blitz::ControlBridge = std::sync::Arc::new(move |request| {
+        let (response_tx, response_rx) = tokio::sync::oneshot::channel();
+        match request {
+            ControlBridgeRequest::Agent(agent_request) => {
+                let (reply_tx, reply_rx) = mpsc::channel();
+                if request_tx.send((agent_request, reply_tx)).is_ok() {
+                    if let Ok(reply) = reply_rx.recv() {
+                        let _ = response_tx.send(reply);
+                        return response_rx;
+                    }
+                }
+                let _ = response_tx.send(DebugResponse::Error(DebugError {
+                    code: "documentUnavailable".into(),
+                    message: "the headless document is no longer serving".into(),
+                }));
+            }
+            #[cfg(feature = "diagnostics")]
+            ControlBridgeRequest::Diagnostics(_) => {
+                let _ = response_tx.send(DebugResponse::Error(DebugError {
+                    code: "diagnosticsUnavailable".into(),
+                    message: "the headless host serves inspection only".into(),
+                }));
+            }
+        }
+        response_rx
+    });
+
+    let server = AgentControlServer::start(bridge)
+        .map_err(|error| format!("could not host the control socket: {error}"))?;
+    trace(&format!(
+        "headless inspection listening: {}",
+        server.descriptor_path().display()
+    ));
+    // The descriptor path on stdout, so a caller can attach without guessing
+    // it. `ps-qa --app` takes a descriptor, and a sweep that has to search a
+    // directory races every other instance on the machine.
+    println!("{}", server.descriptor_path().display());
+    use std::io::Write as _;
+    let _ = std::io::stdout().flush();
+
+    let mut revision = 0_u64;
+    while let Ok((request, reply)) = request_rx.recv() {
+        let response = match request {
+            AgentControlRequest::Inspect { root, max_depth } => {
+                revision += 1;
+                inspect_document(&mut document, root, max_depth, revision)
+            }
+            AgentControlRequest::Act(AgentAction::Click { node_id }) => {
+                match click_agent_node(&mut document, node_id, 1) {
+                    Ok(_) => {
+                        // Settle before acknowledging. A click that opens a menu
+                        // needs the effect to have run before the next Inspect,
+                        // or the check reads the tree from before its own action
+                        // and reports that nothing happened.
+                        for _ in 0..6 {
+                            std::thread::sleep(std::time::Duration::from_millis(50));
+                            document.eval("void 0");
+                            document.poll(None);
+                        }
+                        document.inner_mut().resolve(0.0);
+                        DebugResponse::Ack
+                    }
+                    Err(error) => DebugResponse::Error(error),
+                }
+            }
+            AgentControlRequest::Act(AgentAction::DoubleClick { node_id }) => {
+                match click_agent_node(&mut document, node_id, 2) {
+                    Ok(_) => DebugResponse::Ack,
+                    Err(error) => DebugResponse::Error(error),
+                }
+            }
+            AgentControlRequest::Act(AgentAction::Input(InputCommand::Key {
+                key, code, phase, ..
+            })) => {
+                /*
+                 * One press per Down, and nothing on the matching Up.
+                 *
+                 * `press_agent_key` sends both halves, because a control that
+                 * acts on keyup never fires if only a keydown arrives. A client
+                 * that sends the pair would otherwise press the key twice, and
+                 * Escape pressed twice closes a menu and then whatever was
+                 * behind it.
+                 */
+                if matches!(phase, KeyPhase::Up) {
+                    DebugResponse::Ack
+                } else {
+                    match press_agent_key(&mut document, &key, &code) {
+                        Ok(()) => {
+                            for _ in 0..6 {
+                                std::thread::sleep(std::time::Duration::from_millis(50));
+                                document.eval("void 0");
+                                document.poll(None);
+                            }
+                            document.inner_mut().resolve(0.0);
+                            DebugResponse::Ack
+                        }
+                        Err(error) => DebugResponse::Error(error),
+                    }
+                }
+            }
+            AgentControlRequest::Quit => {
+                let _ = reply.send(DebugResponse::Ack);
+                break;
+            }
+            // Everything else needs runtime state this host does not have, and
+            // saying so is better than a plausible-looking Ack: a check that
+            // silently did nothing reports the component as broken.
+            _ => DebugResponse::Error(DebugError {
+                code: "unsupported".into(),
+                message: "the headless host serves Inspect and Click only".into(),
+            }),
+        };
+        if reply.send(response).is_err() {
+            break;
+        }
+    }
+
+    trace("headless inspection finished");
+    Ok(())
 }
 
 #[cfg(all(not(test), feature = "capture"))]
@@ -415,6 +613,28 @@ fn main() {
     }
     #[cfg(not(test))]
     {
+        /*
+         * `AGENCYZERO_BLITZ_INSPECT`: serve inspection, open no window.
+         *
+         * This is the path a QA sweep should take. The process owns a document,
+         * hosts the control socket and waits to be driven, so `ps-qa` attaches
+         * to it exactly as it attaches to the real application, and every check
+         * works including the ones that click.
+         *
+         * It supersedes the capture path below. A screenshot answers "did
+         * something paint" and a tree dump answers "what is on screen right
+         * now"; neither can answer "what happens when this is pressed", which
+         * is most of what the check suite asks. Driving needs a live document
+         * on the other end of a socket, and that is what this is.
+         */
+        if std::env::var_os("AGENCYZERO_BLITZ_INSPECT").is_some() {
+            if let Err(error) = serve_inspection() {
+                trace(&format!("headless inspection failed: {error}"));
+                std::process::exit(1);
+            }
+            return;
+        }
+
         if let Some(output) = std::env::var_os("AGENCYZERO_BLITZ_CAPTURE") {
             #[cfg(feature = "capture")]
             {

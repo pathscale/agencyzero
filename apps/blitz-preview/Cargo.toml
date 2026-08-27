@@ -21,7 +21,11 @@ blitz-traits = { package = "ps-blitz-traits", version = "^0.3.0-beta.11" }
 brotli = { version = "^8.0.4", default-features = false, features = ["std"] }
 png = { version = "^0.18.1", optional = true }
 tauri = { version = "^2.11.5", default-features = false, features = ["compression"] }
-tauri-runtime-blitz = "^0.1.0"
+tauri-runtime-blitz = { version = "^0.1.0", features = ["agent-control"] }
+# The control bridge hands its answer back on a `tokio::sync::oneshot`,
+# which is the type tauri-runtime-blitz names in `ControlBridge`. Only the
+# channel is needed, so no runtime or reactor is pulled in.
+tokio = { version = "^1", default-features = false, features = ["sync"] }
 url = "^2.5.8"
 
 # For `--offscreen`: the activation policy has to be set before any window
@@ -54,3 +58,15 @@ strip = "symbols"
 
 [workspace]
 resolver = "3"
+
+# Local checkout of tauri-runtime-blitz, for the headless inspection host.
+#
+# `AgentControlServer::start`, `inspect_document` and `click_agent_node` are
+# exported on that branch (TRB#35) so this binary can serve the inspection
+# socket without opening a window. Drop this once the change is published.
+#
+# This crate is not a member of the agencyzero workspace and has its own
+# lockfile, so a patch in the root manifest does not reach it.
+[patch.crates-io]
+tauri-runtime-blitz = { path = "../../../tauri-runtime-blitz/crates/tauri-runtime-blitz" }
+blitz-control-protocol = { path = "../../../tauri-runtime-blitz/crates/blitz-control-protocol" }
