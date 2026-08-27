@@ -289,6 +289,55 @@ fn capture_preview(output: &std::path::Path) -> Result<(), String> {
         "const status = document.getElementById('native-ipc-status'); if (status && status.parentNode) status.parentNode.removeChild(status);",
     );
 
+    /*
+     * `AGENCYZERO_BLITZ_TREE`: write the semantic tree, not a picture.
+     *
+     * This is what a QA check actually reads. A PNG says a component painted
+     * *something*; only the tree says which control a reader can address, what
+     * its role is and what its accessible name reads, which is the whole
+     * question every check asks.
+     *
+     * It is the same tree the inspector serves over the control socket
+     * (`build_accessibility_tree`), so a headless run and a windowed run answer
+     * from one source. The socket itself is `pub(crate)` in
+     * `tauri-runtime-blitz` and so cannot be hosted from here, which is why
+     * this path writes the tree to a file instead of serving it.
+     */
+    if let Some(tree_path) = std::env::var_os("AGENCYZERO_BLITZ_TREE") {
+        let update = document.inner().build_accessibility_tree();
+        let mut lines = String::new();
+        for (id, node) in &update.nodes {
+            /*
+             * Skip the document's own `<style>` text. It reaches the tree as a
+             * `TextRun` carrying the whole stylesheet, which buried the handful
+             * of nodes a check actually addresses under 70 kB of Tailwind.
+             */
+            let name = node.label().or_else(|| node.value()).unwrap_or_default();
+            if name.len() > 200 {
+                continue;
+            }
+            lines.push_str(&format!(
+                "{}\t{:?}\t{}\n",
+                id.0,
+                node.role(),
+                /*
+                 * `label` is only set when a node carries an explicit one, and
+                 * almost none do: the first dump had 27 nodes and not a single
+                 * name, which is exactly why 30 generated checks could not
+                 * address anything. A node's `value` carries its text, which is
+                 * what Blitz names a node from and what a check matches on.
+                 */
+                name,
+            ));
+        }
+        fs::write(std::path::Path::new(&tree_path), lines)
+            .map_err(|error| format!("could not write the tree: {error}"))?;
+        trace(&format!(
+            "headless tree written: {} nodes",
+            update.nodes.len()
+        ));
+    }
+
     let mut doc = document.inner_mut();
     doc.resolve(0.0);
     let buffer = render_to_buffer::<VelloCpuImageRenderer, _>(
@@ -449,8 +498,14 @@ fn main() {
      * component that never rendered.
      */
     if std::env::args().any(|argument| argument == "--offscreen") {
-        #[cfg(target_os = "macos")]
-        app.set_activation_policy(tauri::ActivationPolicy::Accessory);
+        /*
+         * No `set_activation_policy` here. It used to set `Accessory`, which
+         * silently undid the `Prohibited` set at the top of `main`, and
+         * `Accessory` is not enough on its own: winit calls
+         * `activateIgnoringOtherApps` during window creation and pulls the
+         * process to the front regardless. That one line is why every sweep
+         * kept stealing focus after the policy was supposedly fixed.
+         */
         if let Some(window) = app.get_webview_window("main") {
             let _ = window.set_position(tauri::PhysicalPosition::new(-20_000, -20_000));
         }
