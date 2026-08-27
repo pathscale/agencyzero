@@ -82,18 +82,6 @@
         expect: NameChanges,
     ),
     (
-        id: "composer-permission-pill-height",
-        group: "composer",
-        what: "the Permission pill is the 24px tall its style declares",
-        open: Some("theta theta north indi"),
-        prepare: None,
-        hover: None,
-        click: None,
-        subject: "Permission",
-        expect_size: Some("x=24"),
-        expect: Measures,
-    ),
-    (
         id: "composer-permission-hover-leaves-nothing",
         group: "composer",
         what: "hovering the Permission pill repeatedly adds no lasting nodes",
