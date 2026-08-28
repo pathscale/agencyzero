@@ -148,6 +148,7 @@
         click: Some("Check for update"),
         subject: "Update check generation",
         expect: NameChanges,
+        outcome_timeout_ms: 2000,
     ),
     (
         id: "settings-workspace-root-creates",

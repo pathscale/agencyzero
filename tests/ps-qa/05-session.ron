@@ -44,11 +44,12 @@
     (
         id: "session-change-persists-id",
         group: "session",
+        destructive: true,
         what: "entering a replacement session id changes the editor's attached-session status",
-        open: None,
+        open: Some("theta theta north indi"),
         hover: None,
         click: None,
-        type_into: Some("textbox:Resume a session by id"),
+        type_into: Some("Resume a session by id"),
         text: Some("019fc95e-qa-audit-session"),
         key: Some("Enter"),
         key_on: Some("textbox:Resume a session by id"),
@@ -59,6 +60,7 @@
     (
         id: "session-reset-confirms",
         group: "session",
+        destructive: true,
         what: "reset asks for inline confirmation before changing session state",
         open: Some("theta theta north indi"),
         hover: None,
@@ -69,6 +71,7 @@
     (
         id: "session-reset-cancel-closes",
         group: "session",
+        destructive: true,
         what: "cancel closes reset confirmation without resetting the session",
         open: Some("theta theta north indi"),
         hover: None,

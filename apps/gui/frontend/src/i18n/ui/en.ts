@@ -12,6 +12,8 @@ const en = {
   "Show {count} earlier messages": "Show {count} earlier messages",
   "Show {count} newer messages": "Show {count} newer messages",
   "Show {count} more projects": "Show {count} more projects",
+  "Show {count} more Home projects": "Show {count} more Home projects",
+  "Show {count} more recent projects": "Show {count} more recent projects",
   "Show {count} more items": "Show {count} more items",
   "Show {count} earlier": "Show {count} earlier",
   "Update available: {version} — install from Settings":

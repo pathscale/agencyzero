@@ -6,6 +6,7 @@
     (
         id: "tasklog-clear",
         group: "tasklog-destructive",
+        destructive: true,
         what: "clearing the task log removes its rendered rows",
         open: Some("theta theta north indi"),
         hover: None,
