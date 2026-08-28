@@ -147,17 +147,6 @@
         expect: SelectionChanges,
     ),
     (
-        id: "composer-model-selects-option",
-        group: "composer",
-        what: "choosing Opus changes the exact composer model trigger",
-        open: Some("theta theta north indi"),
-        prepare: Some("button:Model:"),
-        hover: None,
-        click: Some("menuitem:Opus"),
-        subject: "button:Model:",
-        expect: NameChanges,
-    ),
-    (
         // Paired with the restore below, so this group is repeatable.
         //
         // A `NameChanges` check that leaves the control on its new value
