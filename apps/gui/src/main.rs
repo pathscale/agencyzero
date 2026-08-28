@@ -814,7 +814,19 @@ struct BuildInfo {
     runtime: &'static str,
     git_sha: &'static str,
     built_at: &'static str,
+    /// Every dependency this binary resolved against, as one text blob.
+    ///
+    /// The version asked for and the version linked are different questions,
+    /// and every wasted round of "is the fix in this build" came from reading
+    /// the first and assuming the second. Written by `build.rs` from
+    /// `cargo tree` plus the installed component library, because neither a
+    /// `Cargo.lock` nor a `bun.lock` is committed here and the manifest carets
+    /// cannot answer it.
+    resolved: &'static str,
 }
+
+/// The resolved dependency graph, embedded at compile time.
+const RESOLVED_MANIFEST: &str = include_str!(concat!(env!("OUT_DIR"), "/resolved-manifest.txt"));
 
 const BUILD: BuildInfo = BuildInfo {
     version: az_core::VERSION,
@@ -825,7 +837,38 @@ const BUILD: BuildInfo = BuildInfo {
     },
     git_sha: env!("AZ_GIT_SHA"),
     built_at: env!("AZ_BUILT_AT"),
+    resolved: RESOLVED_MANIFEST,
 };
+
+/// The renderer-side versions, logged at boot.
+///
+/// The whole graph is available through `get_build_info`; these are the four
+/// that decide whether a rendering fix is present, so they go in the log where
+/// they are read without asking the app anything.
+fn resolved_highlights() -> String {
+    let wanted = [
+        "ps-blitz-script",
+        "ps-boa-engine",
+        "tauri-runtime-blitz",
+        "@pathscale/ui",
+    ];
+    // `cargo tree` marks a crate it has already expanded with a trailing
+    // `(*)`, so every package appears twice. Same version, no extra
+    // information, and it makes the line read as though the graph were
+    // duplicated.
+    let mut seen = Vec::new();
+    for line in RESOLVED_MANIFEST.lines() {
+        let entry = line.trim_end_matches(" (*)");
+        if wanted
+            .iter()
+            .any(|name| entry.split_whitespace().next() == Some(name))
+            && !seen.contains(&entry)
+        {
+            seen.push(entry);
+        }
+    }
+    seen.join(", ")
+}
 
 #[tauri::command]
 fn get_build_info() -> BuildInfo {
@@ -2331,6 +2374,12 @@ fn main() {
                 BUILD.git_sha,
                 BUILD.built_at,
             );
+            // The versions that decide whether a rendering fix is in this
+            // binary, on the line after the build stamp. A build stamp says
+            // which commit; it does not say which renderer that commit
+            // resolved against, and that is the question that kept being
+            // answered wrongly. The whole graph is in `get_build_info`.
+            crate::log!(log::Level::Info, "boot", "resolved: {}", resolved_highlights());
             crate::log!(
                 log::Level::Info,
                 "boot",

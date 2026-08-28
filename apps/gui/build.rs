@@ -102,11 +102,33 @@ fn stamp_build() {
     let built = first_line("date", &["+%Y-%m-%d %H:%M:%S"]).unwrap_or_else(|| "unknown".into());
     println!("cargo:rustc-env=AZ_BUILT_AT={built}");
 
+    /*
+     * The versions of the crates that actually render, and of the component
+     * library, so nobody has to take a build's word for what is in it.
+     *
+     * A whole session was spent disagreeing about whether a fix was present:
+     * a caret asking for a pre-release silently resolved to a stale registry
+     * copy, `bun install` reverted a locally linked `@pathscale/ui`, and a
+     * Rust rebuild kept an older embedded frontend. Each produced a build that
+     * looked right, was described as fixed, and was not. The version was
+     * knowable at compile time every time, and simply was not written down.
+     *
+     * Read from the resolved graph rather than the manifest: the manifest says
+     * what was asked for, and every one of those failures was the difference
+     * between the ask and the answer.
+     */
+    write_resolved_manifest();
+
     // A commit moves HEAD or a ref; a code edit touches `src`. Either has to
     // rerun this script, or the stamp would describe some earlier build.
     println!("cargo:rerun-if-changed=../../.git/HEAD");
     println!("cargo:rerun-if-changed=../../.git/refs");
     println!("cargo:rerun-if-changed=src");
+    // The resolved graph and the installed component library are inputs to the
+    // stamp above, so a change in either has to rerun this script.
+    println!("cargo:rerun-if-changed=../../Cargo.toml");
+    println!("cargo:rerun-if-changed=Cargo.toml");
+    println!("cargo:rerun-if-changed=frontend/node_modules/@pathscale/ui/package.json");
 }
 
 /// Drop framework load commands that nothing in this binary references.
@@ -152,4 +174,68 @@ fn main() {
         embed_blitz_assets();
     }
     tauri_build::build()
+}
+
+/// Write every resolved dependency version into the binary, plus the installed
+/// component library, so a running app can state exactly what it was built
+/// from.
+///
+/// A build stamp of a few hand-picked crates answers only the question someone
+/// thought to ask. This records the whole graph: `cargo tree` output for the
+/// Rust side and the resolved version of `@pathscale/ui` for the frontend,
+/// which together are the two halves that drifted.
+///
+/// It exists because "is the fix in this build" cost most of a session and was
+/// answered wrongly several times. A caret asking for a pre-release silently
+/// resolved to a stale registry copy; `bun install` reverted a locally linked
+/// `@pathscale/ui` mid-session; a Rust rebuild kept an older embedded
+/// frontend. All three were knowable at compile time and none were written
+/// down, so each produced a build that looked right and was described as fixed
+/// when it was not.
+fn write_resolved_manifest() {
+    let out_dir = std::env::var("OUT_DIR").expect("OUT_DIR is set for build scripts");
+    let path = std::path::Path::new(&out_dir).join("resolved-manifest.txt");
+
+    let mut manifest = String::new();
+
+    // The whole Rust graph, deduplicated. A path or git source shows up here
+    // as its source, which is the thing that must never ship unnoticed.
+    let tree = std::process::Command::new("cargo")
+        .args(["tree", "--edges", "normal", "--prefix", "none", "--quiet"])
+        .output()
+        .ok()
+        .filter(|out| out.status.success())
+        .and_then(|out| String::from_utf8(out.stdout).ok())
+        .unwrap_or_else(|| "cargo tree unavailable\n".into());
+    let mut crates: Vec<&str> = tree
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+        .collect();
+    crates.sort_unstable();
+    crates.dedup();
+    manifest.push_str(&format!("# rust: {} crates\n", crates.len()));
+    for line in crates {
+        manifest.push_str(line);
+        manifest.push('\n');
+    }
+
+    // The component library as installed, not as requested. `bun.lock` is not
+    // committed in this project, so the caret in `package.json` cannot answer
+    // which version is on disk.
+    let ui = std::fs::read_to_string("frontend/node_modules/@pathscale/ui/package.json")
+        .ok()
+        .and_then(|text| {
+            text.lines()
+                .find(|line| line.trim_start().starts_with("\"version\""))
+                .and_then(|line| line.split('"').nth(3).map(str::to_owned))
+        })
+        .unwrap_or_else(|| "unknown".into());
+    manifest.push_str(&format!("\n# frontend\n@pathscale/ui {ui}\n"));
+
+    std::fs::write(&path, manifest).expect("write resolved-manifest.txt");
+
+    println!("cargo:rerun-if-changed=../../Cargo.toml");
+    println!("cargo:rerun-if-changed=Cargo.toml");
+    println!("cargo:rerun-if-changed=frontend/node_modules/@pathscale/ui/package.json");
 }
