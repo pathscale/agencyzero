@@ -74,7 +74,7 @@ jobs:
         # This PR uses the rendered-pixel, shared-host and manifest-validation
         # work from ps-qa 0.4.3. Pin the exact reviewed source until that
         # version is published, then return to a crates.io version constraint.
-        run: cargo install ps-qa --git https://github.com/pathscale/ps-qa --rev 6f4a7e79547234f7626e22f536f3a2aa0073b932
+        run: cargo install ps-qa --git https://github.com/pathscale/ps-qa --rev 08007a073164cf3f54214aee2471f2c6c3f939b1
 
       - name: Validate the QA profile and outcome manifest
         run: ps-qa --app ps-qa.ron list --checks tests/ps-qa
@@ -176,6 +176,9 @@ jobs:
         timeout-minutes: 3
         env:
           QA_GROUPS: ${{ inputs.group || 'rename dirs select tasklog-copy-entry dialog-opens settings-model-selects-option settings-effort-selects-option home-project-page-reveals theme-first-paint' }}
+          # Preserve strict state predicates while allowing for shared-runner
+          # scheduling; developer runs keep the default scale of 1.
+          QA_TIMEOUT_SCALE: 2
         run: |
           set -o pipefail
           # One process, ordered semantic preconditions. Blank means all groups.
@@ -202,6 +205,7 @@ jobs:
         timeout-minutes: 3
         env:
           QA_GROUPS: ''
+          QA_TIMEOUT_SCALE: 2
         run: |
           set -o pipefail
           QA_LOG=/tmp/qa-full.txt scripts/qa-run-groups.sh
