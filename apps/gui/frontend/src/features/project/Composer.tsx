@@ -1215,7 +1215,7 @@ export function Composer(props: ComposerProps): JSX.Element {
         }`}
       >
         <section
-          aria-label="Composer body"
+          aria-label={props.placeholder}
           /*
             Less room under the controls than over the prompt: the text needs
             air above it, the controls only need to clear the edge. Even spacing
