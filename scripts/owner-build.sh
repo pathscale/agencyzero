@@ -160,7 +160,10 @@ launched=0
 for _ in $(seq 1 30); do
   sleep 1
   kill -0 "$probe_pid" 2>/dev/null || break
-  if grep -q 'panel proj-' "$probe_data/launch.log" 2>/dev/null; then
+  # The frontend answering an IPC call, not a rendered project panel: the probe
+  # runs on an empty profile, which has no project to render, so waiting for one
+  # failed a bundle that was working perfectly.
+  if grep -q '\[webview\] <-' "$probe_data/launch.log" 2>/dev/null; then
     launched=1
     break
   fi
