@@ -6,7 +6,30 @@ it is also the *worst* verification surface: slow, flaky, and it requires the
 System instance, whose store you must never touch. There is a better path,
 and it needs no screen at all.
 
-## The frontend runs standalone, against fixtures
+## The native outcome harness is the release gate
+
+`ps-qa` drives the QA profile through Blitz inspection. It addresses the
+rendered semantic tree, performs real click, pointer, key and text-input
+actions, and judges the resulting value, selection, geometry or pixels. The
+checks live in `tests/ps-qa`.
+
+The component library has the same contract at a smaller scale. UI builds one
+page per exported component and `qa-inspect-host` serves those pages without a
+window. One clean native host is used per component, while the outcomes for
+that component share the host. The complete 72-component sweep takes under two
+minutes on a developer Mac.
+
+This is the replacement for jsdom interaction coverage. Pure functions may
+still have ordinary unit tests, but a component does not earn UI coverage by
+mounting into a fake DOM. It earns coverage when the native renderer exposes
+the intended result after the intended input.
+
+Every value-bearing `@pathscale/ui` primitive imported by AgencyZero is listed
+in `apps/gui/frontend/scripts/check-ui-controls.ts`. That gate requires named
+ps-qa outcomes which actually drive a control. Adding an Input, Select,
+InlineEdit or similar primitive without a rendered outcome fails CI.
+
+## The frontend also runs standalone against fixtures
 
 `apps/gui/frontend` is a browser app first. Outside Tauri it serves itself
 with the in-memory mock backend (`src/api/mock.ts`) and a banner reading
@@ -21,7 +44,7 @@ panels, transcript rendering, composer states, the whole event-driven store
 (the mock emits the same events Rust does). No Tauri build, no instance, no
 desktop.
 
-## Drive it headlessly, by role and label — never by pixels
+## Browser fixture inspection is a secondary diagnostic
 
 Use the browser that is already here. **Brave is the machine's agent browser** —
 it carries the owner's Claude for Chrome plugin and is kept apart from the
@@ -56,9 +79,9 @@ Two rules learned the hard way:
   When a test "types Enter and nothing happens", click the labelled submit
   button instead — that path is identical for real users and scripts.
 
-Assert on the DOM (`textContent`, element presence, `aria-*` state), not on
-screenshots. A text assertion fails with a message; a screenshot diff fails
-with homework.
+Use this path for a quick frontend-only diagnosis. Do not treat a DOM assertion
+as the release verdict when the same behavior can be checked by ps-qa against
+the native renderer.
 
 ## What this cannot verify, and what to do then
 

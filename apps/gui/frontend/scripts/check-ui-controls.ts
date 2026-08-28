@@ -80,11 +80,16 @@ for (const file of tsxFiles(sourceRoot)) {
   }
 }
 
-const outcomeIds = new Set<string>();
+const outcomeContracts = new Map<string, string>();
 for (const entry of readdirSync(qaRoot, { withFileTypes: true })) {
   if (!entry.isFile() || !entry.name.endsWith(".ron")) continue;
   const source = readFileSync(join(qaRoot, entry.name), "utf8");
-  for (const match of source.matchAll(/\bid:\s*"([^"]+)"/g)) outcomeIds.add(match[1]);
+  const matches = [...source.matchAll(/\bid:\s*"([^"]+)"/g)];
+  for (const [index, match] of matches.entries()) {
+    const start = match.index ?? 0;
+    const end = matches[index + 1]?.index ?? source.length;
+    outcomeContracts.set(match[1], source.slice(start, end));
+  }
 }
 
 for (const component of [...importedInputs].sort()) {
@@ -94,8 +99,17 @@ for (const component of [...importedInputs].sort()) {
     continue;
   }
   for (const outcome of outcomes) {
-    if (!outcomeIds.has(outcome)) {
+    const contract = outcomeContracts.get(outcome);
+    if (!contract) {
       violations.push(`${component}: declared ps-qa outcome ${outcome} does not exist`);
+      continue;
+    }
+    if (
+      !/(?:prepare|click|type_into|key|key_on|hover|after_prepare_hover):\s*Some/.test(contract)
+    ) {
+      violations.push(
+        `${component}: declared ps-qa outcome ${outcome} only observes paint and drives no control`,
+      );
     }
   }
 }
