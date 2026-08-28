@@ -71,10 +71,10 @@ jobs:
       # spending minutes building or launching an app with an incompatible
       # harness release.
       - name: Install ps-qa
-        # This PR uses the rendered-pixel, shared-host and manifest-validation
-        # work from ps-qa 0.4.3. Pin the exact reviewed source until that
-        # version is published, then return to a crates.io version constraint.
-        run: cargo install ps-qa --git https://github.com/pathscale/ps-qa --rev 08007a073164cf3f54214aee2471f2c6c3f939b1
+        # This PR uses the rendered-pixel, shared-host, manifest-validation and
+        # corrected hover sampling work from ps-qa 0.4.4. Pin the exact reviewed
+        # source until that version is published, then return to crates.io.
+        run: cargo install ps-qa --git https://github.com/pathscale/ps-qa --rev 27b86f9523024b3e956122bf921b5d9465924be5
 
       - name: Validate the QA profile and outcome manifest
         run: ps-qa --app ps-qa.ron list --checks tests/ps-qa
