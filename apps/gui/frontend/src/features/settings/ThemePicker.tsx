@@ -204,7 +204,7 @@ export function ThemePicker(props: {
   ]);
 
   return (
-    <div class="flex flex-col gap-3">
+    <div data-slot="theme-color-control" class="flex flex-col gap-3">
       <ComplexColorWheel
         value={surface() || DEFAULT_ACCENT}
         onChange={chooseSurface}

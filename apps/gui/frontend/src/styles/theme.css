@@ -1686,20 +1686,10 @@
   }
 
   /*
-   * The composer's own fill, scoped to the composer.
-   *
-   * It is painted with `bg-az-inset`, and that utility is on 38 other things:
-   * chips, small buttons, count badges. Those have to stay solid to remain
-   * legible against whatever passes behind them, and a translucent button reads
-   * as a disabled one. So the alpha is applied through the composer's own ring
-   * class rather than to the utility, which is the only large surface using it.
-   *
-   * The ring's own gradient is cleared where the fill sits. `az-ring-composer`
-   * paints an animated primary-tinted gradient as the 1px border, and a
-   * translucent child let that gradient show *through* the fill: it landed as a
-   * hard vertical seam down the middle of the composer, brightest where the
-   * gradient peaks. The ring is a border, so it belongs on the padding box and
-   * nowhere else.
+   * The parent paints the gradient into its one-pixel padding; the child owns
+   * the composer's flat fill. These must remain separate paint layers. Making
+   * the child translucent reveals the parent gradient across the whole body —
+   * no stacking-context rule can prevent ordinary alpha compositing.
    */
   .az-ring-composer {
     background-origin: border-box;
@@ -1707,11 +1697,10 @@
   }
 
   .az-ring-composer > * {
-    background-color: rgb(
-      from var(--color-az-inset) r g b /
-      calc(var(--glass-background-opacity, 55%) * 0.72)
-    );
-    /* Its own stacking context, so the parent gradient cannot bleed into it. */
+    /* Opaque by design. A translucent child necessarily shows the animated
+       parent gradient through its body; stacking isolation cannot change
+       alpha compositing. The gradient belongs to the one-pixel ring only. */
+    background-color: var(--color-az-inset);
     isolation: isolate;
   }
 

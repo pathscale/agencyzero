@@ -37,7 +37,7 @@
         click: None,
         type_into: Some("Search settings"),
         text: Some("Appearance"),
-        subject: "@color-wheel-flower",
+        subject: "@theme-color-control",
         expect: PixelsHoldAfterHover,
     ),
     (

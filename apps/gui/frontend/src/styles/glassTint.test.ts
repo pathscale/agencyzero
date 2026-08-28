@@ -119,17 +119,17 @@ describe("the glass tint follows the surface, not the accent", () => {
    * The composer's animated ring is a gradient painted on the border box, and
    * the fill inside it is a child. Two declarations keep it visible and both
    * have been lost before: without `background-clip: border-box` the gradient
-   * lands behind the fill instead of on the edge, and without `isolation` on
-   * the child the parent gradient shows *through* a translucent fill as a hard
-   * vertical seam. There is no assertion for a seam, so this asserts the two
-   * declarations that prevent it.
+   * lands behind the fill instead of on the edge, and a translucent child
+   * necessarily reveals it across the body. Native QA checks the resolved
+   * alpha; this source guard keeps the intended solid token declaration.
    */
-  it("keeps the composer ring on its border box, with an isolated fill", () => {
+  it("keeps the composer ring on its border box, with a solid fill", () => {
     const ring = THEME_CSS.slice(
       THEME_CSS.indexOf(".az-ring-composer {"),
       THEME_CSS.indexOf(".az-ring-drift"),
     );
     expect(ring).toContain("border-box");
+    expect(ring).toContain("background-color: var(--color-az-inset)");
     expect(ring).toContain("isolation: isolate");
   });
 

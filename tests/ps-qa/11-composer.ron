@@ -2,6 +2,16 @@
 // toggles must change either their semantic value or their inverse label.
 [
     (
+        id: "composer-body-is-flat",
+        group: "composer",
+        what: "the composer body owns an opaque flat fill while its border animates independently",
+        open: Some("theta theta north indi"),
+        hover: None,
+        click: None,
+        subject: "@composer-body",
+        expect: OpaqueBackground,
+    ),
+    (
         id: "composer-advanced",
         group: "composer",
         what: "Prompt Syntax advanced mode changes",

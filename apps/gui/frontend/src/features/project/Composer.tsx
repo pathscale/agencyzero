@@ -1215,6 +1215,7 @@ export function Composer(props: ComposerProps): JSX.Element {
         }`}
       >
         <div
+          data-slot="composer-body"
           /*
             Less room under the controls than over the prompt: the text needs
             air above it, the controls only need to clear the edge. Even spacing
