@@ -39,6 +39,7 @@ jobs:
       - name: Compare the committed version against the experimental channel
         id: decide
         run: |
+          cargo generate-lockfile
           # `cargo pkgid` prints `<source>#<name>@<version>`; see release.yml.
           VERSION=$(cargo pkgid -p az-gui)
           VERSION=${VERSION##*@}

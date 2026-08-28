@@ -3,11 +3,18 @@ set -euo pipefail
 
 repo_root=$(git rev-parse --show-toplevel)
 
+# `cargo pkgid` only reads an existing resolution. CI intentionally does not
+# commit Cargo.lock, so establish that resolution before asking for a package
+# id. A developer's existing ignored lockfile remains untouched.
+if [[ ! -f "$repo_root/Cargo.lock" ]]; then
+  cargo generate-lockfile
+fi
+
 # The client and the protocol inherit one workspace dependency version, so
 # there is no pair to cross-check here: ask cargo which version it resolved.
 # `cargo pkgid` prints `<source>#<name>@<version>`, so the version is whatever
 # follows the last `@` -- no JSON, and no second parser to install.
-proxy_version=$(cargo pkgid -p agency-proxy-client 2>/dev/null)
+proxy_version=$(cargo pkgid -p agency-proxy-client)
 proxy_version=${proxy_version##*@}
 # Shape-check, not just non-empty: a pkgid form without an `@` would survive
 # the expansion whole and get passed to `cargo install --version`.

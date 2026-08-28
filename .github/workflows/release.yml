@@ -71,6 +71,7 @@ jobs:
       - name: Compare the committed version against the published one
         id: decide
         run: |
+          cargo generate-lockfile
           # `cargo pkgid` prints `<source>#<name>@<version>`; the version is
           # whatever follows the last `@`. Asking cargo beats pattern-matching
           # Cargo.toml, and needs no JSON parser on the runner.

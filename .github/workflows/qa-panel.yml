@@ -71,7 +71,10 @@ jobs:
       # spending minutes building or launching an app with an incompatible
       # harness release.
       - name: Install ps-qa
-        run: cargo install ps-qa --version '^0.4.1'
+        # This PR adds rendered-pixel checks from ps-qa 0.4.2. Pin the exact
+        # reviewed source until that version is published, then the release
+        # branch can return to a crates.io version constraint.
+        run: cargo install ps-qa --git https://github.com/pathscale/ps-qa --rev 2cc4d0f
 
       - name: Validate the QA profile and outcome manifest
         run: ps-qa --app ps-qa.ron list --checks tests/ps-qa
