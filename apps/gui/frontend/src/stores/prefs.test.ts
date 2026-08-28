@@ -15,28 +15,24 @@ describe("interface size", () => {
     expect(UI_SCALES).toEqual({ normal: 1, large: 1.08, "extra-large": 1.16 });
   });
 
-  it("applies a picked scale without shrinking the viewport twice", async () => {
+  it("stores a picked scale", async () => {
     setPrefs((d) => {
       d.uiSize = "extra-large";
     });
     await Promise.resolve();
 
     expect(prefs.uiSize).toBe("extra-large");
-    expect(document.documentElement.style.getPropertyValue("--az-ui-scale")).toBe("1.16");
-    expect(document.documentElement.style.getPropertyValue("--az-ui-inverse-scale")).toBe("");
   });
 });
 
 describe("colour mode", () => {
-  it("persists the selected palette on the document root", async () => {
+  it("stores the selected palette", async () => {
     setPrefs((d) => {
       d.colorMode = "light";
     });
     await Promise.resolve();
 
     expect(prefs.colorMode).toBe("light");
-    expect(document.documentElement.dataset.colorMode).toBe("light");
-    expect(document.documentElement.style.colorScheme).toBe("light");
 
     setPrefs((d) => {
       d.colorMode = "dark";

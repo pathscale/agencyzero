@@ -6,8 +6,7 @@ import {
   shouldRevealLater,
   TRANSCRIPT_MAX_ENTRIES,
   transcriptTail,
-  viewportAnchor,
-} from "~/features/project/TranscriptPane";
+} from "~/features/project/transcriptLogic";
 
 describe("transcript paging", () => {
   it("mounts only the newest page until earlier messages are requested", () => {
@@ -78,36 +77,6 @@ describe("transcript paging", () => {
   it("keeps the same content anchored after prepending an earlier page", () => {
     expect(anchoredScrollTop(0, 1796, 3993)).toBe(2197);
     expect(anchoredScrollTop(24, 1000, 900)).toBe(24);
-  });
-
-  it("anchors on the topmost row in view and never on a reveal affordance", () => {
-    // The scroller's own top edge is 0, so a row whose bottom is negative has
-    // been scrolled out of view above it.
-    const scroller = (...rows: [number, number, boolean?][]): HTMLElement => {
-      const section = document.createElement("section");
-      section.getBoundingClientRect = () => ({ top: 0, bottom: 600 }) as unknown as DOMRect;
-      for (const [top, height, edge] of rows) {
-        const node = document.createElement("div");
-        if (edge) node.setAttribute("data-transcript-edge", "");
-        node.getBoundingClientRect = () => ({ top, bottom: top + height }) as unknown as DOMRect;
-        section.append(node);
-      }
-      return section;
-    };
-
-    // Sitting at the top, which is the only place a reveal earlier ever fires:
-    // the affordance is the first thing the viewport touches, and anchoring on
-    // it would hold the button still and push the prose down a whole page.
-    const atTop = scroller([0, 24, true], [30, 300], [340, 300]);
-    expect(viewportAnchor(atTop)?.row).toBe(atTop.children[1]);
-    expect(viewportAnchor(atTop)?.gap).toBe(30);
-
-    // Mid-thread, the row straddling the top edge is the one to keep still.
-    const midway = scroller([-1200, 24, true], [-900, 300], [-40, 300], [300, 300]);
-    expect(viewportAnchor(midway)?.row).toBe(midway.children[2]);
-    expect(viewportAnchor(midway)?.gap).toBe(-40);
-
-    expect(viewportAnchor(scroller())).toBeUndefined();
   });
 
   it("keeps the anchor row still when the window slides in both directions", () => {

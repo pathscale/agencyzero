@@ -1,12 +1,4 @@
-/*
- * @vitest-environment node
- *
- * This file reads the repository with `node:fs` rather than rendering
- * anything. Under the suite's default jsdom environment those builtins are
- * externalised for the browser and the import fails outright with "No such
- * built-in module: node:". Vitest 4 removed `environmentMatchGlobs`, so the
- * environment is declared per file.
- */
+/* Reads shipped source with `node:fs`; rendered language changes use ps-qa. */
 /// <reference types="node" />
 import { readdirSync, readFileSync } from "node:fs";
 import { join, relative } from "node:path";

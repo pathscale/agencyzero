@@ -16,12 +16,17 @@ import {
 import { Button } from "~/components/Button";
 import { Icon } from "~/components/Icon";
 import { ApprovalCard } from "~/features/project/ApprovalCard";
+import { CopyMessageButton, InlineText, MessageBody } from "~/features/project/MessageBody";
 import {
-  CopyMessageButton,
-  InlineText,
-  isPromptSyntaxDirectiveLine,
-  MessageBody,
-} from "~/features/project/MessageBody";
+  anchoredScrollTop,
+  anchoredToRow,
+  holdBackPartialDirective,
+  shouldRevealEarlier,
+  shouldRevealLater,
+  TRANSCRIPT_MAX_ENTRIES,
+  TRANSCRIPT_PAGE_SIZE,
+  transcriptTail,
+} from "~/features/project/transcriptLogic";
 import {
   isCybersecurityRefusal,
   isRetryableStop,
@@ -58,44 +63,6 @@ const STARTERS = () => [
  * delivers the whole line. Releasing the completed tail made only the first
  * shape flash the control syntax to the owner.
  */
-export function holdBackPartialDirective(text: string): string {
-  /*
-   * Only the last line is searched, and that is the whole cost story.
-   *
-   * This runs on every streaming token. `lastIndexOf("<ps")` over the whole
-   * body has to reach the start of the string before it can report a miss, and
-   * a miss is the common case — most replies contain no directive at all — so
-   * the scan was O(body) per token, which is the same quadratic the parse had.
-   *
-   * A directive is a line: `isPromptSyntaxDirectiveLine` in MessageBody takes
-   * one line and requires the directive to span it exactly. So an unterminated
-   * `<ps` can only be on the last line, and searching earlier lines could never
-   * find one that mattered. The bound is exact, not a heuristic window.
-   *
-   * The one body this does not help is a reply with no newline anywhere, where
-   * the last line is the whole reply. That is also the body for which the
-   * answer genuinely depends on all of it.
-   */
-  const lineStart = text.lastIndexOf("\n") + 1;
-  const line = lineStart === 0 ? text : text.slice(lineStart);
-
-  // The *last* `<ps` on that line, not the first: `<ps a> <ps b` is a complete
-  // directive followed by a partial one, and it is the partial one that has to
-  // be held back.
-  const openInLine = line.lastIndexOf("<ps");
-  if (openInLine === -1) return text;
-
-  // An unfinished control is never visible. A finished, valid authoring line
-  // stays hidden too; the full message parser takes over once it is no longer
-  // the live tail. Misframed prose and malformed controls remain visible.
-  const open = lineStart + openInLine;
-  const closed = text.indexOf(">", open);
-  if (closed === -1) return text.slice(0, open);
-  return isPromptSyntaxDirectiveLine(line) ? text.slice(0, lineStart) : text;
-}
-
-const TRANSCRIPT_PAGE_SIZE = 12;
-
 /** Fractional layout may leave the reachable tail within a pixel of max. */
 const TAIL_SLACK = 24;
 
@@ -138,7 +105,6 @@ export function noteTranscriptChromeChanged(): void {
   bumpChromeRevision((value) => value + 1);
 }
 
-export const TRANSCRIPT_MAX_ENTRIES = TRANSCRIPT_PAGE_SIZE * 4;
 /** What the first frame mounts, before the window fills to a full page. */
 const INITIAL_VISIBLE_ENTRIES = 4;
 
@@ -186,52 +152,12 @@ function sameEntry(a: TimelineEntry, b: TimelineEntry): boolean {
  * ceiling however the signals behind them got there. The bound is a property
  * of this function, not a discipline the caller has to keep.
  */
-export function transcriptTail<T>(
-  entries: T[],
-  visibleCount: number,
-  trailingHidden = 0,
-): {
-  hidden: number;
-  trailing: number;
-  visible: T[];
-} {
-  const size = Math.min(Math.max(1, visibleCount), TRANSCRIPT_MAX_ENTRIES);
-  const trailing = Math.max(0, Math.min(trailingHidden, entries.length - size));
-  const end = entries.length - trailing;
-  const hidden = Math.max(0, end - size);
-  return { hidden, trailing, visible: entries.slice(hidden, end) };
-}
-
-export function shouldRevealEarlier(
-  scrollTop: number,
-  hidden: number,
-  ownerIntent: boolean,
-): boolean {
-  return ownerIntent && hidden > 0 && scrollTop <= 48;
-}
-
 /**
  * The mirror of `shouldRevealEarlier` for the bottom edge, which only exists
  * once the window has started sliding and there are newer rows below it.
  * Owner intent is required on both edges for the same reason: reflow and
  * resize clamp scrollTop on their own and must not page the transcript.
  */
-export function shouldRevealLater(
-  distanceToTail: number,
-  trailing: number,
-  ownerIntent: boolean,
-): boolean {
-  return ownerIntent && trailing > 0 && distanceToTail <= 48;
-}
-
-export function anchoredScrollTop(
-  previousTop: number,
-  previousHeight: number,
-  nextHeight: number,
-): number {
-  return previousTop + Math.max(0, nextHeight - previousHeight);
-}
-
 /**
  * Scroll offset that leaves the anchor row under the same pixel it occupied.
  *
@@ -240,10 +166,6 @@ export function anchoredScrollTop(
  * height says nothing about how far the row the reader is looking at actually
  * moved; the row's own displacement does, in both directions.
  */
-export function anchoredToRow(currentTop: number, previousGap: number, nextGap: number): number {
-  return Math.max(0, currentTop + nextGap - previousGap);
-}
-
 /** How far the row's top edge sits below the scroller's top edge, right now. */
 function rowGap(scroller: HTMLElement, row: Element): number {
   return row.getBoundingClientRect().top - scroller.getBoundingClientRect().top;

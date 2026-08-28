@@ -1,11 +1,11 @@
+import type { ColorValue } from "@pathscale/ui/components/color-wheel-flower";
 import {
   applyGlassTokens,
   GLASS_DEFAULTS,
   GLASS_LIMITS,
   type GlassMode,
   type GlassTuning,
-} from "@pathscale/ui";
-import type { ColorValue } from "@pathscale/ui/components/color-wheel-flower";
+} from "@pathscale/ui/styles/glass.js";
 import type { ThemeSettings } from "~/types";
 
 /**
@@ -421,10 +421,7 @@ export function applyTheme(
    * wash has something real to apply to either way.
    */
   const wash = normalizeWash(theme.wash ?? DEFAULT_WASH);
-  const configuredWash = wash;
-  const accent = isAccent(theme.accent)
-    ? theme.accent.trim()
-    : defaultAccent(configuredWash, softness);
+  const accent = resolvedInteractiveAccent(theme);
   const brightness = Math.min(
     Math.max(theme.textBrightness || 0, BRIGHTNESS_STOPS[0]),
     BRIGHTNESS_STOPS[BRIGHTNESS_STOPS.length - 1],
@@ -534,6 +531,17 @@ export function applyTheme(
   writeGlassTuning(theme, root);
 
   return windowChrome(accent, theme);
+}
+
+/** Resolve native window chrome without touching a document. */
+export function windowChromeForTheme(theme: ThemeSettings): ReturnType<typeof windowChrome> {
+  return windowChrome(resolvedInteractiveAccent(theme), theme);
+}
+
+function resolvedInteractiveAccent(theme: ThemeSettings): string {
+  if (isAccent(theme.accent)) return theme.accent.trim();
+  const softness = Math.min(Math.max(theme.softness || 0, 0), MAX_SOFTNESS);
+  return defaultAccent(normalizeWash(theme.wash ?? DEFAULT_WASH), softness);
 }
 
 /**
@@ -721,8 +729,8 @@ function writeGlassTuning(theme: ThemeSettings, root: HTMLElement): void {
  * declaration rather than falling back to an initial value, so a partial
  * tuning gives a card with no background rather than a plainer one.
  */
-export function glassTuning(theme: ThemeSettings, root: HTMLElement): GlassTuning {
-  const mode: GlassMode = root.dataset.colorMode === "light" ? "light" : "dark";
+export function glassTuning(theme: ThemeSettings, root?: HTMLElement): GlassTuning {
+  const mode: GlassMode = root?.dataset.colorMode === "light" ? "light" : "dark";
   const defaults = GLASS_DEFAULTS[mode];
   const resolve = (value: number | undefined, fallback: number): number =>
     Number.isFinite(value) ? Number(value) : fallback;

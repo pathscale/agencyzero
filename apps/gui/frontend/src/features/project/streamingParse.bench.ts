@@ -14,13 +14,13 @@
  * re-parses `props.body` on every token, so a reply of L characters arriving in
  * 4-character deltas calls `splitBlocks` L/4 times over a growing prefix.
  *
- * What it does not cover: the Boa string concatenation, and the DOM write. Both
- * are outside the frontend and neither can be reached from jsdom. This is the
- * parse only, which is the part the incremental-parse work has to move.
+ * What it does not cover: the Boa string concatenation and the renderer write.
+ * Both are outside this pure benchmark. This measures only the parse, which is
+ * the part the incremental-parse work has to move.
  */
 import { describe, it } from "vitest";
 import { createStreamingSplitter, splitBlocks } from "~/features/project/MessageBody";
-import { holdBackPartialDirective } from "~/features/project/TranscriptPane";
+import { holdBackPartialDirective } from "~/features/project/transcriptLogic";
 
 /** The whole-body scan `holdBackPartialDirective` used to do, for comparison. */
 function unboundedHoldBack(text: string): string {

@@ -41,6 +41,9 @@ jobs:
       - run: bun run typecheck
       - run: bun run lint
       - run: bun run lint:ui-controls
+      # Pure application and store outcomes under Solid's browser reactive
+      # runtime. Rendered interactions are gated separately by QA panel.
+      - run: bun run test:run
       - run: bun run build
 
   rust:

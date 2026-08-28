@@ -1,9 +1,9 @@
-import { render, waitFor } from "@solidjs/testing-library";
 import { flush } from "solid-js";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { SETTINGS } from "~/api/fixtures";
 import { setPrefs } from "~/stores/prefs";
-import { useWorkspace, type Workspace, WorkspaceProvider } from "~/stores/workspace";
+import type { Workspace } from "~/stores/workspace";
+import { bootWorkspace, waitFor } from "~/test/reactive";
 
 const queueHarness = vi.hoisted(() => ({
   handlers: new Map<string, (payload: unknown) => void>(),
@@ -39,18 +39,7 @@ vi.mock("~/api", async (importOriginal) => {
 });
 
 async function mountWorkspace(): Promise<Workspace> {
-  let workspace!: Workspace;
-  function Probe() {
-    workspace = useWorkspace();
-    return null;
-  }
-  render(() => (
-    <WorkspaceProvider>
-      <Probe />
-    </WorkspaceProvider>
-  ));
-  await waitFor(() => expect(workspace.state.boot.status).toBe("ready"), { timeout: 5_000 });
-  return workspace;
+  return bootWorkspace();
 }
 
 beforeEach(() => {

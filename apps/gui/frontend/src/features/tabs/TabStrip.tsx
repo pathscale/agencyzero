@@ -110,7 +110,7 @@ export function TabStrip(): JSX.Element {
   onSettled(() => {
     measure();
     // Width changes with the window and with how many tabs are open; neither
-    // fires `scroll`. Guarded because jsdom has no ResizeObserver.
+    // fires `scroll`. Guarded for non-renderer test runtimes.
     if (typeof ResizeObserver === "undefined") return;
     const observer = new ResizeObserver(measure);
     observer.observe(strip);

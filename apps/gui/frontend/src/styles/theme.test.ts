@@ -1,12 +1,4 @@
-/*
- * @vitest-environment node
- *
- * This file reads the repository with `node:fs` rather than rendering
- * anything. Under the suite's default jsdom environment those builtins are
- * externalised for the browser and the import fails outright with "No such
- * built-in module: node:". Vitest 4 removed `environmentMatchGlobs`, so the
- * environment is declared per file.
- */
+/* Reads shipped source with `node:fs`; renderer behavior belongs in ps-qa. */
 /// <reference types="node" />
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -374,9 +366,8 @@ describe("glass survives a renderer that under-reports itself", () => {
 });
 
 /*
- * Moved here from `Button.test.tsx`, which renders and therefore needs jsdom.
- * These assert the shipped stylesheet's text, and reading a file with
- * `node:fs` is exactly what this file already does.
+ * These assert the shipped stylesheet's text. Actual Button interaction and
+ * layout are exercised by ps-qa in the real renderer.
  */
 describe("the neutral Button reset", () => {
   /*

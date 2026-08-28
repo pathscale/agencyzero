@@ -1,8 +1,8 @@
 import type { JSX } from "@solidjs/web";
-import { PromptSyntaxParser } from "promptsyntax";
 import { createMemo, createSignal, For, Show } from "solid-js";
 import { Button } from "~/components/Button";
 import { Icon } from "~/components/Icon";
+import { isPromptSyntaxDirectiveLine } from "~/features/project/promptSyntax";
 import { isItemId, itemReferenceLabel, revealItemReference } from "~/lib/itemReference";
 import { describeError, log } from "~/lib/log";
 import { tx } from "~/stores/i18n";
@@ -82,24 +82,6 @@ type Block =
       rows: string[][];
       align: ("left" | "center" | "right" | null)[];
     };
-
-const promptSyntax = new PromptSyntaxParser({ authoringNamespaces: ["agency"] });
-
-/** The same explicit authoring-line boundary Rust promotes. */
-export function isPromptSyntaxDirectiveLine(line: string): boolean {
-  if (line.startsWith("    ") || line.startsWith("\t")) return false;
-  const trimmed = line.trim();
-  if (trimmed.startsWith(">")) return false;
-  const parsed = promptSyntax.parse(trimmed);
-  if (parsed.segments.length !== 1) return false;
-  const [segment] = parsed.segments;
-  return (
-    segment?.type === "directive" &&
-    segment.span.start === 0 &&
-    segment.span.end === trimmed.length &&
-    segment.directive.kind === "authoring_segment"
-  );
-}
 
 /**
  * Split a `| a | b |` row into its cells.

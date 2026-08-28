@@ -1,8 +1,8 @@
-import { render, waitFor } from "@solidjs/testing-library";
 import { describe, expect, it, vi } from "vitest";
 import { SETTINGS } from "~/api/fixtures";
 import { setPrefs } from "~/stores/prefs";
-import { useWorkspace, type Workspace, WorkspaceProvider } from "~/stores/workspace";
+import type { Workspace } from "~/stores/workspace";
+import { bootWorkspace } from "~/test/reactive";
 
 /*
  * The directory list is the owner's evidence that a permission grant landed.
@@ -35,21 +35,7 @@ async function boot(): Promise<Workspace> {
   setPrefs((d) => {
     d.openTabKeys = ["cafe"];
   });
-  let workspace!: Workspace;
-
-  function Probe() {
-    workspace = useWorkspace();
-    return null;
-  }
-
-  render(() => (
-    <WorkspaceProvider>
-      <Probe />
-    </WorkspaceProvider>
-  ));
-
-  await waitFor(() => expect(workspace.state.boot.status).toBe("ready"), { timeout: 5_000 });
-  return workspace;
+  return bootWorkspace();
 }
 
 const dirsOf = (workspace: Workspace, id: string): string[] =>

@@ -79,9 +79,9 @@ describe("createTabReorder", () => {
    * This is the regression that shipped: capturing the pointer on pointerdown
    * makes the browser retarget the following `click` to the capturing element,
    * so clicks never reached the button inside the pill and selecting a tab
-   * stopped working. jsdom does not model that retargeting, so the invariant
-   * itself is what gets asserted — capture must not be taken before a drag is
-   * real.
+   * stopped working. The Node suite asserts the invariant directly, while
+   * ps-qa exercises the resulting click in the real renderer: capture must not
+   * be taken before a drag is real.
    */
   it("does not capture the pointer on pointerdown, so a plain click still dispatches", () => {
     withReorder(({ reorder }) => {

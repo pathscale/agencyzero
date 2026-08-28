@@ -1,8 +1,7 @@
-import { render, waitFor } from "@solidjs/testing-library";
 import { describe, expect, it, vi } from "vitest";
 import type { AppEvents } from "~/api";
-import { applyTheme } from "~/lib/theme";
-import { useWorkspace, type Workspace, WorkspaceProvider } from "~/stores/workspace";
+import { windowChromeForTheme } from "~/lib/theme";
+import { bootWorkspace, waitFor } from "~/test/reactive";
 import type { GlobalSettings } from "~/types";
 
 const calls = vi.hoisted(() => ({
@@ -41,19 +40,7 @@ vi.mock("~/api", async (importOriginal) => {
  */
 describe("window chrome", () => {
   it("is not resent when a settings broadcast carries the same theme", async () => {
-    let workspace!: Workspace;
-
-    function Probe() {
-      workspace = useWorkspace();
-      return null;
-    }
-
-    render(() => (
-      <WorkspaceProvider>
-        <Probe />
-      </WorkspaceProvider>
-    ));
-    await waitFor(() => expect(workspace.state.boot.status).toBe("ready"));
+    const workspace = await bootWorkspace();
     await waitFor(() => expect(calls.setWindowChrome).toHaveBeenCalledTimes(1));
     expect(calls.broadcast, "nothing subscribed to settings:updated").toBeDefined();
 
@@ -76,8 +63,11 @@ describe("window chrome", () => {
      * leave the change path untested. It did fail, which is the point, and this
      * is the assertion it was holding the place for.
      */
-    const chrome = applyTheme(workspace.state.settings!.theme);
-    const recoloured = applyTheme({ ...workspace.state.settings!.theme, accent: "#ff0000" });
+    const chrome = windowChromeForTheme(workspace.state.settings!.theme);
+    const recoloured = windowChromeForTheme({
+      ...workspace.state.settings!.theme,
+      accent: "#ff0000",
+    });
 
     expect(chrome.enabled, "the backdrop is live now that the window is transparent").toBe(true);
     expect(

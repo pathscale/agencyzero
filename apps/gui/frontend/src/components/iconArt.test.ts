@@ -18,8 +18,8 @@ import { describe, expect, it } from "vitest";
  * `presentation` node whose children are not exposed, so a blank icon and a
  * drawn one are indistinguishable from the outside: both are `16x16`, visible,
  * and stroked with the accent. That is precisely how the bug survived a live
- * inspection pass. Rendering under jsdom would not help either, because jsdom
- * resolves `<use>` perfectly well and passed throughout the outage.
+ * inspection pass. A DOM-only render would not help because it resolves
+ * `<use>` without exercising the rasteriser that failed.
  *
  * What is checkable is the shape of the markup that reaches the rasteriser, so
  * that is what this pins. Until the control protocol can report pixels, this is

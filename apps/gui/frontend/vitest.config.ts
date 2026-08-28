@@ -59,9 +59,8 @@ export default defineConfig({
     },
   ],
   test: {
-    environment: "jsdom",
+    environment: "node",
     globals: true,
-    setupFiles: ["./src/test/setup.ts"],
     include: ["src/**/*.{test,spec}.{ts,tsx}"],
     server: {
       // @pathscale/ui ships JSX-compiled ESM that has to go through the Solid
@@ -79,18 +78,10 @@ export default defineConfig({
   resolve: {
     alias: {
       "~": resolve(__dirname, "./src"),
-      /*
-       * Node builtins stay reachable from a jsdom test.
-       *
-       * Two files both render components and read the repository with
-       * `node:fs` - the transcript markup dump and the Button baseline audit -
-       * so neither can use a per-file `@vitest-environment node`. Vite
-       * externalises `node:*` for a browser environment and the import failed
-       * outright under Vitest 4 with "No such built-in module: node:".
-       *
-       * Nothing here reaches a bundle: the suite runs on Node under jsdom, and
-       * the application build has its own config.
-       */
+      // Store tests exercise Solid's client-side reactive runtime without
+      // mounting a DOM. Node's export condition selects Solid's inert server
+      // runtime, so name the same production runtime the browser bundle uses.
+      "solid-js": resolve(__dirname, "./node_modules/solid-js/dist/solid.js"),
     },
     /*
      * No "development" condition, deliberately.

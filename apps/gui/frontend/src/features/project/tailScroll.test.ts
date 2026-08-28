@@ -28,9 +28,9 @@ import { describe, expect, it } from "vitest";
 /**
  * A scroller that does *not* clamp, which is the environment the bug needs.
  *
- * jsdom clamps `scrollTop` (this repo's `src/test/setup.ts` adds it), and so
- * does every browser, so a faithful stand-in has to keep whatever it is given.
- * That is what Blitz effectively did with an over-large bound.
+ * Browsers clamp `scrollTop`, so a faithful stand-in for the Blitz regression
+ * has to keep whatever it is given. That is what Blitz effectively did with an
+ * over-large bound.
  */
 function unclampedScroller(scrollHeight: number, clientHeight: number) {
   return { scrollHeight, clientHeight, scrollTop: 0 };

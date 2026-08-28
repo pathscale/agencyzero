@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { holdBackPartialDirective } from "~/features/project/TranscriptPane";
+import { holdBackPartialDirective } from "~/features/project/transcriptLogic";
 
 /**
  * A direct last-line implementation, kept here as the oracle.

@@ -21,8 +21,8 @@ import { ARTWORK_FALLBACK } from "~/lib/theme";
  * before the theme resolved - which is nearly all of them, and all of them on a
  * cold start - was handed an unreadable paint and drew empty.
  *
- * Nothing else in the suite can catch this. jsdom never rasterises, so it is
- * happy with any string. `blitz-bench qa` reads boxes and roles from the
+ * Nothing else in the Node suite can catch this because it never rasterises.
+ * `blitz-bench qa` reads boxes and roles from the
  * semantic tree, where a blank icon and a drawn one are both `16x16`, visible,
  * and reporting the accent as their colour: that is exactly how this survived a
  * live inspection pass. The only checkable invariant on this side of the
@@ -39,10 +39,9 @@ describe("the icon stroke", () => {
 
   it("never hands the renderer a var() as a paint", () => {
     /*
-     * Read from source rather than by rendering, because rendering under jsdom
-     * proves nothing here: the failure is downstream of the DOM, in a
-     * rasteriser jsdom does not have. What matters is that no branch of the
-     * `stroke` prop can emit a custom property.
+     * Read from source because the failure is downstream of the DOM, in the
+     * rasteriser. What matters is that no branch of the `stroke` prop can emit
+     * a custom property.
      */
     const icon = readSource("Icon.tsx");
     const strokeProp = icon.slice(icon.indexOf("stroke={"), icon.indexOf("stroke-width"));

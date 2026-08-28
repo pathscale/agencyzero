@@ -1,8 +1,8 @@
-import { render, waitFor } from "@solidjs/testing-library";
 import { flush } from "solid-js";
 import { beforeEach, describe, expect, it } from "vitest";
 import { setPrefs } from "~/stores/prefs";
-import { useWorkspace, type Workspace, WorkspaceProvider } from "~/stores/workspace";
+import type { Workspace } from "~/stores/workspace";
+import { bootWorkspace, waitFor } from "~/test/reactive";
 
 /**
  * Mounts the provider against the mock, which serves the same catalogues the
@@ -11,21 +11,7 @@ import { useWorkspace, type Workspace, WorkspaceProvider } from "~/stores/worksp
  * and Copilot's `auto` plus twenty-three pinned ids.
  */
 async function mountWorkspace(): Promise<Workspace> {
-  let workspace!: Workspace;
-
-  function Probe() {
-    workspace = useWorkspace();
-    return null;
-  }
-
-  render(() => (
-    <WorkspaceProvider>
-      <Probe />
-    </WorkspaceProvider>
-  ));
-
-  await waitFor(() => expect(workspace.state.boot.status).toBe("ready"), { timeout: 5_000 });
-  return workspace;
+  return bootWorkspace();
 }
 
 const claude = (workspace: Workspace) => workspace.state.settings?.models.claude;

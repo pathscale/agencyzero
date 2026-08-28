@@ -1,8 +1,7 @@
-import { render, waitFor } from "@solidjs/testing-library";
 import { describe, expect, it, vi } from "vitest";
 import { SETTINGS } from "~/api/fixtures";
 import { setPrefs } from "~/stores/prefs";
-import { useWorkspace, type Workspace, WorkspaceProvider } from "~/stores/workspace";
+import { bootWorkspace } from "~/test/reactive";
 
 const calls = vi.hoisted(() => ({
   discover: vi.fn(async () => undefined),
@@ -37,20 +36,7 @@ describe("pull-request loading", () => {
     setPrefs((d) => {
       d.openTabKeys = ["cafe"];
     });
-    let workspace!: Workspace;
-
-    function Probe() {
-      workspace = useWorkspace();
-      return null;
-    }
-
-    render(() => (
-      <WorkspaceProvider>
-        <Probe />
-      </WorkspaceProvider>
-    ));
-
-    await waitFor(() => expect(workspace.state.boot.status).toBe("ready"), { timeout: 5_000 });
+    await bootWorkspace();
     expect(calls.discover).not.toHaveBeenCalled();
     expect(calls.refresh).not.toHaveBeenCalled();
     expect(calls.listMessages.mock.calls.map(([projectId]) => projectId).sort()).toEqual([

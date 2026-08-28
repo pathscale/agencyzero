@@ -13,6 +13,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const invoke = vi.fn();
 const listen = vi.fn();
+const runtime = globalThis as typeof globalThis & {
+  __TAURI_INTERNALS__?: Record<string, unknown>;
+};
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke: (...args: unknown[]) => invoke(...args) }));
 vi.mock("@tauri-apps/api/event", () => ({ listen: (...args: unknown[]) => listen(...args) }));
@@ -45,7 +48,11 @@ describe("selectApi", () => {
     invoke.mockReset();
     listen.mockReset();
     // The signal Tauri v2 injects, and what `isTauri()` reads.
-    (window as unknown as Record<string, unknown>).__TAURI_INTERNALS__ = {};
+    Object.defineProperty(globalThis, "window", {
+      configurable: true,
+      value: globalThis,
+    });
+    runtime.__TAURI_INTERNALS__ = {};
     invoke.mockImplementation((command: string) => {
       if (command === "list_capabilities") return Promise.resolve(IMPLEMENTED);
       return Promise.resolve(undefined);
@@ -54,7 +61,8 @@ describe("selectApi", () => {
   });
 
   afterEach(() => {
-    delete (window as unknown as Record<string, unknown>).__TAURI_INTERNALS__;
+    delete runtime.__TAURI_INTERNALS__;
+    Reflect.deleteProperty(globalThis, "window");
   });
 
   it("subscribes on Tauri's bus, which is where Rust emits", async () => {

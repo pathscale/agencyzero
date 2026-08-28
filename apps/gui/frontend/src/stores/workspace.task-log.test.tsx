@@ -1,8 +1,7 @@
-import { render, waitFor } from "@solidjs/testing-library";
 import { describe, expect, it, vi } from "vitest";
 import { SETTINGS } from "~/api/fixtures";
 import { setPrefs } from "~/stores/prefs";
-import { useWorkspace, type Workspace, WorkspaceProvider } from "~/stores/workspace";
+import { bootWorkspace, waitFor } from "~/test/reactive";
 import type { TaskLogEntry } from "~/types";
 
 /** Ninety entries, newest first, one minute apart - more than one page holds. */
@@ -58,17 +57,7 @@ describe("paging the task log", () => {
       d.openTabKeys = ["cafe"];
     });
 
-    let workspace!: Workspace;
-    function Probe() {
-      workspace = useWorkspace();
-      return null;
-    }
-    render(() => (
-      <WorkspaceProvider>
-        <Probe />
-      </WorkspaceProvider>
-    ));
-    await waitFor(() => expect(workspace.state.boot.status).toBe("ready"), { timeout: 5_000 });
+    const workspace = await bootWorkspace();
 
     const held = () => workspace.state.taskLog.cafe ?? [];
     await waitFor(() => expect(held().length).toBeGreaterThan(0));
@@ -106,17 +95,7 @@ describe("paging the task log", () => {
       d.openTabKeys = ["cafe"];
     });
 
-    let workspace!: Workspace;
-    function Probe() {
-      workspace = useWorkspace();
-      return null;
-    }
-    render(() => (
-      <WorkspaceProvider>
-        <Probe />
-      </WorkspaceProvider>
-    ));
-    await waitFor(() => expect(workspace.state.boot.status).toBe("ready"), { timeout: 5_000 });
+    const workspace = await bootWorkspace();
     await waitFor(() => expect((workspace.state.taskLog.cafe ?? []).length).toBe(2));
 
     calls.listTaskLog.mockClear();

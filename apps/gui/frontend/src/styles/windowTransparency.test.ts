@@ -1,11 +1,4 @@
-/*
- * @vitest-environment node
- *
- * Reads the repository with `node:fs` rather than rendering anything. Under
- * the suite's default jsdom environment those builtins are externalised and
- * the import fails outright, so the environment is declared per file. The
- * half of this feature that needs a DOM lives in `windowAlpha.test.ts`.
- */
+/* Reads shipped source with `node:fs`; renderer behavior belongs in ps-qa. */
 /// <reference types="node" />
 import { readFileSync } from "node:fs";
 import { join } from "node:path";

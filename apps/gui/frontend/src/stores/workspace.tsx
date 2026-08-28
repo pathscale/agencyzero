@@ -19,7 +19,7 @@ import { PERMISSION_ORDER } from "~/lib/labels";
 import { describeError, installGlobalErrorLogging, log } from "~/lib/log";
 import { record as recordPerf } from "~/lib/perf";
 import { usageTotals } from "~/lib/stats";
-import { applyTheme } from "~/lib/theme";
+import { applyTheme, windowChromeForTheme } from "~/lib/theme";
 import { i18n } from "~/stores/i18n";
 import {
   markPortablePrefsCurrent,
@@ -85,6 +85,11 @@ const FALLBACK_EFFORT = "high";
 const OPTIMISTIC_PERSIST_AFTER_PAINT_MS = 900;
 const afterOptimisticPaint = () =>
   new Promise<void>((resolve) => globalThis.setTimeout(resolve, OPTIMISTIC_PERSIST_AFTER_PAINT_MS));
+
+/** Schedule paint instrumentation only where a renderer owns a frame clock. */
+const afterFrame = (measure: () => void): void => {
+  if (typeof requestAnimationFrame !== "undefined") requestAnimationFrame(measure);
+};
 
 /** Matches the strip's poll period; see `claudeUsageBackoffMs`. */
 const CLAUDE_USAGE_POLL_MS = 60_000;
@@ -432,7 +437,7 @@ function compatiblePermission(
   return !canAsk && permission === "ask" ? "read_only" : permission;
 }
 
-function createWorkspace() {
+export function createWorkspace() {
   const [state, setState] = createStore<WorkspaceState>({
     projects: [],
     items: {},
@@ -538,7 +543,8 @@ function createWorkspace() {
    * blank until something forces a full repaint.
    */
   function syncWindowChrome(theme: ThemeSettings): void {
-    const chrome = applyTheme(theme);
+    const chrome =
+      typeof document === "undefined" ? windowChromeForTheme(theme) : applyTheme(theme);
     const encoded = JSON.stringify(chrome);
     if (encoded === lastWindowChrome) return;
     lastWindowChrome = encoded;
@@ -1129,7 +1135,7 @@ function createWorkspace() {
      * frame is the whole window.
      */
     let paintedAt: number | undefined;
-    requestAnimationFrame(() => {
+    afterFrame(() => {
       paintedAt = performance.now();
     });
 
@@ -2041,7 +2047,7 @@ function createWorkspace() {
       // Same cue as `run:stopped`, and the same beat of delay: the slot is
       // released as this run unwinds, a moment after the event goes out.
       if ((state.queued[projectId] ?? []).length > 0) {
-        window.setTimeout(() => void flushQueue(projectId, 0), 250);
+        globalThis.setTimeout(() => void flushQueue(projectId, 0), 250);
       }
     });
 
@@ -2184,9 +2190,9 @@ function createWorkspace() {
        * bounce them off the compaction and queue them a second time.
        */
       if (state.pendingCompact[projectId] !== undefined) {
-        window.setTimeout(() => flushPendingCompact(projectId), 250);
+        globalThis.setTimeout(() => flushPendingCompact(projectId), 250);
       } else if ((state.queued[projectId] ?? []).length > 0) {
-        window.setTimeout(() => void flushQueue(projectId, 0), 250);
+        globalThis.setTimeout(() => void flushQueue(projectId, 0), 250);
       }
       refreshProxyAfterLifecycleEvent();
     });
@@ -2254,7 +2260,7 @@ function createWorkspace() {
     });
 
     const committed = performance.now();
-    requestAnimationFrame(() => {
+    afterFrame(() => {
       const painted = performance.now();
       const rows = state.messages[key]?.length ?? 0;
       recordPerf("tab switch", painted - started);
@@ -2339,7 +2345,7 @@ function createWorkspace() {
         // One frame later, so this is time to the tab being on screen rather
         // than time to the store being correct. Reported from inside the frame
         // callback so a load that never paints still logs its own number.
-        requestAnimationFrame(() => {
+        afterFrame(() => {
           const painted = performance.now();
           log.info(
             `tab ${projectId} open ${(settled - clicked).toFixed(0)}ms ` +
@@ -2939,7 +2945,7 @@ function createWorkspace() {
         // Let the enqueue write land before the drain snapshots the queue.
         // Starting immediately let `flushQueue` overwrite a concurrently
         // appended second correction with its older one-row snapshot.
-        window.setTimeout(() => void flushQueue(projectId, 0, true), 0);
+        globalThis.setTimeout(() => void flushQueue(projectId, 0, true), 0);
       }
       return;
     }
@@ -3041,14 +3047,14 @@ function createWorkspace() {
       // Previously only the first was flushed; later messages remained under
       // a queue badge until another lifecycle event happened to wake them.
       if (allowLiveFollowUp && (state.queued[projectId] ?? []).length > 0) {
-        window.setTimeout(() => void flushQueue(projectId, 0, true), 0);
+        globalThis.setTimeout(() => void flushQueue(projectId, 0, true), 0);
       }
     } catch (cause) {
       setState((d) => {
         d.queued[projectId] = ((rest = []) => [next, ...rest])(d.queued[projectId]);
       });
       if (attempt < 4) {
-        window.setTimeout(
+        globalThis.setTimeout(
           () => void flushQueue(projectId, attempt + 1, allowLiveFollowUp),
           500 * 2 ** attempt,
         );

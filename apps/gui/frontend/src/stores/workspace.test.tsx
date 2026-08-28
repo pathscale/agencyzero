@@ -1,4 +1,3 @@
-import { render, waitFor } from "@solidjs/testing-library";
 import { flush } from "solid-js";
 import { beforeEach, describe, expect, it } from "vitest";
 import { SETTINGS, setClaudeUsageError, setSyncProjectError } from "~/api/fixtures";
@@ -10,10 +9,9 @@ import {
   monotonicUsage,
   queueReason,
   shortModelName,
-  useWorkspace,
   type Workspace,
-  WorkspaceProvider,
 } from "~/stores/workspace";
+import { bootWorkspace, waitFor } from "~/test/reactive";
 
 describe("running usage continuity", () => {
   it("keeps cumulative traffic and cost through a lower post-compact snapshot", () => {
@@ -98,21 +96,7 @@ describe("Claude usage backoff", () => {
  * and a CRITICAL hold plus a rate limit on baz.qux.
  */
 async function mountWorkspace(): Promise<Workspace> {
-  let workspace!: Workspace;
-
-  function Probe() {
-    workspace = useWorkspace();
-    return null;
-  }
-
-  render(() => (
-    <WorkspaceProvider>
-      <Probe />
-    </WorkspaceProvider>
-  ));
-
-  await waitFor(() => expect(workspace.state.boot.status).toBe("ready"), { timeout: 5_000 });
-  return workspace;
+  return bootWorkspace();
 }
 
 const keys = (workspace: Workspace) => workspace.state.tabs.map((tab) => tab.key);
