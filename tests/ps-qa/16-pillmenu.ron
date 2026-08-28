@@ -83,4 +83,37 @@
         subject: "Effort",
         expect: NameChanges,
     ),
+    (
+        /*
+         * Opening one pill menu must close any other that is already open.
+         *
+         * This is the defect the owner reports as shadows stacking on the
+         * composer, and it is not a shadow: the menus are real, both open at
+         * once, and they paint over each other. Each popover is a large
+         * semi-transparent panel, so two overlapping read as one darker one,
+         * and the darkening compounds with every pill visited before the
+         * pointer leaves the row.
+         *
+         * Measured on the running application, deterministic on a clean tree:
+         * 0 menu items, press Effort -> 5, press Permission -> 11. Nothing
+         * closed. Node count climbs the same way across repeated visits, 454
+         * to 498 over eight cycles, and settles only when a mouse-out
+         * dismisses everything at once.
+         *
+         * Named against Effort's own options rather than a count: a count
+         * assertion passes for the wrong reason the moment a pill's option
+         * list changes length. `Vanishes` rather than `Absent` because a
+         * closed menu is legitimately still in the tree with no box.
+         */
+        id: "pillmenu-opening-one-closes-another",
+        group: "pillmenu",
+        what: "opening the Permission pill closes the Effort pill's menu",
+        open: Some("theta theta north indi"),
+        hover: None,
+        prepare: Some("Effort"),
+        settle_after_ms: 600,
+        click: Some("Permission"),
+        subject: "menuitem:low",
+        expect: Vanishes,
+    ),
 ]
