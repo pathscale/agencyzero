@@ -37,6 +37,54 @@
         expect: PaintsNamed,
     ),
     (
+        // `placement="top"` is only correct when the whole menu finishes
+        // above the trigger. Checking the last item catches a fixed-position
+        // menu whose viewport coordinates are applied a second time by a
+        // transformed containing block.
+        id: "pillmenu-effort-menu-stays-above-trigger",
+        group: "pillmenu",
+        what: "the complete top-placed Effort menu paints above its trigger",
+        open: Some("theta theta north indi"),
+        hover: None,
+        prepare: Some("Effort"),
+        settle_after_ms: 600,
+        click: None,
+        compare: Some("button:Effort"),
+        subject: "menuitem:max",
+        expect: Above,
+    ),
+    (
+        // The fixed menu is hoisted into a retained stacking-context paint
+        // list. Pointer-driven incremental resolves must update that entry,
+        // never append another copy of the same child. The DOM and layout stay
+        // flat when this fails, so compare the renderer's pixels before and
+        // after the pointer returns to the same non-hover state.
+        id: "pillmenu-effort-shadow-does-not-stack",
+        group: "pillmenu",
+        what: "moving across an open pill menu leaves its rendered shadow unchanged",
+        open: Some("theta theta north indi"),
+        hover: None,
+        prepare: Some("Effort"),
+        after_prepare_hover: Some(("menuitem:low", 5)),
+        settle_after_ms: 600,
+        click: None,
+        subject: "@dropdown-popover",
+        expect: PixelsHold,
+    ),
+    (
+        id: "pillmenu-effort-hover-paints-feedback",
+        group: "pillmenu",
+        what: "hovering an Effort option visibly moves the menu's active feedback",
+        open: Some("theta theta north indi"),
+        hover: None,
+        prepare: Some("Effort"),
+        after_prepare_hover: Some("menuitem:high"),
+        settle_after_ms: 600,
+        click: None,
+        subject: "@dropdown-popover",
+        expect: PixelsChange,
+    ),
+    (
         id: "pillmenu-effort-selects-low",
         group: "pillmenu",
         what: "choosing low from the Effort pill changes what the trigger reads",
