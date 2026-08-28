@@ -262,6 +262,46 @@ const HEAVY_PROJECTS: &[&str] = &[
     "proj-79aef7ba-ac75-47b6-8bd3-e2b71439c39b",
 ];
 
+/// Stable names owned by the QA contract, not by whatever private source was
+/// sampled when the archive was rebuilt.
+///
+/// Outcome checks address these exact rows. Letting `scrub_name` derive them
+/// from mutable source text made a perfectly valid profile rebuild invalidate
+/// most of the manifest at once. IDs are the fixture identity; these names are
+/// its public, deterministic interface.
+const FIXTURE_PROJECT_NAMES: &[(&str, &str)] = &[
+    (
+        "proj-0340a6b5-69b7-4ffc-9c11-3f6ff3b40a5a",
+        "east north east",
+    ),
+    ("proj-3f61d1c8-1a32-458a-adc2-edff01eb1759", "e756"),
+    (
+        "proj-79aef7ba-ac75-47b6-8bd3-e2b71439c39b",
+        "theta theta north indi",
+    ),
+];
+
+const FIXTURE_ITEM_TITLES: &[(&str, &str)] = &[
+    (
+        "item-0f2e666c-abf5-40b7-a291-58d854a21529",
+        "iota indigo lambda gamma eta",
+    ),
+    (
+        "item-359d6e30-3d1c-493d-9115-006d22b8efd5",
+        "gamma east north gamma lambda indigo kappa south epsilon beta south lambd",
+    ),
+    (
+        "item-4df654f3-4279-4d21-bfa3-9c54447805ad",
+        "kappa eta north cobalt epsilon north delta east eta zeta beta",
+    ),
+];
+
+fn fixture_value<'a>(id: &str, fixtures: &'a [(&str, &str)]) -> Option<&'a str> {
+    fixtures
+        .iter()
+        .find_map(|(fixture_id, value)| (*fixture_id == id).then_some(*value))
+}
+
 /// Task-log rows kept for a heavy project.
 ///
 /// The log pages at well under this, so the paging controls still have more
@@ -469,7 +509,9 @@ async fn copy_scrubbed(
         let mut scrubbed_row = row.clone();
         // By id, so two projects never end up sharing a name. Checks drive
         // projects by name and a duplicate makes the press ambiguous.
-        scrubbed_row.name = scrub_name(&row.name, &row.id);
+        scrubbed_row.name = fixture_value(&row.id, FIXTURE_PROJECT_NAMES)
+            .map(str::to_owned)
+            .unwrap_or_else(|| scrub_name(&row.name, &row.id));
         // The working directories, which name the owner's home and every
         // repository they had open. Scrubbed as JSON so the list stays a list.
         scrubbed_row.dirs = scrub_dirs(&row.dirs);
@@ -489,7 +531,9 @@ async fn copy_scrubbed(
         let mut scrubbed_row = row.clone();
         // Row controls are driven by their item's title, so these have to stay
         // distinct for the same reason project names do.
-        scrubbed_row.title = scrub_name(&row.title, &row.id);
+        scrubbed_row.title = fixture_value(&row.id, FIXTURE_ITEM_TITLES)
+            .map(str::to_owned)
+            .unwrap_or_else(|| scrub_name(&row.title, &row.id));
         tables
             .project_item
             .insert(scrubbed_row)
@@ -585,12 +629,37 @@ async fn copy_scrubbed(
      * 2026-08-23, but only because that store happened to hold none with a home
      * path in it.
      */
+    let mut agent_io_projects = std::collections::HashSet::new();
     for row in source.agent_io.select_all().execute().unwrap_or_default() {
+        agent_io_projects.insert(row.project_id.clone());
         let mut scrubbed_row = row.clone();
         scrubbed_row.detail = scrub_value(&row.detail);
         tables
             .agent_io
             .insert(scrubbed_row)
+            .map_err(|error| error.to_string())?;
+        scrubbed += 1;
+    }
+    /*
+     * The Expand/Shrink and Copy-all controls only exist when the project has
+     * at least one Agent I/O row. A clean source commonly has none because raw
+     * exchange persistence is opt-in, which made the committed profile unable
+     * to exercise those controls at all. Seed one inert row on the canonical
+     * heavy project: it contains no owner data and still drives the real list,
+     * clipboard and viewport code paths.
+     */
+    let qa_project = HEAVY_PROJECTS[1];
+    if !agent_io_projects.contains(qa_project) {
+        tables
+            .agent_io
+            .insert(crate::db::schema::agent_io::AgentIoRowRow {
+                id: "qa-agent-io-fixture".to_owned(),
+                project_id: qa_project.to_owned(),
+                at: "2026-08-23T00:00:00Z".to_owned(),
+                direction: "gui".to_owned(),
+                kind: "action".to_owned(),
+                detail: "QA fixture entry".to_owned(),
+            })
             .map_err(|error| error.to_string())?;
         scrubbed += 1;
     }
@@ -773,6 +842,21 @@ fn copy_tree(from: &Path, to: &Path) -> std::io::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn manifest_owned_fixture_names_do_not_drift_with_source_text() {
+        assert_eq!(
+            fixture_value(HEAVY_PROJECTS[1], FIXTURE_PROJECT_NAMES),
+            Some("theta theta north indi")
+        );
+        assert_eq!(
+            fixture_value(
+                "item-4df654f3-4279-4d21-bfa3-9c54447805ad",
+                FIXTURE_ITEM_TITLES,
+            ),
+            Some("kappa eta north cobalt epsilon north delta east eta zeta beta")
+        );
+    }
 
     #[test]
     fn filler_is_deterministic_and_shaped_like_its_input() {

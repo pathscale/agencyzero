@@ -5,6 +5,7 @@
     (
         id: "session-reset-isolated-confirms",
         group: "session-reset",
+        destructive: true,
         what: "session reset asks for confirmation in the disposable profile",
         open: Some("theta theta north indi"),
         hover: None,
@@ -15,6 +16,7 @@
     (
         id: "session-reset-isolated-clears-attachment",
         group: "session-reset",
+        destructive: true,
         what: "Confirm reset clears the rendered attached-session status",
         open: None,
         hover: None,

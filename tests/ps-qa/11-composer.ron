@@ -194,26 +194,24 @@
     (
         id: "composer-effort-selects-option",
         group: "composer",
-        what: "choosing high changes the composer effort trigger's accessible value",
+        what: "choosing medium changes the composer effort trigger's accessible value",
         open: Some("theta theta north indi"),
         prepare: Some("Effort"),
         hover: None,
-        // `high`, not `medium`: the composer starts on medium, so selecting it
-        // asserted a change that could not happen and the check failed against
-        // a working application. A `NameChanges` check has to name a value the
-        // control does not already hold.
-        click: Some("menuitem:high"),
+        // This profile starts on high. NameChanges must choose another value,
+        // rather than treating an idempotent selection as a component failure.
+        click: Some("menuitem:medium"),
         subject: "Effort",
         expect: NameChanges,
     ),
     (
         id: "composer-effort-restores",
         group: "composer",
-        what: "the Effort pill returns to medium for the rest of the audit",
+        what: "the Effort pill returns to high for the rest of the audit",
         open: Some("theta theta north indi"),
         prepare: Some("Effort"),
         hover: None,
-        click: Some("menuitem:medium"),
+        click: Some("menuitem:high"),
         subject: "Effort",
         expect: NameChanges,
     ),

@@ -170,6 +170,9 @@ export function HomeTab(): JSX.Element {
             <Button
               type="button"
               onClick={projectGrid.revealMore}
+              aria-label={tx("Show {count} more Home projects", {
+                count: Math.min(HOME_PROJECT_PAGE_SIZE, matches().length - visibleMatches().length),
+              })}
               class="flex-none rounded-xl border border-primary/24 bg-az-chip px-3.5 py-2.5 font-semibold text-[12px] text-primary transition-colors hover:bg-az-chip"
             >
               {tx("Show {count} more projects", {
@@ -273,6 +276,9 @@ export function HomeTab(): JSX.Element {
               <Button
                 type="button"
                 onClick={recentGrid.revealMore}
+                aria-label={tx("Show {count} more recent projects", {
+                  count: Math.min(HOME_RECENT_PAGE_SIZE, recent().length - visibleRecent().length),
+                })}
                 class="rounded-[11px] border border-primary/24 bg-az-chip px-3 py-2 font-semibold text-[11.5px] text-primary transition-colors hover:bg-az-chip"
               >
                 {tx("Show {count} more projects", {

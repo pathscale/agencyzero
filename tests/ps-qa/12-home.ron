@@ -18,12 +18,23 @@
         what: "the Home pager renders the next viewport-sized project page",
         open: Some("Home"),
         hover: None,
-        click: Some("button:Show 5 more projects"),
+        click: Some("button:Show 5 more Home projects"),
         subject: "button:Rename project ",
-        // The projects column is a fixed-height scroller. revealMore mounts
-        // the next page, but the viewport still paints five rows at once.
-        expect: Grows,
-        covers: ["button:Show * more projects"],
+        // The first page grows; later pages recycle the bounded rendered
+        // family. In both cases the visible project identities must advance.
+        expect: FamilyChanges,
+        covers: ["button:Show * more Home projects"],
+    ),
+    (
+        id: "home-recent-page-reveals",
+        group: "home",
+        what: "the Recent pager advances its own bounded project family",
+        open: Some("Home"),
+        hover: None,
+        click: Some("button:Show 5 more recent projects"),
+        subject: "button:Open recent project ",
+        expect: FamilyChanges,
+        covers: ["button:Show * more recent projects"],
     ),
     (
         id: "home-item-page-project-search",

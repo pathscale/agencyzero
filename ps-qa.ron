@@ -114,6 +114,8 @@ AppProfile(
         // the rest of the audit. Verify it in the manual release pass instead
         // of destabilising a shared semantic sweep.
         (label: "Restart AgencyProxy",                  command: "restart_agent_proxy"),
+        (label: "Stop AgencyProxy",                     command: "stop_agent_proxy (local manual)"),
+        (label: "Start AgencyProxy",                    command: "start_agent_proxy (local manual)"),
         (label: "Restart",                              command: "restart_app"),
 
         // A real turn needs an authenticated paid provider. CI proves the

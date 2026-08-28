@@ -401,12 +401,22 @@ export function AgentIoList(props: { projectId: string }): JSX.Element {
           <Show
             when={tall()}
             fallback={
-              <Button type="button" onClick={() => setTall(true)} class={resizeButtonClass}>
+              <Button
+                type="button"
+                onClick={() => setTall(true)}
+                aria-label={`${tx("Agent I/O")}: ${tx("Expand")}`}
+                class={resizeButtonClass}
+              >
                 {tx("Expand")}
               </Button>
             }
           >
-            <Button type="button" onClick={() => setTall(false)} class={resizeButtonClass}>
+            <Button
+              type="button"
+              onClick={() => setTall(false)}
+              aria-label={`${tx("Agent I/O")}: ${tx("Shrink")}`}
+              class={resizeButtonClass}
+            >
               {tx("Shrink")}
             </Button>
           </Show>
@@ -1989,6 +1999,7 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
                 <Textarea
                   id="item-description"
                   autofocus
+                  aria-label={tx("Description / sub-items")}
                   value={draft().context}
                   maxlength={NOTES_BUDGET}
                   onInput={(event) =>

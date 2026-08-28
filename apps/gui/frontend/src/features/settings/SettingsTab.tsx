@@ -2593,11 +2593,15 @@ function SourceActions(): JSX.Element {
  * install look identical in state, and claiming freshness on a check that
  * never reached the CDN is the lie the backend was built to avoid.
  */
+// Survives Settings search/deferred remounts. A check can finish while its row
+// is temporarily unmounted; keeping the completion generation inside the row
+// discarded that result and made a completed backend call look hung.
+const [updateCheckGeneration, setUpdateCheckGeneration] = createSignal(0);
+
 function UpdateControl(): JSX.Element {
   const { state, actions, isLive } = useWorkspace();
   const [busy, setBusy] = createSignal(false);
   const [note, setNote] = createSignal<string | null>(null);
-  const [generation, setGeneration] = createSignal(0);
   const alive = whileMounted();
 
   const check = (): void => {
@@ -2609,7 +2613,7 @@ function UpdateControl(): JSX.Element {
       .catch(alive((cause) => setNote(describeError(cause))))
       .finally(
         alive(() => {
-          setGeneration((value) => value + 1);
+          setUpdateCheckGeneration((value) => value + 1);
           setBusy(false);
         }),
       );
@@ -2629,7 +2633,11 @@ function UpdateControl(): JSX.Element {
 
   return (
     <Flex align="center" gap="sm">
-      <span role="status" aria-label={`Update check generation ${generation()}`} class="sr-only" />
+      <span
+        role="status"
+        aria-label={`Update check generation ${updateCheckGeneration()}`}
+        class="sr-only"
+      />
       <Show when={note()}>
         {(text) => <span class="max-w-[220px] truncate text-[11.5px] text-az-muted">{text()}</span>}
       </Show>
