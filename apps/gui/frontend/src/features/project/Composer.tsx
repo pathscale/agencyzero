@@ -1214,8 +1214,8 @@ export function Composer(props: ComposerProps): JSX.Element {
           props.size === "lg" ? "az-ring-strong rounded-[19px]" : ""
         }`}
       >
-        <div
-          data-slot="composer-body"
+        <section
+          aria-label="Composer body"
           /*
             Less room under the controls than over the prompt: the text needs
             air above it, the controls only need to clear the edge. Even spacing
@@ -1568,7 +1568,7 @@ export function Composer(props: ComposerProps): JSX.Element {
               </div>
             </div>
           </div>
-        </div>
+        </section>
       </div>
     </div>
   );

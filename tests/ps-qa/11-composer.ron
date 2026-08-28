@@ -8,7 +8,7 @@
         open: Some("theta theta north indi"),
         hover: None,
         click: None,
-        subject: "@composer-body",
+        subject: "Composer body",
         expect: OpaqueBackground,
     ),
     (
