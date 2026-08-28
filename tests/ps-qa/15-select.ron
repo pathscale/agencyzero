@@ -2,12 +2,11 @@
 // gives chat discovery two disposable provider sessions so the real component
 // always has choices and its change/restore behavior cannot silently disappear.
 //
-// Every check here asserts on the *trigger*, never on the option that was
-// pressed. The previous version of this file asserted `SelectionChanges` on
-// `option:...` and passed 2/2 against a Select that could not select: an
-// option's own selected flag flips whether or not the value ever reaches the
-// control the reader looks at. `templates.ron` now forbids that shape for a
-// value control, and `check-qa-templates.ts` enforces it.
+// Selection is asserted on the option because its `aria-selected` state is
+// derived from the root Select's controlled `value`. AgencyZero must accept
+// the change and pass that value back before this state can change. The
+// trigger has a fixed descriptive aria-label, so its accessible name is not
+// the visible selected value and must not be used as a value assertion.
 [
     (
         id: "select-session-displays",
@@ -30,8 +29,8 @@
         prepare: Some("Choose a session from Codex CLI / IDE"),
         prepare_key: Some("ArrowDown"),
         click: Some("option:ps-qa older select fixture"),
-        subject: "button:Choose a session from Codex CLI / IDE",
-        expect: PaintsMore,
+        subject: "option:ps-qa older select fixture",
+        expect: SelectionChanges,
     ),
     (
         id: "select-session-restores",
@@ -42,7 +41,7 @@
         prepare: Some("Choose a session from Codex CLI / IDE"),
         prepare_key: Some("ArrowDown"),
         click: Some("option:ps-qa newer select fixture"),
-        subject: "button:Choose a session from Codex CLI / IDE",
-        expect: NameChanges,
+        subject: "option:ps-qa newer select fixture",
+        expect: SelectionChanges,
     ),
 ]
