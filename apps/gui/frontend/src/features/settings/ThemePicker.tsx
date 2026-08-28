@@ -204,7 +204,7 @@ export function ThemePicker(props: {
   ]);
 
   return (
-    <div data-slot="theme-color-control" class="flex flex-col gap-3">
+    <section aria-label="Theme color control" class="flex flex-col gap-3">
       <ComplexColorWheel
         value={surface() || DEFAULT_ACCENT}
         onChange={chooseSurface}
@@ -266,7 +266,7 @@ export function ThemePicker(props: {
           onPick={chooseAccentTwo}
         />
       </div>
-    </div>
+    </section>
   );
 }
 
