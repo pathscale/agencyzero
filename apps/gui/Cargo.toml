@@ -101,7 +101,7 @@ tauri = { version = "2", default-features = false, features = ["macos-private-ap
 # 0.1.0 the runtime's own feature forwards to `tauri` and `tauri-runtime`, so
 # naming it here agrees with that rather than being the only thing holding the
 # two sides together.
-tauri-runtime-blitz = { version = "^0.1.13", optional = true, features = ["macos-private-api"] }
+tauri-runtime-blitz = { version = "^0.1.14", optional = true, features = ["macos-private-api"] }
 #
 # The engine by version, not by branch. Same move `chuzz` made, for the same
 # reasons its manifest records.
