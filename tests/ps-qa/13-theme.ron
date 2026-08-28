@@ -36,7 +36,7 @@
         after_prepare_hover: Some("radio:Theme color "),
         reveal_before_capture: Some("heading:Appearance"),
         click: None,
-        subject: "Theme color control",
+        subject: "Surface colour",
         expect: PixelsHoldAfterHover,
     ),
     (

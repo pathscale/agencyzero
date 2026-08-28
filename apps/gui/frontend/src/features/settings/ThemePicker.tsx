@@ -204,7 +204,7 @@ export function ThemePicker(props: {
   ]);
 
   return (
-    <section aria-label="Theme color control" class="flex flex-col gap-3">
+    <section aria-label={t("appearance.surfaceColour")} class="flex flex-col gap-3">
       <ComplexColorWheel
         value={surface() || DEFAULT_ACCENT}
         onChange={chooseSurface}

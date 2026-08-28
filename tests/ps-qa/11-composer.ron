@@ -8,7 +8,7 @@
         open: Some("theta theta north indi"),
         hover: None,
         click: None,
-        subject: "Composer body",
+        subject: "Ask, or type / for commands…",
         expect: OpaqueBackground,
     ),
     (
