@@ -49,16 +49,18 @@
         expect: NameChanges,
     ),
     (
-        // The same selection over the physical pointer path, which is what a
+        // The same menu over the physical pointer path, which is what a
         // person's mouse does and what the owner reports as broken. The check
         // above resolves a node id and activates it; this one opens the menu by
-        // pressing the trigger and picks the option by pressing that, both
-        // inside one process so the menu is still open when the option is hit.
+        // pressing the trigger and picks a different option by pressing that,
+        // both inside one process so the menu is still open when the option is
+        // hit. It must differ because the preceding check leaves `low`
+        // selected, and selecting `low` again cannot satisfy NameChanges.
         //
         // Worth having as its own check rather than flipping the one above:
         // when these two disagree, the split localises the defect to pointer
         // handling over the hoisted overlay rather than to the menu itself.
-        id: "pillmenu-effort-selects-low-by-pointer",
+        id: "pillmenu-effort-selects-high-by-pointer",
         group: "pillmenu",
         what: "a real pointer press on a menu option commits the selection",
         open: Some("theta theta north indi"),
@@ -66,7 +68,7 @@
         prepare: Some("Effort"),
         prepare_press: true,
         settle_after_ms: 600,
-        click: Some("menuitem:low"),
+        click: Some("menuitem:high"),
         press: true,
         subject: "Effort",
         expect: NameChanges,
