@@ -170,7 +170,21 @@ for _ in $(seq 1 30); do
 done
 kill -TERM "$probe_pid" 2>/dev/null || true
 wait "$probe_pid" 2>/dev/null || true
-rm -rf "$probe_home" "$probe_data"
+
+# The probe's verdict is already decided by here, so cleanup must never be able
+# to change it. It could: the app spawns helpers that keep unpacking into the
+# temp HOME after the parent is reaped, `rm -rf` raced one of them, and every
+# "Directory not empty" it printed was a non-zero exit that `set -e` turned into
+# a failed build. The binary was signed, verified and working; the script
+# reported failure one line before saying so.
+#
+# So give the writers a moment to finish, then never let the result matter.
+for _ in $(seq 1 5); do
+  rm -rf "$probe_home" "$probe_data" 2>/dev/null && break
+  sleep 1
+done
+rm -rf "$probe_home" "$probe_data" 2>/dev/null || true
+
 [ "$launched" = 1 ] || fail "the bundle did not reach a rendered panel within 30s"
 echo "  launches and renders"
 
