@@ -74,9 +74,9 @@ describe("glass calculations", () => {
 
   it("derives native tint from opacity without touching a document", () => {
     expect(windowChromeForTheme({ ...base, accent: "#3366cc" }).enabled).toBe(true);
-    expect(
-      windowChromeForTheme({ ...base, accent: "#3366cc", glassOpacity: 0 }).tint,
-    ).toEqual([51, 102, 204, 0]);
+    expect(windowChromeForTheme({ ...base, accent: "#3366cc", glassOpacity: 0 }).tint).toEqual([
+      51, 102, 204, 0,
+    ]);
     const dim = windowChromeForTheme({ ...base, accent: "#3366cc", glassOpacity: 20 }).tint;
     const solid = windowChromeForTheme({ ...base, accent: "#3366cc", glassOpacity: 90 }).tint;
     expect(dim?.[3]).toBeLessThan(solid?.[3] ?? 0);
