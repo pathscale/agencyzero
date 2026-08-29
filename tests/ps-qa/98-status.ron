@@ -23,6 +23,7 @@
         click: Some("button:Change the status of kappa eta north cobalt epsilon north delta east eta zeta beta"),
         subject: "button:Change the status of kappa eta north cobalt epsilon north delta east eta zeta beta",
         expect: PaintsNamed,
+        covers: ["button:Change the status of "],
     ),
     (
         id: "status-2",

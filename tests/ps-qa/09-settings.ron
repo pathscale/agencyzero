@@ -40,6 +40,7 @@
         click: Some("menuitem:medium"),
         subject: "Default effort",
         expect: NameChanges,
+        covers: ["button:Default effort:"],
     ),
     (
         id: "settings-permission-selects-option",
@@ -73,6 +74,7 @@
         click: Some("menuitem:2 turns"),
         subject: "Agent-finished retention",
         expect: NameChanges,
+        covers: ["button:Agent-finished retention:"],
     ),
     (
         id: "settings-context-detail-selects-option",
@@ -84,6 +86,7 @@
         click: Some("menuitem:Full"),
         subject: "Per-turn context detail for this project",
         expect: NameChanges,
+        covers: ["button:Per-turn context detail for this project:"],
     ),
     (
         id: "settings-restart-authority-selects-option",
@@ -182,5 +185,6 @@
         click: Some("menuitem:Codex"),
         subject: "Default agent",
         expect: NameChanges,
+        covers: ["button:Default agent:"],
     ),
 ]

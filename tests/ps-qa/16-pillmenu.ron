@@ -128,17 +128,15 @@
         expect: NameChanges,
     ),
     (
-        id: "pillmenu-effort-restores",
+        id: "pillmenu-effort-leaves-fixture-value",
         group: "pillmenu",
-        what: "the Effort pill returns to its original value for the rest of the audit",
+        what: "the pointer selection leaves Effort at the fixture's original high value",
         open: Some("theta theta north indi"),
         hover: None,
-        prepare: Some("Effort"),
-        prepare_unless: Some("menuitem:medium"),
-        settle_after_ms: 600,
-        click: Some("menuitem:medium"),
-        subject: "Effort",
-        expect: NameChanges,
+        prepare: None,
+        click: None,
+        subject: "button:Effort: high",
+        expect: PaintsNamed,
     ),
     (
         /*
