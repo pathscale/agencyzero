@@ -36,6 +36,8 @@ const PERMISSION_HINTS = {
 const permissionHint = (permission: Permission): string => tx(PERMISSION_HINTS[permission]);
 
 export type ComposerProps = {
+  /** Stable base for every control owned by this composer. */
+  id: string;
   /**
    * Where a half-written message is filed, usually the tab key.
    *
@@ -139,6 +141,7 @@ export type ComposerProps = {
  * behaves as, while the transport underneath stays paths-in-prose.
  */
 export function AttachmentPills(props: {
+  id: string;
   paths: string[];
   onRemove: (path: string) => void;
 }): JSX.Element {
@@ -149,17 +152,18 @@ export function AttachmentPills(props: {
           {(path) => (
             <span
               title={path}
-              class="flex max-w-[260px] items-center gap-1.5 rounded-full border border-az-hairline-strong bg-base-300 py-1 pr-1.5 pl-2.5 text-[11.5px]"
+              class="flex max-w-[260px] items-center gap-1.5 rounded-full border border-az-hairline-strong bg-base-300 py-1 pr-1.5 pl-2.5 text-ui-detail"
             >
-              <Icon name="paperclip" class="shrink-0 text-[11px] text-az-muted" />
+              <Icon name="paperclip" class="shrink-0 text-az-muted text-ui-caption" />
               <span class="min-w-0 truncate text-az-body">{path.split("/").pop() || path}</span>
               <Button
+                id={`${props.id}-attachment-${encodeURIComponent(path)}-remove`}
                 type="button"
                 onClick={() => props.onRemove(path)}
                 aria-label={tx("Remove {name}", { name: path.split("/").pop() || path })}
                 class="flex size-[16px] shrink-0 items-center justify-center rounded-full text-az-faint transition-colors hover:bg-white/10 hover:text-base-content"
               >
-                <Icon name="x" class="text-[11px]" />
+                <Icon name="x" class="text-ui-caption" />
               </Button>
             </span>
           )}
@@ -171,6 +175,7 @@ export function AttachmentPills(props: {
 
 /** Trusted reply metadata, staged like an attachment but never editable prose. */
 export function QuestionReplyPill(props: {
+  id: string;
   question?: Question;
   number?: number;
   onRemove?: () => void;
@@ -180,20 +185,21 @@ export function QuestionReplyPill(props: {
       {(question) => (
         <span
           title={question().text}
-          class="flex w-fit max-w-full items-center gap-1.5 self-start rounded-full border border-primary/35 bg-az-chip py-1 pr-1.5 pl-2.5 text-[11.5px]"
+          class="flex w-fit max-w-full items-center gap-1.5 self-start rounded-full border border-primary/35 bg-az-chip py-1 pr-1.5 pl-2.5 text-ui-detail"
         >
-          <Icon name="message-square-dashed" class="shrink-0 text-[11px] text-primary" />
+          <Icon name="message-square-dashed" class="shrink-0 text-primary text-ui-caption" />
           <span class="shrink-0 font-semibold text-primary">
             {tx("Reply to #{number}", { number: props.number ?? "?" })}
           </span>
           <Show when={props.onRemove}>
             <Button
+              id={`${props.id}-question-reply-remove`}
               type="button"
               onClick={() => props.onRemove?.()}
               aria-label={tx("Remove question reply")}
               class="flex size-[16px] shrink-0 items-center justify-center rounded-full text-az-faint transition-colors hover:bg-white/10 hover:text-base-content"
             >
-              <Icon name="x" class="text-[11px]" />
+              <Icon name="x" class="text-ui-caption" />
             </Button>
           </Show>
         </span>
@@ -954,15 +960,16 @@ export function Composer(props: ComposerProps): JSX.Element {
           role="alert"
           class="flex items-start gap-3 rounded-xl border border-error/38 bg-error/8 px-3 py-2.5"
         >
-          <Icon name="shield" class="relative top-0.5 shrink-0 text-[14px] text-error" />
+          <Icon name="shield" class="relative top-0.5 shrink-0 text-error text-ui-control" />
           <div class="min-w-0 flex-1">
-            <p class="font-semibold text-[11.5px] text-error">{tx("Model not available")}</p>
-            <p class="mt-0.5 text-[11px] text-az-body leading-[1.45]">{modelBlockedReason()}</p>
+            <p class="font-semibold text-error text-ui-detail">{tx("Model not available")}</p>
+            <p class="mt-0.5 text-az-body text-ui-caption leading-[1.45]">{modelBlockedReason()}</p>
           </div>
           <Button
+            id={`${props.id}-open-settings-for-model`}
             type="button"
             onClick={() => actions.openSettings()}
-            class="shrink-0 rounded-lg border border-error/30 px-2.5 py-1 text-[10.5px] text-az-body hover:border-error hover:text-error"
+            class="shrink-0 rounded-lg border border-error/30 px-2.5 py-1 text-az-body text-ui-caption-sm hover:border-error hover:text-error"
           >
             {tx("Settings")}
           </Button>
@@ -974,15 +981,16 @@ export function Composer(props: ComposerProps): JSX.Element {
           role="alert"
           class="flex items-start gap-3 rounded-xl border border-error/38 bg-error/8 px-3 py-2.5"
         >
-          <Icon name="shield" class="relative top-0.5 shrink-0 text-[14px] text-error" />
+          <Icon name="shield" class="relative top-0.5 shrink-0 text-error text-ui-control" />
           <div class="min-w-0 flex-1">
-            <p class="font-semibold text-[11.5px] text-error">{tx("Agent setup required")}</p>
-            <p class="mt-0.5 text-[11px] text-az-body leading-[1.45]">{agentBlockedReason()}</p>
+            <p class="font-semibold text-error text-ui-detail">{tx("Agent setup required")}</p>
+            <p class="mt-0.5 text-az-body text-ui-caption leading-[1.45]">{agentBlockedReason()}</p>
           </div>
           <Button
+            id={`${props.id}-open-settings-for-agent`}
             type="button"
             onClick={() => actions.openSettings()}
-            class="shrink-0 rounded-lg border border-error/30 px-2.5 py-1 text-[10.5px] text-az-body hover:border-error hover:text-error"
+            class="shrink-0 rounded-lg border border-error/30 px-2.5 py-1 text-az-body text-ui-caption-sm hover:border-error hover:text-error"
           >
             {tx("Open Settings")}
           </Button>
@@ -998,14 +1006,14 @@ export function Composer(props: ComposerProps): JSX.Element {
           const thinkingPerThousand = () => thinkingCostPerThousand(table(), estimateModel());
           return (
             <div
-              class={`flex flex-col gap-1.5 rounded-xl border px-3 py-2 text-[11.5px] leading-[1.5] ${
+              class={`flex flex-col gap-1.5 rounded-xl border px-3 py-2 text-ui-detail leading-[1.5] ${
                 est().severity === "high"
                   ? "border-error/40 bg-error/8 text-error"
                   : "border-warning/40 bg-warning/8 text-warning"
               }`}
             >
               <div class="flex items-start gap-2">
-                <Icon name="gauge" class="relative top-0.5 shrink-0 text-[13px]" />
+                <Icon name="gauge" class="relative top-0.5 shrink-0 text-ui-body" />
                 <Show
                   when={!isCompactCommand()}
                   fallback={
@@ -1092,12 +1100,13 @@ export function Composer(props: ComposerProps): JSX.Element {
                   </div>
                 </Show>
                 <Button
+                  id={`${props.id}-cost-warning-dismiss`}
                   type="button"
                   onClick={dismissCostAlert}
                   aria-label={tx("Dismiss")}
                   class="shrink-0 rounded p-0.5 text-az-faint transition-colors hover:text-az-body"
                 >
-                  <Icon name="x" class="text-[12px]" />
+                  <Icon name="x" class="text-ui-label" />
                 </Button>
               </div>
               <Show when={prefs.costWarningDismissals > 0}>
@@ -1106,17 +1115,19 @@ export function Composer(props: ComposerProps): JSX.Element {
                     when={confirmDisableCostWarning()}
                     fallback={
                       <Button
+                        id={`${props.id}-cost-warning-disable`}
                         type="button"
                         onClick={() => setConfirmDisableCostWarning(true)}
-                        class="text-[10.5px] text-az-muted underline decoration-current/40 underline-offset-2 hover:text-az-body"
+                        class="text-az-muted text-ui-caption-sm underline decoration-current/40 underline-offset-2 hover:text-az-body"
                       >
                         {tx("Permanently disable this warning")}
                       </Button>
                     }
                   >
-                    <div class="flex items-center gap-2 text-[10.5px] text-az-muted">
+                    <div class="flex items-center gap-2 text-az-muted text-ui-caption-sm">
                       <span>{tx("Disable cost warnings permanently?")}</span>
                       <Button
+                        id={`${props.id}-cost-warning-disable-confirm`}
                         type="button"
                         onClick={() => {
                           setPrefs((d) => {
@@ -1129,6 +1140,7 @@ export function Composer(props: ComposerProps): JSX.Element {
                         {tx("Confirm")}
                       </Button>
                       <Button
+                        id={`${props.id}-cost-warning-disable-cancel`}
                         type="button"
                         onClick={() => setConfirmDisableCostWarning(false)}
                         class="text-az-muted hover:text-az-body"
@@ -1147,6 +1159,7 @@ export function Composer(props: ComposerProps): JSX.Element {
         <div class="flex min-h-[24px] items-center justify-end gap-2 px-1">
           <Show when={props.onCompact && compactPressure() && state.pricing}>
             <Button
+              id={`${props.id}-compact`}
               type="button"
               onClick={runCompact}
               aria-label={props.agent === "codex" ? tx("Freshen context") : tx("Compact context")}
@@ -1155,7 +1168,7 @@ export function Composer(props: ComposerProps): JSX.Element {
                   ? tx("Keep a bounded handoff, then start the next Codex turn in a fresh session.")
                   : tx("Learn what must survive, then compact this Claude session.")
               }
-              class={`rounded-md border px-2.5 py-1 font-semibold text-[10.5px] transition-colors ${
+              class={`rounded-md border px-2.5 py-1 font-semibold text-ui-caption-sm transition-colors ${
                 compactPressure() === "red"
                   ? "border-error/55 bg-error/15 text-error hover:bg-error/25"
                   : compactPressure() === "orange"
@@ -1172,7 +1185,7 @@ export function Composer(props: ComposerProps): JSX.Element {
               the owner asked for it coloured like the controls rather than dim
               chrome. */}
           <Show when={props.usage}>
-            <span class="font-medium font-mono text-[10.5px] text-accent">{props.usage}</span>
+            <span class="font-medium font-mono text-accent text-ui-caption-sm">{props.usage}</span>
           </Show>
           {/* The live estimate for the next turn: a projection, not a charge —
               the real cost comes back on the turn and the header shows it then.
@@ -1193,7 +1206,7 @@ export function Composer(props: ComposerProps): JSX.Element {
                     "Estimated cost of the next turn (≈{ctx}k context + prompt + reply). A projection, not a charge — the real cost is shown on the turn.",
                     { ctx: Math.round((est().contextTokens ?? 0) / 1000) },
                   )}
-                  class={`flex items-center gap-1 rounded-full border px-2 py-px font-mono font-semibold text-[10.5px] ${
+                  class={`flex items-center gap-1 rounded-full border px-2 py-px font-mono font-semibold text-ui-caption-sm ${
                     est().severity === "high"
                       ? "border-error/40 bg-error/10 text-error"
                       : est().severity === "warning"
@@ -1201,7 +1214,7 @@ export function Composer(props: ComposerProps): JSX.Element {
                         : "border-accent/35 bg-accent/10 text-accent"
                   }`}
                 >
-                  <Icon name="gauge" class="text-[11px]" />
+                  <Icon name="gauge" class="text-ui-caption" />
                   {tx("est {cost}", { cost: costLabel(est().total) })}
                 </span>
               );
@@ -1226,12 +1239,14 @@ export function Composer(props: ComposerProps): JSX.Element {
           }`}
         >
           <AttachmentPills
+            id={props.id}
             paths={attachments()}
             onRemove={(path) =>
               setAttachments((current) => current.filter((existing) => existing !== path))
             }
           />
           <QuestionReplyPill
+            id={props.id}
             question={props.replyQuestion}
             number={props.replyQuestionNumber}
             onRemove={props.onCancelQuestionReply}
@@ -1242,6 +1257,7 @@ export function Composer(props: ComposerProps): JSX.Element {
             style={{ height: `${promptHeight()}px` }}
           >
             <Textarea
+              id={`${props.id}-body`}
               ref={field}
               autofocus={props.autofocus}
               rows={visibleRows()}
@@ -1299,17 +1315,17 @@ export function Composer(props: ComposerProps): JSX.Element {
                 void submit();
               }}
               class={`az-scroll block max-h-full min-h-0 w-full min-w-0 resize-none overflow-y-auto overflow-x-hidden whitespace-pre-wrap break-words border-0 bg-transparent p-0 text-base-content leading-[1.45] shadow-none [overflow-wrap:anywhere] placeholder:text-az-faint focus:bg-transparent focus:shadow-none focus:outline-none ${
-                props.size === "lg" ? "text-[15px]" : "text-[14.5px]"
+                props.size === "lg" ? "text-ui-lead" : "text-ui-control-lg"
               }`}
             />
           </div>
 
           <Show when={advanced()}>
             <div class="rounded-lg border border-az-hairline bg-base-300/45 px-3 py-2">
-              <div class="mb-1 font-semibold text-[10px] text-az-faint uppercase tracking-[0.08em]">
+              <div class="mb-1 font-semibold text-az-faint text-ui-tiny uppercase tracking-[0.08em]">
                 {tx("Prompt Syntax preview")}
               </div>
-              <div class="whitespace-pre-wrap text-[12px] text-az-body leading-relaxed">
+              <div class="whitespace-pre-wrap text-az-body text-ui-label leading-relaxed">
                 <For each={compiled()?.segments ?? []}>
                   {(segment) =>
                     segment.type === "directive" ? (
@@ -1323,7 +1339,7 @@ export function Composer(props: ComposerProps): JSX.Element {
                 </For>
               </div>
               <Show when={(compiled()?.errors.length ?? 0) > 0}>
-                <ul class="mt-1.5 list-disc space-y-0.5 pl-4 text-[11px] text-error">
+                <ul class="mt-1.5 list-disc space-y-0.5 pl-4 text-error text-ui-caption">
                   <For each={compiled()?.errors}>{(message) => <li>{message}</li>}</For>
                 </ul>
               </Show>
@@ -1339,7 +1355,7 @@ export function Composer(props: ComposerProps): JSX.Element {
         */}
           <Show when={error()}>
             {(message) => (
-              <p role="alert" class="text-[12px] text-error">
+              <p role="alert" class="text-error text-ui-label">
                 {message()}
               </p>
             )}
@@ -1365,11 +1381,12 @@ export function Composer(props: ComposerProps): JSX.Element {
           >
             <div data-composer-primary-controls class="flex shrink-0 items-center gap-2.5">
               <Button
+                id={`${props.id}-advanced`}
                 type="button"
                 onClick={toggleAdvanced}
                 aria-pressed={advanced() ? "true" : "false"}
                 title={tx("Parse Prompt Syntax controls before sending")}
-                class={`flex h-[24px] items-center rounded-full border px-2.5 font-medium text-[11px] transition-colors ${
+                class={`flex h-[24px] items-center rounded-full border px-2.5 font-medium text-ui-caption transition-colors ${
                   advanced()
                     ? "border-primary/35 bg-az-chip text-primary"
                     : "border-az-hairline-strong text-az-muted hover:text-base-content"
@@ -1379,6 +1396,7 @@ export function Composer(props: ComposerProps): JSX.Element {
               </Button>
 
               <PillMenu
+                id={`${props.id}-permission`}
                 label={tx("Permission")}
                 value={props.permission}
                 options={(props.permissions ?? PERMISSION_ORDER).map((permission) => ({
@@ -1390,6 +1408,7 @@ export function Composer(props: ComposerProps): JSX.Element {
               />
 
               <Button
+                id={`${props.id}-attach`}
                 type="button"
                 onClick={() => void attach()}
                 // Greyed on a build whose backend lacks the picker, per the house
@@ -1400,10 +1419,11 @@ export function Composer(props: ComposerProps): JSX.Element {
                 aria-label={tx("Attach files")}
                 class="flex size-[24px] items-center justify-center rounded-full border border-az-hairline-strong text-az-body transition-colors hover:border-primary/30 hover:text-az-title disabled:cursor-not-allowed disabled:opacity-40"
               >
-                <Icon name="plus" class="text-[16px]" />
+                <Icon name="plus" class="text-ui-title" />
               </Button>
 
               <Button
+                id={`${props.id}-expand`}
                 type="button"
                 onClick={toggleExpanded}
                 aria-pressed={expanded() ? "true" : "false"}
@@ -1415,7 +1435,7 @@ export function Composer(props: ComposerProps): JSX.Element {
                     : "border-az-hairline-strong text-az-body hover:border-primary/30 hover:text-az-title"
                 }`}
               >
-                <Icon name={expanded() ? "chevron-down" : "chevron-up"} class="text-[15px]" />
+                <Icon name={expanded() ? "chevron-down" : "chevron-up"} class="text-ui-lead" />
               </Button>
             </div>
 
@@ -1449,6 +1469,7 @@ export function Composer(props: ComposerProps): JSX.Element {
             the backend maps to Claude's disable switch.
           */}
               <Button
+                id={`${props.id}-extra-thinking`}
                 type="button"
                 onClick={() => props.onExtraThinkingChange?.(!props.extraThinking)}
                 disabled={props.agent !== "claude"}
@@ -1460,17 +1481,18 @@ export function Composer(props: ComposerProps): JSX.Element {
                       )
                     : tx("Extra Thinking applies to Claude only.")
                 }
-                class={`flex h-[24px] items-center gap-1.5 rounded-full border px-2.5 font-medium text-[11px] transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
+                class={`flex h-[24px] items-center gap-1.5 rounded-full border px-2.5 font-medium text-ui-caption transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
                   props.agent === "claude" && props.extraThinking
                     ? "border-primary/35 bg-az-chip text-primary"
                     : "border-az-hairline-strong text-az-muted hover:text-base-content"
                 }`}
               >
-                <Icon name="sparkles" class="text-[11px]" />
+                <Icon name="sparkles" class="text-ui-caption" />
                 {tx("Extra Thinking")}
               </Button>
 
               <PillMenu
+                id={`${props.id}-model`}
                 label={tx("Model")}
                 icon="sparkles"
                 iconClass="text-primary"
@@ -1494,6 +1516,7 @@ export function Composer(props: ComposerProps): JSX.Element {
           */}
               <Show when={props.efforts.length > 0}>
                 <PillMenu
+                  id={`${props.id}-effort`}
                   label={tx("Effort")}
                   variant="outline"
                   value={props.effort}
@@ -1514,6 +1537,7 @@ export function Composer(props: ComposerProps): JSX.Element {
                 {/* While a run is live, the provider capability decides whether
                 this interrupts the open turn or queues for the next one. */}
                 <Button
+                  id={`${props.id}-send`}
                   type="button"
                   onClick={() => void submit()}
                   onKeyDown={(event) => {
@@ -1545,7 +1569,7 @@ export function Composer(props: ComposerProps): JSX.Element {
                   }
                   class="flex size-[24px] items-center justify-center rounded-full bg-primary text-primary-content transition-colors hover:bg-az-primary-hover disabled:cursor-not-allowed disabled:opacity-40"
                 >
-                  <Icon name="arrow-up" class="text-[17px]" />
+                  <Icon name="arrow-up" class="text-ui-title-lg" />
                 </Button>
                 {/*
                 The slot stays mounted so the send button does not move, while
@@ -1555,6 +1579,7 @@ export function Composer(props: ComposerProps): JSX.Element {
                 <span class="flex size-[24px] items-center justify-center">
                   <Show when={props.isRunning}>
                     <Button
+                      id={`${props.id}-stop`}
                       type="button"
                       onClick={() => props.onStop?.()}
                       disabled={!props.onStop}

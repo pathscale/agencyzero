@@ -137,7 +137,7 @@ createEffect(
   () => {
     if (typeof document === "undefined") return;
     const scale = UI_SCALES[prefs.uiSize];
-    document.documentElement.style.setProperty("--az-ui-scale", String(scale));
+    document.documentElement.style.setProperty("--az-ui-font-size", `${scale * 100}%`);
   },
 );
 

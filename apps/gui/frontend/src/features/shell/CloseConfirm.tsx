@@ -53,10 +53,10 @@ export function CloseConfirm(props: CloseConfirmProps): JSX.Element {
         >
           <div class="flex flex-col gap-3.5 rounded-2xl bg-az-inset p-5">
             <Dialog.Header class="flex-row items-baseline gap-2.5">
-              <Icon name="info" class="relative top-0.5 text-[15px] text-primary" />
+              <Icon name="info" class="relative top-0.5 text-primary text-ui-lead" />
               <Dialog.Heading
                 id="close-confirm-title"
-                class="font-semibold text-[14.5px] text-az-title"
+                class="font-semibold text-az-title text-ui-control-lg"
               >
                 {tx(
                   props.error
@@ -68,13 +68,13 @@ export function CloseConfirm(props: CloseConfirmProps): JSX.Element {
               </Dialog.Heading>
             </Dialog.Header>
 
-            <Dialog.Body class="overflow-visible text-[12.5px] text-az-body leading-[1.55]">
+            <Dialog.Body class="overflow-visible text-az-body text-ui-label-lg leading-[1.55]">
               <Show
                 when={!props.error}
                 fallback={
                   <p
                     data-selectable
-                    class="rounded-lg border border-error/25 bg-error/8 p-3 font-mono text-[11.5px] text-error leading-[1.55]"
+                    class="rounded-lg border border-error/25 bg-error/8 p-3 font-mono text-error text-ui-detail leading-[1.55]"
                   >
                     {props.error}
                   </p>
@@ -119,18 +119,20 @@ export function CloseConfirm(props: CloseConfirmProps): JSX.Element {
 
             <Dialog.Footer class="pt-0.5">
               <Button
+                id="close-confirm-cancel"
                 type="button"
                 onClick={props.onCancel}
-                class="rounded-lg border border-az-hairline-strong px-3.5 py-1.5 text-[12.5px] text-az-body transition-colors hover:border-primary/30 hover:text-az-title"
+                class="rounded-lg border border-az-hairline-strong px-3.5 py-1.5 text-az-body text-ui-label-lg transition-colors hover:border-primary/30 hover:text-az-title"
               >
                 {tx(props.error ? "Keep AgencyZero open" : "Wait for completion")}
               </Button>
               <Show when={!props.error}>
                 <Button
+                  id="close-confirm-submit"
                   type="button"
                   autofocus
                   onClick={props.onConfirm}
-                  class="rounded-lg bg-primary px-3.5 py-1.5 font-semibold text-[12.5px] text-primary-content transition-colors hover:bg-az-primary-hover"
+                  class="rounded-lg bg-primary px-3.5 py-1.5 font-semibold text-primary-content text-ui-label-lg transition-colors hover:bg-az-primary-hover"
                 >
                   {tx(props.quitsProxy ? "Quit both" : "Exit now")}
                 </Button>

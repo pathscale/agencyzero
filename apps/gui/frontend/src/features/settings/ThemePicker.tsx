@@ -206,6 +206,7 @@ export function ThemePicker(props: {
   return (
     <section aria-label={t("appearance.surfaceColour")} class="flex flex-col gap-3">
       <ComplexColorWheel
+        id="settings-theme-surface"
         value={surface() || DEFAULT_ACCENT}
         onChange={chooseSurface}
         mode={prefs.colorMode}
@@ -214,11 +215,12 @@ export function ThemePicker(props: {
         adjustments={adjustments()}
         action={
           <Button
+            id="settings-theme-reset"
             type="button"
             aria-label={t("appearance.resetButton")}
             disabled={props.isDefault}
             onClick={props.onReset}
-            class="rounded-lg border border-az-hairline-strong px-2.5 py-1 text-[11px] text-az-muted transition-colors hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-40"
+            class="rounded-lg border border-az-hairline-strong px-2.5 py-1 text-az-muted text-ui-caption transition-colors hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-40"
           >
             {t("appearance.resetButton")}
           </Button>
@@ -227,6 +229,7 @@ export function ThemePicker(props: {
 
       <div class="flex flex-col gap-3 px-3.5 pb-3">
         <AccentSelector
+          id="settings-theme-control-accent"
           surface={surface() || DEFAULT_ACCENT}
           accent={accent()}
           wash={wash()}
@@ -256,6 +259,7 @@ export function ThemePicker(props: {
           looks exactly as it did before the axis existed.
         */}
         <AccentSelector
+          id="settings-theme-art-accent"
           label={t("appearance.accentTwo")}
           hint={t("appearance.accentTwoHint")}
           surface={surface() || DEFAULT_ACCENT}
@@ -272,6 +276,8 @@ export function ThemePicker(props: {
 
 /** An independent high-contrast colour for controls, rings and active states. */
 function AccentSelector(props: {
+  /** Stable base for every swatch in this row. */
+  id: string;
   /** Overrides the row's heading, for the second accent. */
   label?: string;
   hint?: string;
@@ -341,10 +347,10 @@ function AccentSelector(props: {
   return (
     <div class="flex flex-col gap-1.5">
       <div class="flex items-baseline gap-2">
-        <span class="font-semibold text-[11px] text-az-muted uppercase tracking-[.04em]">
+        <span class="font-semibold text-az-muted text-ui-caption uppercase tracking-[.04em]">
           {props.label ?? t("appearance.accentColour")}
         </span>
-        <span class="text-[11px] text-az-faint">
+        <span class="text-az-faint text-ui-caption">
           {props.hint ?? t("appearance.accentColourHint")}
         </span>
       </div>
@@ -365,6 +371,7 @@ function AccentSelector(props: {
                 : `${row()} ${index() + 1}`;
             return (
               <Button
+                id={`${props.id}-${index()}`}
                 type="button"
                 aria-label={label()}
                 title={label()}

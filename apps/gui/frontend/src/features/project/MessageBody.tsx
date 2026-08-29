@@ -395,7 +395,7 @@ export function createStreamingSplitter(): (body: string) => Block[] {
   };
 }
 
-export function MessageBody(props: { body: string; class?: string }): JSX.Element {
+export function MessageBody(props: { id: string; body: string; class?: string }): JSX.Element {
   /*
    * Memoised, and identity-stable block by block.
    *
@@ -437,22 +437,41 @@ export function MessageBody(props: { body: string; class?: string }): JSX.Elemen
       data-selectable
     >
       <For each={blocks()}>
-        {(block) =>
+        {(block, blockIndex) =>
           block.kind === "code" ? (
-            <CodeBlock text={block.text} lang={block.lang} />
+            <CodeBlock
+              id={`${props.id}-code-${blockIndex()}`}
+              text={block.text}
+              lang={block.lang}
+            />
           ) : block.kind === "table" ? (
-            <TableBlock header={block.header} rows={block.rows} align={block.align} />
+            <TableBlock
+              id={`${props.id}-table-${blockIndex()}`}
+              header={block.header}
+              rows={block.rows}
+              align={block.align}
+            />
           ) : block.kind === "list" ? (
             <Show
               when={block.ordered}
               fallback={
                 <ul class="list-outside list-disc space-y-1 pl-5">
-                  <For each={block.items}>{(item) => <li>{renderInline(item)}</li>}</For>
+                  <For each={block.items}>
+                    {(item, itemIndex) => (
+                      <li>
+                        {renderInline(item, `${props.id}-list-${blockIndex()}-${itemIndex()}`)}
+                      </li>
+                    )}
+                  </For>
                 </ul>
               }
             >
               <ol start={block.start} class="list-outside list-decimal space-y-1 pl-5">
-                <For each={block.items}>{(item) => <li>{renderInline(item)}</li>}</For>
+                <For each={block.items}>
+                  {(item, itemIndex) => (
+                    <li>{renderInline(item, `${props.id}-list-${blockIndex()}-${itemIndex()}`)}</li>
+                  )}
+                </For>
               </ol>
             </Show>
           ) : (
@@ -465,7 +484,14 @@ export function MessageBody(props: { body: string; class?: string }): JSX.Elemen
                 .map((part) => part.trim())
                 .filter((part) => part.length > 0)}
             >
-              {(paragraph) => <p>{renderInline(paragraph)}</p>}
+              {(paragraph, paragraphIndex) => (
+                <p>
+                  {renderInline(
+                    paragraph,
+                    `${props.id}-paragraph-${blockIndex()}-${paragraphIndex()}`,
+                  )}
+                </p>
+              )}
             </For>
           )
         }
@@ -488,7 +514,7 @@ export function MessageBody(props: { body: string; class?: string }): JSX.Elemen
  * silent. A block of paths or commands is the thing people most want out of a
  * transcript, so it should not depend on landing the drag.
  */
-function CodeBlock(props: { text: string; lang: string }): JSX.Element {
+function CodeBlock(props: { id: string; text: string; lang: string }): JSX.Element {
   const [copied, setCopied] = createSignal(false);
 
   const copy = async (): Promise<void> => {
@@ -501,18 +527,19 @@ function CodeBlock(props: { text: string; lang: string }): JSX.Element {
     <div class="group relative">
       <pre
         data-selectable
-        class="az-scroll overflow-x-auto rounded-lg border border-az-hairline bg-base-300 px-3 py-2.5 font-mono text-[12px] text-az-body leading-[1.6]"
+        class="az-scroll overflow-x-auto rounded-lg border border-az-hairline bg-base-300 px-3 py-2.5 font-mono text-az-body text-ui-label leading-[1.6]"
       >
         <code>{props.text}</code>
       </pre>
       <Button
+        id={`${props.id}-copy`}
         type="button"
         onClick={() => void copy()}
         aria-label={tx("Copy this {language} block", { language: props.lang || tx("code") })}
         title={tx("Copy")}
-        class="absolute top-1.5 right-1.5 flex items-center gap-1 rounded-md border border-az-hairline-strong bg-base-200 px-1.5 py-[3px] text-[10.5px] text-az-faint transition-colors hover:text-base-content"
+        class="absolute top-1.5 right-1.5 flex items-center gap-1 rounded-md border border-az-hairline-strong bg-base-200 px-1.5 py-[3px] text-az-faint text-ui-caption-sm transition-colors hover:text-base-content"
       >
-        <Icon name={copied() ? "check" : "copy"} class="text-[11px]" />
+        <Icon name={copied() ? "check" : "copy"} class="text-ui-caption" />
         {copied() ? tx("Copied") : tx("Copy")}
       </Button>
     </div>
@@ -526,6 +553,7 @@ function CodeBlock(props: { text: string; lang: string }): JSX.Element {
  * squeezes the column past legibility.
  */
 function TableBlock(props: {
+  id: string;
   header: string[];
   rows: string[][];
   align: ("left" | "center" | "right" | null)[];
@@ -537,7 +565,7 @@ function TableBlock(props: {
 
   return (
     <div data-selectable class="az-scroll overflow-x-auto rounded-lg border border-az-hairline">
-      <table class="w-full border-collapse text-[12px] text-az-body">
+      <table class="w-full border-collapse text-az-body text-ui-label">
         <thead>
           <tr>
             <For each={props.header}>
@@ -545,7 +573,7 @@ function TableBlock(props: {
                 <th
                   class={`border-az-hairline border-b bg-base-300 px-3 py-1.5 font-semibold text-az-strong ${alignClass(col())}`}
                 >
-                  {renderInline(cell)}
+                  {renderInline(cell, `${props.id}-header-${col()}`)}
                 </th>
               )}
             </For>
@@ -553,12 +581,12 @@ function TableBlock(props: {
         </thead>
         <tbody>
           <For each={props.rows}>
-            {(row) => (
+            {(row, rowIndex) => (
               <tr>
                 <For each={props.header}>
                   {(_, col) => (
                     <td class={`border-az-hairline border-b px-3 py-1.5 ${alignClass(col())}`}>
-                      {renderInline(row[col()] ?? "")}
+                      {renderInline(row[col()] ?? "", `${props.id}-row-${rowIndex()}-${col()}`)}
                     </td>
                   )}
                 </For>
@@ -572,11 +600,12 @@ function TableBlock(props: {
 }
 
 /** Copy a whole message, for when the interesting part is not in one block. */
-export function CopyMessageButton(props: { body: string }): JSX.Element {
+export function CopyMessageButton(props: { id: string; body: string }): JSX.Element {
   const [copied, setCopied] = createSignal(false);
 
   return (
     <Button
+      id={props.id}
       type="button"
       onClick={() => {
         void copyText(props.body).then((ok) => {
@@ -589,8 +618,8 @@ export function CopyMessageButton(props: { body: string }): JSX.Element {
       title={tx("Copy the whole message")}
       class="shrink-0 text-az-faint transition-colors hover:text-base-content"
     >
-      <Show when={copied()} fallback={<Icon name="copy" class="text-[12px]" />}>
-        <Icon name="check" class="text-[12px]" />
+      <Show when={copied()} fallback={<Icon name="copy" class="text-ui-label" />}>
+        <Icon name="check" class="text-ui-label" />
       </Show>
     </Button>
   );
@@ -603,21 +632,22 @@ export function CopyMessageButton(props: { body: string }): JSX.Element {
  * always names a path or a command — and a bare `rm -rf ./snapshots/tmp` in the
  * middle of a sentence is exactly the thing that needs to stand out.
  */
-export function InlineText(props: { text: string }): JSX.Element {
-  return <>{renderInline(props.text)}</>;
+export function InlineText(props: { id: string; text: string }): JSX.Element {
+  return <>{renderInline(props.text, props.id)}</>;
 }
 
 /** Splits on `**bold**` and `` `code` `` while keeping the delimiters' order. */
 const ITEM_REFERENCE_SPLIT =
   /(item-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/gi;
 
-function renderItemReferences(text: string): JSX.Element {
+function renderItemReferences(text: string, id: string): JSX.Element {
   return text
     .split(ITEM_REFERENCE_SPLIT)
     .filter(Boolean)
-    .map((part) =>
+    .map((part, index) =>
       isItemId(part) ? (
         <Button
+          id={`${id}-item-reference-${index}`}
           type="button"
           class="inline cursor-pointer font-medium text-az-link underline decoration-az-link/45 decoration-dotted underline-offset-2 hover:text-primary"
           title={part}
@@ -632,27 +662,27 @@ function renderItemReferences(text: string): JSX.Element {
     );
 }
 
-function renderInline(text: string): JSX.Element[] {
+function renderInline(text: string, id: string): JSX.Element[] {
   const parts = text.split(/(\*\*[^*]+\*\*|`[^`]+`)/g);
 
-  return parts.filter(Boolean).map((part) => {
+  return parts.filter(Boolean).map((part, index) => {
     if (part.startsWith("**") && part.endsWith("**")) {
       return (
         <strong class="font-semibold text-az-strong">
-          {renderItemReferences(part.slice(2, -2))}
+          {renderItemReferences(part.slice(2, -2), `${id}-inline-${index}`)}
         </strong>
       );
     }
     if (part.startsWith("`") && part.endsWith("`")) {
       return <InlineCode>{part.slice(1, -1)}</InlineCode>;
     }
-    return <>{renderItemReferences(part)}</>;
+    return <>{renderItemReferences(part, `${id}-inline-${index}`)}</>;
   });
 }
 
 export function InlineCode(props: { children: JSX.Element }): JSX.Element {
   return (
-    <code class="rounded-[5px] border border-az-hairline bg-base-300 px-[5px] py-px font-mono text-[12px] text-info">
+    <code class="rounded-[5px] border border-az-hairline bg-base-300 px-[5px] py-px font-mono text-info text-ui-label">
       {props.children}
     </code>
   );

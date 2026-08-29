@@ -166,6 +166,10 @@
         click: Some("Extra Thinking: let the model reason before it answers"),
         subject: "Extra Thinking: let the model reason before it answers",
         expect: SelectionChanges,
+        // Same authored control renders a disabled explanatory label for
+        // non-Claude tabs. This enabled-state outcome proves the component;
+        // inventory still reports the hidden/disabled instance separately.
+        covers: ["button:Extra Thinking"],
     ),
     (
         id: "composer-extra-thinking-restores",

@@ -36,6 +36,8 @@ export function Panel(props: PanelProps): JSX.Element {
 }
 
 export type SectionPanelProps = {
+  /** Stable base for both disclosure affordances. */
+  id: string;
   icon?: IconProps["name"];
   title: string;
   /** Small count badge after the title. */
@@ -107,6 +109,7 @@ export function SectionPanel(props: SectionPanelProps): JSX.Element {
       */}
       <div class="group/header flex items-center justify-start gap-2.5 px-3.5 py-3 transition-colors hover:bg-az-sunken">
         <Button
+          id={`${props.id}-toggle`}
           type="button"
           onClick={props.onToggle}
           aria-expanded={props.isOpen ? "true" : "false"}
@@ -121,12 +124,12 @@ export function SectionPanel(props: SectionPanelProps): JSX.Element {
         >
           <Show when={props.trailing}>{props.trailing}</Show>
           <Show when={props.icon}>
-            {(name) => <Icon name={name()} class="text-[15px] text-primary" />}
+            {(name) => <Icon name={name()} class="text-primary text-ui-lead" />}
           </Show>
-          <span class="font-semibold text-[12.5px] text-base-content">{props.title}</span>
+          <span class="font-semibold text-base-content text-ui-label-lg">{props.title}</span>
           <Show when={props.count !== undefined}>
             <span
-              class={`rounded-full px-2 py-px font-semibold text-[11px] ${
+              class={`rounded-full px-2 py-px font-semibold text-ui-caption ${
                 props.countTone === "primary"
                   ? "bg-az-chip text-primary"
                   : "bg-base-300 text-az-body"
@@ -136,12 +139,13 @@ export function SectionPanel(props: SectionPanelProps): JSX.Element {
             </span>
           </Show>
           <Show when={props.note}>
-            <span class="text-[11.5px] text-az-muted">{props.note}</span>
+            <span class="text-az-muted text-ui-detail">{props.note}</span>
           </Show>
         </Button>
 
         <Show when={props.lead}>{props.lead}</Show>
         <Button
+          id={`${props.id}-toggle-icon`}
           type="button"
           onClick={props.onToggle}
           aria-label={tx(props.isOpen ? "Collapse {name}" : "Expand {name}", {
@@ -155,7 +159,7 @@ export function SectionPanel(props: SectionPanelProps): JSX.Element {
         >
           <Icon
             name={props.isOpen ? "chevron-up" : "chevron-down"}
-            class="text-[15px] text-primary/70"
+            class="text-primary/70 text-ui-lead"
           />
         </Button>
       </div>

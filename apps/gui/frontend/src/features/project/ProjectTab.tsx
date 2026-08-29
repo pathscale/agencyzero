@@ -314,7 +314,7 @@ export function ProjectTab(props: { tab: Tab; project: Project }): JSX.Element {
       <div class="relative flex min-h-0 min-w-0 flex-1">
         <Panel class="relative flex min-w-0 flex-1 flex-col">
           <header class="relative flex flex-none items-center gap-3 border-az-hairline-soft border-b px-4 py-3">
-            <Icon name="messages-square" class="text-[16px] text-az-muted" />
+            <Icon name="messages-square" class="text-az-muted text-ui-title" />
             {/*
             The name owns the row and truncates on its own. Everything after it
             is `shrink-0` and sits to the right of a spacer, so no label can push
@@ -326,11 +326,12 @@ export function ProjectTab(props: { tab: Tab; project: Project }): JSX.Element {
                 <Show when={props.project.id} keyed>
                   {(projectId) => (
                     <EditableTitle
+                      id={`project-${projectId}-title`}
                       value={props.project.name}
                       onRename={(name) => actions.renameProject(projectId, name)}
                       label={tx("Rename project")}
-                      class="min-w-0 flex-1 font-semibold text-[14.5px] text-az-title"
-                      inputClass="font-semibold text-[14.5px]"
+                      class="min-w-0 flex-1 font-semibold text-az-title text-ui-control-lg"
+                      inputClass="font-semibold text-ui-control-lg"
                     />
                   )}
                 </Show>
@@ -338,22 +339,23 @@ export function ProjectTab(props: { tab: Tab; project: Project }): JSX.Element {
             >
               {(fork) => (
                 <div class="flex min-w-0 flex-1 items-center gap-2">
-                  <span class="shrink-0 rounded-full border border-primary/30 bg-az-chip px-2 py-0.5 font-semibold text-[10.5px] text-primary uppercase tracking-wide">
+                  <span class="shrink-0 rounded-full border border-primary/30 bg-az-chip px-2 py-0.5 font-semibold text-primary text-ui-caption-sm uppercase tracking-wide">
                     {tx("Fork")}
                   </span>
                   <Button
+                    id={`project-${props.project.id}-open-parent`}
                     type="button"
                     onClick={() => {
                       if (!actions.revealItem(fork().itemId)) actions.openProject(fork().parentId);
                     }}
                     title={tx("Return to the parent item")}
-                    class="inline-flex min-w-0 items-center gap-1.5 font-semibold text-[14.5px] text-primary transition-colors hover:text-primary/80"
+                    class="inline-flex min-w-0 items-center gap-1.5 font-semibold text-primary text-ui-control-lg transition-colors hover:text-primary/80"
                   >
                     <span class="truncate">
                       {fork().parent?.name ?? tx("Parent project")} ·{" "}
                       {fork().item?.title ?? props.project.name}
                     </span>
-                    <Icon name="arrow-up" class="shrink-0 -rotate-90 text-[12px]" />
+                    <Icon name="arrow-up" class="shrink-0 -rotate-90 text-ui-label" />
                   </Button>
                 </div>
               )}
@@ -366,7 +368,7 @@ export function ProjectTab(props: { tab: Tab; project: Project }): JSX.Element {
             <span
               data-turn-totals
               aria-hidden={headerTurns() <= 0 ? "true" : "false"}
-              class={`absolute top-full right-3 z-20 flex w-[270px] max-w-[calc(100%-1.5rem)] items-center gap-1.5 overflow-hidden rounded-b-lg border border-primary/38 border-t-0 bg-base-200 px-3 py-1 font-mono text-[11px] text-az-muted shadow-[0_7px_18px_rgba(0,0,0,0.38)] ${headerTurns() <= 0 ? "invisible" : ""}`}
+              class={`absolute top-full right-3 z-20 flex w-[270px] max-w-[calc(100%-1.5rem)] items-center gap-1.5 overflow-hidden rounded-b-lg border border-primary/38 border-t-0 bg-base-200 px-3 py-1 font-mono text-az-muted text-ui-caption shadow-[0_7px_18px_rgba(0,0,0,0.38)] ${headerTurns() <= 0 ? "invisible" : ""}`}
             >
               {/* No leading agent label: the 7-day readout at the end already says
                 "Claude 7d …", so a "Claude ·" prefix here was the same word
@@ -407,7 +409,7 @@ export function ProjectTab(props: { tab: Tab; project: Project }): JSX.Element {
             <Show when={providerUsage()}>
               {(usage) => (
                 <span
-                  class={`min-w-0 max-w-[300px] shrink truncate rounded-md border px-2.5 py-1 font-mono font-semibold text-[10.5px] ${
+                  class={`min-w-0 max-w-[300px] shrink truncate rounded-md border px-2.5 py-1 font-mono font-semibold text-ui-caption-sm ${
                     usage().severity === "high"
                       ? "border-error/32 bg-error/10 text-error"
                       : usage().severity === "mid"
@@ -426,7 +428,7 @@ export function ProjectTab(props: { tab: Tab; project: Project }): JSX.Element {
                 title={tx(
                   "The latest comparable turn reported zero cache reads after a substantial cached turn. This can increase usage, but the provider does not expose the cause.",
                 )}
-                class="shrink-0 rounded-full border border-warning/30 bg-warning/10 px-2.5 py-0.5 text-[11px] text-warning"
+                class="shrink-0 rounded-full border border-warning/30 bg-warning/10 px-2.5 py-0.5 text-ui-caption text-warning"
               >
                 {tx("cache miss?")}
               </span>
@@ -472,17 +474,18 @@ export function ProjectTab(props: { tab: Tab; project: Project }): JSX.Element {
               out as a queued prompt, because it is the same promise: the click
               was taken and is waiting, not refused. */}
             <Show when={state.pendingCompact[props.project.id] !== undefined}>
-              <div class="flex items-center gap-2 rounded-[11px] border border-primary/14 border-dashed bg-az-inset px-3 py-1.5 text-[12px]">
-                <Icon name="history" class="shrink-0 text-[12px] text-az-faint" />
+              <div class="flex items-center gap-2 rounded-[11px] border border-primary/14 border-dashed bg-az-inset px-3 py-1.5 text-ui-label">
+                <Icon name="history" class="shrink-0 text-az-faint text-ui-label" />
                 <span class="min-w-0 flex-1 truncate text-az-body">{tx("Compact")}</span>
-                <span class="shrink-0 text-[10.5px] text-az-faint">{QUEUE_REASONS.busy}</span>
+                <span class="shrink-0 text-az-faint text-ui-caption-sm">{QUEUE_REASONS.busy}</span>
                 <Button
+                  id={`project-${props.project.id}-drop-queued-compact`}
                   type="button"
                   onClick={() => actions.dropPendingCompact(props.project.id)}
                   aria-label={tx("Drop this queued compaction")}
                   class="shrink-0 text-az-faint transition-colors hover:text-error"
                 >
-                  <Icon name="x" class="text-[12px]" />
+                  <Icon name="x" class="text-ui-label" />
                 </Button>
               </div>
             </Show>
@@ -492,21 +495,22 @@ export function ProjectTab(props: { tab: Tab; project: Project }): JSX.Element {
               <div class="flex flex-col gap-1">
                 <For each={state.queued[props.project.id]}>
                   {(prompt, index) => (
-                    <div class="flex items-center gap-2 rounded-[11px] border border-primary/14 border-dashed bg-az-inset px-3 py-1.5 text-[12px]">
-                      <Icon name="history" class="shrink-0 text-[12px] text-az-faint" />
+                    <div class="flex items-center gap-2 rounded-[11px] border border-primary/14 border-dashed bg-az-inset px-3 py-1.5 text-ui-label">
+                      <Icon name="history" class="shrink-0 text-az-faint text-ui-label" />
                       <span class="min-w-0 flex-1 truncate text-az-body">{prompt.body}</span>
                       {/* Why, not just that. A wait with no stated cause reads as
                         the message having been swallowed. */}
-                      <span class="shrink-0 text-[10.5px] text-az-faint">
+                      <span class="shrink-0 text-az-faint text-ui-caption-sm">
                         {QUEUE_REASONS[prompt.reason]}
                       </span>
                       <Button
+                        id={`project-${props.project.id}-drop-queued-${index()}`}
                         type="button"
                         onClick={() => actions.removeQueued(props.project.id, index())}
                         aria-label={tx("Drop this queued message")}
                         class="shrink-0 text-az-faint transition-colors hover:text-error"
                       >
-                        <Icon name="x" class="text-[12px]" />
+                        <Icon name="x" class="text-ui-label" />
                       </Button>
                     </div>
                   )}
@@ -515,6 +519,7 @@ export function ProjectTab(props: { tab: Tab; project: Project }): JSX.Element {
             </Show>
             {mark("between")}
             <Composer
+              id={`project-${props.project.id}-composer`}
               draftKey={props.tab.key}
               onChromeChange={noteTranscriptChromeChanged}
               onCompact={
@@ -606,6 +611,7 @@ export function ProjectTab(props: { tab: Tab; project: Project }): JSX.Element {
 
         <Show when={!forkInfo()}>
           <ProjectPanelToggle
+            id={`project-${props.project.id}-panel-toggle`}
             visible={prefs.projectPanelVisible}
             onToggle={() =>
               setPrefs((d) => {
@@ -625,12 +631,16 @@ export function ProjectTab(props: { tab: Tab; project: Project }): JSX.Element {
 
 /**
  * The sidebar handle starts at the conversation boundary and occupies the
- * whole gap on its right. The slim rectangular tab uses the same primary blue
- * as Send without becoming a second focal button, and reaches neither panel's
- * scrollbar. The arrow points toward the action: right closes the visible
- * sidebar, left restores the hidden one.
+ * whole gap on its right. When that sidebar is closed, the conversation grows
+ * to the window edge, so an outside-positioned handle would be clipped; the
+ * restore control moves inside that edge instead. The arrow points toward the
+ * action: right closes the visible sidebar, left restores the hidden one.
  */
-export function ProjectPanelToggle(props: { visible: boolean; onToggle: () => void }): JSX.Element {
+export function ProjectPanelToggle(props: {
+  id: string;
+  visible: boolean;
+  onToggle: () => void;
+}): JSX.Element {
   /*
    * `props.visible` read inside the compute, not handed to `tx` as an argument.
    *
@@ -643,17 +653,20 @@ export function ProjectPanelToggle(props: { visible: boolean; onToggle: () => vo
     props.visible ? tx("Hide the project sidebar") : tx("Show the project sidebar");
   return (
     <Button
+      id={props.id}
       type="button"
       onClick={props.onToggle}
       aria-pressed={props.visible ? "true" : "false"}
       aria-label={label()}
       title={label()}
-      class="absolute top-1/2 left-full z-20 flex h-9 w-1.5 -translate-y-1/2 items-center justify-center rounded-r-md border border-primary/40 border-l-0 bg-az-chip-strong text-primary transition-colors duration-200 hover:border-primary/60 hover:bg-az-chip-strong motion-reduce:transition-none"
+      class={`absolute top-1/2 z-20 flex h-12 w-6 -translate-y-1/2 items-center justify-center border border-primary/45 bg-az-chip-strong text-primary shadow-sm transition-colors duration-200 hover:border-primary/70 hover:bg-az-hover motion-reduce:transition-none ${
+        props.visible ? "left-full rounded-r-lg border-l-0" : "right-2 rounded-lg"
+      }`}
     >
       <Icon
         name="chevron-right"
         stroke-width="3.5"
-        class={`text-[10px] transition-transform duration-200 motion-reduce:transition-none ${
+        class={`text-ui-caption transition-transform duration-200 motion-reduce:transition-none ${
           props.visible ? "rotate-0" : "rotate-180"
         }`}
       />
@@ -695,7 +708,7 @@ function PrChip(props: { pr: PullRequest }): JSX.Element {
 
   return (
     <div
-      class={`flex items-center gap-2.5 rounded-[11px] border px-3 py-2 text-[12px] ${
+      class={`flex items-center gap-2.5 rounded-[11px] border px-3 py-2 text-ui-label ${
         merged()
           ? "border-az-pr/40 bg-az-pr/12"
           : closed()
@@ -705,7 +718,7 @@ function PrChip(props: { pr: PullRequest }): JSX.Element {
     >
       <Icon
         name={merged() ? "git-merge" : "git-pull-request"}
-        class={`shrink-0 text-[14px] ${merged() ? "text-az-pr-strong" : closed() ? "text-az-muted" : "text-success"}`}
+        class={`shrink-0 text-ui-control ${merged() ? "text-az-pr-strong" : closed() ? "text-az-muted" : "text-success"}`}
       />
       {/*
        * The branch name is the link.
@@ -728,6 +741,7 @@ function PrChip(props: { pr: PullRequest }): JSX.Element {
         </span>
         <span class="shrink-0 text-az-muted">{props.pr.repo}</span>
         <Button
+          id={`pr-${props.pr.id}-open`}
           type="button"
           onClick={() =>
             void actions
@@ -735,7 +749,7 @@ function PrChip(props: { pr: PullRequest }): JSX.Element {
               .catch((cause) => log.warn(`could not open the PR: ${describeError(cause)}`))
           }
           title={tx("Open {url}", { url: props.pr.url })}
-          class="min-w-0 cursor-pointer truncate font-mono text-[11px] text-primary underline decoration-dotted underline-offset-2 transition-opacity hover:opacity-75"
+          class="min-w-0 cursor-pointer truncate font-mono text-primary text-ui-caption underline decoration-dotted underline-offset-2 transition-opacity hover:opacity-75"
         >
           {/* A pull request always has a number; a branch name is what the
               API may not have given us. Fall back to the number rather than
@@ -743,7 +757,7 @@ function PrChip(props: { pr: PullRequest }): JSX.Element {
           {props.pr.branch || `#${props.pr.number}`}
         </Button>
         <Show when={copied()}>
-          <span class="shrink-0 text-[10.5px] text-success">{tx("copied")}</span>
+          <span class="shrink-0 text-success text-ui-caption-sm">{tx("copied")}</span>
         </Show>
       </div>
       <Show
@@ -751,42 +765,47 @@ function PrChip(props: { pr: PullRequest }): JSX.Element {
         fallback={
           <>
             <Show when={props.pr.additions + props.pr.deletions > 0}>
-              <span class="shrink-0 font-mono text-[11px]">
+              <span class="shrink-0 font-mono text-ui-caption">
                 <span class="text-success">+{props.pr.additions}</span>{" "}
                 <span class="text-error">−{props.pr.deletions}</span>
               </span>
             </Show>
             <Show when={props.pr.ci !== "unknown" && props.pr.ci !== "none"}>
               <Button
+                id={`pr-${props.pr.id}-refresh-ci`}
                 type="button"
                 onClick={() =>
                   isLive("refreshPullRequest") && actions.refreshPullRequest(props.pr.id)
                 }
                 title={tx("CI rollup — click to re-check")}
-                class={`shrink-0 rounded-md px-[7px] py-px font-semibold text-[10.5px] ${CI_TONE[props.pr.ci] ?? "bg-base-300 text-az-muted"}`}
+                class={`shrink-0 rounded-md px-[7px] py-px font-semibold text-ui-caption-sm ${CI_TONE[props.pr.ci] ?? "bg-base-300 text-az-muted"}`}
               >
                 {tx("CI")} {props.pr.ci}
               </Button>
             </Show>
             <Show when={closed()}>
-              <span class="shrink-0 font-semibold text-[11px] text-az-muted">{tx("Closed")}</span>
+              <span class="shrink-0 font-semibold text-az-muted text-ui-caption">
+                {tx("Closed")}
+              </span>
             </Show>
           </>
         }
       >
-        <span class="shrink-0 font-semibold text-[11.5px] text-az-pr-strong">{tx("Merged")}</span>
+        <span class="shrink-0 font-semibold text-az-pr-strong text-ui-detail">{tx("Merged")}</span>
       </Show>
       <Button
+        id={`pr-${props.pr.id}-copy-link`}
         type="button"
         onClick={() => void copy()}
         aria-label={tx("Copy the link to PR {number}", { number: props.pr.number })}
         title={copied() ? tx("Copied") : tx("Copy the link")}
         class="shrink-0 rounded-md p-1 text-az-faint transition-colors hover:text-az-body"
       >
-        <Icon name={copied() ? "check" : "copy"} class="text-[12px]" />
+        <Icon name={copied() ? "check" : "copy"} class="text-ui-label" />
       </Button>
       <ReviewButtons pr={props.pr} />
       <Button
+        id={`pr-${props.pr.id}-dismiss`}
         type="button"
         onClick={() => void actions.dismissPullRequest(props.pr.id)}
         aria-label={tx("Dismiss PR {number}", { number: props.pr.number })}
@@ -795,7 +814,7 @@ function PrChip(props: { pr: PullRequest }): JSX.Element {
          * not set. Every other dismiss here warms to `error`. */
         class="shrink-0 text-az-faint transition-colors hover:text-error"
       >
-        <Icon name="x" class="text-[13px]" />
+        <Icon name="x" class="text-ui-body" />
       </Button>
     </div>
   );
@@ -831,10 +850,11 @@ export function ReviewButtons(props: { pr: PullRequest }): JSX.Element {
   return (
     <Show when={isLive("reviewPullRequest")}>
       <span class="flex shrink-0 items-center gap-1">
-        <span class="text-[10.5px] text-az-faint">{tx("Review")}</span>
+        <span class="text-az-faint text-ui-caption-sm">{tx("Review")}</span>
         <For each={REVIEWERS}>
           {(reviewer) => (
             <Button
+              id={`pr-${props.pr.id}-review-${reviewer.agent}`}
               type="button"
               /*
                * `state`, not a bare `aria-busy`.
@@ -861,7 +881,7 @@ export function ReviewButtons(props: { pr: PullRequest }): JSX.Element {
             >
               <Icon
                 name={isPending(reviewer.agent) ? "history" : reviewer.icon}
-                class={`text-[12px] ${isPending(reviewer.agent) ? "animate-spin" : ""}`}
+                class={`text-ui-label ${isPending(reviewer.agent) ? "animate-spin" : ""}`}
               />
             </Button>
           )}
@@ -910,7 +930,7 @@ function SessionChip(props: { sessionId: string | null }): JSX.Element {
     <Show
       when={props.sessionId}
       fallback={
-        <span class="shrink-0 font-mono text-[10.5px] text-az-faint">
+        <span class="shrink-0 font-mono text-az-faint text-ui-caption-sm">
           {tx("session · none yet")}
         </span>
       }
@@ -918,17 +938,18 @@ function SessionChip(props: { sessionId: string | null }): JSX.Element {
       {(id) => (
         <span
           title={id()}
-          class="flex shrink-0 items-center gap-1 font-mono text-[10.5px] text-az-faint"
+          class="flex shrink-0 items-center gap-1 font-mono text-az-faint text-ui-caption-sm"
         >
           <span class="text-az-faint">{tx("session ·")}</span>
           {id().slice(0, 8)}
           <Button
+            id={`session-${encodeURIComponent(id())}-copy`}
             type="button"
             onClick={() => void copy(id())}
             aria-label={tx(copied() ? "Copied session id" : "Copy session id")}
             class="flex size-[18px] items-center justify-center rounded transition-colors hover:bg-white/8 hover:text-az-body"
           >
-            <Icon name={copied() ? "check" : "copy"} class="text-[10px]" />
+            <Icon name={copied() ? "check" : "copy"} class="text-ui-tiny" />
           </Button>
         </span>
       )}

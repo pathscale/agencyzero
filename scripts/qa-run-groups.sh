@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/usr/bin/env zsh
 
 set -uo pipefail
 
@@ -10,9 +10,7 @@ if [ -n "${QA_DESCRIPTOR:-}" ]; then
 fi
 groups=()
 if [ -n "${QA_GROUPS:-}" ]; then
-  read -r -a groups <<< "$QA_GROUPS"
-else
-  :
+  groups=("${(@s: :)QA_GROUPS}")
 fi
 
 : > "$qa_log"
@@ -24,16 +22,16 @@ fi
 # persistence checks are named last in the manifest.
 if [ "${#groups[@]}" -eq 0 ]; then
   ps-qa "${qa_connection[@]}" --timeout-scale "$timeout_scale" --trace qa 2>&1 | tee -a "$qa_log"
-  status="${PIPESTATUS[0]}"
-  if [ "$status" -eq 0 ]; then
+  qa_status="${pipestatus[1]}"
+  if [ "$qa_status" -eq 0 ]; then
     # Resolved native paint, not a source-class approximation. Each read takes
     # only a few milliseconds; navigation is the expensive part and is reused.
     for surface in Settings Analytics Home "theta theta north indi"; do
       ps-qa "${qa_connection[@]}" click "$surface" >/dev/null
-      ps-qa "${qa_connection[@]}" contrast 2>&1 | tee -a "$qa_log" || status=1
+      ps-qa "${qa_connection[@]}" contrast 2>&1 | tee -a "$qa_log" || qa_status=1
     done
   fi
-  exit "$status"
+  exit "$qa_status"
 fi
 
 failed=0
@@ -43,8 +41,8 @@ for group in "${groups[@]}"; do
     echo "===== $group ====="
   } | tee -a "$qa_log"
   ps-qa "${qa_connection[@]}" --timeout-scale "$timeout_scale" --trace qa "$group" 2>&1 | tee -a "$qa_log"
-  status=${PIPESTATUS[0]}
-  if [ "$status" -ne 0 ]; then
+  qa_status=${pipestatus[1]}
+  if [ "$qa_status" -ne 0 ]; then
     failed=1
   fi
 done

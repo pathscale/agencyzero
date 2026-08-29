@@ -59,18 +59,18 @@ export function ApprovalCard(props: { projectId: string; approval: PendingApprov
 
   return (
     <div class="flex gap-[11px] rounded-xl border border-warning/26 border-l-2 border-l-warning bg-warning/9 p-[11px_13px]">
-      <Icon name="lock" class="relative top-0.5 shrink-0 text-[15px] text-warning" />
+      <Icon name="lock" class="relative top-0.5 shrink-0 text-ui-lead text-warning" />
       <div class="flex min-w-0 flex-1 flex-col gap-[7px]">
         <div class="flex items-baseline gap-2">
-          <span class="font-semibold text-[12px] text-warning">{tx("Approval needed")}</span>
-          <span class="font-mono text-[11.5px] text-az-muted">{tool()}</span>
+          <span class="font-semibold text-ui-label text-warning">{tx("Approval needed")}</span>
+          <span class="font-mono text-az-muted text-ui-detail">{tool()}</span>
         </div>
 
         <Show when={headline()}>
           {(line) => (
             <code
               data-selectable
-              class="block truncate rounded-md bg-base-300 px-2 py-1 font-mono text-[12px] text-az-strong"
+              class="block truncate rounded-md bg-base-300 px-2 py-1 font-mono text-az-strong text-ui-label"
               title={line()}
             >
               {line()}
@@ -81,20 +81,22 @@ export function ApprovalCard(props: { projectId: string; approval: PendingApprov
         {/* The full arguments, exactly as the agent sent them. */}
         <pre
           data-selectable
-          class="az-scroll max-h-[140px] overflow-y-auto whitespace-pre-wrap break-all rounded-md bg-base-300/60 px-2 py-1 font-mono text-[10.5px] text-az-body"
+          class="az-scroll max-h-[140px] overflow-y-auto whitespace-pre-wrap break-all rounded-md bg-base-300/60 px-2 py-1 font-mono text-az-body text-ui-caption-sm"
         >
           {detail()}
         </pre>
 
         <div class="flex items-center gap-2 pt-0.5">
           <Button
+            id={`approval-${props.approval.approvalId}-allow-once`}
             type="button"
             onClick={() => answer(true)}
-            class="rounded-lg bg-primary px-[13px] py-[5px] font-semibold text-[12px] text-primary-content transition-colors hover:bg-az-primary-hover"
+            class="rounded-lg bg-primary px-[13px] py-[5px] font-semibold text-primary-content text-ui-label transition-colors hover:bg-az-primary-hover"
           >
             {isPermissionGrant() ? tx("Allow for session") : tx("Allow once")}
           </Button>
           <Button
+            id={`approval-${props.approval.approvalId}-allow-always`}
             type="button"
             onClick={() => answer(true, true)}
             /*
@@ -112,23 +114,24 @@ export function ApprovalCard(props: { projectId: string; approval: PendingApprov
                     "Remembers this kind of call for this project — the same command family or the same directory — and allows it automatically from now on",
                   )
             }
-            class="rounded-lg border border-primary/50 px-3 py-[5px] font-semibold text-[12px] text-primary transition-colors hover:border-primary hover:bg-az-chip"
+            class="rounded-lg border border-primary/50 px-3 py-[5px] font-semibold text-primary text-ui-label transition-colors hover:border-primary hover:bg-az-chip"
           >
             {isPermissionGrant() ? tx("Always allow these paths") : tx("Always allow similar")}
           </Button>
           <Button
+            id={`approval-${props.approval.approvalId}-deny`}
             type="button"
             onClick={() => answer(false)}
-            class="rounded-lg border border-primary/18 px-3 py-[5px] text-[12px] text-az-body transition-colors hover:border-error hover:text-error"
+            class="rounded-lg border border-primary/18 px-3 py-[5px] text-az-body text-ui-label transition-colors hover:border-error hover:text-error"
           >
             {tx("Deny")}
           </Button>
-          <span class="text-[11.5px] text-az-muted">
+          <span class="text-az-muted text-ui-detail">
             {tx("· the run is paused until you decide")}
           </span>
         </div>
         <Show when={isPermissionGrant()}>
-          <p class="text-[11px] text-az-muted leading-[1.45]">
+          <p class="text-az-muted text-ui-caption leading-[1.45]">
             {tx(
               "Add a folder to Working directories in Settings to make it writable from the start.",
             )}

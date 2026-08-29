@@ -13,7 +13,7 @@
     "build": "bun run typecheck && bun --bun rsbuild build",
     "preview": "bun --bun rsbuild preview",
     "typecheck": "bun --bun tsc --noEmit",
-    "lint": "./scripts/biome.sh check .",
+    "lint": "./scripts/biome.sh check . && bun scripts/check-style-contracts.ts && bun scripts/check-ui-controls.ts",
     "lint:ui-controls": "bun scripts/check-ui-controls.ts",
     "format": "./scripts/biome.sh format . --write",
     "test": "bun --bun vitest",

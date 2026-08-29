@@ -1,5 +1,5 @@
 import type { JSX } from "@solidjs/web";
-import { createEffect, createMemo, createSignal, For, onSettled, Show } from "solid-js";
+import { createEffect, createMemo, createSignal, For, onCleanup, onSettled, Show } from "solid-js";
 import { Button } from "~/components/Button";
 import { Icon, type IconProps } from "~/components/Icon";
 import { StatusDot } from "~/components/StatusDot";
@@ -140,6 +140,7 @@ export function TabStrip(): JSX.Element {
    * tab that is scrolled out of sight would otherwise look like nothing
    * happened. Reading `tabs.length` as well means a new tab is revealed too.
    */
+  let revealFrame: number | undefined;
   createEffect(
     () => {
       const key = state.activeKey;
@@ -159,12 +160,24 @@ export function TabStrip(): JSX.Element {
       // reading the signal subscribes to the object, so either flag flipping
       // re-runs this no matter what is done with the values afterwards.
       arrowsShown();
-      queueMicrotask(() => {
-        reveal(key);
-      });
+      // Selection feedback paints first. Geometry reads synchronously flush
+      // pending layout in Blitz, so doing this in the click's microtask queue
+      // made an already-visible tab pay that flush before its selected state
+      // could be shown. Keyboard navigation still reveals it one frame later.
+      if (revealFrame !== undefined) cancelAnimationFrame(revealFrame);
+      if (typeof requestAnimationFrame === "undefined") queueMicrotask(() => reveal(key));
+      else {
+        revealFrame = requestAnimationFrame(() => {
+          revealFrame = undefined;
+          reveal(key);
+        });
+      }
     },
     () => {},
   );
+  onCleanup(() => {
+    if (revealFrame !== undefined) cancelAnimationFrame(revealFrame);
+  });
 
   return (
     /*
@@ -195,13 +208,14 @@ export function TabStrip(): JSX.Element {
         </For>
 
         <Button
+          id="tabs-new-project"
           type="button"
           onClick={() => actions.openDraft()}
           title={tx("New project")}
           aria-label={tx("New project")}
           class="flex h-8 shrink-0 items-center justify-center rounded-full border border-primary/22 border-dashed px-3 text-az-muted transition-colors hover:border-primary hover:bg-az-chip hover:text-primary"
         >
-          <Icon name="plus" class="text-[15px]" />
+          <Icon name="plus" class="text-ui-lead" />
         </Button>
       </div>
 
@@ -218,6 +232,7 @@ export function TabStrip(): JSX.Element {
       */}
       <div class="az-strip-cap relative z-20 flex flex-none items-center gap-1.5 rounded-full pr-1 pl-5">
         <Button
+          id="tabs-analytics"
           type="button"
           onClick={() => actions.openAnalytics()}
           title={tx("Analytics")}
@@ -228,9 +243,10 @@ export function TabStrip(): JSX.Element {
               : "text-az-muted hover:text-base-content"
           }`}
         >
-          <Icon name="gauge" class="text-[15px]" />
+          <Icon name="gauge" class="text-ui-lead" />
         </Button>
         <Button
+          id="tabs-settings"
           type="button"
           onClick={() => actions.openSettings()}
           title={
@@ -247,14 +263,14 @@ export function TabStrip(): JSX.Element {
               : "text-az-muted hover:text-base-content"
           }`}
         >
-          <Icon name="settings" class="text-[15px]" />
+          <Icon name="settings" class="text-ui-lead" />
           {/* The update nudge: a dot, not a dialog. The gear is where the
               install button lives, so the dot points at its own remedy. */}
           <Show when={state.availableUpdate}>
             <span class="az-halo-primary absolute top-[3px] right-[3px] size-[7px] rounded-full bg-primary" />
           </Show>
         </Button>
-        <div class="ml-1 flex size-[26px] items-center justify-center rounded-full bg-az-badge font-semibold text-[11px] text-base-content">
+        <div class="ml-1 flex size-[26px] items-center justify-center rounded-full bg-az-badge font-semibold text-base-content text-ui-caption">
           N
         </div>
       </div>
@@ -277,6 +293,7 @@ function ScrollArrow(props: {
 }): JSX.Element {
   return (
     <Button
+      id={props.direction === -1 ? "tabs-scroll-left" : "tabs-scroll-right"}
       type="button"
       onClick={props.onScroll}
       disabled={props.isDisabled}
@@ -299,7 +316,7 @@ function ScrollArrow(props: {
     >
       <Icon
         name="chevron-right"
-        class={`text-[15px] ${props.direction === -1 ? "rotate-180" : ""}`}
+        class={`text-ui-lead ${props.direction === -1 ? "rotate-180" : ""}`}
       />
     </Button>
   );
@@ -380,6 +397,7 @@ function TabPill(props: {
       onPointerCancel={props.reorder.onPointerUp}
     >
       <Button
+        id={`tab-${encodeURIComponent(props.tab.key)}-activate`}
         type="button"
         onClick={() => actions.focus(props.tab.key)}
         aria-current={isActive() ? "page" : undefined}
@@ -390,13 +408,13 @@ function TabPill(props: {
          * tabs are exactly what that looked like.
          */
         data-no-outline
-        class={`flex h-full min-w-0 items-center gap-2 pl-3.5 text-[12.5px] ${isClosable() ? "pr-2" : "pr-3.5"}`}
+        class={`flex h-full min-w-0 items-center gap-2 pl-3.5 text-ui-label-lg ${isClosable() ? "pr-2" : "pr-3.5"}`}
       >
         <Show when={TAB_ICON[props.tab.kind]}>
           {(name) => (
             <Icon
               name={name()}
-              class={`text-[14px] ${props.tab.kind !== "home" && isActive() ? "text-primary" : ""}`}
+              class={`text-ui-control ${props.tab.kind !== "home" && isActive() ? "text-primary" : ""}`}
             />
           )}
         </Show>
@@ -413,6 +431,7 @@ function TabPill(props: {
       */}
       <Show when={isClosable()}>
         <Button
+          id={`tab-${encodeURIComponent(props.tab.key)}-close`}
           type="button"
           data-no-drag
           onClick={() => actions.closeTab(props.tab.key)}
@@ -421,7 +440,7 @@ function TabPill(props: {
             isActive() ? "opacity-100" : "opacity-0 group-hover:opacity-100"
           }`}
         >
-          <Icon name="x" class="text-[13px]" />
+          <Icon name="x" class="text-ui-body" />
         </Button>
       </Show>
     </div>

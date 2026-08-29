@@ -51,6 +51,7 @@ function ActiveProjectPanel(): JSX.Element {
    * ProjectPanel stages its heavy open bodies after the headers paint.
    */
   const [displayed, setDisplayed] = createSignal<{ project: Project; tab: Tab } | null>(null);
+  const [handoffHidden, setHandoffHidden] = createSignal(false);
   let readyFrame: number | undefined;
   let readyTimer: number | undefined;
   const currentProject = () =>
@@ -73,15 +74,17 @@ function ActiveProjectPanel(): JSX.Element {
       if (readyTimer !== undefined) window.clearTimeout(readyTimer);
       if (!current) {
         setDisplayed(null);
+        setHandoffHidden(false);
         return;
       }
-      if (displayed()?.project.id !== current.project.id) setDisplayed(null);
+      if (displayed()?.project.id !== current.project.id) setHandoffHidden(true);
 
       const repoint = (): void => {
         readyFrame = undefined;
         readyTimer = window.setTimeout(() => {
           readyTimer = undefined;
           setDisplayed(current);
+          setHandoffHidden(false);
         }, 0);
       };
       if (typeof requestAnimationFrame === "undefined") repoint();
@@ -97,8 +100,8 @@ function ActiveProjectPanel(): JSX.Element {
 
   return (
     <div
-      aria-hidden={shown() ? "false" : "true"}
-      class={`min-h-0 flex-none overflow-hidden ${
+      aria-hidden={shown() && !handoffHidden() ? "false" : "true"}
+      class={`min-h-0 flex-none overflow-hidden ${handoffHidden() ? "pointer-events-none invisible" : ""} ${
         shown()
           ? "ml-4 w-[332px] translate-x-0 opacity-100"
           : "pointer-events-none ml-0 w-0 translate-x-3 opacity-0"
@@ -114,22 +117,19 @@ function ActiveProjectPanel(): JSX.Element {
 /**
  * The window: a tab strip over one screen at a time.
  *
- * Exactly one surface is mounted. Project tabs share one `Match` branch, so a
- * project-to-project switch re-points one component tree at the new store keys
- * instead of keeping an invisible tree for every recently visited project.
- * This matters in Blitz: a `display:none` ancestor does not reliably release
- * its descendants' layout boxes, so retained controls remain addressable to
- * automation and keep the renderer walking work nobody can see.
+ * Project data may be warm, but only the active pane is mounted. Retaining
+ * hidden panes traded one future construction for permanent DOM, semantic and
+ * reactive ownership, and mounting a large neighbor consumed hundreds of
+ * milliseconds immediately after startup. The data cache removes I/O from a
+ * nearby switch without making an invisible application tree pay layout and
+ * memory costs.
  */
 export function Workspace(): JSX.Element {
   const { state, actions, activeTab, activeProject } = useWorkspace();
   const shell = useAppShell();
 
   return (
-    <div
-      data-slot="application-surface"
-      class="az-desk relative flex h-full flex-col overflow-hidden"
-    >
+    <div class="az-desk relative flex h-full flex-col overflow-hidden">
       <Show when={state.boot.status !== "loading"}>
         <TabStrip />
       </Show>
@@ -138,12 +138,15 @@ export function Workspace(): JSX.Element {
         {(failure) => (
           <div
             role="alert"
-            class="mx-3 mt-1.5 flex flex-none items-start gap-2 rounded-lg border border-error/35 bg-error/12 px-3 py-2 text-[11.5px] text-error"
+            class="mx-3 mt-1.5 flex flex-none items-start gap-2 rounded-lg border border-error/35 bg-error/12 px-3 py-2 text-error text-ui-detail"
           >
-            <Icon name="shield" class="mt-px shrink-0 text-[14px]" />
+            <Icon name="shield" class="mt-px shrink-0 text-ui-control" />
             <div class="min-w-0">
               <p class="font-semibold">{tx("Storage stopped saving")}</p>
-              <p data-selectable class="mt-0.5 break-words font-mono text-[10.5px] leading-[1.45]">
+              <p
+                data-selectable
+                class="mt-0.5 break-words font-mono text-ui-caption-sm leading-[1.45]"
+              >
                 {failure()}
               </p>
               <p class="mt-1 text-az-body">
@@ -215,8 +218,15 @@ export function Workspace(): JSX.Element {
                 </div>
               </Match>
               <Match when={activeTab().kind === "project" && activeProject() !== null}>
-                <div data-active-project={activeProject()?.id} class="flex min-h-0 min-w-0 flex-1">
-                  <ProjectTab tab={activeTab()} project={activeProject() as Project} />
+                <div class="flex min-h-0 min-w-0 flex-1">
+                  <div class="relative min-h-0 min-w-0 flex-1 overflow-hidden">
+                    <div
+                      data-active-project={activeProject()?.id}
+                      class="absolute inset-0 flex min-h-0 min-w-0"
+                    >
+                      <ProjectTab tab={activeTab()} project={activeProject()!} />
+                    </div>
+                  </div>
                   <ActiveProjectPanel />
                 </div>
               </Match>
@@ -228,10 +238,10 @@ export function Workspace(): JSX.Element {
                   missing record from a broken render.
                 */}
                 <div class="flex min-w-0 flex-1 flex-col items-center justify-center gap-2 rounded-panel border border-az-hairline bg-az-sunken">
-                  <p class="text-[13.5px] text-az-title">
+                  <p class="text-az-title text-ui-body-lg">
                     {tx("This project could not be loaded")}
                   </p>
-                  <p class="max-w-[420px] text-center text-[11.5px] text-az-muted">
+                  <p class="max-w-[420px] text-center text-az-muted text-ui-detail">
                     {tx(
                       "The tab is open but its record is missing from the workspace. Reopening the window will re-read it from the database.",
                     )}
@@ -279,12 +289,12 @@ export function Booting(): JSX.Element {
       <div class="absolute top-1/2 left-1/2 size-[360px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-az-chip blur-[90px]" />
       <div class="relative flex flex-col items-center">
         <div class="az-halo-primary flex size-[58px] items-center justify-center rounded-[18px] border border-primary/28 bg-az-chip text-primary shadow-[0_16px_45px_rgb(from_var(--color-primary)_r_g_b/.12)]">
-          <Icon name="sparkles" class="text-[27px]" />
+          <Icon name="sparkles" class="text-ui-hero" />
         </div>
-        <p class="mt-4 font-semibold text-[18px] text-az-title tracking-[-.02em]">
+        <p class="mt-4 font-semibold text-az-title text-ui-heading tracking-[-.02em]">
           {tx("AgencyZero")}
         </p>
-        <p class="mt-1 text-[11.5px] text-az-muted">{tx("Loading workspace…")}</p>
+        <p class="mt-1 text-az-muted text-ui-detail">{tx("Loading workspace…")}</p>
         <div class="mt-4 h-1 w-32 overflow-hidden rounded-full bg-az-chip">
           <div class="h-full w-2/3 animate-pulse rounded-full bg-primary/65" />
         </div>
@@ -307,31 +317,33 @@ export function BootFailed(props: {
   return (
     <div class="flex flex-1 flex-col items-center justify-center gap-3.5 px-8">
       <div class="flex size-[54px] items-center justify-center rounded-2xl border border-error/26 bg-error/8">
-        <Icon name="shield" class="text-[24px] text-error" />
+        <Icon name="shield" class="text-error text-ui-display-lg" />
       </div>
       <div class="flex flex-col items-center gap-1.5">
-        <p class="font-semibold text-[15px] text-base-content">
+        <p class="font-semibold text-base-content text-ui-lead">
           {tx("Could not load the workspace")}
         </p>
         <p
           data-selectable
-          class="max-w-[460px] text-center font-mono text-[11.5px] text-az-muted leading-[1.55]"
+          class="max-w-[460px] text-center font-mono text-az-muted text-ui-detail leading-[1.55]"
         >
           {props.message}
         </p>
       </div>
       <Flex align="center" gap="sm">
         <Button
+          id="boot-retry"
           type="button"
           onClick={props.onRetry}
-          class="rounded-lg bg-primary px-3.5 py-1.5 font-semibold text-[12.5px] text-primary-content transition-colors hover:bg-az-primary-hover"
+          class="rounded-lg bg-primary px-3.5 py-1.5 font-semibold text-primary-content text-ui-label-lg transition-colors hover:bg-az-primary-hover"
         >
           {tx("Try again")}
         </Button>
         <Button
+          id="boot-open-settings"
           type="button"
           onClick={props.onOpenSettings}
-          class="rounded-lg border border-az-hairline px-3.5 py-1.5 font-semibold text-[12.5px] text-az-body transition-colors hover:bg-white/6 hover:text-base-content"
+          class="rounded-lg border border-az-hairline px-3.5 py-1.5 font-semibold text-az-body text-ui-label-lg transition-colors hover:bg-white/6 hover:text-base-content"
         >
           {tx("Open Settings")}
         </Button>
@@ -349,7 +361,7 @@ export function BootFailed(props: {
  */
 function MockBanner(): JSX.Element {
   return (
-    <div class="flex flex-none items-center justify-center gap-2 border-az-hairline-soft border-t px-3 py-1.5 text-[10.5px] text-az-faint">
+    <div class="flex flex-none items-center justify-center gap-2 border-az-hairline-soft border-t px-3 py-1.5 text-az-faint text-ui-caption-sm">
       <span class="size-1.5 rounded-full bg-warning" />
       {tx("Design fixtures — the Rust commands are not implemented yet")}
     </div>

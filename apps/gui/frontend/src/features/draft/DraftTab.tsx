@@ -29,6 +29,7 @@ export function DraftTab(props: { tab: Tab }): JSX.Element {
       */}
       <div class="w-full max-w-[720px]">
         <Composer
+          id="draft-composer"
           draftKey={props.tab.key}
           size="lg"
           autofocus

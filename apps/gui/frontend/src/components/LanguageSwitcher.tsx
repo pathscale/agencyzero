@@ -6,7 +6,7 @@ import type { Component } from "solid-js";
 import { i18n, type SupportedLanguage, tx } from "~/stores/i18n";
 import { useWorkspace } from "~/stores/workspace";
 
-type LanguageSwitcherProps = Omit<LibraryLanguageSwitcherProps, "i18n">;
+type LanguageSwitcherProps = Omit<LibraryLanguageSwitcherProps, "i18n"> & { id?: string };
 
 /** AgencyZero labels over the same shared control NoFilter uses. */
 export const LanguageSwitcher: Component<LanguageSwitcherProps> = (props) => {
