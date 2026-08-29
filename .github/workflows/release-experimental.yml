@@ -88,7 +88,7 @@ jobs:
       # See the same step in release.yml: the crates.io build of the CLI the
       # npm package shims, so the release path never needs Node.
       - name: Install the Tauri CLI
-        run: cargo install tauri-cli --version "^2.11"
+        run: cargo install tauri-cli
 
       - name: Build the AgencyProxy sidecar
         run: scripts/stage-agency-proxy-sidecar.sh

@@ -23,6 +23,10 @@ az-core = { path = "crates/core" }
 # resolved version instead of re-parsing the manifest to check they match.
 agency-proxy-client = "0.1.7"
 agency-proxy-protocol = "0.1.7"
+# The GUI and both storage tools compile the same schema against one resolved
+# WorkTable package. A workspace dependency prevents their compatible ranges
+# from drifting into separate copies without freezing the selected patch.
+worktable = "1.0.0-beta.11"
 
 # Heavy deps are declared per-crate on purpose: only apps/gui pulls in the
 # Tauri stack, so agent/proxy builds never trigger a webview toolchain build.

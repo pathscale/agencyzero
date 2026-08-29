@@ -127,9 +127,10 @@ fn stamp_build() {
     // The resolved graph and the installed component library are inputs to the
     // stamp above, so a change in either has to rerun this script.
     println!("cargo:rerun-if-changed=../../Cargo.toml");
-    println!("cargo:rerun-if-changed=../../Cargo.lock");
     println!("cargo:rerun-if-changed=Cargo.toml");
     println!("cargo:rerun-if-changed=frontend/node_modules/@pathscale/ui/package.json");
+    println!("cargo:rerun-if-changed=frontend/node_modules/solid-js/package.json");
+    println!("cargo:rerun-if-changed=frontend/node_modules/@solidjs/web/package.json");
 }
 
 /// Drop framework load commands that nothing in this binary references.
@@ -202,9 +203,7 @@ fn write_resolved_manifest() {
     // The whole Rust graph, deduplicated. A path or git source shows up here
     // as its source, which is the thing that must never ship unnoticed.
     let tree = std::process::Command::new("cargo")
-        .args([
-            "tree", "--locked", "--edges", "normal", "--prefix", "none", "--quiet",
-        ])
+        .args(["tree", "--edges", "normal", "--prefix", "none", "--quiet"])
         .output()
         .ok()
         .filter(|out| out.status.success())
@@ -226,15 +225,33 @@ fn write_resolved_manifest() {
     // The component library as installed, not as requested. `bun.lock` is not
     // committed in this project, so the caret in `package.json` cannot answer
     // which version is on disk.
-    let ui = std::fs::read_to_string("frontend/node_modules/@pathscale/ui/package.json")
-        .ok()
-        .and_then(|text| {
+    let package_version = |path: &str| {
+        std::fs::read_to_string(path).ok().and_then(|text| {
             text.lines()
                 .find(|line| line.trim_start().starts_with("\"version\""))
                 .and_then(|line| line.split('"').nth(3).map(str::to_owned))
         })
-        .unwrap_or_else(|| "unknown".into());
-    manifest.push_str(&format!("\n# frontend\n@pathscale/ui {ui}\n"));
+    };
+    let ui = package_version("frontend/node_modules/@pathscale/ui/package.json");
+    let solid = package_version("frontend/node_modules/solid-js/package.json");
+    let solid_web = package_version("frontend/node_modules/@solidjs/web/package.json");
+    if let (Some(solid), Some(solid_web)) = (&solid, &solid_web) {
+        assert!(
+            solid == solid_web && solid.starts_with("2."),
+            "AZ requires one matching Solid 2 runtime; resolved solid-js={solid}, @solidjs/web={solid_web}"
+        );
+    }
+    manifest.push_str("\n# frontend\n");
+    for (name, version) in [
+        ("@pathscale/ui", ui),
+        ("solid-js", solid),
+        ("@solidjs/web", solid_web),
+    ] {
+        manifest.push_str(name);
+        manifest.push(' ');
+        manifest.push_str(version.as_deref().unwrap_or("unknown"));
+        manifest.push('\n');
+    }
 
     std::fs::write(&path, manifest).expect("write resolved-manifest.txt");
 
