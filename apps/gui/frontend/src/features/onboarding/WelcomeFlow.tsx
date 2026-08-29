@@ -221,18 +221,22 @@ export function WelcomeFlow(): JSX.Element {
           <Dialog.Header class="flex-row items-start justify-between gap-5 border-az-hairline-soft border-b px-6 py-5">
             <div class="flex min-w-0 items-center gap-3.5">
               <div class="az-halo-primary flex size-11 shrink-0 items-center justify-center rounded-[14px] border border-primary/30 bg-az-chip text-primary">
-                <Icon name="sparkles" class="text-[21px]" />
+                <Icon name="sparkles" class="text-ui-display" />
               </div>
               <div>
-                <Dialog.Heading id="welcome-title" class="font-semibold text-[18px] text-az-title">
+                <Dialog.Heading
+                  id="welcome-title"
+                  class="font-semibold text-az-title text-ui-heading"
+                >
                   {tx("Welcome to AgencyZero")}
                 </Dialog.Heading>
-                <p class="mt-0.5 text-[11.5px] text-az-muted">
+                <p class="mt-0.5 text-az-muted text-ui-detail">
                   {tx("Set up the workspace once, then start with a real task.")}
                 </p>
               </div>
             </div>
             <Button
+              id="onboarding-close"
               type="button"
               disabled={busy()}
               onClick={() => actions.deferOnboarding()}
@@ -240,7 +244,7 @@ export function WelcomeFlow(): JSX.Element {
               aria-label={isReplay() ? tx("Close setup") : tx("Finish setup later")}
               class="static size-auto rounded-lg p-1.5 text-az-muted hover:bg-white/6 hover:text-base-content disabled:opacity-40"
             >
-              <Icon name="x" class="text-[16px]" />
+              <Icon name="x" class="text-ui-title" />
             </Button>
           </Dialog.Header>
 
@@ -272,7 +276,7 @@ export function WelcomeFlow(): JSX.Element {
                 title={tx("Interface language")}
                 hint={tx("Choose the language used by AgencyZero.")}
               >
-                <LanguageSwitcher align="end" />
+                <LanguageSwitcher id="onboarding-language" align="end" />
               </SetupRow>
               <SetupRow
                 title={tx("Home Project directory")}
@@ -283,24 +287,26 @@ export function WelcomeFlow(): JSX.Element {
                 }
               >
                 <div class="flex max-w-[430px] flex-col items-end gap-2">
-                  <code class="max-w-full truncate font-mono text-[11px] text-az-body">
+                  <code class="max-w-full truncate font-mono text-az-body text-ui-caption">
                     {state.workspaceRoot?.path ?? tx("Not available")}
                   </code>
                   <Flex align="center" gap="sm">
                     <Button
+                      id="onboarding-workspace-choose"
                       type="button"
                       disabled={busy()}
                       onClick={() => void actions.chooseWorkspaceRoot()}
-                      class="rounded-lg border border-az-hairline-strong px-3 py-1.5 text-[11.5px] text-az-body hover:border-primary hover:text-primary disabled:opacity-40"
+                      class="rounded-lg border border-az-hairline-strong px-3 py-1.5 text-az-body text-ui-detail hover:border-primary hover:text-primary disabled:opacity-40"
                     >
                       {tx("Choose folder…")}
                     </Button>
                     <Show when={!state.workspaceRoot?.exists}>
                       <Button
+                        id="onboarding-workspace-create"
                         type="button"
                         disabled={busy()}
                         onClick={() => void actions.createWorkspaceRoot()}
-                        class="rounded-lg border border-primary/50 px-3 py-1.5 text-[11.5px] text-primary hover:bg-az-chip disabled:opacity-40"
+                        class="rounded-lg border border-primary/50 px-3 py-1.5 text-primary text-ui-detail hover:bg-az-chip disabled:opacity-40"
                       >
                         {tx("Create recommended folder")}
                       </Button>
@@ -310,35 +316,37 @@ export function WelcomeFlow(): JSX.Element {
               </SetupRow>
               <div class="mt-4 flex items-center justify-between gap-5 rounded-xl border border-primary/22 bg-az-chip px-4 py-3.5">
                 <div class="min-w-0">
-                  <p class="font-medium text-[12.5px] text-az-strong">
+                  <p class="font-medium text-az-strong text-ui-label-lg">
                     {tx("Restoring from backup?")}
                   </p>
-                  <p class="mt-0.5 text-[10.5px] text-az-muted">
+                  <p class="mt-0.5 text-az-muted text-ui-caption-sm">
                     {tx("Select an AgencyZero backup, then restore it before continuing setup.")}
                   </p>
                 </div>
                 <div class="flex shrink-0 items-center gap-2">
                   <Show when={restoreSelection()}>
                     {(picked) => (
-                      <code class="max-w-[190px] truncate font-mono text-[10.5px] text-az-body">
+                      <code class="max-w-[190px] truncate font-mono text-az-body text-ui-caption-sm">
                         {picked().fileName}
                       </code>
                     )}
                   </Show>
                   <Button
+                    id="onboarding-backup-select"
                     type="button"
                     disabled={busy() || !isLive("selectStoreBackup")}
                     onClick={() => void selectBackup()}
-                    class="rounded-lg border border-az-hairline-strong px-3 py-1.5 text-[11.5px] text-az-body hover:border-primary hover:text-primary disabled:opacity-40"
+                    class="rounded-lg border border-az-hairline-strong px-3 py-1.5 text-az-body text-ui-detail hover:border-primary hover:text-primary disabled:opacity-40"
                   >
                     {tx("Select backup file…")}
                   </Button>
                   <Show when={restoreSelection()}>
                     <Button
+                      id="onboarding-backup-restore"
                       type="button"
                       disabled={busy()}
                       onClick={() => void restoreBackup()}
-                      class="rounded-lg border border-warning/50 px-3 py-1.5 font-semibold text-[11.5px] text-warning hover:border-warning disabled:opacity-40"
+                      class="rounded-lg border border-warning/50 px-3 py-1.5 font-semibold text-ui-detail text-warning hover:border-warning disabled:opacity-40"
                     >
                       {tx("Restore")}
                     </Button>
@@ -366,19 +374,19 @@ export function WelcomeFlow(): JSX.Element {
                                 ? "vendor-openai"
                                 : "vendor-copilot"
                           }
-                          class="text-[17px] text-az-body"
+                          class="text-az-body text-ui-title-lg"
                         />
                         <div>
-                          <p class="font-medium text-[12.5px] text-az-strong">
+                          <p class="font-medium text-az-strong text-ui-label-lg">
                             {AGENT_LABELS[status.agent]}
                           </p>
-                          <p class="mt-0.5 text-[10.5px] text-az-muted">
+                          <p class="mt-0.5 text-az-muted text-ui-caption-sm">
                             {status.version ?? tx("No installed version detected")}
                           </p>
                         </div>
                       </div>
                       <span
-                        class={`rounded-full px-2 py-1 font-medium text-[10.5px] ${
+                        class={`rounded-full px-2 py-1 font-medium text-ui-caption-sm ${
                           status.state === "connected"
                             ? "bg-success/12 text-success"
                             : status.state === "logged_out"
@@ -393,18 +401,19 @@ export function WelcomeFlow(): JSX.Element {
                 </For>
               </div>
               <div class="mt-3 flex items-center justify-between gap-3">
-                <p class="text-[11px] text-az-muted">
+                <p class="text-az-muted text-ui-caption">
                   {connectedProjectAgents().length > 0
                     ? tx("At least one project agent is ready.")
                     : tx("Install and sign in to Claude or Codex before continuing.")}
                 </p>
                 <Button
+                  id="onboarding-agents-recheck"
                   type="button"
                   disabled={busy()}
                   onClick={() => void actions.recheckAgents()}
-                  class="flex items-center gap-1.5 rounded-lg border border-az-hairline-strong px-3 py-1.5 text-[11.5px] text-az-body hover:border-primary hover:text-primary disabled:opacity-40"
+                  class="flex items-center gap-1.5 rounded-lg border border-az-hairline-strong px-3 py-1.5 text-az-body text-ui-detail hover:border-primary hover:text-primary disabled:opacity-40"
                 >
-                  <Icon name="refresh-cw" class="text-[12px]" />
+                  <Icon name="refresh-cw" class="text-ui-label" />
                   {tx("Run checks again")}
                 </Button>
               </div>
@@ -413,19 +422,20 @@ export function WelcomeFlow(): JSX.Element {
                   role="alert"
                   class="mt-4 rounded-xl border border-error/38 bg-error/8 px-4 py-3.5"
                 >
-                  <p class="font-semibold text-[12.5px] text-error">
+                  <p class="font-semibold text-error text-ui-label-lg">
                     {tx("No compatible project agent is ready")}
                   </p>
-                  <p class="mt-1 text-[11px] text-az-body leading-[1.5]">
+                  <p class="mt-1 text-az-body text-ui-caption leading-[1.5]">
                     {tx(
                       "AgencyZero cannot send prompts until Claude or Codex is installed, compatible, and signed in.",
                     )}
                   </p>
                   <Button
+                    id="onboarding-agents-skip"
                     type="button"
                     disabled={busy()}
                     onClick={skipAgents}
-                    class="mt-3 rounded-lg border border-error/35 px-3 py-1.5 text-[11.5px] text-az-body hover:border-error hover:text-error disabled:opacity-40"
+                    class="mt-3 rounded-lg border border-error/35 px-3 py-1.5 text-az-body text-ui-detail hover:border-error hover:text-error disabled:opacity-40"
                   >
                     {tx("Skip - I promise to install them later")}
                   </Button>
@@ -453,10 +463,10 @@ export function WelcomeFlow(): JSX.Element {
                     when={connectedProjectAgents().length > 0}
                     fallback={
                       <div class="mt-4 rounded-xl border border-warning/35 bg-warning/8 px-4 py-3.5">
-                        <p class="font-medium text-[12px] text-warning">
+                        <p class="font-medium text-ui-label text-warning">
                           {tx("Prompt controls will remain disabled")}
                         </p>
-                        <p class="mt-1 text-[11px] text-az-body leading-[1.5]">
+                        <p class="mt-1 text-az-body text-ui-caption leading-[1.5]">
                           {tx(
                             "You can browse AgencyZero, but return to Settings and run the agent checks after installing Claude or Codex.",
                           )}
@@ -468,6 +478,7 @@ export function WelcomeFlow(): JSX.Element {
                       <For each={connectedProjectAgents()}>
                         {(status) => (
                           <Button
+                            id={`onboarding-agent-${status.agent}`}
                             type="button"
                             disabled={busy()}
                             onClick={() => void chooseAgent(status.agent)}
@@ -477,10 +488,10 @@ export function WelcomeFlow(): JSX.Element {
                                 : "border-az-hairline bg-az-inset hover:border-primary/40"
                             }`}
                           >
-                            <span class="font-medium text-[12.5px] text-az-strong">
+                            <span class="font-medium text-az-strong text-ui-label-lg">
                               {AGENT_LABELS[status.agent]}
                             </span>
-                            <span class="mt-1 block text-[10.5px] text-az-muted">
+                            <span class="mt-1 block text-az-muted text-ui-caption-sm">
                               {tx("Default project agent")}
                             </span>
                           </Button>
@@ -492,6 +503,7 @@ export function WelcomeFlow(): JSX.Element {
                       hint={tx("Choose from the enabled models for this agent.")}
                     >
                       <Select
+                        id="onboarding-default-model"
                         value={settings().models[settings().defaultAgent].default}
                         disabled={busy() || !defaultAgentReady()}
                         onChange={(value) =>
@@ -502,7 +514,7 @@ export function WelcomeFlow(): JSX.Element {
                       >
                         <Select.Trigger
                           aria-label={tx("Default model")}
-                          class="h-9 min-w-[250px] rounded-lg border border-az-hairline bg-az-inset px-2.5 text-[12px] text-az-body outline-none disabled:opacity-40"
+                          class="h-9 min-w-[250px] rounded-lg border border-az-hairline bg-az-inset px-2.5 text-az-body text-ui-label outline-none disabled:opacity-40"
                         >
                           <Select.Value />
                           <Select.Indicator endIcon={<Icon name="chevron-down" />} />
@@ -521,10 +533,10 @@ export function WelcomeFlow(): JSX.Element {
                       </Select>
                     </SetupRow>
                     <div class="mt-4">
-                      <p class="font-medium text-[12.5px] text-az-strong">
+                      <p class="font-medium text-az-strong text-ui-label-lg">
                         {tx("Security posture")}
                       </p>
-                      <p class="mt-0.5 text-[11px] text-az-muted">
+                      <p class="mt-0.5 text-az-muted text-ui-caption">
                         {tx("Choose explicitly; AgencyZero never widens access on its own.")}
                       </p>
                       <div class="mt-3 grid grid-cols-3 gap-2.5">
@@ -535,6 +547,7 @@ export function WelcomeFlow(): JSX.Element {
                         >
                           {(permission) => (
                             <Button
+                              id={`onboarding-permission-${permission}`}
                               type="button"
                               disabled={busy()}
                               onClick={() => void chooseSecurity(permission)}
@@ -544,10 +557,10 @@ export function WelcomeFlow(): JSX.Element {
                                   : "border-az-hairline bg-az-inset hover:border-primary/40"
                               }`}
                             >
-                              <span class="font-semibold text-[12px] text-az-strong">
+                              <span class="font-semibold text-az-strong text-ui-label">
                                 {permissionLabel(permission)}
                               </span>
-                              <span class="mt-1.5 block text-[10.5px] text-az-muted leading-[1.45]">
+                              <span class="mt-1.5 block text-az-muted text-ui-caption-sm leading-[1.45]">
                                 {SECURITY_HINT[permission]}
                               </span>
                             </Button>
@@ -570,7 +583,7 @@ export function WelcomeFlow(): JSX.Element {
                 <Show
                   when={sources().length > 0}
                   fallback={
-                    <p class="px-4 py-5 text-center text-[11.5px] text-az-muted">
+                    <p class="px-4 py-5 text-center text-az-muted text-ui-detail">
                       {importsLoaded()
                         ? tx("No importable local sessions were found.")
                         : tx("Checking known provider stores…")}
@@ -584,16 +597,19 @@ export function WelcomeFlow(): JSX.Element {
                       return (
                         <div class="flex items-center justify-between gap-4 border-az-hairline-soft border-b px-4 py-3 last:border-b-0">
                           <div>
-                            <p class="font-medium text-[12.5px] text-az-strong">{source.label}</p>
-                            <p class="mt-0.5 text-[10.5px] text-az-muted">
+                            <p class="font-medium text-az-strong text-ui-label-lg">
+                              {source.label}
+                            </p>
+                            <p class="mt-0.5 text-az-muted text-ui-caption-sm">
                               {tx("{count} chats available", { count: importable().length })}
                             </p>
                           </div>
                           <Button
+                            id={`onboarding-import-${encodeURIComponent(source.source)}-all`}
                             type="button"
                             disabled={busy() || importable().length === 0}
                             onClick={() => void importAll(source)}
-                            class="rounded-lg border border-primary/45 px-3 py-1.5 font-medium text-[11.5px] text-primary hover:bg-az-chip disabled:opacity-40"
+                            class="rounded-lg border border-primary/45 px-3 py-1.5 font-medium text-primary text-ui-detail hover:bg-az-chip disabled:opacity-40"
                           >
                             {tx("Import all")}
                           </Button>
@@ -603,7 +619,7 @@ export function WelcomeFlow(): JSX.Element {
                   </For>
                 </Show>
               </div>
-              <p class="mt-3 text-[11px] text-az-muted">
+              <p class="mt-3 text-az-muted text-ui-caption">
                 {tx("Import is optional. You can return to it from Settings at any time.")}
               </p>
             </Show>
@@ -626,12 +642,13 @@ export function WelcomeFlow(): JSX.Element {
                       <For each={[true, false]}>
                         {(enabled) => (
                           <Button
+                            id={`onboarding-update-checks-${enabled ? "on" : "off"}`}
                             type="button"
                             disabled={busy()}
                             onClick={() =>
                               void actions.saveSettings({ automaticUpdateChecks: enabled })
                             }
-                            class={`rounded-md px-3 py-1 text-[11.5px] ${
+                            class={`rounded-md px-3 py-1 text-ui-detail ${
                               settings().automaticUpdateChecks === enabled
                                 ? "bg-az-chip font-medium text-primary"
                                 : "text-az-muted"
@@ -644,10 +661,10 @@ export function WelcomeFlow(): JSX.Element {
                     </div>
                   </SetupRow>
                   <div class="mt-4 rounded-xl border border-primary/22 bg-az-chip px-4 py-4">
-                    <p class="font-medium text-[12.5px] text-az-strong">
+                    <p class="font-medium text-az-strong text-ui-label-lg">
                       {tx("What happens next")}
                     </p>
-                    <p class="mt-1 text-[11px] text-az-muted leading-[1.55]">
+                    <p class="mt-1 text-az-muted text-ui-caption leading-[1.55]">
                       {connectedProjectAgents().length > 0
                         ? tx(
                             "AgencyZero opens an Untitled project. Describe the outcome you want; the first reply names the project and can create tracked work items.",
@@ -663,7 +680,7 @@ export function WelcomeFlow(): JSX.Element {
 
             <Show when={note()}>
               {(message) => (
-                <p class="mt-4 rounded-lg border border-warning/24 bg-warning/8 px-3 py-2 text-[11px] text-az-body">
+                <p class="mt-4 rounded-lg border border-warning/24 bg-warning/8 px-3 py-2 text-az-body text-ui-caption">
                   {message()}
                 </p>
               )}
@@ -673,29 +690,32 @@ export function WelcomeFlow(): JSX.Element {
           <Dialog.Footer class="justify-between gap-4 border-az-hairline-soft border-t px-6 py-4">
             <Flex align="center" gap="sm">
               <Button
+                id="onboarding-back"
                 type="button"
                 disabled={busy() || step() === 0}
                 onClick={() => setStep((current) => Math.max(0, current - 1))}
-                class="rounded-lg px-3 py-1.5 text-[11.5px] text-az-muted hover:bg-white/5 hover:text-base-content disabled:opacity-30"
+                class="rounded-lg px-3 py-1.5 text-az-muted text-ui-detail hover:bg-white/5 hover:text-base-content disabled:opacity-30"
               >
                 {tx("Back")}
               </Button>
               <Button
+                id="onboarding-finish-later"
                 type="button"
                 disabled={busy()}
                 onClick={() => actions.deferOnboarding()}
-                class="rounded-lg px-3 py-1.5 text-[11.5px] text-az-muted hover:bg-white/5 hover:text-base-content disabled:opacity-30"
+                class="rounded-lg px-3 py-1.5 text-az-muted text-ui-detail hover:bg-white/5 hover:text-base-content disabled:opacity-30"
               >
                 {isReplay() ? tx("Close") : tx("Finish later")}
               </Button>
             </Flex>
             <Button
+              id="onboarding-continue"
               type="button"
               disabled={busy() || !canContinue()}
               onClick={() =>
                 step() === LAST_STEP ? void finish() : setStep((current) => current + 1)
               }
-              class="flex min-w-[128px] items-center justify-center gap-1.5 rounded-lg bg-primary px-4 py-2 font-semibold text-[12px] text-primary-content hover:bg-az-primary-hover disabled:cursor-not-allowed disabled:opacity-40"
+              class="flex min-w-[128px] items-center justify-center gap-1.5 rounded-lg bg-primary px-4 py-2 font-semibold text-primary-content text-ui-label hover:bg-az-primary-hover disabled:cursor-not-allowed disabled:opacity-40"
             >
               {step() === LAST_STEP
                 ? connectedProjectAgents().length > 0
@@ -703,7 +723,7 @@ export function WelcomeFlow(): JSX.Element {
                   : tx("Finish setup")
                 : tx("Continue")}
               <Show when={step() !== LAST_STEP}>
-                <Icon name="chevron-right" class="text-[13px]" />
+                <Icon name="chevron-right" class="text-ui-body" />
               </Show>
             </Button>
           </Dialog.Footer>
@@ -721,11 +741,11 @@ function SetupHeading(props: {
   return (
     <div class="flex items-start gap-3">
       <div class="flex size-9 shrink-0 items-center justify-center rounded-xl bg-az-chip text-primary">
-        <Icon name={props.icon} class="text-[17px]" />
+        <Icon name={props.icon} class="text-ui-title-lg" />
       </div>
       <div>
-        <h2 class="font-semibold text-[16px] text-az-title">{props.title}</h2>
-        <p class="mt-1 text-[11.5px] text-az-muted">{props.hint}</p>
+        <h2 class="font-semibold text-az-title text-ui-title">{props.title}</h2>
+        <p class="mt-1 text-az-muted text-ui-detail">{props.hint}</p>
       </div>
     </div>
   );
@@ -735,8 +755,8 @@ function SetupRow(props: { title: string; hint: string; children: JSX.Element })
   return (
     <div class="mt-4 flex items-center justify-between gap-5 rounded-xl border border-az-hairline bg-az-inset px-4 py-3.5">
       <div class="min-w-0">
-        <p class="font-medium text-[12.5px] text-az-strong">{props.title}</p>
-        <p class="mt-0.5 text-[10.5px] text-az-muted">{props.hint}</p>
+        <p class="font-medium text-az-strong text-ui-label-lg">{props.title}</p>
+        <p class="mt-0.5 text-az-muted text-ui-caption-sm">{props.hint}</p>
       </div>
       <div class="shrink-0">{props.children}</div>
     </div>

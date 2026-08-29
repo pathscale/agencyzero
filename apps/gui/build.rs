@@ -127,6 +127,7 @@ fn stamp_build() {
     // The resolved graph and the installed component library are inputs to the
     // stamp above, so a change in either has to rerun this script.
     println!("cargo:rerun-if-changed=../../Cargo.toml");
+    println!("cargo:rerun-if-changed=../../Cargo.lock");
     println!("cargo:rerun-if-changed=Cargo.toml");
     println!("cargo:rerun-if-changed=frontend/node_modules/@pathscale/ui/package.json");
 }
@@ -201,7 +202,15 @@ fn write_resolved_manifest() {
     // The whole Rust graph, deduplicated. A path or git source shows up here
     // as its source, which is the thing that must never ship unnoticed.
     let tree = std::process::Command::new("cargo")
-        .args(["tree", "--edges", "normal", "--prefix", "none", "--quiet"])
+        .args([
+            "tree",
+            "--locked",
+            "--edges",
+            "normal",
+            "--prefix",
+            "none",
+            "--quiet",
+        ])
         .output()
         .ok()
         .filter(|out| out.status.success())
@@ -236,6 +245,7 @@ fn write_resolved_manifest() {
     std::fs::write(&path, manifest).expect("write resolved-manifest.txt");
 
     println!("cargo:rerun-if-changed=../../Cargo.toml");
+    println!("cargo:rerun-if-changed=../../Cargo.lock");
     println!("cargo:rerun-if-changed=Cargo.toml");
     println!("cargo:rerun-if-changed=frontend/node_modules/@pathscale/ui/package.json");
 }

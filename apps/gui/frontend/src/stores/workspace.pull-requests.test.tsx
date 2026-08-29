@@ -39,8 +39,7 @@ describe("pull-request loading", () => {
     await bootWorkspace();
     expect(calls.discover).not.toHaveBeenCalled();
     expect(calls.refresh).not.toHaveBeenCalled();
-    expect(calls.listMessages.mock.calls.map(([projectId]) => projectId).sort()).toEqual([
-      "cafe",
+    expect(calls.listMessages.mock.calls.map(([projectId]) => projectId)).toEqual([
       "home-task-manager",
     ]);
   });

@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/usr/bin/env zsh
 #
 # Expand the committed QA profile to a throwaway directory.
 #
@@ -8,7 +8,8 @@
 # press is already counted in the baseline otherwise.
 set -euo pipefail
 
-readonly ARCHIVE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/tests/data/qa-profile.tar.zst"
+readonly REPO_ROOT="${0:A:h:h}"
+readonly ARCHIVE="$REPO_ROOT/tests/data/qa-profile.tar.zst"
 readonly DESTINATION="${1:-/tmp/qa-profile-db}"
 readonly QA_HOME="${DESTINATION}-home"
 

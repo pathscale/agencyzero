@@ -451,6 +451,20 @@ export function SettingsTab(): JSX.Element {
   let page!: HTMLDivElement;
   onSettled(() => page.focus({ preventScroll: true }));
 
+  const setInterfaceSize = (
+    value: "normal" | "large" | "extra-large",
+    anchor: HTMLButtonElement,
+  ) => {
+    const top = anchor.getBoundingClientRect().top;
+    setPrefs((draft) => {
+      draft.uiSize = value;
+    });
+    requestAnimationFrame(() => {
+      if (!anchor.isConnected) return;
+      page.scrollTop += anchor.getBoundingClientRect().top - top;
+    });
+  };
+
   return (
     <div
       ref={page}
@@ -489,10 +503,10 @@ export function SettingsTab(): JSX.Element {
       */}
       <div class="flex w-full max-w-[720px] flex-col gap-10 px-6 pt-5.5 pb-7">
         <div class="flex items-baseline gap-2.5 pb-0.5">
-          <h1 class="font-semibold text-[18px] text-az-title tracking-[-.01em]">
+          <h1 class="font-semibold text-az-title text-ui-heading tracking-[-.01em]">
             {tx("Settings")}
           </h1>
-          <span class="text-[11.5px] text-az-muted">
+          <span class="text-az-muted text-ui-detail">
             {tx("defaults for every new tab · each project can override")}
           </span>
         </div>
@@ -502,29 +516,31 @@ export function SettingsTab(): JSX.Element {
           point where reading them all is how you find one.
         */}
         <div class="flex items-center gap-2.5 rounded-[11px] border border-primary/11 bg-az-inset px-3 py-2.5 focus-within:border-primary/40">
-          <Icon name="search" class="shrink-0 text-[14px] text-primary/70" />
+          <Icon name="search" class="shrink-0 text-primary/70 text-ui-control" />
           <Input.Field
+            id="settings-search"
             type="search"
             value={settingsQuery()}
             onInput={(event) => setSettingsQuery(event.currentTarget.value)}
             placeholder={tx("Search settings…")}
             aria-label={tx("Search settings")}
-            class="min-w-0 flex-1 bg-transparent text-[12.5px] text-base-content placeholder:text-az-muted focus:outline-none"
+            class="min-w-0 flex-1 bg-transparent text-base-content text-ui-label-lg placeholder:text-az-muted focus:outline-none"
           />
         </div>
 
         <div class="flex items-center justify-between gap-4 rounded-[11px] border border-az-hairline bg-base-100 px-3.5 py-3">
           <div class="min-w-0">
-            <div class="font-medium text-[12.5px] text-az-strong">{t("language.label")}</div>
-            <div class="mt-0.5 text-[11px] text-az-muted">{t("language.hint")}</div>
+            <div class="font-medium text-az-strong text-ui-label-lg">{t("language.label")}</div>
+            <div class="mt-0.5 text-az-muted text-ui-caption">{t("language.hint")}</div>
           </div>
           <div class="flex shrink-0 items-center gap-2">
-            <LanguageSwitcher align="end" />
+            <LanguageSwitcher id="settings-language" align="end" />
             <Button
+              id="settings-welcome-tutorial"
               type="button"
               data-guide-target="help-setup"
               onClick={() => actions.openOnboarding()}
-              class="rounded-lg border border-az-hairline-strong px-2.5 py-1.5 text-[11.5px] text-az-muted transition-colors hover:border-primary hover:text-primary"
+              class="rounded-lg border border-az-hairline-strong px-2.5 py-1.5 text-az-muted text-ui-detail transition-colors hover:border-primary hover:text-primary"
             >
               {tx("Welcome Tutorial")}
             </Button>
@@ -569,9 +585,9 @@ export function SettingsTab(): JSX.Element {
               */}
           <div class="az-panel az-glass flex-none overflow-hidden rounded-panel border border-az-hairline">
             <div class="flex flex-wrap items-baseline gap-x-2.5 gap-y-1 px-3.5 pt-3 pb-2.5">
-              <Icon name="gauge" class="relative top-0.5 text-[14px] text-primary" />
-              <h2 class="font-semibold text-[13px] text-az-title">{tx("Diagnostics")}</h2>
-              <span class="text-[11.5px] text-az-muted">
+              <Icon name="gauge" class="relative top-0.5 text-primary text-ui-control" />
+              <h2 class="font-semibold text-az-title text-ui-body">{tx("Diagnostics")}</h2>
+              <span class="text-az-muted text-ui-detail">
                 {tx("local inspection and bounded performance traces")}
               </span>
             </div>
@@ -593,13 +609,14 @@ export function SettingsTab(): JSX.Element {
                       same flag and lost it for the same reason.
                     */}
                 <SettingToggle
+                  id="settings-inspection-control"
                   label={tx("Enable inspection and agent control")}
                   checked={displayedBlitzControl()}
                   onChange={setBlitzControl}
                 />
                 <span
                   role={blitzControlError() ? "alert" : "status"}
-                  class={`max-w-[260px] text-right text-[10.5px] ${
+                  class={`max-w-[260px] text-right text-ui-caption-sm ${
                     blitzControlError()
                       ? "text-error"
                       : displayedBlitzControl()
@@ -641,11 +658,12 @@ export function SettingsTab(): JSX.Element {
                       something this control no longer does on its own.
                     */}
                 <SettingToggle
+                  id="settings-deep-profiling"
                   label={tx("Allow deep intrusive profiling")}
                   checked={displayedDeepProfiling()}
                   onChange={setBlitzDeepProfiling}
                 />
-                <span class="max-w-[260px] text-right text-[10.5px] text-az-muted">
+                <span class="max-w-[260px] text-right text-az-muted text-ui-caption-sm">
                   {displayedDeepProfiling()
                     ? tx("Allowed. Samples only while a profiler is attached")
                     : tx("No deep samples collected")}
@@ -672,10 +690,10 @@ export function SettingsTab(): JSX.Element {
                 <span
                   class={`size-2 rounded-full ${state.agencyProxy?.connected ? "bg-success" : "bg-error"}`}
                 />
-                <span class="text-[11.5px] text-az-body">
+                <span class="text-az-body text-ui-detail">
                   {state.agencyProxy?.connected ? tx("Connected") : tx("Unavailable")}
                 </span>
-                <span class="text-[11px] text-az-muted">
+                <span class="text-az-muted text-ui-caption">
                   {state.agencyProxy
                     ? `${state.agencyProxy.activeRuns} ${tx(
                         state.agencyProxy.activeRuns === 1 ? "live run" : "live runs",
@@ -690,23 +708,25 @@ export function SettingsTab(): JSX.Element {
               stack
             >
               <div class="flex min-w-0 items-center gap-2">
-                <span class="min-w-0 flex-1 truncate font-mono text-[11.5px] text-az-muted">
+                <span class="min-w-0 flex-1 truncate font-mono text-az-muted text-ui-detail">
                   {current().agentProxyBinary || tx("Bundled AgencyProxy")}
                 </span>
                 <Button
+                  id="settings-proxy-choose-binary"
                   type="button"
                   disabled={!isLive("chooseAgentProxyBinary")}
                   onClick={() => void actions.chooseAgentProxyBinary()}
-                  class="rounded-lg border border-az-hairline-strong px-3 py-[5px] text-[12px] text-az-body transition-colors hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-40"
+                  class="rounded-lg border border-az-hairline-strong px-3 py-[5px] text-az-body text-ui-label transition-colors hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-40"
                 >
                   {tx("Choose…")}
                 </Button>
                 <Button
+                  id="settings-proxy-use-bundled"
                   type="button"
                   aria-label={tx("Use bundled AgencyProxy")}
                   disabled={!current().agentProxyBinary}
                   onClick={() => void actions.saveSettings({ agentProxyBinary: "" })}
-                  class="rounded-lg border border-az-hairline-strong px-3 py-[5px] text-[12px] text-az-muted transition-colors hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-40"
+                  class="rounded-lg border border-az-hairline-strong px-3 py-[5px] text-az-muted text-ui-label transition-colors hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-40"
                 >
                   {tx("Use bundled")}
                 </Button>
@@ -725,9 +745,10 @@ export function SettingsTab(): JSX.Element {
                 })}
               </span>
               <Show when={proxyNote()}>
-                <span class="mr-auto text-[11px] text-az-muted">{proxyNote()}</span>
+                <span class="mr-auto text-az-muted text-ui-caption">{proxyNote()}</span>
               </Show>
               <Button
+                id="settings-proxy-refresh"
                 type="button"
                 title={tx("Refresh AgencyProxy status")}
                 aria-label={tx("Refresh AgencyProxy status")}
@@ -737,10 +758,11 @@ export function SettingsTab(): JSX.Element {
               >
                 <Icon
                   name="refresh-cw"
-                  class={`text-[13px] ${proxyAction() === "refresh" ? "animate-spin" : ""}`}
+                  class={`text-ui-body ${proxyAction() === "refresh" ? "animate-spin" : ""}`}
                 />
               </Button>
               <Button
+                id="settings-proxy-restart"
                 type="button"
                 aria-label={
                   state.agencyProxy?.connected === false
@@ -751,7 +773,7 @@ export function SettingsTab(): JSX.Element {
                 }
                 disabled={proxyAction() !== null || !isLive("restartAgentProxy")}
                 onClick={() => restartProxy("drain")}
-                class="rounded-lg border border-warning/40 px-3 py-[5px] text-[12px] text-warning transition-colors hover:border-warning hover:bg-warning/8 disabled:cursor-not-allowed disabled:opacity-40"
+                class="rounded-lg border border-warning/40 px-3 py-[5px] text-ui-label text-warning transition-colors hover:border-warning hover:bg-warning/8 disabled:cursor-not-allowed disabled:opacity-40"
               >
                 {/*
                  * The spans on these three captions are load-bearing, not
@@ -782,11 +804,12 @@ export function SettingsTab(): JSX.Element {
               </Button>
               <Show when={state.agencyProxy?.connected && isLive("stopAgentProxy")}>
                 <Button
+                  id="settings-proxy-stop"
                   type="button"
                   aria-label={tx("Stop AgencyProxy")}
                   disabled={proxyAction() !== null}
                   onClick={stopProxy}
-                  class="rounded-lg border border-az-hairline-strong px-3 py-[5px] text-[12px] text-az-muted transition-colors hover:border-error hover:text-error disabled:cursor-not-allowed disabled:opacity-40"
+                  class="rounded-lg border border-az-hairline-strong px-3 py-[5px] text-az-muted text-ui-label transition-colors hover:border-error hover:text-error disabled:cursor-not-allowed disabled:opacity-40"
                 >
                   <span>
                     {proxyAction() === "stop" && (state.agencyProxy?.activeRuns ?? 0) > 0
@@ -799,12 +822,13 @@ export function SettingsTab(): JSX.Element {
               </Show>
               <Show when={(state.agencyProxy?.activeRuns ?? 0) > 0}>
                 <Button
+                  id="settings-proxy-terminate-restart"
                   type="button"
                   disabled={proxyAction() !== null || !isLive("restartAgentProxy")}
                   onClick={() =>
                     terminateArmed() ? restartProxy("terminate") : setTerminateArmed(true)
                   }
-                  class="rounded-lg border border-error/40 px-3 py-[5px] text-[12px] text-error transition-colors hover:border-error hover:bg-error/8 disabled:cursor-not-allowed disabled:opacity-40"
+                  class="rounded-lg border border-error/40 px-3 py-[5px] text-error text-ui-label transition-colors hover:border-error hover:bg-error/8 disabled:cursor-not-allowed disabled:opacity-40"
                 >
                   <span>
                     {proxyAction() === "terminate"
@@ -835,18 +859,19 @@ export function SettingsTab(): JSX.Element {
                 {tx("Agent check generation {count}", { count: agentCheckGeneration() })}
               </span>
               <Button
+                id="settings-agents-recheck"
                 type="button"
                 onClick={recheckAgents}
-                class="rounded-lg border border-az-hairline-strong px-3 py-[5px] text-[12px] text-az-body transition-colors hover:border-primary hover:text-primary"
+                class="rounded-lg border border-az-hairline-strong px-3 py-[5px] text-az-body text-ui-label transition-colors hover:border-primary hover:text-primary"
               >
                 {tx("Re-check")}
               </Button>
               <Show when={agentCheckError()}>
-                {(message) => <span class="text-[11px] text-error">{message()}</span>}
+                {(message) => <span class="text-error text-ui-caption">{message()}</span>}
               </Show>
               <Show when={state.agents[0]}>
                 {(first) => (
-                  <span class="text-[11.5px] text-az-muted">
+                  <span class="text-az-muted text-ui-detail">
                     {tx("last checked")} {relativeTime(first().checkedAt)}
                   </span>
                 )}
@@ -861,6 +886,7 @@ export function SettingsTab(): JSX.Element {
           >
             <Row label={tx("Agent")}>
               <PillMenu<Agent>
+                id="settings-default-agent"
                 label={tx("Default agent")}
                 icon="sparkles"
                 value={current().defaultAgent}
@@ -870,11 +896,12 @@ export function SettingsTab(): JSX.Element {
                 onChange={selectDefaultAgent}
               />
               <Show when={modelRefreshError()}>
-                {(error) => <span class="text-[11.5px] text-error">{error()}</span>}
+                {(error) => <span class="text-error text-ui-detail">{error()}</span>}
               </Show>
             </Row>
             <Row label={tx("Model")} hint={tx("chosen from what Models below has enabled")}>
               <PillMenu
+                id="settings-default-model"
                 label={tx("Default model")}
                 value={current().models[current().defaultAgent].default}
                 options={enabledModels(current().defaultAgent).map((model) => ({
@@ -886,6 +913,7 @@ export function SettingsTab(): JSX.Element {
             </Row>
             <Row label={tx("Effort")} hint={tx("reasoning level a new tab starts on")}>
               <PillMenu
+                id="settings-default-effort"
                 label={tx("Default effort")}
                 value={current().defaultEffort}
                 options={effortOptions().map((effort) => ({ value: effort, label: effort }))}
@@ -894,6 +922,7 @@ export function SettingsTab(): JSX.Element {
             </Row>
             <Row label={tx("Completed items")} hint={tx("what manual completion does to the row")}>
               <PillMenu
+                id="settings-completed-items"
                 label={tx("Completed items")}
                 value={current().completedItems}
                 options={[
@@ -912,6 +941,7 @@ export function SettingsTab(): JSX.Element {
               hint={tx("user turns kept before automatic retirement")}
             >
               <PillMenu<"1" | "2" | "3">
+                id="settings-agent-finished-retention"
                 label={tx("Agent-finished retention")}
                 value={String(current().agentFinishedRetentionTurns) as "1" | "2" | "3"}
                 options={[
@@ -931,6 +961,7 @@ export function SettingsTab(): JSX.Element {
               )}
             >
               <SettingToggle
+                id="settings-per-turn-injection"
                 label={tx("Inject AgencyZero and Prompt Syntax per turn")}
                 checked={current().perTurnInjection}
                 onChange={(perTurnInjection) => void actions.saveSettings({ perTurnInjection })}
@@ -942,6 +973,7 @@ export function SettingsTab(): JSX.Element {
               stack
             >
               <Textarea
+                id="settings-review-prompt"
                 aria-label={tx("PR review prompt")}
                 rows={3}
                 value={current().review?.prompt ?? ""}
@@ -951,7 +983,7 @@ export function SettingsTab(): JSX.Element {
                 onChange={(event) =>
                   void actions.saveSettings({ review: { prompt: event.currentTarget.value } })
                 }
-                class="az-scroll w-full resize-none rounded-lg border border-az-hairline bg-base-300 px-2.5 py-2 text-[12px] text-az-body leading-[1.5] placeholder:text-az-faint focus:outline-none"
+                class="az-scroll w-full resize-none rounded-lg border border-az-hairline bg-base-300 px-2.5 py-2 text-az-body text-ui-label leading-[1.5] placeholder:text-az-faint focus:outline-none"
               />
             </Row>
             <Row
@@ -960,6 +992,7 @@ export function SettingsTab(): JSX.Element {
               isLast
             >
               <PillMenu<Permission>
+                id="settings-default-permission"
                 label={tx("Default permission")}
                 icon="lock"
                 value={current().defaultPermission}
@@ -987,9 +1020,10 @@ export function SettingsTab(): JSX.Element {
             </For>
             <div class="flex flex-wrap items-center gap-2.5 px-3.5 pt-0 pb-3">
               <Button
+                id="settings-models-refresh"
                 type="button"
                 onClick={refreshModels}
-                class="rounded-lg border border-az-hairline-strong px-3 py-[5px] text-[12px] text-az-body transition-colors hover:border-primary hover:text-primary"
+                class="rounded-lg border border-az-hairline-strong px-3 py-[5px] text-az-body text-ui-label transition-colors hover:border-primary hover:text-primary"
               >
                 {tx("Re-read from the CLIs")}
               </Button>
@@ -998,7 +1032,7 @@ export function SettingsTab(): JSX.Element {
                 aria-label={`Model refresh generation ${modelRefreshGeneration()}`}
                 class="sr-only"
               />
-              <span class="text-[11.5px] text-az-muted">
+              <span class="text-az-muted text-ui-detail">
                 {tx("only Codex can enumerate; the other two stay on the compiled list")}
               </span>
             </div>
@@ -1011,6 +1045,7 @@ export function SettingsTab(): JSX.Element {
           >
             <Row label={tx("Agent")}>
               <PillMenu<Agent>
+                id="settings-task-manager-agent"
                 label={tx("Task manager agent")}
                 icon="sparkles"
                 value={current().taskManager.agent}
@@ -1030,6 +1065,7 @@ export function SettingsTab(): JSX.Element {
               )}
             >
               <PillMenu
+                id="settings-task-manager-model"
                 label={tx("Task manager model")}
                 value={current().taskManager.model}
                 options={enabledModels(current().taskManager.agent).map((model) => ({
@@ -1042,6 +1078,7 @@ export function SettingsTab(): JSX.Element {
             </Row>
             <Row label={tx("Effort")}>
               <PillMenu
+                id="settings-task-manager-effort"
                 label={tx("Task manager effort")}
                 value={current().taskManager.effort}
                 options={taskManagerEfforts().map((effort) => ({
@@ -1057,6 +1094,7 @@ export function SettingsTab(): JSX.Element {
             </Row>
             <Row label={tx("Permission posture")}>
               <PillMenu<Permission>
+                id="settings-task-manager-permission"
                 label={tx("Task manager permission")}
                 icon="lock"
                 value={current().taskManager.permission}
@@ -1110,6 +1148,7 @@ export function SettingsTab(): JSX.Element {
               hint={tx("checks only; an update is never installed automatically")}
             >
               <SettingToggle
+                id="settings-update-checks-at-launch"
                 label={tx("Check for updates at launch")}
                 checked={current().automaticUpdateChecks}
                 onChange={(automaticUpdateChecks) =>
@@ -1122,6 +1161,7 @@ export function SettingsTab(): JSX.Element {
               hint={tx("disabled by default; applies only after the agent's turn finishes")}
             >
               <PillMenu<"disabled" | "restart" | "restart_and_update">
+                id="settings-agent-restart-authority"
                 label={tx("Agent restart authority")}
                 value={current().agentRestartPolicy}
                 options={[
@@ -1160,6 +1200,7 @@ export function SettingsTab(): JSX.Element {
                 >
                   {(option) => (
                     <Button
+                      id={`settings-theme-mode-${option.value}`}
                       type="button"
                       aria-pressed={prefs.colorMode === option.value ? "true" : "false"}
                       onClick={() =>
@@ -1167,7 +1208,7 @@ export function SettingsTab(): JSX.Element {
                           d.colorMode = option.value;
                         })
                       }
-                      class={`rounded-full px-3 py-1 font-semibold text-[11px] transition-colors ${
+                      class={`rounded-full px-3 py-1 font-semibold text-ui-caption transition-colors ${
                         prefs.colorMode === option.value
                           ? "bg-primary text-primary-content"
                           : "text-az-muted hover:bg-az-hover hover:text-az-title"
@@ -1194,15 +1235,12 @@ export function SettingsTab(): JSX.Element {
                 >
                   {(option) => (
                     <Button
+                      id={`settings-theme-size-${option.value}`}
                       type="button"
                       aria-label={`${option.name} ${t("appearance.size")}`}
                       aria-pressed={prefs.uiSize === option.value ? "true" : "false"}
-                      onClick={() =>
-                        setPrefs((d) => {
-                          d.uiSize = option.value;
-                        })
-                      }
-                      class={`flex size-7 items-center justify-center rounded-full font-semibold text-[10.5px] transition-colors ${
+                      onClick={(event) => setInterfaceSize(option.value, event.currentTarget)}
+                      class={`flex size-7 items-center justify-center rounded-full font-semibold text-ui-caption-sm transition-colors ${
                         prefs.uiSize === option.value
                           ? "bg-primary text-primary-content"
                           : "text-az-muted hover:bg-az-hover hover:text-az-title"
@@ -1309,6 +1347,7 @@ export function SettingsTab(): JSX.Element {
               hint={tx("turn every translucent surface solid, in one switch")}
             >
               <Switch
+                id="settings-theme-glass-enabled"
                 aria-label={tx("Glass")}
                 checked={current().theme.glassEnabled !== false}
                 flavor="accent"
@@ -1340,6 +1379,7 @@ export function SettingsTab(): JSX.Element {
               hint={tx("how far a panel smears the app's own content behind it")}
             >
               <GlassTuningAxis
+                id="settings-theme-glass-blur"
                 label={tx("Glass blur")}
                 axis="blur"
                 theme={current().theme}
@@ -1354,6 +1394,7 @@ export function SettingsTab(): JSX.Element {
               hint={tx("how much a glass surface asserts its own tint, border and highlight")}
             >
               <GlassTuningAxis
+                id="settings-theme-glass-refraction"
                 label={tx("Glass refraction")}
                 axis="refraction"
                 theme={current().theme}
@@ -1371,6 +1412,7 @@ export function SettingsTab(): JSX.Element {
               hint={tx("how far a glass surface sits off the page: glow, sheen and shadow")}
             >
               <GlassTuningAxis
+                id="settings-theme-glass-depth"
                 label={tx("Glass depth")}
                 axis="depth"
                 theme={current().theme}
@@ -1412,6 +1454,7 @@ export function SettingsTab(): JSX.Element {
                     solid.
                   */}
               <GlassPercentAxis
+                id="settings-theme-glass-opacity"
                 label={tx("Glass opacity")}
                 max={100}
                 value={current().theme.glassOpacity ?? DEFAULT_GLASS_OPACITY}
@@ -1437,6 +1480,7 @@ export function SettingsTab(): JSX.Element {
               isLast
             >
               <GlassPercentAxis
+                id="settings-theme-glass-scrim"
                 label={tx("Glass scrim")}
                 max={70}
                 value={current().theme.glassScrim ?? DEFAULT_GLASS_SCRIM}
@@ -1463,14 +1507,15 @@ export function SettingsTab(): JSX.Element {
                   }
                 >
                   <Flex align="center" gap="sm">
-                    <span class="max-w-[280px] truncate font-mono text-[11.5px] text-az-body">
+                    <span class="max-w-[280px] truncate font-mono text-az-body text-ui-detail">
                       {root().path}
                     </span>
                     <Show when={!root().exists}>
                       <Button
+                        id="settings-workspace-create"
                         type="button"
                         onClick={() => void actions.createWorkspaceRoot()}
-                        class="shrink-0 rounded-lg border border-primary/50 px-2.5 py-[4px] text-[11.5px] text-primary transition-colors hover:border-primary"
+                        class="shrink-0 rounded-lg border border-primary/50 px-2.5 py-[4px] text-primary text-ui-detail transition-colors hover:border-primary"
                       >
                         {tx("Create it")}
                       </Button>
@@ -1491,7 +1536,7 @@ export function SettingsTab(): JSX.Element {
                         : tx("a change takes effect on the next launch; nothing is moved")
                     }
                   >
-                    <span class="max-w-[340px] truncate font-mono text-[11.5px] text-az-body">
+                    <span class="max-w-[340px] truncate font-mono text-az-body text-ui-detail">
                       {location().path}
                     </span>
                   </Row>
@@ -1504,7 +1549,7 @@ export function SettingsTab(): JSX.Element {
                   <Show when={location().pending}>
                     {(pending) => (
                       <Row label={tx("Next launch")} hint={tx("relaunch to open here")}>
-                        <span class="max-w-[340px] truncate font-mono text-[11.5px] text-primary">
+                        <span class="max-w-[340px] truncate font-mono text-primary text-ui-detail">
                           {pending().path}
                         </span>
                       </Row>
@@ -1519,14 +1564,16 @@ export function SettingsTab(): JSX.Element {
                   <Row label={tx("Change it")}>
                     <Flex align="center" gap="sm">
                       <Button
+                        id="settings-data-choose"
                         type="button"
                         disabled={!location().isEditable || !isLive("chooseDataDirectory")}
                         onClick={() => void actions.chooseDataLocation()}
-                        class="rounded-lg border border-az-hairline-strong px-3 py-[5px] text-[12px] text-az-body transition-colors hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-40"
+                        class="rounded-lg border border-az-hairline-strong px-3 py-[5px] text-az-body text-ui-label transition-colors hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-40"
                       >
                         {tx("Choose…")}
                       </Button>
                       <Button
+                        id="settings-data-use-default"
                         type="button"
                         disabled={
                           !location().isEditable ||
@@ -1537,7 +1584,7 @@ export function SettingsTab(): JSX.Element {
                           (location().pending ?? location()).source === "default"
                         }
                         onClick={() => void actions.setDataLocation(null)}
-                        class="rounded-lg border border-az-hairline-strong px-3 py-[5px] text-[12px] text-az-muted transition-colors hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-40"
+                        class="rounded-lg border border-az-hairline-strong px-3 py-[5px] text-az-muted text-ui-label transition-colors hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-40"
                       >
                         {tx("Use the default")}
                       </Button>
@@ -1583,6 +1630,7 @@ export function SettingsTab(): JSX.Element {
               isLast
             >
               <SettingToggle
+                id="settings-agent-settings-updates"
                 label={tx("Allow agents to update app settings")}
                 checked={current().agentSettingsUpdates}
                 onChange={(agentSettingsUpdates) =>
@@ -1603,6 +1651,7 @@ export function SettingsTab(): JSX.Element {
               hint={tx("each session can turn it off in its Settings section")}
             >
               <SettingToggle
+                id="settings-moderator-enabled"
                 label={tx("Moderator enabled by default")}
                 checked={current().moderator.enabled}
                 onChange={(enabled) => void actions.saveSettings({ moderator: { enabled } })}
@@ -1615,6 +1664,7 @@ export function SettingsTab(): JSX.Element {
                * semantics this small single-choice control promises.
                */}
               <select
+                id="settings-moderator-model"
                 aria-label={`${tx("Moderator model")}: ${moderatorModelLabel()}`}
                 value={current().moderator.model}
                 onChange={(event) =>
@@ -1626,7 +1676,7 @@ export function SettingsTab(): JSX.Element {
                     moveModeratorModel(event.key === "ArrowDown" ? 1 : -1);
                   }
                 }}
-                class="h-9 min-w-[220px] rounded-lg border border-az-hairline bg-az-inset px-2.5 text-[12px] text-az-body outline-none"
+                class="h-9 min-w-[220px] rounded-lg border border-az-hairline bg-az-inset px-2.5 text-az-body text-ui-label outline-none"
               >
                 <For each={moderatorModels()}>
                   {(model) => <option value={model.value}>{model.label}</option>}
@@ -1635,6 +1685,7 @@ export function SettingsTab(): JSX.Element {
             </Row>
             <Row label={tx("Confine tool calls to the working directories")}>
               <SettingToggle
+                id="settings-moderator-confine-dirs"
                 label={tx("Confine tool calls to the working directories")}
                 checked={current().moderator.confineToDirs}
                 onChange={(confineToDirs) =>
@@ -1644,11 +1695,12 @@ export function SettingsTab(): JSX.Element {
             </Row>
 
             <div class="flex flex-col gap-2.5 px-3.5 py-3">
-              <span class="font-semibold text-[11.5px] text-az-muted uppercase tracking-[.04em]">
+              <span class="font-semibold text-az-muted text-ui-detail uppercase tracking-[.04em]">
                 {tx("On a hold")}
               </span>
 
               <HoldRow
+                id="settings-moderator-check-hold"
                 severity="CHECK"
                 tone="warning"
                 description={tx(
@@ -1662,6 +1714,7 @@ export function SettingsTab(): JSX.Element {
                 }
               />
               <HoldRow
+                id="settings-moderator-critical-hold"
                 severity="CRITICAL"
                 tone="error"
                 description={tx(
@@ -1685,6 +1738,7 @@ export function SettingsTab(): JSX.Element {
           >
             <Row label={tx("A hold needs your approval")}>
               <SettingToggle
+                id="settings-notify-hold"
                 label={tx("Notify on a hold")}
                 checked={current().notifications.onHold}
                 onChange={(onHold) => void actions.saveSettings({ notifications: { onHold } })}
@@ -1692,6 +1746,7 @@ export function SettingsTab(): JSX.Element {
             </Row>
             <Row label={tx("A run finishes")}>
               <SettingToggle
+                id="settings-notify-run-finished"
                 label={tx("Notify when a run finishes")}
                 checked={current().notifications.onRunFinished}
                 onChange={(onRunFinished) =>
@@ -1701,6 +1756,7 @@ export function SettingsTab(): JSX.Element {
             </Row>
             <Row label={tx("A task fails")}>
               <SettingToggle
+                id="settings-notify-task-failed"
                 label={tx("Notify when a task fails")}
                 checked={current().notifications.onTaskFailed}
                 onChange={(onTaskFailed) =>
@@ -1710,6 +1766,7 @@ export function SettingsTab(): JSX.Element {
             </Row>
             <Row label={tx("Rate limited by the provider")}>
               <SettingToggle
+                id="settings-notify-rate-limited"
                 label={tx("Notify when rate limited")}
                 checked={current().notifications.onRateLimited}
                 onChange={(onRateLimited) =>
@@ -1719,6 +1776,7 @@ export function SettingsTab(): JSX.Element {
             </Row>
             <Row label={tx("Play a sound")} isLast>
               <SettingToggle
+                id="settings-notify-sound"
                 label={tx("Play a sound")}
                 checked={current().notifications.sound}
                 onChange={(sound) => void actions.saveSettings({ notifications: { sound } })}
@@ -1739,6 +1797,7 @@ export function SettingsTab(): JSX.Element {
               )}
             >
               <PillMenu<EnvPolicy>
+                id="settings-environment-policy"
                 label={tx("Environment policy")}
                 value={current().envPolicy}
                 options={(["minimal", "inherit"] as const).map((policy) => ({
@@ -1754,6 +1813,7 @@ export function SettingsTab(): JSX.Element {
               isLast
             >
               <SettingToggle
+                id="settings-forward-proxy-vars"
                 label={tx("Forward proxy and custom-CA variables")}
                 checked={current().forwardProxyVars}
                 onChange={(forwardProxyVars) => void actions.saveSettings({ forwardProxyVars })}
@@ -1767,8 +1827,8 @@ export function SettingsTab(): JSX.Element {
 
           <InternalPerformance />
 
-          <p class="flex gap-2 text-[11.5px] text-az-muted leading-[1.5]">
-            <Icon name="info" class="relative top-0.5 shrink-0 text-[13px]" />
+          <p class="flex gap-2 text-az-muted text-ui-detail leading-[1.5]">
+            <Icon name="info" class="relative top-0.5 shrink-0 text-ui-body" />
             <span>
               {tx("Sessions are stored per project by agent-abstraction at")}{" "}
               <code class="font-mono">{tx("<dir>/<project-slug>/<name>.json")}</code>.
@@ -1852,13 +1912,18 @@ function ChatImportSettings(): JSX.Element {
       icon="messages-square"
       title={tx("Import chats")}
       hint={tx("copy local provider transcripts into new AgencyZero projects")}
+      searchTerms={[
+        tx("Choose a session from {source}", { source: "Codex CLI / IDE" }),
+        tx("Import"),
+        tx("Import all"),
+      ]}
       pending={available() ? undefined : tx("requires the native import backend")}
     >
       <Show
         when={sources().length > 0}
         fallback={
           <Row label={tx("Local sources")} hint={tx("checking known provider stores")} isLast>
-            <span class="text-[11.5px] text-az-muted">{tx("No sessions discovered")}</span>
+            <span class="text-az-muted text-ui-detail">{tx("No sessions discovered")}</span>
           </Row>
         }
       >
@@ -1873,13 +1938,14 @@ function ChatImportSettings(): JSX.Element {
                 <Show
                   when={importableSessions(source).length > 0}
                   fallback={
-                    <span class="text-[11px] text-az-faint">
+                    <span class="text-az-faint text-ui-caption">
                       {source.available ? tx("No importable sessions") : tx("Not installed")}
                     </span>
                   }
                 >
                   <div class="flex w-full items-center gap-2">
                     <Select
+                      id={`settings-chat-import-${encodeURIComponent(source.source)}`}
                       value={choice(source)}
                       onChange={(value) =>
                         typeof value === "string" &&
@@ -1890,7 +1956,7 @@ function ChatImportSettings(): JSX.Element {
                     >
                       <Select.Trigger
                         aria-label={tx("Choose a session from {source}", { source: source.label })}
-                        class="h-9 w-full min-w-0 rounded-lg border border-az-hairline bg-az-inset px-2 text-[12px] text-az-body outline-none"
+                        class="h-9 w-full min-w-0 rounded-lg border border-az-hairline bg-az-inset px-2 text-az-body text-ui-label outline-none"
                       >
                         <Select.Value />
                         <Select.Indicator endIcon={<Icon name="chevron-down" />} />
@@ -1913,20 +1979,22 @@ function ChatImportSettings(): JSX.Element {
                       </Select.Popover>
                     </Select>
                     <Button
+                      id={`settings-chat-import-${encodeURIComponent(source.source)}-one`}
                       type="button"
                       disabled={!choice(source) || busy() !== null}
                       onClick={() => void importOne(source.source, choice(source))}
-                      class="h-9 shrink-0 rounded-lg border border-az-hairline-strong px-2.5 text-[11px] text-primary transition-colors hover:border-primary disabled:opacity-40"
+                      class="h-9 shrink-0 rounded-lg border border-az-hairline-strong px-2.5 text-primary text-ui-caption transition-colors hover:border-primary disabled:opacity-40"
                     >
                       {busy() === `${source.source}:${choice(source)}`
                         ? tx("Importing…")
                         : tx("Import")}
                     </Button>
                     <Button
+                      id={`settings-chat-import-${encodeURIComponent(source.source)}-all`}
                       type="button"
                       disabled={busy() !== null}
                       onClick={() => void importAll(source)}
-                      class="h-9 shrink-0 rounded-lg border border-primary/45 px-2.5 font-medium text-[11px] text-primary transition-colors hover:border-primary hover:bg-az-chip disabled:opacity-40"
+                      class="h-9 shrink-0 rounded-lg border border-primary/45 px-2.5 font-medium text-primary text-ui-caption transition-colors hover:border-primary hover:bg-az-chip disabled:opacity-40"
                     >
                       {busy() === `${source.source}:*` ? tx("Importing all…") : tx("Import all")}
                     </Button>
@@ -1938,7 +2006,16 @@ function ChatImportSettings(): JSX.Element {
         </For>
       </Show>
       <Show when={note()}>
-        {(message) => <p class="px-3.5 py-2 text-[11.5px] text-az-muted">{message()}</p>}
+        {(message) => (
+          <p
+            role="status"
+            aria-live="polite"
+            aria-label={message()}
+            class="px-3.5 py-2 text-az-muted text-ui-detail"
+          >
+            {message()}
+          </p>
+        )}
       </Show>
     </Section>
   );
@@ -2025,7 +2102,7 @@ function StudySettings(): JSX.Element {
       hint={tx("local, opt-in PromptSyntax deployment study")}
       pending={available() ? undefined : tx("needs the study event backend")}
     >
-      <div class="border-az-hairline-soft border-b px-3.5 py-3 text-[11.5px] text-az-muted leading-[1.55]">
+      <div class="border-az-hairline-soft border-b px-3.5 py-3 text-az-muted text-ui-detail leading-[1.55]">
         {tx(
           "Records timestamps, prompt character and line counts, attachment counts, whether you used PromptSyntax, operation types, providers, opaque links, timing and explicit outcomes. It does not copy prompt text, agent prose, task titles, paths, URLs, tool calls, tool output or attachment contents. Nothing is uploaded.",
         )}
@@ -2035,6 +2112,7 @@ function StudySettings(): JSX.Element {
         hint={tx("off by default; disabling stops new rows but keeps existing data")}
       >
         <SettingToggle
+          id="settings-study-enabled"
           label={tx("PS deployment study")}
           checked={enabled()}
           disabled={!available() || busy()}
@@ -2052,7 +2130,7 @@ function StudySettings(): JSX.Element {
             : tx("no study interval has been started")
         }
       >
-        <span class="font-mono text-[12px] text-az-strong tabular-nums">
+        <span class="font-mono text-az-strong text-ui-label tabular-nums">
           {summary()?.eventCount ?? 0}
         </span>
       </Row>
@@ -2068,19 +2146,21 @@ function StudySettings(): JSX.Element {
       >
         <Flex align="center" gap="sm">
           <Button
+            id="settings-study-export"
             type="button"
             disabled={busy()}
             onClick={() => void exportEvents()}
-            class="rounded-lg border border-az-hairline-strong px-3 py-[5px] text-[12px] text-az-body transition-colors hover:border-primary hover:text-primary disabled:opacity-40"
+            class="rounded-lg border border-az-hairline-strong px-3 py-[5px] text-az-body text-ui-label transition-colors hover:border-primary hover:text-primary disabled:opacity-40"
           >
             {tx("Export JSONL")}
           </Button>
           <Button
+            id="settings-study-delete"
             type="button"
             disabled={busy() || enabled() || (summary()?.eventCount ?? 0) === 0}
             onClick={() => void clearEvents()}
             onBlur={() => setConfirmingDelete(false)}
-            class={`rounded-lg border px-3 py-[5px] text-[12px] transition-colors disabled:opacity-40 ${
+            class={`rounded-lg border px-3 py-[5px] text-ui-label transition-colors disabled:opacity-40 ${
               confirmingDelete()
                 ? "border-error/60 text-error hover:border-error"
                 : "border-az-hairline-strong text-az-muted hover:border-error/50 hover:text-error"
@@ -2155,7 +2235,7 @@ function ExperimentalSettings(): JSX.Element {
         label={tx("Codex 7-day usage")}
         hint={tx("managed by Codex; refreshed through its local app-server")}
       >
-        <span class="font-mono text-[11.5px] text-az-body">
+        <span class="font-mono text-az-body text-ui-detail">
           {codexWindow()?.usedFraction === null || codexWindow()?.usedFraction === undefined
             ? tx("not reported")
             : `${Math.round(Math.min(1, Math.max(0, codexWindow()!.usedFraction!)) * 100)}% used${
@@ -2173,22 +2253,22 @@ function ExperimentalSettings(): JSX.Element {
           "managed by Claude Code; an expired credential is refreshed through its own /usage command",
         )}
       >
-        <span class="font-mono text-[11.5px] text-az-body">{tx("Claude Code")}</span>
+        <span class="font-mono text-az-body text-ui-detail">{tx("Claude Code")}</span>
       </Row>
       <Row label={tx("Claude 5-hour usage")}>
-        <span class="font-mono text-[11.5px] text-az-body">
+        <span class="font-mono text-az-body text-ui-detail">
           {windowValue(usage()?.fiveHour ?? null)}
         </span>
       </Row>
       <Row label={tx("Claude 7-day usage")}>
-        <span class="font-mono text-[11.5px] text-az-body">
+        <span class="font-mono text-az-body text-ui-detail">
           {windowValue(usage()?.sevenDay ?? null)}
         </span>
       </Row>
       <Show when={usage()?.sevenDaySonnet}>
         {(value) => (
           <Row label={tx("Claude Sonnet 7-day usage")}>
-            <span class="font-mono text-[11.5px] text-az-body">{windowValue(value())}</span>
+            <span class="font-mono text-az-body text-ui-detail">{windowValue(value())}</span>
           </Row>
         )}
       </Show>
@@ -2196,7 +2276,7 @@ function ExperimentalSettings(): JSX.Element {
         <For each={usage()?.limits ?? []}>
           {(limit) => (
             <Row label={`Claude ${limit.model ?? limit.kind}`}>
-              <span class="font-mono text-[11.5px] text-az-body">
+              <span class="font-mono text-az-body text-ui-detail">
                 {limit.percent.toFixed(1)}%
                 {limit.resetsAt
                   ? ` ${tx("· resets in {time}", { time: countdown(limit.resetsAt, now()) })}`
@@ -2226,14 +2306,15 @@ function ExperimentalSettings(): JSX.Element {
             {tx("Usage refresh generation {count}", { count: refreshGeneration() })}
           </span>
           <Show when={note()}>
-            {(message) => <span class="max-w-[230px] text-[11px] text-error">{message()}</span>}
+            {(message) => <span class="max-w-[230px] text-error text-ui-caption">{message()}</span>}
           </Show>
           <Button
+            id="settings-provider-usage-refresh"
             type="button"
             aria-label={tx("Refresh provider usage")}
             disabled={busy()}
             onClick={() => void refresh()}
-            class="rounded-lg border border-az-hairline-strong px-3 py-[5px] text-[12px] text-az-body transition-colors hover:border-primary hover:text-primary disabled:opacity-40"
+            class="rounded-lg border border-az-hairline-strong px-3 py-[5px] text-az-body text-ui-label transition-colors hover:border-primary hover:text-primary disabled:opacity-40"
           >
             {busy() ? tx("Refreshing…") : tx("Refresh")}
           </Button>
@@ -2281,7 +2362,7 @@ function TableSizes(): JSX.Element {
     <Show
       when={sizes()}
       fallback={
-        <span class="text-[11.5px] text-az-muted">
+        <span class="text-az-muted text-ui-detail">
           {failed() ? tx("unavailable") : tx("measuring…")}
         </span>
       }
@@ -2291,23 +2372,25 @@ function TableSizes(): JSX.Element {
           <For each={tables()}>
             {(table) => (
               <div class="flex items-baseline justify-between gap-3">
-                <span class="truncate font-mono text-[11px] text-az-body">{table.name}</span>
-                <span class="shrink-0 font-mono text-[11px] text-az-muted">
+                <span class="truncate font-mono text-az-body text-ui-caption">{table.name}</span>
+                <span class="shrink-0 font-mono text-az-muted text-ui-caption">
                   {formatBytes(table.bytes)}
                 </span>
               </div>
             )}
           </For>
           <div class="mt-0.5 flex items-baseline justify-between gap-3 border-az-hairline border-t pt-1">
-            <span class="font-semibold text-[11px] text-az-muted uppercase tracking-[.04em]">
+            <span class="font-semibold text-az-muted text-ui-caption uppercase tracking-[.04em]">
               {tx("total")}
             </span>
-            <span class="shrink-0 font-mono text-[11px] text-az-strong">
+            <span class="shrink-0 font-mono text-az-strong text-ui-caption">
               {formatBytes(total())}
             </span>
           </div>
           <Show when={state.backend === "mock"}>
-            <span class="text-[10.5px] text-az-faint">{tx("fixtures — no store to measure")}</span>
+            <span class="text-az-faint text-ui-caption-sm">
+              {tx("fixtures — no store to measure")}
+            </span>
           </Show>
         </div>
       )}
@@ -2366,32 +2449,33 @@ function StoreBackupControls(): JSX.Element {
 
   return (
     <div class="flex max-w-[390px] flex-col items-end gap-1.5">
-      <span class="text-right text-[11px] text-az-muted">
+      <span class="text-right text-az-muted text-ui-caption">
         {tx("Portable .azbackup package · version and integrity checked")}
       </span>
-      <span class="text-right text-[10.5px] text-az-faint">
+      <span class="text-right text-az-faint text-ui-caption-sm">
         {tx("The app drains and restarts so the store is never copied while open.")}
       </span>
       <Show when={status()?.lastOperation}>
         {(operation) => (
           <span
-            class={`text-right text-[10.5px] ${operation().ok ? "text-success" : "text-error"}`}
+            class={`text-right text-ui-caption-sm ${operation().ok ? "text-success" : "text-error"}`}
           >
             {operation().message}
           </span>
         )}
       </Show>
       <Show when={error()}>
-        <span role="alert" class="text-right text-[10.5px] text-error">
+        <span role="alert" class="text-right text-error text-ui-caption-sm">
           {error()}
         </span>
       </Show>
       <Flex align="center" gap="sm">
         <Button
+          id="settings-store-backup-create"
           type="button"
           disabled={!isLive("createStoreBackup")}
           onClick={backup}
-          class="rounded-lg border border-primary/50 px-3 py-[5px] text-[12px] text-primary transition-colors hover:border-primary disabled:cursor-not-allowed disabled:opacity-40"
+          class="rounded-lg border border-primary/50 px-3 py-[5px] text-primary text-ui-label transition-colors hover:border-primary disabled:cursor-not-allowed disabled:opacity-40"
         >
           {tx("Back up & close")}
         </Button>
@@ -2399,29 +2483,32 @@ function StoreBackupControls(): JSX.Element {
           when={selection()}
           fallback={
             <Button
+              id="settings-store-backup-select"
               type="button"
               disabled={!isLive("selectStoreBackup")}
               onClick={selectBackup}
-              class="rounded-lg border border-az-hairline-strong px-3 py-[5px] text-[12px] text-az-muted transition-colors hover:border-warning hover:text-warning disabled:cursor-not-allowed disabled:opacity-40"
+              class="rounded-lg border border-az-hairline-strong px-3 py-[5px] text-az-muted text-ui-label transition-colors hover:border-warning hover:text-warning disabled:cursor-not-allowed disabled:opacity-40"
             >
               {tx("Select backup file…")}
             </Button>
           }
         >
-          <code class="max-w-[160px] truncate font-mono text-[10.5px] text-az-body">
+          <code class="max-w-[160px] truncate font-mono text-az-body text-ui-caption-sm">
             {selection()?.fileName}
           </code>
           <Button
+            id="settings-store-backup-restore"
             type="button"
             onClick={restore}
-            class="rounded-lg border border-warning/50 px-2.5 py-[4px] font-semibold text-[11.5px] text-warning hover:border-warning"
+            class="rounded-lg border border-warning/50 px-2.5 py-[4px] font-semibold text-ui-detail text-warning hover:border-warning"
           >
             {tx("Restore")}
           </Button>
           <Button
+            id="settings-store-backup-cancel"
             type="button"
             onClick={() => setSelection(null)}
-            class="rounded-lg px-2 py-[4px] text-[11.5px] text-az-muted hover:text-base-content"
+            class="rounded-lg px-2 py-[4px] text-az-muted text-ui-detail hover:text-base-content"
           >
             {tx("Cancel")}
           </Button>
@@ -2451,19 +2538,21 @@ function TaskManagerDirs(props: { taskManager: TaskManagerSettings }): JSX.Eleme
       <For each={props.taskManager.dirs}>
         {(dir) => (
           <span class="flex max-w-full items-center gap-1.5 rounded-md border border-az-hairline bg-base-300 px-2 py-0.5">
-            <span class="truncate font-mono text-[11px] text-az-body">{dir}</span>
+            <span class="truncate font-mono text-az-body text-ui-caption">{dir}</span>
             <Button
+              id={`settings-task-manager-dir-remove-${encodeURIComponent(dir)}`}
               type="button"
               onClick={() => save(props.taskManager.dirs.filter((kept) => kept !== dir))}
               aria-label={`Remove ${dir}`}
               class="shrink-0 text-az-faint transition-colors hover:text-error"
             >
-              <Icon name="x" class="text-[11px]" />
+              <Icon name="x" class="text-ui-caption" />
             </Button>
           </span>
         )}
       </For>
       <Input.Field
+        id="settings-task-manager-dir-add"
         value={path()}
         placeholder={tx("~/code/…")}
         aria-label={tx("Add a task manager directory")}
@@ -2472,7 +2561,7 @@ function TaskManagerDirs(props: { taskManager: TaskManagerSettings }): JSX.Eleme
           if (event.key === "Enter") add();
         }}
         onBlur={add}
-        class="w-[200px] rounded-md border border-az-hairline bg-az-inset px-2 py-1 font-mono text-[11px] text-az-body focus:border-primary/40 focus:outline-none"
+        class="w-[200px] rounded-md border border-az-hairline bg-az-inset px-2 py-1 font-mono text-az-body text-ui-caption focus:border-primary/40 focus:outline-none"
       />
     </div>
   );
@@ -2502,20 +2591,21 @@ function ResetTaskManagerButton(): JSX.Element {
       <Show
         when={state.taskManagerSession}
         fallback={
-          <span class="font-mono text-[11px] text-az-faint">{tx("no conversation yet")}</span>
+          <span class="font-mono text-az-faint text-ui-caption">{tx("no conversation yet")}</span>
         }
       >
         {(session) => (
-          <span class="max-w-[180px] truncate font-mono text-[11px] text-az-faint">
+          <span class="max-w-[180px] truncate font-mono text-az-faint text-ui-caption">
             {session()}
           </span>
         )}
       </Show>
       <Button
+        id="settings-task-manager-reset"
         type="button"
         onClick={() => void reset()}
         disabled={busy() || !state.taskManagerSession || !isLive("resetTaskManager")}
-        class="shrink-0 rounded-lg border border-az-hairline-strong px-3 py-[5px] text-[12px] text-az-body transition-colors hover:border-warning hover:text-warning disabled:opacity-40"
+        class="shrink-0 rounded-lg border border-az-hairline-strong px-3 py-[5px] text-az-body text-ui-label transition-colors hover:border-warning hover:text-warning disabled:opacity-40"
       >
         {busy() ? tx("Resetting…") : tx("Reset")}
       </Button>
@@ -2550,9 +2640,9 @@ function BuildStamp(): JSX.Element {
   });
 
   return (
-    <Show when={build()} fallback={<span class="text-[12px] text-az-faint">—</span>}>
+    <Show when={build()} fallback={<span class="text-az-faint text-ui-label">—</span>}>
       {(info) => (
-        <span class="font-mono text-[11.5px] text-az-body">
+        <span class="font-mono text-az-body text-ui-detail">
           {info().version} · {info().runtime} · {info().gitSha} {tx("· built")} {info().builtAt}
         </span>
       )}
@@ -2569,16 +2659,18 @@ function SourceActions(): JSX.Element {
   return (
     <Flex align="center" gap="sm">
       <Button
+        id="settings-view-source"
         type="button"
         onClick={openRepository}
-        class="rounded-lg border border-az-hairline-strong px-2.5 py-1 text-[11.5px] text-az-muted transition-colors hover:border-primary hover:text-primary"
+        class="rounded-lg border border-az-hairline-strong px-2.5 py-1 text-az-muted text-ui-detail transition-colors hover:border-primary hover:text-primary"
       >
         {tx("View source")}
       </Button>
       <Button
+        id="settings-star-github"
         type="button"
         onClick={openRepository}
-        class="rounded-lg bg-primary px-2.5 py-1 text-[11.5px] text-primary-content transition-opacity hover:opacity-90"
+        class="rounded-lg bg-primary px-2.5 py-1 text-primary-content text-ui-detail transition-opacity hover:opacity-90"
       >
         {tx("Star on GitHub")}
       </Button>
@@ -2639,16 +2731,19 @@ function UpdateControl(): JSX.Element {
         class="sr-only"
       />
       <Show when={note()}>
-        {(text) => <span class="max-w-[220px] truncate text-[11.5px] text-az-muted">{text()}</span>}
+        {(text) => (
+          <span class="max-w-[220px] truncate text-az-muted text-ui-detail">{text()}</span>
+        )}
       </Show>
       <Show
         when={state.availableUpdate}
         fallback={
           <Button
+            id="settings-update-check"
             type="button"
             onClick={check}
             disabled={busy() || !isLive("checkForUpdate")}
-            class="shrink-0 rounded-lg border border-az-hairline-strong px-3 py-[5px] text-[12px] text-az-body transition-colors hover:border-primary hover:text-primary disabled:opacity-40"
+            class="shrink-0 rounded-lg border border-az-hairline-strong px-3 py-[5px] text-az-body text-ui-label transition-colors hover:border-primary hover:text-primary disabled:opacity-40"
           >
             {busy() ? tx("Checking…") : tx("Check for update")}
           </Button>
@@ -2656,14 +2751,15 @@ function UpdateControl(): JSX.Element {
       >
         {(update) => (
           <>
-            <span class="shrink-0 font-mono text-[11.5px] text-primary">
+            <span class="shrink-0 font-mono text-primary text-ui-detail">
               {update().version} {tx("available")}
             </span>
             <Button
+              id="settings-update-install"
               type="button"
               onClick={install}
               disabled={busy() || !isLive("installUpdate")}
-              class="shrink-0 rounded-lg border border-primary/50 px-3 py-[5px] font-semibold text-[12px] text-primary transition-colors hover:border-primary hover:bg-az-chip disabled:opacity-40"
+              class="shrink-0 rounded-lg border border-primary/50 px-3 py-[5px] font-semibold text-primary text-ui-label transition-colors hover:border-primary hover:bg-az-chip disabled:opacity-40"
             >
               {busy() ? tx("Installing…") : tx("Install & Restart")}
             </Button>
@@ -2681,13 +2777,14 @@ function RelaunchButton(): JSX.Element {
 
   return (
     <Button
+      id="settings-restart-app"
       type="button"
       disabled={busy() || !isLive("relaunchApp")}
       onClick={() => {
         setBusy(true);
         void actions.relaunchApp().catch(alive(() => setBusy(false)));
       }}
-      class="shrink-0 rounded-lg border border-az-hairline-strong px-3 py-[5px] text-[12px] text-az-body transition-colors hover:border-warning hover:text-warning disabled:opacity-40"
+      class="shrink-0 rounded-lg border border-az-hairline-strong px-3 py-[5px] text-az-body text-ui-label transition-colors hover:border-warning hover:text-warning disabled:opacity-40"
     >
       {busy() ? tx("Restarting…") : tx("Restart")}
     </Button>
@@ -2765,7 +2862,7 @@ function CostSection(): JSX.Element {
   const dollars = (value: number | undefined): string =>
     typeof value === "number" ? `$${value.toFixed(2)}` : "—";
   const figure = (value: number | undefined): JSX.Element => (
-    <span class="font-mono text-[12.5px] text-az-strong">{dollars(value)}</span>
+    <span class="font-mono text-az-strong text-ui-label-lg">{dollars(value)}</span>
   );
 
   /*
@@ -2852,6 +2949,7 @@ function CostSection(): JSX.Element {
       >
         <div class="min-w-[260px]">
           <Slider
+            id="settings-cost-warning-threshold"
             label={tx("Projected turn warning threshold")}
             min={0.25}
             max={20}
@@ -2875,6 +2973,7 @@ function CostSection(): JSX.Element {
         isLast
       >
         <SettingToggle
+          id="settings-cost-warnings-enabled"
           label={tx("Show projected-cost warnings")}
           checked={!prefs.costWarningsDisabled}
           onChange={(enabled) =>
@@ -3028,6 +3127,7 @@ function InternalPerformance(): JSX.Element {
             {tx("Performance reset generation {count}", { count: resetGeneration() })}
           </span>
           <Button
+            id="settings-performance-refresh"
             type="button"
             aria-label={tx("Refresh performance measurements")}
             class="az-ui-button-neutral"
@@ -3036,6 +3136,7 @@ function InternalPerformance(): JSX.Element {
             {tx("Refresh")}
           </Button>
           <Button
+            id="settings-performance-reset"
             type="button"
             aria-label={tx("Reset performance measurements")}
             class="az-ui-button-neutral"
@@ -3056,10 +3157,10 @@ function InternalPerformance(): JSX.Element {
       <Row label={tx("Timings")} hint={tx("worst total first")} stack isLast>
         <Show
           when={table().entries.length > 0}
-          fallback={<span class="text-[11.5px] text-az-muted">{tx("Nothing measured yet")}</span>}
+          fallback={<span class="text-az-muted text-ui-detail">{tx("Nothing measured yet")}</span>}
         >
           <div class="az-scroll max-h-[320px] w-full min-w-0 overflow-y-auto">
-            <table class="w-full text-[11.5px] tabular-nums">
+            <table class="w-full text-ui-detail tabular-nums">
               <thead class="text-az-muted">
                 <tr>
                   <th class="py-1 text-left font-normal">{"What"}</th>
@@ -3100,6 +3201,8 @@ function Section(props: {
   icon: IconProps["name"];
   title: string;
   hint: string;
+  /** Accessible descendant names that can admit a lazily mounted section. */
+  searchTerms?: readonly string[];
   /**
    * What this section still needs before its controls do anything.
    *
@@ -3131,7 +3234,9 @@ function Section(props: {
    * reader approaches it.
    */
   const titleMatches = createMemo(() =>
-    matchesSearch(`${props.title} ${props.hint} ${props.pending ?? ""}`),
+    matchesSearch(
+      [props.title, props.hint, props.pending ?? "", ...(props.searchTerms ?? [])].join(" "),
+    ),
   );
   const [mounted, setMounted] = createSignal(ordinal < settingsBudget());
   createEffect(
@@ -3171,18 +3276,22 @@ function Section(props: {
   };
   return (
     <SearchScope value={{ titleMatches, report }}>
-      <Panel ref={shell} class={`flex-none rounded-[13px] ${visible() ? "" : "hidden"}`}>
+      <Panel
+        ref={shell}
+        id="settings-section"
+        class={`flex-none rounded-[13px] ${visible() ? "" : "hidden"}`}
+      >
         <div class="flex flex-wrap items-baseline gap-x-2.5 gap-y-1 px-3.5 pt-3 pb-2.5">
-          <Icon name={props.icon} class="relative top-0.5 text-[14px] text-primary" />
+          <Icon name={props.icon} class="relative top-0.5 text-primary text-ui-control" />
           <h2
-            class={`font-semibold text-[13px] ${props.pending ? "text-az-muted" : "text-az-title"}`}
+            class={`font-semibold text-ui-body ${props.pending ? "text-az-muted" : "text-az-title"}`}
           >
             {props.title}
           </h2>
-          <span class="text-[11.5px] text-az-muted">{props.hint}</span>
+          <span class="text-az-muted text-ui-detail">{props.hint}</span>
           <Show when={props.pending}>
             {(reason) => (
-              <span class="ml-auto shrink-0 rounded border border-az-hairline px-1.5 py-px text-[10px] text-az-muted">
+              <span class="ml-auto shrink-0 rounded border border-az-hairline px-1.5 py-px text-az-muted text-ui-tiny">
                 {tx("not wired ·")} {reason()}
               </span>
             )}
@@ -3239,10 +3348,10 @@ function Row(props: {
         props.stack ? "flex flex-col gap-2" : "flex items-center gap-3"
       }`}
     >
-      <span class={`text-[12.5px] text-az-body ${props.stack ? "" : "min-w-0 flex-1"}`}>
+      <span class={`text-az-body text-ui-label-lg ${props.stack ? "" : "min-w-0 flex-1"}`}>
         {props.label}
         <Show when={props.hint}>
-          <span class="mt-0.5 block break-words text-[11.5px] text-az-muted">{props.hint}</span>
+          <span class="mt-0.5 block break-words text-az-muted text-ui-detail">{props.hint}</span>
         </Show>
       </span>
       {props.children}
@@ -3268,6 +3377,7 @@ const SETTLE_MS = 180;
  * audit test in this folder refuses to ship a slider that cannot move.
  */
 function GlassPercentAxis(props: {
+  id: string;
   label: string;
   max: number;
   value: number;
@@ -3299,6 +3409,7 @@ function GlassPercentAxis(props: {
   return (
     <div class="min-w-[260px]">
       <Slider
+        id={props.id}
         label={props.label}
         min={0}
         max={props.max}
@@ -3395,6 +3506,7 @@ type GlassSliderAxis = keyof typeof GLASS_SETTING_KEYS;
  * (`onChange` paints, `onChangeEnd` persists), so there is no timer here.
  */
 function GlassTuningAxis(props: {
+  id: string;
   label: string;
   axis: GlassSliderAxis;
   step: number;
@@ -3450,6 +3562,7 @@ function GlassTuningAxis(props: {
   return (
     <div class="min-w-[260px]">
       <Slider
+        id={props.id}
         label={props.label}
         min={limits().min}
         max={limits().max}
@@ -3562,16 +3675,17 @@ function StoreSnapshotControl(): JSX.Element {
       <Show when={note()}>
         <span
           role={failed() ? "alert" : "status"}
-          class={`text-right text-[10.5px] ${failed() ? "text-error" : "text-success"}`}
+          class={`text-right text-ui-caption-sm ${failed() ? "text-error" : "text-success"}`}
         >
           {note()}
         </span>
       </Show>
       <Button
+        id="settings-store-snapshot"
         type="button"
         disabled={busy() || !isLive("createStoreSnapshot")}
         onClick={take}
-        class="rounded-lg border border-az-hairline-strong px-3 py-[5px] text-[12px] text-az-muted transition-colors hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-40"
+        class="rounded-lg border border-az-hairline-strong px-3 py-[5px] text-az-muted text-ui-label transition-colors hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-40"
       >
         {busy() ? tx("Taking snapshot…") : tx("Take snapshot")}
       </Button>
@@ -3580,6 +3694,7 @@ function StoreSnapshotControl(): JSX.Element {
 }
 
 function SettingToggle(props: {
+  id: string;
   label: string;
   checked: boolean;
   disabled?: boolean;
@@ -3587,6 +3702,7 @@ function SettingToggle(props: {
 }): JSX.Element {
   return (
     <Switch
+      id={props.id}
       aria-label={props.label}
       checked={props.checked}
       disabled={props.disabled}
@@ -3608,19 +3724,19 @@ function AgentRow(props: { status: AgentStatus }): JSX.Element {
   return (
     <div class="flex items-center gap-3 border-az-hairline-soft border-b px-3.5 py-2.5">
       <AgentStateDot state={props.status.state} />
-      <span class="w-[88px] shrink-0 font-semibold text-[12.5px] text-az-strong">
+      <span class="w-[88px] shrink-0 font-semibold text-az-strong text-ui-label-lg">
         {AGENT_LABELS[props.status.agent]}
       </span>
-      <span class="shrink-0 font-mono text-[11.5px] text-az-muted">
+      <span class="shrink-0 font-mono text-az-muted text-ui-detail">
         {props.status.version ?? "—"}
       </span>
-      <span class={`min-w-0 flex-1 text-[11.5px] ${STATE_TONE[props.status.state]}`}>
+      <span class={`min-w-0 flex-1 text-ui-detail ${STATE_TONE[props.status.state]}`}>
         {detail()}
       </span>
       <span class="flex shrink-0 gap-[5px]">
         <For each={props.status.caps}>
           {(cap) => (
-            <span class="rounded-full border border-primary/25 bg-az-chip px-[7px] py-0.5 font-mono text-[10.5px] text-primary/85">
+            <span class="rounded-full border border-primary/25 bg-az-chip px-[7px] py-0.5 font-mono text-primary/85 text-ui-caption-sm">
               {cap}
             </span>
           )}
@@ -3631,6 +3747,7 @@ function AgentRow(props: { status: AgentStatus }): JSX.Element {
 }
 
 function HoldRow(props: {
+  id: string;
   severity: string;
   tone: "warning" | "error";
   description: string;
@@ -3644,14 +3761,15 @@ function HoldRow(props: {
       }`}
     >
       <span
-        class={`shrink-0 rounded-md px-2 py-0.5 font-bold text-[11px] ${
+        class={`shrink-0 rounded-md px-2 py-0.5 font-bold text-ui-caption ${
           props.tone === "warning" ? "bg-warning/20 text-warning" : "bg-error/20 text-error"
         }`}
       >
         {props.severity}
       </span>
-      <span class="flex-1 text-[12px] text-az-body leading-[1.5]">{props.description}</span>
+      <span class="flex-1 text-az-body text-ui-label leading-[1.5]">{props.description}</span>
       <SettingToggle
+        id={props.id}
         label={`${props.severity} hold behaviour`}
         checked={props.checked}
         onChange={props.onChange}
@@ -3674,13 +3792,13 @@ function AgentModelList(props: { catalogue: AgentModels; selection: ModelSelecti
   return (
     <div class="flex flex-col border-az-hairline border-b last:border-b-0">
       <div class="flex flex-wrap items-baseline gap-x-2.5 gap-y-0.5 px-3.5 pt-3 pb-1">
-        <span class="font-semibold text-[13px] text-az-title">{AGENT_LABELS[agent()]}</span>
-        <span class="text-[11.5px] text-az-muted">{tx(AGENT_USE[agent()])}</span>
-        <span class="ml-auto text-[11px] text-az-muted tabular-nums">
+        <span class="font-semibold text-az-title text-ui-body">{AGENT_LABELS[agent()]}</span>
+        <span class="text-az-muted text-ui-detail">{tx(AGENT_USE[agent()])}</span>
+        <span class="ml-auto text-az-muted text-ui-caption tabular-nums">
           {props.selection.enabled.length} {tx("of")} {props.catalogue.models.length}
         </span>
       </div>
-      <p class="px-3.5 pb-2 text-[11px] text-az-muted">
+      <p class="px-3.5 pb-2 text-az-muted text-ui-caption">
         {props.catalogue.discovered
           ? tx("asked just now")
           : tx(SOURCE_LABELS[props.catalogue.source])}{" "}
@@ -3734,6 +3852,7 @@ function ModelRow(props: {
         the keyboard behaviour; the span beside it is the visible box.
       */}
       <Checkbox
+        id={`settings-model-${props.agent}-${encodeURIComponent(props.model.id)}-offer`}
         class="shrink-0"
         title={props.isLastEnabled ? tx("The last enabled model cannot be removed") : undefined}
         checked={props.isEnabled}
@@ -3746,32 +3865,33 @@ function ModelRow(props: {
 
       <div class="flex min-w-0 flex-1 flex-col leading-tight">
         <span class="flex items-baseline gap-1.5">
-          <span class="truncate text-[12.5px] text-az-body">{props.model.name}</span>
-          <span class="truncate font-mono text-[10.5px] text-az-muted">{props.model.id}</span>
+          <span class="truncate text-az-body text-ui-label-lg">{props.model.name}</span>
+          <span class="truncate font-mono text-az-muted text-ui-caption-sm">{props.model.id}</span>
           <Show when={props.model.kind === "alias"}>
-            <span class="shrink-0 rounded border border-az-hairline px-1 text-[9.5px] text-az-muted uppercase tracking-[.04em]">
+            <span class="shrink-0 rounded border border-az-hairline px-1 text-az-muted text-ui-micro uppercase tracking-[.04em]">
               {tx("alias")}
             </span>
           </Show>
         </span>
         <Show when={props.model.note}>
-          <span class="truncate text-[11px] text-az-muted">{props.model.note}</span>
+          <span class="truncate text-az-muted text-ui-caption">{props.model.note}</span>
         </Show>
       </div>
 
       <Show
         when={!props.isDefault}
         fallback={
-          <span class="shrink-0 rounded border border-primary px-1.5 py-px text-[10px] text-primary">
+          <span class="shrink-0 rounded border border-primary px-1.5 py-px text-primary text-ui-tiny">
             {tx("default")}
           </span>
         }
       >
         <Button
+          id={`settings-model-${props.agent}-${encodeURIComponent(props.model.id)}-default`}
           type="button"
           onClick={() => void actions.setDefaultModel(props.agent, props.model.id)}
           aria-label={tx("Make {name} the default", { name: props.model.name })}
-          class="shrink-0 rounded border border-az-hairline-strong px-1.5 py-px text-[10px] text-az-muted opacity-0 transition-opacity hover:text-primary focus-visible:opacity-100 group-hover:opacity-100"
+          class="shrink-0 rounded border border-az-hairline-strong px-1.5 py-px text-az-muted text-ui-tiny opacity-0 transition-opacity hover:text-primary focus-visible:opacity-100 group-hover:opacity-100"
         >
           {tx("make default")}
         </Button>

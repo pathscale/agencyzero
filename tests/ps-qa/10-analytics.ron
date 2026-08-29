@@ -2,6 +2,17 @@
 // aria-selected on the control. The subject is unique content from that tab.
 [
     (
+        id: "analytics-tabs-stay-inside-list",
+        group: "analytics",
+        what: "every analytics tab remains inside the visible horizontal tab list",
+        open: Some("Analytics"),
+        hover: None,
+        click: None,
+        compare: Some("Analytics sections"),
+        subject: "@tabs-tab",
+        expect: ContainedBy,
+    ),
+    (
         id: "analytics-refresh-completes",
         group: "analytics",
         what: "refreshing analytics completes a ledger read",

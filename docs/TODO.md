@@ -107,6 +107,30 @@ The detail stays in the sections below; this is an index, not a second copy.
 | 24 | W3: assert one copy of each pivotal crate | open |
 | 25 | W4: assert no local `[patch]` reaches a shipped build | open, near-missed 2026-08-12 |
 | 26 | W5: assert a target-aware native-dependency inventory | open |
+| 27 | Stable, unique component IDs as the QA control contract | open, after typography migration |
+
+### Item 27: stable component IDs, enforced statically and live
+
+Accessible names describe controls to people; they are not unique identities
+and can change with translation or state. Every QA-addressable public component
+root must instead receive an explicit, stable HTML `id`. Compound parts derive
+their IDs from that root, and repeated rows derive them from durable record IDs,
+never array positions or visible titles.
+
+This is complete only when all of the following land together:
+
+1. PathScale/UI component props require and forward the root ID.
+2. AgencyZero supplies stable IDs at every interactive call site.
+3. Static lint rejects missing IDs, duplicate literal IDs, and index-derived
+   IDs.
+4. Blitz exposes the DOM ID separately from its ephemeral numeric node handle.
+5. ps-qa accepts exact `#id` selectors and migrates action manifests away from
+   accessible-name lookup.
+6. The live inventory fails duplicate resolved IDs, covering dynamic values a
+   static pass cannot prove unique.
+
+Names remain accessibility assertions and discovery output. They are not the
+primary automation selector once this migration is complete.
 
 Item 13 was measured on 2026-08-12 and **closed**: there is no whole-document
 clear left to count. `resolve.rs` clears one node, not the tree. On a 186-node

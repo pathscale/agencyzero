@@ -13,6 +13,7 @@ import { tx } from "~/stores/i18n";
  * the accessible names, which are translated.
  */
 export function EditableTitle(props: {
+  id: string;
   value: string;
   onRename: (name: string) => Promise<unknown>;
   class?: string;
@@ -32,15 +33,17 @@ export function EditableTitle(props: {
 
   return (
     <InlineEdit
+      id={`${props.id}-edit`}
       value={props.value}
       onCommit={rename}
       label={props.label ?? tx("Rename {name}", { name: props.value })}
-      trigger={<Icon name="pencil" class="text-[11px]" />}
+      trigger={<Icon name="pencil" class="text-ui-caption" />}
       class={props.class}
       fieldClass={props.inputClass}
     >
       {props.onActivate ? (
         <Button
+          id={`${props.id}-open`}
           type="button"
           onClick={() => props.onActivate?.()}
           aria-label={tx("Open project {name}", { name: props.value })}

@@ -112,8 +112,8 @@ export function HomeTab(): JSX.Element {
       <Panel class="flex min-w-0 flex-1 flex-col">
         <div class="flex flex-col gap-[11px] px-4 pt-4 pb-3">
           <div class="flex items-baseline gap-2.5 px-0.5">
-            <span class="font-semibold text-[15px] text-base-content">{tx("Projects")}</span>
-            <span class="text-[11.5px] text-az-faint">
+            <span class="font-semibold text-base-content text-ui-lead">{tx("Projects")}</span>
+            <span class="text-az-faint text-ui-detail">
               {tx("and their items · click a project to open its tab")}
             </span>
             <HomeItemSortControls />
@@ -130,8 +130,9 @@ export function HomeTab(): JSX.Element {
             <TaskManagerComposer />
 
             <div class="flex min-w-0 flex-1 items-center gap-2.5 rounded-[11px] border border-primary/11 bg-az-inset px-3 py-2.5 focus-within:border-primary/40">
-              <Icon name="search" class="shrink-0 text-[14px] text-primary/70" />
+              <Icon name="search" class="shrink-0 text-primary/70 text-ui-control" />
               <Input.Field
+                id="home-search"
                 type="search"
                 value={query()}
                 onInput={(event) => {
@@ -140,9 +141,9 @@ export function HomeTab(): JSX.Element {
                 }}
                 placeholder={tx("Search projects and items…")}
                 aria-label={tx("Search projects and items")}
-                class="min-w-0 flex-1 bg-transparent text-[12.5px] text-base-content placeholder:text-az-muted focus:outline-none"
+                class="min-w-0 flex-1 bg-transparent text-base-content text-ui-label-lg placeholder:text-az-muted focus:outline-none"
               />
-              <kbd class="shrink-0 rounded-md border border-primary/25 bg-az-chip px-[7px] py-0.5 font-mono text-[10.5px] text-primary/70">
+              <kbd class="shrink-0 rounded-md border border-primary/25 bg-az-chip px-[7px] py-0.5 font-mono text-primary/70 text-ui-caption-sm">
                 ⌘K
               </kbd>
             </div>
@@ -162,18 +163,19 @@ export function HomeTab(): JSX.Element {
             )}
           </For>
           <Show when={matches().length === 0}>
-            <p class="px-2 py-6 text-center text-[12.5px] text-az-muted">
+            <p class="px-2 py-6 text-center text-az-muted text-ui-label-lg">
               {tx("Nothing matches “{query}”", { query: query() })}
             </p>
           </Show>
           <Show when={projectGrid.hasMore()}>
             <Button
+              id="home-projects-more"
               type="button"
               onClick={projectGrid.revealMore}
               aria-label={tx("Show {count} more Home projects", {
                 count: Math.min(HOME_PROJECT_PAGE_SIZE, matches().length - visibleMatches().length),
               })}
-              class="flex-none rounded-xl border border-primary/24 bg-az-chip px-3.5 py-2.5 font-semibold text-[12px] text-primary transition-colors hover:bg-az-chip"
+              class="flex-none rounded-xl border border-primary/24 bg-az-chip px-3.5 py-2.5 font-semibold text-primary text-ui-label transition-colors hover:bg-az-chip"
             >
               {tx("Show {count} more projects", {
                 count: Math.min(HOME_PROJECT_PAGE_SIZE, matches().length - visibleMatches().length),
@@ -185,6 +187,7 @@ export function HomeTab(): JSX.Element {
 
       <div class="flex w-[310px] flex-none flex-col gap-3">
         <Button
+          id="home-new-project"
           type="button"
           onClick={() => actions.openDraft()}
           /*
@@ -195,14 +198,15 @@ export function HomeTab(): JSX.Element {
             now sits on the edge and the label, where it marks the action
             without owning the area.
           */
-          class="flex items-center justify-center gap-2.5 rounded-panel border border-primary/45 bg-primary/8 py-3.5 font-semibold text-[13.5px] text-primary transition-colors hover:border-primary/70 hover:bg-primary/14"
+          class="flex items-center justify-center gap-2.5 rounded-panel border border-primary/45 bg-primary/8 py-3.5 font-semibold text-primary text-ui-body-lg transition-colors hover:border-primary/70 hover:bg-primary/14"
         >
-          <Icon name="plus" class="text-[17px]" />
+          <Icon name="plus" class="text-ui-title-lg" />
           {tx("New Project")}
         </Button>
 
         <Show when={pinned().length > 0}>
           <SectionPanel
+            id="home-pinned"
             icon="pin"
             title={tx("Pinned")}
             count={pinned().length}
@@ -214,16 +218,17 @@ export function HomeTab(): JSX.Element {
               <For each={pinned()}>
                 {(project) => (
                   <Button
+                    id={`home-pinned-project-${project.id}`}
                     type="button"
                     onClick={() => actions.openProject(project.id)}
                     aria-label={tx("Open project {name}", { name: project.name })}
                     class="flex items-center gap-2.5 rounded-[11px] border border-primary/22 bg-base-300 px-3 py-2.5 text-left transition-colors hover:border-primary/50"
                   >
                     <StatusDot status={tabStatus(project.id)} />
-                    <span class="min-w-0 flex-1 truncate font-semibold text-[12.5px] text-base-content">
+                    <span class="min-w-0 flex-1 truncate font-semibold text-base-content text-ui-label-lg">
                       {project.name}
                     </span>
-                    <span class="shrink-0 text-[11px] text-az-muted">
+                    <span class="shrink-0 text-az-muted text-ui-caption">
                       {
                         itemsFor(project.id).filter(
                           (item) => item.status !== "finished" && item.status !== "canceled",
@@ -239,6 +244,7 @@ export function HomeTab(): JSX.Element {
         </Show>
 
         <SectionPanel
+          id="home-recent"
           icon="history"
           title={tx("Recent")}
           count={recent().length}
@@ -250,21 +256,22 @@ export function HomeTab(): JSX.Element {
             <For each={visibleRecent()}>
               {(project) => (
                 <Button
+                  id={`home-recent-project-${project.id}`}
                   type="button"
                   onClick={() => actions.openProject(project.id)}
                   aria-label={tx("Open recent project {name}", { name: project.name })}
                   class="flex items-center gap-3 rounded-[11px] border border-az-hairline bg-base-300 px-3 py-2.5 text-left transition-colors hover:border-primary/40"
                 >
-                  <Icon name="folder-git-2" class="shrink-0 text-[15px] text-primary" />
+                  <Icon name="folder-git-2" class="shrink-0 text-primary text-ui-lead" />
                   <div class="flex min-w-0 flex-1 flex-col gap-0.5">
-                    <span class="truncate font-semibold text-[12.5px] text-base-content">
+                    <span class="truncate font-semibold text-base-content text-ui-label-lg">
                       {project.name}
                     </span>
-                    <span class="truncate font-mono text-[11px] text-az-muted">
+                    <span class="truncate font-mono text-az-muted text-ui-caption">
                       {project.dirs[0] ?? tx("no working directory")}
                     </span>
                   </div>
-                  <span class="ml-auto shrink-0 text-[11px] text-az-faint">
+                  <span class="ml-auto shrink-0 text-az-faint text-ui-caption">
                     {state.running[project.id]?.length
                       ? tx("running now")
                       : relativeTime(project.lastActivityAt)}
@@ -274,12 +281,13 @@ export function HomeTab(): JSX.Element {
             </For>
             <Show when={recentGrid.hasMore()}>
               <Button
+                id="home-recent-more"
                 type="button"
                 onClick={recentGrid.revealMore}
                 aria-label={tx("Show {count} more recent projects", {
                   count: Math.min(HOME_RECENT_PAGE_SIZE, recent().length - visibleRecent().length),
                 })}
-                class="rounded-[11px] border border-primary/24 bg-az-chip px-3 py-2 font-semibold text-[11.5px] text-primary transition-colors hover:bg-az-chip"
+                class="rounded-[11px] border border-primary/24 bg-az-chip px-3 py-2 font-semibold text-primary text-ui-detail transition-colors hover:bg-az-chip"
               >
                 {tx("Show {count} more projects", {
                   count: Math.min(HOME_RECENT_PAGE_SIZE, recent().length - visibleRecent().length),
@@ -297,6 +305,7 @@ export function HomeTab(): JSX.Element {
         */}
         <Show when={(state.agentIo[TASK_MANAGER_ID] ?? []).length > 0}>
           <SectionPanel
+            id="home-task-manager-io"
             icon="terminal"
             title={tx("Task Manager I/O")}
             count={(state.agentIo[TASK_MANAGER_ID] ?? []).length}
@@ -334,6 +343,7 @@ export function CleanupRowActions(props: {
   return (
     <div class="flex shrink-0 items-center gap-1 rounded-md border border-warning/35 bg-warning/8 px-1.5 py-0.5">
       <Checkbox
+        id={`home-cleanup-${props.item.id}-keep`}
         checked
         state={busy() !== null ? "disabled" : undefined}
         aria-label={tx("Delete {name}", { name: props.item.title })}
@@ -344,15 +354,16 @@ export function CleanupRowActions(props: {
             checkbox.checked = true;
           });
         }}
-        class="font-semibold text-[10.5px] text-warning"
+        class="font-semibold text-ui-caption-sm text-warning"
       >
         {tx("Delete")}
       </Checkbox>
       <Button
+        id={`home-cleanup-${props.item.id}-confirm`}
         type="button"
         disabled={busy() !== null}
         onClick={() => void run("delete", props.onConfirm)}
-        class="rounded border border-error/35 px-1.5 py-px font-semibold text-[10px] text-error hover:bg-error/12 disabled:opacity-50"
+        class="rounded border border-error/35 px-1.5 py-px font-semibold text-error text-ui-tiny hover:bg-error/12 disabled:opacity-50"
       >
         {busy() === "delete" ? tx("Deleting…") : tx("Confirm")}
       </Button>
@@ -388,9 +399,10 @@ function HomeItemSortControls(): JSX.Element {
       aria-label={tx("Sort projects and items")}
     >
       <Button
+        id="home-sort-by"
         type="button"
         onClick={nextSort}
-        class="rounded-md border border-az-hairline bg-az-inset px-1.5 py-0.5 font-medium text-[10.5px] text-az-muted transition-colors hover:text-az-strong"
+        class="rounded-md border border-az-hairline bg-az-inset px-1.5 py-0.5 font-medium text-az-muted text-ui-caption-sm transition-colors hover:text-az-strong"
         aria-label={
           sortBy() === "status"
             ? tx("Sort Home by status; choose time")
@@ -418,6 +430,7 @@ function HomeItemSortControls(): JSX.Element {
         </span>
       </Button>
       <Button
+        id="home-sort-direction"
         type="button"
         onClick={() =>
           setPrefs((d) => {
@@ -430,7 +443,7 @@ function HomeItemSortControls(): JSX.Element {
       >
         <Icon
           name="arrow-up"
-          class={`text-[11px] transition-transform ${direction() === "desc" ? "rotate-180" : ""}`}
+          class={`text-ui-caption transition-transform ${direction() === "desc" ? "rotate-180" : ""}`}
         />
       </Button>
     </fieldset>
@@ -462,6 +475,7 @@ function HomeCleanupButton(): JSX.Element {
 
   return (
     <Button
+      id="home-cleanup-start"
       type="button"
       onClick={() => void start()}
       disabled={isStarting() || isRunning()}
@@ -471,13 +485,13 @@ function HomeCleanupButton(): JSX.Element {
           ? tx("Clean-up is already running")
           : tx("Review project items and mark proposed deletions"))
       }
-      class={`flex shrink-0 items-center gap-1 rounded-md border px-2 py-0.5 font-semibold text-[10.5px] transition-colors disabled:cursor-not-allowed disabled:opacity-45 ${
+      class={`flex shrink-0 items-center gap-1 rounded-md border px-2 py-0.5 font-semibold text-ui-caption-sm transition-colors disabled:cursor-not-allowed disabled:opacity-45 ${
         error()
           ? "border-error/45 bg-error/10 text-error"
           : "border-primary/35 bg-az-chip text-primary hover:bg-az-chip"
       }`}
     >
-      <Icon name="sparkles" class="text-[11px]" />
+      <Icon name="sparkles" class="text-ui-caption" />
       {isStarting() ? tx("Starting…") : tx("Clean-up")}
     </Button>
   );
@@ -601,16 +615,17 @@ function TaskManagerComposer(): JSX.Element {
           role="alert"
           class="mb-2 flex items-center gap-3 rounded-[11px] border border-error/38 bg-error/8 px-3 py-2.5"
         >
-          <Icon name="shield" class="shrink-0 text-[14px] text-error" />
-          <p class="min-w-0 flex-1 text-[11px] text-az-body leading-[1.45]">
+          <Icon name="shield" class="shrink-0 text-error text-ui-control" />
+          <p class="min-w-0 flex-1 text-az-body text-ui-caption leading-[1.45]">
             {tx(
               "The task manager cannot send prompts until its selected agent is installed, compatible, and signed in.",
             )}
           </p>
           <Button
+            id="home-task-manager-open-settings"
             type="button"
             onClick={() => actions.openSettings()}
-            class="shrink-0 rounded-lg border border-error/30 px-2.5 py-1 text-[10.5px] text-az-body hover:border-error hover:text-error"
+            class="shrink-0 rounded-lg border border-error/30 px-2.5 py-1 text-az-body text-ui-caption-sm hover:border-error hover:text-error"
           >
             {tx("Open Settings")}
           </Button>
@@ -623,7 +638,7 @@ function TaskManagerComposer(): JSX.Element {
       >
         <Icon
           name="list-checks"
-          class={`shrink-0 text-[14px] ${tall() ? "relative top-0.5" : ""} ${
+          class={`shrink-0 text-ui-control ${tall() ? "relative top-0.5" : ""} ${
             isRunning() ? "text-primary" : "text-az-muted"
           }`}
         />
@@ -631,6 +646,7 @@ function TaskManagerComposer(): JSX.Element {
           when={tall()}
           fallback={
             <Input.Field
+              id="home-task-manager-prompt"
               value={draft()}
               onInput={(event) => setDraft(event.currentTarget.value)}
               onKeyDown={(event) => {
@@ -643,11 +659,12 @@ function TaskManagerComposer(): JSX.Element {
               placeholder={placeholder()}
               aria-label={tx("Task manager prompt")}
               disabled={isSending() || waitsForRun() || !agentReady()}
-              class="min-w-0 flex-1 bg-transparent text-[12.5px] text-base-content placeholder:text-az-muted focus:outline-none disabled:opacity-60"
+              class="min-w-0 flex-1 bg-transparent text-base-content text-ui-label-lg placeholder:text-az-muted focus:outline-none disabled:opacity-60"
             />
           }
         >
           <Textarea
+            id="home-task-manager-prompt-expanded"
             autofocus
             rows={6}
             value={draft()}
@@ -662,10 +679,11 @@ function TaskManagerComposer(): JSX.Element {
             placeholder={placeholder()}
             aria-label={tx("Task manager prompt")}
             disabled={isSending() || waitsForRun() || !agentReady()}
-            class="az-scroll min-w-0 flex-1 resize-none bg-transparent text-[12.5px] text-base-content leading-[1.5] placeholder:text-az-muted focus:outline-none disabled:opacity-60"
+            class="az-scroll min-w-0 flex-1 resize-none bg-transparent text-base-content text-ui-label-lg leading-[1.5] placeholder:text-az-muted focus:outline-none disabled:opacity-60"
           />
         </Show>
         <Button
+          id="home-task-manager-attach"
           type="button"
           onClick={() => void attach()}
           disabled={!isLive("chooseAttachments")}
@@ -673,9 +691,10 @@ function TaskManagerComposer(): JSX.Element {
           aria-label={tx("Attach files for the task manager")}
           class="shrink-0 text-az-faint transition-colors hover:text-az-body disabled:cursor-not-allowed disabled:opacity-40"
         >
-          <Icon name="plus" class="text-[14px]" />
+          <Icon name="plus" class="text-ui-control" />
         </Button>
         <Button
+          id="home-task-manager-expand"
           type="button"
           onClick={() => setTall((open) => !open)}
           aria-pressed={tall() ? "true" : "false"}
@@ -683,17 +702,18 @@ function TaskManagerComposer(): JSX.Element {
           aria-label={tall() ? tx("Shrink the prompt area") : tx("Expand the prompt area")}
           class="shrink-0 text-az-faint transition-colors hover:text-az-body"
         >
-          <Icon name={tall() ? "chevron-up" : "chevron-down"} class="text-[14px]" />
+          <Icon name={tall() ? "chevron-up" : "chevron-down"} class="text-ui-control" />
         </Button>
         <Show
           when={isRunning()}
           fallback={
-            <kbd class="shrink-0 rounded-md border border-primary/25 bg-az-chip px-[7px] py-0.5 font-mono text-[10.5px] text-primary/70">
+            <kbd class="shrink-0 rounded-md border border-primary/25 bg-az-chip px-[7px] py-0.5 font-mono text-primary/70 text-ui-caption-sm">
               ↵
             </kbd>
           }
         >
           <Button
+            id="home-task-manager-cancel"
             type="button"
             onClick={() => void cancel()}
             disabled={isCanceling()}
@@ -701,7 +721,7 @@ function TaskManagerComposer(): JSX.Element {
             aria-label={tx("Cancel")}
             class="flex size-5 shrink-0 items-center justify-center rounded-full border border-error/35 text-error transition-colors hover:bg-error/12 disabled:opacity-45"
           >
-            <Icon name="x" class="text-[11px]" />
+            <Icon name="x" class="text-ui-caption" />
           </Button>
         </Show>
         {/*
@@ -710,6 +730,7 @@ function TaskManagerComposer(): JSX.Element {
           thing — so they hide behind this rather than costing space daily.
         */}
         <Button
+          id="home-task-manager-debug"
           type="button"
           onClick={() => togglePanelSection("tmDebug")}
           aria-pressed={prefs.panelSections.tmDebug ? "true" : "false"}
@@ -718,12 +739,13 @@ function TaskManagerComposer(): JSX.Element {
             prefs.panelSections.tmDebug ? "text-primary" : "text-az-faint hover:text-az-body"
           }`}
         >
-          <Icon name="terminal" class="text-[13px]" />
+          <Icon name="terminal" class="text-ui-body" />
         </Button>
       </div>
       <Show when={attachments().length > 0}>
         <div class="px-1 pt-1.5">
           <AttachmentPills
+            id="home-task-manager-composer"
             paths={attachments()}
             onRemove={(path) =>
               setAttachments((current) => current.filter((existing) => existing !== path))
@@ -733,7 +755,7 @@ function TaskManagerComposer(): JSX.Element {
       </Show>
       <Show when={error()}>
         {(message) => (
-          <p role="alert" class="px-1 pt-1 text-[11px] text-error">
+          <p role="alert" class="px-1 pt-1 text-error text-ui-caption">
             {tx("Could not send — your prompt is still here.")} {message()}
           </p>
         )}
@@ -804,12 +826,12 @@ function TaskManagerStatus(): JSX.Element {
       <Show when={prefs.panelSections.tmDebug && reply()}>
         {(current) => (
           <div class="flex flex-col gap-1 rounded-[11px] border border-az-hairline-soft bg-az-inset px-3 py-2">
-            <span class="text-[10.5px] text-az-faint">
+            <span class="text-az-faint text-ui-caption-sm">
               {current().isWriting ? tx("Task Manager · writing…") : tx("Task Manager")}
             </span>
             <p
               data-selectable
-              class="az-scroll max-h-[120px] overflow-y-auto whitespace-pre-wrap text-[12px] text-az-body leading-[1.55]"
+              class="az-scroll max-h-[120px] overflow-y-auto whitespace-pre-wrap text-az-body text-ui-label leading-[1.55]"
             >
               {current().body}
             </p>
@@ -825,15 +847,16 @@ function TaskManagerStatus(): JSX.Element {
         */}
         <div class="flex flex-col gap-0.5 rounded-[11px] border border-az-hairline-soft bg-az-inset px-2.5 py-2">
           <div class="flex items-center gap-2 px-1 pb-1">
-            <span class="text-[10.5px] text-az-faint">
+            <span class="text-az-faint text-ui-caption-sm">
               {tx("collected ·")} {tasks().length}
             </span>
             <Button
+              id="home-task-manager-clear-collected"
               type="button"
               onClick={() => {
                 for (const task of tasks()) void actions.deleteItem(task.id);
               }}
-              class="ml-auto rounded-md border border-az-hairline px-2 py-0.5 text-[10.5px] text-az-muted transition-colors hover:border-error hover:text-error"
+              class="ml-auto rounded-md border border-az-hairline px-2 py-0.5 text-az-muted text-ui-caption-sm transition-colors hover:border-error hover:text-error"
             >
               {tx("Clear")}
             </Button>
@@ -843,8 +866,10 @@ function TaskManagerStatus(): JSX.Element {
               {(task) => (
                 <div class="flex items-baseline gap-2.5 px-1 py-1">
                   <ItemMarker status={task.status} />
-                  <span class="min-w-0 flex-1 truncate text-[12px] text-az-body">{task.title}</span>
-                  <span class={`shrink-0 text-[11px] ${STATUS_TONE[task.status]}`}>
+                  <span class="min-w-0 flex-1 truncate text-az-body text-ui-label">
+                    {task.title}
+                  </span>
+                  <span class={`shrink-0 text-ui-caption ${STATUS_TONE[task.status]}`}>
                     {statusSuffix(task.status)}
                   </span>
                 </div>
@@ -964,6 +989,7 @@ function GroupItemRow(props: {
       fallback={
         <Show when={editing()}>
           <Input.Field
+            id={`home-item-${props.item.id}-title`}
             autofocus
             value={title()}
             aria-label={tx("Edit {name}", { name: props.item.title })}
@@ -972,7 +998,7 @@ function GroupItemRow(props: {
               if (event.key === "Enter") void save();
               if (event.key === "Escape") setEditing(false);
             }}
-            class="mx-2 my-1 rounded-[9px] border border-primary/40 bg-base-300 px-2.5 py-2 text-[12.5px] text-az-body focus:outline-none"
+            class="mx-2 my-1 rounded-[9px] border border-primary/40 bg-base-300 px-2.5 py-2 text-az-body text-ui-label-lg focus:outline-none"
           />
         </Show>
       }
@@ -999,6 +1025,7 @@ function GroupItemRow(props: {
            * target rather than riding on a click meant to read the row.
            */}
           <Button
+            id={`home-item-${props.item.id}-status`}
             type="button"
             onClick={(event) => {
               event.stopPropagation();
@@ -1011,13 +1038,14 @@ function GroupItemRow(props: {
             <ItemMarker status={props.item.status} />
           </Button>
           <Button
+            id={`home-item-${props.item.id}-open`}
             type="button"
             onClick={props.onOpen}
             aria-label={tx("Open item {name}", { name: props.item.title })}
             class="flex min-w-0 flex-1 items-baseline gap-2.5 text-left"
           >
             <span
-              class={`min-w-0 flex-1 text-[12.5px] ${
+              class={`min-w-0 flex-1 text-ui-label-lg ${
                 props.item.status === "active"
                   ? "text-az-strong"
                   : props.item.status === "finished"
@@ -1037,6 +1065,7 @@ function GroupItemRow(props: {
           </Show>
           <Show when={active() || props.descriptionOpen}>
             <Button
+              id={`home-item-${props.item.id}-edit`}
               type="button"
               onClick={() => {
                 setTitle(props.item.title);
@@ -1046,10 +1075,11 @@ function GroupItemRow(props: {
               title={tx("Edit this item")}
               class="shrink-0 rounded-md p-0.5 text-az-faint hover:text-az-body"
             >
-              <Icon name="pencil" class="text-[11px]" />
+              <Icon name="pencil" class="text-ui-caption" />
             </Button>
             <Show when={!props.item.deleteProposed}>
               <Button
+                id={`home-item-${props.item.id}-delete`}
                 type="button"
                 onClick={() =>
                   void actions
@@ -1062,10 +1092,11 @@ function GroupItemRow(props: {
                 title={tx("Delete this item")}
                 class="shrink-0 rounded-md p-0.5 text-az-faint hover:text-error"
               >
-                <Icon name="x" class="text-[12px]" />
+                <Icon name="x" class="text-ui-label" />
               </Button>
             </Show>
             <Button
+              id={`home-item-${props.item.id}-description-toggle`}
               type="button"
               onClick={() => void toggleDescription()}
               aria-label={tx("Edit the description for {name}", { name: props.item.title })}
@@ -1078,9 +1109,10 @@ function GroupItemRow(props: {
                   : "border-primary/20 bg-az-chip text-az-muted"
               }`}
             >
-              <Icon name="list-checks" class="text-[12px]" />
+              <Icon name="list-checks" class="text-ui-label" />
             </Button>
             <Button
+              id={`home-item-${props.item.id}-fork`}
               type="button"
               onClick={(event) => {
                 const box = event.currentTarget.getBoundingClientRect();
@@ -1107,11 +1139,11 @@ function GroupItemRow(props: {
               }
               class={`flex h-6 shrink-0 items-center justify-center gap-1 rounded-md border font-semibold text-primary transition-colors hover:border-primary/70 hover:bg-az-chip-strong disabled:opacity-35 ${
                 fork()
-                  ? "border-primary/38 bg-az-chip px-1.5 text-[10.5px]"
+                  ? "border-primary/38 bg-az-chip px-1.5 text-ui-caption-sm"
                   : "size-6 border-primary/28 bg-az-chip"
               }`}
             >
-              <Icon name="git-fork" class="text-[12px]" />
+              <Icon name="git-fork" class="text-ui-label" />
               <Show when={fork()}>{tx("Forked")}</Show>
             </Button>
           </Show>
@@ -1122,7 +1154,7 @@ function GroupItemRow(props: {
             columns visibly wander from row to row.
           */}
           <span
-            class={`w-[96px] shrink-0 text-right text-[11.5px] ${STATUS_TONE[props.item.status]}`}
+            class={`w-[96px] shrink-0 text-right text-ui-detail ${STATUS_TONE[props.item.status]}`}
           >
             {statusSuffix(props.item.status)}
           </span>
@@ -1134,14 +1166,15 @@ function GroupItemRow(props: {
               class="flex flex-col gap-2 border-primary/24 border-t bg-az-inset px-3.5 py-3 shadow-[inset_2px_0_0_color-mix(in_srgb,var(--color-primary)_55%,transparent)]"
             >
               <div class="flex items-center justify-between gap-3">
-                <span class="font-semibold text-[11.5px] text-az-body">
+                <span class="font-semibold text-az-body text-ui-detail">
                   {tx("Description / sub-items")}
                 </span>
-                <span class="font-mono text-[10px] text-az-faint">
+                <span class="font-mono text-az-faint text-ui-tiny">
                   {draft().context.length} / {NOTES_BUDGET}
                 </span>
               </div>
               <Textarea
+                id={`home-item-${props.item.id}-description`}
                 autofocus
                 value={draft().context}
                 maxlength={NOTES_BUDGET}
@@ -1155,25 +1188,27 @@ function GroupItemRow(props: {
                 placeholder={tx(
                   "Describe constraints, acceptance criteria, decisions, and useful pointers…",
                 )}
-                class="az-scroll min-h-[138px] resize-y rounded-lg border border-primary/22 bg-base-300 px-3 py-2.5 text-[12px] text-az-body leading-[1.5] outline-none placeholder:text-az-faint focus:border-primary/55"
+                class="az-scroll min-h-[138px] resize-y rounded-lg border border-primary/22 bg-base-300 px-3 py-2.5 text-az-body text-ui-label leading-[1.5] outline-none placeholder:text-az-faint focus:border-primary/55"
               />
               <div class="flex items-center justify-between gap-3">
-                <span class="text-[10.5px] text-az-muted">
+                <span class="text-az-muted text-ui-caption-sm">
                   {tx("Use one Markdown bullet or checklist line per sub-item.")}
                 </span>
                 <div class="flex shrink-0 items-center gap-1.5">
                   <Button
+                    id={`home-item-${props.item.id}-description-close`}
                     type="button"
                     onClick={() => setDescriptionDraft(null)}
-                    class="rounded-md px-2.5 py-1 text-[11px] text-az-muted hover:bg-white/6 hover:text-az-body"
+                    class="rounded-md px-2.5 py-1 text-az-muted text-ui-caption hover:bg-white/6 hover:text-az-body"
                   >
                     {tx("Close")}
                   </Button>
                   <Button
+                    id={`home-item-${props.item.id}-description-save`}
                     type="button"
                     disabled={busy() || draft().context === draft().saved}
                     onClick={() => void saveDescription()}
-                    class="rounded-md border border-primary/40 bg-az-chip px-2.5 py-1 font-semibold text-[11px] text-primary hover:bg-az-chip-strong disabled:opacity-35"
+                    class="rounded-md border border-primary/40 bg-az-chip px-2.5 py-1 font-semibold text-primary text-ui-caption hover:bg-az-chip-strong disabled:opacity-35"
                   >
                     {tx("Save description")}
                   </Button>
@@ -1197,35 +1232,36 @@ function GroupItemRow(props: {
             <section class="flex max-h-full w-[560px] max-w-full flex-none flex-col overflow-hidden rounded-[14px] border border-az-hairline-strong bg-base-200 shadow-[0_24px_80px_rgba(0,0,0,.65)]">
               <header class="flex items-start gap-3 border-az-hairline-soft border-b px-5 py-4">
                 <div class="flex size-9 shrink-0 items-center justify-center rounded-[11px] border border-primary/28 bg-az-chip text-primary">
-                  <Icon name="git-fork" class="text-[17px]" />
+                  <Icon name="git-fork" class="text-ui-title-lg" />
                 </div>
                 <div class="min-w-0 flex-1">
                   <h2
                     id={`home-fork-title-${props.item.id}`}
-                    class="font-semibold text-[14.5px] text-az-title"
+                    class="font-semibold text-az-title text-ui-control-lg"
                   >
                     {tx("Prepare item fork")}
                   </h2>
-                  <p class="mt-0.5 truncate text-[12px] text-az-muted">{props.item.title}</p>
+                  <p class="mt-0.5 truncate text-az-muted text-ui-label">{props.item.title}</p>
                 </div>
                 <Button
+                  id={`home-item-${props.item.id}-fork-close`}
                   type="button"
                   onClick={() => setForkDraft(null)}
                   aria-label={tx("Cancel")}
                   class="rounded-lg p-1.5 text-az-muted hover:bg-white/6 hover:text-base-content"
                 >
-                  <Icon name="x" class="text-[15px]" />
+                  <Icon name="x" class="text-ui-lead" />
                 </Button>
               </header>
               <div class="flex min-h-0 flex-col gap-2 px-5 py-4">
                 <div class="flex items-center justify-between gap-3">
                   <label
                     for={`home-fork-description-${props.item.id}`}
-                    class="font-semibold text-[12.5px] text-az-body"
+                    class="font-semibold text-az-body text-ui-label-lg"
                   >
                     {tx("Description / sub-items")}
                   </label>
-                  <span class="font-mono text-[10.5px] text-az-faint">
+                  <span class="font-mono text-az-faint text-ui-caption-sm">
                     {forkDraft()?.length ?? 0} / {NOTES_BUDGET}
                   </span>
                 </div>
@@ -1238,9 +1274,9 @@ function GroupItemRow(props: {
                   placeholder={tx(
                     "Describe constraints, acceptance criteria, decisions, and useful pointers…",
                   )}
-                  class="az-scroll az-control-solid min-h-[220px] resize-y rounded-xl border border-primary/24 bg-az-inset px-3.5 py-3 text-[12.5px] text-az-body leading-[1.55] outline-none placeholder:text-az-faint focus:border-primary/55"
+                  class="az-scroll az-control-solid min-h-[220px] resize-y rounded-xl border border-primary/24 bg-az-inset px-3.5 py-3 text-az-body text-ui-label-lg leading-[1.55] outline-none placeholder:text-az-faint focus:border-primary/55"
                 />
-                <p class="text-[11px] text-az-muted leading-[1.5]">
+                <p class="text-az-muted text-ui-caption leading-[1.5]">
                   {tx(
                     "Sent when this item starts in a fresh fork or focused run. Ordinary compact item snapshots omit it.",
                   )}{" "}
@@ -1249,17 +1285,19 @@ function GroupItemRow(props: {
               </div>
               <footer class="flex items-center justify-end gap-2 border-az-hairline-soft border-t px-5 py-3.5">
                 <Button
+                  id={`home-item-${props.item.id}-fork-cancel`}
                   type="button"
                   onClick={() => setForkDraft(null)}
-                  class="rounded-lg border border-az-hairline px-3 py-1.5 text-[12px] text-az-body hover:border-primary/35"
+                  class="rounded-lg border border-az-hairline px-3 py-1.5 text-az-body text-ui-label hover:border-primary/35"
                 >
                   {tx("Cancel")}
                 </Button>
                 <Button
+                  id={`home-item-${props.item.id}-fork-start`}
                   type="button"
                   disabled={busy()}
                   onClick={() => void startFork()}
-                  class="rounded-lg border border-primary/45 bg-az-chip px-3 py-1.5 font-semibold text-[12px] text-primary hover:bg-az-chip-strong disabled:opacity-40"
+                  class="rounded-lg border border-primary/45 bg-az-chip px-3 py-1.5 font-semibold text-primary text-ui-label hover:bg-az-chip-strong disabled:opacity-40"
                 >
                   {tx("Start fork")}
                 </Button>
@@ -1344,30 +1382,32 @@ function ProjectGroup(props: {
       class="flex-none overflow-hidden rounded-xl border border-az-hairline-soft bg-base-300"
     >
       <div class="flex items-center gap-2.5 px-3.5 py-2.5 transition-colors hover:bg-white/4">
-        <Icon name="folder-git-2" class="shrink-0 text-[15px] text-primary" />
+        <Icon name="folder-git-2" class="shrink-0 text-primary text-ui-lead" />
         <EditableTitle
+          id={`home-project-${props.project.id}-title`}
           value={props.project.name}
           onRename={(name) => actions.renameProject(props.project.id, name)}
           onActivate={() => actions.openProject(props.project.id)}
           label={tx("Rename project {name}", { name: props.project.name })}
-          class="min-w-0 font-semibold text-[13px] text-base-content"
-          inputClass="font-semibold text-[13px]"
+          class="min-w-0 font-semibold text-base-content text-ui-body"
+          inputClass="font-semibold text-ui-body"
         />
         <span class="flex min-w-0 flex-1 items-center gap-2.5">
-          <span class={`shrink-0 text-[11.5px] ${STATUS_TONE[props.project.status]}`}>
+          <span class={`shrink-0 text-ui-detail ${STATUS_TONE[props.project.status]}`}>
             {statusSuffix(props.project.status)}
           </span>
-          <span class="ml-auto shrink-0 text-[11.5px] text-az-muted">{summary()}</span>
+          <span class="ml-auto shrink-0 text-az-muted text-ui-detail">{summary()}</span>
         </span>
 
         <Button
+          id={`home-project-${props.project.id}-pin`}
           type="button"
           onClick={() => void actions.setProjectPinned(props.project.id, !props.project.pinned)}
           aria-pressed={props.project.pinned ? "true" : "false"}
           aria-label={props.project.pinned ? tx("Unpin project") : tx("Pin project")}
           class={`shrink-0 transition-colors ${props.project.pinned ? "text-primary" : "text-az-muted hover:text-az-strong"}`}
         >
-          <Icon name="pin" class="text-[14px]" />
+          <Icon name="pin" class="text-ui-control" />
         </Button>
 
         {/*
@@ -1381,18 +1421,20 @@ function ProjectGroup(props: {
           when={confirming()}
           fallback={
             <Button
+              id={`home-project-${props.project.id}-delete`}
               type="button"
               onClick={() => setConfirming(true)}
               aria-label={tx("Delete project {name}", { name: props.project.name })}
               class="shrink-0 text-az-muted transition-colors hover:text-error"
             >
-              <Icon name="x" class="text-[14px]" />
+              <Icon name="x" class="text-ui-control" />
             </Button>
           }
         >
           <div class="flex shrink-0 items-center gap-1.5">
-            <span class="text-[11px] text-az-muted">{tx("Delete?")}</span>
+            <span class="text-az-muted text-ui-caption">{tx("Delete?")}</span>
             <Button
+              id={`home-project-${props.project.id}-delete-confirm`}
               type="button"
               onClick={() => void remove()}
               disabled={isDeleting()}
@@ -1404,14 +1446,15 @@ function ProjectGroup(props: {
               title={tx(
                 "Removes this project and its transcript, items, pull requests and sessions from the store. Usage/cost history is kept.",
               )}
-              class="rounded-md border border-error/40 bg-error/15 px-2 py-0.5 font-semibold text-[11px] text-error transition-colors hover:bg-error/25 disabled:opacity-50"
+              class="rounded-md border border-error/40 bg-error/15 px-2 py-0.5 font-semibold text-error text-ui-caption transition-colors hover:bg-error/25 disabled:opacity-50"
             >
               {isDeleting() ? tx("Deleting…") : tx("Delete")}
             </Button>
             <Button
+              id={`home-project-${props.project.id}-delete-cancel`}
               type="button"
               onClick={() => setConfirming(false)}
-              class="rounded-md px-2 py-0.5 text-[11px] text-az-muted transition-colors hover:text-base-content"
+              class="rounded-md px-2 py-0.5 text-az-muted text-ui-caption transition-colors hover:text-base-content"
             >
               {tx("Cancel")}
             </Button>
@@ -1419,6 +1462,7 @@ function ProjectGroup(props: {
         </Show>
 
         <Button
+          id={`home-project-${props.project.id}-collapse`}
           type="button"
           onClick={toggleCollapsed}
           aria-expanded={!collapsed() ? "true" : "false"}
@@ -1427,7 +1471,7 @@ function ProjectGroup(props: {
           })}
           class="shrink-0 text-az-muted transition-colors hover:text-az-body"
         >
-          <Icon name={collapsed() ? "chevron-right" : "chevron-down"} class="text-[14px]" />
+          <Icon name={collapsed() ? "chevron-right" : "chevron-down"} class="text-ui-control" />
         </Button>
       </div>
 
@@ -1464,9 +1508,10 @@ function ProjectGroup(props: {
           </For>
           <Show when={itemGrid.hasMore()}>
             <Button
+              id={`home-project-${props.project.id}-items-more`}
               type="button"
               onClick={itemGrid.revealMore}
-              class="border-az-hairline-soft border-t px-3.5 py-2 text-left font-semibold text-[11px] text-primary transition-colors hover:bg-az-chip"
+              class="border-az-hairline-soft border-t px-3.5 py-2 text-left font-semibold text-primary text-ui-caption transition-colors hover:bg-az-chip"
             >
               {tx("Show {count} more items", { count: itemGrid.nextCount() })}
             </Button>

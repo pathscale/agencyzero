@@ -15,7 +15,11 @@ AppProfile(
         (
             name: "settings",
             opener: "Settings",
-            marker: Some("Appearance"),
+            // The search field never filters itself out. A section title such
+            // as Appearance does, which made a focused check already on
+            // Settings try to reopen the tab and then time out waiting for a
+            // marker its own previous filter had hidden.
+            marker: Some("Search settings"),
             reveal_with: Some("Search settings"),
         ),
         (name: "analytics", opener: "Analytics", marker: Some("Outcome per dollar")),

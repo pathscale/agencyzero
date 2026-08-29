@@ -1,10 +1,40 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import ts from "typescript";
 
 const sourceRoot = join(import.meta.dir, "..", "src");
 const repositoryRoot = join(import.meta.dir, "..", "..", "..", "..");
 const qaRoot = join(repositoryRoot, "tests", "ps-qa");
 const nativeSelectOwner = join(sourceRoot, "features", "settings", "SettingsTab.tsx");
+
+/**
+ * Components whose rendered output contains the control QA addresses.
+ *
+ * Compound roots such as Select and Tabs derive IDs for their trigger/tab
+ * children from this base. Requiring the base at the call site keeps product
+ * identity out of framework creation order while letting the component own
+ * its internal suffixes.
+ */
+const alwaysIdOwnedControls = new Set([
+  "Button",
+  "LanguageSwitcher",
+  "PillMenu",
+  "button",
+  "input",
+  "select",
+  "textarea",
+]);
+const uiIdOwnedControls = new Set([
+  "Checkbox",
+  "ComplexColorWheel",
+  "InlineEdit",
+  "Input.Field",
+  "Select",
+  "Slider",
+  "Switch",
+  "Tabs.Root",
+  "Textarea",
+]);
 
 // Every value-bearing @pathscale/ui primitive. Keep this list broader than the
 // imports below: adding one of these to AgencyZero must also add real rendered
@@ -69,6 +99,58 @@ const violations = tsxFiles(sourceRoot).flatMap((file) => {
       .map((tag) => `${file}:${index + 1}: ${tag}`);
   });
 });
+
+const literalIds = new Map<string, string>();
+for (const file of tsxFiles(sourceRoot)) {
+  const source = readFileSync(file, "utf8");
+  const sourceFile = ts.createSourceFile(
+    file,
+    source,
+    ts.ScriptTarget.Latest,
+    true,
+    ts.ScriptKind.TSX,
+  );
+  const uiImports = new Set<string>();
+  for (const statement of sourceFile.statements) {
+    if (!ts.isImportDeclaration(statement) || !ts.isStringLiteral(statement.moduleSpecifier)) {
+      continue;
+    }
+    if (!statement.moduleSpecifier.text.startsWith("@pathscale/ui")) continue;
+    const bindings = statement.importClause?.namedBindings;
+    if (!bindings || !ts.isNamedImports(bindings)) continue;
+    for (const imported of bindings.elements) uiImports.add(imported.name.text);
+  }
+
+  const visit = (node: ts.Node): void => {
+    if (ts.isJsxOpeningElement(node) || ts.isJsxSelfClosingElement(node)) {
+      const tag = node.tagName.getText(sourceFile);
+      const rootTag = tag.split(".")[0];
+      const ownsId =
+        alwaysIdOwnedControls.has(tag) || (uiIdOwnedControls.has(tag) && uiImports.has(rootTag));
+      if (ownsId) {
+        const id = node.attributes.properties.find(
+          (attribute): attribute is ts.JsxAttribute =>
+            ts.isJsxAttribute(attribute) && attribute.name.getText(sourceFile) === "id",
+        );
+        const line = sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile)).line + 1;
+        if (!id) {
+          violations.push(`${file}:${line}: <${tag}> has no stable id`);
+        } else if (id.initializer && ts.isStringLiteral(id.initializer)) {
+          const prior = literalIds.get(id.initializer.text);
+          if (prior) {
+            violations.push(
+              `${file}:${line}: duplicate literal id "${id.initializer.text}" (first at ${prior})`,
+            );
+          } else {
+            literalIds.set(id.initializer.text, `${file}:${line}`);
+          }
+        }
+      }
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(sourceFile);
+}
 
 const importedInputs = new Set<string>();
 for (const file of tsxFiles(sourceRoot)) {

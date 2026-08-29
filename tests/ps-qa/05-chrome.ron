@@ -50,7 +50,8 @@
         hover: None,
         click: Some("Hide the project sidebar"),
         subject: "Show the project sidebar",
-        expect: Paints,
+        expect_size: Some("20x40"),
+        expect: Measures,
     ),
     (
         id: "chrome-show-project-sidebar",
@@ -60,7 +61,8 @@
         hover: None,
         click: Some("Show the project sidebar"),
         subject: "Hide the project sidebar",
-        expect: Paints,
+        expect_size: Some("20x40"),
+        expect: Measures,
     ),
     (
         id: "chrome-project-sort-time",

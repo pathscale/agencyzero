@@ -1504,21 +1504,35 @@ async fn quit_app_and_proxy(app: AppHandle, state: State<'_, AppState>) -> Resul
 /// disk rather than overwritten, so it is still there to look at.
 #[tauri::command]
 fn get_settings(state: State<'_, AppState>) -> GlobalSettings {
-    let has_projects = state
-        .tables
-        .project
-        .select_all()
-        .execute()
-        .is_ok_and(|projects| !projects.is_empty());
-    let mut settings = match state.tables.kv_get(settings::KEY) {
-        Some(raw) => serde_json::from_str(&raw).unwrap_or_else(|error| {
+    let stored = state.tables.kv_get(settings::KEY);
+    let parsed = stored
+        .as_deref()
+        .map(serde_json::from_str::<GlobalSettings>);
+    // Project existence only repairs a missing/corrupt or pre-onboarding
+    // settings row. Once the durable row says onboarding completed, scanning
+    // every project cannot change the answer and must not be on every launch.
+    let settled = parsed
+        .as_ref()
+        .and_then(|result| result.as_ref().ok())
+        .and_then(|settings| settings.onboarding_completed)
+        .unwrap_or(false);
+    let has_projects = settled
+        || state
+            .tables
+            .project
+            .select_all()
+            .execute()
+            .is_ok_and(|projects| !projects.is_empty());
+    let mut settings = match parsed {
+        Some(Ok(settings)) => settings,
+        Some(Err(error)) => {
             crate::log!(
                 log::Level::Warn,
                 "settings",
                 "record unreadable, using established-store defaults: {error}"
             );
             settings::defaults_for_store(has_projects)
-        }),
+        }
         None => settings::defaults_for_store(has_projects),
     };
     settings::normalize_for_store(&mut settings, has_projects);

@@ -55,6 +55,7 @@ describe("paging the task log", () => {
     SETTINGS.workspaceTabs = null;
     setPrefs((d) => {
       d.openTabKeys = ["cafe"];
+      d.lastTabKey = "cafe";
     });
 
     const workspace = await bootWorkspace();
@@ -93,6 +94,7 @@ describe("paging the task log", () => {
     SETTINGS.workspaceTabs = null;
     setPrefs((d) => {
       d.openTabKeys = ["cafe"];
+      d.lastTabKey = "cafe";
     });
 
     const workspace = await bootWorkspace();

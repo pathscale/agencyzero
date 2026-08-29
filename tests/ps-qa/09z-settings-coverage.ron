@@ -79,6 +79,7 @@
         click: Some("menuitem:Claude"),
         subject: "Task manager agent",
         expect: NameChanges,
+        covers: ["#settings-task-manager-agent--trigger"],
     ),
     (
         id: "settings-task-manager-directory-adds",
@@ -159,6 +160,7 @@
         click: None,
         subject: "Create it",
         expect: Vanishes,
+        covers: ["#settings-workspace-create"],
     ),
     (
         id: "settings-snapshot-completes",
@@ -323,6 +325,7 @@
         click: Some("menuitem:Restart & update"),
         subject: "Agent restart authority",
         expect: NameChanges,
+        covers: ["#settings-agent-restart-authority--trigger"],
     ),
     (
         id: "settings-task-manager-effort-restores",

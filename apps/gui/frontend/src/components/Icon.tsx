@@ -13,7 +13,7 @@ export type IconProps = Omit<JSX.SvgSVGAttributes<SVGSVGElement>, "children"> & 
  * One icon, with its artwork inlined from {@link ICON_ART}.
  *
  * Sized in `em` and stroked with `currentColor`, so it takes its size and
- * colour from the surrounding text: `<span class="text-primary text-[14px]">`
+ * colour from the surrounding text: `<span class="text-primary text-ui-control">`
  * styles the icon and the label together.
  */
 export function Icon(props: IconProps): JSX.Element {
@@ -61,7 +61,7 @@ export function Icon(props: IconProps): JSX.Element {
        *
        * Without the attributes usvg uses the `viewBox` and reports 24x24, so
        * the artwork arrives at its authored scale and CSS decides the size, as
-       * `size-*` and `text-[13px]` on the callers already intend.
+       * `size-*` and `text-ui-body` on the callers already intend.
        */
       fill="none"
       /*

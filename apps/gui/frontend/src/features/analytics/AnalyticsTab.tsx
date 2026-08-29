@@ -93,7 +93,7 @@ export function AnalyticsTab(): JSX.Element {
         <Show
           when={data()}
           fallback={
-            <div class="flex flex-1 items-center justify-center py-16 text-[12.5px] text-az-muted">
+            <div class="flex flex-1 items-center justify-center py-16 text-az-muted text-ui-label-lg">
               {tx("Loading usage…")}
             </div>
           }
@@ -108,6 +108,7 @@ export function AnalyticsTab(): JSX.Element {
               />
 
               <Tabs.Root
+                id="analytics-sections"
                 selectedKey={activeTab()}
                 onSelectionChange={(key) => setActiveTab(key as AnalyticsTabKey)}
                 class="gap-0"
@@ -123,7 +124,7 @@ export function AnalyticsTab(): JSX.Element {
                         <Tabs.Tab
                           id={tab.key}
                           aria-label={tx(tab.label)}
-                          class={`shrink-0 rounded-md px-3 py-1.5 font-medium text-[11.5px] transition-colors ${
+                          class={`shrink-0 rounded-md px-3 py-1.5 font-medium text-ui-detail transition-colors ${
                             selected()
                               ? "bg-base-100 text-az-title shadow-sm"
                               : "text-az-muted hover:bg-base-100/55 hover:text-az-strong"
@@ -177,15 +178,15 @@ function ItemBreakdown(props: { items: UsageItem[] }): JSX.Element {
   return (
     <div class="rounded-xl border border-az-hairline bg-base-100 px-4 py-3.5">
       <div class="flex items-baseline justify-between gap-3">
-        <h2 class="font-medium text-[12.5px] text-az-title">{tx("Per item")}</h2>
-        <span class="text-[10.5px] text-az-muted">
+        <h2 class="font-medium text-az-title text-ui-label-lg">{tx("Per item")}</h2>
+        <span class="text-az-muted text-ui-caption-sm">
           {tx("measured agent-active time from captured runs")}
         </span>
       </div>
       <Show
         when={props.items.length > 0}
         fallback={
-          <div class="py-8 text-center text-[11.5px] text-az-muted">
+          <div class="py-8 text-center text-az-muted text-ui-detail">
             {tx("No item-linked runs yet")}
           </div>
         }
@@ -195,20 +196,20 @@ function ItemBreakdown(props: { items: UsageItem[] }): JSX.Element {
             {(item) => (
               <div class="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 rounded-lg border border-az-hairline px-3 py-2.5">
                 <div class="min-w-0">
-                  <div class="truncate text-[11.5px] text-az-strong" title={item.itemId}>
+                  <div class="truncate text-az-strong text-ui-detail" title={item.itemId}>
                     {item.itemTitle}
                   </div>
-                  <div class="mt-1 truncate font-mono text-[10px] text-az-muted">
+                  <div class="mt-1 truncate font-mono text-az-muted text-ui-tiny">
                     {item.projectName} · {item.agents.join(", ") || "—"} · {item.turns}{" "}
                     {tx("turns")}
                     {item.completed ? ` · ${tx("finished")}` : ""}
                   </div>
                 </div>
                 <div class="text-right">
-                  <div class="font-mono font-semibold text-[12px] text-primary">
+                  <div class="font-mono font-semibold text-primary text-ui-label">
                     {agentTime(item.durationMs)}
                   </div>
-                  <div class="mt-0.5 text-[9.5px] text-az-muted">{tx("agent time")}</div>
+                  <div class="mt-0.5 text-az-muted text-ui-micro">{tx("agent time")}</div>
                 </div>
               </div>
             )}
@@ -225,8 +226,8 @@ function AgentValue(props: { agents: UsageAgentValue[] }): JSX.Element {
     <Show when={props.agents.length > 0}>
       <div class="rounded-xl border border-az-hairline bg-base-100 px-4 py-3.5">
         <div class="flex items-baseline justify-between gap-3">
-          <h2 class="font-medium text-[12.5px] text-az-title">{tx("Outcome per dollar")}</h2>
-          <span class="text-[10.5px] text-az-muted">
+          <h2 class="font-medium text-az-title text-ui-label-lg">{tx("Outcome per dollar")}</h2>
+          <span class="text-az-muted text-ui-caption-sm">
             {tx("captured completions and attributed turns only")}
           </span>
         </div>
@@ -235,24 +236,24 @@ function AgentValue(props: { agents: UsageAgentValue[] }): JSX.Element {
             {(agent) => (
               <div class="rounded-lg border border-az-hairline px-3 py-2.5">
                 <div class="flex items-baseline justify-between gap-2">
-                  <span class="font-semibold text-[12px] text-az-strong">
+                  <span class="font-semibold text-az-strong text-ui-label">
                     {agent.agent === "codex"
                       ? "Codex"
                       : agent.agent === "claude"
                         ? "Claude"
                         : agent.agent}
                   </span>
-                  <span class="font-mono text-[12px] text-primary">
+                  <span class="font-mono text-primary text-ui-label">
                     {agent.costPerCompletedItem === null
                       ? "—"
                       : `${dollars(agent.costPerCompletedItem)} / ${tx("finished item")}`}
                   </span>
                 </div>
-                <div class="mt-1.5 font-mono text-[10.5px] text-az-muted">
+                <div class="mt-1.5 font-mono text-az-muted text-ui-caption-sm">
                   {agent.completedItems} {tx("finished")} · {agent.turns} {tx("turns")} ·{" "}
                   {tokens(agent.processedTokens)} {tx("processed")}
                 </div>
-                <div class="mt-1 text-[10.5px] text-az-faint">
+                <div class="mt-1 text-az-faint text-ui-caption-sm">
                   {dollars(agent.effectiveCostUsd)} {tx("effective cost")}
                   {agent.estimatedCostUsd > 0 ? ` · ${tx("includes local estimates")}` : ""}
                 </div>
@@ -271,21 +272,23 @@ function SessionBreakdown(props: { sessions: UsageSession[] }): JSX.Element {
     <Show when={props.sessions.length > 0}>
       <div class="rounded-xl border border-az-hairline bg-base-100 px-4 py-3.5">
         <div class="flex items-baseline justify-between gap-3">
-          <h2 class="font-medium text-[12.5px] text-az-title">{tx("Per session")}</h2>
-          <span class="text-[10.5px] text-az-muted">{tx("captured from this build onward")}</span>
+          <h2 class="font-medium text-az-title text-ui-label-lg">{tx("Per session")}</h2>
+          <span class="text-az-muted text-ui-caption-sm">
+            {tx("captured from this build onward")}
+          </span>
         </div>
         <div class="mt-3 flex flex-col gap-2.5">
           <For each={props.sessions}>
             {(session) => (
               <div class="rounded-lg border border-az-hairline px-3 py-2.5">
-                <div class="flex items-baseline gap-2 text-[11.5px]">
+                <div class="flex items-baseline gap-2 text-ui-detail">
                   <span class="min-w-0 flex-1 truncate text-az-strong">{session.projectName}</span>
-                  <span class="font-mono text-[10.5px] text-az-muted">{session.agent}</span>
-                  <span class="font-mono text-[11px] text-az-title">
+                  <span class="font-mono text-az-muted text-ui-caption-sm">{session.agent}</span>
+                  <span class="font-mono text-az-title text-ui-caption">
                     {dollars(session.costUsd)}
                   </span>
                 </div>
-                <div class="mt-1 flex items-center gap-2 font-mono text-[10.5px] text-az-muted">
+                <div class="mt-1 flex items-center gap-2 font-mono text-az-muted text-ui-caption-sm">
                   <span title={session.sessionId || tx("Provider supplied no session id")}>
                     {session.sessionId ? session.sessionId.slice(0, 8) : tx("no session id")}
                   </span>
@@ -317,18 +320,18 @@ function SessionBreakdown(props: { sessions: UsageSession[] }): JSX.Element {
 function ProjectBreakdown(props: { projects: UsageProject[]; total: number }): JSX.Element {
   return (
     <div class="rounded-xl border border-az-hairline bg-base-100 px-4 py-3.5">
-      <h2 class="font-medium text-[12.5px] text-az-title">{tx("Per project")}</h2>
+      <h2 class="font-medium text-az-title text-ui-label-lg">{tx("Per project")}</h2>
       <div class="mt-3 flex flex-col gap-3">
         <For each={props.projects}>
           {(project) => {
             const share = () => (project.costUsd / Math.max(props.total, 0.000001)) * 100;
             return (
               <div>
-                <div class="flex items-baseline gap-2 text-[11.5px]">
+                <div class="flex items-baseline gap-2 text-ui-detail">
                   <span class="min-w-0 flex-1 truncate text-az-strong" title={project.projectId}>
                     {project.projectName}
                   </span>
-                  <span class="font-mono text-[10.5px] text-az-muted">
+                  <span class="font-mono text-az-muted text-ui-caption-sm">
                     {project.turns} {tx("turns")}
                   </span>
                   <span class="w-[58px] text-right font-mono text-az-strong">
@@ -338,7 +341,7 @@ function ProjectBreakdown(props: { projects: UsageProject[]; total: number }): J
                 <div class="mt-1.5 h-1.5 overflow-hidden rounded-full bg-base-300">
                   <div class="h-full rounded-full bg-primary" style={{ width: `${share()}%` }} />
                 </div>
-                <div class="mt-1 flex justify-between font-mono text-[9.5px] text-az-faint">
+                <div class="mt-1 flex justify-between font-mono text-az-faint text-ui-micro">
                   <span>{share().toFixed(1)}%</span>
                   <span>
                     {tx("in")} {tokens(project.inputTokens)} · {tx("out")}{" "}
@@ -472,10 +475,10 @@ function HeadlineRow(props: {
           {tx("Analytics refresh generation {count}", { count: props.refreshGeneration })}
         </span>
         <div class="min-w-0 flex-1">
-          <h1 class="font-semibold text-[16px] text-az-title tracking-[-.01em]">
+          <h1 class="font-semibold text-az-title text-ui-title tracking-[-.01em]">
             {tx("Analytics")}
           </h1>
-          <div class="flex flex-wrap items-center gap-x-2 text-[9.5px] text-az-muted">
+          <div class="flex flex-wrap items-center gap-x-2 text-az-muted text-ui-micro">
             <span>{tx("usage ledger")}</span>
             <Show when={props.usage.importedTurns > 0}>
               <span>
@@ -488,6 +491,7 @@ function HeadlineRow(props: {
           </div>
         </div>
         <Button
+          id="analytics-refresh"
           type="button"
           aria-label={tx("Refresh analytics")}
           title={tx("Refresh analytics")}
@@ -495,7 +499,10 @@ function HeadlineRow(props: {
           disabled={props.refreshing}
           class="flex size-8 shrink-0 items-center justify-center rounded-lg text-primary transition-colors hover:bg-az-chip disabled:cursor-wait disabled:opacity-55"
         >
-          <Icon name="refresh-cw" class={`text-[13px] ${props.refreshing ? "animate-spin" : ""}`} />
+          <Icon
+            name="refresh-cw"
+            class={`text-ui-body ${props.refreshing ? "animate-spin" : ""}`}
+          />
         </Button>
       </div>
       <div class="grid grid-cols-2 gap-1.5 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
@@ -505,8 +512,8 @@ function HeadlineRow(props: {
               class="flex min-w-0 flex-col justify-center rounded-lg border border-az-hairline bg-az-inset px-2.5 py-2"
               title={tile.title}
             >
-              <div class="truncate text-[9.5px] text-az-muted">{tile.label}</div>
-              <div class={`mt-0.5 truncate font-bold font-mono text-[15px] ${tile.tone}`}>
+              <div class="truncate text-az-muted text-ui-micro">{tile.label}</div>
+              <div class={`mt-0.5 truncate font-bold font-mono text-ui-lead ${tile.tone}`}>
                 {tile.value}
               </div>
               {/*
@@ -523,7 +530,7 @@ function HeadlineRow(props: {
                 footnote that can only be read by hovering is not a footnote.
               */}
               <Show when={tile.detail}>
-                <div class="mt-0.5 text-[10px] text-az-body leading-[1.4]" title={tile.detail}>
+                <div class="mt-0.5 text-az-body text-ui-tiny leading-[1.4]" title={tile.detail}>
                   {tile.detail}
                 </div>
               </Show>
@@ -558,14 +565,14 @@ function DaySeries(props: { days: UsageDay[] }): JSX.Element {
   return (
     <div class="rounded-xl border border-az-hairline bg-base-100 px-4 py-3.5">
       <div class="flex items-center justify-between">
-        <h2 class="font-medium text-[12.5px] text-az-title">{tx("Per day")}</h2>
+        <h2 class="font-medium text-az-title text-ui-label-lg">{tx("Per day")}</h2>
         <Legend />
       </div>
       <div class="mt-3 flex flex-col gap-2.5">
         <For each={props.days}>
           {(day) => (
             <div class="flex items-center gap-3">
-              <span class="w-[52px] shrink-0 font-mono text-[11px] text-az-muted">
+              <span class="w-[52px] shrink-0 font-mono text-az-muted text-ui-caption">
                 {day.day.slice(5)}
               </span>
               <div class="flex h-3 min-w-0 flex-1 overflow-hidden rounded-full bg-base-300">
@@ -579,7 +586,7 @@ function DaySeries(props: { days: UsageDay[] }): JSX.Element {
                   )}
                 </For>
               </div>
-              <span class="w-[52px] shrink-0 text-right font-mono text-[11px] text-az-strong">
+              <span class="w-[52px] shrink-0 text-right font-mono text-az-strong text-ui-caption">
                 {dollars(day.costUsd)}
               </span>
             </div>
@@ -602,7 +609,7 @@ function Legend(): JSX.Element {
     <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
       <For each={TOKEN_CLASSES}>
         {(cls) => (
-          <span class="flex items-center gap-1.5 text-[10.5px] text-az-muted">
+          <span class="flex items-center gap-1.5 text-az-muted text-ui-caption-sm">
             <span class={`size-2 rounded-[3px] ${cls.tone}`} />
             {label[cls.key]}
           </span>
@@ -616,9 +623,9 @@ function Legend(): JSX.Element {
 function ModelBreakdown(props: { models: UsageModel[] }): JSX.Element {
   return (
     <div class="rounded-xl border border-az-hairline bg-base-100 px-4 py-3.5">
-      <h2 class="font-medium text-[12.5px] text-az-title">{tx("Per model")}</h2>
+      <h2 class="font-medium text-az-title text-ui-label-lg">{tx("Per model")}</h2>
       <div class="mt-3 flex flex-col gap-2">
-        <div class="grid grid-cols-6 gap-2 border-az-hairline border-b pb-1.5 text-[10.5px] text-az-muted">
+        <div class="grid grid-cols-6 gap-2 border-az-hairline border-b pb-1.5 text-az-muted text-ui-caption-sm">
           <span class="col-span-1">{tx("Model")}</span>
           <span class="text-right">{tx("Cost")}</span>
           <span class="text-right">{tx("Input")}</span>
@@ -628,7 +635,7 @@ function ModelBreakdown(props: { models: UsageModel[] }): JSX.Element {
         </div>
         <For each={props.models}>
           {(model) => (
-            <div class="grid grid-cols-6 items-center gap-2 text-[11.5px]">
+            <div class="grid grid-cols-6 items-center gap-2 text-ui-detail">
               <span class="col-span-1 min-w-0 truncate text-az-strong">{model.model}</span>
               <span class="text-right font-mono text-az-strong">{dollars(model.costUsd)}</span>
               <span class="text-right font-mono text-az-body">{tokens(model.inputTokens)}</span>

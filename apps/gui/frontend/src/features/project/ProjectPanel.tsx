@@ -105,6 +105,7 @@ export function ProjectPanel(props: { project: Project; agent: Agent }): JSX.Ele
     // pixels this element already blurred. Seven full-frame passes became two.
     <div class="az-glass az-scroll flex h-full min-h-0 w-[332px] flex-none flex-col gap-2.5 overflow-y-auto overscroll-contain">
       <SectionPanel
+        id={`project-${props.project.id}-items`}
         icon="list-checks"
         title={tx("Items")}
         count={openItemCount(props.project.id)}
@@ -124,6 +125,7 @@ export function ProjectPanel(props: { project: Project; agent: Agent }): JSX.Ele
       {sectionMark("items")}
 
       <SectionPanel
+        id={`project-${props.project.id}-running`}
         title={tx("Running")}
         count={running().length}
         countTone="primary"
@@ -146,6 +148,7 @@ export function ProjectPanel(props: { project: Project; agent: Agent }): JSX.Ele
         160px of blank space is not collapsed, it is furniture.
       */}
       <SectionPanel
+        id={`project-${props.project.id}-task-log`}
         icon="history"
         title={tx("Task log")}
         count={state.logTotals[props.project.id] ?? taskLog().length}
@@ -165,6 +168,7 @@ export function ProjectPanel(props: { project: Project; agent: Agent }): JSX.Ele
       {sectionMark("tasklog")}
 
       <SectionPanel
+        id={`project-${props.project.id}-agent-io`}
         icon="terminal"
         title={tx("Agent I/O")}
         count={io().length}
@@ -178,6 +182,7 @@ export function ProjectPanel(props: { project: Project; agent: Agent }): JSX.Ele
       {sectionMark("agentio")}
 
       <SectionPanel
+        id={`project-${props.project.id}-notes`}
         icon="sparkles"
         title={tx("Kept across compaction")}
         isOpen={prefs.panelSections.notes}
@@ -224,13 +229,14 @@ function ItemSortControls(): JSX.Element {
       aria-label={tx("Sort items")}
     >
       <Button
+        id="project-items-sort-by"
         type="button"
         onClick={() =>
           setPrefs((d) => {
             d.itemSortBy = sortBy() === "status" ? "time" : "status";
           })
         }
-        class="rounded-full border border-az-hairline bg-az-inset px-2 py-0.5 font-medium text-[10.5px] text-az-muted transition-colors hover:text-az-strong"
+        class="rounded-full border border-az-hairline bg-az-inset px-2 py-0.5 font-medium text-az-muted text-ui-caption-sm transition-colors hover:text-az-strong"
         aria-label={
           sortBy() === "status"
             ? tx("Sort items by status; choose time")
@@ -241,6 +247,7 @@ function ItemSortControls(): JSX.Element {
         {sortBy() === "status" ? tx("Status") : tx("Time")}
       </Button>
       <Button
+        id="project-items-sort-direction"
         type="button"
         onClick={() =>
           setPrefs((d) => {
@@ -253,7 +260,7 @@ function ItemSortControls(): JSX.Element {
       >
         <Icon
           name="arrow-up"
-          class={`text-[11px] transition-transform ${direction() === "desc" ? "rotate-180" : ""}`}
+          class={`text-ui-caption transition-transform ${direction() === "desc" ? "rotate-180" : ""}`}
         />
       </Button>
     </fieldset>
@@ -312,13 +319,14 @@ function IoPersistToggle(props: { projectId: string }): JSX.Element {
 
   return (
     <Checkbox
+      id={`project-${props.projectId}-agent-io-persist`}
       checked={enabled()}
       state={!isLive("setIoPersist") ? "disabled" : undefined}
       onChange={(event) => void toggle(event.currentTarget.checked)}
       title={tx(
         "Keep this project's raw exchange in the database, so it survives a restart. Off by default: a long run writes thousands of rows.",
       )}
-      class="az-compact-checkbox px-3.5 py-2 text-[11px] text-az-muted"
+      class="az-compact-checkbox px-3.5 py-2 text-az-muted text-ui-caption"
     >
       {tx("Keep across restarts")}
     </Checkbox>
@@ -340,7 +348,7 @@ export function AgentIoList(props: { projectId: string }): JSX.Element {
    */
   const [tall, setTall] = createSignal(false);
   const resizeButtonClass =
-    "rounded-md border border-az-hairline px-2 py-0.5 text-[10.5px] text-az-muted transition-colors hover:border-az-hairline-strong hover:text-base-content";
+    "rounded-md border border-az-hairline px-2 py-0.5 text-ui-caption-sm text-az-muted transition-colors hover:border-az-hairline-strong hover:text-base-content";
 
   /** Newest last, so it reads like a terminal; the view follows the tail. */
   let scroller: HTMLDivElement | undefined;
@@ -392,7 +400,7 @@ export function AgentIoList(props: { projectId: string }): JSX.Element {
       <Show
         when={lines().length > 0}
         fallback={
-          <p class="px-3.5 py-6 text-center text-[11.5px] text-az-muted">
+          <p class="px-3.5 py-6 text-center text-az-muted text-ui-detail">
             {tx("Nothing sent yet on this project.")}
           </p>
         }
@@ -402,6 +410,7 @@ export function AgentIoList(props: { projectId: string }): JSX.Element {
             when={tall()}
             fallback={
               <Button
+                id={`project-${props.projectId}-agent-io-expand`}
                 type="button"
                 onClick={() => setTall(true)}
                 aria-label={`${tx("Agent I/O")}: ${tx("Expand")}`}
@@ -412,6 +421,7 @@ export function AgentIoList(props: { projectId: string }): JSX.Element {
             }
           >
             <Button
+              id={`project-${props.projectId}-agent-io-shrink`}
               type="button"
               onClick={() => setTall(false)}
               aria-label={`${tx("Agent I/O")}: ${tx("Shrink")}`}
@@ -421,13 +431,14 @@ export function AgentIoList(props: { projectId: string }): JSX.Element {
             </Button>
           </Show>
           <Button
+            id={`project-${props.projectId}-agent-io-copy-all`}
             type="button"
             onClick={() => void copyAll()}
-            class="rounded-md border border-az-hairline px-2 py-0.5 text-[10.5px] text-az-muted transition-colors hover:border-az-hairline-strong hover:text-base-content"
+            class="rounded-md border border-az-hairline px-2 py-0.5 text-az-muted text-ui-caption-sm transition-colors hover:border-az-hairline-strong hover:text-base-content"
           >
             {copied() ? tx("Copied all") : tx("Copy all")}
           </Button>
-          <span class="ml-auto text-[10.5px] text-az-faint">
+          <span class="ml-auto text-az-faint text-ui-caption-sm">
             {lines().length} {tx("entries")}
           </span>
         </div>
@@ -440,7 +451,7 @@ export function AgentIoList(props: { projectId: string }): JSX.Element {
         <div
           ref={scroller}
           data-selectable
-          class={`az-scroll flex flex-col gap-1.5 overflow-y-auto px-2.5 pb-2.5 font-mono text-[11px] ${
+          class={`az-scroll flex flex-col gap-1.5 overflow-y-auto px-2.5 pb-2.5 font-mono text-ui-caption ${
             tall() ? "max-h-[62vh]" : "max-h-[220px]"
           }`}
         >
@@ -460,7 +471,7 @@ export function AgentIoList(props: { projectId: string }): JSX.Element {
                     {line.direction === "sent" ? "→" : "←"}
                   </span>
                   <span class="shrink-0 font-semibold text-az-muted">{line.kind}</span>
-                  <span class="ml-auto shrink-0 text-[10px] text-az-faint">
+                  <span class="ml-auto shrink-0 text-az-faint text-ui-tiny">
                     {clockTime(line.at)}
                   </span>
                 </div>
@@ -470,7 +481,7 @@ export function AgentIoList(props: { projectId: string }): JSX.Element {
                   4000-character token. Either would otherwise push the panel
                   sideways.
                 */}
-                <pre class="whitespace-pre-wrap break-all text-[10.5px] text-az-bubble-text">
+                <pre class="whitespace-pre-wrap break-all text-az-bubble-text text-ui-caption-sm">
                   {line.detail}
                 </pre>
               </div>
@@ -535,6 +546,7 @@ function SettingsSection(props: { project: Project; agent: Agent }): JSX.Element
 
   return (
     <SectionPanel
+      id={`project-${props.project.id}-settings`}
       icon="sliders-horizontal"
       title={tx("Settings")}
       note={`· ${props.project.dirs.length} ${
@@ -546,22 +558,23 @@ function SettingsSection(props: { project: Project; agent: Agent }): JSX.Element
       contentDelayMs={900}
     >
       <div class="flex flex-col gap-2.5 px-3 pt-3 pb-3.5">
-        <div class="text-[11.5px] text-az-muted">{tx("Working directories")}</div>
+        <div class="text-az-muted text-ui-detail">{tx("Working directories")}</div>
 
         <For each={props.project.dirs}>
           {(dir) => (
             <div class="flex min-w-0 items-center gap-2 rounded-[9px] border border-az-hairline-soft bg-base-300 px-2.5 py-[7px]">
-              <Icon name="folder" class="shrink-0 text-[13px] text-primary/70" />
-              <span class="min-w-0 flex-1 truncate font-mono text-[11.5px] text-az-body">
+              <Icon name="folder" class="shrink-0 text-primary/70 text-ui-body" />
+              <span class="min-w-0 flex-1 truncate font-mono text-az-body text-ui-detail">
                 {dir}
               </span>
               <Button
+                id={`project-${props.project.id}-remove-dir-${encodeURIComponent(dir)}`}
                 type="button"
                 onClick={() => void actions.removeDir(props.project.id, dir)}
                 aria-label={tx("Remove {name}", { name: dir })}
                 class="shrink-0 text-az-faint transition-colors hover:text-error"
               >
-                <Icon name="x" class="text-[13px]" />
+                <Icon name="x" class="text-ui-body" />
               </Button>
             </div>
           )}
@@ -571,11 +584,12 @@ function SettingsSection(props: { project: Project; agent: Agent }): JSX.Element
           when={adding()}
           fallback={
             <Button
+              id={`project-${props.project.id}-add-dir`}
               type="button"
               onClick={() => setAdding(true)}
-              class="flex items-center gap-[7px] rounded-[9px] border border-primary/16 border-dashed px-2.5 py-[7px] text-[11.5px] text-az-muted transition-colors hover:border-primary hover:text-primary"
+              class="flex items-center gap-[7px] rounded-[9px] border border-primary/16 border-dashed px-2.5 py-[7px] text-az-muted text-ui-detail transition-colors hover:border-primary hover:text-primary"
             >
-              <Icon name="folder-plus" class="text-[13px]" />
+              <Icon name="folder-plus" class="text-ui-body" />
               {tx("Add dir")}
             </Button>
           }
@@ -588,6 +602,7 @@ function SettingsSection(props: { project: Project; agent: Agent }): JSX.Element
           */}
           <div class="flex items-center gap-1.5">
             <Button
+              id={`project-${props.project.id}-choose-dir`}
               type="button"
               onClick={() => void pick()}
               disabled={!isLive("chooseProjectDirectory")}
@@ -595,9 +610,10 @@ function SettingsSection(props: { project: Project; agent: Agent }): JSX.Element
               title={tx("Choose a folder")}
               class="shrink-0 cursor-pointer rounded-[9px] border border-primary/40 px-2 py-[7px] text-az-body transition-colors hover:border-primary hover:text-primary disabled:opacity-40"
             >
-              <Icon name="folder-plus" class="text-[13px]" />
+              <Icon name="folder-plus" class="text-ui-body" />
             </Button>
             <Input.Field
+              id={`project-${props.project.id}-dir-path`}
               autofocus
               value={path()}
               placeholder={tx("~/src/…")}
@@ -608,7 +624,7 @@ function SettingsSection(props: { project: Project; agent: Agent }): JSX.Element
                 if (event.key === "Escape") setAdding(false);
               }}
               onBlur={() => void addDir()}
-              class="min-w-0 flex-1 rounded-[9px] border border-primary/40 bg-base-300 px-2.5 py-[7px] font-mono text-[11.5px] text-az-body focus:outline-none"
+              class="min-w-0 flex-1 rounded-[9px] border border-primary/40 bg-base-300 px-2.5 py-[7px] font-mono text-az-body text-ui-detail focus:outline-none"
             />
           </div>
         </Show>
@@ -616,14 +632,15 @@ function SettingsSection(props: { project: Project; agent: Agent }): JSX.Element
         <div class="my-0.5 h-px bg-az-hairline-soft" />
 
         <div class="flex items-center gap-2.5">
-          <Icon name="shield" class="shrink-0 text-[14px] text-warning" />
-          <span class="min-w-0 flex-1 text-[12px] text-az-body">
+          <Icon name="shield" class="shrink-0 text-ui-control text-warning" />
+          <span class="min-w-0 flex-1 text-az-body text-ui-label">
             {tx("Moderator")}
-            <span class="mt-px block text-[11px] text-az-muted">
+            <span class="mt-px block text-az-muted text-ui-caption">
               {tx("this session · global default is")} {moderatorDefault() ? tx("on") : tx("off")}
             </span>
           </span>
           <Switch
+            id={`project-${props.project.id}-moderator`}
             aria-label={tx("Moderator for this session")}
             checked={props.project.moderatorEnabled}
             disabled
@@ -664,8 +681,8 @@ function SettingsSection(props: { project: Project; agent: Agent }): JSX.Element
           }
         />
 
-        <div class="flex gap-[7px] pt-0.5 text-[11px] text-az-faint leading-[1.5]">
-          <Icon name="info" class="relative top-0.5 shrink-0 text-[12px]" />
+        <div class="flex gap-[7px] pt-0.5 text-az-faint text-ui-caption leading-[1.5]">
+          <Icon name="info" class="relative top-0.5 shrink-0 text-ui-label" />
           {tx(
             "Model and permission are per tab — set them in the composer. Everything else lives in global settings.",
           )}
@@ -734,13 +751,14 @@ function ConciseResponseToggle(props: { projectId: string }): JSX.Element {
 
   return (
     <div class="flex items-start gap-2.5">
-      <Icon name="message-square-dashed" class="shrink-0 text-[14px] text-primary/75" />
+      <Icon name="message-square-dashed" class="shrink-0 text-primary/75 text-ui-control" />
       <div class="min-w-0 flex-1">
-        <div class="flex items-center justify-between text-[12px] text-az-body">
+        <div class="flex items-center justify-between text-az-body text-ui-label">
           <span>{tx("Verbosity")}</span>
           <span class="font-medium text-primary">{labels()[index()]}</span>
         </div>
         <Slider
+          id={`project-${props.projectId}-verbosity`}
           label={tx("Response verbosity for this project")}
           min={0}
           max={3}
@@ -753,7 +771,7 @@ function ConciseResponseToggle(props: { projectId: string }): JSX.Element {
           size="sm"
           class="az-quiet-slider mt-1 [&_[data-slot=label]]:sr-only"
         />
-        <span class="mt-1 block text-[10.5px] text-az-muted">{hints()[index()]}</span>
+        <span class="mt-1 block text-az-muted text-ui-caption-sm">{hints()[index()]}</span>
       </div>
     </div>
   );
@@ -797,14 +815,15 @@ function ContextDetailSelect(props: { projectId: string }): JSX.Element {
 
   return (
     <div class="flex items-center gap-2.5">
-      <Icon name="list-checks" class="shrink-0 text-[14px] text-primary/75" />
-      <span class="min-w-0 flex-1 text-[12px] text-az-body">
+      <Icon name="list-checks" class="shrink-0 text-primary/75 text-ui-control" />
+      <span class="min-w-0 flex-1 text-az-body text-ui-label">
         {tx("Context detail")}
-        <span class="mt-px block text-[11px] text-az-muted">
+        <span class="mt-px block text-az-muted text-ui-caption">
           {tx("How much of the item list rides every turn — less means fewer tokens")}
         </span>
       </span>
       <PillMenu
+        id="project-context-detail"
         label={tx("Per-turn context detail for this project")}
         variant="outline"
         value={level()}
@@ -893,10 +912,10 @@ function ResetSession(props: { project: Project; running: boolean }): JSX.Elemen
     <Show when={agents().length > 0}>
       <div class="flex flex-col gap-1.5">
         <div class="flex items-center gap-2.5">
-          <Icon name="history" class="shrink-0 text-[14px] text-primary/75" />
-          <span class="min-w-0 flex-1 text-[12px] text-az-body">
+          <Icon name="history" class="shrink-0 text-primary/75 text-ui-control" />
+          <span class="min-w-0 flex-1 text-az-body text-ui-label">
             {tx("Reset session")}
-            <span class="mt-px block text-[11px] text-az-muted">
+            <span class="mt-px block text-az-muted text-ui-caption">
               {props.running
                 ? tx("A run is stuck; force-reset stops it and keeps this conversation")
                 : tx("Clear stuck run state and continue this conversation")}
@@ -912,8 +931,9 @@ function ResetSession(props: { project: Project; running: boolean }): JSX.Elemen
             when={confirming()}
             fallback={
               <Button
+                id={`project-${props.project.id}-reset-session`}
                 type="button"
-                class={`btn btn-xs text-[11px] ${props.running ? "btn-error" : "border-az-hairline bg-base-100"}`}
+                class={`btn btn-xs text-ui-caption ${props.running ? "btn-error" : "border-az-hairline bg-base-100"}`}
                 onClick={() => setConfirming(true)}
               >
                 {props.running ? tx("Force reset") : tx("Reset")}
@@ -922,16 +942,18 @@ function ResetSession(props: { project: Project; running: boolean }): JSX.Elemen
           >
             <div class="flex items-center gap-1.5">
               <Button
+                id={`project-${props.project.id}-confirm-reset-session`}
                 type="button"
-                class="btn btn-xs btn-error text-[11px]"
+                class="btn btn-xs btn-error text-ui-caption"
                 disabled={busy()}
                 onClick={() => void reset()}
               >
                 {props.running ? tx("Confirm force reset") : tx("Confirm reset")}
               </Button>
               <Button
+                id={`project-${props.project.id}-cancel-reset-session`}
                 type="button"
-                class="btn btn-xs btn-ghost text-[11px]"
+                class="btn btn-xs btn-ghost text-ui-caption"
                 disabled={busy()}
                 onClick={() => setConfirming(false)}
               >
@@ -941,7 +963,7 @@ function ResetSession(props: { project: Project; running: boolean }): JSX.Elemen
           </Show>
         </div>
         <Show when={error()}>
-          <p role="alert" class="pl-[26px] text-[11px] text-error">
+          <p role="alert" class="pl-[26px] text-error text-ui-caption">
             {tx("Could not reset:")} {error()}
           </p>
         </Show>
@@ -988,19 +1010,20 @@ function ResumeSession(props: {
   return (
     <div class="flex flex-col gap-1.5">
       <div class="flex items-center gap-2.5">
-        <Icon name="history" class="shrink-0 text-[14px] text-primary/75" />
-        <span class="min-w-0 flex-1 text-[12px] text-az-body">
+        <Icon name="history" class="shrink-0 text-primary/75 text-ui-control" />
+        <span class="min-w-0 flex-1 text-az-body text-ui-label">
           {tx("Resume a session by id")}
           <output
             aria-live="polite"
             aria-label={sessionStatus()}
-            class="mt-px block text-[11px] text-az-muted"
+            class="mt-px block text-az-muted text-ui-caption"
           >
             {sessionStatus()}
           </output>
         </span>
       </div>
       <Input.Field
+        id={`project-${props.projectId}-resume-session-id`}
         value={id()}
         disabled={busy() || props.running}
         aria-label={`${tx("Resume a session by id")} — ${sessionStatus()}`}
@@ -1010,7 +1033,7 @@ function ResumeSession(props: {
           if (event.key === "Enter") adopt();
           if (event.key === "Escape") setId("");
         }}
-        class="ml-[26px] min-w-0 flex-1 rounded-md border border-az-hairline bg-base-300 px-2 py-1 font-mono text-[11px] text-az-body focus:outline-none disabled:opacity-45"
+        class="ml-[26px] min-w-0 flex-1 rounded-md border border-az-hairline bg-base-300 px-2 py-1 font-mono text-az-body text-ui-caption focus:outline-none disabled:opacity-45"
       />
     </div>
   );
@@ -1053,20 +1076,21 @@ function ApprovalRules(props: { projectId: string }): JSX.Element {
     <Show when={rules().length > 0}>
       <div class="my-0.5 h-px bg-az-hairline-soft" />
       <Flex align="center" gap="sm">
-        <span class="min-w-0 flex-1 text-[11.5px] text-az-muted">
+        <span class="min-w-0 flex-1 text-az-muted text-ui-detail">
           {tx("Remembered approvals · auto-allowed")}
         </span>
         <Button
+          id={`project-${props.projectId}-forget-approval-rules`}
           type="button"
           onClick={forget}
-          class="shrink-0 rounded-md border border-primary/16 px-2 py-0.5 text-[11px] text-az-body transition-colors hover:border-error hover:text-error"
+          class="shrink-0 rounded-md border border-primary/16 px-2 py-0.5 text-az-body text-ui-caption transition-colors hover:border-error hover:text-error"
         >
           {tx("Forget all")}
         </Button>
       </Flex>
       <For each={rules()}>
         {(rule) => (
-          <code class="block truncate rounded-md bg-base-300 px-2 py-1 font-mono text-[11px] text-az-body">
+          <code class="block truncate rounded-md bg-base-300 px-2 py-1 font-mono text-az-body text-ui-caption">
             {rule}
           </code>
         )}
@@ -1379,8 +1403,9 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
       <div class="az-scroll min-h-0 flex-1 overflow-y-auto overflow-x-hidden pt-1.5">
         <Show when={props.items.length > 3}>
           <div class="mb-1 flex items-center gap-2 border-az-hairline-soft border-b bg-az-inset px-2.5 py-1.5">
-            <Icon name="search" class="shrink-0 text-[12px] text-primary/70" />
+            <Icon name="search" class="shrink-0 text-primary/70 text-ui-label" />
             <Input.Field
+              id={`project-${props.projectId}-items-filter`}
               type="text"
               value={query()}
               onInput={(event) => {
@@ -1389,10 +1414,11 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
               }}
               placeholder={tx("Filter items…")}
               aria-label={tx("Filter items")}
-              class="min-w-0 flex-1 bg-transparent text-[12px] text-az-body outline-none placeholder:text-az-faint"
+              class="min-w-0 flex-1 bg-transparent text-az-body text-ui-label outline-none placeholder:text-az-faint"
             />
             <Show when={filtering()}>
               <Button
+                id={`project-${props.projectId}-items-filter-clear`}
                 type="button"
                 onClick={() => {
                   setQuery("");
@@ -1401,13 +1427,13 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
                 aria-label={tx("Clear the filter")}
                 class="shrink-0 rounded-md p-0.5 text-az-faint transition-colors hover:text-az-body"
               >
-                <Icon name="x" class="text-[11px]" />
+                <Icon name="x" class="text-ui-caption" />
               </Button>
             </Show>
           </div>
         </Show>
         <Show when={filtering() && shown().length === 0}>
-          <p class="px-2.5 py-3 text-[12px] text-az-muted">
+          <p class="px-2.5 py-3 text-az-muted text-ui-label">
             {tx("No item matches “{query}”", { query: query().trim() })}
           </p>
         </Show>
@@ -1427,6 +1453,7 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
               fallback={
                 <Show when={editingId() === item.id}>
                   <Input.Field
+                    id={`project-${props.projectId}-item-${item.id}-title-edit`}
                     autofocus
                     value={editTitle()}
                     aria-label={tx("Edit {name}", { name: item.title })}
@@ -1435,7 +1462,7 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
                       if (event.key === "Enter") void saveEdit(item);
                       if (event.key === "Escape") setEditingId(null);
                     }}
-                    class="rounded-[9px] border border-primary/40 bg-base-300 px-2.5 py-2 text-[12.5px] text-az-body focus:outline-none"
+                    class="rounded-[9px] border border-primary/40 bg-base-300 px-2.5 py-2 text-az-body text-ui-label-lg focus:outline-none"
                   />
                 </Show>
               }
@@ -1513,6 +1540,7 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
                      * and the title beside it goes back to being text.
                      */}
                     <Button
+                      id={`project-${props.projectId}-item-${item.id}-status`}
                       type="button"
                       onClick={() => advance(item)}
                       aria-label={tx("Change the status of {name}", { name: item.title })}
@@ -1525,7 +1553,7 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
                       <span
                         data-selectable
                         title={item.title}
-                        class={`line-clamp-2 min-w-0 flex-1 text-[12.5px] leading-[1.35] ${
+                        class={`line-clamp-2 min-w-0 flex-1 text-ui-label-lg leading-[1.35] ${
                           item.status === "active" || item.status === "planning"
                             ? "text-base-content"
                             : item.status === "finished"
@@ -1536,7 +1564,7 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
                         {item.title}
                       </span>
                       <span
-                        class={`flex shrink-0 flex-col items-end text-[10.5px] leading-[1.2] ${
+                        class={`flex shrink-0 flex-col items-end text-ui-caption-sm leading-[1.2] ${
                           item.status === "active"
                             ? "font-semibold text-primary"
                             : item.status === "shipped"
@@ -1578,6 +1606,7 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
                                 >
                                   {(url) => (
                                     <Button
+                                      id={`project-${props.projectId}-item-${item.id}-open-pr`}
                                       type="button"
                                       onClick={() => void actions.openExternal(url())}
                                       title={tx("Open {url}", { url: url() })}
@@ -1592,6 +1621,7 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
                             >
                               {(url) => (
                                 <Button
+                                  id={`project-${props.projectId}-item-${item.id}-open-issue`}
                                   type="button"
                                   onClick={() => void actions.openExternal(url())}
                                   title={tx("Open {url}", { url: url() })}
@@ -1612,6 +1642,7 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
                       when={questionFor(item)}
                       fallback={
                         <Button
+                          id={`project-${props.projectId}-item-${item.id}-run-without-question`}
                           type="button"
                           onClick={() => run(item)}
                           disabled={isRunning()}
@@ -1625,19 +1656,20 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
                           })}
                           class="relative z-10 mr-1 ml-0.5 flex size-[22px] shrink-0 items-center justify-center rounded-md border border-primary/55 bg-az-chip text-primary transition-colors hover:border-primary hover:bg-az-chip-strong disabled:opacity-30"
                         >
-                          <Icon name="play" class="text-[11px]" />
+                          <Icon name="play" class="text-ui-caption" />
                         </Button>
                       }
                     >
                       {(question) => (
                         <Button
+                          id={`project-${props.projectId}-item-${item.id}-reply-question`}
                           type="button"
                           onClick={() => replyTo(question())}
                           title={tx("Reply to this item's question")}
                           aria-label={tx("Reply to the question for {name}", { name: item.title })}
                           class="relative z-10 mr-1 ml-0.5 flex size-[22px] shrink-0 items-center justify-center rounded-md border border-warning/65 bg-warning/22 text-warning shadow-[0_0_0_1px_rgb(from_var(--color-warning)_r_g_b/.08)] transition-colors hover:border-warning hover:bg-warning/34 focus-visible:border-warning focus-visible:bg-warning/34"
                         >
-                          <Icon name="message-square-dashed" class="text-[12px]" />
+                          <Icon name="message-square-dashed" class="text-ui-label" />
                         </Button>
                       )}
                     </Show>
@@ -1656,6 +1688,7 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
                       }`}
                     >
                       <Button
+                        id={`project-${props.projectId}-item-${item.id}-description`}
                         type="button"
                         onClick={(event) => {
                           const box = event.currentTarget.getBoundingClientRect();
@@ -1679,9 +1712,10 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
                             : "border-primary/20 bg-az-chip text-az-muted"
                         }`}
                       >
-                        <Icon name="list-checks" class="text-[12px]" />
+                        <Icon name="list-checks" class="text-ui-label" />
                       </Button>
                       <Button
+                        id={`project-${props.projectId}-item-${item.id}-fork`}
                         type="button"
                         onClick={(event) => {
                           const box = event.currentTarget.getBoundingClientRect();
@@ -1712,10 +1746,11 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
                             : "border-primary/30 bg-az-chip text-primary/80"
                         }`}
                       >
-                        <Icon name="git-fork" class="text-[12px]" />
+                        <Icon name="git-fork" class="text-ui-label" />
                       </Button>
                       <Show when={item.status !== "finished"}>
                         <Button
+                          id={`project-${props.projectId}-item-${item.id}-run`}
                           type="button"
                           onClick={() => {
                             const question = questionFor(item);
@@ -1745,13 +1780,14 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
                         >
                           <Icon
                             name={questionFor(item) ? "message-square-dashed" : "play"}
-                            class="text-[12px]"
+                            class="text-ui-label"
                           />
                         </Button>
                       </Show>
                       {/* Revealed on hover: the controls all the time would be louder
                 than the titles they act on. */}
                       <Button
+                        id={`project-${props.projectId}-item-${item.id}-link-issue`}
                         type="button"
                         onClick={() => {
                           setDescriptionDraft(null);
@@ -1764,9 +1800,10 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
                         title={tx("Link a GitHub issue")}
                         class="shrink-0 rounded-md p-1 text-az-faint transition-colors hover:text-primary"
                       >
-                        <Icon name="git-pull-request" class="text-[11px]" />
+                        <Icon name="git-pull-request" class="text-ui-caption" />
                       </Button>
                       <Button
+                        id={`project-${props.projectId}-item-${item.id}-edit`}
                         type="button"
                         onClick={() => {
                           setEditTitle(item.title);
@@ -1776,9 +1813,10 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
                         title={tx("Edit this item")}
                         class="shrink-0 rounded-md p-1 text-az-faint transition-colors hover:text-az-body"
                       >
-                        <Icon name="pencil" class="text-[11px]" />
+                        <Icon name="pencil" class="text-ui-caption" />
                       </Button>
                       <Button
+                        id={`project-${props.projectId}-item-${item.id}-delete`}
                         type="button"
                         onClick={() =>
                           void actions
@@ -1791,26 +1829,28 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
                         title={tx("Delete this item")}
                         class="shrink-0 rounded-md p-1 text-az-faint transition-colors hover:text-error"
                       >
-                        <Icon name="x" class="text-[12px]" />
+                        <Icon name="x" class="text-ui-label" />
                       </Button>
                       <div class="flex shrink-0 flex-col">
                         <Button
+                          id={`project-${props.projectId}-item-${item.id}-move-up`}
                           type="button"
                           onClick={() => move(item, -1)}
                           disabled={filtering() || index() === 0}
                           aria-label={tx("Move {name} up", { name: item.title })}
                           class="rounded-sm px-0.5 text-az-faint transition-colors hover:text-az-body disabled:opacity-25"
                         >
-                          <Icon name="chevron-up" class="text-[10px]" />
+                          <Icon name="chevron-up" class="text-ui-tiny" />
                         </Button>
                         <Button
+                          id={`project-${props.projectId}-item-${item.id}-move-down`}
                           type="button"
                           onClick={() => move(item, 1)}
                           disabled={filtering() || index() === shown().length - 1}
                           aria-label={tx("Move {name} down", { name: item.title })}
                           class="rounded-sm px-0.5 text-az-faint transition-colors hover:text-az-body disabled:opacity-25"
                         >
-                          <Icon name="chevron-down" class="text-[10px]" />
+                          <Icon name="chevron-down" class="text-ui-tiny" />
                         </Button>
                       </div>
                     </div>
@@ -1820,6 +1860,7 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
                   {(draft) => (
                     <section class="flex items-center gap-2 rounded-b-[9px] border-primary/24 border-t bg-az-inset px-3 py-2.5 shadow-[inset_2px_0_0_color-mix(in_srgb,var(--color-primary)_55%,transparent)]">
                       <Input.Field
+                        id={`project-${props.projectId}-item-${item.id}-issue-url`}
                         ref={(element: HTMLInputElement) => {
                           issueField = element;
                         }}
@@ -1834,20 +1875,22 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
                           if (event.key === "Enter") void saveIssue();
                           if (event.key === "Escape") setIssueDraft(null);
                         }}
-                        class="min-w-0 flex-1 rounded-lg border border-primary/28 bg-base-300 px-2.5 py-1.5 font-mono text-[11.5px] text-az-body outline-none placeholder:text-az-faint focus:border-primary/60"
+                        class="min-w-0 flex-1 rounded-lg border border-primary/28 bg-base-300 px-2.5 py-1.5 font-mono text-az-body text-ui-detail outline-none placeholder:text-az-faint focus:border-primary/60"
                       />
                       <Button
+                        id={`project-${props.projectId}-item-${item.id}-issue-cancel`}
                         type="button"
                         onClick={() => setIssueDraft(null)}
-                        class="rounded-md px-2.5 py-1 text-[11px] text-az-muted hover:bg-white/6 hover:text-az-body"
+                        class="rounded-md px-2.5 py-1 text-az-muted text-ui-caption hover:bg-white/6 hover:text-az-body"
                       >
                         {tx("Cancel")}
                       </Button>
                       <Button
+                        id={`project-${props.projectId}-item-${item.id}-issue-save`}
                         type="button"
                         disabled={!draft().url.trim() || savingIssueId() === item.id}
                         onClick={() => void saveIssue()}
-                        class="rounded-md border border-primary/40 bg-az-chip px-2.5 py-1 font-semibold text-[11px] text-primary hover:bg-az-chip-strong disabled:opacity-35"
+                        class="rounded-md border border-primary/40 bg-az-chip px-2.5 py-1 font-semibold text-primary text-ui-caption hover:bg-az-chip-strong disabled:opacity-35"
                       >
                         {tx("Link a GitHub issue")}
                       </Button>
@@ -1861,14 +1904,15 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
                       class="flex flex-col gap-2 rounded-b-[9px] border-primary/24 border-t bg-az-inset px-3 py-2.5 shadow-[inset_2px_0_0_color-mix(in_srgb,var(--color-primary)_55%,transparent)]"
                     >
                       <div class="flex items-center justify-between gap-3">
-                        <span class="font-semibold text-[11.5px] text-az-body">
+                        <span class="font-semibold text-az-body text-ui-detail">
                           {tx("Description / sub-items")}
                         </span>
-                        <span class="font-mono text-[10px] text-az-faint">
+                        <span class="font-mono text-az-faint text-ui-tiny">
                           {draft().context.length} / {NOTES_BUDGET}
                         </span>
                       </div>
                       <Textarea
+                        id={`project-${props.projectId}-item-${item.id}-description-editor`}
                         autofocus
                         value={draft().context}
                         maxlength={NOTES_BUDGET}
@@ -1882,27 +1926,29 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
                         placeholder={tx(
                           "Describe constraints, acceptance criteria, decisions, and useful pointers…",
                         )}
-                        class="az-scroll min-h-[138px] resize-y rounded-lg border border-primary/22 bg-base-300 px-3 py-2.5 text-[12px] text-az-body leading-[1.5] outline-none placeholder:text-az-faint focus:border-primary/55"
+                        class="az-scroll min-h-[138px] resize-y rounded-lg border border-primary/22 bg-base-300 px-3 py-2.5 text-az-body text-ui-label leading-[1.5] outline-none placeholder:text-az-faint focus:border-primary/55"
                       />
                       <div class="flex items-center justify-between gap-3">
-                        <span class="text-[10.5px] text-az-muted">
+                        <span class="text-az-muted text-ui-caption-sm">
                           {tx("Use one Markdown bullet or checklist line per sub-item.")}
                         </span>
                         <div class="flex shrink-0 items-center gap-1.5">
                           <Button
+                            id={`project-${props.projectId}-item-${item.id}-description-close`}
                             type="button"
                             onClick={() => setDescriptionDraft(null)}
-                            class="rounded-md px-2.5 py-1 text-[11px] text-az-muted hover:bg-white/6 hover:text-az-body"
+                            class="rounded-md px-2.5 py-1 text-az-muted text-ui-caption hover:bg-white/6 hover:text-az-body"
                           >
                             {tx("Close")}
                           </Button>
                           <Button
+                            id={`project-${props.projectId}-item-${item.id}-description-save`}
                             type="button"
                             disabled={
                               savingDescriptionId() === item.id || draft().context === draft().saved
                             }
                             onClick={() => void saveDescription()}
-                            class="rounded-md border border-primary/40 bg-az-chip px-2.5 py-1 font-semibold text-[11px] text-primary hover:bg-az-chip-strong disabled:opacity-35"
+                            class="rounded-md border border-primary/40 bg-az-chip px-2.5 py-1 font-semibold text-primary text-ui-caption hover:bg-az-chip-strong disabled:opacity-35"
                           >
                             {tx("Save description")}
                           </Button>
@@ -1917,9 +1963,10 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
         </For>
         <Show when={shown().length > visibleShown().length}>
           <Button
+            id={`project-${props.projectId}-items-show-more`}
             type="button"
             onClick={() => setItemLimit((limit) => limit + PROJECT_ITEM_PAGE_SIZE)}
-            class="mt-1 flex-none rounded-[9px] border border-primary/24 bg-az-chip px-2.5 py-2 font-semibold text-[11.5px] text-primary transition-colors hover:bg-az-chip"
+            class="mt-1 flex-none rounded-[9px] border border-primary/24 bg-az-chip px-2.5 py-2 font-semibold text-primary text-ui-detail transition-colors hover:bg-az-chip"
           >
             {tx("Show {count} more items", {
               count: Math.min(PROJECT_ITEM_PAGE_SIZE, shown().length - visibleShown().length),
@@ -1932,16 +1979,18 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
         when={adding()}
         fallback={
           <Button
+            id={`project-${props.projectId}-item-new`}
             type="button"
             onClick={() => setAdding(true)}
-            class="mt-1 flex flex-none items-center gap-2 rounded-[9px] border border-primary/16 border-dashed bg-base-200 px-2.5 py-2 text-[12px] text-az-muted transition-colors hover:border-primary hover:text-primary"
+            class="mt-1 flex flex-none items-center gap-2 rounded-[9px] border border-primary/16 border-dashed bg-base-200 px-2.5 py-2 text-az-muted text-ui-label transition-colors hover:border-primary hover:text-primary"
           >
-            <Icon name="plus" class="text-[13px]" />
+            <Icon name="plus" class="text-ui-body" />
             {tx("New item")}
           </Button>
         }
       >
         <Input.Field
+          id={`project-${props.projectId}-item-new-title`}
           autofocus
           value={title()}
           placeholder={tx("What needs doing?")}
@@ -1951,7 +2000,7 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
             if (event.key === "Enter") create();
             if (event.key === "Escape") setAdding(false);
           }}
-          class="mt-1 flex-none rounded-[9px] border border-primary/40 bg-base-300 px-2.5 py-2 text-[12px] text-az-body focus:outline-none"
+          class="mt-1 flex-none rounded-[9px] border border-primary/40 bg-base-300 px-2.5 py-2 text-az-body text-ui-label focus:outline-none"
         />
       </Show>
 
@@ -1970,29 +2019,33 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
             <section class="flex max-h-full w-[560px] max-w-full flex-none flex-col overflow-hidden rounded-[14px] border border-az-hairline-strong bg-base-200 shadow-[0_24px_80px_rgba(0,0,0,.65)]">
               <header class="flex items-start gap-3 border-az-hairline-soft border-b px-5 py-4">
                 <div class="flex size-9 shrink-0 items-center justify-center rounded-[11px] border border-primary/28 bg-az-chip text-primary">
-                  <Icon name="git-fork" class="text-[17px]" />
+                  <Icon name="git-fork" class="text-ui-title-lg" />
                 </div>
                 <div class="min-w-0 flex-1">
-                  <h2 id="item-context-title" class="font-semibold text-[14.5px] text-az-title">
+                  <h2
+                    id="item-context-title"
+                    class="font-semibold text-az-title text-ui-control-lg"
+                  >
                     {draft().startFork ? tx("Prepare item fork") : tx("Edit item description")}
                   </h2>
-                  <p class="mt-0.5 truncate text-[12px] text-az-muted">{draft().item.title}</p>
+                  <p class="mt-0.5 truncate text-az-muted text-ui-label">{draft().item.title}</p>
                 </div>
                 <Button
+                  id={`project-${props.projectId}-item-context-close`}
                   type="button"
                   onClick={() => setContextDraft(null)}
                   aria-label={tx("Cancel")}
                   class="rounded-lg p-1.5 text-az-muted hover:bg-white/6 hover:text-base-content"
                 >
-                  <Icon name="x" class="text-[15px]" />
+                  <Icon name="x" class="text-ui-lead" />
                 </Button>
               </header>
               <div class="flex min-h-0 flex-col gap-2 px-5 py-4">
                 <div class="flex items-center justify-between gap-3">
-                  <label for="item-description" class="font-semibold text-[12.5px] text-az-body">
+                  <label for="item-description" class="font-semibold text-az-body text-ui-label-lg">
                     {tx("Description / sub-items")}
                   </label>
-                  <span class="font-mono text-[10.5px] text-az-faint">
+                  <span class="font-mono text-az-faint text-ui-caption-sm">
                     {draft().context.length} / {NOTES_BUDGET}
                   </span>
                 </div>
@@ -2012,9 +2065,9 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
                   placeholder={tx(
                     "Describe constraints, acceptance criteria, decisions, and useful pointers…",
                   )}
-                  class="az-scroll az-control-solid min-h-[220px] resize-y rounded-xl border border-primary/24 bg-az-inset px-3.5 py-3 text-[12.5px] text-az-body leading-[1.55] outline-none placeholder:text-az-faint focus:border-primary/55"
+                  class="az-scroll az-control-solid min-h-[220px] resize-y rounded-xl border border-primary/24 bg-az-inset px-3.5 py-3 text-az-body text-ui-label-lg leading-[1.55] outline-none placeholder:text-az-faint focus:border-primary/55"
                 />
-                <p class="text-[11px] text-az-muted leading-[1.5]">
+                <p class="text-az-muted text-ui-caption leading-[1.5]">
                   {tx(
                     "Sent when this item starts in a fresh fork or focused run. Ordinary compact item snapshots omit it.",
                   )}{" "}
@@ -2023,17 +2076,19 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
               </div>
               <footer class="flex items-center justify-end gap-2 border-az-hairline-soft border-t px-5 py-3.5">
                 <Button
+                  id={`project-${props.projectId}-item-context-cancel`}
                   type="button"
                   onClick={() => setContextDraft(null)}
-                  class="rounded-lg border border-az-hairline px-3 py-1.5 text-[12px] text-az-body hover:border-primary/35"
+                  class="rounded-lg border border-az-hairline px-3 py-1.5 text-az-body text-ui-label hover:border-primary/35"
                 >
                   {tx("Cancel")}
                 </Button>
                 <Button
+                  id={`project-${props.projectId}-item-context-save`}
                   type="button"
                   disabled={forkingId() === draft().item.id}
                   onClick={() => void saveContext()}
-                  class="rounded-lg border border-primary/45 bg-az-chip px-3 py-1.5 font-semibold text-[12px] text-primary hover:bg-az-chip-strong disabled:opacity-40"
+                  class="rounded-lg border border-primary/45 bg-az-chip px-3 py-1.5 font-semibold text-primary text-ui-label hover:bg-az-chip-strong disabled:opacity-40"
                 >
                   {draft().startFork ? tx("Start fork") : tx("Save description")}
                 </Button>
@@ -2056,7 +2111,7 @@ function RunningList(props: { projectId: string }): JSX.Element {
       <For each={tasks()}>{(task) => <RunningTaskCard task={task} now={now()} />}</For>
 
       <Show when={tasks().length === 0}>
-        <p class="rounded-[11px] border border-primary/12 border-dashed p-3 text-center text-[11.5px] text-az-muted">
+        <p class="rounded-[11px] border border-primary/12 border-dashed p-3 text-center text-az-muted text-ui-detail">
           {tx("Nothing running")}
         </p>
       </Show>
@@ -2071,14 +2126,15 @@ export function RunningTaskCard(props: { task: RunningTask; now: number }): JSX.
     <div class="rounded-[11px] border border-primary/22 bg-base-300 px-3 py-2.5">
       {/* A running row is the present, so show the whole command rather than a
           truncated label that hides what the provider is actually doing. */}
-      <div class="whitespace-pre-wrap break-words font-mono text-[12px] text-az-strong">
+      <div class="whitespace-pre-wrap break-words font-mono text-az-strong text-ui-label">
         {props.task.label}
       </div>
-      <div class="mt-2 flex items-center gap-2 text-[11px]">
+      <div class="mt-2 flex items-center gap-2 text-ui-caption">
         <span class="font-mono text-az-muted">{props.task.name}</span>
         <span class="text-primary">{elapsed(props.task.startedAt, props.now)}</span>
         <div class="flex-1" />
         <Button
+          id={`project-${props.task.projectId}-running-${encodeURIComponent(props.task.toolCallId ?? props.task.startedAt)}-stop`}
           type="button"
           disabled={!props.task.isCancelable || !isLive("cancelRun")}
           onClick={() => void actions.cancelRun(props.task.projectId)}
@@ -2222,13 +2278,13 @@ function TaskLogList(props: { projectId: string }): JSX.Element {
                   if (activeEntryId() === entry.id) setActiveEntryId(null);
                 }
               }}
-              class="flex flex-col gap-1 text-[11.5px]"
+              class="flex flex-col gap-1 text-ui-detail"
             >
               <div class="flex items-baseline gap-2">
                 <Icon
                   name={entry.ok === true ? "check" : entry.ok === false ? "x" : "info"}
                   label={entry.ok === null ? tx("Outcome not reported") : undefined}
-                  class={`shrink-0 text-[12px] ${
+                  class={`shrink-0 text-ui-label ${
                     entry.ok === true
                       ? "text-success"
                       : entry.ok === false
@@ -2251,13 +2307,14 @@ function TaskLogList(props: { projectId: string }): JSX.Element {
                  * identical. The tool name was already on the row's data and
                  * simply was not rendered.
                  */}
-                <span class="shrink-0 font-mono text-[11px] text-az-muted">{entry.tool}</span>
+                <span class="shrink-0 font-mono text-az-muted text-ui-caption">{entry.tool}</span>
                 {/*
                  * `aria-label` rather than `title`: the tooltip fired on hover
                  * over every row on the way past, which reads as the panel
                  * flinching. The pointer already says the row is a control.
                  */}
                 <Button
+                  id={`project-${props.projectId}-task-log-${entry.id}-expand`}
                   type="button"
                   onClick={() => setExpanded(expanded() === entry.id ? null : entry.id)}
                   aria-label={
@@ -2276,6 +2333,7 @@ function TaskLogList(props: { projectId: string }): JSX.Element {
                 </span>
                 <Show when={activeEntryId() === entry.id}>
                   <Button
+                    id={`project-${props.projectId}-task-log-${entry.id}-copy`}
                     type="button"
                     onClick={() =>
                       void copyEntry(
@@ -2289,12 +2347,12 @@ function TaskLogList(props: { projectId: string }): JSX.Element {
                     title={copied() === entry.id ? tx("Copied") : tx("Copy")}
                     class="shrink-0 rounded p-0.5 text-az-faint transition-colors hover:text-az-body"
                   >
-                    <Icon name={copied() === entry.id ? "check" : "copy"} class="text-[11px]" />
+                    <Icon name={copied() === entry.id ? "check" : "copy"} class="text-ui-caption" />
                   </Button>
                 </Show>
               </div>
               <Show when={expanded() === entry.id && entry.output}>
-                <pre class="az-scroll max-h-64 whitespace-pre-wrap break-words rounded-md border border-az-hairline bg-az-inset px-2 py-1.5 font-mono text-[10.5px] text-az-body">
+                <pre class="az-scroll max-h-64 whitespace-pre-wrap break-words rounded-md border border-az-hairline bg-az-inset px-2 py-1.5 font-mono text-az-body text-ui-caption-sm">
                   {entry.output}
                 </pre>
               </Show>
@@ -2310,9 +2368,10 @@ function TaskLogList(props: { projectId: string }): JSX.Element {
       */}
       <Show when={hasMore()}>
         <Button
+          id={`project-${props.projectId}-task-log-show-earlier`}
           type="button"
           onClick={revealMore}
-          class="flex-none rounded-[9px] border border-primary/24 bg-az-chip px-2.5 py-1.5 font-semibold text-[11px] text-primary transition-colors hover:bg-az-chip"
+          class="flex-none rounded-[9px] border border-primary/24 bg-az-chip px-2.5 py-1.5 font-semibold text-primary text-ui-caption transition-colors hover:bg-az-chip"
         >
           {/*
             `nextCount()` is the grid's own next step and reads 0 once the held
@@ -2331,7 +2390,7 @@ function TaskLogList(props: { projectId: string }): JSX.Element {
       </Show>
 
       <Show when={entries().length === 0}>
-        <p class="py-3 text-center text-[11.5px] text-az-muted">{tx("Nothing has run yet")}</p>
+        <p class="py-3 text-center text-az-muted text-ui-detail">{tx("Nothing has run yet")}</p>
       </Show>
     </div>
   );
@@ -2354,10 +2413,11 @@ function CopyLogButton(props: { projectId: string }): JSX.Element {
   };
   return (
     <Button
+      id={`project-${props.projectId}-task-log-copy`}
       type="button"
       onClick={() => void copy()}
       aria-label={tx(copied() ? "Copied task log" : "Copy task log")}
-      class="shrink-0 text-[11px] text-az-faint transition-colors hover:text-base-content"
+      class="shrink-0 text-az-faint text-ui-caption transition-colors hover:text-base-content"
     >
       {tx(copied() ? "Copied" : "Copy")}
     </Button>
@@ -2407,14 +2467,15 @@ function CheckpointToggle(props: { projectId: string }): JSX.Element {
   return (
     <div class="flex flex-col gap-1.5">
       <div class="flex items-center gap-2.5">
-        <Icon name="history" class="shrink-0 text-[14px] text-az-muted" />
-        <span class="min-w-0 flex-1 text-[12px] text-az-body">
+        <Icon name="history" class="shrink-0 text-az-muted text-ui-control" />
+        <span class="min-w-0 flex-1 text-az-body text-ui-label">
           {tx("Knowledge checkpoints")}
-          <span class="mt-px block text-[11px] text-az-muted">
+          <span class="mt-px block text-az-muted text-ui-caption">
             {tx("this project · off by default")}
           </span>
         </span>
         <Switch
+          id={`project-${props.projectId}-knowledge-checkpoints`}
           aria-label={tx("Knowledge checkpoints for this project")}
           checked={enabled()}
           flavor="accent"
@@ -2428,7 +2489,7 @@ function CheckpointToggle(props: { projectId: string }): JSX.Element {
         schedule the user does not control, so what it does, when it fires and
         what it is for all have to be readable before the switch is flipped.
       */}
-      <p class="pl-[26px] text-[11px] text-az-faint leading-[1.5]">
+      <p class="pl-[26px] text-az-faint text-ui-caption leading-[1.5]">
         {tx(
           "As this conversation grows past 300k, 600k and 900k tokens, run the same note-taking pass a compaction would and save the result to a file — one extra turn each time, billed like any other. The agent never sees these; they exist so the three can be compared to find out whether the notes get worse under pressure, and where compacting is actually best done. Files land beside the database in checkpoints/, and the marks re-arm after every compaction.",
         )}
@@ -2498,7 +2559,7 @@ function NotesEditor(props: { projectId: string }): JSX.Element {
 
   return (
     <div class="flex flex-col gap-2 p-3">
-      <p class="text-[11.5px] text-az-muted leading-[1.5]">
+      <p class="text-az-muted text-ui-detail leading-[1.5]">
         {tx(
           "Written by the agent before each compaction and sent with every turn since. Correct anything wrong here — it is being followed.",
         )}
@@ -2513,6 +2574,7 @@ function NotesEditor(props: { projectId: string }): JSX.Element {
         the right to state a house rule would be an odd thing to enforce.
       */}
       <Textarea
+        id={`project-${props.projectId}-notes-editor`}
         value={draft()}
         onInput={(event) => setDraft(event.currentTarget.value)}
         rows={8}
@@ -2521,11 +2583,11 @@ function NotesEditor(props: { projectId: string }): JSX.Element {
           "Nothing kept yet — the first /compact fills this in.\n\nYou can also write rules here yourself; they are sent with every turn either way.",
         )}
         disabled={!isLive("setProjectNotes")}
-        class="az-scroll w-full resize-y rounded-lg border border-az-hairline-strong bg-base-300 p-2.5 font-mono text-[11.5px] text-az-body leading-[1.6] placeholder:text-az-faint focus:border-primary/40 focus:outline-none disabled:opacity-50"
+        class="az-scroll w-full resize-y rounded-lg border border-az-hairline-strong bg-base-300 p-2.5 font-mono text-az-body text-ui-detail leading-[1.6] placeholder:text-az-faint focus:border-primary/40 focus:outline-none disabled:opacity-50"
       />
       <Flex align="center" gap="sm">
         <span
-          class={`text-[11px] ${remaining() < 0 ? "text-error" : "text-az-faint"}`}
+          class={`text-ui-caption ${remaining() < 0 ? "text-error" : "text-az-faint"}`}
           title={tx(
             "The budget is {budget} characters; anything over is dropped from the top when saved.",
             { budget: NOTES_BUDGET },
@@ -2538,9 +2600,10 @@ function NotesEditor(props: { projectId: string }): JSX.Element {
         <div class="flex-1" />
         <Show when={dirty()}>
           <Button
+            id={`project-${props.projectId}-notes-revert`}
             type="button"
             onClick={() => setDraft(saved())}
-            class="shrink-0 text-[11px] text-az-faint transition-colors hover:text-base-content"
+            class="shrink-0 text-az-faint text-ui-caption transition-colors hover:text-base-content"
           >
             {tx("Revert")}
           </Button>
@@ -2559,11 +2622,12 @@ function NotesEditor(props: { projectId: string }): JSX.Element {
          * again. See section 8 of SOLID-LAYOUTS-ISSUES.md.
          */}
         <Button
+          id={`project-${props.projectId}-notes-save`}
           type="button"
           onClick={() => void save(draft())}
           state={status() === "saving" ? "loading" : undefined}
           disabled={!dirty() || status() === "saving" || !isLive("setProjectNotes")}
-          class="shrink-0 rounded-lg border border-primary/18 px-2.5 py-[3px] text-[11.5px] text-az-body transition-colors hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-40"
+          class="shrink-0 rounded-lg border border-primary/18 px-2.5 py-[3px] text-az-body text-ui-detail transition-colors hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-40"
         >
           {tx("Save")}
         </Button>
@@ -2571,17 +2635,18 @@ function NotesEditor(props: { projectId: string }): JSX.Element {
               changed direction is better off with nothing than with rules
               written for the work it used to be doing. */}
         <Button
+          id={`project-${props.projectId}-notes-forget`}
           type="button"
           onClick={() => void save("")}
           disabled={!saved().trim() || !isLive("setProjectNotes")}
-          class="shrink-0 text-[11px] text-az-faint transition-colors hover:text-error disabled:cursor-not-allowed disabled:opacity-40"
+          class="shrink-0 text-az-faint text-ui-caption transition-colors hover:text-error disabled:cursor-not-allowed disabled:opacity-40"
         >
           {tx("Forget")}
         </Button>
       </Flex>
 
       <Show when={status() === "error"}>
-        <p role="alert" class="text-[11.5px] text-error">
+        <p role="alert" class="text-error text-ui-detail">
           {tx("Could not save — what you typed is still here.")} {message()}
         </p>
       </Show>
@@ -2593,9 +2658,10 @@ function ClearLogButton(props: { projectId: string }): JSX.Element {
   const { actions } = useWorkspace();
   return (
     <Button
+      id={`project-${props.projectId}-task-log-clear`}
       type="button"
       onClick={() => void actions.clearTaskLog(props.projectId)}
-      class="shrink-0 text-[11px] text-az-faint transition-colors hover:text-base-content"
+      class="shrink-0 text-az-faint text-ui-caption transition-colors hover:text-base-content"
     >
       {tx("Clear")}
     </Button>

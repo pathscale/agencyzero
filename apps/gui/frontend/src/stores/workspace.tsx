@@ -91,6 +91,13 @@ const afterFrame = (measure: () => void): void => {
   if (typeof requestAnimationFrame !== "undefined") requestAnimationFrame(measure);
 };
 
+/** Yield until a ready/focus state has had a chance to produce its first frame. */
+const afterRenderedFrame = (): Promise<void> =>
+  new Promise((resolve) => {
+    if (typeof requestAnimationFrame === "undefined") queueMicrotask(resolve);
+    else requestAnimationFrame(() => resolve());
+  });
+
 /** Matches the strip's poll period; see `claudeUsageBackoffMs`. */
 const CLAUDE_USAGE_POLL_MS = 60_000;
 
@@ -433,8 +440,12 @@ function compatiblePermission(
   agent: Agent,
   permission: Permission,
 ): Permission {
-  const canAsk = statuses.find((status) => status.agent === agent)?.capabilities.approvals ?? false;
-  return !canAsk && permission === "ask" ? "read_only" : permission;
+  const status = statuses.find((candidate) => candidate.agent === agent);
+  // No status means discovery is still pending, not that the provider lacks
+  // approval support. Narrow only from an answer the backend actually gave.
+  return status && !status.capabilities.approvals && permission === "ask"
+    ? "read_only"
+    : permission;
 }
 
 export function createWorkspace() {
@@ -495,6 +506,7 @@ export function createWorkspace() {
    * failed with "workspace used before the backend was selected".
    */
   let apiRef: AgencyZeroApi | null = null;
+  let agentStatusLoad: Promise<void> | null = null;
   const api = (): AgencyZeroApi | null => apiRef;
   const setApi = (next: AgencyZeroApi): void => {
     apiRef = next;
@@ -606,10 +618,13 @@ export function createWorkspace() {
   const clientIfReady = (): AgencyZeroApi | null => api();
 
   /** Refuse locally before creating a project or handing a prompt to IPC. */
-  function requireReadyAgent(agent: Agent): void {
+  async function requireReadyAgent(agent: Agent): Promise<void> {
     // The fixture backend intentionally has no provider process. It simulates
     // sends for UI tests; the real Tauri path is also guarded in Rust.
     if (state.backend === "mock") return;
+    if (state.agents.length === 0 && agentStatusLoad) {
+      await agentStatusLoad;
+    }
     const status = state.agents.find((candidate) => candidate.agent === agent);
     if (status?.state === "connected") return;
     const label = agent === "claude" ? "Claude" : agent === "codex" ? "Codex" : "Copilot";
@@ -785,16 +800,18 @@ export function createWorkspace() {
     () => [state.boot.status, state.tabs, state.activeKey, state.transcriptPositions] as const,
     () => {
       if (state.boot.status !== "ready") return;
-      const workspaceTabs = portableWorkspaceTabs();
-      setPrefs((d) => {
-        d.openTabKeys = workspaceTabs.openProjectKeys;
-      });
-      setPrefs((d) => {
-        d.lastTabKey = workspaceTabs.activeProjectKey;
-      });
       if (workspaceTabsWriteTimer) clearTimeout(workspaceTabsWriteTimer);
       workspaceTabsWriteTimer = setTimeout(() => {
         workspaceTabsWriteTimer = undefined;
+        const workspaceTabs = portableWorkspaceTabs();
+        // Legacy webview preferences and durable settings are persistence, not
+        // selection state. Rewriting them in the active-key reaction made
+        // every preference consumer participate in the click's microtask
+        // flush before the newly selected pane could paint.
+        setPrefs((d) => {
+          d.openTabKeys = workspaceTabs.openProjectKeys;
+          d.lastTabKey = workspaceTabs.activeProjectKey;
+        });
         void persistWorkspaceTabs().catch((cause) =>
           log.warn(`could not persist open project tabs: ${describeError(cause)}`),
         );
@@ -1261,7 +1278,10 @@ export function createWorkspace() {
 
     const load = fetchProject(projectId)
       .then(() => {
-        if (state.projects.some((project) => project.id === projectId)) {
+        if (
+          projectId === TASK_MANAGER_ID ||
+          state.projects.some((project) => project.id === projectId)
+        ) {
           hydratedProjects.add(projectId);
         }
       })
@@ -1270,6 +1290,28 @@ export function createWorkspace() {
       });
     projectLoads.set(projectId, load);
     return load;
+  }
+
+  /** Project-backed surfaces immediately beside one tab in strip order. */
+  function neighboringProjectIds(key: string, tabs: readonly Tab[] = state.tabs): string[] {
+    const index = tabs.findIndex((tab) => tab.key === key);
+    if (index < 0) return [];
+    const ids = [tabs[index - 1], tabs[index + 1]]
+      .flatMap((tab) => {
+        if (!tab) return [];
+        if (tab.key === "home") return [TASK_MANAGER_ID];
+        return tab.projectId ? [tab.projectId] : [];
+      })
+      .filter((projectId, at, all) => all.indexOf(projectId) === at);
+    return ids;
+  }
+
+  /** Warm only likely next switches; distant restored tabs remain cold. */
+  function warmNeighbors(key: string): Promise<void> {
+    const neighbors = neighboringProjectIds(key);
+    if (neighbors.length === 0) return Promise.resolve();
+    log.debug(`warming ${neighbors.length} tab neighbor(s) around ${key}`);
+    return Promise.all(neighbors.map(loadProject)).then(() => undefined);
   }
 
   /**
@@ -1336,11 +1378,20 @@ export function createWorkspace() {
       await subscribe(backend);
 
       log.info("boot: hydrating");
+      const settingsPromise = backend.getSettings().then(async (settings) => {
+        // Apply persisted presentation state as soon as its one row arrives.
+        // Waiting for unrelated project, proxy, pricing and model reads made a
+        // fast preference lookup inherit the slowest startup dependency and
+        // left the splash on the stylesheet defaults in the meantime.
+        restorePortablePrefs(settings.uiPreferences, settings.uiPreferencesRevision);
+        await i18n.setLocale(settings.locale);
+        syncWindowChrome(settings.theme);
+        return settings;
+      });
       const [
         projects,
         homeSnapshot,
         settings,
-        agents,
         agencyProxy,
         models,
         pricing,
@@ -1350,8 +1401,7 @@ export function createWorkspace() {
       ] = await Promise.all([
         backend.listProjects(),
         backend.getHomeSnapshot(),
-        backend.getSettings(),
-        backend.listAgentStatus(false),
+        settingsPromise,
         backend.getAgentProxyStatus(),
         // Compiled catalogues only. Discovery spawns a CLI per agent, which is
         // too slow to sit in front of the first paint; Settings can ask for it.
@@ -1372,13 +1422,6 @@ export function createWorkspace() {
         {},
       );
 
-      // Before the first paint of anything themed: the stylesheet's defaults are
-      // the designed palette, so a saved theme arriving late would show as a
-      // flash of the old colours on every launch.
-      restorePortablePrefs(settings.uiPreferences, settings.uiPreferencesRevision);
-      await i18n.setLocale(settings.locale);
-      syncWindowChrome(settings.theme);
-
       setState((d) => {
         reconcile(projects)(d.projects);
       });
@@ -1390,9 +1433,6 @@ export function createWorkspace() {
       });
       setState((d) => {
         d.settings = settings;
-      });
-      setState((d) => {
-        reconcile(agents)(d.agents);
       });
       setState((d) => {
         d.agencyProxy = agencyProxy;
@@ -1465,33 +1505,31 @@ export function createWorkspace() {
         d.activeKey = lastPortableActiveKey;
       });
 
-      /*
-       * The tab in front goes first, and that is the whole change: everything
-       * below still runs, still concurrently, and still finishes before ready.
-       *
-       * It matters because the reads do not actually run concurrently. They are
-       * synchronous Tauri commands, so they execute on the window thread one at
-       * a time in the order they were issued, and only their dispatch overlaps.
-       * Measured on a real profile with five open tabs: the same `list_items`
-       * call took 27ms issued first and 347ms issued third, and the last
-       * project's fetch finished at 547ms against the first one's 35ms. In tab
-       * order the project someone is actually looking at was as likely as not
-       * to be the one at the back of that queue.
-       */
       const openProjectIds = restoredTabs
         .flatMap((tab) => (tab.projectId === null ? [] : [tab.projectId]))
-        .sort((left, right) =>
-          left === lastPortableActiveKey ? -1 : right === lastPortableActiveKey ? 1 : 0,
-        );
-      log.info(`boot: loading ${openProjectIds.length} open project(s); ${projects.length} total`);
+        .filter((projectId) => projectId !== TASK_MANAGER_ID);
+      /*
+       * A remembered tab is window arrangement, not a demand to hydrate every
+       * transcript before the window becomes usable. Eight restored tabs used
+       * to issue 64 project reads here and held the splash until the slowest
+       * hidden tab finished. Load only the surface the owner will actually see;
+       * `focus` loads another restored tab when it is selected.
+       *
+       * Home's live surface is the task manager, which deliberately has no
+       * project row. Treat it as the active project for hydration purposes.
+       */
+      const initialProjectId =
+        lastPortableActiveKey === "home"
+          ? TASK_MANAGER_ID
+          : openProjectIds.includes(lastPortableActiveKey)
+            ? lastPortableActiveKey
+            : null;
+      log.info(
+        `boot: loading active ${initialProjectId ?? "surface without project data"}; ` +
+          `${openProjectIds.length} project tab(s) restored, ${projects.length} total`,
+      );
       await Promise.all([
-        ...openProjectIds.map(loadProject),
-        /*
-         * The task manager rides along: it has no project row, so it is not
-         * in `projects`, but its transcript, harvested items and I/O live
-         * under its fixed id like anyone else's.
-         */
-        loadProject(TASK_MANAGER_ID),
+        initialProjectId ? loadProject(initialProjectId) : Promise.resolve(),
         client()
           .getTaskManager()
           .then((tm) =>
@@ -1501,11 +1539,29 @@ export function createWorkspace() {
           ),
       ]);
 
-      drainEventBuffer();
       setState((d) => {
         d.boot = { status: "ready" };
       });
       log.info("boot: ready");
+
+      // Agent discovery is availability metadata for Settings and the model
+      // controls, not workspace hydration. The command probes installed CLIs
+      // and took 1.6–1.8s on the QA profile; gating the active project on it
+      // left the splash up while every row needed for the first screen was
+      // already loaded. Start it only after ready and merge the answer when it
+      // arrives.
+      const rendered = afterRenderedFrame();
+      agentStatusLoad = rendered
+        .then(() => backend.listAgentStatus(false))
+        .then((agents) =>
+          setState((d) => {
+            reconcile(agents)(d.agents);
+          }),
+        )
+        .catch((cause) => log.warn(`could not probe installed agents: ${describeError(cause)}`));
+      await rendered;
+      drainEventBuffer();
+      log.info("boot: event buffer drained");
 
       // After ready, not during: an update nobody has asked to install must
       // never delay first paint, and a failed check is a log line, not a
@@ -2250,6 +2306,16 @@ export function createWorkspace() {
    */
   function focus(key: string, justOpened = false): void {
     if (!justOpened && !state.tabs.some((tab) => tab.key === key)) return;
+    const projectId =
+      key === "home" ? TASK_MANAGER_ID : state.tabs.find((tab) => tab.key === key)?.projectId;
+    if (projectId) {
+      void loadProject(projectId)
+        .then(afterRenderedFrame)
+        .then(() => warmNeighbors(key))
+        .catch((cause) =>
+          log.error(`could not load focused project ${projectId}: ${describeError(cause)}`),
+        );
+    }
     /*
      * A tab switch is one signal write, so everything it costs happens after
      * this returns: the outgoing tab hides, the incoming one reveals, and this
@@ -2265,9 +2331,6 @@ export function createWorkspace() {
     const started = performance.now();
     setState((d) => {
       d.activeKey = key;
-    });
-    setPrefs((d) => {
-      d.lastTabKey = key;
     });
 
     const committed = performance.now();
@@ -2720,7 +2783,7 @@ export function createWorkspace() {
     study?: StudyTurnMetadata,
   ): Promise<void> {
     const tab = state.tabs.find((candidate) => candidate.key === tabKey);
-    requireReadyAgent(tab?.agent ?? defaultAgent());
+    await requireReadyAgent(tab?.agent ?? defaultAgent());
     const created = await client().createProject({
       firstMessage,
       agent: tab?.agent,
@@ -2880,16 +2943,18 @@ export function createWorkspace() {
     itemId?: string,
   ): Promise<void> => {
     const tab = state.tabs.find((candidate) => candidate.projectId === projectId);
-    requireReadyAgent(tab?.agent ?? defaultAgent());
+    const running = state.runStatus[projectId];
+    const selectedAgent = running?.agent ?? tab?.agent ?? defaultAgent();
+    if (!running) await requireReadyAgent(selectedAgent);
     const sent = await client().sendMessage({
       projectId,
       body,
       retryMessageId,
       replyQuestionId,
       itemId,
-      agent: tab?.agent,
-      model: tab?.model,
-      permission: tab?.permission,
+      agent: selectedAgent,
+      model: running?.model ?? tab?.model,
+      permission: running?.permission ?? tab?.permission,
       // The tab's effort, which was being dropped here: every run reached the
       // agent with `effort=<none>` while the composer showed a level selected.
       effort: tab?.effort,
@@ -2940,7 +3005,8 @@ export function createWorkspace() {
     retryMessageId?: string,
   ): Promise<void> => {
     const tab = state.tabs.find((candidate) => candidate.projectId === projectId);
-    requireReadyAgent(tab?.agent ?? defaultAgent());
+    const selectedAgent = state.runStatus[projectId]?.agent ?? tab?.agent ?? defaultAgent();
+    if (!state.runStatus[projectId]) await requireReadyAgent(selectedAgent);
     /*
      * A compaction is the one busy state worth checking *before* dispatching.
      * It is not a turn that can be interrupted — the words would go into a run
@@ -3099,7 +3165,7 @@ export function createWorkspace() {
     stateless = false,
   ): Promise<void> => {
     const taskManager = state.settings?.taskManager;
-    requireReadyAgent(taskManager?.agent ?? "claude");
+    await requireReadyAgent(taskManager?.agent ?? "claude");
     await client().sendMessage({
       projectId: TASK_MANAGER_ID,
       body,

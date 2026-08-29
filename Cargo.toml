@@ -45,6 +45,38 @@ agency-proxy-protocol = "0.1.7"
 debug = 0
 incremental = true
 
+# The frontend is JavaScript interpreted by Boa. Leaving the interpreter at
+# dev's default opt-level 0 made a small Solid reaction take ~300ms in the QA
+# build while the renderer itself took single-digit milliseconds. Keep AZ's own
+# crates quick to compile, but build the long-lived script runtime like runtime
+# code rather than like code under source-level debugging.
+[profile.dev.package.ps-boa-engine]
+opt-level = 2
+
+[profile.dev.package.ps-boa-gc]
+opt-level = 2
+
+[profile.dev.package.ps-boa-string]
+opt-level = 2
+
+[profile.dev.package.ps-blitz-script]
+opt-level = 2
+
+# Pixel QA uses the renderer's real CPU paint path. At opt-level 0 even a
+# 32x32 crop spends seconds repainting the window, so the inspector times out
+# before it can compare first paint with the post-hover frame.
+[profile.dev.package.ps-blitz-paint]
+opt-level = 2
+
+[profile.dev.package.ps-anyrender-vello-cpu]
+opt-level = 2
+
+[profile.dev.package.ps-vello-cpu]
+opt-level = 2
+
+[profile.dev.package.ps-glifo]
+opt-level = 2
+
 [profile.test]
 # Tests need assertions and line-bearing panic output, not debugger symbols.
 debug = 0

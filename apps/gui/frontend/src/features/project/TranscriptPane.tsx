@@ -519,6 +519,7 @@ export function TranscriptPane(props: {
 
   let followFrame: number | undefined;
   let restoreReaderFrame: number | undefined;
+  let activationFrame: number | undefined;
   const followTail = (): void => {
     if (!untrack(pinned)) return;
     const moveToTail = (): void => {
@@ -644,6 +645,9 @@ export function TranscriptPane(props: {
     }
     if (restoreReaderFrame !== undefined && typeof cancelAnimationFrame !== "undefined") {
       cancelAnimationFrame(restoreReaderFrame);
+    }
+    if (activationFrame !== undefined && typeof cancelAnimationFrame !== "undefined") {
+      cancelAnimationFrame(activationFrame);
     }
     if (revealFrame !== undefined && typeof cancelAnimationFrame !== "undefined") {
       cancelAnimationFrame(revealFrame);
@@ -841,8 +845,17 @@ export function TranscriptPane(props: {
       const activeKey = state.activeKey;
       untrack(() => {
         if (activeKey !== props.project.id) return;
-        if (pinned()) followTail();
-        else restoreReaderPosition();
+        // Revealing the retained pane is the feedback frame. Both paths read
+        // scroll geometry, which forces a synchronous layout flush; restore on
+        // the following frame instead of inside the tab click's microtasks.
+        if (activationFrame !== undefined) cancelAnimationFrame(activationFrame);
+        const restore = (): void => {
+          activationFrame = undefined;
+          if (pinned()) followTail();
+          else restoreReaderPosition();
+        };
+        if (typeof requestAnimationFrame === "undefined") queueMicrotask(restore);
+        else activationFrame = requestAnimationFrame(restore);
       });
     },
     () => {},
@@ -887,10 +900,11 @@ export function TranscriptPane(props: {
             the bottom. */}
         <Show when={visibleTimeline().hidden > 0}>
           <Button
+            id={`project-${props.project.id}-transcript-earlier`}
             type="button"
             onClick={() => revealEarlier()}
             data-transcript-edge
-            class="mx-auto rounded-full border border-az-hairline-strong px-3 py-1 text-[11px] text-az-muted transition-colors hover:border-primary/50 hover:text-az-body"
+            class="mx-auto rounded-full border border-az-hairline-strong px-3 py-1 text-az-muted text-ui-caption transition-colors hover:border-primary/50 hover:text-az-body"
           >
             {tx("Show {count} earlier messages", {
               count: Math.min(TRANSCRIPT_PAGE_SIZE, visibleTimeline().hidden),
@@ -977,10 +991,11 @@ export function TranscriptPane(props: {
             discontinuity. Scrolling into it reveals the next page anyway. */}
         <Show when={visibleTimeline().trailing > 0}>
           <Button
+            id={`project-${props.project.id}-transcript-newer`}
             type="button"
             onClick={revealLater}
             data-transcript-edge
-            class="mx-auto rounded-full border border-az-hairline-strong px-3 py-1 text-[11px] text-az-muted transition-colors hover:border-primary/50 hover:text-az-body"
+            class="mx-auto rounded-full border border-az-hairline-strong px-3 py-1 text-az-muted text-ui-caption transition-colors hover:border-primary/50 hover:text-az-body"
           >
             {tx("Show {count} newer messages", {
               count: Math.min(TRANSCRIPT_PAGE_SIZE, visibleTimeline().trailing),
@@ -1001,7 +1016,7 @@ export function TranscriptPane(props: {
             // The same container as a finished reply, so the bubble does not
             // appear, disappear and reappear as the run lands.
             <div class={`${AGENT_BUBBLE}`}>
-              <span class="text-[11px] text-az-muted">
+              <span class="text-az-muted text-ui-caption">
                 {/*
                   Numbered while it is still being written.
 
@@ -1016,7 +1031,11 @@ export function TranscriptPane(props: {
                 {tx("Turn {number}", { number: streamingTurn() })} ·{" "}
                 {AGENT_LABELS[streamingAgent()]} {tx("· writing…")}
               </span>
-              <MessageBody body={holdBackPartialDirective(text())} class={AGENT_TEXT} />
+              <MessageBody
+                id={`project-${props.project.id}-streaming-body`}
+                body={holdBackPartialDirective(text())}
+                class={AGENT_TEXT}
+              />
             </div>
           )}
         </Show>
@@ -1103,20 +1122,20 @@ function QuestionCard(props: { question: Question; number: number }): JSX.Elemen
 
   return (
     <div
-      class={`group flex items-start gap-2.5 rounded-r-xl border-l-[3px] py-2.5 pr-2.5 pl-3.5 text-[12.5px] transition-opacity ${
+      class={`group flex items-start gap-2.5 rounded-r-xl border-l-[3px] py-2.5 pr-2.5 pl-3.5 text-ui-label-lg transition-opacity ${
         answered() ? "border-az-hairline bg-az-inset opacity-80" : `${openSurface()} ${accent()}`
       }`}
     >
       <div class="flex min-w-0 flex-1 flex-col gap-1.5">
         <div class="flex items-center gap-1.5">
-          <Icon name="message-square-dashed" class={`text-[13px] ${iconTone()}`} />
-          <span class="font-semibold text-[11px] text-az-strong">
+          <Icon name="message-square-dashed" class={`text-ui-body ${iconTone()}`} />
+          <span class="font-semibold text-az-strong text-ui-caption">
             {tx("Question #{number}", { number: props.number })}
           </span>
-          <span class="text-[10.5px] text-az-muted">· {urgency()}</span>
+          <span class="text-az-muted text-ui-caption-sm">· {urgency()}</span>
         </div>
         <Show when={props.question.issueUrl}>
-          <span class="min-w-0 truncate text-[10.5px] text-az-muted">
+          <span class="min-w-0 truncate text-az-muted text-ui-caption-sm">
             {props.question.issueUrl}
           </span>
         </Show>
@@ -1127,21 +1146,23 @@ function QuestionCard(props: { question: Question; number: number }): JSX.Elemen
       <Show when={!answered()}>
         <div class="flex shrink-0 items-center gap-1">
           <Button
+            id={`question-${props.question.id}-reply`}
             type="button"
             onClick={() => actions.selectQuestionReply(props.question.projectId, props.question.id)}
             aria-label={tx("Reply to this question")}
-            class="rounded-full border border-primary/30 bg-az-chip px-2 py-0.5 font-semibold text-[10.5px] text-primary transition-colors hover:bg-az-chip"
+            class="rounded-full border border-primary/30 bg-az-chip px-2 py-0.5 font-semibold text-primary text-ui-caption-sm transition-colors hover:bg-az-chip"
           >
             {tx("Reply")}
           </Button>
           <Button
+            id={`question-${props.question.id}-dismiss`}
             type="button"
             onClick={() => void actions.answerQuestion(props.question.id, true)}
             aria-label={tx("Dismiss this question")}
             title={tx("Dismiss this question")}
             class="rounded p-0.5 text-az-faint transition-colors hover:bg-white/5 hover:text-az-body"
           >
-            <Icon name="x" class="text-[13px]" />
+            <Icon name="x" class="text-ui-body" />
           </Button>
         </div>
       </Show>
@@ -1209,7 +1230,7 @@ export function RunStatusLine(props: {
   const isSynced = () => props.status.persistedChars >= props.streamedChars;
 
   return (
-    <div class="flex items-center gap-2.5 px-1 py-0.5 text-[12px] text-az-muted">
+    <div class="flex items-center gap-2.5 px-1 py-0.5 text-az-muted text-ui-label">
       {/*
         Controls on the left, fixed: Cancel and the saved-to-store dot sit
         before the text so the text can grow and shrink without sliding them
@@ -1220,9 +1241,10 @@ export function RunStatusLine(props: {
       */}
       <Show when={isLive("cancelRun")}>
         <Button
+          id={`project-${props.projectId}-cancel-run`}
           type="button"
           onClick={() => void actions.cancelRun(props.projectId)}
-          class="shrink-0 rounded-md border border-primary/16 px-2 py-px text-[11.5px] text-az-body transition-colors hover:border-error hover:text-error"
+          class="shrink-0 rounded-md border border-primary/16 px-2 py-px text-az-body text-ui-detail transition-colors hover:border-error hover:text-error"
         >
           {tx("Cancel")}
         </Button>
@@ -1332,7 +1354,7 @@ const AGENT_BUBBLE =
 /* 14px rather than 13.5, and 1.75 rather than 1.7: this is the longest-running
  * prose in the window and it was set smaller and tighter than the user's own
  * one-line messages. */
-const AGENT_TEXT = "text-[14px] text-az-bubble-text leading-[1.75]";
+const AGENT_TEXT = "text-ui-control text-az-bubble-text leading-[1.75]";
 
 function AgentBubble(props: {
   message: Message;
@@ -1341,7 +1363,7 @@ function AgentBubble(props: {
 }): JSX.Element {
   if (props.message.stop === "reconnected" && props.message.body === "Reconnected") {
     return (
-      <div class="self-start rounded-full border border-az-hairline px-3 py-1 text-[11px] text-az-muted">
+      <div class="self-start rounded-full border border-az-hairline px-3 py-1 text-az-muted text-ui-caption">
         {tx("Reconnected")}
       </div>
     );
@@ -1378,16 +1400,16 @@ function AgentBubble(props: {
      */
     <div class={`group ${AGENT_BUBBLE}`} data-selectable>
       <div class="flex items-baseline gap-2">
-        <span class="font-semibold text-[11px] text-az-muted">
+        <span class="font-semibold text-az-muted text-ui-caption">
           {AGENT_LABELS[props.message.agent]}
         </span>
         <Show when={props.message.model}>
-          {(model) => <span class="text-[11px] text-az-faint">{model()}</span>}
+          {(model) => <span class="text-az-faint text-ui-caption">{model()}</span>}
         </Show>
         <Show when={failed()}>
           <span
             title={props.message.stop}
-            class={`rounded-[5px] border bg-transparent px-[6px] py-px font-semibold text-[10px] ${
+            class={`rounded-[5px] border bg-transparent px-[6px] py-px font-semibold text-ui-tiny ${
               transient() ? "border-warning/30 text-warning" : "border-error/30 text-error"
             }`}
           >
@@ -1399,21 +1421,26 @@ function AgentBubble(props: {
           </span>
         </Show>
         <div class="flex-1" />
-        <CopyMessageButton body={props.message.body} />
+        <CopyMessageButton id={`message-${props.message.id}-copy`} body={props.message.body} />
       </div>
-      <MessageBody body={props.message.body} class={AGENT_TEXT} />
+      <MessageBody
+        id={`message-${props.message.id}-body`}
+        body={props.message.body}
+        class={AGENT_TEXT}
+      />
       <Show when={retryable() && props.onRetry}>
         {(retry) => (
           <div class="flex items-center gap-2 pt-0.5">
             <Button
+              id={`message-${props.message.id}-retry`}
               type="button"
               onClick={() => retry()()}
-              class="rounded-lg border border-primary/18 px-3 py-[5px] text-[12px] text-az-body transition-colors hover:border-primary hover:text-primary"
+              class="rounded-lg border border-primary/18 px-3 py-[5px] text-az-body text-ui-label transition-colors hover:border-primary hover:text-primary"
             >
               {tx("Retry")}
             </Button>
             <Show when={transient()}>
-              <span class="text-[11.5px] text-az-muted">
+              <span class="text-az-muted text-ui-detail">
                 {tx("the server was overloaded — your prompt is safe to resend")}
               </span>
             </Show>
@@ -1431,7 +1458,7 @@ function AgentBubble(props: {
       <Flex align="center" gap="sm">
         <Show when={props.turn}>
           {(turn) => (
-            <span class="shrink-0 text-[10.5px] text-az-faint">
+            <span class="shrink-0 text-az-faint text-ui-caption-sm">
               {tx("Turn {number}", { number: turn() })} ·
             </span>
           )}
@@ -1505,7 +1532,7 @@ export function MessageCost(props: { message: Message }): JSX.Element {
                       calculated: costLabel(value().calculatedUsd!),
                     })
           }
-          class="inline-flex shrink-0 items-center font-mono text-[10.5px]"
+          class="inline-flex shrink-0 items-center font-mono text-ui-caption-sm"
         >
           <Show when={value().usd !== null}>
             <span
@@ -1555,13 +1582,13 @@ function UserBubble(props: {
     <div class="flex max-w-[76%] flex-col items-end gap-[7px] self-end">
       <div
         data-selectable
-        class="whitespace-pre-wrap rounded-[16px_16px_6px_16px] bg-base-300 px-[15px] py-[11px] text-[13.5px] text-az-title leading-[1.55]"
+        class="whitespace-pre-wrap rounded-[16px_16px_6px_16px] bg-base-300 px-[15px] py-[11px] text-az-title text-ui-body-lg leading-[1.55]"
       >
         <Show when={props.replyQuestion}>
           {(question) => (
             <div
               title={question().text}
-              class="mb-2 flex w-fit items-center border-primary/35 border-l-2 pl-2 text-[10.5px] text-primary"
+              class="mb-2 flex w-fit items-center border-primary/35 border-l-2 pl-2 text-primary text-ui-caption-sm"
             >
               <span class="shrink-0 font-semibold">
                 {tx("Reply to #{number}", { number: props.replyQuestionNumber ?? "?" })}
@@ -1630,7 +1657,7 @@ export function MessageReceipt(props: { status?: MessageReceiptState }): JSX.Ele
 function MessageTime(props: { at: string }): JSX.Element {
   const now = useNow(30_000);
   return (
-    <span title={props.at} class="shrink-0 text-[10.5px] text-az-strong">
+    <span title={props.at} class="shrink-0 text-az-strong text-ui-caption-sm">
       {relativeTime(props.at, now())}
     </span>
   );
@@ -1661,11 +1688,14 @@ function SystemNote(props: { message: Message }): JSX.Element {
       <span class="h-px flex-1 bg-az-hairline" />
       <span
         data-selectable
-        class={`flex min-w-0 items-center gap-1.5 text-center text-[11.5px] ${
+        class={`flex min-w-0 items-center gap-1.5 text-center text-ui-detail ${
           failed() ? "text-error" : "text-az-muted"
         }`}
       >
-        <Icon name={failed() ? "info" : "sparkles"} class="relative top-px shrink-0 text-[12px]" />
+        <Icon
+          name={failed() ? "info" : "sparkles"}
+          class="relative top-px shrink-0 text-ui-label"
+        />
         {/*
           `min-w-0` and a truncating span, because the cost beside it is
           `shrink-0`. A flex child will not shrink below its content width
@@ -1680,7 +1710,7 @@ function SystemNote(props: { message: Message }): JSX.Element {
       </span>
       {/* These notes carry the one thing most worth copying out of a
           transcript: the path a checkpoint was just written to. */}
-      <CopyMessageButton body={props.message.body} />
+      <CopyMessageButton id={`message-${props.message.id}-copy`} body={props.message.body} />
       <span class="h-px flex-1 bg-az-hairline" />
     </div>
   );
@@ -1704,33 +1734,37 @@ export function ReviewNote(props: { message: Message }): JSX.Element {
       <Flex align="center" gap="sm">
         <Icon
           name="messages-square"
-          class={`shrink-0 text-[14px] ${failed() ? "text-error" : "text-info"}`}
+          class={`shrink-0 text-ui-control ${failed() ? "text-error" : "text-info"}`}
         />
-        <span class="font-semibold text-[12px] text-az-strong">
+        <span class="font-semibold text-az-strong text-ui-label">
           {tx("Review by {agent}", {
             agent: AGENT_LABELS[props.message.agent] ?? props.message.agent,
           })}
         </span>
         <Show when={failed()}>
-          <span class="rounded-[5px] bg-error/18 px-[6px] py-px font-semibold text-[10px] text-error">
+          <span class="rounded-[5px] bg-error/18 px-[6px] py-px font-semibold text-error text-ui-tiny">
             {tx("Review failed")}
           </span>
         </Show>
         <Show when={props.message.stop}>
-          <span class="min-w-0 truncate font-mono text-[11px] text-az-muted">
+          <span class="min-w-0 truncate font-mono text-az-muted text-ui-caption">
             {props.message.stop}
           </span>
         </Show>
         <Show when={props.message.review?.headSha}>
-          <span class="shrink-0 font-mono text-[10px] text-az-muted">
+          <span class="shrink-0 font-mono text-az-muted text-ui-tiny">
             {tx("head {sha}", { sha: props.message.review!.headSha.slice(0, 8) })}
           </span>
         </Show>
         <span class="ml-auto shrink-0">
-          <CopyMessageButton body={props.message.body} />
+          <CopyMessageButton id={`message-${props.message.id}-copy`} body={props.message.body} />
         </span>
       </Flex>
-      <MessageBody body={props.message.body} class={AGENT_TEXT} />
+      <MessageBody
+        id={`message-${props.message.id}-body`}
+        body={props.message.body}
+        class={AGENT_TEXT}
+      />
       <MessageTime at={props.message.createdAt} />
     </div>
   );
@@ -1752,23 +1786,25 @@ function ModeratorNote(props: { message: Message }): JSX.Element {
     >
       <Icon
         name="shield"
-        class={`relative top-0.5 shrink-0 text-[15px] ${isCritical() ? "text-error" : "text-warning"}`}
+        class={`relative top-0.5 shrink-0 text-ui-lead ${isCritical() ? "text-error" : "text-warning"}`}
       />
       <div class="flex min-w-0 flex-1 flex-col gap-[7px]">
         <div class="flex items-baseline gap-2">
-          <span class={`font-semibold text-[12px] ${isCritical() ? "text-error" : "text-warning"}`}>
+          <span
+            class={`font-semibold text-ui-label ${isCritical() ? "text-error" : "text-warning"}`}
+          >
             {tx("Moderator")}
           </span>
-          <span class="text-[11.5px] text-az-muted">
+          <span class="text-az-muted text-ui-detail">
             {tx("supervising")} · {props.message.model}
           </span>
         </div>
 
-        <p data-selectable class="text-[12.5px] text-az-body leading-[1.55]">
+        <p data-selectable class="text-az-body text-ui-label-lg leading-[1.55]">
           <Show when={moderation()?.severity}>
             {(severity) => (
               <span
-                class={`mr-1.5 rounded-[5px] px-[7px] py-px font-bold text-[10.5px] ${
+                class={`mr-1.5 rounded-[5px] px-[7px] py-px font-bold text-ui-caption-sm ${
                   severity() === "critical"
                     ? "bg-error/20 text-error"
                     : "bg-warning/20 text-warning"
@@ -1778,36 +1814,41 @@ function ModeratorNote(props: { message: Message }): JSX.Element {
               </span>
             )}
           </Show>
-          <InlineText text={moderation()?.reason ?? ""} />
+          <InlineText
+            id={`message-${props.message.id}-moderation-reason`}
+            text={moderation()?.reason ?? ""}
+          />
         </p>
 
         <Show when={moderation()?.needsApproval}>
           <div class="flex items-center gap-2 pt-0.5">
             <Button
+              id={`message-${props.message.id}-moderation-approve`}
               type="button"
               disabled={state.backend !== "mock"}
               onClick={() => void actions.resolveModeration(props.message.id, true)}
-              class="rounded-lg bg-primary px-[13px] py-[5px] font-semibold text-[12px] text-primary-content transition-colors hover:bg-az-primary-hover"
+              class="rounded-lg bg-primary px-[13px] py-[5px] font-semibold text-primary-content text-ui-label transition-colors hover:bg-az-primary-hover"
             >
               {tx("Approve once")}
             </Button>
             <Button
+              id={`message-${props.message.id}-moderation-deny`}
               type="button"
               disabled={state.backend !== "mock"}
               onClick={() => void actions.resolveModeration(props.message.id, false)}
-              class="rounded-lg border border-primary/18 px-3 py-[5px] text-[12px] text-az-body transition-colors hover:border-error hover:text-error"
+              class="rounded-lg border border-primary/18 px-3 py-[5px] text-az-body text-ui-label transition-colors hover:border-error hover:text-error"
             >
               {tx("Deny")}
             </Button>
             <Show
               when={state.backend === "mock"}
               fallback={
-                <span class="text-[11.5px] text-az-muted">
+                <span class="text-az-muted text-ui-detail">
                   {"· moderator decisions are not wired"}
                 </span>
               }
             >
-              <span class="text-[11.5px] text-az-muted">{tx("· agent is paused")}</span>
+              <span class="text-az-muted text-ui-detail">{tx("· agent is paused")}</span>
             </Show>
           </div>
         </Show>
@@ -1829,24 +1870,25 @@ function EmptyTranscript(props: {
       <Empty class="flex flex-col items-center gap-3.5">
         <Empty.Icon>
           <div class="flex size-[54px] items-center justify-center rounded-2xl border border-az-hairline bg-base-300">
-            <Icon name="message-square-dashed" class="text-[24px] text-az-faint" />
+            <Icon name="message-square-dashed" class="text-az-faint text-ui-display-lg" />
           </div>
         </Empty.Icon>
-        <Empty.Title class="font-semibold text-[15px] text-base-content">
+        <Empty.Title class="font-semibold text-base-content text-ui-lead">
           {tx("Nothing open")}
         </Empty.Title>
-        <Empty.Description class="max-w-[360px] text-center text-[12.5px] text-az-muted leading-[1.55]">
+        <Empty.Description class="max-w-[360px] text-center text-az-muted text-ui-label-lg leading-[1.55]">
           {tx(
             "This project is connected and idle. Start the conversation, or pick an item from the panel on the right.",
           )}
         </Empty.Description>
         <Empty.Actions class="flex max-w-[430px] flex-wrap justify-center gap-2">
           <For each={STARTERS()}>
-            {(starter) => (
+            {(starter, index) => (
               <Button
+                id={`project-${props.projectId}-starter-${index()}`}
                 type="button"
                 onClick={() => props.onStart(starter)}
-                class="rounded-full border border-az-hairline-strong px-3.5 py-1.5 text-[12px] text-az-body transition-colors hover:border-primary hover:text-primary"
+                class="rounded-full border border-az-hairline-strong px-3.5 py-1.5 text-az-body text-ui-label transition-colors hover:border-primary hover:text-primary"
               >
                 {starter}
               </Button>

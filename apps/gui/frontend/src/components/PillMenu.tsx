@@ -14,6 +14,8 @@ export type PillOption<T extends string> = {
 };
 
 export type PillMenuProps<T extends string> = {
+  /** Stable application identity. Compound parts derive their own ids from it. */
+  id: string;
   /** Bold prefix that never changes, e.g. the agent name next to the model. */
   prefix?: string;
   value: T;
@@ -42,11 +44,12 @@ export function PillMenu<T extends string>(props: PillMenuProps<T>): JSX.Element
 
   // Opens upward: every pill in this app sits in a composer at the window's bottom edge.
   return (
-    <Dropdown placement="top">
+    <Dropdown id={props.id} placement="top">
       <Dropdown.Trigger
+        id={`${props.id}--trigger`}
         aria-label={`${props.label}: ${currentLabel()}`}
         disabled={props.isDisabled}
-        class={`flex h-[24px] min-h-[24px] shrink-0 items-center gap-[7px] rounded-full px-2.5 py-0 font-medium text-[11px] leading-none transition-colors ${
+        class={`flex h-[24px] min-h-[24px] shrink-0 items-center gap-[7px] rounded-full px-2.5 py-0 font-medium text-ui-caption leading-none transition-colors ${
           props.variant === "outline"
             ? "border border-primary/35 text-az-body hover:border-primary/60 hover:text-az-title"
             : "border border-primary/35 bg-base-300 hover:border-primary/60"
@@ -54,7 +57,7 @@ export function PillMenu<T extends string>(props: PillMenuProps<T>): JSX.Element
       >
         <Show when={props.icon}>
           {(name) => (
-            <Icon name={name()} class={`text-[13px] ${props.iconClass ?? "text-az-muted"}`} />
+            <Icon name={name()} class={`text-ui-body ${props.iconClass ?? "text-az-muted"}`} />
           )}
         </Show>
         <Show when={props.prefix}>
@@ -63,25 +66,27 @@ export function PillMenu<T extends string>(props: PillMenuProps<T>): JSX.Element
         <span class={props.prefix ? "text-az-muted" : "text-az-strong"}>
           {current()?.triggerLabel ?? currentLabel()}
         </span>
-        <Icon name="chevron-down" class="text-[12px] text-az-faint" />
+        <Icon name="chevron-down" class="text-az-faint text-ui-label" />
       </Dropdown.Trigger>
 
       <Dropdown.Menu
+        id={`${props.id}--menu`}
         align="start"
         class="min-w-[190px] rounded-xl border border-az-hairline bg-base-100 p-1 shadow-[0_18px_40px_rgba(0,0,0,.5)]"
       >
         <For each={props.options}>
           {(option) => (
             <Dropdown.Item
+              id={`${props.id}--option-${option.value}`}
               aria-label={option.label}
               onClick={() => props.onChange(option.value)}
               class={`flex w-full flex-col items-start gap-0.5 rounded-lg px-3 py-2 text-left transition-colors hover:bg-white/5 ${
                 option.value === props.value ? "text-primary" : "text-az-body"
               }`}
             >
-              <span class="text-[12.5px]">{option.label}</span>
+              <span class="text-ui-label-lg">{option.label}</span>
               <Show when={option.hint}>
-                <span class="text-[11px] text-az-muted">{option.hint}</span>
+                <span class="text-az-muted text-ui-caption">{option.hint}</span>
               </Show>
             </Dropdown.Item>
           )}

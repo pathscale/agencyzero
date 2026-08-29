@@ -99,6 +99,11 @@ async function mountWorkspace(): Promise<Workspace> {
   return bootWorkspace();
 }
 
+async function hydrateProject(workspace: Workspace, projectId: string): Promise<void> {
+  workspace.actions.focus(projectId);
+  await waitFor(() => expect(workspace.state.messages[projectId]).toBeDefined());
+}
+
 const keys = (workspace: Workspace) => workspace.state.tabs.map((tab) => tab.key);
 
 beforeEach(() => {
@@ -129,22 +134,25 @@ describe("startup", () => {
     expect(keys(workspace)).toEqual(["home", "worktable", "cafe", "quux"]);
   });
 
-  /*
-   * A restored tab has its project loaded, not just its key in the strip.
-   *
-   * Boot wrote the restored strip into the store and then read `state.tabs`
-   * back to decide which projects to fetch. Solid 2 defers that write, so the
-   * read saw Home alone: boot logged "loading 0 open project(s)" and fetched
-   * nothing, while the strip still rendered every remembered tab. The tabs
-   * were there and empty, which is why asserting on keys alone missed it.
-   */
-  it("loads the messages for every tab it restored, not just their keys", async () => {
+  it("does not hydrate hidden projects behind the visible Home surface", async () => {
     const workspace = await mountWorkspace();
 
     expect(keys(workspace)).toEqual(["home", "worktable", "cafe", "quux"]);
-    for (const project of ["worktable", "cafe", "quux"]) {
-      await waitFor(() => expect(workspace.state.messages[project]).toBeTruthy());
-    }
+    expect(workspace.state.messages.worktable).toBeUndefined();
+    expect(workspace.state.messages.cafe).toBeUndefined();
+    expect(workspace.state.messages.quux).toBeUndefined();
+  });
+
+  it("hydrates the remembered project in front before boot becomes ready", async () => {
+    setPrefs((d) => {
+      d.lastTabKey = "quux";
+    });
+    const workspace = await mountWorkspace();
+
+    expect(workspace.state.activeKey).toBe("quux");
+    expect(workspace.state.messages.quux).toBeTruthy();
+    expect(workspace.state.messages.cafe).toBeUndefined();
+    expect(workspace.state.messages.worktable).toBeUndefined();
   });
 
   /*
@@ -221,8 +229,10 @@ describe("startup", () => {
 
   it("derives approval postures from provider capabilities", async () => {
     const workspace = await mountWorkspace();
-    expect(workspace.permissionsFor("claude")).toContain("ask");
-    expect(workspace.permissionsFor("codex")).toContain("ask");
+    await waitFor(() => {
+      expect(workspace.permissionsFor("claude")).toContain("ask");
+      expect(workspace.permissionsFor("codex")).toContain("ask");
+    });
   });
 });
 
@@ -439,12 +449,14 @@ describe("tabStatus", () => {
    */
   it("reports a CRITICAL hold as an error, over the rate limit on the same tab", async () => {
     const workspace = await mountWorkspace();
+    await hydrateProject(workspace, "cafe");
     expect(workspace.state.rateLimits.cafe).toBeTruthy();
     expect(workspace.tabStatus("cafe")).toBe("error");
   });
 
   it("falls back to the rate limit once the hold is resolved", async () => {
     const workspace = await mountWorkspace();
+    await hydrateProject(workspace, "cafe");
     const hold = workspace.state.messages.cafe.find((message) => message.moderation?.needsApproval);
 
     await workspace.actions.resolveModeration(hold!.id, true);
@@ -454,6 +466,7 @@ describe("tabStatus", () => {
 
   it("reports a project with live tool calls as running", async () => {
     const workspace = await mountWorkspace();
+    await hydrateProject(workspace, "worktable");
     expect(workspace.tabStatus("worktable")).toBe("running");
   });
 
@@ -479,6 +492,7 @@ describe("tabStatus", () => {
 
   it("does not turn a deliberate cancellation into an error message", async () => {
     const workspace = await mountWorkspace();
+    await hydrateProject(workspace, "worktable");
 
     await workspace.actions.cancelRun("worktable");
 
@@ -691,6 +705,7 @@ describe("optimistic item persistence", () => {
 describe("item forks", () => {
   it("opens one linked child chat and inherits the parent tab selection", async () => {
     const workspace = await mountWorkspace();
+    await hydrateProject(workspace, "worktable");
     const parent = workspace.state.tabs.find((tab) => tab.projectId === "worktable");
     expect(parent).toBeDefined();
 
@@ -750,6 +765,7 @@ describe("task correlation", () => {
    */
   it("completes only the tool call that finished, not every task sharing its label", async () => {
     const workspace = await mountWorkspace();
+    await hydrateProject(workspace, "worktable");
     const before = workspace.state.running.worktable;
     expect(before).toHaveLength(2);
 
@@ -851,6 +867,7 @@ describe("queueReason", () => {
 describe("project deletion", () => {
   it("purges every collection the project owned", async () => {
     const workspace = await mountWorkspace();
+    await hydrateProject(workspace, "worktable");
     expect(workspace.state.messages.worktable).toBeTruthy();
 
     workspace.actions.purgeProject("worktable");

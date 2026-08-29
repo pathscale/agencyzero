@@ -32,6 +32,8 @@
         what: "Escape closes the Home-row editor without changing its name",
         open: Some("Home"),
         hover: None,
+        setup_type_into: Some("Search projects and items"),
+        setup_text: Some("theta theta north indi"),
         click: Some("button:Rename project theta theta north indi"),
         key: Some("Escape"),
         key_on: Some("textbox:Rename project theta theta north indi"),

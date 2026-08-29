@@ -295,6 +295,31 @@
  */
 @theme {
   /*
+   * One typography ladder for the application. Components name the role they
+   * need; none of them owns a numeric font size. Values are rem so the
+   * interface-size preference can scale typography and rem-based geometry from
+   * the root instead of repainting a fixed pixel ladder through CSS zoom.
+   */
+  --text-ui-micro: 0.59375rem;
+  --text-ui-tiny: 0.625rem;
+  --text-ui-caption-sm: 0.65625rem;
+  --text-ui-caption: 0.6875rem;
+  --text-ui-detail: 0.71875rem;
+  --text-ui-label: 0.75rem;
+  --text-ui-label-lg: 0.78125rem;
+  --text-ui-body: 0.8125rem;
+  --text-ui-body-lg: 0.84375rem;
+  --text-ui-control: 0.875rem;
+  --text-ui-control-lg: 0.90625rem;
+  --text-ui-lead: 0.9375rem;
+  --text-ui-title: 1rem;
+  --text-ui-title-lg: 1.0625rem;
+  --text-ui-heading: 1.125rem;
+  --text-ui-display: 1.3125rem;
+  --text-ui-display-lg: 1.5rem;
+  --text-ui-hero: 1.6875rem;
+
+  /*
    * Text ladder. Muted and faint still recede through size and weight, but not
    * below the 4.5:1 floor measured against the rendered dark card stack. Every
    * rung carries `- var(--az-damp)`, so the picker can move the ladder together.
@@ -495,13 +520,11 @@
   }
 
   /*
-   * The interface uses an explicit pixel type ladder, so changing the root font
-   * size would leave nearly every label untouched. Zoom keeps that ladder and
-   * its control geometry together. CSS zoom participates in layout already;
-   * inverse dimensions would compensate a second time and leave empty space.
+   * Rem is the shared unit for typography and Tailwind geometry. Scaling it at
+   * the root keeps text, controls, gaps, and breakpoints in the same system.
    */
-  #root {
-    zoom: var(--az-ui-scale, 1.08);
+  html {
+    font-size: var(--az-ui-font-size, 112%);
   }
 
   body {
@@ -541,7 +564,7 @@
     background-color: rgb(from var(--color-az-void) r g b / var(--az-glass-alpha, 100%));
     color: var(--color-base-content);
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
-    font-size: 13px;
+    font-size: var(--text-ui-body);
     -webkit-font-smoothing: antialiased;
   }
 
