@@ -72,8 +72,7 @@ jobs:
       # spending minutes building or launching an app with an incompatible
       # harness release.
       - name: Install ps-qa
-        # Compatible 0.4 releases preserve the reviewed QA profile contract.
-        run: cargo install ps-qa --version '^0.4.15'
+        run: cargo install ps-qa
 
       - name: Validate the QA profile and outcome manifest
         run: ps-qa --app ps-qa.ron list --checks tests/ps-qa
