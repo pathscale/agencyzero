@@ -4,7 +4,10 @@ This is measured renderer evidence. It does not count jsdom event dispatch as a
 working control. Every automated action resolves an accessible name to an exact
 semantic node id; AgencyZero checks never use coordinate-pointer activation.
 
-## Current subject
+## Recorded subject (historical)
+
+These numbers describe the dated runs below, not the current manifest. The
+current count comes from `ps-qa --app ps-qa.ron list --checks tests/ps-qa`.
 
 - AgencyZero PR 186, app 0.8.37
 - ps-qa PR 10 candidate, 214 checks in 24 surface-grouped outcome areas
