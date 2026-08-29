@@ -9,10 +9,9 @@ name: QA panel
 # frontend and QA changes while making a UI dependency bump prove the exact
 # package it resolves before that pull request can merge.
 #
-# Pull requests run the input-component contract groups and tree integrity.
-# Manual runs can execute every declared outcome and optionally reconcile every
-# control instance, keeping historical whole-application debt separate from a
-# focused component regression gate.
+# Pull requests run every declared outcome plus tree integrity. Manual runs can
+# still select a focused group while authoring, or add inventory reconciliation
+# and lifecycle checks for the exhaustive release audit.
 on:
   pull_request:
     paths:
@@ -54,6 +53,9 @@ jobs:
     # for a cold release build and cleanup, but never leave a stale QA process
     # occupying a runner for an hour.
     timeout-minutes: 30
+    defaults:
+      run:
+        shell: zsh {0}
     steps:
       - uses: actions/checkout@v4
 
@@ -170,7 +172,7 @@ jobs:
 
       - name: Run the focused input checks
         id: checks
-        if: ${{ github.event_name == 'pull_request' || inputs.group != '' || inputs.suite == 'focused' }}
+        if: ${{ github.event_name == 'workflow_dispatch' && (inputs.group != '' || inputs.suite == 'focused') }}
         continue-on-error: true
         timeout-minutes: 3
         env:
@@ -199,7 +201,7 @@ jobs:
       # a blank group, after the focused regression is green.
       - name: Run the complete behavior audit
         id: full
-        if: ${{ github.event_name == 'workflow_dispatch' && inputs.group == '' && inputs.suite != 'focused' }}
+        if: ${{ github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.group == '' && inputs.suite != 'focused') }}
         continue-on-error: true
         timeout-minutes: 3
         env:
@@ -274,22 +276,40 @@ jobs:
       # stopped at the first failure and silently hid later lifecycle failures.
       - name: Enforce complete QA outcome
         if: always()
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          REQUESTED_GROUP: ${{ inputs.group }}
+          REQUESTED_SUITE: ${{ inputs.suite }}
+          INTEGRITY_OUTCOME: ${{ steps.integrity.outcome }}
+          FOCUSED_OUTCOME: ${{ steps.checks.outcome }}
+          FULL_OUTCOME: ${{ steps.full.outcome }}
+          INVENTORY_OUTCOME: ${{ steps.inventory.outcome }}
+          SWEEP_OUTCOME: ${{ steps.sweep.outcome }}
+          ISOLATED_OUTCOME: ${{ steps.isolated.outcome }}
         run: |
           failed=0
-          for gate in \
-            'tree integrity:${{ steps.integrity.outcome }}' \
-            'focused input checks:${{ steps.checks.outcome }}' \
-            'complete behavior audit:${{ steps.full.outcome }}' \
-            'reachability inventory:${{ steps.inventory.outcome }}' \
-            'semantic sweep:${{ steps.sweep.outcome }}' \
-            'inspection toggle:${{ steps.isolated.outcome }}'; do
-            name="${gate%%:*}"
-            outcome="${gate#*:}"
-            if [ "$outcome" = failure ]; then
+          require_gate() {
+            local name="$1"
+            local outcome="$2"
+            if [[ "$outcome" != success ]]; then
               echo "$name failed" >&2
               failed=1
             fi
-          done
+          }
+
+          require_gate 'tree integrity' "$INTEGRITY_OUTCOME"
+          if [[ "$EVENT_NAME" == pull_request ]]; then
+            require_gate 'complete behavior audit' "$FULL_OUTCOME"
+          elif [[ -n "$REQUESTED_GROUP" || "$REQUESTED_SUITE" == focused ]]; then
+            require_gate 'focused input checks' "$FOCUSED_OUTCOME"
+          else
+            require_gate 'complete behavior audit' "$FULL_OUTCOME"
+          fi
+          if [[ "$EVENT_NAME" == workflow_dispatch && -z "$REQUESTED_GROUP" && "$REQUESTED_SUITE" == exhaustive ]]; then
+            require_gate 'reachability inventory' "$INVENTORY_OUTCOME"
+            require_gate 'semantic sweep' "$SWEEP_OUTCOME"
+            require_gate 'inspection toggle' "$ISOLATED_OUTCOME"
+          fi
           exit "$failed"
 
       - name: Summary

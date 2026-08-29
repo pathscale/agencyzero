@@ -1,25 +1,24 @@
 # Component outcome audit: status and next work
 
-Updated 2026-08-23. The repeatable procedure is
+Updated 2026-08-30. The repeatable procedure is
 `docs/QA-button-audit-runbook.md`; dated measurements and failures are in
 `tests/ps-qa/issues.md`.
 
 ## Current stack
 
-- AgencyZero PR 186 unmounts every inactive top-level surface. It also keeps
+- AgencyZero PR 201 unmounts every inactive top-level surface. It also keeps
   the legacy frontend unit suite manual and preserves typecheck, lint and the
   production frontend build as automatic CI.
-- tauri-runtime-blitz 0.1.5 carries the node-addressed control protocol,
+- tauri-runtime-blitz 0.1.17 carries the node-addressed control protocol,
   reusable glass support and the macOS availability fallback. Click activation
   targets the selected semantic node directly; coordinates do not select or
   retarget a control.
-- ps-qa 0.3.2 provides node-addressed actions, role inventory, modal dismissal,
+- ps-qa 0.4.16 provides node-addressed actions, role inventory, modal dismissal,
   nested-scroll reveal and isolated-control classification. AgencyZero's checks
   omit coordinate `press`, so this application uses semantic activation only.
 
-The workflow consumes published crates only: `tauri-runtime-blitz` and
-`blitz-control-protocol` 0.1.5, ps-qa 0.3.2, PromptSyntax 0.2.0 and PathScale
-UI 2.9.1. There are no audit-only Git dependency patches.
+The workflow consumes published crates only and installs the current releases
+without a lock or version pin. There are no audit-only Git dependency patches.
 
 ## Evidence contract
 
@@ -47,7 +46,8 @@ Always remove measurement blockers before interpreting component failures:
 2. Run `find --hidden --painted` and `ghost`.
 3. If inactive surfaces still own painted boxes, fix the application and start
    again. Do not compensate with selector heuristics.
-4. Run all 112 outcome checks.
+4. Run the complete manifest. As of this update it is 290 checks in 33 groups;
+   `ps-qa --app ps-qa.ron list --checks tests/ps-qa` is the authoritative count.
 5. Run `audit` and `cover` only after the tree is trustworthy.
 6. Record every failure, unreachable surface and manual-only control in
    `tests/ps-qa/issues.md`.

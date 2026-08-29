@@ -69,6 +69,7 @@
         click: Some("#settings-chat-import-codex-all"),
         subject: "status:Imported",
         expect: PaintsNamed,
+        outcome_timeout_ms: 5000,
         covers: ["#settings-chat-import-codex-all"],
     ),
 ]
