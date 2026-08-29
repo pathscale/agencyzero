@@ -408,8 +408,8 @@
         what: "the global glass setting changes",
         open: Some("Settings"),
         hover: None,
-        click: Some("Glass"),
-        subject: "Glass",
+        click: Some("switch:Glass"),
+        subject: "switch:Glass",
         expect: ValueChanges,
     ),
     (
@@ -418,8 +418,8 @@
         what: "the global glass setting can be restored",
         open: Some("Settings"),
         hover: None,
-        click: Some("Glass"),
-        subject: "Glass",
+        click: Some("switch:Glass"),
+        subject: "switch:Glass",
         expect: ValueChanges,
     ),
     (
