@@ -149,6 +149,16 @@ export interface Project {
   lastActivityAt: string;
 }
 
+/** One backend snapshot for the low-churn controls in the project side panel. */
+export interface ProjectPanelData {
+  ioPersist: boolean;
+  notes: string;
+  responseVerbosity: "default" | "low" | "medium" | "high";
+  contextDetail: "adaptive" | "full" | "compact" | "minimal";
+  checkpoints: boolean;
+  approvalRules: string[];
+}
+
 /** The lightweight, all-project state Home needs before the first paint. */
 export interface HomeSnapshot {
   items: ProjectItem[];
@@ -734,7 +744,7 @@ export interface ThemeSettings {
   /** How far a glass surface sits off the page: glow, sheen, shadow. 0 to 30. */
   glassDepth?: number;
   /**
-   * How opaque the surface's own film is, as a percentage, 0 to 95.
+   * How opaque the surface's own film is, as a percentage, 0 to 100.
    *
    * Its own axis rather than a derived one. The library computes
    * `--glass-background-opacity` from refraction, and on a dark surface that
@@ -754,10 +764,9 @@ export interface ThemeSettings {
   /**
    * Whether translucent surfaces are drawn at all. Absent means on.
    *
-   * Every other glass field is a shade of "how much", and none of them is
-   * "none": the opacity axis stops at a film that is still a film, and turning
-   * the rest down leaves translucent surfaces behind. This is the switch that
-   * says no to the effect rather than asking for less of it, and it governs
+   * The opacity axis can remove the film, but blur, refraction and depth may
+   * still affect translucent surfaces. This is the switch that says no to the
+   * whole material rather than asking for less of one axis, and it governs
    * both this app's own surfaces and the library's, which follow a root class
    * written from the same flag.
    *
@@ -1110,7 +1119,10 @@ export interface UiPrefs {
 }
 
 /** Preferences that travel with a backup; unfinished owner text stays local. */
-export type PortableUiPrefs = Omit<UiPrefs, "composerDrafts" | "replyQuestionIds">;
+export type PortableUiPrefs = Omit<
+  UiPrefs,
+  "composerDrafts" | "replyQuestionIds" | "lastTabKey" | "openTabKeys"
+>;
 
 /**
  * One quota window, in the provider's own terms.

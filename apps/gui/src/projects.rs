@@ -72,6 +72,22 @@ pub struct ProjectDto {
     pub last_activity_at: String,
 }
 
+/// The right project panel's durable, low-churn state.
+///
+/// These values share one screen and one persistence table. Returning them as
+/// one typed snapshot prevents every leaf control from creating its own IPC
+/// lifecycle whenever the active project changes.
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectPanelData {
+    pub io_persist: bool,
+    pub notes: String,
+    pub response_verbosity: String,
+    pub context_detail: String,
+    pub checkpoints: bool,
+    pub approval_rules: Vec<String>,
+}
+
 /// Attach the project's session id, which lives in `kv` rather than on the row.
 fn with_session(mut dto: ProjectDto, tables: &crate::db::tables::Tables) -> ProjectDto {
     for agent in [Agent::Claude, Agent::Codex] {
@@ -9197,6 +9213,36 @@ pub async fn delete_project(
     crate::log!(crate::log::Level::Info, "projects", "deleted {id}");
     let _ = app.emit("project:deleted", serde_json::json!({ "id": id }));
     Ok(())
+}
+
+/// Read everything the project side panel needs in one command.
+///
+/// All fields are synchronous table reads. Keeping the aggregation here turns
+/// six renderer-to-backend round trips per project switch into one snapshot and
+/// gives the frontend one lifecycle to cache and invalidate.
+#[tauri::command]
+pub fn get_project_panel_data(project_id: String, state: State<'_, AppState>) -> ProjectPanelData {
+    let tables = &state.tables;
+    let context_detail = match project_verbosity(tables, &project_id) {
+        Verbosity::Adaptive => "adaptive",
+        Verbosity::Full => "full",
+        Verbosity::Compact => "compact",
+        Verbosity::Minimal => "minimal",
+    };
+    ProjectPanelData {
+        io_persist: tables
+            .kv_get(&io_persist_key(&project_id))
+            .is_some_and(|value| value == "true"),
+        notes: tables
+            .kv_get(&crate::notes::notes_key(&project_id))
+            .unwrap_or_default(),
+        response_verbosity: project_response_verbosity(tables, &project_id),
+        context_detail: context_detail.to_string(),
+        checkpoints: tables
+            .kv_get(&crate::notes::checkpoints_key(&project_id))
+            .is_some_and(|value| value == "true"),
+        approval_rules: load_rules(tables, &project_id),
+    }
 }
 
 /// Whether this project samples its knowledge as the context fills.

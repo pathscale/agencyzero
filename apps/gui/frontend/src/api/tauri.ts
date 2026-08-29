@@ -124,6 +124,7 @@ export function createCommandApi(call: CommandCaller, on: EventListener): Agency
 
     cancelRun: (projectId) => call("cancel_run", { projectId }),
     compactProject: (projectId, agent) => call("compact_project", { projectId, agent }),
+    getProjectPanelData: (projectId) => call("get_project_panel_data", { projectId }),
     getCheckpoints: (projectId) => call("get_checkpoints", { projectId }),
     setCheckpoints: (projectId, enabled) => call("set_checkpoints", { projectId, enabled }),
     getProjectConcise: (projectId) => call("get_project_concise", { projectId }),

@@ -1,135 +1,31 @@
 import { Flex } from "@pathscale/ui";
 import type { JSX } from "@solidjs/web";
-import {
-  createEffect,
-  createSignal,
-  For,
-  Match,
-  onCleanup,
-  onSettled,
-  Show,
-  Switch,
-} from "solid-js";
+import { For, Match, onCleanup, onSettled, Show, Switch } from "solid-js";
 import { Button } from "~/components/Button";
 import { Icon } from "~/components/Icon";
-import { AnalyticsTab } from "~/features/analytics/AnalyticsTab";
 import { DraftTab } from "~/features/draft/DraftTab";
-import { HomeTab } from "~/features/home/HomeTab";
 import { WelcomeFlow } from "~/features/onboarding/WelcomeFlow";
-import { ProjectPanel } from "~/features/project/ProjectPanel";
-import { ProjectTab } from "~/features/project/ProjectTab";
-import { SettingsTab } from "~/features/settings/SettingsTab";
 import { CloseConfirm } from "~/features/shell/CloseConfirm";
 import { useAppShell } from "~/features/shell/useAppShell";
 import { TabStrip } from "~/features/tabs/TabStrip";
+import { WorkspacePanes } from "~/features/tabs/WorkspacePanes";
 import { installSelectionCopy } from "~/lib/clipboard";
 import { log } from "~/lib/log";
 import { i18n, tx } from "~/stores/i18n";
-import { prefs } from "~/stores/prefs";
 import { type BootState, useWorkspace, WorkspaceProvider } from "~/stores/workspace";
-import type { Project, Tab } from "~/types";
-
-/**
- * The one side panel, pointed at whichever project is in front.
- *
- * Built once while project tabs remain active: the project it reads changes,
- * its DOM does not. Leaving the project surface unmounts the branch.
- *
- * Its contents are absent when a fork is open or the sidebar is collapsed, so
- * controls nobody can reach do not remain in the semantic or layout tree.
- */
-function ActiveProjectPanel(): JSX.Element {
-  const { state } = useWorkspace();
-  /*
-   * The transcript and composer are the project surface; the side panel is
-   * supplementary. Point the panel at the new project after the main surface
-   * has painted, so its item and task-log trees cannot hold up tab feedback.
-   *
-   * Drop the old project's panel during that one-frame handoff. Keeping it
-   * alive makes every reactive item/log body repoint in one blocking turn and
-   * briefly shows the wrong project's controls beside the new transcript.
-   * ProjectPanel stages its heavy open bodies after the headers paint.
-   */
-  const [displayed, setDisplayed] = createSignal<{ project: Project; tab: Tab } | null>(null);
-  const [handoffHidden, setHandoffHidden] = createSignal(false);
-  let readyFrame: number | undefined;
-  let readyTimer: number | undefined;
-  const currentProject = () =>
-    state.projects.find((candidate) => candidate.id === state.activeKey) ?? null;
-  const shown = () =>
-    Boolean(currentProject()) && prefs.projectPanelVisible && !currentProject()?.forkedFrom?.itemId;
-  /*
-   * A signal makes the active project and tab one reactive value. The enclosing
-   * project `Match` disposes this component before `activeKey` can represent a
-   * non-project surface.
-   */
-  createEffect(
-    () => {
-      const project = state.projects.find((candidate) => candidate.id === state.activeKey);
-      const tab = state.tabs.find((candidate) => candidate.key === state.activeKey);
-      return project && tab && shown() ? { project, tab } : null;
-    },
-    (current) => {
-      if (readyFrame !== undefined) cancelAnimationFrame(readyFrame);
-      if (readyTimer !== undefined) window.clearTimeout(readyTimer);
-      if (!current) {
-        setDisplayed(null);
-        setHandoffHidden(false);
-        return;
-      }
-      if (displayed()?.project.id !== current.project.id) setHandoffHidden(true);
-
-      const repoint = (): void => {
-        readyFrame = undefined;
-        readyTimer = window.setTimeout(() => {
-          readyTimer = undefined;
-          setDisplayed(current);
-          setHandoffHidden(false);
-        }, 0);
-      };
-      if (typeof requestAnimationFrame === "undefined") repoint();
-      else readyFrame = requestAnimationFrame(repoint);
-    },
-  );
-  onCleanup(() => {
-    if (readyFrame !== undefined) cancelAnimationFrame(readyFrame);
-    if (readyTimer !== undefined) window.clearTimeout(readyTimer);
-  });
-
-  const active = displayed;
-
-  return (
-    <div
-      aria-hidden={shown() && !handoffHidden() ? "false" : "true"}
-      class={`min-h-0 flex-none overflow-hidden ${handoffHidden() ? "pointer-events-none invisible" : ""} ${
-        shown()
-          ? "ml-4 w-[332px] translate-x-0 opacity-100"
-          : "pointer-events-none ml-0 w-0 translate-x-3 opacity-0"
-      }`}
-    >
-      <Show when={shown() ? active() : null}>
-        {(current) => <ProjectPanel project={current().project} agent={current().tab.agent} />}
-      </Show>
-    </div>
-  );
-}
 
 /**
  * The window: a tab strip over one screen at a time.
  *
- * Project data may be warm, but only the active pane is mounted. Retaining
- * hidden panes traded one future construction for permanent DOM, semantic and
- * reactive ownership, and mounting a large neighbor consumed hundreds of
- * milliseconds immediately after startup. The data cache removes I/O from a
- * nearby switch without making an invisible application tree pay layout and
- * memory costs.
+ * Only the active pane is mounted. Its reactive and native layout ownership is
+ * destroyed at a tab change instead of leaking into the next surface.
  */
 export function Workspace(): JSX.Element {
   const { state, actions, activeTab, activeProject } = useWorkspace();
   const shell = useAppShell();
 
   return (
-    <div class="az-desk relative flex h-full flex-col overflow-hidden">
+    <div id="application-surface" class="az-desk relative flex h-full flex-col overflow-hidden">
       <Show when={state.boot.status !== "loading"}>
         <TabStrip />
       </Show>
@@ -196,41 +92,14 @@ export function Workspace(): JSX.Element {
               (activeTab().kind === "settings" && state.settings !== null)
             }
           >
+            <WorkspacePanes />
             <Switch>
-              <Match when={activeTab().kind === "home"}>
-                <div data-active-tab="home" class="flex min-h-0 min-w-0 flex-1">
-                  <HomeTab />
-                </div>
-              </Match>
-              <Match when={activeTab().kind === "settings"}>
-                <div data-active-tab="settings" class="flex min-h-0 min-w-0 flex-1">
-                  <SettingsTab />
-                </div>
-              </Match>
-              <Match when={activeTab().kind === "analytics"}>
-                <div data-active-tab="analytics" class="flex min-h-0 min-w-0 flex-1">
-                  <AnalyticsTab />
-                </div>
-              </Match>
               <Match when={activeTab().kind === "draft"}>
                 <div data-active-tab="draft" class="flex min-h-0 min-w-0 flex-1">
                   <DraftTab tab={activeTab()} />
                 </div>
               </Match>
-              <Match when={activeTab().kind === "project" && activeProject() !== null}>
-                <div class="flex min-h-0 min-w-0 flex-1">
-                  <div class="relative min-h-0 min-w-0 flex-1 overflow-hidden">
-                    <div
-                      data-active-project={activeProject()?.id}
-                      class="absolute inset-0 flex min-h-0 min-w-0"
-                    >
-                      <ProjectTab tab={activeTab()} project={activeProject()!} />
-                    </div>
-                  </div>
-                  <ActiveProjectPanel />
-                </div>
-              </Match>
-              <Match when={activeTab().kind === "project"}>
+              <Match when={activeTab().kind === "project" && activeProject() === null}>
                 {/*
                   A project tab whose record is not in state. Previously this matched
                   nothing and the window rendered an unexplained black void, which is

@@ -540,7 +540,7 @@ export function SettingsTab(): JSX.Element {
               type="button"
               data-guide-target="help-setup"
               onClick={() => actions.openOnboarding()}
-              class="rounded-lg border border-az-hairline-strong px-2.5 py-1.5 text-az-muted text-ui-detail transition-colors hover:border-primary hover:text-primary"
+              class="rounded-lg border border-az-hairline-strong px-2.5 py-1.5 text-az-body text-ui-detail transition-colors hover:border-primary hover:text-primary"
             >
               {tx("Welcome Tutorial")}
             </Button>
@@ -673,6 +673,7 @@ export function SettingsTab(): JSX.Element {
           </div>
 
           <Section
+            id="settings-section-proxy"
             icon="gauge"
             title={tx("AgencyProxy")}
             hint={tx("owns live agent sessions across AgencyZero restarts")}
@@ -843,6 +844,7 @@ export function SettingsTab(): JSX.Element {
           </Section>
 
           <Section
+            id="settings-section-agents"
             icon="shield"
             title={tx("Agents")}
             hint={tx("detected from the installed CLIs, not from configuration")}
@@ -880,6 +882,7 @@ export function SettingsTab(): JSX.Element {
           </Section>
 
           <Section
+            id="settings-section-agent-defaults"
             icon="sparkles"
             title={tx("Agent defaults")}
             hint={tx("what a new tab starts with")}
@@ -1006,6 +1009,7 @@ export function SettingsTab(): JSX.Element {
           </Section>
 
           <Section
+            id="settings-section-models"
             icon="sliders-horizontal"
             title={tx("Models")}
             hint={tx("what each picker offers")}
@@ -1039,6 +1043,7 @@ export function SettingsTab(): JSX.Element {
           </Section>
 
           <Section
+            id="settings-section-task-manager"
             icon="list-checks"
             title={tx("Task Manager")}
             hint={tx("the Home conversation that keeps the lists in order")}
@@ -1128,7 +1133,12 @@ export function SettingsTab(): JSX.Element {
 
           <CostSection />
 
-          <Section icon="settings" title={tx("Application")} hint={tx("the running instance")}>
+          <Section
+            id="settings-section-application"
+            icon="settings"
+            title={tx("Application")}
+            hint={tx("the running instance")}
+          >
             <Row
               label={tx("Build")}
               hint={tx(
@@ -1189,7 +1199,13 @@ export function SettingsTab(): JSX.Element {
             </Row>
           </Section>
 
-          <Section icon="sparkles" title={t("appearance.title")} hint={t("appearance.hint")}>
+          <Section
+            id="settings-section-appearance"
+            icon="sparkles"
+            title={t("appearance.title")}
+            hint={t("appearance.hint")}
+            searchTerms={[t("appearance.resetButton")]}
+          >
             <Row label={t("appearance.mode")} hint={t("appearance.modeHint")}>
               <div class="az-control-solid flex items-center gap-1 rounded-full border border-az-hairline bg-az-inset p-1">
                 <For
@@ -1272,9 +1288,19 @@ export function SettingsTab(): JSX.Element {
               isDefault={
                 current().theme.surface === "" &&
                 current().theme.accent === "" &&
+                (current().theme.accentTwo ?? "") === "" &&
                 current().theme.softness === 0 &&
                 normalizeWash(current().theme.wash) === DEFAULT_WASH &&
-                current().theme.textBrightness === 0
+                current().theme.textBrightness === 0 &&
+                current().theme.glassEnabled !== false &&
+                (current().theme.glassBlur ?? GLASS_DEFAULTS[prefs.colorMode].blur) ===
+                  GLASS_DEFAULTS[prefs.colorMode].blur &&
+                (current().theme.glassRefraction ?? GLASS_DEFAULTS[prefs.colorMode].refraction) ===
+                  GLASS_DEFAULTS[prefs.colorMode].refraction &&
+                (current().theme.glassDepth ?? GLASS_DEFAULTS[prefs.colorMode].depth) ===
+                  GLASS_DEFAULTS[prefs.colorMode].depth &&
+                (current().theme.glassOpacity ?? DEFAULT_GLASS_OPACITY) === DEFAULT_GLASS_OPACITY &&
+                (current().theme.glassScrim ?? DEFAULT_GLASS_SCRIM) === DEFAULT_GLASS_SCRIM
               }
               /*
                     Reset means every axis on this pane, glass included.
@@ -1296,6 +1322,7 @@ export function SettingsTab(): JSX.Element {
                   theme: {
                     surface: "",
                     accent: "",
+                    accentTwo: "",
                     softness: 0,
                     wash: DEFAULT_WASH,
                     textBrightness: 0,
@@ -1491,6 +1518,7 @@ export function SettingsTab(): JSX.Element {
           </Section>
 
           <Section
+            id="settings-section-data"
             icon="folder"
             title={tx("Data")}
             hint={tx("where projects, items and messages are stored")}
@@ -1620,6 +1648,7 @@ export function SettingsTab(): JSX.Element {
           <StudySettings />
 
           <Section
+            id="settings-section-agent-authority"
             icon="lock"
             title={tx("Agent authority")}
             hint={tx("explicit capabilities delegated to Prompt Syntax")}
@@ -1641,6 +1670,7 @@ export function SettingsTab(): JSX.Element {
           </Section>
 
           <Section
+            id="settings-section-moderator"
             icon="shield"
             title={tx("Moderator")}
             hint={tx("a second agent watching the stream — costs tokens")}
@@ -1731,6 +1761,7 @@ export function SettingsTab(): JSX.Element {
           </Section>
 
           <Section
+            id="settings-section-notifications"
             icon="info"
             title={tx("Notifications")}
             hint={tx("while you are in another window")}
@@ -1785,6 +1816,7 @@ export function SettingsTab(): JSX.Element {
           </Section>
 
           <Section
+            id="settings-section-environment"
             icon="lock"
             title={tx("Environment")}
             pending={environmentPending()}
@@ -1909,6 +1941,7 @@ function ChatImportSettings(): JSX.Element {
 
   return (
     <Section
+      id="settings-section-import-chats"
       icon="messages-square"
       title={tx("Import chats")}
       hint={tx("copy local provider transcripts into new AgencyZero projects")}
@@ -2097,6 +2130,7 @@ function StudySettings(): JSX.Element {
 
   return (
     <Section
+      id="settings-section-research"
       icon="gauge"
       title={tx("Research")}
       hint={tx("local, opt-in PromptSyntax deployment study")}
@@ -2227,6 +2261,7 @@ function ExperimentalSettings(): JSX.Element {
 
   return (
     <Section
+      id="settings-section-experimental"
       icon="sparkles"
       title={tx("Experimental")}
       hint={tx("isolated capabilities in AgencyZero Experimental")}
@@ -2904,6 +2939,7 @@ function CostSection(): JSX.Element {
 
   return (
     <Section
+      id="settings-section-cost"
       icon="gauge"
       title={tx("Cost")}
       hint={tx("all sessions · summed from the usage ledger")}
@@ -3096,6 +3132,7 @@ function InternalPerformance(): JSX.Element {
 
   return (
     <Section
+      id="settings-section-performance"
       icon="gauge"
       title={tx("Application internal performance")}
       hint={tx("what each part of the app costs, measured in this session")}
@@ -3198,6 +3235,8 @@ function InternalPerformance(): JSX.Element {
 }
 
 function Section(props: {
+  /** Stable, unique inspection and QA address for this settings surface. */
+  id: string;
   icon: IconProps["name"];
   title: string;
   hint: string;
@@ -3278,7 +3317,7 @@ function Section(props: {
     <SearchScope value={{ titleMatches, report }}>
       <Panel
         ref={shell}
-        id="settings-section"
+        id={props.id}
         class={`flex-none rounded-[13px] ${visible() ? "" : "hidden"}`}
       >
         <div class="flex flex-wrap items-baseline gap-x-2.5 gap-y-1 px-3.5 pt-3 pb-2.5">

@@ -9,6 +9,7 @@ import type {
   Message,
   Project,
   ProjectItem,
+  ProjectPanelData,
   ProjectStatus,
   Question,
   QuotaReport,
@@ -796,6 +797,18 @@ export function createMockApi(): AgencyZeroApi {
      * nothing touched, which is the one thing this file refuses to do.
      */
     compactProject: () => Promise.reject(new Error("the mock has no agent session to compact")),
+
+    getProjectPanelData: (projectId) =>
+      settle({
+        ioPersist: false,
+        notes: notes.get(projectId) ?? "",
+        responseVerbosity: (responseVerbosity.get(projectId) ??
+          "default") as ProjectPanelData["responseVerbosity"],
+        contextDetail: (verbosityByProject.get(projectId) ??
+          "adaptive") as ProjectPanelData["contextDetail"],
+        checkpoints: checkpoints.has(projectId),
+        approvalRules: ["Bash: cargo test", "Edit: apps/gui/src"],
+      } satisfies ProjectPanelData),
 
     /*
      * Notes are real here, unlike the compaction that produces them.

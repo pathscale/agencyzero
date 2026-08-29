@@ -1,5 +1,5 @@
 import type { JSX } from "@solidjs/web";
-import { createEffect, createSignal, omit, onCleanup, Show } from "solid-js";
+import { omit, Show } from "solid-js";
 import { Button } from "~/components/Button";
 import { Icon, type IconProps } from "~/components/Icon";
 import { tx } from "~/stores/i18n";
@@ -50,12 +50,11 @@ export type SectionPanelProps = {
   trailing?: JSX.Element;
   isOpen: boolean;
   onToggle: () => void;
-  children: JSX.Element;
+  /** Constructed only after the disclosure opens. */
+  children: () => JSX.Element;
   class?: string;
   /** Layout for the revealed body, used when a section owns remaining height. */
   contentClass?: string;
-  /** Stage a heavy body after the disclosure header has painted. */
-  contentDelayMs?: number;
 };
 
 /**
@@ -67,27 +66,6 @@ export type SectionPanelProps = {
  * rather than an uncontrolled disclosure.
  */
 export function SectionPanel(props: SectionPanelProps): JSX.Element {
-  const [deferredReady, setDeferredReady] = createSignal(false);
-  let deferredTimer: number | undefined;
-  createEffect(
-    () => [props.isOpen, props.contentDelayMs] as const,
-    ([open, delay]) => {
-      if (deferredTimer !== undefined) window.clearTimeout(deferredTimer);
-      if (!open || delay === undefined) {
-        setDeferredReady(false);
-        return;
-      }
-      deferredTimer = window.setTimeout(() => {
-        deferredTimer = undefined;
-        setDeferredReady(true);
-      }, delay);
-    },
-  );
-  onCleanup(() => {
-    if (deferredTimer !== undefined) window.clearTimeout(deferredTimer);
-  });
-  const contentOpen = () => props.isOpen && (props.contentDelayMs === undefined || deferredReady());
-
   return (
     <Panel class={`az-glass-shared ${props.class ?? ""}`}>
       {/*
@@ -168,11 +146,11 @@ export function SectionPanel(props: SectionPanelProps): JSX.Element {
           editor and log control behind `hidden` made each tab switch rebuild
           thousands of unreachable nodes. Mounting the body only while open is
           the standard disclosure lifecycle and keeps the semantic tree honest. */}
-      <Show when={contentOpen()}>
+      {props.isOpen ? (
         <div class={`overflow-hidden border-az-hairline-soft border-t ${props.contentClass ?? ""}`}>
-          {props.children}
+          {props.children()}
         </div>
-      </Show>
+      ) : null}
     </Panel>
   );
 }

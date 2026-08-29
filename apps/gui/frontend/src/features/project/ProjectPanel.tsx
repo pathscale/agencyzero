@@ -21,8 +21,23 @@ import { prefs, setPrefs, togglePanelSection } from "~/stores/prefs";
 import { useNow, useWorkspace } from "~/stores/workspace";
 import type { Agent, Project, ProjectItem, Question, RunningTask } from "~/types";
 
-/** Three rich rows fit without making tab navigation pay for off-screen work. */
-export const PROJECT_ITEM_PAGE_SIZE = 3;
+/** The first useful screenful; later rows stream in as the owner scrolls. */
+export const PROJECT_ITEM_PAGE_SIZE = 12;
+
+const ITEM_LOAD_AHEAD_PX = 96;
+
+export function shouldGrowItemPage(
+  scrollTop: number,
+  clientHeight: number,
+  scrollHeight: number,
+  visible: number,
+  total: number,
+): boolean {
+  return (
+    visible < total &&
+    scrollHeight - scrollTop - clientHeight <= Math.max(ITEM_LOAD_AHEAD_PX, clientHeight / 4)
+  );
+}
 
 /**
  * How many task-log rows are built up front.
@@ -47,7 +62,18 @@ export function itemPage<T>(items: readonly T[], limit: number): T[] {
  * you switch tabs.
  */
 export function ProjectPanel(props: { project: Project; agent: Agent }): JSX.Element {
-  const { state, itemsFor, openItemCount } = useWorkspace();
+  const { state, actions, itemsFor, openItemCount } = useWorkspace();
+
+  // One typed load for the whole panel. Leaf controls render this shared
+  // snapshot and perform mutations; none owns a mount-time backend request.
+  createEffect(
+    () => props.project.id,
+    (projectId) => {
+      void actions
+        .loadProjectPanelData(projectId)
+        .catch((cause) => log.warn(`could not load project panel: ${describeError(cause)}`));
+    },
+  );
 
   /*
    * Per-section attribution, the same trick the pane uses.
@@ -118,9 +144,8 @@ export function ProjectPanel(props: { project: Project; agent: Agent }): JSX.Ele
             : "flex-none"
         }
         contentClass="flex min-h-0 flex-1 flex-col"
-        contentDelayMs={400}
       >
-        <ItemList projectId={props.project.id} items={panelItems()} />
+        {() => <ItemList projectId={props.project.id} items={panelItems()} />}
       </SectionPanel>
       {sectionMark("items")}
 
@@ -137,9 +162,8 @@ export function ProjectPanel(props: { project: Project; agent: Agent }): JSX.Ele
         isOpen={prefs.panelSections.running}
         onToggle={() => togglePanelSection("running")}
         class="flex-none"
-        contentDelayMs={500}
       >
-        <RunningList projectId={props.project.id} />
+        {() => <RunningList projectId={props.project.id} />}
       </SectionPanel>
       {sectionMark("running")}
 
@@ -161,9 +185,8 @@ export function ProjectPanel(props: { project: Project; agent: Agent }): JSX.Ele
         isOpen={prefs.panelSections.log}
         onToggle={() => togglePanelSection("log")}
         class={prefs.panelSections.log ? "flex min-h-[160px] flex-col" : "flex-none"}
-        contentDelayMs={600}
       >
-        <TaskLogList projectId={props.project.id} />
+        {() => <TaskLogList projectId={props.project.id} />}
       </SectionPanel>
       {sectionMark("tasklog")}
 
@@ -175,9 +198,8 @@ export function ProjectPanel(props: { project: Project; agent: Agent }): JSX.Ele
         isOpen={prefs.panelSections.io}
         onToggle={() => togglePanelSection("io")}
         class={prefs.panelSections.io ? "flex min-h-[160px] flex-col" : "flex-none"}
-        contentDelayMs={700}
       >
-        <AgentIoList projectId={props.project.id} />
+        {() => <AgentIoList projectId={props.project.id} />}
       </SectionPanel>
       {sectionMark("agentio")}
 
@@ -188,9 +210,8 @@ export function ProjectPanel(props: { project: Project; agent: Agent }): JSX.Ele
         isOpen={prefs.panelSections.notes}
         onToggle={() => togglePanelSection("notes")}
         class="flex-none"
-        contentDelayMs={800}
       >
-        <NotesEditor projectId={props.project.id} />
+        {() => <NotesEditor projectId={props.project.id} />}
       </SectionPanel>
       {sectionMark("notes")}
 
@@ -288,21 +309,12 @@ function ItemSortControls(): JSX.Element {
  * on for the project you are debugging.
  */
 function IoPersistToggle(props: { projectId: string }): JSX.Element {
-  const { actions, isLive } = useWorkspace();
+  const { state, actions, isLive } = useWorkspace();
   const [enabled, setEnabled] = createSignal(false);
-  const alive = whileMounted();
-
-  // Read once per project; the flag only changes from this control.
   createEffect(
-    () => props.projectId,
-    () => {
-      const id = props.projectId;
-      void actions
-        .getIoPersist(id)
-        .then(alive(setEnabled))
-        .catch((cause) =>
-          log.warn(`could not read the I/O recording flag: ${describeError(cause)}`),
-        );
+    () => state.projectPanelData[props.projectId]?.ioPersist,
+    (value) => {
+      if (value !== undefined) setEnabled(value);
     },
   );
 
@@ -555,146 +567,147 @@ function SettingsSection(props: { project: Project; agent: Agent }): JSX.Element
       isOpen={prefs.panelSections.settings}
       onToggle={() => togglePanelSection("settings")}
       class="flex-none"
-      contentDelayMs={900}
     >
-      <div class="flex flex-col gap-2.5 px-3 pt-3 pb-3.5">
-        <div class="text-az-muted text-ui-detail">{tx("Working directories")}</div>
+      {() => (
+        <div class="flex flex-col gap-2.5 px-3 pt-3 pb-3.5">
+          <div class="text-az-muted text-ui-detail">{tx("Working directories")}</div>
 
-        <For each={props.project.dirs}>
-          {(dir) => (
-            <div class="flex min-w-0 items-center gap-2 rounded-[9px] border border-az-hairline-soft bg-base-300 px-2.5 py-[7px]">
-              <Icon name="folder" class="shrink-0 text-primary/70 text-ui-body" />
-              <span class="min-w-0 flex-1 truncate font-mono text-az-body text-ui-detail">
-                {dir}
-              </span>
+          <For each={props.project.dirs}>
+            {(dir) => (
+              <div class="flex min-w-0 items-center gap-2 rounded-[9px] border border-az-hairline-soft bg-base-300 px-2.5 py-[7px]">
+                <Icon name="folder" class="shrink-0 text-primary/70 text-ui-body" />
+                <span class="min-w-0 flex-1 truncate font-mono text-az-body text-ui-detail">
+                  {dir}
+                </span>
+                <Button
+                  id={`project-${props.project.id}-remove-dir-${encodeURIComponent(dir)}`}
+                  type="button"
+                  onClick={() => void actions.removeDir(props.project.id, dir)}
+                  aria-label={tx("Remove {name}", { name: dir })}
+                  class="shrink-0 text-az-faint transition-colors hover:text-error"
+                >
+                  <Icon name="x" class="text-ui-body" />
+                </Button>
+              </div>
+            )}
+          </For>
+
+          <Show
+            when={adding()}
+            fallback={
               <Button
-                id={`project-${props.project.id}-remove-dir-${encodeURIComponent(dir)}`}
+                id={`project-${props.project.id}-add-dir`}
                 type="button"
-                onClick={() => void actions.removeDir(props.project.id, dir)}
-                aria-label={tx("Remove {name}", { name: dir })}
-                class="shrink-0 text-az-faint transition-colors hover:text-error"
+                onClick={() => setAdding(true)}
+                class="flex items-center gap-[7px] rounded-[9px] border border-primary/16 border-dashed px-2.5 py-[7px] text-az-muted text-ui-detail transition-colors hover:border-primary hover:text-primary"
               >
-                <Icon name="x" class="text-ui-body" />
+                <Icon name="folder-plus" class="text-ui-body" />
+                {tx("Add dir")}
               </Button>
-            </div>
-          )}
-        </For>
-
-        <Show
-          when={adding()}
-          fallback={
-            <Button
-              id={`project-${props.project.id}-add-dir`}
-              type="button"
-              onClick={() => setAdding(true)}
-              class="flex items-center gap-[7px] rounded-[9px] border border-primary/16 border-dashed px-2.5 py-[7px] text-az-muted text-ui-detail transition-colors hover:border-primary hover:text-primary"
-            >
-              <Icon name="folder-plus" class="text-ui-body" />
-              {tx("Add dir")}
-            </Button>
-          }
-        >
-          {/*
+            }
+          >
+            {/*
             Type a path or pick one. The picker matters more than it looks: a
             typed path is how a project ends up pointed at a directory that is
             not a checkout, and a project with no checkout can have no pull
             requests discovered for it, silently.
           */}
-          <div class="flex items-center gap-1.5">
-            <Button
-              id={`project-${props.project.id}-choose-dir`}
-              type="button"
-              onClick={() => void pick()}
-              disabled={!isLive("chooseProjectDirectory")}
-              aria-label={tx("Choose a working directory")}
-              title={tx("Choose a folder")}
-              class="shrink-0 cursor-pointer rounded-[9px] border border-primary/40 px-2 py-[7px] text-az-body transition-colors hover:border-primary hover:text-primary disabled:opacity-40"
-            >
-              <Icon name="folder-plus" class="text-ui-body" />
-            </Button>
-            <Input.Field
-              id={`project-${props.project.id}-dir-path`}
-              autofocus
-              value={path()}
-              placeholder={tx("~/src/…")}
-              aria-label={tx("Working directory path")}
-              onInput={(event) => setPath(event.currentTarget.value)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter") void addDir();
-                if (event.key === "Escape") setAdding(false);
-              }}
-              onBlur={() => void addDir()}
-              class="min-w-0 flex-1 rounded-[9px] border border-primary/40 bg-base-300 px-2.5 py-[7px] font-mono text-az-body text-ui-detail focus:outline-none"
+            <div class="flex items-center gap-1.5">
+              <Button
+                id={`project-${props.project.id}-choose-dir`}
+                type="button"
+                onClick={() => void pick()}
+                disabled={!isLive("chooseProjectDirectory")}
+                aria-label={tx("Choose a working directory")}
+                title={tx("Choose a folder")}
+                class="shrink-0 cursor-pointer rounded-[9px] border border-primary/40 px-2 py-[7px] text-az-body transition-colors hover:border-primary hover:text-primary disabled:opacity-40"
+              >
+                <Icon name="folder-plus" class="text-ui-body" />
+              </Button>
+              <Input.Field
+                id={`project-${props.project.id}-dir-path`}
+                autofocus
+                value={path()}
+                placeholder={tx("~/src/…")}
+                aria-label={tx("Working directory path")}
+                onInput={(event) => setPath(event.currentTarget.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") void addDir();
+                  if (event.key === "Escape") setAdding(false);
+                }}
+                onBlur={() => void addDir()}
+                class="min-w-0 flex-1 rounded-[9px] border border-primary/40 bg-base-300 px-2.5 py-[7px] font-mono text-az-body text-ui-detail focus:outline-none"
+              />
+            </div>
+          </Show>
+
+          <div class="my-0.5 h-px bg-az-hairline-soft" />
+
+          <div class="flex items-center gap-2.5">
+            <Icon name="shield" class="shrink-0 text-ui-control text-warning" />
+            <span class="min-w-0 flex-1 text-az-body text-ui-label">
+              {tx("Moderator")}
+              <span class="mt-px block text-az-muted text-ui-caption">
+                {tx("this session · global default is")} {moderatorDefault() ? tx("on") : tx("off")}
+              </span>
+            </span>
+            <Switch
+              id={`project-${props.project.id}-moderator`}
+              aria-label={tx("Moderator for this session")}
+              checked={props.project.moderatorEnabled}
+              disabled
+              flavor="accent"
+              size="sm"
+              onChange={(event) =>
+                void actions.setProjectModerator(props.project.id, event.currentTarget.checked)
+              }
             />
           </div>
-        </Show>
 
-        <div class="my-0.5 h-px bg-az-hairline-soft" />
+          <div class="my-0.5 h-px bg-az-hairline-soft" />
 
-        <div class="flex items-center gap-2.5">
-          <Icon name="shield" class="shrink-0 text-ui-control text-warning" />
-          <span class="min-w-0 flex-1 text-az-body text-ui-label">
-            {tx("Moderator")}
-            <span class="mt-px block text-az-muted text-ui-caption">
-              {tx("this session · global default is")} {moderatorDefault() ? tx("on") : tx("off")}
-            </span>
-          </span>
-          <Switch
-            id={`project-${props.project.id}-moderator`}
-            aria-label={tx("Moderator for this session")}
-            checked={props.project.moderatorEnabled}
-            disabled
-            flavor="accent"
-            size="sm"
-            onChange={(event) =>
-              void actions.setProjectModerator(props.project.id, event.currentTarget.checked)
+          <ConciseResponseToggle projectId={props.project.id} />
+
+          <div class="my-0.5 h-px bg-az-hairline-soft" />
+
+          <ContextDetailSelect projectId={props.project.id} />
+
+          <div class="my-0.5 h-px bg-az-hairline-soft" />
+
+          <CheckpointToggle projectId={props.project.id} />
+
+          <ApprovalRules projectId={props.project.id} />
+
+          <ResetSession project={props.project} running={isRunning()} />
+
+          <div class="my-0.5 h-px bg-az-hairline-soft" />
+
+          <ResumeSession
+            projectId={props.project.id}
+            agent={props.agent}
+            running={isRunning()}
+            currentSession={
+              props.agent === "claude"
+                ? (props.project.sessions.claude ?? props.project.sessionId)
+                : props.project.sessions[props.agent]
             }
           />
+
+          <div class="flex gap-[7px] pt-0.5 text-az-faint text-ui-caption leading-[1.5]">
+            <Icon name="info" class="relative top-0.5 shrink-0 text-ui-label" />
+            {tx(
+              "Model and permission are per tab — set them in the composer. Everything else lives in global settings.",
+            )}
+          </div>
         </div>
-
-        <div class="my-0.5 h-px bg-az-hairline-soft" />
-
-        <ConciseResponseToggle projectId={props.project.id} />
-
-        <div class="my-0.5 h-px bg-az-hairline-soft" />
-
-        <ContextDetailSelect projectId={props.project.id} />
-
-        <div class="my-0.5 h-px bg-az-hairline-soft" />
-
-        <CheckpointToggle projectId={props.project.id} />
-
-        <ApprovalRules projectId={props.project.id} />
-
-        <ResetSession project={props.project} running={isRunning()} />
-
-        <div class="my-0.5 h-px bg-az-hairline-soft" />
-
-        <ResumeSession
-          projectId={props.project.id}
-          agent={props.agent}
-          running={isRunning()}
-          currentSession={
-            props.agent === "claude"
-              ? (props.project.sessions.claude ?? props.project.sessionId)
-              : props.project.sessions[props.agent]
-          }
-        />
-
-        <div class="flex gap-[7px] pt-0.5 text-az-faint text-ui-caption leading-[1.5]">
-          <Icon name="info" class="relative top-0.5 shrink-0 text-ui-label" />
-          {tx(
-            "Model and permission are per tab — set them in the composer. Everything else lives in global settings.",
-          )}
-        </div>
-      </div>
+      )}
     </SectionPanel>
   );
 }
 
 /** Project response verbosity, stored in KV and added to every turn. */
 function ConciseResponseToggle(props: { projectId: string }): JSX.Element {
-  const { actions, isLive } = useWorkspace();
+  const { state, actions, isLive } = useWorkspace();
   const levels = ["default", "low", "medium", "high"] as const;
   const labels = () => [tx("Model default"), tx("Low"), tx("Medium"), tx("High")];
   const hints = () => [
@@ -704,24 +717,10 @@ function ConciseResponseToggle(props: { projectId: string }): JSX.Element {
     tx("Include more detail in responses"),
   ];
   const [level, setLevel] = createSignal<(typeof levels)[number]>("default");
-  const alive = whileMounted();
-
   createEffect(
-    () => props.projectId,
-    () => {
-      const id = props.projectId;
-      void actions
-        .getProjectConcise(id)
-        .then(
-          alive((value) =>
-            setLevel(
-              levels.includes(value as (typeof levels)[number])
-                ? (value as (typeof levels)[number])
-                : "default",
-            ),
-          ),
-        )
-        .catch((cause) => log.warn(`could not read response verbosity: ${describeError(cause)}`));
+    () => state.projectPanelData[props.projectId]?.responseVerbosity,
+    (value) => {
+      if (value !== undefined) setLevel(value);
     },
   );
 
@@ -787,18 +786,12 @@ function ConciseResponseToggle(props: { projectId: string }): JSX.Element {
  * input-side companion to Concise responses, which trims the output.
  */
 function ContextDetailSelect(props: { projectId: string }): JSX.Element {
-  const { actions, isLive } = useWorkspace();
+  const { state, actions, isLive } = useWorkspace();
   const [level, setLevel] = createSignal("adaptive");
-  const alive = whileMounted();
-
   createEffect(
-    () => props.projectId,
-    () => {
-      const id = props.projectId;
-      void actions
-        .getProjectVerbosity(id)
-        .then(alive(setLevel))
-        .catch((cause) => log.warn(`could not read context detail: ${describeError(cause)}`));
+    () => state.projectPanelData[props.projectId]?.contextDetail,
+    (value) => {
+      if (value !== undefined) setLevel(value);
     },
   );
 
@@ -823,7 +816,7 @@ function ContextDetailSelect(props: { projectId: string }): JSX.Element {
         </span>
       </span>
       <PillMenu
-        id="project-context-detail"
+        id={`project-${props.projectId}-context-detail`}
         label={tx("Per-turn context detail for this project")}
         variant="outline"
         value={level()}
@@ -1049,26 +1042,11 @@ function ResumeSession(props: {
  */
 function ApprovalRules(props: { projectId: string }): JSX.Element {
   const { state, actions } = useWorkspace();
-  const [rules, setRules] = createSignal<string[]>([]);
-  const alive = whileMounted();
-
-  // Re-asked when this project's pending approval appears or resolves — the
-  // only moments a rule can be born; forgetting below updates the list itself.
-  createEffect(
-    () => [state.pendingApprovals, props.projectId] as const,
-    () => {
-      void state.pendingApprovals[props.projectId];
-      void actions
-        .listApprovalRules(props.projectId)
-        .then(alive(setRules))
-        .catch(alive(() => setRules([])));
-    },
-  );
+  const rules = () => state.projectPanelData[props.projectId]?.approvalRules ?? [];
 
   const forget = (): void => {
     void actions
       .clearApprovalRules(props.projectId)
-      .then(alive(() => setRules([])))
       .catch((cause) => log.error(`could not clear the rules: ${describeError(cause)}`));
   };
 
@@ -1159,6 +1137,31 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
   });
   const visibleShown = createMemo(() => itemPage(shown(), itemLimit()));
   const filtering = () => query().trim().length > 0;
+  let itemScroller: HTMLDivElement | undefined;
+
+  const growVisibleItems = (scroller = itemScroller): void => {
+    if (
+      !scroller ||
+      !shouldGrowItemPage(
+        scroller.scrollTop,
+        scroller.clientHeight,
+        scroller.scrollHeight,
+        visibleShown().length,
+        shown().length,
+      )
+    ) {
+      return;
+    }
+    setItemLimit((limit) => Math.min(shown().length, limit + PROJECT_ITEM_PAGE_SIZE));
+  };
+
+  // A tall panel may fit the first page without producing a scroll event.
+  // Keep adding one bounded page after layout until the viewport is filled;
+  // once it overflows, ordinary scrolling drives the same path.
+  createEffect(
+    () => [visibleShown().length, shown().length] as const,
+    () => queueMicrotask(alive(() => growVisibleItems())),
+  );
 
   createEffect(
     () => [state.itemReveal, props.items] as const,
@@ -1400,7 +1403,11 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
 
   return (
     <div data-item-list class="flex min-h-0 flex-1 flex-col gap-0.5 overflow-hidden px-2 pb-2.5">
-      <div class="az-scroll min-h-0 flex-1 overflow-y-auto overflow-x-hidden pt-1.5">
+      <div
+        ref={itemScroller}
+        onScroll={(event) => growVisibleItems(event.currentTarget)}
+        class="az-scroll min-h-0 flex-1 overflow-y-auto overflow-x-hidden pt-1.5"
+      >
         <Show when={props.items.length > 3}>
           <div class="mb-1 flex items-center gap-2 border-az-hairline-soft border-b bg-az-inset px-2.5 py-1.5">
             <Icon name="search" class="shrink-0 text-primary/70 text-ui-label" />
@@ -1961,18 +1968,6 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
             </Show>
           )}
         </For>
-        <Show when={shown().length > visibleShown().length}>
-          <Button
-            id={`project-${props.projectId}-items-show-more`}
-            type="button"
-            onClick={() => setItemLimit((limit) => limit + PROJECT_ITEM_PAGE_SIZE)}
-            class="mt-1 flex-none rounded-[9px] border border-primary/24 bg-az-chip px-2.5 py-2 font-semibold text-primary text-ui-detail transition-colors hover:bg-az-chip"
-          >
-            {tx("Show {count} more items", {
-              count: Math.min(PROJECT_ITEM_PAGE_SIZE, shown().length - visibleShown().length),
-            })}
-          </Button>
-        </Show>
       </div>
 
       <Show
@@ -2436,20 +2431,12 @@ function CopyLogButton(props: { projectId: string }): JSX.Element {
  * bigger?
  */
 function CheckpointToggle(props: { projectId: string }): JSX.Element {
-  const { actions, isLive } = useWorkspace();
+  const { state, actions, isLive } = useWorkspace();
   const [enabled, setEnabled] = createSignal(false);
-  const alive = whileMounted();
-
   createEffect(
-    () => props.projectId,
-    () => {
-      const id = props.projectId;
-      void actions
-        .getCheckpoints(id)
-        .then(alive(setEnabled))
-        .catch((cause) =>
-          log.warn(`could not read the checkpoint setting: ${describeError(cause)}`),
-        );
+    () => state.projectPanelData[props.projectId]?.checkpoints,
+    (value) => {
+      if (value !== undefined) setEnabled(value);
     },
   );
 
@@ -2513,28 +2500,17 @@ function CheckpointToggle(props: { projectId: string }): JSX.Element {
  * and having no way to strike it out would be its own kind of maddening.
  */
 function NotesEditor(props: { projectId: string }): JSX.Element {
-  const { actions, isLive } = useWorkspace();
+  const { state, actions, isLive } = useWorkspace();
   const [draft, setDraft] = createSignal("");
   const [saved, setSaved] = createSignal("");
   const [status, setStatus] = createSignal<"idle" | "saving" | "error">("idle");
   const [message, setMessage] = createSignal("");
-  const alive = whileMounted();
-
-  // Re-read when the tab changes under a reused instance, and after a
-  // compaction has had a chance to write.
   createEffect(
-    () => props.projectId,
-    () => {
-      const projectId = props.projectId;
-      void actions
-        .getProjectNotes(projectId)
-        .then(
-          alive((notes) => {
-            setDraft(notes);
-            setSaved(notes);
-          }),
-        )
-        .catch((cause) => log.warn(`could not read the notes: ${describeError(cause)}`));
+    () => state.projectPanelData[props.projectId]?.notes,
+    (notes) => {
+      if (notes === undefined) return;
+      setDraft(notes);
+      setSaved(notes);
     },
   );
 

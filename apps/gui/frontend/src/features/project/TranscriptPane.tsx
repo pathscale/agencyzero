@@ -105,7 +105,7 @@ export function noteTranscriptChromeChanged(): void {
   bumpChromeRevision((value) => value + 1);
 }
 
-/** What the first frame mounts, before the window fills to a full page. */
+/** The visible tail mounted on entry; earlier rows remain behind the reveal control. */
 const INITIAL_VISIBLE_ENTRIES = 4;
 
 /** One row of the transcript: a message, or an answered question above it. */
@@ -326,60 +326,6 @@ export function TranscriptPane(props: {
     if (typeof requestAnimationFrame === "undefined") queueMicrotask(restoreAnchor);
     else revealFrame = requestAnimationFrame(restoreAnchor);
   };
-  /*
-   * Fill the window to a full page over the frames after the first.
-   *
-   * Each step re-pins, because the rows arriving mount *above* the newest one:
-   * without that the tail would walk down the screen as the page filled. A
-   * reader who has scrolled away is left alone, since `followTail` is a no-op
-   * once unpinned.
-   *
-   * Driven by frames rather than a timer so it yields between steps and cannot
-   * turn into one long block, which is the thing it exists to avoid.
-   */
-  onSettled(() => {
-    if (typeof requestAnimationFrame === "undefined") {
-      setVisibleEntries(TRANSCRIPT_PAGE_SIZE);
-      return;
-    }
-    let fillFrame: number | undefined;
-    /*
-     * The step count lives here, not in the signal it writes.
-     *
-     * This used to read `untrack(visibleEntries)` at the top of every frame.
-     * Solid 2 defers a signal write, so that read returned the value from
-     * before the previous frame's write every time: `size` stayed at
-     * `INITIAL_VISIBLE_ENTRIES`, each frame rewrote the same number, and the
-     * window never grew past its first step however many frames ran. Solid 1
-     * applied the write eagerly, which is the only reason reading it back
-     * worked.
-     *
-     * A local counter is also simply the honest shape: this loop owns the
-     * progression and does not need to ask the store where it got to.
-     */
-    let filled = untrack(visibleEntries);
-    const fill = (): void => {
-      if (filled >= TRANSCRIPT_PAGE_SIZE) return;
-      filled = Math.min(TRANSCRIPT_PAGE_SIZE, filled + INITIAL_VISIBLE_ENTRIES);
-      setVisibleEntries(filled);
-      /*
-       * A frame callback is outside the reactive system, and Solid 2 queues a
-       * write rather than applying it. Nothing drains that queue from here, so
-       * without this the write sits unapplied: the window stayed at its first
-       * step however many frames ran, and the transcript mounted four rows
-       * instead of a page. Solid 1 applied writes eagerly and needed no flush.
-       */
-      flush();
-      followTail();
-      fillFrame = requestAnimationFrame(fill);
-    };
-    fillFrame = requestAnimationFrame(fill);
-    // Returned, not `onCleanup`: Solid 2 forbids it inside `onSettled`.
-    return () => {
-      if (fillFrame !== undefined) cancelAnimationFrame(fillFrame);
-    };
-  });
-
   const revealEarlier = (afterRestore?: () => void): void => {
     const view = visibleTimeline();
     /*
