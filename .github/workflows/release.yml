@@ -147,7 +147,7 @@ jobs:
       # package is a thin Node shim around this binary, so taking it from
       # crates.io is what keeps Node out of the release path entirely.
       - name: Install the Tauri CLI
-        run: cargo install tauri-cli --version "^2.11"
+        run: cargo install tauri-cli
 
       - name: Build the AgencyProxy sidecar
         run: scripts/stage-agency-proxy-sidecar.sh

@@ -7,13 +7,9 @@ publish.workspace = true
 
 [dependencies]
 libc = "0.2"
-# The same build the app uses, by git rev.
-#
-# These were a registry `=1.0.0-beta.10` and a git rev of the same version:
-# one number, two code bases. Rows written by this crate then carried an index
-# the app could not read, which presents as "torn or corrupt persisted table"
-# on a table this tool has just written from scratch.
-worktable = "=1.0.0-beta.10"
+# The same resolved package as the app and headless tool. Rows written against
+# a second copy can carry an index the app cannot read.
+worktable.workspace = true
 # The `worktable!` and `worktable_version!` macros emit code that names these by
 # bare path rather than through a re-export, so a consumer of the macros has to
 # declare them too. Kept identical to the block in agency-tools and apps/gui: the
