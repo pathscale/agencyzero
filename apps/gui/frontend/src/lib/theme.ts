@@ -979,8 +979,10 @@ export function windowChrome(
    * window that stayed put at opacity 0, so the app read as solid at the exact
    * setting where it should have been clearest.
    *
-   * At zero the view is left untinted rather than tinted with zero alpha, so
-   * the backdrop is the blurred desktop and nothing else.
+   * Zero must still be sent as an explicit tint. `NSGlassEffectView` does not
+   * interpret a missing tint as transparent; it falls back to the system glass
+   * tint, which can be the application's accent. Omitting the tuple therefore
+   * paints the strongest unintended colour at the exact setting named 0%.
    */
   const filmOpacity = Number.isFinite(theme.glassOpacity)
     ? Number(theme.glassOpacity)
@@ -993,7 +995,7 @@ export function windowChrome(
    */
   if (!rgb || !WINDOW_GLASS_ENABLED) return { enabled: false };
   return {
-    tint: tintAlpha > 0 ? [rgb[0], rgb[1], rgb[2], tintAlpha] : undefined,
+    tint: [rgb[0], rgb[1], rgb[2], tintAlpha],
     // macOS 26's own window radius. Stated rather than left to the effect view,
     // which otherwise squares off against a rounded frame.
     radius: 12,
