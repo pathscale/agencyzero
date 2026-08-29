@@ -36,7 +36,7 @@ const inputCoverage: Record<string, readonly string[]> = {
   Dropdown: [
     "pillmenu-effort-opens",
     "pillmenu-effort-selects-low",
-    "pillmenu-effort-leaves-fixture-value",
+    "pillmenu-effort-selects-high-by-pointer",
   ],
   InlineEdit: [
     "rename-commits-typed-name",
