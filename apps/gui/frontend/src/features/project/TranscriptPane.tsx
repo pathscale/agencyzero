@@ -1387,8 +1387,8 @@ function AgentBubble(props: {
         <Show when={failed()}>
           <span
             title={props.message.stop}
-            class={`rounded-[5px] px-[6px] py-px font-semibold text-[10px] ${
-              transient() ? "bg-warning/18 text-warning" : "bg-error/18 text-error"
+            class={`rounded-[5px] border bg-transparent px-[6px] py-px font-semibold text-[10px] ${
+              transient() ? "border-warning/30 text-warning" : "border-error/30 text-error"
             }`}
           >
             {transient()
@@ -1630,7 +1630,7 @@ export function MessageReceipt(props: { status?: MessageReceiptState }): JSX.Ele
 function MessageTime(props: { at: string }): JSX.Element {
   const now = useNow(30_000);
   return (
-    <span title={props.at} class="shrink-0 text-[10.5px] text-az-faint">
+    <span title={props.at} class="shrink-0 text-[10.5px] text-az-strong">
       {relativeTime(props.at, now())}
     </span>
   );

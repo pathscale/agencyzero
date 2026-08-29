@@ -1,6 +1,15 @@
 import { Flex } from "@pathscale/ui";
 import type { JSX } from "@solidjs/web";
-import { createEffect, createSignal, Match, onCleanup, onSettled, Show, Switch } from "solid-js";
+import {
+  createEffect,
+  createSignal,
+  For,
+  Match,
+  onCleanup,
+  onSettled,
+  Show,
+  Switch,
+} from "solid-js";
 import { Button } from "~/components/Button";
 import { Icon } from "~/components/Icon";
 import { AnalyticsTab } from "~/features/analytics/AnalyticsTab";
@@ -15,7 +24,7 @@ import { useAppShell } from "~/features/shell/useAppShell";
 import { TabStrip } from "~/features/tabs/TabStrip";
 import { installSelectionCopy } from "~/lib/clipboard";
 import { log } from "~/lib/log";
-import { tx } from "~/stores/i18n";
+import { i18n, tx } from "~/stores/i18n";
 import { prefs } from "~/stores/prefs";
 import { type BootState, useWorkspace, WorkspaceProvider } from "~/stores/workspace";
 import type { Project, Tab } from "~/types";
@@ -117,7 +126,10 @@ export function Workspace(): JSX.Element {
   const shell = useAppShell();
 
   return (
-    <div class="az-desk relative flex h-full flex-col overflow-hidden">
+    <div
+      data-slot="application-surface"
+      class="az-desk relative flex h-full flex-col overflow-hidden"
+    >
       <Show when={state.boot.status !== "loading"}>
         <TabStrip />
       </Show>
@@ -354,7 +366,17 @@ export default function App(): JSX.Element {
 
   return (
     <WorkspaceProvider>
-      <Workspace />
+      {/*
+        Translation helpers are ordinary function calls used throughout the
+        component tree. Some renderer/compiler paths evaluate an attribute
+        expression only when its owner mounts, which left a language change
+        with a new selector value but stale labels elsewhere in the window.
+
+        Keep the long-lived data owner and its subscriptions intact, but key
+        the visible workspace by locale so every text and accessibility
+        attribute is rebuilt from one catalogue.
+      */}
+      <For each={[i18n.locale]}>{() => <Workspace />}</For>
     </WorkspaceProvider>
   );
 }

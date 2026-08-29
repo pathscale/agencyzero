@@ -3,8 +3,8 @@ import type { PortableUiPrefs, UiPrefs } from "~/types";
 
 export const UI_SCALES: Record<UiPrefs["uiSize"], number> = {
   normal: 1,
-  large: 1.08,
-  "extra-large": 1.16,
+  large: 1.12,
+  "extra-large": 1.25,
 };
 
 const DEFAULTS: UiPrefs = {

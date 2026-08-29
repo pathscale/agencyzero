@@ -12,7 +12,7 @@ import {
 
 describe("interface size", () => {
   it("offers the three ordered scales requested by the picker", () => {
-    expect(UI_SCALES).toEqual({ normal: 1, large: 1.08, "extra-large": 1.16 });
+    expect(UI_SCALES).toEqual({ normal: 1, large: 1.12, "extra-large": 1.25 });
   });
 
   it("stores a picked scale", async () => {

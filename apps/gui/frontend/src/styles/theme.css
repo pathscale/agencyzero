@@ -3,7 +3,7 @@
  * kit exports against (`design/README.md`).
  *
  * Two hard rules the design encodes, both about legibility on a very dark desk:
- *   - text contrast floor is oklch(62%); nothing dimmer than --color-az-faint
+ *   - text contrast floor is oklch(70%); nothing dimmer than --color-az-faint
  *   - no pure white; the top tier is oklch(86%)
  *
  * Surfaces stack desk -> panel -> card, matching @pathscale/ui's base-N
@@ -295,9 +295,9 @@
  */
 @theme {
   /*
-   * Text ladder. The design footer names four rungs: 84 / 76 bold / 73 body /
-   * 64 muted. Every rung carries `- var(--az-damp)`, so the picker can bring
-   * the whole ladder down together and keep the intervals between rungs.
+   * Text ladder. Muted and faint still recede through size and weight, but not
+   * below the 4.5:1 floor measured against the rendered dark card stack. Every
+   * rung carries `- var(--az-damp)`, so the picker can move the ladder together.
    */
   --color-az-title: color-mix(
     in oklab,
@@ -317,12 +317,12 @@
   --color-az-muted: color-mix(
     in oklab,
     var(--az-surface) calc(var(--az-wash) * 0.3),
-    oklch(calc(66% - var(--az-damp)) calc(0.01 * var(--az-tint)) var(--az-hue-text))
+    oklch(calc(72% - var(--az-damp)) calc(0.01 * var(--az-tint)) var(--az-hue-text))
   );
   --color-az-faint: color-mix(
     in oklab,
     var(--az-surface) calc(var(--az-wash) * 0.3),
-    oklch(calc(62% - var(--az-damp)) calc(0.01 * var(--az-tint)) var(--az-hue-text))
+    oklch(calc(70% - var(--az-damp)) calc(0.01 * var(--az-tint)) var(--az-hue-text))
   );
 
   /*
@@ -526,11 +526,9 @@
      * only").
      *
      * The blur itself is the compositor's, through `NSGlassEffectView` behind a
-     * transparent window, and none of it is on yet: the window config carries
-     * no `transparent: true`, so `WINDOW_GLASS_ENABLED` in `lib/theme.ts` stays
-     * false and the effect view is never attached. Attaching it over an opaque
-     * window washes the whole app out under one flat colour, which is what that
-     * flag exists to prevent.
+     * transparent window. Every build profile inherits that native precondition
+     * from the base config; a config-stack test prevents a variant from turning
+     * opaque while the effect remains attached and washing the app white.
      *
      * CSS `backdrop-filter` is a separate route to the same look, and it is no
      * longer the impossible one: the shipping vello backend gained a real
@@ -1800,12 +1798,12 @@
   --color-az-muted: color-mix(
     in oklab,
     var(--az-surface) calc(var(--az-wash) * 0.2),
-    oklch(calc(40% + var(--az-damp)) calc(0.01 * var(--az-tint)) var(--az-hue-text))
+    oklch(calc(34% + var(--az-damp)) calc(0.01 * var(--az-tint)) var(--az-hue-text))
   );
   --color-az-faint: color-mix(
     in oklab,
     var(--az-surface) calc(var(--az-wash) * 0.2),
-    oklch(calc(46% + var(--az-damp)) calc(0.01 * var(--az-tint)) var(--az-hue-text))
+    oklch(calc(38% + var(--az-damp)) calc(0.01 * var(--az-tint)) var(--az-hue-text))
   );
   --color-az-dim: color-mix(
     in oklab,
